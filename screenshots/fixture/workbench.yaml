@@ -1,0 +1,25 @@
+name: Acme
+
+sections:
+  - name: Pages
+    icon: file-text
+    items:
+      - folder: Auth
+        items:
+          - label: Sign in
+            src: pages/sign-in.html
+            states:
+              - id: default
+                label: Default
+              - id: error
+                label: Wrong password
+          - label: Reset password
+            src: pages/reset.html
+      - label: Dashboard
+        src: pages/dashboard.html
+
+  - name: Components
+    icon: component
+    items:
+      - label: Button
+        src: preview/button.html

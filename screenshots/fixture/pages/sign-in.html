@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Acme</title>
+<link rel="stylesheet" href="../acme.css">
+</head>
+<body class="auth">
+  <aside class="auth-brand">
+    <div class="logo"><span class="logo-mark"></span>Acme</div>
+    <h1>Everything your team ships, in one place.</h1>
+    <p>Plan the work, track it to done, and keep everyone on the same page.</p>
+  </aside>
+  <main class="auth-form">
+    <h2>Welcome back</h2>
+    <p class="muted">Sign in to your Acme workspace.</p>
+    <p class="alert" data-wb-state-only="error">That password doesn’t match this email.</p>
+    <label>Email<input type="email" placeholder="you@example.com" data-wb-set-error="value=jo@example.com"></label>
+    <label>Password<input type="password" placeholder="Enter your password" data-wb-set-error="value=hunter22"></label>
+    <div class="row"><label class="check"><input type="checkbox" checked> Remember me</label><a href="reset.html">Forgot password?</a></div>
+    <button class="btn">Sign in</button>
+    <p class="muted small">New to Acme? <a href="#">Create an account</a></p>
+  </main>
+</body>
+</html>
