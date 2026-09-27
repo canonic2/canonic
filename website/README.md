@@ -25,8 +25,8 @@ When the workbench UI changes, regenerate the images from the repository root:
 node packages/website/screenshots/capture.cjs
 ```
 
-The script starts `extension/server.js` on `screenshots/fixture`, drives
-headless Chrome through `extension/capture.js`, and overwrites the screenshots
+The script starts `packages/workbench/server.js` on `screenshots/fixture`, drives
+headless Chrome through `packages/workbench/capture.js`, and overwrites the screenshots
 in `images/`. Set `CHROME_PATH` to choose a browser.
 
 - The overview is a 1440 × 860 window. The script also measures the workbench's

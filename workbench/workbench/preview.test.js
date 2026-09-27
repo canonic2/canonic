@@ -1,0 +1,218 @@
+var assert = require('node:assert/strict');
+var test = require('node:test');
+var vm = require('node:vm');
+var fs = require('node:fs');
+var path = require('node:path');
+
+// Exercise the shell's actual loading handlers with controlled load/paint
+// ordering. No network or rendering timing determines which iframe wins.
+function preview() {
+  function node() {
+    var attrs = {};
+    return { classList: { add: function () {}, remove: function () {} },
+      getAttribute: function (name) { return attrs[name]; },
+      setAttribute: function (name, value) { attrs[name] = value; },
+      removeAttribute: function (name) { delete attrs[name]; },
+      set src(value) { attrs.src = value; },
+    };
+  }
+  var paints = []; var events = [];
+  var state = { frame: node(), frameBuffer: node(), pendingFrame: null, frameWrap: node(), frameShell: { hidden: true },
+    reportRenderedStory: function () {},
+    window: { requestAnimationFrame: function (fn) { paints.push(fn); }, dispatchEvent: function (event) {
+      events.push({ frame: event.detail.frame, hidden: state.frameShell.hidden });
+    } }, CustomEvent: function (_name, options) { this.detail = options.detail; },
+  };
+  var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
+  var handlers = source.slice(source.indexOf('  function loadPreview('), source.indexOf("  frame.addEventListener('load', frameLoaded)"));
+  vm.runInNewContext(handlers, state);
+  return { state: state, events: events, paint: function () { paints.splice(0).forEach(function (fn) { fn(); }); } };
+}
+
+function widthChoice(current) {
+  var calls = [];
+  var widthButtons = [
+    { dataset: { width: '1512' }, disabled: false },
+    { dataset: { width: '393' }, disabled: false },
+  ];
+  var state = {
+    current: current,
+    widthButtons: widthButtons,
+    setWidth: function (mode) { calls.push(['width', mode]); },
+    syncHash: function () { calls.push(['sync']); },
+  };
+  var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
+  var handler = source.slice(source.indexOf('  function chooseWidth('), source.indexOf('  /* ----------------------------------------------------- sidebar resize */'));
+  vm.runInNewContext(handler, state);
+  return { choose: state.chooseWidth, calls: calls, buttons: widthButtons };
+}
+
+function widthAvailability(mode, viewports) {
+  var buttons = ['fit', '1512', '393', 'resizable'].map(function (width) {
+    return { dataset: { width: width }, disabled: false, title: width };
+  });
+  var selected = [];
+  var state = {
+    widths: buttons.map(function (button) { return button.dataset.width; }),
+    widthButtons: buttons,
+    stage: { dataset: { width: mode } },
+    setWidth: function (width) { selected.push(width); state.stage.dataset.width = width; },
+    window: { wbManifest: { viewportWidths: function () {
+      var map = { fit: 'fit', desktop: '1512', mobile: '393', responsive: 'resizable' };
+      return viewports.map(function (viewport) { return map[viewport]; });
+    } } },
+  };
+  var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
+  var handler = source.slice(source.indexOf('  function updateWidthAvailability('), source.indexOf('  /* A toolbar width change'));
+  vm.runInNewContext(handler, state);
+  state.updateWidthAvailability({ viewports: viewports });
+  return { buttons: buttons, selected: selected };
+}
+
+function storyNavigation() {
+  var loaded = [];
+  var reported = [];
+  var sent = [];
+  var events = [];
+  var timers = [];
+  var lens = { key: 'storybook', kind: 'storybook', url: 'http://localhost:6006' };
+  var item = { implementationOnly: 'storybook', implementations: { storybook: { title: 'Components/Button' } } };
+  var frame = { contentWindow: { postMessage: function (data, origin) { sent.push([JSON.parse(data), origin]); } } };
+  var frameBuffer = { contentWindow: {} };
+  var state = {
+    current: 'button', currentState: null, showSeq: 1, frameReady: true,
+    pendingFrame: null, frame: frame, frameBuffer: frameBuffer,
+    view: { lens: lens }, nav: null, openLink: {},
+    window: { wbLenses: {
+      pick: function (list, picked) { return list.find(function (story) { return story.state === picked; }); },
+      storyUrl: function (_lens, id) { return lens.url + '/iframe.html?id=' + id + '&viewMode=story'; },
+      storyOpenUrl: function (_lens, id) { return lens.url + '/?path=/story/' + id; },
+      selectStory: function (target, implementation, id) {
+        assert.equal(target, frame);
+        sent.push([{ event: { type: 'setCurrentStory', args: [{ storyId: id }] } }, implementation.url]);
+        return true;
+      },
+      storybookEvent: function (message, target, implementation) {
+        if (message.source !== target.contentWindow || message.origin !== implementation.url) return null;
+        return message.data;
+      },
+    }, dispatchEvent: function (event) { events.push(event); } },
+    CustomEvent: function (type, options) { this.type = type; this.detail = options.detail; },
+    stories: function () { return Promise.resolve([
+      { id: 'components-button--default', state: 'default', name: 'Default' },
+      { id: 'components-button--secondary', state: 'secondary', name: 'Secondary' },
+    ]); },
+    setTimeout: function (fn) { var timer = { fn: fn, cleared: false }; timers.push(timer); return timer; },
+    clearTimeout: function (timer) { timer.cleared = true; },
+    showFrame: function (url) { loaded.push(url); },
+    tellHost: function (_src, story) { reported.push(story); },
+    codeFor: function () { return []; }, drawStories: function () {},
+    setTitle: function () {}, syncHash: function () {}, say: function () {},
+  };
+  var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
+  vm.runInNewContext(source.slice(source.indexOf('  var pendingStorySwitch = null;'), source.indexOf('  /* Where the code is,')), state);
+  var handler = source.slice(source.indexOf('  function loadStory('), source.indexOf('  /* ------------------------------------------------------------ source */'));
+  vm.runInNewContext(handler, state);
+  return {
+    load: function (story, previous) { state.showSeq += 1; state.loadStory(item, lens, story, state.showSeq, previous ? { lens: lens } : null); },
+    acknowledge: function (type, id) { state.storySwitchEvent({ source: frame.contentWindow, origin: lens.url,
+      data: { type: type, id: id } }); },
+    acknowledgePending: function (type, id) { state.storySwitchEvent({ source: frameBuffer.contentWindow,
+      origin: lens.url, data: { type: type, id: id } }); },
+    timeout: function () { timers.filter(function (timer) { return !timer.cleared; }).at(-1).fn(); },
+    loaded: loaded, sent: sent, events: events, reported: reported, state: state,
+  };
+}
+
+test('a spare iframe that wins the initial load reveals the preview before capture preparation', function () {
+  var p = preview(); var state = p.state;
+  state.loadPreview('/initial');
+  state.loadPreview('/resized');
+  var winner = state.frameBuffer;
+  state.frameLoaded({ currentTarget: winner });
+  p.paint();
+  assert.equal(state.frame, winner);
+  assert.equal(state.frameShell.hidden, false);
+  assert.equal(p.events[0].frame, winner);
+  assert.equal(p.events[0].hidden, false);
+});
+
+test('a superseded pending frame cannot replace the active preview during paint', function () {
+  var p = preview(); var state = p.state;
+  state.loadPreview('/initial'); state.loadPreview('/old');
+  var initial = state.frame;
+  state.frameLoaded({ currentTarget: state.frameBuffer });
+  state.pendingFrame = null;
+  p.paint();
+  assert.equal(state.frame, initial); assert.equal(p.events.length, 0);
+});
+
+test('changing width resizes the current iframe without routing or reloading it', function () {
+  var choice = widthChoice('preview/components-button.html');
+  choice.choose('1512');
+  assert.deepEqual(choice.calls, [['width', '1512'], ['sync']]);
+});
+
+test('changing width before a screen is selected does not write an address', function () {
+  var choice = widthChoice(null);
+  choice.choose('393');
+  assert.deepEqual(choice.calls, [['width', '393']]);
+});
+
+test('an unsupported width cannot resize the current screen', function () {
+  var choice = widthChoice('preview/components-button.html');
+  choice.buttons[0].disabled = true;
+  choice.choose('1512');
+  assert.deepEqual(choice.calls, []);
+});
+
+test('a screen disables unsupported frame modes and falls back to its first supported one', function () {
+  var result = widthAvailability('fit', ['desktop', 'responsive']);
+  assert.deepEqual(result.buttons.map(function (button) { return button.disabled; }), [true, false, true, false]);
+  assert.deepEqual(result.selected, ['1512']);
+});
+
+test('switches stories in the loaded Storybook preview without navigating', async function () {
+  var stories = storyNavigation();
+  stories.load('default', false);
+  await Promise.resolve();
+  assert.deepEqual(stories.reported, [], 'catalog lookup does not acknowledge an unrendered story');
+  stories.acknowledge('storyRendered', 'components-button--default');
+  stories.load('secondary', true);
+  await Promise.resolve();
+  assert.deepEqual(stories.loaded, [
+    'http://localhost:6006/iframe.html?id=components-button--default&viewMode=story',
+  ]);
+  assert.equal(stories.sent[0][0].event.args[0].storyId, 'components-button--secondary');
+  stories.acknowledge('currentStoryWasSet', 'components-button--secondary');
+  assert.deepEqual(stories.reported, ['default'], 'accepting a switch does not settle the new story');
+  stories.acknowledge('storyRendered', 'components-button--secondary');
+  assert.equal(stories.events[0].type, 'wb-frame-change');
+  assert.equal(stories.loaded.length, 1);
+  assert.deepEqual(stories.reported, ['default', 'secondary']);
+});
+
+test('navigates only if Storybook does not acknowledge the switch', async function () {
+  var stories = storyNavigation();
+  stories.load('secondary', true);
+  await Promise.resolve();
+  stories.acknowledge('storyRendered', 'components-button--default');
+  stories.timeout();
+  assert.deepEqual(stories.loaded, [
+    'http://localhost:6006/iframe.html?id=components-button--secondary&viewMode=story',
+  ]);
+});
+
+test('reports a fallback story only after its spare frame becomes visible', async function () {
+  var stories = storyNavigation();
+  stories.load('secondary', true);
+  await Promise.resolve();
+  stories.timeout();
+  stories.state.pendingFrame = stories.state.frameBuffer;
+  stories.acknowledgePending('storyRendered', 'components-button--secondary');
+  assert.deepEqual(stories.reported, []);
+  stories.state.frame = stories.state.frameBuffer;
+  stories.state.pendingFrame = null;
+  stories.state.reportRenderedStory();
+  assert.deepEqual(stories.reported, ['secondary']);
+});

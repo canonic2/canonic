@@ -1,4 +1,4 @@
-/* Tokens follow the workbench chrome (extension/workbench/workbench.css):
+/* Tokens follow the workbench chrome (packages/workbench/workbench/workbench.css):
    the same grays, the same Canonic blue. Light is the page default; dark
    follows the system unless data-theme pins one. */
 :root {

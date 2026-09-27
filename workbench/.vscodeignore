@@ -1,0 +1,19 @@
+# What stays out of the .vsix. Everything not listed here ships — which now
+# includes workbench/, the tool itself, because a project no longer keeps a
+# copy of it.
+.vscode/**
+.gitignore
+**/*.test.js
+**/.DS_Store
+icon-source.svg
+scripts/**
+dist/**
+capture-helper/**
+simulator-stream-demo/.build/**
+simulator-stream-demo/index.html
+simulator-stream-demo/README.md
+simulator-stream-demo/server.js
+node_modules/lucide/**
+!node_modules/lucide/package.json
+!node_modules/lucide/LICENSE
+!node_modules/lucide/dist/umd/lucide.min.js

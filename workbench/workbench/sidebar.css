@@ -1,0 +1,304 @@
+/* The list, wearing the editor's clothes
+   --------------------------------------
+   nav.css draws the rail and the rows; this decides what they look like in VS
+   Code's sidebar, where the list stands where a file tree usually does. It
+   should look like it belongs there, not like a website someone embedded.
+
+   So there is no palette here either. Every colour is one of VS Code's own
+   theme variables, which the editor sets on this document for whichever theme
+   the user is running — light, dark, high contrast, or a hand-made one. The
+   fallbacks after each are Dark Modern's values, and they are only ever used
+   when this page is opened outside the editor, which is how it gets looked at
+   during design work.
+
+   The geometry is the editor's too: 22px rows, square selection, full-bleed —
+   nav.css leaves those as variables for exactly this.
+*/
+
+:root {
+  /* nav.css's palette, mapped onto VS Code's. */
+  --wb-panel: var(--vscode-sideBar-background, #181818);
+  --wb-raised: var(--vscode-input-background, #313131);
+  --wb-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+  --wb-selected: var(--vscode-list-activeSelectionBackground, #04395e);
+  --sb-selected-inactive: var(--vscode-list-inactiveSelectionBackground, #37373d);
+  --sb-focus-background: var(--vscode-list-focusBackground, var(--wb-hover));
+  --sb-focus-outline: var(--vscode-list-focusOutline, var(--vscode-focusBorder, #0078d4));
+  --sb-focus-selection-outline: var(--vscode-list-focusAndSelectionOutline, var(--sb-focus-outline));
+  --wb-line: var(--vscode-sideBar-border, #2b2b2b);
+
+  --wb-fg: var(--vscode-sideBar-foreground, var(--vscode-foreground, #cccccc));
+  --wb-fg-2: var(--vscode-sideBar-foreground, var(--vscode-foreground, #cccccc));
+  --wb-fg-3: var(--vscode-descriptionForeground, #9d9d9d);
+  --wb-accent: var(--vscode-focusBorder, #0078d4);
+
+  --wb-space-2: 2px;
+  --wb-space-4: 4px;
+  --wb-space-8: 8px;
+  --wb-space-12: 12px;
+  --wb-space-16: 16px;
+  --wb-space-24: 24px;
+
+  --wb-radius-sm: 2px;
+  --wb-radius-md: 3px;
+
+  /* An editor's list, not a design tool's: 22px rows, no rounding, and the
+     selection running the full width of the panel the way every other tree in
+     this window does. */
+  --wb-row-pad-y: 2px;
+  --wb-row-pad-x: var(--wb-space-8);
+  --wb-row-radius: 0;
+  --wb-row-font: var(--vscode-font-size, 13px);
+  --wb-row-gap: 6px;
+  --wb-nav-pad: 0 0 var(--wb-space-8);
+
+  /* Narrower than the workbench's 48px: this rail shares a panel that is
+     often 240px wide, and the editor's own activity bar is right beside it. */
+  --sb-rail-w: 40px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* The editor gives every webview `padding: 0 20px`, which is right for a
+     document and wrong for a tree: it holds the list off both edges of the
+     panel, so nothing lines up with the explorer above it and no row can run
+     full width. A tree owns its panel edge to edge. */
+  padding: 0;
+  /* The editor's face and its size, so a row here and a row in the explorer
+     sit on the same line. */
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--wb-fg);
+  background: var(--wb-panel);
+  /* A tree, like the explorer's: rows are picked, not selected as text. The
+     filter is the one place to type, and ⌘A belongs to it alone. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.sb {
+  display: grid;
+  grid-template-columns: var(--sb-rail-w) minmax(0, 1fr);
+  height: 100%;
+}
+
+.sb-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------- rail */
+
+/* Standing hard against the window's own activity bar now that the panel is
+   full width, so it is ruled off on both sides — one hairline against the
+   editor's rail, one against the list. */
+.wb-rail {
+  gap: var(--wb-space-2);
+  padding: var(--wb-space-4) 0;
+  background: none;
+  border-left: 1px solid var(--vscode-activityBar-border, var(--wb-line));
+  border-right: 1px solid var(--vscode-sideBar-border, var(--wb-line));
+}
+
+.wb-rail-item {
+  position: relative;
+  height: 36px;
+  color: var(--vscode-activityBar-inactiveForeground, #868686);
+  border-radius: 0;
+}
+
+.wb-rail-item:hover {
+  background: none;
+  color: var(--vscode-activityBar-foreground, #d7d7d7);
+}
+
+/* The lit glyph is the whole mark. The editor's activity bar puts a bar down
+   the leading edge as well, but that bar is inches away from this one on the
+   same screen edge, and two of them read as two rails rather than one. */
+.wb-rail-item[aria-current='true'] {
+  background: none;
+  color: var(--vscode-activityBar-foreground, #d7d7d7);
+}
+
+.wb-rail-item:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--wb-accent));
+  outline-offset: -1px;
+}
+
+/* ------------------------------------------------------------------ panel */
+
+.wb-search {
+  padding: var(--wb-space-8);
+}
+
+.wb-search input {
+  height: 26px;
+  padding: 3px 6px;
+  line-height: normal;
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-input-foreground, #cccccc);
+  background: var(--vscode-input-background, #313131);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--vscode-cornerRadius-medium, 4px);
+}
+
+.wb-search input::placeholder {
+  color: var(--vscode-input-placeholderForeground, #989898);
+}
+
+.wb-search input:focus {
+  border-color: var(--vscode-input-border, transparent);
+  outline: 1px solid var(--vscode-focusBorder, var(--wb-accent));
+  outline-offset: -1px;
+}
+
+/* Catalogs are live dependencies. Keep their failures beside the list they
+   affect, including when handwritten screens are still available below. */
+.sb-diagnostics {
+  margin: 0 var(--wb-space-8) var(--wb-space-8);
+  padding: var(--wb-space-8);
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  background: var(--vscode-inputValidation-warningBackground, transparent);
+  border: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
+  border-radius: var(--vscode-cornerRadius-medium, 4px);
+}
+
+/* Rows sit flush, the way tree rows do — the panel's rhythm comes from the
+   row height, not from gaps between them. */
+.wb-item {
+  margin-bottom: 0;
+  line-height: 18px;
+}
+
+.wb-item:hover {
+  color: var(--vscode-list-hoverForeground, var(--wb-fg));
+}
+
+.wb-item:hover .wb-icon {
+  color: var(--vscode-list-hoverForeground, var(--wb-fg));
+}
+
+.wb-item[aria-current='true'],
+.wb-item[aria-current='true']:hover {
+  color: var(--vscode-list-activeSelectionForeground, #ffffff);
+  /* A tree row marks the selection with its background alone; the extra
+     weight the workbench adds would make the list jump as you walk it. */
+  font-weight: inherit;
+}
+
+.wb-item[aria-current='true'] .wb-icon,
+.wb-item[aria-current='true']:hover .wb-icon {
+  color: var(--vscode-list-activeSelectionIconForeground, var(--vscode-list-activeSelectionForeground, #ffffff));
+}
+
+/* Focus and selection are separate in an editor tree. A focused row gets the
+   one-pixel frame from the screenshots; the screen on the canvas keeps its
+   selected fill even when keyboard focus moves to a neighbouring row. */
+.wb-item:focus {
+  color: var(--vscode-list-focusForeground, var(--wb-fg));
+  background: var(--sb-focus-background);
+  outline: 1px solid var(--sb-focus-outline);
+  outline-offset: -1px;
+}
+
+.wb-item:focus .wb-icon {
+  color: var(--vscode-list-focusForeground, var(--wb-fg));
+}
+
+.wb-item[aria-current='true']:not(.wb-fold-head):focus,
+.wb-item[aria-current='true']:not(.wb-fold-head):focus:hover {
+  color: var(--vscode-list-activeSelectionForeground, #ffffff);
+  background: var(--wb-selected);
+  outline-color: var(--sb-focus-selection-outline);
+}
+
+.wb-item[aria-current='true']:not(.wb-fold-head):focus .wb-icon {
+  color: var(--vscode-list-activeSelectionIconForeground, var(--vscode-list-activeSelectionForeground, #ffffff));
+}
+
+/* When focus leaves the tree, keep the current screen marked with the theme's
+   quieter inactive selection instead of pretending the tree is still active. */
+.wb-nav:not(:focus-within) .wb-item[aria-current='true']:not(.wb-fold-head),
+.wb-nav:not(:focus-within) .wb-item[aria-current='true']:not(.wb-fold-head):hover {
+  color: var(--vscode-list-inactiveSelectionForeground, var(--wb-fg));
+  background: var(--sb-selected-inactive);
+}
+
+.wb-nav:not(:focus-within) .wb-item[aria-current='true']:not(.wb-fold-head) .wb-icon {
+  color: var(--vscode-list-inactiveSelectionIconForeground, var(--vscode-list-inactiveSelectionForeground, var(--wb-fg)));
+}
+
+.wb-fold-head[aria-current='true'],
+.wb-fold-head[aria-current='true']:hover {
+  font-weight: inherit;
+}
+
+.wb-fold-head[aria-current='true']:focus,
+.wb-fold-head[aria-current='true']:focus:hover {
+  color: var(--vscode-list-focusForeground, var(--wb-fg));
+  background: var(--sb-focus-background);
+}
+
+/* A tree row's selection runs the full width of the panel — that is the one
+   thing that says the panel is a tree and not a list someone laid on top of
+   one. So a screen's states are indented by padding inside each row rather
+   than by insetting the box that holds them, and the guide is drawn beside
+   the rows rather than by them: same offsets as the workbench's, but the
+   highlight starts at the panel edge. */
+.wb-states > .wb-fold-list {
+  position: relative;
+  margin: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+/* Down the caret's centre, where the border used to sit. */
+.wb-states > .wb-fold-list::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--wb-row-pad-x) + 7px);
+  width: 1px;
+  background: var(--vscode-tree-inactiveIndentGuidesStroke, var(--wb-line));
+}
+
+/* Where the indent went: the guide, its hairline, and the step past it. */
+.wb-state {
+  padding-left: calc(var(--wb-row-pad-x) + 23px);
+}
+
+.wb-group-label,
+.wb-folder > .wb-fold-head {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--wb-fg));
+}
+
+.wb-folder > .wb-fold-head:focus {
+  color: var(--vscode-list-focusForeground, var(--wb-fg));
+}
+
+/* No config, no list — the same sentence the workbench would have shown on
+   its canvas, in the only space this half has for it. */
+.sb-problem {
+  margin: 0;
+  padding: var(--wb-space-12);
+  font-size: 12px;
+  color: var(--vscode-errorForeground, #f14c4c);
+}

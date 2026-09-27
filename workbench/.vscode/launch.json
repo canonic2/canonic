@@ -1,0 +1,13 @@
+{
+  // Run this to open a second window with the extension loaded from source,
+  // then open a project that has a workbench.yaml at its root.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"]
+    }
+  ]
+}

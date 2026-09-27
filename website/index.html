@@ -113,7 +113,7 @@
               <h3>Only in some setups</h3>
               <dl class="controls">
                 <div><dt>Lens switcher</dt><dd>Design, then each implementation the screen has, when <code>workbench.yaml</code> declares implementations. See <a href="#lenses">Lenses</a>.</dd></div>
-                <div><dt>Story picker</dt><dd>Beside the switcher under a Storybook lens, listing the title’s stories.</dd></div>
+                <div><dt>Story picker</dt><dd>Beside the switcher under a Storybook lens, listing the title’s stories. Picks reuse the loaded preview.</dd></div>
                 <div><dt>Copy handoff</dt><dd>In VS Code only. See <a href="#markup">Markup and handoff</a>.</dd></div>
                 <div><dt>More (⋯)</dt><dd>When the window is too narrow, the controls that don’t fit move into this menu.</dd></div>
               </dl>
@@ -193,6 +193,7 @@
       <h2>Lenses</h2>
       <p class="lede">A design screen is one picture of something that also exists as code. Declare where the code runs (a Storybook, a dev server, staging) and a lens switcher appears in the toolbar: Design first, then each implementation the screen has.</p>
       <p>A lens shows the implementation in the same frame, at the same width, under the same marks. The choice stays as you move between screens, and the address carries it, so a copied link opens the same view:</p>
+      <p>A project can also configure a start command and a port or HTTP readiness check for a Storybook or local server. In a trusted VS Code workspace, Canonic opens a terminal and starts it only when the check fails.</p>
 <pre><code>#pages/sign-in.html:error@393~staging</code></pre>
       <table class="tools parts-of">
         <tbody>

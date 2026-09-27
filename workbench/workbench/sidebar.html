@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Screens</title>
+  <!-- The Canonic extension inserts a <base>, the project root, and a content
+       policy here: this document is loaded into a webview whose address is the
+       editor's, so the base is the only thing that says where this folder
+       actually is. Everything below is relative to it. -->
+  <link rel="stylesheet" href="nav.css" />
+  <link rel="stylesheet" href="sidebar.css" />
+</head>
+<body>
+  <!-- The same two levels the workbench has, in the editor's sidebar: the
+       rail picks the section, the panel lists it. There is no panel title —
+       the view's own header carries the section's name, which is where an
+       editor puts it. -->
+  <div class="sb">
+    <nav class="wb-rail" id="rail" aria-label="Sections"></nav>
+
+    <div class="sb-panel">
+      <div class="wb-search">
+        <input id="search" type="text" role="searchbox" placeholder="Filter…" autocomplete="off"
+               aria-label="Filter pages and components" />
+      </div>
+
+      <div class="sb-diagnostics" id="diagnostics" role="status" hidden></div>
+      <nav class="wb-nav" id="nav" aria-label="Pages and components"></nav>
+    </div>
+  </div>
+
+  <p class="sb-problem" id="problem" hidden></p>
+
+  <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
+  <script src="icons.js"></script>
+  <script src="yaml.js"></script>
+  <script src="manifest.js"></script>
+  <script src="config.js"></script>
+  <script src="nav.js"></script>
+  <script src="sidebar.js"></script>
+</body>
+</html>

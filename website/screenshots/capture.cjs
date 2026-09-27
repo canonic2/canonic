@@ -16,7 +16,7 @@
 var cp = require('node:child_process');
 var fs = require('node:fs');
 var path = require('node:path');
-var EXTENSION = path.resolve(__dirname, '../../../extension');
+var EXTENSION = path.resolve(__dirname, '../../workbench');
 var capture = require(path.join(EXTENSION, 'capture.js'));
 var FIXTURE = path.join(__dirname, 'fixture');
 var OUT = path.resolve(__dirname, '../images');

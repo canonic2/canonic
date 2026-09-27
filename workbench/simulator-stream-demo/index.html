@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canonic Simulator Stream</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #171717; color: #ededed; display: grid; place-items: center; }
+    main { width: min(100%, 1100px); height: 100vh; padding: 24px; display: grid; grid-template-rows: auto auto 1fr; gap: 16px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .actions { display: flex; align-items: center; gap: 14px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; }
+    #status { margin: 0; color: #a8a8a8; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    button { appearance: none; border: 1px solid #505050; border-radius: 6px; padding: 7px 11px; background: #2d2d2d; color: #ededed; font: inherit; cursor: pointer; }
+    button:hover { background: #383838; }
+    .debug { border: 1px solid #343434; border-radius: 8px; background: #111; }
+    .debug summary { cursor: pointer; padding: 9px 12px; color: #bbb; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .debug-tools { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+    #build { color: #777; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; margin-right: auto; }
+    #debug-log { height: 150px; overflow: auto; margin: 0; padding: 10px 12px; border-top: 1px solid #292929; color: #b7d7a8; white-space: pre-wrap; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .stage { min-height: 0; display: grid; place-items: center; border: 1px solid #343434; border-radius: 12px; overflow: hidden; background: #090909; }
+    canvas { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; touch-action: none; }
+    canvas.interactive { cursor: crosshair; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Canonic · iOS Simulator stream demo</h1>
+      <div class="actions">
+        <p id="status">Connecting…</p>
+        <button id="interaction" type="button">Enable interaction</button>
+        <button id="choose" type="button">Choose Simulator window</button>
+      </div>
+    </header>
+    <details class="debug" open>
+      <summary>Visual debugger</summary>
+      <div class="debug-tools">
+        <span id="build"></span>
+        <button id="copy-debug" type="button">Copy logs</button>
+        <button id="clear-debug" type="button">Clear</button>
+      </div>
+      <pre id="debug-log"></pre>
+    </details>
+    <div class="stage"><canvas id="screen"></canvas></div>
+  </main>
+  <script>
+    var canvas = document.getElementById('screen');
+    var context = canvas.getContext('2d', { alpha: false });
+    var status = document.getElementById('status');
+    var choose = document.getElementById('choose');
+    var interaction = document.getElementById('interaction');
+    var debugLog = document.getElementById('debug-log');
+    var build = document.getElementById('build');
+    var BUILD_ID = 'wda-input-20260914-3';
+    var debugLines = [];
+    var frames = 0;
+    var measuredAt = performance.now();
+    var measurement = null;
+    var wdaScreen = null;
+    var pointerStart = null;
+
+    build.textContent = 'build ' + BUILD_ID;
+
+    function debug(event, detail) {
+      var suffix = '';
+      if (detail !== undefined) {
+        try { suffix = ' ' + (typeof detail === 'string' ? detail : JSON.stringify(detail)); }
+        catch (_) { suffix = ' ' + String(detail); }
+      }
+      debugLines.push(new Date().toISOString() + '  ' + event + suffix);
+      debugLog.textContent = debugLines.join('\n');
+      debugLog.scrollTop = debugLog.scrollHeight;
+    }
+
+    function setStatus(value) {
+      status.textContent = value;
+      debug('status', value);
+    }
+
+    async function wdaRequest(payload) {
+      var startedAt = performance.now();
+      debug('wda.request', payload);
+      var response = await fetch('/wda', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      var result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || 'WDA request failed.');
+      debug('wda.response', { action: payload.action, latencyMs: Math.round(performance.now() - startedAt), result: result });
+      return result;
+    }
+
+    interaction.addEventListener('click', async function () {
+      interaction.disabled = true;
+      interaction.textContent = 'Starting WDA…';
+      try {
+        var result = await wdaRequest({ action: 'start' });
+        wdaScreen = result.screen;
+        canvas.classList.add('interactive');
+        interaction.textContent = 'Interaction enabled';
+        debug('interaction.enabled', { simulator: result.simulator, screen: wdaScreen });
+      } catch (error) {
+        interaction.disabled = false;
+        interaction.textContent = 'Retry interaction';
+        debug('interaction.failed', error.stack || error.message);
+      }
+    });
+
+    function devicePoint(event) {
+      if (!wdaScreen || !canvas.width || !canvas.height) return null;
+      var rect = canvas.getBoundingClientRect();
+      var captureX = (event.clientX - rect.left) * canvas.width / rect.width;
+      var captureY = (event.clientY - rect.top) * canvas.height / rect.height;
+      var scale = Math.min(canvas.width / wdaScreen.width, canvas.height / wdaScreen.height);
+      var contentWidth = wdaScreen.width * scale;
+      var contentHeight = wdaScreen.height * scale;
+      var contentLeft = (canvas.width - contentWidth) / 2;
+      var contentTop = canvas.height - contentHeight;
+      var x = (captureX - contentLeft) / contentWidth;
+      var y = (captureY - contentTop) / contentHeight;
+      if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+      return { x: x, y: y };
+    }
+
+    canvas.addEventListener('pointerdown', function (event) {
+      var point = devicePoint(event);
+      if (!point) return;
+      event.preventDefault();
+      canvas.setPointerCapture(event.pointerId);
+      pointerStart = { point: point, at: performance.now(), pointerId: event.pointerId };
+      debug('pointer.down', point);
+    });
+
+    canvas.addEventListener('pointerup', async function (event) {
+      if (!pointerStart || pointerStart.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      var start = pointerStart;
+      pointerStart = null;
+      var end = devicePoint(event);
+      if (!end) return debug('pointer.ignored', 'released outside the device screen');
+      var distance = Math.hypot(end.x - start.point.x, end.y - start.point.y);
+      try {
+        if (distance < 0.015) {
+          await wdaRequest({ action: 'tap', x: end.x, y: end.y });
+        } else {
+          await wdaRequest({
+            action: 'swipe',
+            fromX: start.point.x,
+            fromY: start.point.y,
+            toX: end.x,
+            toY: end.y,
+            duration: Math.max(0.05, (performance.now() - start.at) / 1000),
+          });
+        }
+      } catch (error) {
+        debug('interaction.failed', error.stack || error.message);
+      }
+    });
+
+    canvas.addEventListener('pointercancel', function () { pointerStart = null; });
+
+    window.addEventListener('error', function (event) {
+      debug('window.error', event.message + ' @ ' + event.filename + ':' + event.lineno);
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      debug('unhandledrejection', event.reason && (event.reason.stack || event.reason.message) || String(event.reason));
+    });
+    document.getElementById('copy-debug').addEventListener('click', async function () {
+      try {
+        await navigator.clipboard.writeText(debugLines.join('\n'));
+        this.textContent = 'Copied';
+        setTimeout(() => { this.textContent = 'Copy logs'; }, 1200);
+      } catch (error) {
+        debug('copy.failed', error.message);
+      }
+    });
+    document.getElementById('clear-debug').addEventListener('click', function () {
+      debugLines = [];
+      debugLog.textContent = '';
+      debug('log.cleared');
+    });
+    debug('boot', { build: BUILD_ID, href: location.href, userAgent: navigator.userAgent });
+
+    function countFrame(width, height, label) {
+      frames += 1;
+      measurement = { width: width, height: height, label: label };
+    }
+
+    setInterval(function () {
+      if (!measurement) return;
+      var now = performance.now();
+      setStatus(measurement.label + ' · ' + measurement.width + '×' + measurement.height + ' · ' + Math.round(frames * 1000 / (now - measuredAt)) + ' fps');
+      frames = 0;
+      measuredAt = now;
+    }, 1000);
+
+    if (!('VideoDecoder' in window)) {
+      setStatus('This browser does not expose WebCodecs VideoDecoder.');
+      throw new Error(status.textContent);
+    }
+
+    var decoder = new VideoDecoder({
+      output: function (frame) {
+        if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+          canvas.width = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+        }
+        context.drawImage(frame, 0, 0, canvas.width, canvas.height);
+        frame.close();
+        countFrame(canvas.width, canvas.height, 'Native H.264');
+      },
+      error: function (error) {
+        setStatus('Decoder error: ' + error.message);
+      },
+    });
+    decoder.configure({ codec: 'avc1.42E01F', optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' });
+
+    var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var socket = new WebSocket(protocol + '//' + location.host + '/stream');
+    socket.binaryType = 'arraybuffer';
+    socket.onopen = function () { debug('websocket.open'); if (!measurement) setStatus('Waiting for a key frame…'); };
+    socket.onclose = function (event) { debug('websocket.close', { code: event.code, reason: event.reason }); if (!measurement) setStatus('Native helper unavailable — choose the Simulator window'); };
+    socket.onerror = function () { debug('websocket.error'); if (!measurement) setStatus('Stream connection failed'); };
+    socket.onmessage = function (event) {
+      var data = new Uint8Array(event.data);
+      if (data.length < 10) return;
+      var view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      var key = data[0] === 1;
+      var timestamp = Number(view.getBigUint64(1, false));
+      try {
+        decoder.decode(new EncodedVideoChunk({
+          type: key ? 'key' : 'delta',
+          timestamp: timestamp,
+          data: data.subarray(9),
+        }));
+      } catch (error) {
+        setStatus('Decode failed: ' + error.message);
+      }
+    };
+
+    async function chooseSimulator() {
+      debug('capture.requested');
+      try {
+        var stream = await navigator.mediaDevices.getDisplayMedia({
+          audio: false,
+          video: { displaySurface: 'window', frameRate: { ideal: 60, max: 60 } },
+        });
+        var track = stream.getVideoTracks()[0];
+        debug('capture.granted', { settings: track.getSettings(), capabilities: track.getCapabilities ? track.getCapabilities() : null });
+        socket.close();
+        if (decoder.state !== 'closed') decoder.close();
+        var video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+        await video.play();
+        debug('video.playing', { width: video.videoWidth, height: video.videoHeight, readyState: video.readyState });
+        choose.textContent = 'Simulator selected';
+        choose.disabled = true;
+        frames = 0;
+        measuredAt = performance.now();
+        measurement = {
+          width: video.videoWidth,
+          height: video.videoHeight,
+          label: 'Browser capture',
+        };
+        setStatus('Browser capture · ' + video.videoWidth + '×' + video.videoHeight + ' · measuring…');
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        countFrame(canvas.width, canvas.height, 'Browser capture');
+        debug('frame.initial', { width: canvas.width, height: canvas.height });
+
+        function paint() {
+          if (!video.videoWidth || !video.videoHeight) return video.requestVideoFrameCallback(paint);
+          if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+          }
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          countFrame(canvas.width, canvas.height, 'Browser capture');
+          video.requestVideoFrameCallback(paint);
+        }
+        video.requestVideoFrameCallback(paint);
+        track.addEventListener('ended', function () {
+          debug('capture.ended');
+          measurement = null;
+          setStatus('Browser capture stopped');
+          choose.textContent = 'Choose Simulator window';
+          choose.disabled = false;
+        });
+      } catch (error) {
+        debug('capture.failed', error.stack || error.message);
+        setStatus('Window capture failed: ' + error.message);
+      }
+    }
+    choose.addEventListener('click', chooseSimulator);
+    window.chooseSimulator = chooseSimulator;
+  </script>
+</body>
+</html>

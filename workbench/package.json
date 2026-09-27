@@ -1,0 +1,109 @@
+{
+  "name": "canonic-workbench",
+  "displayName": "Canonic",
+  "description": "A design workbench for the screens in your repo: every page and preview on one canvas, marked up and handed to your agent.",
+  "version": "0.4.0",
+  "publisher": "canonic",
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": { "vscode": "^1.75.0", "node": ">=18" },
+  "categories": ["Visualization", "Other"],
+  "keywords": ["design", "design system", "preview", "screenshot", "storybook", "implementation", "lens"],
+  "activationEvents": ["workspaceContains:workbench.yaml"],
+  "main": "./extension.js",
+  "scripts": {
+    "test": "node --test",
+    "serve": "node server.js",
+    "package": "node scripts/package.cjs",
+    "package:all": "node scripts/package-all.cjs",
+    "bundle-capture": "node scripts/bundle-capture.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@vscode/vsce": "3.9.2"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "canonic",
+          "title": "Canonic",
+          "icon": "icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "canonic": [
+        {
+          "type": "webview",
+          "id": "canonic.screens",
+          "name": "Screens",
+          "when": "canonic.hasWorkbench"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "canonic.openWorkbench",
+        "title": "Open Workbench",
+        "category": "Canonic",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "canonic.openWorkbenchExternally",
+        "title": "Open Workbench in Browser",
+        "category": "Canonic"
+      },
+      {
+        "command": "canonic.copyWorkbenchUrl",
+        "title": "Copy Workbench URL",
+        "category": "Canonic"
+      },
+      {
+        "command": "canonic.refreshScreens",
+        "title": "Refresh Screens",
+        "category": "Canonic",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "canonic.showWorkbenchLog",
+        "title": "Show Workbench Log",
+        "category": "Canonic"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "canonic.refreshScreens",
+          "when": "canonic.hasWorkbench"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "canonic.openWorkbench",
+          "when": "view == canonic.screens",
+          "group": "navigation@1"
+        },
+        {
+          "command": "canonic.refreshScreens",
+          "when": "view == canonic.screens",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Canonic",
+      "properties": {
+        "canonic.capture.chromePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Chrome, Chromium, or Edge for fallback screenshots when the bundled capture helper is absent or cannot start. Leave empty to detect it automatically."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "tar": "7.5.22",
+    "lucide": "1.33.0"
+  }
+}
