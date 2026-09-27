@@ -299,6 +299,18 @@ the local development package is not notarized. The `LSUIElement` setting must
 be applied before signing. Other desktop targets and remote hosts still need
 native validation; Linux hosts without a display keep the Chrome fallback.
 
+### GitHub builds and releases
+
+The [extension workflow](../.github/workflows/extension.yml) tests the extension
+and builds all six platform VSIX files on matching GitHub-hosted runners when
+`workbench/` changes on `main`. The files are available as workflow artifacts
+for 14 days. To make a durable GitHub Release, update `package.json` and its
+lockfile, then push a matching `v<version>` tag (for example, `v0.4.0`). The
+workflow checks the tag against the package version and attaches all six VSIX
+files to that release using stable, versionless download names for the website.
+These builds are unsigned; validate and sign platform
+releases before treating them as production-ready.
+
 For capture profiling, run `node packages/workbench/scripts/benchmark-capture.cjs` from
 the repository root after bundling the runtime. It runs current helper sources
 in an isolated temporary runtime and compares plain, CSS blur, and backdrop-blur

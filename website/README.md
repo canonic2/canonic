@@ -17,6 +17,14 @@ dependencies.
 
 Open `index.html` in a browser, or serve the folder with any static server.
 
+The [Publish website workflow](../.github/workflows/website.yml) copies only
+`index.html`, `style.css`, `canonic.svg`, and `images/` to GitHub Pages when
+`website/` changes on `main`. The repository's Pages source must be set to
+**GitHub Actions**. The published site is at
+`https://canonic2.github.io/canonic/` unless a custom domain is configured.
+The Install section links to the latest GitHub Release; release downloads become
+available after a version tag has been published.
+
 ## Updating screenshots
 
 When the workbench UI changes, regenerate the images from the repository root:
