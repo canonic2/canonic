@@ -302,12 +302,13 @@ native validation; Linux hosts without a display keep the Chrome fallback.
 ### GitHub builds and releases
 
 The [extension workflow](../.github/workflows/extension.yml) tests the extension
-and builds all six platform VSIX files on matching GitHub-hosted runners when
-`workbench/` changes on `main`. The files are available as workflow artifacts
-for 14 days. To make a durable GitHub Release, update `package.json` and its
-lockfile, then push a matching `v<version>` tag (for example, `v0.4.0`). The
-workflow checks the tag against the package version and attaches all six VSIX
-files to that release using stable, versionless download names for the website.
+and builds all six platform VSIX files on matching GitHub-hosted runners when a
+`workbench/v<version>` tag is pushed. Update `package.json` and its lockfile,
+then push a matching tag (for example, `workbench/v1.0.1`). The workflow checks
+the tag against the package version, attaches all six VSIX files to a GitHub
+Release using stable, versionless asset names, and updates the website's links
+after the release succeeds. Build files are also available as workflow artifacts
+for 14 days.
 These builds are unsigned; validate and sign platform
 releases before treating them as production-ready.
 

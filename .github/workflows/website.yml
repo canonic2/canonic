@@ -2,32 +2,52 @@ name: Publish website
 
 on:
   push:
-    branches: [main]
-    paths:
-      - website/**
-      - .github/workflows/website.yml
-  workflow_dispatch:
+    tags: ['website/v*']
+  workflow_call:
+    inputs:
+      workbench_tag:
+        type: string
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - name: Prepare public files
+      - name: Select website version
+        id: website
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir public
-          cp website/index.html website/style.css website/canonic.svg public/
-          cp -R website/images public/images
-          touch public/.nojekyll
-      - uses: actions/upload-pages-artifact@v4
+          if [[ "$GITHUB_REF" == refs/tags/website/* ]]; then
+            ref="$GITHUB_REF"
+          else
+            ref=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/website/v" --jq '.[].ref' | sort -V | tail -n 1)
+            ref="${ref:-main}"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.website.outputs.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Check website tag
+        if: startsWith(github.ref, 'refs/tags/website/')
+        run: node -e 'if (!/^website\/v\d+\.\d+\.\d+$/.test(process.env.GITHUB_REF_NAME)) { console.error("Tag must be website/v<major>.<minor>.<patch>"); process.exit(1); }'
+      - uses: actions/configure-pages@v6
+      - name: Prepare public files
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WORKBENCH_TAG: ${{ inputs.workbench_tag }}
+        run: node website/build.cjs public
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: public
 
@@ -44,4 +64,4 @@ jobs:
     steps:
       - name: Publish to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

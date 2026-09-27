@@ -2,8 +2,8 @@
 
 A single static page that documents the extension's UI: the workbench layout,
 each toolbar button, page states, markup and handoff, lenses, and how to
-install a platform build. Plain HTML and CSS with no build step or runtime
-dependencies.
+install a platform build. Plain HTML and CSS, with a Node build script that
+fills in release downloads for GitHub Pages.
 
 | File | Job |
 | --- | --- |
@@ -12,18 +12,23 @@ dependencies.
 | `canonic.svg` | the mark, filled blue so it reads on both themes |
 | `images/` | screenshots of the workbench showing the Acme example |
 | `screenshots/` | the Acme fixture and the script that regenerates `images/` |
+| `build.cjs` | assembles the public site with links to a successful workbench release |
 
 ## Previewing
 
 Open `index.html` in a browser, or serve the folder with any static server.
 
-The [Publish website workflow](../.github/workflows/website.yml) copies only
-`index.html`, `style.css`, `canonic.svg`, and `images/` to GitHub Pages when
-`website/` changes on `main`. The repository's Pages source must be set to
-**GitHub Actions**. The published site is at
+The [Publish website workflow](../.github/workflows/website.yml) deploys
+`index.html`, `style.css`, `canonic.svg`, and `images/` to GitHub Pages when a
+`website/v<version>` tag is pushed (for example, `website/v1.0.1`). A successful
+`workbench/v<version>` build and release also calls it, using the newest tagged
+website version and the new release's download links. Until the first website
+tag, this uses the website on `main`. The repository's Pages source must be set
+to **GitHub Actions**. The `github-pages` environment must allow both
+`website/v*` and `workbench/v*` tag deployments. The published site is at
 `https://canonic2.github.io/canonic/` unless a custom domain is configured.
-The Install section links to the latest GitHub Release; release downloads become
-available after a version tag has been published.
+If no workbench release exists yet, the Install section waits for one. A website
+tag uses the newest published workbench release available when it deploys.
 
 ## Updating screenshots
 

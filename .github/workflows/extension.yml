@@ -2,12 +2,7 @@ name: Build workbench extension
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
-    paths:
-      - workbench/**
-      - .github/workflows/extension.yml
-  workflow_dispatch:
+    tags: ['workbench/v*']
 
 permissions:
   contents: read
@@ -16,15 +11,14 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.12.0'
           cache: npm
           cache-dependency-path: workbench/package-lock.json
       - name: Check release version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: node -e 'const version = require("./workbench/package.json").version; if (process.env.GITHUB_REF_NAME !== `v${version}`) { console.error(`Tag must be v${version}`); process.exit(1); }'
+        run: node -e 'const version = require("./workbench/package.json").version; if (!/^\d+\.\d+\.\d+$/.test(version) || process.env.GITHUB_REF_NAME !== `workbench/v${version}`) { console.error(`Tag must be workbench/v${version}`); process.exit(1); }'
       - run: npm ci --ignore-scripts
         working-directory: workbench
       - run: npm test
@@ -50,8 +44,8 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.12.0'
           cache: npm
@@ -60,7 +54,7 @@ jobs:
         working-directory: workbench
       - run: npm run package:all -- ${{ matrix.target }}
         working-directory: workbench
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: workbench-${{ matrix.target }}
           path: workbench/dist/*.vsix
@@ -68,13 +62,12 @@ jobs:
           retention-days: 14
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: workbench-*
           merge-multiple: true
@@ -83,7 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${GITHUB_REF_NAME#workbench/v}"
           files=(dist/*-"$version".vsix)
           test "${#files[@]}" -eq 6
           for file in "${files[@]}"; do
@@ -91,3 +84,13 @@ jobs:
             mv "$file" "dist/${name%-"$version".vsix}.vsix"
           done
           gh release create "$GITHUB_REF_NAME" dist/*.vsix --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --latest
+
+  publish_website:
+    needs: release
+    uses: ./.github/workflows/website.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      workbench_tag: ${{ github.ref_name }}
