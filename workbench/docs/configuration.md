@@ -401,8 +401,8 @@ A **probe** has exactly one of:
 
 Use `port` for `check` when you only need to know something is listening, and
 a `url` for `ready` when the server listens before it can serve, as Storybook
-does while it builds. If `ready` times out, the canvas still opens and reports
-the problem. Start commands never run in untrusted workspaces or outside
+does while it builds. If `ready` times out, the canvas still opens and the
+**Workbench** output channel records the timeout. Start commands never run in untrusted workspaces or outside
 VS Code. See [Start the server automatically](lenses.md#start-the-server-automatically).
 
 ## Catalogs
