@@ -51,7 +51,7 @@ reset the width. The width is remembered.
 | **Open the source** (`</>`) | Lists the design file and the screen's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file. A path that isn't on this machine is listed but can't be opened. |
 | **Copy reference** | Copies a short text reference to the current view. See [Copy a reference](#copy-a-reference). |
 | **Open on its own** | Opens the current page in your browser, outside the workbench. |
-| **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Controls and lifecycle](workbench-previews.md#controls-and-actions). |
+| **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Controls and actions](workbench-previews.md#controls-and-actions). |
 | **More** | **Configure pages** and **Download design-system ZIP**. Shown when the workbench server is running. |
 
 When the canvas is narrow, **Reload**, **Open the source**, **Copy reference**,
@@ -86,8 +86,8 @@ The canvas behaves like Figma's:
 | Input | Does |
 | --- | --- |
 | ⌘ or Ctrl + scroll wheel, or pinch | Zoom at the pointer |
-| Scroll wheel, or Shift + wheel | Pan |
-| Space + drag, or middle-button drag | Pan |
+| Scroll wheel on the canvas around the frame, or Shift + wheel there | Pan. Over the page, the wheel scrolls the page. |
+| Space + drag, or middle-button drag | Pan, anywhere on the canvas |
 | ⌘ or Ctrl + `=` (or `+`), and ⌘ or Ctrl + `−` | Zoom in and out, in powers of two |
 | ⌘ or Ctrl + 0, or Shift 0 | Zoom to 100% |
 | Shift 1 | Zoom to fit |
@@ -121,6 +121,48 @@ menu or clipboard integration. Storybook doesn't forward keys while an input in
 the story is focused. Use **Open on its own** when you need full native
 behavior.
 
+## Keyboard shortcuts
+
+Workbench adds no VS Code keybindings; these keys work inside the canvas and
+the screen list. Use Ctrl where a shortcut shows ⌘ on Windows and Linux.
+
+### Canvas keys
+
+| Keys | Does |
+| --- | --- |
+| ⌘ `=` or ⌘ `+` | Zoom in |
+| ⌘ `−` | Zoom out |
+| ⌘ 0, or Shift 0 | Zoom to 100% |
+| Shift 1 | Zoom to fit |
+| Space + drag | Pan |
+| Escape | Close an open menu |
+
+Shift 0 and Shift 1 don't apply while you type in a field or a note.
+
+### Markup keys
+
+| Keys | Does |
+| --- | --- |
+| Escape | Leave the drawing tool for **Select**; with **Select**, deselect the mark; while typing a note, finish it |
+| ⌘ Z | Undo the last mark, unless a field, a note, or the page has focus |
+| Delete or Backspace | Remove the selected mark |
+| Arrow keys, Shift + arrow keys | Nudge the selected mark 1 or 8 pixels |
+| Shift while drawing | Keep arrows and lines at 45° steps, and rectangles and circles square |
+| Shift while dragging a corner handle | Keep a rectangle or circle square |
+| Double-click a note or comment | Edit its text, with **Select** |
+
+### Screen list keys
+
+| Keys | Where | Does |
+| --- | --- | --- |
+| ⌘ K | Standalone browser | Jump to the filter |
+| Escape | In the filter | Clear it |
+| Down | In the filter, in VS Code | Move to the first row |
+| Up, Down, Home, End | In the list, in VS Code | Move between rows |
+| Right, Left | In the list, in VS Code | Expand or collapse a folder or screen; Left on a row inside one moves to it |
+| Enter or Space | On a row | Show it |
+| Left, Right, Shift + Left or Right | On the list's edge, in a standalone browser | Resize the list by 8 or 32 pixels |
+
 ## Links and the address
 
 The current view is recorded in the address's hash, so reloading or opening a
@@ -148,8 +190,10 @@ To get a link:
 - In a standalone browser, copy the address bar.
 
 The workbench only listens on `127.0.0.1`, so a link works on your machine
-while the workbench is running. Share a [reference](#copy-a-reference) or a
-screenshot with other people instead.
+while the workbench is running. The port is the first free one from 3579, so
+with several project windows open, a saved link may point at another project
+after a restart; the hash part stays valid. Share a
+[reference](#copy-a-reference) or a screenshot with other people instead.
 
 ## Copy a reference
 
@@ -170,9 +214,11 @@ those, use a [handoff](markup-and-handoff.md#hand-off-to-an-agent).
 
 Saving rewrites only the `sections` block of `workbench.yaml`, and the screen
 list refreshes. States, implementation mappings, and code pointers in that
-block are preserved. Everything outside it, including comments, is left alone,
-while comments inside it may be reformatted. Editing the YAML directly always
-works too; see the [reference](configuration.md).
+block are preserved. Everything outside it, including comments, is left alone;
+comments inside it are removed. The form edits `workbench.yaml` only, so
+sections that `workbench.local.yaml` overrides on your machine keep showing
+the local version. Editing the YAML directly always works too; see the
+[reference](configuration.md).
 
 ## Using a standalone browser
 
@@ -182,7 +228,8 @@ The canvas also works in a regular browser:
   serves the page, so handoffs and opening files in the editor work too.
 - Without VS Code, run the server yourself. See
   [Running without VS Code](extension.md#running-without-vs-code). Everything
-  works except handoffs and opening files in the editor.
+  works except handoffs, opening files in the editor, and
+  [start commands](configuration.md#start-commands).
 
 In a browser, the screen list is on the left of the page, browser shortcuts
 and menus work normally, and the camera downloads screenshots. Problems

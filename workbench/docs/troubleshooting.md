@@ -26,7 +26,14 @@ Use **Workbench: Copy Canvas URL** for the actual port. The answer includes:
 - `files`: whether `workbench.yaml` (`main`) and `workbench.local.yaml`
   (`local`) were read.
 
-Read `problems` first whenever a screen, lens, story, or source link is missing.
+Read `problems` first whenever a lens, story, preview, catalog screen, or
+source link is missing. A hand-written screen dropped for a bad `src`, label,
+state id, or folder isn't listed there; see
+[A screen is missing from the list](#a-screen-is-missing-from-the-list).
+
+In VS Code, the screen list shows the same problems above the screens when
+TypeScript previews or a catalog are on. A standalone browser doesn't list
+them, so read the config route there.
 
 ### Check a Storybook title
 
@@ -38,7 +45,9 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 | --- | --- |
 | 200 | The title's stories, with ids, names, states, and resolved source paths. |
 | 404 | The title doesn't exist. The answer names the nearest titles, including the prefixed title when only the prefix differs. |
-| 503 | Storybook isn't running at the configured address, or `url: auto` found none. |
+| 400 | No Storybook implementation has that name, `url: auto` found no running Storybook, or the request has no `title`. |
+| 502 | Something answered at the address, but `/index.json` returned an error. It may not be Storybook 7 or later. |
+| 503 | Storybook isn't answering at the configured address. |
 
 ### Other places
 
@@ -58,6 +67,8 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 ## The Workbench view doesn't appear
 
 - `workbench.yaml` must be at the root of an open folder, not in a subfolder.
+  Open the folder that contains it, or add that folder to the workspace; see
+  [Projects in a subfolder](extension.md#projects-in-a-subfolder).
 - In a multi-root workspace, only the first folder with a `workbench.yaml` is
   served.
 - The workspace must be trusted. VS Code doesn't run Workbench in Restricted
@@ -80,7 +91,11 @@ See [YAML that the reader accepts](configuration.md#yaml-that-the-reader-accepts
 
 ## A screen is missing from the list
 
-Each dropped screen is named in `problems`. The usual reasons:
+A screen, folder, or section that can't be used is dropped, and the rest of
+the list still builds. These problems are written to the canvas's console,
+not to the config route: in VS Code, run
+**Developer: Open Webview Developer Tools** and read the console. The usual
+reasons:
 
 - It has no `label` or no `src`.
 - Its `src` starts with `/`, contains `..`, or contains `:` or `~`.
@@ -110,7 +125,6 @@ except for screens imported by a [catalog](configuration.md#catalogs).
   `previews: false` turns discovery off.
 - **Added or removed a file:** run **Workbench: Refresh Screens**. Only changes
   to the YAML files refresh the list on their own.
-- **`Workbench previews require a trusted workspace.`** Trust the folder.
 - **`Workbench previews: …`** The worker or `workbench.config.ts` failed. The
   log's `preview.worker` entries hold the worker's error output.
 - **`unknown Workbench preview “…”`** A screen's `kind: workbench` lens names an
@@ -146,7 +160,9 @@ See [TypeScript Workbench previews](workbench-previews.md).
 ## Links don't work in a page
 
 Actions are off by default, so links don't navigate and forms don't submit.
-Turn on **Actions** in the toolbar. See [Links and actions](pages-and-states.md#links-and-actions).
+Turn on **Actions** in the toolbar. With actions on, a link to an `.html` page
+in the project that isn't listed as a screen still does nothing; add the page
+to `workbench.yaml`. See [Links and actions](pages-and-states.md#links-and-actions).
 
 ## A width button is disabled
 
@@ -205,7 +221,7 @@ See [iOS Simulator troubleshooting](ios-simulator.md#troubleshooting) and
 | A lens screenshot doesn't show what you typed or scrolled to | Same cause: add the bridge. |
 | Screenshots of one page fail with a message | The page contains an `iframe`, `object`, or `embed`, or a canvas or video loaded from another origin without CORS. These pages can't be captured. |
 | A font or image is missing in the first screenshot after loading | The helper's copy was still loading assets. Take it again. |
-| Screenshots fail with an error | Read **Workbench: Show Log**. If the bundled helper can't start, Workbench uses Chrome; set `canonic.capture.chromePath` if it can't find one. |
+| Screenshots fail with an error | Read **Workbench: Show Log**. The screenshot helper needs macOS 13 or later, Windows, or Linux with a display; see [The screenshot helper](extension.md#the-screenshot-helper). |
 
 See [What screenshots can and can't include](markup-and-handoff.md#what-screenshots-can-and-cant-include).
 
@@ -214,6 +230,13 @@ See [What screenshots can and can't include](markup-and-handoff.md#what-screensh
 Handoffs need the VS Code extension's server. They work in the editor and in a
 browser opened with **Workbench: Open Canvas in Browser**, but not with a server
 you started yourself with `node server.js`. Use the camera there instead.
+
+## An agent can't find the handoff's screenshot
+
+The prompt's `Screenshot:` path is relative to the folder that holds
+`workbench.yaml`. Run the agent in that folder, or give it the file from
+`.canonic/.handoffs/` yourself. See
+[Pasting into an agent](markup-and-handoff.md#pasting-into-an-agent).
 
 ## Source links don't open
 

@@ -14,13 +14,20 @@ function executable(root, platform) {
   return path.join(root, platform === 'win32' ? 'canonic-capture.exe' : 'canonic-capture');
 }
 
-function available() {
-  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return false;
-  if (process.platform === 'darwin' && Number(os.release().split('.')[0]) < 22) return false;
+/* Why this host can't run the bundled runtime, or null when it can. */
+function unavailable() {
+  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return 'it needs a display on Linux';
+  if (process.platform === 'darwin' && Number(os.release().split('.')[0]) < 22) return 'it needs macOS 13 or later';
   try {
     var manifest = JSON.parse(fs.readFileSync(path.join(BUNDLE, 'runtime.json'), 'utf8'));
-    return manifest.target === process.platform + '-' + process.arch && fs.existsSync(path.join(BUNDLE, 'runtime.tar.gz'));
-  } catch (_) { return false; }
+    if (manifest.target !== process.platform + '-' + process.arch) return 'this build is for ' + manifest.target;
+    if (!fs.existsSync(path.join(BUNDLE, 'runtime.tar.gz'))) throw new Error('missing archive');
+    return null;
+  } catch (_) { return 'this copy has no bundled runtime; run npm run bundle-runtime'; }
+}
+
+function available() {
+  return !unavailable();
 }
 
 /* Each update ships a new hash, and a runtime is hundreds of megabytes. Once
@@ -74,4 +81,4 @@ async function extract(bundle, manifest, storage, destination, binary) {
   } finally { await fs.promises.rm(stage, { recursive: true, force: true }); }
 }
 
-module.exports = { executable: executable, available: available, prepare: prepare, prune: prune };
+module.exports = { executable: executable, available: available, unavailable: unavailable, prepare: prepare, prune: prune };

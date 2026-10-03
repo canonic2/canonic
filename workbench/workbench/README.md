@@ -14,7 +14,8 @@ extension as a pinned dependency.
 
 The [user documentation](../docs/README.md) is the guide for people setting
 Workbench up. The [workbench specifications](../specs/README.md) record the
-observable contracts for shared behavior, Storybook, and other previews.
+observable contracts for shared behavior, TypeScript previews, Storybook, and
+other implementations.
 
 ---
 

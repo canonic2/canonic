@@ -42,8 +42,7 @@ The user-facing reference is [The VS Code extension](../docs/extension.md).
 | **Workbench: Refresh Screens** | Refreshes the canvas and rebuilds the sidebar (see [Refresh](#refresh)). |
 | **Workbench: Show Log** | Shows the **Workbench** output channel. |
 
-`canonic.capture.chromePath` is the only setting: a browser executable for
-fallback screenshots ([capture](capture.md)).
+The extension contributes no settings.
 
 **Open Canvas in Browser** and `node server.js <project>` serve the same
 canvas but differ in host. The browser command uses the extension's server, so
@@ -127,14 +126,14 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
 VS Code extension host
   ├─ loopback workbench server ── project, workbench, and preview pages
   │    ├─ preview worker ── compiles and serves TypeScript previews (bundled runtime or Node)
-  │    ├─ screenshot capture service ── bundled Electron helper or Chrome fallback
+  │    ├─ screenshot capture service ── bundled Electron helper
   │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS
   └─ VS Code webviews ── sidebar and workbench tab
 ```
 
 The screenshot helper renders pages for [interactive capture](capture.md) and
 [export](export.md). The window helper streams native windows for the
-[Simulator and window lenses](other-previews.md); it is a separate process and
+[Simulator and window lenses](implementations.md#native-window-stream); it is a separate process and
 Screen Recording permission path. The preview worker and screenshot helper
 share the bundled Electron runtime, unpacked once into the extension's global
 storage. Browser-only VS Code cannot spawn any of these local processes.
@@ -142,22 +141,8 @@ storage. Browser-only VS Code cannot spawn any of these local processes.
 ### Preview worker
 
 The worker runs project code, so it is a separate process from the extension
-host and server. What it compiles and serves is specified in
-[TypeScript previews](previews.md); this section covers its lifecycle.
-
-- It is started lazily by the first config resolution that discovers at least
-  one definition in a trusted workspace with previews enabled. Packaged builds
-  run it on the bundled runtime as Node; otherwise it uses the server's own
-  Node. It must report its port within 30 seconds or startup fails with a
-  problem.
-- A change to the resolved `previews` value restarts it on the next
-  resolution. `previews: false` stops it.
-- If it exits unexpectedly, the next preview request or config resolution
-  starts a new one. There is no proactive restart.
-- It stops with the server: the server asks it to close and kills it after
-  3 seconds. It also exits when its parent's IPC channel disconnects.
-- Its error output is logged as `preview.worker` (each chunk truncated), and
-  per-request timing as `preview.request.completed`.
+host and server. Its lifecycle, timeouts, and logging are specified in
+[TypeScript previews](previews.md#compile-worker-lifecycle-and-trust).
 
 ## Logging
 
@@ -178,29 +163,20 @@ or handoff prompts.
   definition takes effect only after **Refresh Screens** or a YAML change, and
   the user guide documents that limitation; update the guide when this is
   fixed.
-- **Possible duplicate preview workers (hypothesis, from code reading).**
-  `importPreviews` in [server.js](../server.js) closes the old worker on a
-  `previews` change, then sets `previews = null` after an `await`. Two
-  overlapping resolutions after a YAML edit (the sidebar's catalog request and
-  the canvas refresh both resolve the config) could each pass that check; the
-  later one would then discard the worker the earlier one created without
-  closing it. That worker would run until the extension host exits. Not
-  reproduced.
-- **Idle worker after previews disappear.** When discovery finds no
-  definitions, resolution returns before touching the running worker, so it
-  keeps running until the server stops or `previews` changes.
 - **Copy Canvas URL in remote workspaces (unverified).** The command copies
   the server's `127.0.0.1` address without `asExternalUri`; in a remote
   workspace that names the remote machine. The tab uses `asExternalUri`, and
   **Open Canvas in Browser** relies on `openExternal`.
-- **Trust read once.** `isTrusted` is read at activation and passed to the
-  server as a constant. This is harmless while the extension does not run in
-  Restricted Mode, but would be wrong if untrusted support were declared.
 
 ## Open questions
 
-- Should an unexpected worker exit be logged and reported as a problem, rather
-  than surfacing only as a failed request until the next one restarts it?
+- **What is the trust gate for?** The extension declares no untrusted-workspace
+  support, so VS Code never runs it in Restricted Mode, and the standalone
+  server treats a missing trust flag as trusted. As built, no user can reach
+  the start-command or preview trust checks. `isTrusted` is also read once at
+  activation and passed to the server as a constant, so granting trust later
+  would not be observed. Either declare limited untrusted support and make
+  the gate live (reading trust changes), or remove the checks.
 
 ## Verification points
 

@@ -25,8 +25,9 @@ compilation, and screenshot processes have separate
   The browser and server use the same implementation, viewport, and `previews`
   rules from `manifest.js`.
 - `sections` contains ordered screen-list sections. Each section contains
-  screens and optionally one level of folders. `sections` may be omitted when
-  previews or a catalog supply screens.
+  screens and optionally one level of folders. `sections` may be omitted unless
+  `previews: false` and no implementation has a catalog; then a config with no
+  usable screen fails with *nothing to show*.
 - `previews` is a map (`include`, `config`) or `false`. Discovery is on by
   default; `false` turns it off and no preview code runs. An invalid value is
   a problem and leaves previews off until fixed. Discovery, definitions, and
@@ -143,7 +144,7 @@ Checked against the working tree on 2026-10-03.
 - **Some failures never become problems.** A stopped Storybook used only by
   mappings, a mapped Simulator whose device is not booted, and an authored
   entry with an invalid `src` or state id fail only on the canvas or are
-  dropped silently; see [other previews](other-previews.md#current-gaps) and
+  dropped silently; see [implementations](implementations.md#current-gaps) and
   [Storybook](storybook.md#current-gaps).
 
 ## Verification points
@@ -167,5 +168,5 @@ Checked against the working tree on 2026-10-03.
   row.
 - [server.test.js](../server.test.js) checks the config route and injection of
   `preview-compat.js` into served HTML.
-- Manual: in VS Code, add an invalid state id and confirm the problem appears
-  only in the canvas console (the first gap above).
+- Not covered: no test checks that the sidebar and canvas show the same
+  problems list.

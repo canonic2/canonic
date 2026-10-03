@@ -43,13 +43,15 @@ supplies screens.
 
 ### Add a Simulator lens to a design screen
 
-Instead of, or as well as, a catalog, a design screen can name the device
-that shows it:
+A design screen can also show a booted device in a lens. The lens streams only
+a device that the implementation's catalog has imported, so keep
+`catalog: true` on the implementation and name the device by its UDID:
 
 ```yaml
 implementations:
   simulator:
     kind: ios-simulator
+    catalog: true
 
 sections:
   - name: Screens
@@ -59,8 +61,12 @@ sections:
         viewports:
           - mobile
         implementations:
-          simulator: iPhone 16 Pro
+          simulator: 6A1F2B3C-0000-4000-8000-123456789ABC
 ```
+
+To find a booted device's UDID, run `xcrun simctl list devices booted`. A
+device name in this place is accepted by the reader, but the stream refuses
+it, and the canvas reports that the Simulator isn't declared.
 
 The screen gets a **Simulator** lens next to **Design**. Navigate the app to the
 matching screen on the device, then switch between the two to compare.
@@ -73,7 +79,8 @@ implementations. `start` isn't available for the Simulator.
 - A small native helper, built from source shipped in the extension, finds the
   Simulator's window with ScreenCaptureKit and encodes it once with VideoToolbox.
   It's the same helper the [app window](windows.md) lens uses, and one window
-  streams at a time.
+  streams at a time. Two canvases streaming at once, such as the editor tab
+  and a browser opened with **Open Canvas in Browser**, interrupt each other.
 - In VS Code, JPEG frames reach the canvas over a loopback HTTP stream at about
   20 frames per second, which doesn't depend on the editor's media codecs. A
   standalone browser uses an H.264 stream at about 30 frames per second,
@@ -123,4 +130,5 @@ reference image.
 | --- | --- |
 | No Simulator screens | Boot a Simulator. With a `device` name or UDID, check that it matches exactly. The config route's `problems` reports when no booted device matches. |
 | Black canvas or a permission error | Grant Screen Recording to the editor, then restart it. |
+| A design screen's Simulator lens says the Simulator isn't declared | Name the device by its UDID, keep `catalog: true` on the implementation, and boot the device. See [Add a Simulator lens to a design screen](#add-a-simulator-lens-to-a-design-screen). |
 | Stream shows but taps do nothing | Install WebDriverAgent. Check the **Workbench** log (**Workbench: Show Log**) for automation errors. |

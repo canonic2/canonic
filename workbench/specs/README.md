@@ -18,16 +18,16 @@ decisions, or findings change, and add new topics to the index below. Use the
 | [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, frames, and failures shared by every screen |
 | [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, adapters, controls, the `workbench` lens, and the portable build |
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
-| [Other previews](other-previews.md) | Authored pages, URL implementations, iOS Simulator implementations, and window implementations |
+| [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
 | [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
-| [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, fallbacks, and limits |
+| [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
 
 The workbench is one implementation in `packages/workbench/workbench/`. Projects provide
 `workbench.yaml` and may override machine-specific values in the ignored
 `workbench.local.yaml`. They do not receive a copy of the workbench code.
 
-## Preview types
+## Screen sources
 
 A screen enters the list from `workbench.yaml`, from an implementation catalog,
 or from preview discovery. TypeScript previews (`*.workbench.ts` and
@@ -35,7 +35,7 @@ or from preview discovery. TypeScript previews (`*.workbench.ts` and
 worker, and render in the Workbench preview host; see
 [TypeScript previews](previews.md) and the [preview API guide](../docs/workbench-previews.md).
 
-| Preview | How it enters the list | What appears on the canvas |
+| Source | How it enters the list | What appears on the canvas |
 | --- | --- | --- |
 | Authored page | A `sections[].items[]` entry with `src` | The project HTML file as designed |
 | TypeScript preview | A discovered definition, placed in the section its title names, or listed by `src` | The compiled component in the preview host, with its states and controls |

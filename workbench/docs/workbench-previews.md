@@ -5,13 +5,25 @@ in named states, next to your design pages. You define it in a
 `.workbench.ts` or `.workbench.tsx` file, with an adapter for HTML, React, Vue,
 Astro, React Native Web, or a technology you register yourself.
 
+This page covers what every preview shares: definitions, states, controls,
+lifecycle hooks, the command-line tools, and portable exports. Each framework
+has its own guide:
+
+| Adapter | Renders | Guide |
+| --- | --- | --- |
+| `react` | A React component, with `inputs` as props | [React](react.md) |
+| `react-native-web` | A React Native component through React Native Web | [React Native Web](react-native-web.md) |
+| `vue` | A Vue 3 single-file component or module, with `inputs` as props | [Vue](vue.md) |
+| `astro` | An Astro component or page, rendered on the server | [Astro](astro.md) |
+| `html` | An HTML file with its styles and scripts, or a module that mounts into the canvas | [HTML](html.md) |
+| Your own | Anything you can mount from a browser module | [Custom adapters](custom-adapters.md) |
+
 You need:
 
 - `workbench.yaml` at the project root. `name: Acme` alone is enough when
   previews supply every screen.
-- A [trusted workspace](extension.md#workspace-trust). Previews run project
-  code, so Workbench doesn't load them in an untrusted folder and reports
-  `Workbench previews require a trusted workspace.` instead.
+- A [trusted workspace](extension.md#workspace-trust), since previews run
+  project code.
 - The framework you render with, installed in your project. Workbench compiles
   TypeScript, JSX, and Vue files itself, but uses your project's React, Vue,
   Astro, or React Native Web. It never installs or replaces them.
@@ -42,6 +54,8 @@ You need:
 
    You don't install `@canonic/workbench`: Workbench supplies it when it
    compiles the file. For editor types, see [Command-line tools](#command-line-tools).
+   This example renders a React component; each framework guide has a complete
+   example of its own.
 
 2. Run **Workbench: Refresh Screens**, or save `workbench.yaml`. The preview
    appears in the sidebar with its states, and opens on the canvas like any
@@ -108,87 +122,10 @@ keyed off it works as it does in [design pages](pages-and-states.md#1-css-keyed-
 
 ## Adapters
 
-| Adapter | Source | What renders |
-| --- | --- | --- |
-| `html` | An HTML file, or a JS/TS module | The HTML with its styles and scripts, or the module's exported mount function |
-| `react` | JSX/TSX or JS/TS | The selected React component, with `inputs` as props |
-| `vue` | A Vue 3 single-file component, or JS/TS | The selected Vue component, with `inputs` as props |
-| `astro` | An Astro component or page | Server-rendered HTML, with `inputs` as `Astro.props` |
-| `react-native-web` | JSX/TSX or JS/TS | The component through React Native Web |
-
-- **React** needs `react` and `react-dom` 18 or later in the project.
-- **Vue** supports TypeScript, templates, and scoped CSS. Style preprocessors,
-  `<style src>`, and custom blocks need a [compiler plugin](#register-other-technologies).
-- **React Native Web** resolves `react-native` to `react-native-web` and prefers
-  `.web.tsx`, `.web.ts`, `.web.jsx`, and `.web.js` files. Native-only modules may
-  need an alias to a mock, or a provider in an `environment`. To review a native
-  app itself, use the [iOS Simulator](ios-simulator.md) or an
-  [app window](windows.md).
-
-### HTML sources
-
-An HTML file's local scripts, stylesheets, images, fonts, inline module
-imports, and `srcset` images are compiled and served with the preview.
-Attributes on its `<html>` and `<body>` are kept; its `<title>`, `<meta>`, and
-`<base>` are dropped. Scripts run again on every state change and reset, and
-can read the current context from `window.workbench`. External `http(s)` URLs
-are left as they are. A missing local file fails the build with
-`Missing HTML asset`.
-
-Links in the page navigate as usual but don't add screens: declare each page
-you want in the list.
-
-A JS or TS module for the `html` adapter exports a mount function:
-
-```ts
-import type { PreviewContext } from '@canonic/workbench';
-
-export default function mount(canvas: HTMLElement, context: PreviewContext) {
-  const button = document.createElement('button');
-  button.textContent = String(context.inputs.label);
-  button.addEventListener('click', () => context.action('click'), {
-    signal: context.signal,
-  });
-  canvas.append(button);
-  // Optionally return a cleanup function for anything outside the canvas.
-}
-```
-
-### Astro components and pages
-
-```ts
-import { definePreview } from '@canonic/workbench';
-
-export default definePreview({
-  id: 'components/card',
-  title: 'Components/Card',
-  adapter: 'astro',
-  source: { entry: './Card.astro' },
-  inputs: { title: 'Acme', featured: false },
-  controls: { title: { type: 'text' }, featured: { type: 'boolean' } },
-  states: { default: {}, featured: { inputs: { featured: true } } },
-});
-```
-
-Astro 4.9 or later must be installed in the project; Workbench uses its
-compiler and renders on the server with Astro's Container API. Frontmatter and
-its Node imports run in Workbench's background process, never in the browser.
-Nested components, slots, scoped styles, CSS imports, scripts, `?raw` and `?url`
-imports, and files in the nearest package's `public/` folder all work. Editing
-an input in **Preview controls** renders the component again; it never writes
-to your files.
-
-The adapter renders a component on its own, not your application. It doesn't
-load `astro.config.*` or run middleware, and it reports an error for
-`astro:content` and other `astro:` imports, for client and server islands, and
-for style preprocessors. `import.meta.glob` isn't expanded. Use a
-[compiler plugin](#register-other-technologies) for those, or review the whole
-application through a [URL lens](lenses.md). Frontmatter that calls an external
-service still needs that service.
-
-`import.meta.env.BASE_URL` is `/` and `import.meta.env.SITE` is
-`https://example.com`; override either with `define` in `workbench.config.ts`.
-`import.meta.env.DEV` is `true` on the canvas and `false` in exports.
+`adapter` picks how the `source` renders. The built-in adapters are `html`,
+`react`, `vue`, `astro`, and `react-native-web`; see the table at the top of
+this page for each one's guide. Any other name must be
+[registered](#register-other-technologies).
 
 ## Controls and actions
 
@@ -231,7 +168,7 @@ The `environment` module can export `setup` and `ready`, and one adapter hook:
 | --- | --- |
 | `react` | `wrap(element, context)`, returning the element wrapped in providers |
 | `vue` | `configure(app, context)`, to install plugins, and `wrap(vnode, context)` |
-| `html` | `mount(canvas, context)`, called after an HTML file's content is in place |
+| `html`, `astro` | `mount(canvas, context)`, called after the rendered HTML is in place |
 
 A preview is ready once its hooks finish, its fonts load, and its visible
 images load or 3 seconds pass. Screenshots and handoffs wait for that, and fail
@@ -254,45 +191,11 @@ remove a definition, or change its `title` or states, run
 
 ## Register other technologies
 
-Adapter names aren't a fixed list. Register one in `workbench.config.ts` at the
-project root, or the file named by
-[`previews.config`](configuration.md#previews):
-
-```ts
-import { defineConfig } from '@canonic/workbench';
-import customCompiler from './preview/custom-compiler';
-
-export default defineConfig({
-  adapters: {
-    custom: {
-      runtime: './preview/custom-runtime.ts',
-      plugins: [customCompiler],
-    },
-  },
-  aliases: { 'native-only-package': './preview/native-package-mock.ts' },
-  dedupe: ['react', 'react-dom'],
-});
-```
-
-The `runtime` module exports `mount(canvas, source, context, environment)`,
-which may return a cleanup function. An adapter whose name isn't built in or
-registered fails with `Unknown adapter`.
-
-| Key | Description |
-| --- | --- |
-| `adapters` | Adapter names mapped to a `runtime` path and optional `plugins`. Registering a built-in name replaces it. |
-| `plugins` | Compiler plugins for every adapter. |
-| `aliases` | Import specifiers mapped to a package name or a project path. |
-| `dedupe` | Packages that always resolve from the project's own installation, such as React in a monorepo. |
-| `resolveExtensions` | The file extensions tried for imports without one, in order. |
-| `define` | Global constants replaced at build time, such as `process.env.API_URL`. |
-
-Compiler plugins use [esbuild's plugin interface](https://esbuild.github.io/plugins/)
-(`setup`, `onResolve`, `onLoad`) and run before Workbench's own loaders. Vite,
-Babel, and framework plugins need a wrapper. A framework that needs server
-rendering needs a plugin that produces browser modules; Workbench doesn't run
-your application server. Relative `runtime` and alias paths start from the
-project root.
+Adapter names aren't a fixed list. `workbench.config.ts` at the project root,
+or the file named by [`previews.config`](configuration.md#previews), registers
+adapters and sets compiler plugins, `aliases`, `dedupe`, `resolveExtensions`,
+and `define` for every preview. An adapter whose name isn't built in or
+registered fails with `Unknown adapter`. See [Custom adapters](custom-adapters.md).
 
 ## Compare a design with a preview
 
@@ -340,6 +243,5 @@ The viewer has:
 The viewer's address keeps the preview, state, viewport, and resizable size, so
 you can copy it to share a selection.
 
-Astro previews contain every authored state, with no Astro installation or
-server needed. Their input controls are left out, since editing inputs needs a
-live render.
+Astro previews carry every authored state but no input controls; see
+[Astro portable exports](astro.md#portable-exports).

@@ -6,26 +6,17 @@ behavior in [core.md](core.md). Storybook has its own contract in
 [storybook.md](storybook.md). TypeScript previews and the `workbench`
 implementation are in [previews.md](previews.md).
 
-## Authored HTML pages
+The keys, their validation rules, and examples are in the
+[workbench.yaml reference](../docs/configuration.md); this spec does not
+repeat them. It records the behavior those keys produce, the decisions behind
+it, and where the code falls short.
 
-```yaml
-sections:
-  - name: Pages
-    items:
-      - label: Sign in
-        src: pages/sign-in.html
-        states:
-          - id: default
-            label: Default
-          - id: error
-            label: Wrong password
-```
+## Authored HTML pages
 
 ### Requirements
 
-- `src` is relative to the project root and cannot start with `/` or contain
-  `..`, `:`, or `~`. Pages need nothing added for Workbench: no script tag,
-  import, or build step.
+- Pages need nothing added for Workbench: no script tag, import, or build
+  step.
 - A state is declared in YAML, which adds the sidebar row, and in the page,
   which decides what it looks like. Declaring a state in YAML alone does not
   make the page render it. State IDs are kebab-case because they travel in
@@ -35,7 +26,7 @@ sections:
   sees it as `default` whatever its ID. Any other state travels as
   `?state=<id>`.
 - Invalid entries are reported as problems rather than silently dropped
-  ([core.md](core.md)).
+  ([core.md](core.md#problem-reporting)).
 
 ### Compatibility script
 
@@ -49,12 +40,10 @@ sections:
 - A page opened straight from disk gets no script and shows as authored. A
   served page loaded outside the workbench, with no `actions` parameter, has
   actions on.
-- `states.js` sets `data-wb-state` on `<html>` immediately: the `state`
-  parameter, or `default` when it is absent or not kebab-case. At
-  `DOMContentLoaded` it removes elements whose `data-wb-state-only` list
-  excludes the state or whose `data-wb-state-not` list includes it, and
-  applies the active state's `data-wb-set-<id>` attributes. Elements added
-  later are not processed.
+- State handling sets `data-wb-state` on `<html>` before the page renders and
+  applies the state markup once, at `DOMContentLoaded`; elements added later
+  are not processed. The attributes are described in
+  [Pages and states](../docs/pages-and-states.md#states).
 
 ### Actions and navigation
 
@@ -74,36 +63,11 @@ sections:
 
 ## URL implementations
 
-```yaml
-implementations:
-  staging:
-    kind: url
-    base: https://staging.example.com
-  dev:
-    kind: url
-    base: http://localhost:3710
-    root: ../acme-web
+Configuration: [Implementations](../docs/configuration.md#implementations) and
+[A screen's implementations](../docs/configuration.md#a-screens-implementations).
 
-sections:
-  - name: Pages
-    items:
-      - label: Sign in
-        src: pages/sign-in.html
-        implementations:
-          staging: /sign-in
-          dev:
-            default: /sign-in
-            error: /sign-in?error=1
-        code:
-          dev: src/routes/sign-in/page.tsx
-```
-
-- A URL implementation requires an HTTP(S) `base`, which may include a base
-  path. Trailing slashes are removed and the screen's path is appended.
-- Each authored screen maps the implementation to one path beginning with `/`,
-  or to a map keyed by that screen's declared state IDs. The map needs an
-  entry for the first state, under its own ID or `default`. A state without an
-  entry uses the default path; a key the screen doesn't declare is a problem.
+- A screen maps the implementation to one path, or to one path per declared
+  state. A state without its own path uses the first state's.
 - With a single path, the lens shows that path for every state and hides the
   state menu. With a state map, the state menu stays and each pick loads its
   path.
@@ -111,10 +75,10 @@ sections:
   embedding and manage their own session in that context. When embedding
   fails, the failure stays in the frame; Workbench does not switch to another
   way of showing the page. **Open on its own** opens the URL in the browser.
-- A URL implementation may use the same optional `start` command and
-  `check`/`ready` probes as Storybook ([storybook.md](storybook.md),
-  [vscode-extension.md](vscode-extension.md)). This is a VS Code startup
-  feature, not a requirement to view a hosted implementation.
+- A URL implementation may use the optional `start` command
+  ([vscode-extension.md](vscode-extension.md#implementation-startup)). This is
+  a VS Code startup feature, not a requirement to view a hosted
+  implementation.
 - An external page may opt into the cooperative preview bridge,
   `/_workbench/preview-bridge.js`. Without it,
   [screenshot capture](capture.md) visits the URL in the helper's separate
@@ -123,12 +87,10 @@ sections:
 
 ### Implementation roots and code pointers
 
-- `root` on a `url`, `storybook`, `ios-simulator`, or `window` implementation
-  says where its code lives, relative to `workbench.yaml` or absolute. A URL
-  `root` is rejected.
-- A screen's `code` maps implementation names to one path or a list, relative
-  to that implementation's `root` or absolute. A screen may list `code` for an
-  implementation without mapping a lens to it.
+Configuration: [Code pointers](../docs/configuration.md#code-pointers).
+
+- An implementation's `root` says where its code lives. A screen may list
+  `code` for an implementation without mapping a lens to it.
 - Code pointers require the implementation's `root`, even for absolute paths.
   Without one, the pointer is listed but cannot be opened, and
   `/_workbench/config` reports that the implementation has no root.
@@ -137,19 +99,12 @@ sections:
 
 ## iOS Simulator implementations
 
-```yaml
-implementations:
-  simulator:
-    kind: ios-simulator
-    device: booted
-    catalog: true
-```
+Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
 
-- `device` defaults to `booted`, which matches every booted device; otherwise
-  it is one exact device name or UDID. With `catalog: true`, each matching
-  booted, available device becomes an implementation-only screen, labeled with
-  the device name, in a section named after the implementation. When no
-  matching booted device is found, the catalog reports a problem.
+- With `catalog: true`, each matching booted, available device becomes an
+  implementation-only screen, labeled with the device name, in a section named
+  after the implementation. When no matching booted device is found, the
+  catalog reports a problem.
 - An authored screen may map a Simulator lens to a device name or UDID instead
   of, or as well as, using a catalog. See the gap below.
 - The canvas shows the device through the native window stream described in
@@ -166,26 +121,12 @@ implementations:
 
 ## Window implementations
 
-```yaml
-implementations:
-  emulator:
-    kind: window
-    app: com.example.emulator
+Configuration: [App windows](../docs/windows.md#configure-it).
 
-sections:
-  - name: Screens
-    items:
-      - label: Sign in
-        src: design/sign-in.html
-        implementations:
-          emulator: Example Phone
-```
-
-- `app` is required: a bundle ID or part of one, in letters, digits, dots,
-  and hyphens. A screen maps the implementation to a window title or part of
-  one. The helper streams the largest on-screen window whose bundle ID and
-  title contain those values, ignoring case. When none matches, the error
-  lists up to twelve visible windows.
+- The helper streams the largest on-screen window whose bundle ID contains the
+  implementation's `app` and whose title contains the screen's mapped value,
+  ignoring case. When none matches, the error lists up to twelve visible
+  windows.
 - The canvas posts the implementation and the screen's `src` to
   `/_workbench/window/stream`. The server answers only when that screen maps
   that `window` implementation, and takes the app and title from the config,
@@ -211,10 +152,11 @@ sections:
   over a streamed HTTP response, because VS Code does not promise an H.264
   decoder and its webview forwarding does not reliably keep a WebSocket
   upgrade. Both carry a private per-stream token on the loopback server.
-- The server runs one native stream at a time, shared by Simulator and window
-  lenses. A request for the same stream (the device's UDID, or the window
-  implementation and screen) and codec reuses it; any other request stops it
-  and starts a new one.
+- Each open canvas keeps its own stream (decided 2026-10-03). A VS Code
+  canvas and a browser canvas showing the same device, or two canvases showing
+  different devices or windows, stream at the same time; opening one must not
+  stop or replace another's stream. Requests for the same source and codec may
+  share one capture.
 - macOS attributes Screen Recording to the app that launched the helper: VS
   Code in the extension, or the terminal for a standalone server. A denial
   names that app. There is no fallback to browser screen sharing; when the
@@ -234,9 +176,16 @@ with a stubbed Simulator list and stream.
   UDID with `catalog: true` streamed. This violates the requirement that an
   authored screen may name a device by name or UDID. No test covers an
   authored Simulator mapping.
+- **Canvases replace each other's stream.** The server runs one native
+  stream at a time, shared by Simulator and window lenses
+  ([window-stream.js](../window-stream.js)). A request for the same source and
+  codec reuses it; any other request stops it and starts a new one, so a VS
+  Code canvas (JPEG) and a browser canvas (H.264) on the same device, or two
+  canvases on different windows, keep interrupting each other.
 - **Mapped devices are not checked.** Without `catalog: true`, a Simulator
   whose device isn't booted produces no entry in `problems`; the failure
-  appears only on the canvas.
+  appears only on the canvas, contrary to the shared problems list in
+  [core.md](core.md#problem-reporting).
 - **Invalid authored entries are dropped silently.** A screen whose `src`
   starts with `/` or contains `..`, `:`, or `~`, and a state whose ID isn't
   kebab-case, are left out with no problem ([config.js](../config.js)
@@ -251,10 +200,6 @@ with a stubbed Simulator list and stream.
 
 - Should an authored Simulator lens resolve a device name to a booted UDID
   without requiring `catalog: true`, or should the mapping accept only UDIDs?
-- The single shared stream means a VS Code canvas (JPEG) and a browser canvas
-  (H.264) showing the same device, or two canvases showing different windows,
-  replace each other's stream. Is that acceptable, or should one helper serve
-  several codecs or sources?
 - Should a link to a project page that isn't a configured screen navigate the
   iframe normally, as the user guide implies, or stay blocked?
 
@@ -273,7 +218,8 @@ with a stubbed Simulator list and stream.
   warnings for implementation-only screens.
 - [simulator.test.js](../workbench/simulator.test.js) checks that a window lens
   streams without starting WDA, and that an embedded workbench uses JPEG.
-  [window-stream.test.js](../window-stream.test.js) checks one native stream,
+  [window-stream.test.js](../window-stream.test.js) checks the current single
+  native stream (see the gap above),
   token checks, HTTP framing, and that the packaged extension ships the
   helper source.
 - [lenses.test.js](../workbench/lenses.test.js) checks URL joining.

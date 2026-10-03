@@ -10,8 +10,8 @@ from the same runtime. See [markup.js](../workbench/markup.js),
 [capture-page.js](../workbench/capture-page.js),
 [electron-capture.js](../electron-capture.js),
 [electron-runtime.js](../electron-runtime.js),
-[capture-helper/main.cjs](../capture-helper/main.cjs), and the Chrome
-fallback in [capture.js](../capture.js). The user-facing description is
+[capture-helper/main.cjs](../capture-helper/main.cjs), and the page scripts
+in [capture-scripts.js](../capture-scripts.js). The user-facing description is
 [Markup and handoff](../docs/markup-and-handoff.md#screenshots).
 
 ## Why a helper exists
@@ -46,9 +46,10 @@ web-page capture, not an operating-system screenshot of VS Code.
   removes `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS`.
 - The runtime is used only when its `runtime.json` target matches the host,
   the archive is present, the host is not macOS earlier than 13 (Darwin 22),
-  and a Linux host has `DISPLAY` or `WAYLAND_DISPLAY`. Otherwise screenshots
-  use the [Chrome fallback](#chrome-fallback) from the start, and the preview
-  worker runs with the host's own executable.
+  and a Linux host has `DISPLAY` or `WAYLAND_DISPLAY`. Otherwise there are no
+  screenshots: every capture and export reference fails with the reason (for
+  example, "it needs macOS 13 or later"), and the preview worker runs with the
+  host's own executable.
 - On macOS the helper is an accessory app (`LSUIElement`) with no visible
   window or Dock icon, including at startup.
 
@@ -71,20 +72,8 @@ web-page capture, not an operating-system screenshot of VS Code.
   exits mid-command is retried once on the replacement. A command that runs
   past its timeout (30 s by default) kills the helper; the view that hung is
   not replayed on its own, and the workbench asks again with its own backoff.
-
-### Chrome fallback
-
-- If the helper cannot be unpacked or started (startup failure or timeout),
-  the service retries the request through headless Chrome, Chromium, or Edge
-  and keeps that engine for the rest of the server's lifetime. Concurrent
-  requests switch once. The same engine is selected directly when the bundled
-  runtime is unavailable on the host.
-- The browser is `canonic.capture.chromePath` when that setting is set;
-  otherwise `CANONIC_CHROME_PATH`, then standard install locations. It runs on a
-  temporary profile and is driven over the DevTools pipe. With no browser
-  found, captures fail with a message naming `CANONIC_CHROME_PATH`.
-- A slow, invalid, or failing page and a command timeout in a running helper
-  remain page errors. They never switch a working helper to Chrome.
+- A helper that cannot be unpacked or started fails the request with that
+  error. There is no second screenshot engine.
 
 ## What is captured
 
@@ -172,6 +161,11 @@ See [handoff.js](../handoff.js).
 - **Keep the OS motion preference in the helper.** Mirrors carry animation
   phases, and forcing reduced motion would select different CSS from the
   visible preview.
+- **One screenshot engine (2026-10-03).** The bundled helper is the only
+  engine. Hosts that can't run it, such as Linux without a display (most
+  remote workspaces) and macOS 12 and earlier, have no screenshots rather
+  than a second engine that renders differently and needs its own
+  hardening.
 
 ## Current status
 
@@ -189,12 +183,6 @@ cases, and embedded documents or tainted pixels.
   or video ([dom-mirror.js](../workbench/dom-mirror.js)), instead of
   rendering those regions blank. The user guides describe the current failure;
   update them with the fix.
-- The Chrome fallback emulates `prefers-reduced-motion: reduce`
-  ([capture.js](../capture.js) `Target.prototype.enable`), unlike the helper.
-  A page with motion-dependent CSS can look different under the fallback.
-- The Chrome fallback does not apply the helper's page hardening (denying
-  permissions, downloads, and new windows). Its unbridged lens capture waits
-  for the load event and fonts, but not explicitly for visible images.
 - A bridged lens handoff carries no element descriptions: the server renders
   the mirror with `capture`, which does not evaluate mark anchors, and the
   browser cannot read the cross-origin frame. Unbridged lens handoffs do name
@@ -202,23 +190,6 @@ cases, and embedded documents or tainted pixels.
 
 ### Open questions
 
-- **Remove the Chrome fallback? (proposed 2026-10-03, pending).** The
-  direction is to drop it rather than bring it to parity with the helper,
-  unless a specific need justifies it. Removing it would leave these hosts
-  without screenshots or export references:
-  - Remote workspaces (SSH, Dev Containers, Codespaces). The extension
-    declares no `extensionKind`, so it runs on the remote host, which is
-    usually Linux without `DISPLAY`, where the bundled runtime is not used.
-  - macOS 12 and earlier, where the bundled runtime is not used.
-  - A source checkout run with `node server.js` before
-    `npm run bundle-runtime`; `electron-runtime/` is not committed.
-
-  Removing it would also remove the `canonic.capture.chromePath` setting and
-  `CANONIC_CHROME_PATH`. Repository tooling that drives Chrome directly
-  through [capture.js](../capture.js), such as
-  [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) and the website's
-  screenshot script, is separate from the fallback and needs its own
-  decision. If the fallback stays, the parity gaps above apply.
 - Should bridged lens handoffs name the elements under marks, for example by
   asking the bridge to describe anchor points?
 
@@ -229,13 +200,14 @@ cases, and embedded documents or tainted pixels.
   archives, and target mismatch. [package-all.test.js](../package-all.test.js)
   covers per-target packaging order.
 - [electron-capture.test.js](../electron-capture.test.js) covers the warm
-  process, speculative collapse, crash recovery, timeouts, the Chrome
-  fallback and when it does not apply, JPEG transport, and the export pool.
+  process, speculative collapse, crash recovery, timeouts, the reason given
+  on a host without the runtime, startup failures, JPEG transport, and the
+  export pool.
 - [capture-helper.test.js](../capture-helper.test.js) covers readback
   priming, hover restoration, in-place Storybook switching, and scroll
   restoration for unbridged pages.
-- [capture.test.js](../capture.test.js) covers the Chrome pipe, browser
-  discovery, overlay scrolling, settling, and hover.
+- [capture-scripts.test.js](../capture-scripts.test.js) covers overlay
+  scrolling, export settling, and the Storybook switch script.
 - [markup-capture.test.js](../workbench/markup-capture.test.js),
   [capture-sync.test.js](../workbench/capture-sync.test.js),
   [capture-page.test.js](../workbench/capture-page.test.js), and
@@ -252,5 +224,6 @@ cases, and embedded documents or tainted pixels.
   timings), and [benchmark-capture.cjs](../scripts/benchmark-capture.cjs)
   (readback, resize, and encode profiling). Timings from these scripts apply
   to the machine and fixture they ran on, not to VS Code click latency.
-  [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) uses an installed Chrome
-  to check lens iframes and sessions.
+  [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) drives an installed Chrome
+  through the development driver [chrome.cjs](../scripts/chrome.cjs) to check
+  lens iframes and sessions; the extension never uses that driver.

@@ -77,7 +77,7 @@ description is [Design-system export](../docs/design-system-export.md).
 Export calls the same capture service but has its own jobs and scheduling.
 References for one page or story stay on one worker to reuse the loaded
 document across viewport sizes. Other groups run in parallel on extra workers
-that start cold, each with its own Electron-or-Chrome fallback; they close when
+that start cold, each with its own helper; they close when
 the export ends. Storybook reuse inside a worker does not navigate the visible
 iframe. Storybook references wait for the story to render (up to 8 seconds),
 then for fonts, visible images, and a short quiet period. A failed capture adds
@@ -141,8 +141,6 @@ The contract above matches the code as of 2026-10-03, with the gaps below.
   ([server.js](../server.js) `beginExport`).
 - If the preview worker cannot produce the portable build at all, the whole
   export job fails, contrary to the job lifecycle above.
-- When the bundled runtime is unavailable on the host, the Chrome-only
-  service has no worker pool, and export captures run on one worker.
 
 ### Open questions
 

@@ -4,6 +4,10 @@
 setup. This page lists every key. For a guided introduction, start with
 [Getting started](getting-started.md).
 
+The project root is the folder that holds `workbench.yaml`. In VS Code, it has
+to be the top of an open folder; see
+[Projects in a subfolder](extension.md#projects-in-a-subfolder).
+
 - [A complete example](#a-complete-example)
 - [Top level](#top-level)
 - [Previews](#previews)
@@ -109,7 +113,7 @@ sections:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | no | Titles the screen list and the canvas tab. Defaults to `Workbench`. |
+| `name` | string | no | Titles the screen list and the browser tab in a standalone browser, and names [design-system exports](design-system-export.md). The canvas defaults to `Workbench`, and exports to the project folder's name. In VS Code, the canvas tab is always *Workbench*. |
 | `sections` | list of [sections](#sections) | no, unless `previews: false` and no [catalog](#catalogs) | The sidebar's sections, in order. |
 | `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
 | `implementations` | map of name to [implementation](#implementations) | no | Where screens also exist as running code. |
@@ -136,14 +140,19 @@ previews:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `include` | list of glob patterns | no | Which files are preview definitions, relative to the project root. Replaces the default patterns. Patterns can't start with `/` or contain `..`. |
-| `config` | path | no | The preview configuration file, relative to the project root. Defaults to `workbench.config.ts`. See [Register other technologies](workbench-previews.md#register-other-technologies). |
+| `config` | path | no | The preview configuration file, relative to the project root. Defaults to `workbench.config.ts`. See [Custom adapters](custom-adapters.md#configuration-file). |
 
 `previews: false` turns off discovery and never runs preview code. An invalid
 `previews` value is reported, and previews stay off until it is fixed.
 
 A screen whose `src` is a preview definition, such as
 `src: src/button.workbench.ts`, keeps its place in your sections and takes its
-states from the definition.
+states from the definition. Its viewports come from the screen's own
+`viewports`, not from the definition's.
+
+Framework guides: [React](react.md), [React Native Web](react-native-web.md),
+[Vue](vue.md), [HTML](html.md), [Astro](astro.md), and
+[Custom adapters](custom-adapters.md).
 
 ## Sections
 
@@ -285,7 +294,7 @@ root is always the project root, and any other `root` is reported and the
 implementation dropped. A `catalog` or `start` on a kind that doesn't support
 it is reported and ignored.
 
-Guides: [TypeScript previews](workbench-previews.md#configure-discovery-and-lenses),
+Guides: [TypeScript previews](workbench-previews.md),
 [URL implementations](lenses.md), [Storybook](storybook.md),
 [iOS Simulator](ios-simulator.md), [App windows](windows.md).
 
@@ -330,11 +339,14 @@ implementations:
   storybook: Components/Button
 ```
 
-**`ios-simulator`**: a device name or UDID.
+**`ios-simulator`**: the device's UDID. The lens streams only a device that the
+implementation's `catalog` has imported, so the implementation needs
+`catalog: true`. The reader also accepts a device name, but the stream refuses
+it. See [iOS Simulator](ios-simulator.md#add-a-simulator-lens-to-a-design-screen).
 
 ```yaml
 implementations:
-  simulator: iPhone 16 Pro
+  simulator: 6A1F2B3C-0000-4000-8000-123456789ABC
 ```
 
 **`window`**: the window's title, or part of it, ignoring case. When several
@@ -454,6 +466,21 @@ It is merged over `workbench.yaml`:
 
 A missing local file is normal. A local file that doesn't parse is reported by
 its own name.
+
+Common uses:
+
+| On your machine | In `workbench.local.yaml` |
+| --- | --- |
+| Your dev server runs on another port | The implementation's `base`, as in the example above |
+| The implementation's repository is checked out elsewhere | The implementation's `root`, as an absolute path |
+| You start the app differently | A `start` block of your own, which replaces the committed one |
+| Storybook's port isn't one `url: auto` finds | The Storybook implementation's `url` |
+| You don't want TypeScript previews compiled | `previews: false` |
+| You want your own screen list for a while | A `sections` list, which replaces the committed one |
+
+Saving **Configure pages** edits `workbench.yaml`, not the local file. Saving
+`workbench.local.yaml` refreshes the screen list and canvas in VS Code, as
+saving `workbench.yaml` does.
 
 ## YAML that the reader accepts
 

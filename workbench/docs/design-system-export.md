@@ -155,3 +155,8 @@ doesn't change it.
   follow, such as aliases it doesn't understand.
 - Check `captureWarnings` for missing screenshots, and `browser.warnings` for
   TypeScript previews that didn't build.
+- A preview that fails to build is a warning, but if the preview worker can't
+  build the viewer at all, the whole export fails. Read **Workbench: Show Log**,
+  or run the `check` command in
+  [Command-line tools](workbench-previews.md#command-line-tools) to find the
+  failing preview.

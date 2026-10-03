@@ -4,53 +4,28 @@ Storybook is an opt-in implementation. A project can map an authored screen to
 one exact Storybook title, import a whole Storybook catalog, or do both.
 Selection, addresses, and lens persistence are in [core.md](core.md); URL
 implementations, code pointers, and the page compatibility script are in
-[other-previews.md](other-previews.md).
+[implementations.md](implementations.md).
 
 ## Configuration
 
-```yaml
-implementations:
-  storybook:
-    kind: storybook
-    url: http://localhost:6006 # or auto
-    root: packages/ui          # optional, for source links and export sources
-    catalog: true              # optional; may be a map of icon settings
-    start:                     # optional in VS Code
-      command: pnpm storybook --no-open
-      cwd: packages/ui
-      check:
-        port: 6006
-      ready:
-        url: http://localhost:6006/index.json
-      timeout: 90
-```
+The keys, their validation, and examples are in the
+[workbench.yaml reference](../docs/configuration.md#implementations) and the
+[Storybook guide](../docs/storybook.md); this spec does not repeat them.
 
-- The implementation name is kebab-case and labels the lens unless `label` is
-  set. A project may declare several Storybooks.
-- An explicit `url` is an HTTP(S) Storybook origin. Workbench reads its live
-  `/index.json`, which Storybook 7 and later serve.
-- `root` is the folder Storybook runs from, relative to `workbench.yaml` or
-  absolute. Story source links and export sources resolve against it.
-- `url: auto` checks Storybook ports named with `-p` or `--port` in
-  `package.json` scripts up to four folders deep (skipping `node_modules`,
-  `.git`, and `.canonic`), then ports 6006–6010, on `127.0.0.1` and
-  `localhost`, and uses the first that serves a Storybook index. The detected
-  address is remembered while the server runs. When nothing answers,
-  `problems` says so and story lookups for that implementation are refused.
-  Detection never launches a process.
-- `start` may launch a command in a trusted VS Code workspace. Workbench first
-  runs `check` (TCP `port` with optional `host`, or an HTTP(S) `url` that must
-  answer with a success status). It opens a terminal and executes `command` in
-  `cwd` (relative to `workbench.yaml`) only when that check fails. It then
-  waits for `ready`, or `check` if `ready` is omitted, up to `timeout` seconds
-  (default 60, at most 300). A check that is already passing does not open
-  another terminal. A timeout is logged; the canvas still opens and the
-  catalog reports its own problem. A local override replaces the whole
-  `start` block.
-- `catalog: true` imports the Storybook index. A catalog map may give a
-  fallback `icon` (default `book-open`) and title-prefix `icons`, as kebab-case
-  Lucide names; the longest matching prefix wins. Without `catalog`, only
-  explicitly mapped authored screens use Storybook.
+- A project may declare several Storybooks. Workbench reads each one's live
+  `/index.json`, which Storybook 7 and later serve. Story source links and
+  export sources resolve against the implementation's `root`.
+- `url: auto` finds a running Storybook from the project's package scripts and
+  the default ports ([guide](../docs/storybook.md#detect-the-port-with-url-auto)).
+  The detected address is remembered while the server runs. When nothing
+  answers, `problems` says so and story lookups for that implementation are
+  refused. Detection never launches a process.
+- `start` launches Storybook in VS Code as described in
+  [implementation startup](vscode-extension.md#implementation-startup). A
+  timeout is logged; the canvas still opens and the catalog reports its own
+  problem.
+- `catalog: true` imports the Storybook index. Without it, only explicitly
+  mapped authored screens use Storybook.
 
 ## Catalog and story identity
 
@@ -134,8 +109,8 @@ Found on 2026-10-03 by reading the code.
 - **Mapped-only Storybooks are not checked up front.** Only catalog imports
   and `url: auto` detection add to `problems`. When a Storybook used only by
   mapped screens is stopped, the failure appears on the canvas when such a
-  screen is opened, not in `problems`, short of the named-problem requirement
-  in [core.md](core.md).
+  screen is opened, not in `problems`, short of the shared problems list in
+  [core.md](core.md#problem-reporting).
 
 ## Open questions
 

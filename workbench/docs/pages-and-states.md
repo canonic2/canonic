@@ -154,10 +154,16 @@ The toolbar's **Actions** switch decides whether a page's links and forms work.
   you're reviewing without leaving it.
 - **On**: the page behaves normally, so you can walk through a real flow.
 
-With actions on, a link to another page in the project that is listed in
-`workbench.yaml` switches the workbench to that screen, and the sidebar follows.
-Links elsewhere, `mailto:` links, downloads, and same-page anchors behave as
-usual.
+With actions on, a link to another screen's page switches the workbench to that
+screen, and the sidebar follows. A `?state=<id>` on the link picks that state,
+as in `<a href="sign-in.html?state=error">`. A form whose `action` names a
+screen's page does the same when it is submitted, so a flow can move from one
+screen to the next.
+
+A link or form to an `.html` page in the project that isn't a screen does
+nothing. List the page in `workbench.yaml` to make it reachable. Links to other
+sites, to project paths that don't end in `.html`, `mailto:` links, downloads,
+and same-page anchors behave as usual.
 
 Either way, browser form validation is off, so a `required` field doesn't stop
 a flow.
