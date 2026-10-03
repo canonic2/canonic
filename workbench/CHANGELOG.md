@@ -7,11 +7,12 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## Unreleased
+## 0.9.0
 
-- Screenshots and handoffs of Storybook and URL lenses show what you see, including opened modals and menus, typed text, and scroll positions. Workbench loads those pages through a local proxy that adds its preview bridge, so your Storybook and app need no changes. If you added the bridge loader to `.storybook/preview` yourself, you can remove it.
+- Screenshots and handoffs of Storybook and URL lenses show the page as you see it: an opened modal or menu, typed text, and scroll positions. Workbench loads those pages through a local proxy that adds its preview bridge, so your Storybook and app need no changes. If you added the bridge loader to `.storybook/preview` yourself, you can remove it. See Storybook and Lenses and URL implementations.
 - Handoffs through a lens name the element under each mark as it is on the page you see.
 - Lens pages load even when the app sends `X-Frame-Options` or a `frame-ancestors` policy.
+- Sign-in through an identity provider (OAuth or SSO) doesn't stay signed in inside a lens, because the provider returns to your app's own address rather than the proxy. Use a sign-in your development build serves itself. See Embedding and sign-in in Lenses and URL implementations.
 
 ## 0.8.0
 
