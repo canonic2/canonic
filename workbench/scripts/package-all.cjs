@@ -1,12 +1,12 @@
-/* Builds one platform VSIX per capture target into dist/. Targets run one at
-   a time because each bundle replaces capture-runtime/. The build host's own
+/* Builds one platform VSIX per Electron target into dist/. Targets run one at
+   a time because each bundle replaces electron-runtime/. The build host's own
    target goes last, so the local runtime is left usable afterwards.
 
    node scripts/package-all.cjs [target ...] [--out <dir>] */
 var cp = require('node:child_process');
 var fs = require('node:fs');
 var path = require('node:path');
-var targets = require('./bundle-capture.cjs').targets;
+var targets = require('./bundle-runtime.cjs').targets;
 var ROOT = path.resolve(__dirname, '..');
 var VERSION = require('../package.json').version;
 

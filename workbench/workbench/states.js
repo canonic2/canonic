@@ -42,8 +42,8 @@
 
       Semicolons between them, name=value or a bare name for a boolean.
 
-   Like actions.js, this is put into the page by the extension's server rather
-   than referenced by it, and lands just after it.
+   Like actions.js, this is part of the compatibility bundle put into the page
+   by the extension's server rather than referenced by the project.
 
    It runs at DOMContentLoaded, so custom elements (loaded with defer) are
    already upgraded and take the attributes normally.
@@ -66,7 +66,9 @@
     Array.prototype.forEach.call(document.querySelectorAll(selector), fn);
   }
 
-  function apply() {
+  function apply(next) {
+    if (typeof next === 'string') state = /^[a-z0-9-]+$/.test(next) ? next : 'default';
+    document.documentElement.setAttribute('data-wb-state', state);
     each('[data-wb-state-only]', function (el) {
       if (ids(el.getAttribute('data-wb-state-only')).indexOf(state) === -1) el.remove();
     });
@@ -87,6 +89,7 @@
       });
     });
   }
+  window.wbPageStates = { apply: apply };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', apply);

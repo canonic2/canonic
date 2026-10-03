@@ -24,7 +24,9 @@ function preview() {
     } }, CustomEvent: function (_name, options) { this.detail = options.detail; },
   };
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
-  var handlers = source.slice(source.indexOf('  function loadPreview('), source.indexOf("  frame.addEventListener('load', frameLoaded)"));
+  state.URL = URL;
+  state.location = { href: 'http://127.0.0.1/_workbench/', origin: 'http://127.0.0.1' };
+  var handlers = source.slice(source.indexOf('  function warmFrame('), source.indexOf("  frame.addEventListener('load', frameLoaded)"));
   vm.runInNewContext(handlers, state);
   return { state: state, events: events, paint: function () { paints.splice(0).forEach(function (fn) { fn(); }); } };
 }
@@ -145,6 +147,26 @@ test('a superseded pending frame cannot replace the active preview during paint'
   state.pendingFrame = null;
   p.paint();
   assert.equal(state.frame, initial); assert.equal(p.events.length, 0);
+});
+
+test('managed previews mount into the warm spare and reset the outgoing renderer without navigating it', async function () {
+  var p = preview(); var state = p.state;
+  var loaded = []; var resets = 0;
+  state.frameReady = true;
+  state.frame.setAttribute('src', '/_workbench/preview-host.html');
+  state.frame.wbWarmHost = true;
+  state.frame.contentWindow = { wbPreviewHost: { reset: function () { resets++; return Promise.resolve(); } } };
+  state.frameBuffer.setAttribute('src', '/_workbench/preview-host.html');
+  state.frameBuffer.wbWarmHost = true;
+  state.frameBuffer.contentWindow = { wbPreviewHost: { load: function (url) { loaded.push(url); return Promise.resolve(); } } };
+  var previous = state.frame;
+  state.loadPreview('http://127.0.0.1/button.workbench.ts');
+  await new Promise(setImmediate);
+  p.paint();
+  assert.deepEqual(loaded, ['http://127.0.0.1/button.workbench.ts']);
+  assert.equal(state.frameBuffer, previous);
+  assert.equal(state.frameBuffer.getAttribute('src'), '/_workbench/preview-host.html');
+  assert.equal(resets, 1);
 });
 
 test('changing width resizes the current iframe without routing or reloading it', function () {

@@ -16,6 +16,10 @@
        sections on top, the chosen one's screens below, the filter at the
        bottom. The view's own header carries the project's name. -->
   <div class="sb wb-browse">
+    <div class="sb-loading" id="loading" role="status" aria-live="polite">
+      <span class="sb-loading-spinner" aria-hidden="true"></span>
+      <span id="loadingText">Loading screens…</span>
+    </div>
     <section class="wb-browse-block" id="sectionsBlock" hidden>
       <h2 class="wb-browse-head">Sections</h2>
       <nav class="wb-sections" id="sections" aria-label="Sections"></nav>

@@ -32,6 +32,25 @@ var panel = null;   /* the one open panel, or null */
 var current = null; /* the hash the workbench has acknowledged with wb-here */
 var where = { src: null, state: null }; /* the screen it settled on */
 var watchers = [];
+var loaded = false;
+var pendingTarget = '';
+var navigation = 0;
+
+function loadingHtml(failed) {
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'">' +
+    '<style>html,body{height:100%;margin:0;padding:0}body{display:grid;place-items:center;' +
+    'background:var(--vscode-editor-background,#1f1f1f);color:var(--vscode-foreground,#d6d6d6);' +
+    'font:13px var(--vscode-font-family,system-ui)}main{text-align:center;padding:32px;max-width:360px}' +
+    'h1{font-size:16px;font-weight:500;margin:20px 0 8px}p{color:var(--vscode-descriptionForeground,#999);line-height:1.6;margin:0}' +
+    '.spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--vscode-widget-border,#444);' +
+    'border-top-color:var(--vscode-progressBar-background,#00a1ff);border-radius:50%;animation:turn 1s linear infinite}' +
+    '@keyframes turn{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}</style>' +
+    '</head><body><main role="status" aria-live="polite">' +
+    (failed ? '<h1>Workbench couldn’t start</h1><p>Open the Workbench log for details, then reload the window to retry.</p>' :
+      '<span class="spinner" aria-hidden="true"></span><h1>Opening Workbench</h1><p>Waiting for previews to start. Screens will appear as soon as they’re ready.</p>') +
+    '</main></body></html>';
+}
 
 function moved(at) {
   where = at;
@@ -223,27 +242,10 @@ function html(url, origin) {
 function show(context, url, hash, options) {
   var target = String(hash || '');
   var preserveFocus = !!(options && options.preserveFocus);
-
-  /* Remote and Codespaces hand out a different address than 127.0.0.1; local
-     editors get the same string back. */
-  return Promise.resolve(vscode.env.asExternalUri(vscode.Uri.parse(url))).then(function (external) {
-    var address = external.toString();
-    var origin = address.replace(/^([a-z]+:\/\/[^/]+).*$/i, '$1');
-
-    if (panel) {
-      /* Focus stays where it was, so you can walk the sidebar list with the
-         arrow keys and watch the canvas follow. */
-      panel.reveal(panel.viewColumn, true);
-      /* Only wb-here advances current. If a pick arrived while the webview or
-         iframe was loading, a repeat click must send it again rather than be
-         discarded as though navigation had succeeded. No target still means
-         "open the workbench" and leaves the current canvas alone. */
-      if (target && target !== current) {
-        panel.webview.postMessage({ type: 'canonic-go', hash: target });
-      }
-      return panel;
-    }
-
+  if (target) { pendingTarget = target; navigation += 1; }
+  var request = navigation;
+  if (panel) panel.reveal(panel.viewColumn, true);
+  else {
     panel = vscode.window.createWebviewPanel(VIEW_TYPE, TITLE, {
       viewColumn: vscode.ViewColumn.Active,
       preserveFocus: preserveFocus,
@@ -258,7 +260,9 @@ function show(context, url, hash, options) {
 
     panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'icon.svg');
     current = null;
-    panel.webview.html = html(address + (target ? '#' + target : ''), origin);
+    loaded = false;
+    pendingTarget = target;
+    panel.webview.html = loadingHtml(false);
 
     /* Every screen the workbench routes to, including the ones nobody here
        asked for. `current` follows it too, so a pick that matches where a
@@ -271,11 +275,32 @@ function show(context, url, hash, options) {
 
     panel.onDidDispose(function () {
       panel = null;
+      loaded = false;
       current = null;
       moved({ src: null, state: null });
     }, null, context.subscriptions);
 
-    return panel;
+  }
+  var opened = panel;
+  /* Open the tab before awaiting service readiness or remote port forwarding.
+     A closed loading tab must stay closed when either finishes. */
+  return Promise.resolve(url).then(function (address) {
+    if (!address) throw new Error('Workbench server is not running');
+    return vscode.env.asExternalUri(vscode.Uri.parse(address));
+  }).then(function (external) {
+    if (panel !== opened) return null;
+    var address = external.toString();
+    var origin = address.replace(/^([a-z]+:\/\/[^/]+).*$/i, '$1');
+    if (!loaded) {
+      loaded = true;
+      opened.webview.html = html(address + (pendingTarget ? '#' + pendingTarget : ''), origin);
+    } else if (request === navigation && target && target !== current) {
+      opened.webview.postMessage({ type: 'canonic-go', hash: target });
+    }
+    return opened;
+  }).catch(function () {
+    if (panel === opened && !loaded) opened.webview.html = loadingHtml(true);
+    return null;
   });
 }
 

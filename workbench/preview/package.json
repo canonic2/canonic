@@ -1,0 +1,9 @@
+{
+  "name": "@canonic/workbench",
+  "version": "0.1.0",
+  "description": "Framework-neutral TypeScript previews for Canonic Workbench",
+  "type": "module",
+  "exports": { ".": { "types": "./api.d.ts", "default": "./api.js" } },
+  "files": ["api.js", "api.d.ts"],
+  "license": "MIT"
+}

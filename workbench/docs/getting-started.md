@@ -1,7 +1,8 @@
 # Getting started
 
 This guide takes you from installing the extension to a working canvas with
-two screens and a page state. It takes about five minutes.
+design pages, a page state, and a preview of a component from your code. It
+takes about five minutes.
 
 ## 1. Install the extension
 
@@ -27,8 +28,9 @@ Or open the Extensions view in VS Code, choose **…** › **Install from VSIX�
 file. Cursor, Windsurf, and other VS Code forks accept the same file through their own
 command or menu.
 
-Each file bundles its platform's screenshot helper, so there is nothing else to
-install. VS Code 1.75 or later is required.
+Each file bundles the runtime its platform needs for screenshots and
+TypeScript previews, so there is nothing else to install. VS Code 1.75 or later
+is required.
 
 > The release builds are unsigned. Desktop macOS is the most exercised
 > platform; Windows and Linux builds have not been validated as thoroughly.
@@ -60,7 +62,7 @@ sections:
     icon: component
     items:
       - label: Button
-        src: preview/button.html
+        src: components/button.html
 ```
 
 - `name` titles the screen list and the canvas tab.
@@ -109,6 +111,10 @@ Try these:
   **Copy handoff**. The annotated screenshot is saved and a prompt describing
   every mark is copied to your clipboard, ready to paste to an agent.
 
+Workbench also lists any [TypeScript previews](workbench-previews.md) it
+finds in `*.workbench.ts` and `*.workbench.tsx` files, once you trust the
+workspace. Step 6 adds one.
+
 In VS Code, saving `workbench.yaml` or `workbench.local.yaml` rebuilds the screen
 list and refreshes the canvas. **Workbench: Refresh Screens** does the same on
 demand. In a standalone browser, reload the page.
@@ -127,13 +133,46 @@ workbench.local.yaml
   [Local overrides](configuration.md#local-overrides).
 - `.canonic/.handoffs/` holds the screenshots that handoffs save.
 
+## 6. Preview a component from your code
+
+Design pages show what a screen should look like. A TypeScript preview renders
+the real component from your source, in named states. Next to a React
+`src/Button.tsx` that exports `Button`, add `src/Button.workbench.ts`:
+
+```ts
+import { definePreview } from '@canonic/workbench';
+
+export default definePreview({
+  id: 'components/button',
+  title: 'Components/Button',
+  adapter: 'react',
+  source: { entry: './Button.tsx', export: 'Button' },
+  inputs: { label: 'Continue', disabled: false },
+  states: {
+    default: {},
+    disabled: { inputs: { disabled: true } },
+  },
+});
+```
+
+Run **Workbench: Refresh Screens**. A second **Button** appears under
+**Components**, with **Default** and **Disabled** states, rendered with your
+project's own React. You don't install anything for the import: Workbench
+supplies `@canonic/workbench` when it compiles the file. HTML, Vue, Astro, and
+React Native Web components work the same way; see
+[TypeScript Workbench previews](workbench-previews.md).
+
 ## Removing Workbench
 
-Delete `workbench.yaml`. Your pages contain nothing Workbench-specific beyond
-optional state attributes and CSS, which are inert without it.
+Delete `workbench.yaml`, along with any `.workbench.ts` and `.workbench.tsx`
+files, `workbench.config.ts`, and `workbench-env.d.ts` you added. Your pages
+contain nothing Workbench-specific beyond optional state attributes and CSS,
+which are inert without it.
 
 ## Next steps
 
+- Add controls, hooks, and other frameworks to previews:
+  [TypeScript Workbench previews](workbench-previews.md).
 - Give pages more states and choose their viewports:
   [Pages and states](pages-and-states.md).
 - Show the same screen as it runs on your dev server:

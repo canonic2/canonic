@@ -126,6 +126,7 @@ function read(root) {
     name: text(raw && raw.name) || path.basename(root),
     sections: sections(raw && raw.sections, impls, problems),
     implementations: impls,
+    previews: manifest.previews(raw && raw.previews, problems),
     problems: problems,
     files: { main: true, local: local !== null },
   };
@@ -242,6 +243,7 @@ function resolve(root, config) {
     screens: screens,
     files: config.files,
     problems: problems,
+    previews: config.previews,
   };
 }
 

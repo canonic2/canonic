@@ -18,7 +18,7 @@
 (function () {
   function url(impl, ref, state) {
     var path = (state && ref.states && ref.states[state]) || ref.path;
-    return impl.base + path;
+    return (impl.base || '') + path;
   }
 
   function storyUrl(impl, id) {

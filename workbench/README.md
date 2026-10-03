@@ -6,9 +6,20 @@ agent.
 
 ![The workbench, showing a sign-in page at desktop width](media/workbench.png)
 
-It is for the HTML you are designing in: a design system's previews, a product's
-screens, a set of static pages. Nothing is bundled, transpiled, or scanned for —
-you list what you want to see in one file and it shows up.
+Screens come from three places, and one canvas shows them all:
+
+- **TypeScript previews.** Define components and screens in `.workbench.ts`
+  files with the HTML, React, Vue, Astro, or React Native Web adapter, or one
+  of your own. Workbench discovers them, renders their named states, and gives
+  each one input controls, reset, an action log, and docs.
+- **HTML pages** you list in `workbench.yaml`, with states keyed off
+  `html[data-wb-state]`.
+- **Implementation catalogs**: a Storybook's stories, or the booted iOS
+  Simulators.
+
+The [documentation](https://canonic.sh/workbench/docs/) covers setup, pages
+and states, TypeScript previews, lenses, Storybook, the iOS Simulator, app
+windows, markup and handoffs, export, and every `workbench.yaml` key.
 
 ## Quick start
 
@@ -34,8 +45,11 @@ you list what you want to see in one file and it shows up.
        icon: component
        items:
          - label: Button
-           src: preview/components-button.html
+           src: components/button.html
    ```
+
+   With [TypeScript previews](https://canonic.sh/workbench/docs/workbench-previews/),
+   `name: Acme` alone is enough: the previews supply the screen list.
 
 3. Open the folder. **Workbench** appears in the activity bar, and opens the
    canvas.
@@ -43,38 +57,39 @@ you list what you want to see in one file and it shows up.
 Your pages need nothing added to them — no script tags, no imports, no folder
 copied into the repo. The extension serves the workbench alongside your project
 and puts what a preview needs into the pages it serves. Delete `workbench.yaml`
-and every trace of this is gone.
+and every trace of this is gone. The
+[getting started guide](https://canonic.sh/workbench/docs/getting-started/)
+walks through it.
 
 ## What you get
 
 - **The screen list in the sidebar**, where a file tree usually goes: sections
   listed above the chosen one's screens, folders, and the states of a screen under it.
-- **Page states.** One page, several versions — the empty form and the one that
-  came back wrong. A state is CSS keyed off `html[data-wb-state]`, markup that
-  only exists in some states, or an attribute applied in one; see
-  [workbench/states.js](workbench/states.js).
-- **Real widths.** Fit, desktop, mobile, or a frame you drag.
+- **States.** One screen, several versions — the empty form and the one that
+  came back wrong. A TypeScript preview declares its states with their inputs;
+  an HTML page answers to `html[data-wb-state]`. See
+  [pages and states](https://canonic.sh/workbench/docs/pages-and-states/).
+- **Real widths.** Fit, desktop, mobile, or a frame you drag, with Figma-style
+  zoom and pan on the canvas.
 - **Markup and screenshots.** Scribble, arrows, shapes, text, comments. The
-  camera downloads its JPEG; handoffs persist their image in the project's
+  camera downloads a JPEG; handoffs persist their image in the project's
   ignored `.canonic/.handoffs/` folder.
 - **Handoff.** The screenshot is saved, the markup is cleared, and a written
   account of every mark is copied to the clipboard for any conversation.
-- **Bounded diagnostics.** Browser, capture, server, and handoff failures meet
-  in VS Code's session-managed **Workbench** log. Run **Workbench: Show
-  Log** to inspect it; VS Code owns retention, so logs do not grow in
-  the project or enter source control. Each workbench server also stops logging
-  after 2 MB in one session. Records contain event metadata and errors, never
-  screenshots, page HTML, or handoff prompts.
 - **Actions off by default**, so clicking around a screen you're reviewing
   doesn't navigate you out of it. Turn it on to walk the real flow.
-- **Implementation lenses.** The same screen as its Storybook story, on the
-  dev server, on staging — one click away from the design, in the same frame,
+- **Implementation lenses.** The same screen as a TypeScript preview, a
+  Storybook story, a page on the dev server or staging, the iOS Simulator, or
+  any macOS app's window — one click away from the design, in the same frame,
   with the same marks over it. See below.
-
-The [documentation](docs/README.md) covers setup, pages and states, lenses,
-Storybook, the iOS Simulator, markup and handoffs, export, and every
-`workbench.yaml` key. What each source file does is in
-[workbench/README.md](workbench/README.md).
+- **Design-system export.** One ZIP with every screen's design and source
+  files, reference screenshots, and a standalone browser viewer of the
+  TypeScript previews. See
+  [design-system export](https://canonic.sh/workbench/docs/design-system-export/).
+- **Bounded diagnostics.** Browser, capture, server, and handoff failures meet
+  in VS Code's session-managed **Workbench** log, never in the project. Each
+  server stops logging after 2 MB in one session, and records never contain
+  screenshots, page HTML, or handoff prompts.
 
 ## Implementation lenses
 
@@ -117,7 +132,7 @@ sections:
   - name: Components
     items:
       - label: Button
-        src: preview/components-button.html
+        src: components/button.html
         implementations:
           storybook: Components/Button    # a story title, as Storybook shows it
 ```
@@ -128,29 +143,20 @@ between screens, like the width does; a screen without that lens shows its
 design. The address carries it — `#pages/sign-in.html:error@393~staging` —
 so a copied link means the implementation too.
 
-- **Storybook** shows one story at a time, with none of Storybook's own
-  chrome, and lists the title's stories in a menu beside the switcher. They
-  are read from the Storybook's index, so nothing is listed twice. Where a
-  story's component lives comes from the index as well.
-- **A url implementation** loads directly in an iframe, just like a Storybook
-  story. Typing, scrolling, selection, and sign-in happen in that page.
-  Configure the app's development environment to allow embedding and its
-  session to work inside the workbench. See [embedding and sign-in](workbench/README.md#embedding-and-sign-in).
-  Remove legacy `render` settings; all lenses now use iframes.
-- **Code pointers** resolve on this machine against each implementation's
-  `root`. The `</>` button in the toolbar lists the design file and every
-  implementation's code for the current screen and opens one in the editor;
-  the handoff quotes their absolute paths, so the agent edits the
-  implementation the picture is of.
-
-Screenshots through a lens name the lens — `sign-in-error-staging.jpg` —
-and the handoff says which implementation it shows, at what address, and
-what is under each mark, read by whichever browser took the shot.
+Storybook and URL lenses load in an iframe, so typing, scrolling, and sign-in
+happen in the page itself; the app must allow being embedded. A `workbench`
+lens shows one of the project's TypeScript previews by its ID, and
+`ios-simulator` and `window` lenses stream a native window. Code pointers
+resolve against each implementation's `root`: the `</>` button opens them in
+the editor, and the handoff quotes their absolute paths, so the agent edits the
+implementation the picture is of.
 
 Ports, and where the product's code is on your disk, belong in
 `workbench.local.yaml` beside the committed file. It is merged over
 `workbench.yaml` — each implementation by name, everything else whole — and
-belongs in `.gitignore`. The design lens itself never touches the network.
+belongs in `.gitignore`. See
+[lenses and URL implementations](https://canonic.sh/workbench/docs/lenses/)
+and the [workbench.yaml reference](https://canonic.sh/workbench/docs/configuration/).
 
 ## Commands
 
@@ -159,54 +165,28 @@ belongs in `.gitignore`. The design lens itself never touches the network.
 | `Workbench: Open Canvas` | the canvas, in an editor tab |
 | `Workbench: Open Canvas in Browser` | the same thing, in your browser |
 | `Workbench: Copy Canvas URL` | the address, for a bookmark or a script |
-| `Workbench: Refresh Screens` | re-read `workbench.yaml` now |
+| `Workbench: Refresh Screens` | re-read the config and find TypeScript previews again |
+| `Workbench: Show Log` | the Workbench log, for failures from the browser, capture, server, and handoffs |
 
 ## Settings
 
 `canonic.capture.chromePath` — an explicit Chrome, Chromium, or Edge executable
-for fallback screenshots. Packaged desktop builds
-take screenshots with a bundled background Electron helper. An installation
-without one, or a helper that cannot unpack or start, uses Chrome for screenshots
-too. Page errors and timeouts are reported through the current renderer. Leave
-the setting empty to detect Chrome from its standard location when it is needed.
-
-The screenshot helper starts with the workspace server and remains warm for
-the extension's lifetime. The workbench continuously synchronizes the local
-preview's live DOM, open shadow roots, form state, scrolling and annotations
-into its inert mirror, and restores the latest view after a crash. A page
-that hangs the helper is not replayed on its own; the workbench asks again
-with a growing delay. Reloading the preview refreshes the helper's copy. On
-macOS the bundle is an agent app, with no visible window or Dock icon. No VS
-Code startup flags are required. Interactions stay on the native capture path;
-capture flushes pending state before reading pixels. Hosted errors are reported
-without switching to DOM-to-image rendering. Cross-origin iframe interaction
-state cannot be copied. See the workbench README for mirror limitations.
-After the initial full snapshot, the mirror sends changed node records and
-properties. Cumulative patches tolerate overlapping background preparation;
-a lost base revision triggers a full retry of the exact requested state.
-
-## How it finds a project
-
-`workbench.yaml` in an open folder is the whole test — it is both the
-`workspaceContains:` activation event and the check in `workbenchRoot()`, which
-also decides which folder gets served when a window holds several: the first one
-that has it.
-
-A folder without one gets no server and no Workbench view. The commands stay
-registered, so running one from the palette explains itself rather than failing
-as a missing command.
-
-## Ports
-
-3579, then 3580–3583, then whatever the OS gives. Loopback only — the server
-hands out a whole project folder, and that isn't anybody else's business. The
-workbench is served at `/_workbench/` on that same origin, which is what lets a
-workbench read the preview's DOM and synchronize the native capture frame
-without a cross-origin boundary.
+for fallback screenshots. Packaged desktop builds take screenshots with a
+bundled background Electron helper, with no visible window or Dock icon and no
+VS Code startup flags. An installation without one, or a helper that cannot
+unpack or start, uses Chrome instead. Leave the setting empty to detect Chrome
+from its standard location when it is needed. See
+[the VS Code extension](https://canonic.sh/workbench/docs/extension/) for the
+server, its ports, the screenshot helper, and workspace trust.
 
 ---
 
 ## Working on it
+
+The [user guides](docs/README.md) in `docs/` are published on the website as
+they are. The [internal specifications](specs/README.md) in `specs/` define the
+behavior the implementation and tests must satisfy; they are not published.
+Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 The workbench itself is `workbench/`, and it ships in the `.vsix`. It is plain
 HTML and script files with no build step; opening
@@ -218,25 +198,33 @@ HTML and script files with no build step; opening
 | `extension.js` | activation, the server's lifecycle, commands, clipboard handoff |
 | `panel.js` | the canvas: one webview holding one iframe |
 | `screens.js` | the Workbench view in the sidebar |
-| `server.js` | the HTTP server, capture and lens endpoints, and script injection — plain node |
+| `startup.js` | checks configured implementations and starts their `start` commands |
+| `server.js` | the HTTP server, capture, export, preview and lens endpoints, and script injection — plain node |
+| `preview-scripts.js` | the `preview-compat.js` bundle (`keys.js`, `actions.js`, `states.js`) injected into served pages |
+| `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, the portable viewer, and the `cli.cjs` command line |
+| `export.js` | the design-system ZIP export |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
-| `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window; the iOS Simulator lens uses it |
-| `capture-runtime.js` | verifies and unpacks the bundled runtime once into extension storage |
+| `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window, for the iOS Simulator and window lenses |
+| `electron-runtime.js` | verifies and unpacks the bundled Electron runtime, shared by capture and the preview worker, once into extension storage |
 | `capture.js` | Chromium over a private DevTools pipe for fallback screenshots |
 | `remote.js` | fetches the configured Storybook's index |
 | `config.js` + `yaml.js` | reads `workbench.yaml` and `workbench.local.yaml` on this machine: absolute paths, implementation origins |
 | `handoff.js` | composes the prompt an agent is handed. Pure string work |
-| `workbench/` | the tool itself — see its README |
+| `workbench/` | the tool itself — see [its README](workbench/README.md) |
 
 `server.js`, `remote.js`, `handoff.js`, `config.js` and `yaml.js`
 never import `vscode`, so they run and are tested without an editor:
 
 ```sh
-npm test                   # config parsing, prompt wording, routes, the browser driver
-npm run serve -- <folder>   # the same server the extension runs, on its own
-node handoff.js            # print the prompt for a sample canvas
-node config.js <folder>    # what this machine resolves the config to
+npm test                                     # config parsing, prompt wording, routes, previews, the browser driver
+npm run serve -- <folder>                    # the same server the extension runs, on its own
+node handoff.js                              # print the prompt for a sample canvas
+node config.js <folder>                      # what this machine resolves the config to
+node preview/cli.cjs check <folder>          # discover and build every TypeScript preview
 ```
+
+`preview/cli.cjs` also has `init` and `build`; see the
+[command-line tools](docs/workbench-previews.md#command-line-tools).
 
 ### The two halves
 
@@ -263,21 +251,32 @@ where a file tree usually does, so it dresses like one.
 The canvas is a webview holding one iframe rather than the built-in Simple
 Browser, because only the page that owns the frame can pass a pick into it.
 
+`workbenchRoot()` in `extension.js` picks the folder to serve: the first open
+folder with a `workbench.yaml`, which is also the `workspaceContains:`
+activation event.
+
 ### Installing from source
 
 ```sh
 npm ci --ignore-scripts
 npm run package
-code --install-extension canonic-workbench-*-0.4.0.vsix --force
+code --install-extension canonic-workbench-<target>-<version>.vsix --force
 ```
+
+`npm run package` writes `canonic-workbench-<target>-<version>.vsix`, such as
+`canonic-workbench-darwin-arm64-0.6.0.vsix`, in this folder. Cursor, Windsurf
+and the other VS Code forks read their own extensions folder —
+`~/.cursor/extensions`, and so on — and their own command line installs the
+same file.
 
 After installing, run **Developer: Reload Window** from the Command Palette
 in each open VS Code project window. Installing replaces the files on disk;
 already-running extension hosts and capture helpers keep their previous code
 until their window reloads. Reloading the preview or using **Refresh Screens**
-does not restart the extension. This also applies to `scripts/install-workbench.mjs`.
+does not restart the extension. This also applies to `scripts/install-workbench.mjs`
+at the repository root.
 
-Building requires Node 22.12 or later; the extension host still supports Node
+Building requires Node 22.12 or later; the extension host supports Node
 18 or later. `npm run package` bundles pinned Electron 44.2.0 and produces a
 platform-specific VSIX for the build host. `-- --target darwin-arm64` (or
 `darwin-x64`, `win32-x64`, `win32-arm64`, `linux-x64`, `linux-arm64`) selects
@@ -288,32 +287,37 @@ Use native builders for release validation and signing.
 The download happens at build time only. `CANONIC_ELECTRON_ZIP_DIR` can point
 to a directory of official Electron ZIPs for an offline build.
 
-The macOS runtime adds about 132 MB to the VSIX and hundreds of MB to the
+The macOS runtime adds about 135 MB to the VSIX and hundreds of MB to the
 installed runtime cache. Its tar archive preserves framework links that VSIX
 cannot represent directly. Each archive is verified and extracted atomically
 into `globalStorage/capture/<sha256>` on first activation. The first activation
 therefore includes extraction; subsequent activations reuse the runtime and
-remove runtimes left by earlier versions, so the cache holds one at a time.
+remove runtimes left by other versions, so the cache holds one at a time.
 Configure macOS signing/notarization before distributing public releases;
 the local development package is not notarized. The `LSUIElement` setting must
-be applied before signing. Other desktop targets and remote hosts still need
-native validation; Linux hosts without a display keep the Chrome fallback.
+be applied before signing. Other desktop targets and remote hosts need
+native validation; Linux hosts without a display use the Chrome fallback.
 
 ### GitHub builds and releases
 
 The [extension workflow](../.github/workflows/extension.yml) tests the extension
 and builds all six platform VSIX files on matching GitHub-hosted runners when a
-`workbench/v<version>` tag is pushed. Update `package.json` and its lockfile,
-then push a matching tag (for example, `workbench/v1.0.1`). The workflow checks
-the tag against the package version, attaches all six VSIX files to a GitHub
-Release using stable, versionless asset names, and updates the website's links
-after the release succeeds. Build files are also available as workflow artifacts
+`workbench/v<version>` tag is pushed. Bump `version` in `package.json` and its
+lockfile, add a `## <version>` entry to [CHANGELOG.md](CHANGELOG.md), then push
+a matching tag (for example, `workbench/v1.0.1`). The workflow checks the tag
+against the package version and refuses a tag without a changelog entry
+(`node scripts/release-notes.cjs <version>` prints the entry, or fails the same
+way). It attaches all six VSIX files to a GitHub Release using stable,
+versionless asset names, with the changelog entry as its notes, and then
+publishes the website. Build files are also available as workflow artifacts
 for 14 days.
 These builds are unsigned; validate and sign platform
 releases before treating them as production-ready.
 
+### Capture benchmarks and smoke checks
+
 For capture profiling, run `node packages/workbench/scripts/benchmark-capture.cjs` from
-the repository root after bundling the runtime. It runs current helper sources
+the repository root after bundling the runtime with `npm run bundle-runtime`. It runs current helper sources
 in an isolated temporary runtime and compares plain, CSS blur, and backdrop-blur
 fixtures at mobile and desktop sizes. It reports preparation, native readback,
 Retina resizing, PNG encoding, and helper round-trip time, with six on-demand
@@ -324,7 +328,7 @@ Pass `<project> <page> [width height]` to profile a particular local page.
 Set `CANONIC_BENCH_FORMAT=jpeg` to benchmark the workbench's 90%-quality JPEG
 output instead of PNG.
 JPEG downsampling uses Electron's intermediate (`better`) resize setting;
-`CANONIC_BENCH_RESIZE=best` compares the slower previous setting. Warm-up primes
+`CANONIC_BENCH_RESIZE=best` compares the slower `best` setting. Warm-up primes
 pixel readback without encoding a discarded file. The Save button and handoff
 complete their capture when the file is written; neither reads the saved image
 back into the canvas.
@@ -368,7 +372,7 @@ cloning, font embedding, asset embedding, rasterization, and encoding timings.
 `CANONIC_BENCH_DOM_STYLES=resolved` experiments with omitting custom properties
 from the cloned styles; it does not change the workbench's production renderer.
 
-For a native smoke check, run `npm run bundle-capture`, then
+For a native smoke check, run `npm run bundle-runtime`, then
 `node scripts/smoke-capture.cjs`. It uses a temporary fixture and checks warm
 capture reuse, reloads, resizing, implementation handoffs, Dock visibility,
 and crash recovery. Ordinary `npm test` needs no desktop or Electron process.
@@ -377,9 +381,6 @@ and crash recovery. Ordinary `npm test` needs no desktop or Electron process.
 Storybook fixtures to check native iframe input, sign-in, session persistence
 across reloads and lens changes, and viewport resizing.
 
-Cursor, Windsurf and the other VS Code forks read their own extensions folder —
-`~/.cursor/extensions`, and so on — and the same command works against it.
-
 ## Licence
 
 MIT. `workbench/modern-screenshot.js` is vendored from
@@ -387,4 +388,4 @@ MIT. `workbench/modern-screenshot.js` is vendored from
 qq15725).
 
 The bundled Electron runtime includes its MIT license and Chromium's third-party
-notices in `capture-runtime/runtime.tar.gz`, preserved in the extracted cache.
+notices in `electron-runtime/runtime.tar.gz`, preserved in the extracted cache.

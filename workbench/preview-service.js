@@ -1,0 +1,89 @@
+/* The worker owns compilation and its loopback server. A packaged extension
+   uses the bundled Electron Node runtime; standalone use needs only Node. */
+var cp = require('node:child_process');
+var path = require('node:path');
+var runtime = require('./electron-runtime');
+var remote = require('./remote');
+
+function create(root, options) {
+  options = options || {};
+  var child = null;
+  var starting = null;
+  var address = null;
+  var closed = false;
+  function launch() {
+    if (closed) return Promise.reject(new Error('Preview service is closed'));
+    if (starting) return starting;
+    starting = Promise.resolve().then(function () {
+      return runtime.available() ? runtime.prepare(options.storage) : process.execPath;
+    }).then(function (executable) {
+      return new Promise(function (resolve, reject) {
+        var env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' });
+        delete env.NODE_OPTIONS;
+        var worker = cp.fork(path.join(__dirname, 'preview', 'worker.cjs'), [root, JSON.stringify(options.previews || {})], {
+          execPath: executable, execArgv: [], env: env, stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+        });
+        child = worker;
+        var timer = setTimeout(function () { worker.kill(); reject(new Error('Preview worker startup timed out')); }, 30000);
+        worker.stderr.on('data', function (chunk) { if (options.log) options.log(String(chunk).slice(0, 2000)); });
+        worker.on('message', function (message) {
+          if (message.type === 'diagnostic' && options.diagnostic) {
+            try { options.diagnostic('info', message.event, message.details); } catch (_) {}
+          }
+        });
+        worker.once('message', function (message) {
+          clearTimeout(timer);
+          address = 'http://127.0.0.1:' + message.port;
+          resolve(address);
+        });
+        worker.once('error', function (error) { clearTimeout(timer); reject(error); });
+        worker.once('exit', function () {
+          clearTimeout(timer);
+          if (child === worker) { child = null; starting = null; address = null; }
+          reject(new Error('Preview worker stopped'));
+        });
+      });
+    }).catch(function (error) { starting = null; throw error; });
+    return starting;
+  }
+  return {
+    index: function () { return launch().then(function (base) { return remote.fetchJson(base + '/index', { timeout: 120000 }); }).then(function (answer) {
+      if (answer.status !== 200) throw new Error(answer.body && answer.body.error || 'Preview index failed');
+      return answer.body;
+    }); },
+    export: function () { return launch().then(function (base) { return remote.fetchJson(base + '/export', { timeout: 300000 }); }).then(function (answer) {
+      if (answer.status !== 200) throw new Error(answer.body && answer.body.error || 'Preview export failed');
+      return answer.body;
+    }); },
+    proxy: function (req, res, target) {
+      return launch().then(function (base) {
+        return new Promise(function (resolve, reject) {
+          var headers = {};
+          if (req.headers['if-none-match']) headers['If-None-Match'] = req.headers['if-none-match'];
+          var outgoing = require('node:http').get(base + target, { headers: headers }, function (incoming) {
+            res.writeHead(incoming.statusCode, incoming.headers);
+            incoming.pipe(res);
+            incoming.on('end', resolve);
+            incoming.on('error', reject);
+          });
+          outgoing.setTimeout(120000, function () { outgoing.destroy(new Error('Preview request timed out')); });
+          outgoing.on('error', reject);
+          res.on('close', function () { outgoing.destroy(); });
+        });
+      });
+    },
+    close: function () {
+      closed = true;
+      return Promise.resolve(starting).catch(function () {}).then(function () {
+        if (!child) return;
+        return new Promise(function (resolve) {
+          var worker = child;
+          var timer = setTimeout(function () { worker.kill('SIGKILL'); }, 3000);
+          worker.once('exit', function () { clearTimeout(timer); resolve(); });
+          if (worker.connected) worker.send('close'); else worker.kill();
+        });
+      });
+    },
+  };
+}
+module.exports = { create: create };

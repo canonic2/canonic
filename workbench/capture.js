@@ -676,6 +676,14 @@ function settleScript(options) {
       return box.width > 0 && box.height > 0;
     }
     var storybook = location.pathname.replace(/\\/+$/, '').endsWith('/iframe.html') || location.pathname === '/iframe.html';
+    if (/\\.workbench\\.tsx?$/.test(location.pathname) || window.__workbenchOptions) {
+      var previewDeadline = Date.now() + 8000;
+      while (!window.__workbenchReady) {
+        if (window.__workbenchError) throw new Error(window.__workbenchError);
+        if (Date.now() >= previewDeadline) throw new Error('Workbench preview did not finish rendering before capture');
+        await sleep(50);
+      }
+    }
     if (storybook) {
       var deadline = Date.now() + 8000;
       while (true) {

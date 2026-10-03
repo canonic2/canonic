@@ -2,9 +2,9 @@
 
 Storybook is an opt-in implementation. A project can map an authored screen to
 one exact Storybook title, import a whole Storybook catalog, or do both.
-See [manifest.js](../../workbench/manifest.js), [server.js](../../server.js),
-[lenses.js](../../workbench/lenses.js), and
-[workbench.js](../../workbench/workbench.js).
+See [manifest.js](../workbench/manifest.js), [server.js](../server.js),
+[lenses.js](../workbench/lenses.js), and
+[workbench.js](../workbench/workbench.js).
 
 ## Configuration
 
@@ -81,7 +81,7 @@ implementations:
 - Design-system export plans a reference for each imported story at the
   supported viewport sizes. [Export capture](export.md) schedules background
   workers and does not drive the visible workbench preview.
-- [server.test.js](../../server.test.js) checks catalog import, exact-title
-  lookup, and export plans. [lenses.test.js](../../workbench/lenses.test.js)
+- [server.test.js](../server.test.js) checks catalog import, exact-title
+  lookup, and export plans. [lenses.test.js](../workbench/lenses.test.js)
   checks story URLs and channel messages.
-  [preview.test.js](../../workbench/preview.test.js) checks reuse and fallback.
+  [preview.test.js](../workbench/preview.test.js) checks reuse and fallback.

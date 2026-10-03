@@ -30,6 +30,14 @@ release downloads and publishes to GitHub Pages.
 
 ## Developing
 
+The Overview, Install page, and page shell have Astro `.workbench.ts` definitions
+in `previews/`. The repository's workbench discovers them alongside the Acme
+demo. To open only the website, run `node packages/workbench/server.js packages/website`
+from the repository root and use its reported workbench URL. The shell exposes
+editable props and a versioned state. These previews use the project's installed
+Astro compiler; they do not start the Astro application server. Content-backed
+docs and application integrations can still be reviewed through a URL lens.
+
 The site uses pnpm; `packageManager` in `package.json` pins its version.
 From this folder:
 
@@ -57,24 +65,29 @@ file's exact download URL. Set `GITHUB_TOKEN` if the API rate-limits you.
 The pages share one request per build.
 
 The Changelog page lists every complete release from the same request. Each
-entry shows the release's notes from GitHub as plain text. The generated
-"Full Changelog" line becomes the entry's changelog button, and headings and
-the New Contributors list are left out. A release with no notes of its own
-shows only its links and builds, so edit a release's notes on GitHub to give
-it a summary. In dev the changelog still asks GitHub, and shows a link to the
+entry shows the release's notes from GitHub as plain text. Those notes are
+the version's entry in `workbench/CHANGELOG.md`, which the release workflow
+publishes. The generated "Full Changelog" line becomes the entry's changelog
+button, and headings and the New Contributors list are left out. A release
+with no notes of its own shows only its links and builds. To correct a
+published release's notes, follow the `workbench-release` skill, then deploy
+the site again. In dev the changelog still asks GitHub, and shows a link to the
 releases if it can't reach them.
 
 ## Workbench documentation
 
 The docs live at `/workbench/docs/`. Astro's content collection reads every
-Markdown file in `../workbench/docs/`, including the contributor specifications.
+Markdown file in `../workbench/docs/`, which contains the public user guides.
 Edit those files directly; the website keeps no duplicate content and requires
 no frontmatter. In dev mode, Astro watches them for updates.
 
-`README.md` becomes the docs overview; `specs/README.md` becomes `/workbench/docs/specs/`.
+Internal specifications live separately in `../workbench/specs/` and are not
+included in website pages, navigation, or search.
+
+`README.md` becomes the docs overview.
 Other filenames become page URLs. Titles and the "On this page" list come from
 Markdown headings. `src/lib/docs.js` groups the main guides in reading order;
-additional files appear in the contributor group automatically. Relative guide
+additional files appear in the "More guides" group automatically. Relative guide
 links are converted to website URLs, preserving heading fragments. Links to
 source files outside the docs point to GitHub. The search field filters guides
 using their full Markdown text, loaded only when needed.

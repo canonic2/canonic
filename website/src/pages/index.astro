@@ -38,7 +38,7 @@ const statesYaml = `- label: Sign in
           Canonic Workbench{version && ` v${version}`}
         </a>
         <h1>Every screen in your repo, on one canvas.</h1>
-        <p>A VS Code extension for the HTML you design in. List your pages and previews in one file, see each one at a real device width, draw on it, and hand the picture to your agent.</p>
+        <p>A VS Code extension for reviewing screens and components. Define TypeScript previews or connect your existing pages and tools, see each screen at a real device width, draw on it, and hand the picture to your agent.</p>
         <div class="actions">
           <a class="btn" href="#install" id="heroDownload">Download for VS Code</a>
           <a class="btn btn-ghost" href="#tour">Take the tour</a>
@@ -70,12 +70,12 @@ const statesYaml = `- label: Sign in
         <div class="section-head">
           <span class="kicker">Tour</span>
           <h2>Four areas, one window.</h2>
-          <p class="lede">Nothing in them comes from your pages. Everything the workbench shows is read from <code>workbench.yaml</code> at the root of your project.</p>
+          <p class="lede">Workbench reads <code>workbench.yaml</code> at the root of your project, shows discovered TypeScript previews alongside manual pages in the sidebar, and imports the implementation catalogs you enable.</p>
         </div>
         <ol class="areas">
           <li><span class="n">01</span><h3>Screen list</h3><p>Laid out like Sketch’s sidebar: the sections in <code>workbench.yaml</code>, such as Pages and Components, listed on top, and the chosen one’s screens and folders below, with search at the bottom. A screen with states lists them underneath it. In VS Code this list sits in the sidebar, where the file tree usually goes.</p></li>
           <li><span class="n">02</span><h3>Top bar</h3><p>The screen and its state on the left, with the other states a click away, then the Actions toggle. Lenses sit in the middle; frame sizes and screen actions on the right. When space runs short, secondary actions move into the More menu.</p></li>
-          <li><span class="n">03</span><h3>Canvas</h3><p>The screen itself, live, in a frame of the size you picked. It’s your real page, not a picture of it. Zoom and pan it like a design canvas; the page keeps its real width.</p></li>
+          <li><span class="n">03</span><h3>Canvas</h3><p>The screen itself, live, in a frame of the size you picked. It’s your real page, not a picture of it. Zoom and pan it like a design canvas; the page keeps its real width. Managed previews reuse their renderer when you switch screens. The current screen stays visible while its replacement loads, and offscreen lazy images don’t hold it up.</p></li>
           <li><span class="n">04</span><h3>Markup bar</h3><p>Drawing tools and the handoff, floating under the frame. Select is the one way back to using the page.</p></li>
         </ol>
       </div>
@@ -116,7 +116,8 @@ const statesYaml = `- label: Sign in
                 <h3>Only in some setups</h3>
                 <dl class="controls">
                   <div><dt>State picker</dt><dd>Beside the screen’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview.</dd></div>
-                  <div><dt>Lens switcher</dt><dd>Design, then each implementation the screen has, when <code>workbench.yaml</code> declares implementations. See <a href="#lenses">Lenses</a>.</dd></div>
+                  <div><dt>Lens switcher</dt><dd>Workbench for TypeScript previews, or Design for HTML pages, followed by additional implementations declared in <code>workbench.yaml</code>. See <a href="#lenses">Lenses</a>.</dd></div>
+                  <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected state, inspect actions, and read documentation. Changes stay temporary.</dd></div>
                   <div><dt>Copy handoff</dt><dd>In VS Code only, at the end of the markup bar, beside a count of your marks. See <a href="#markup">Markup and handoff</a>.</dd></div>
                 </dl>
               </div>
@@ -197,9 +198,10 @@ const statesYaml = `- label: Sign in
       <div class="feature" id="lenses">
         <div class="feature-text">
           <span class="kicker">Lenses</span>
-          <h2>Design and the real build, one click apart.</h2>
-          <p>Declare where the code runs (a Storybook, a dev server, staging, a booted iOS Simulator, or a window of any macOS app, such as an Android emulator) and a lens switcher appears in the toolbar: Design first, then each implementation the screen has. A lens shows it in the same frame, at the same width, under the same marks.</p>
-          <p>The choice stays as you move between screens, and the address carries it, so a copied link opens the same view. A project can also configure a start command and a readiness check for a Storybook or local server; in a trusted VS Code workspace, Workbench starts it in a terminal only when the check fails.</p>
+          <h2>Your previews, in their own language.</h2>
+          <p>Define components and screens in TypeScript <code>.workbench.ts</code> files. The default Workbench lens supports HTML, React, Vue, Astro, and React Native Web, with adapters for other technologies, named states, editable inputs, and an action log. Exports include an independent browser viewer with states, viewports, controls, actions, and docs. Astro exports include the authored states; editing Astro props requires the live Workbench server. Storybook, dev servers, staging, the iOS Simulator, and macOS app windows remain available as additional lenses.</p>
+          <p>The choice stays as you move between screens, and the address carries it, so a copied link opens the same view. A project can also configure a start command and a readiness check for a Storybook or local server; in a trusted VS Code workspace, Workbench starts it in a terminal only when the check fails. The canvas opens immediately with a loading indicator while services start, and the sidebar names the catalogs it is waiting for.</p>
+          <img src={`${base}images/workbench-previews.jpg`} alt="Acme TypeScript preview with its named states and editable input controls" loading="lazy" />
         </div>
         <div class="feature-media">
           <div class="code">
@@ -223,8 +225,8 @@ const statesYaml = `- label: Sign in
     <div class="wrap">
       <div class="setup-text">
         <span class="kicker">Setup</span>
-        <h2>One file is the whole integration.</h2>
-        <p class="lede">No copy of the tool in your project, and no scripts added to your pages. Workbench only turns on in a folder with a <code>workbench.yaml</code>. Delete that file and nothing else remains in your project.</p>
+        <h2>Start with one configuration file.</h2>
+        <p class="lede">The tool ships inside the extension. Workbench turns on in a folder with a <code>workbench.yaml</code>; your pages and optional TypeScript preview definitions stay in your project.</p>
       </div>
       <div class="code">
         <div class="code-head"><span class="code-file">workbench.yaml</span><button class="copy" type="button" aria-label="Copy the workbench.yaml example">Copy</button></div>

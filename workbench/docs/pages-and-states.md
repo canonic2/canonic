@@ -2,7 +2,8 @@
 
 A Workbench screen is an HTML file in your repository. This guide covers how
 those pages are served, how one page shows several states, how links behave,
-and how to choose the frame sizes a screen supports.
+and how to choose the frame sizes a screen supports. To render components from
+your codebase instead, see [TypeScript previews](workbench-previews.md).
 
 ## Design pages
 
@@ -28,11 +29,11 @@ consequences for how you write pages:
 - **Paths behave as on a normal web server rooted at the project.** A relative
   path (`../styles/app.css`) resolves from the page. A root-relative path
   (`/styles/app.css`) resolves from the project root.
-- **Two scripts are injected into every page the server serves.** `actions.js`
-  goes first in `<head>`, and `states.js` follows it. They implement
-  [states](#states) and [actions](#links-and-actions). They don't change
-  anything a page's own scripts can see, apart from attributes on `<html>`.
-- **A page opened straight from disk gets neither script.** It shows as
+- **One script is added to every HTML page the server serves, and to
+  TypeScript previews.** `/_workbench/preview-compat.js` goes first in `<head>`
+  and handles [states](#states), [actions](#links-and-actions), and forwarding
+  editor shortcuts to VS Code. You don't add it yourself.
+- **A page opened straight from disk gets no script.** It shows as
   authored, and its links behave like ordinary links.
 
 Because the canvas and your page share an origin, the workbench can read the
@@ -43,13 +44,9 @@ screenshot of exactly what you see.
 
 Pages are real pages in a Chromium-based browser: scripts, web components,
 shadow DOM, web fonts, canvas, video, dialogs, and forms all work. The
-screenshot path copies the live document, so a few things don't appear in
-screenshots even though they appear on the canvas:
-
-- content inside nested iframes,
-- closed shadow roots,
-- canvas or video pixels loaded from another origin without CORS.
-
+screenshot path copies the live document, so closed shadow roots don't appear
+in screenshots, and a page containing an `iframe`, `object`, or `embed`, or a
+canvas or video loaded from another origin without CORS, can't be captured.
 See [Screenshot limits](markup-and-handoff.md#what-screenshots-can-and-cant-include).
 
 ## States
@@ -77,7 +74,7 @@ A state is declared twice, and the ids must match:
 ```
 
 When you pick a state, the page loads with `?state=<id>`. The first state is
-the page as authored and loads with no parameter. `states.js` reads the
+the page as authored and loads with no parameter. Workbench's script reads the
 parameter and sets `data-wb-state` on `<html>`: `default` for the first state,
 or the id. An id that isn't kebab-case is treated as `default`.
 
@@ -126,7 +123,7 @@ the markup as a record of what the element does elsewhere.
 
 ### When states are applied
 
-`states.js` sets the root attribute immediately, then applies `only`, `not`,
+The script sets the root attribute immediately, then applies `only`, `not`,
 and `set` at `DOMContentLoaded`. Custom elements loaded with `defer` are already
 upgraded by then, so they receive the attributes normally. Elements that your
 scripts add later aren't processed, so key late content off the root attribute
@@ -162,10 +159,13 @@ With actions on, a link to another page in the project that is listed in
 Links elsewhere, `mailto:` links, downloads, and same-page anchors behave as
 usual.
 
+Either way, browser form validation is off, so a `required` field doesn't stop
+a flow.
+
 The switch applies to pages Workbench serves. Implementations shown through a
 [lens](lenses.md) are other sites, and their links always work.
 
-`actions.js` sets `data-wb-actions="on"` or `"off"` on `<html>` if your styles
+Workbench sets `data-wb-actions="on"` or `"off"` on `<html>` if your styles
 need to know.
 
 ## Viewports
@@ -203,7 +203,7 @@ its variants as states:
   icon: component
   items:
     - label: Button
-      src: preview/button.html
+      src: components/button.html
       viewports:
         - fit
       states:
@@ -216,12 +216,13 @@ its variants as states:
 ```
 
 ```html
-<!-- preview/button.html -->
+<!-- components/button.html -->
 <button class="btn"
         data-wb-set-secondary="class=btn btn-secondary"
         data-wb-set-disabled="disabled">Continue</button>
 ```
 
-If your components already have Storybook stories, consider
-[importing them](storybook.md#import-the-whole-catalog) instead of writing
-previews.
+To render the real components from your codebase instead of HTML copies, write
+[TypeScript previews](workbench-previews.md). If your components already have
+Storybook stories, consider
+[importing them](storybook.md#import-the-whole-catalog).

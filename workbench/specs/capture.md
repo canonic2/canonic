@@ -2,11 +2,11 @@
 
 This spec covers the camera download and screenshot-backed handoff from the
 current canvas. The [design-system export](export.md) has a different capture
-schedule. See [markup.js](../../workbench/markup.js),
-[dom-mirror.js](../../workbench/dom-mirror.js),
-[capture-sync.js](../../workbench/capture-sync.js),
-[electron-capture.js](../../electron-capture.js), and
-[capture-helper/main.cjs](../../capture-helper/main.cjs).
+schedule. See [markup.js](../workbench/markup.js),
+[dom-mirror.js](../workbench/dom-mirror.js),
+[capture-sync.js](../workbench/capture-sync.js),
+[electron-capture.js](../electron-capture.js), and
+[capture-helper/main.cjs](../capture-helper/main.cjs).
 
 ## Why a helper exists
 
@@ -84,11 +84,11 @@ bridge transfers document state, not credentials or application code.
 
 ## Verification points
 
-- [capture-helper.test.js](../../capture-helper.test.js),
-  [capture-runtime.test.js](../../capture-runtime.test.js), and
-  [electron-capture.test.js](../../electron-capture.test.js) cover helper
+- [capture-helper.test.js](../capture-helper.test.js),
+  [electron-runtime.test.js](../electron-runtime.test.js), and
+  [electron-capture.test.js](../electron-capture.test.js) cover helper
   packaging, lifecycle, IPC, and fallback.
-- [markup-capture.test.js](../../workbench/markup-capture.test.js),
-  [capture-sync.test.js](../../workbench/capture-sync.test.js), and
-  [capture-page.test.js](../../workbench/capture-page.test.js) cover the
+- [markup-capture.test.js](../workbench/markup-capture.test.js),
+  [capture-sync.test.js](../workbench/capture-sync.test.js), and
+  [capture-page.test.js](../workbench/capture-page.test.js) cover the
   interactive request, mirror readiness, and inert surface.

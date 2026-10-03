@@ -139,6 +139,17 @@ async function main() {
     await mouse('mouseReleased', 400, 700);
     await wait(300);
     await shot('markup.jpg');
+    await open('#preview/interactive-button.workbench.ts@1512', SIDE);
+    await t.evaluate(`(async function () {
+      var deadline = Date.now() + 8000;
+      while (document.getElementById('previewControls').hidden) {
+        if (Date.now() > deadline) throw new Error('Workbench preview controls did not become ready');
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      document.getElementById('previewControls').click();
+    })()`);
+    await wait(200);
+    await shot('workbench-previews.jpg');
   } finally {
     await cap.close();
     server.process.removeAllListeners('exit');

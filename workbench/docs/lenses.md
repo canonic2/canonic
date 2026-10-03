@@ -5,22 +5,26 @@ A design screen is one picture of something that also exists as code. A
 same width, with your marks over it. Switch between them to compare the
 design with what was built, then hand the difference to an agent.
 
-There are four kinds of implementation:
+There are five kinds of implementation:
 
 | Kind | Shows | Guide |
 | --- | --- | --- |
 | `url` | A page from any web server: your dev server, a preview deployment, staging | This page |
+| `workbench` | A named TypeScript preview from this project | [Workbench previews](workbench-previews.md) |
 | `storybook` | One Storybook story, without Storybook's own interface | [Storybook](storybook.md) |
 | `ios-simulator` | A live, interactive stream of a booted iOS Simulator | [iOS Simulator](ios-simulator.md) |
 | `window` | A live stream of a window from any macOS app, such as an Android emulator | [App windows](windows.md) |
 
-This page covers how lenses work in general and how to set up a `url`
-implementation.
+This page covers how lenses work in general, how to set up a `url`
+implementation, and how to point a design screen at a
+[Workbench preview](#compare-a-design-with-a-workbench-preview).
 
 ## How lenses work
 
 A screen that lists any implementations gets a **lens switcher** in the
-toolbar: **Design**, then one button per implementation the screen has.
+toolbar: **Design**, then one button per implementation the screen has. On a
+screen whose `src` is a `.workbench.ts` or `.workbench.tsx` file, the first
+button reads **Workbench** instead.
 
 - **The choice sticks** as you move between screens, like the frame width.
   A screen that doesn't have the chosen lens shows its design.
@@ -31,6 +35,8 @@ toolbar: **Design**, then one button per implementation the screen has.
   taken through a lens is named after it (`sign-in-error-staging.jpg`), and the
   handoff says which implementation it shows, at what URL, and where that
   implementation's code is.
+- **Actions** is always on through a `url` or `storybook` lens. Your app
+  serves that page, so the workbench can't stop its links and forms.
 - **Open on its own** in the toolbar opens the current page in your browser,
   outside the workbench, for interaction the iframe can't provide.
 
@@ -57,7 +63,7 @@ implementations:
 - `base` is the server's origin, plus a base path if every page lives under
   one (`https://example.com/app`).
 - `root` is where the implementation's code is, relative to `workbench.yaml` or
-  absolute. It is optional, and only used for [code pointers](#point-at-the-code).
+  absolute. It is optional, and only needed for [code pointers](#point-at-the-code).
 
 ### 2. Tell each screen where it is
 
@@ -143,14 +149,17 @@ implementations:
 ```
 
 1. On activation, Workbench runs the `check`: a TCP connection to `port`
-   (on `127.0.0.1` unless you set `host`), or an HTTP request to `url`.
+   (on `127.0.0.1` unless you set `host`), or an HTTP request to `url` that
+   has to answer with a success status.
 2. If the check passes, nothing else happens. An existing server is never
    started twice.
 3. If it fails, Workbench opens a VS Code terminal in `cwd` (relative to
    `workbench.yaml`) and runs `command`. The terminal stays open, so you can
    read its output and stop it.
 4. It waits up to `timeout` seconds for `ready`, or for `check` if `ready` is
-   omitted. If it times out, the canvas still opens and reports the problem.
+   omitted. `timeout` defaults to 60 and can be up to 300. If the server
+   isn't ready in time, the canvas still opens, and the **Workbench** output
+   channel records that it didn't become ready.
 
 Use `ready` when the server listens before it can serve:
 
@@ -252,6 +261,36 @@ if (typeof window !== 'undefined' && window.parent !== window && document.referr
 - The workbench accepts bridge messages only from the active iframe, at the
   implementation's configured origin.
 
+## Compare a design with a Workbench preview
+
+A `workbench` implementation shows one of this project's
+[TypeScript previews](workbench-previews.md) in place of a design. It takes no
+`base`, `start`, or `root` of its own: previews come from this project.
+
+```yaml
+implementations:
+  implementation:
+    kind: workbench
+    label: Implementation
+
+sections:
+  - name: Components
+    items:
+      - label: Button
+        src: design/button.html
+        implementations:
+          implementation: components/button
+```
+
+- The value is the preview's `id`, such as `components/button`. An unknown ID
+  is reported by the [config route](troubleshooting.md#read-the-resolved-config).
+- A design state loads the preview state with the same id. Any other state
+  shows the preview's first state.
+- **Open the source** lists the preview's source file, and the handoff names
+  it.
+- Previews run project code, so they need a
+  [trusted workspace](https://code.visualstudio.com/docs/editor/workspace-trust).
+
 ## Point at the code
 
 `code` tells Workbench where a screen's implementation lives, so the editor can
@@ -278,15 +317,19 @@ sections:
 ```
 
 - Paths are relative to the implementation's `root`, or absolute. Folders work
-  as well as files.
+  as well as files. The implementation needs a `root` either way; without
+  one, its code pointers are listed but can't be opened, and the config route
+  reports the problem.
 - **Open the source** (`</>`) in the toolbar lists the design file and each code
-  pointer, and opens the one you pick in the editor. Opening files needs the
-  extension.
+  pointer, and opens the one you pick in the editor. A file opens in a tab; a
+  folder is revealed in the Explorer, or in your file browser when it's outside
+  the window. Opening files needs the extension.
 - The handoff includes a `Source:` line with the absolute paths, and the
   screen's design file. An agent reading it knows which code to change and
   which design to match. Code pointers appear in the handoff even on the Design
   lens.
-- Paths are resolved on your machine. A path that doesn't exist is reported by
+- Paths are resolved on your machine. A path that doesn't exist is shown
+  disabled in **Open the source**, left out of the handoff, and reported by
   the [config route](troubleshooting.md#read-the-resolved-config) with
   `exists: false`.
 

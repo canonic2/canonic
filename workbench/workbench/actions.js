@@ -22,12 +22,21 @@
    screen are stopped.
 
    Nothing in a project points at this file. The extension's server puts it
-   into every page it serves, first in <head>, ahead of the page's own scripts
+   into its compatibility bundle, first in <head>, ahead of the page's own scripts
    — see `withPreviewScripts` in server.js.
 */
 (function () {
   var flag = /[?&]actions=(on|off)/.exec(location.search);
   var on = !flag || flag[1] === 'on';
+  window.wbPreviewActions = {
+    configure: function (search) {
+      var next = /[?&]actions=(on|off)/.exec(search);
+      on = !next || next[1] === 'on';
+      document.documentElement.setAttribute('data-wb-actions', on ? 'on' : 'off');
+      silenceForms();
+    },
+    apply: silenceForms,
+  };
 
   /* A live page sits one frame deeper than the workbench shell. Relay editor
      shortcuts now; navigation being on or off has no bearing on the editor. */
@@ -103,7 +112,7 @@
     silenceForms();
   }
 
-  if (on) {
+  {
     document.addEventListener(
       'click',
       function (e) {
@@ -111,6 +120,7 @@
         for (var i = 0; i < path.length; i++) {
           var el = path[i];
           if (el.tagName !== 'A' || !el.hasAttribute('href')) continue;
+          if (!on) { e.preventDefault(); return; }
           handOff(e, candidate(el.getAttribute('href')));
           return;
         }
@@ -125,38 +135,12 @@
     document.addEventListener(
       'submit',
       function (e) {
+        if (!on) { e.preventDefault(); return; }
         var form = e.target;
         if (!form || form.tagName !== 'FORM') return;
         handOff(e, candidate(form.getAttribute('action')));
       },
       true
     );
-    return;
   }
-
-  /* Capture, so the page's own handler can't navigate before this runs. */
-  document.addEventListener(
-    'click',
-    function (e) {
-      /* composedPath rather than target: a custom element keeps its real <a>
-         in a shadow root, and target stops at the host element. */
-      var path = e.composedPath ? e.composedPath() : [e.target];
-      for (var i = 0; i < path.length; i++) {
-        var el = path[i];
-        if (el.tagName === 'A' && el.hasAttribute('href')) {
-          e.preventDefault();
-          return;
-        }
-      }
-    },
-    true
-  );
-
-  document.addEventListener(
-    'submit',
-    function (e) {
-      e.preventDefault();
-    },
-    true
-  );
 })();

@@ -19,6 +19,8 @@ jobs:
           cache-dependency-path: workbench/package-lock.json
       - name: Check release version
         run: node -e 'const version = require("./workbench/package.json").version; if (!/^\d+\.\d+\.\d+$/.test(version) || process.env.GITHUB_REF_NAME !== `workbench/v${version}`) { console.error(`Tag must be workbench/v${version}`); process.exit(1); }'
+      - name: Check release notes
+        run: node workbench/scripts/release-notes.cjs "${GITHUB_REF_NAME#workbench/v}"
       - run: npm ci --ignore-scripts
         working-directory: workbench
       - run: npm test
@@ -67,11 +69,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           pattern: workbench-*
           merge-multiple: true
           path: dist
+      # The CHANGELOG.md entry comes first; GitHub's generated notes add the
+      # "Full Changelog" link the website turns into its changelog button.
       - name: Publish six VSIX files to GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -83,7 +90,13 @@ jobs:
             name="${file##*/}"
             mv "$file" "dist/${name%-"$version".vsix}.vsix"
           done
-          gh release create "$GITHUB_REF_NAME" dist/*.vsix --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --latest
+          node workbench/scripts/release-notes.cjs "$version" > release-notes.md
+          # Compare with the workbench tag just below this one, not whichever
+          # release GitHub would pick.
+          previous="$(git tag -l 'workbench/v*' --sort=v:refname | awk -v tag="$GITHUB_REF_NAME" '$0 == tag { print last; exit } { last = $0 }')"
+          start=()
+          if [ -n "$previous" ]; then start=(--notes-start-tag "$previous"); fi
+          gh release create "$GITHUB_REF_NAME" dist/*.vsix --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file release-notes.md --generate-notes "${start[@]}" --latest
 
   publish_website:
     needs: release

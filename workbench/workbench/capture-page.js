@@ -111,7 +111,7 @@
     scrollImmediately(win, Number(scroll.x) || 0, Number(scroll.y) || 0);
 
     var fonts = doc.fonts && doc.fonts.ready ? doc.fonts.ready.catch(function () {}) : Promise.resolve();
-    return Promise.all([fonts, mediaReady(doc)])
+    return previewReady(win).then(function () { return Promise.all([fonts, mediaReady(doc)]); })
       .then(function () {
         scrollImmediately(win, Number(scroll.x) || 0, Number(scroll.y) || 0);
         return paint(win);
@@ -119,6 +119,20 @@
       .then(function () {
         return paint(window);
       });
+  }
+
+  function previewReady(win) {
+    if (!win.__workbenchOptions) return Promise.resolve();
+    var deadline = Date.now() + 8000;
+    return new Promise(function (resolve, reject) {
+      function check() {
+        if (win.__workbenchError) { reject(new Error(win.__workbenchError)); return; }
+        if (win.__workbenchReady) { resolve(); return; }
+        if (Date.now() >= deadline) { reject(new Error('Workbench preview did not finish rendering before capture')); return; }
+        window.setTimeout(check, 50);
+      }
+      check();
+    });
   }
 
   function result(payload) {

@@ -205,6 +205,26 @@
 
   /* The declared implementations, keyed by name. Anything malformed is named
      in `problems` and left out; the rest still work. */
+  function previews(raw, problems) {
+    if (raw === false) return false;
+    if (raw === undefined || raw === null) return {};
+    if (!isMap(raw)) { problems.push('previews: must be false or a map with include and config.'); return false; }
+    var result = {};
+    if (raw.include !== undefined) {
+      if (!Array.isArray(raw.include) || !raw.include.length || raw.include.some(function (pattern) { return typeof pattern !== 'string' || !pattern.trim() || pattern.charAt(0) === '/' || pattern.indexOf('..') !== -1; })) {
+        problems.push('previews.include: must be a nonempty list of project-relative glob patterns.');
+        return false;
+      }
+      result.include = raw.include.slice();
+    }
+    if (raw.config !== undefined) {
+      var file = text(raw.config);
+      if (!file || file.charAt(0) === '/' || file.indexOf('..') !== -1 || SCHEME.test(file)) { problems.push('previews.config: must be a project-relative config file.'); return false; }
+      result.config = file;
+    }
+    return result;
+  }
+
   function implementations(raw, problems) {
     var out = {};
     if (raw === undefined || raw === null || raw === '') return out;
@@ -224,12 +244,14 @@
         return;
       }
       var kind = text(spec.kind);
-      if (kind !== 'url' && kind !== 'storybook' && kind !== 'ios-simulator' && kind !== 'window') {
-        problems.push(where + ': kind must be url, storybook, ios-simulator, or window.');
+      if (kind !== 'url' && kind !== 'storybook' && kind !== 'workbench' && kind !== 'ios-simulator' && kind !== 'window') {
+        problems.push(where + ': kind must be url, storybook, workbench, ios-simulator, or window.');
         return;
       }
       var impl = { key: key, label: text(spec.label) || labelOf(key), kind: kind, root: null };
-      if (kind === 'ios-simulator') {
+      if (kind === 'workbench') {
+        impl.root = '.';
+      } else if (kind === 'ios-simulator') {
         impl.device = text(spec.device) || 'booted';
       } else if (kind === 'window') {
         var app = text(spec.app);
@@ -270,7 +292,7 @@
       }
 
       if (spec.start !== undefined) {
-        if (kind === 'ios-simulator' || kind === 'window') {
+        if (kind === 'ios-simulator' || kind === 'window' || kind === 'workbench') {
           problems.push(where + ': start is available for URL and Storybook implementations.');
         } else {
           impl.start = startup(spec.start, where, problems);
@@ -279,6 +301,7 @@
 
       var root = text(spec.root);
       if (root) {
+        if (kind === 'workbench' && root !== '.') { problems.push(where + ': Workbench previews use this project root.'); return; }
         if (SCHEME.test(root)) problems.push(where + ': root must be a folder path, not a URL.');
         else impl.root = root;
       }
@@ -296,13 +319,28 @@
   /* Manual and imported sections share one rail. Matching names are one
      section, not duplicate buttons that both claim the same selection. */
   function mergeSections(base, imported) {
+    function clone(items) { return (items || []).map(function (item) { return item.folder ? Object.assign({}, item, { items: clone(item.items) }) : Object.assign({}, item); }); }
     var out = (base || []).map(function (section) {
-      return Object.assign({}, section, { items: (section.items || []).slice() });
+      return Object.assign({}, section, { items: clone(section.items) });
     });
+    function existing(src) {
+      var found = null;
+      function visit(items) { items.forEach(function (item) { if (item.folder) visit(item.items); else if (item.src === src) found = item; }); }
+      out.forEach(function (section) { visit(section.items); });
+      return found;
+    }
     (imported || []).forEach(function (section) {
+      function remaining(items) { return (items || []).map(function (item) {
+        if (item.folder) { var children = remaining(item.items); return children.length ? Object.assign({}, item, { items: children }) : null; }
+        var original = item.workbench && existing(item.src);
+        if (original) { original.states = item.states; original.workbench = true; if (!original.viewports && item.viewports) original.viewports = item.viewports; return null; }
+        return item;
+      }).filter(Boolean); }
+      var items = remaining(section.items);
+      if (!items.length) return;
       var found = out.find(function (candidate) { return candidate.group === section.group; });
-      if (found) found.items = found.items.concat(section.items || []);
-      else out.push(section);
+      if (found) found.items = found.items.concat(items);
+      else out.push(Object.assign({}, section, { items: items }));
     });
     return out;
   }
@@ -348,6 +386,14 @@
           return;
         }
         out[key] = { title: title };
+        count += 1;
+        return;
+      }
+
+      if (impl.kind === 'workbench') {
+        var preview = text(value);
+        if (!/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(preview)) { problems.push(where + ': Workbench lens needs a preview ID.'); return; }
+        out[key] = { preview: preview };
         count += 1;
         return;
       }
@@ -459,6 +505,7 @@
     merge: merge,
     streamed: streamed,
     implementations: implementations,
+    previews: previews,
     screenViewports: screenViewports,
     viewportWidths: viewportWidths,
     screenLenses: screenLenses,
