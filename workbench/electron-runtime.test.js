@@ -5,7 +5,7 @@ var os = require('node:os');
 var path = require('node:path');
 var crypto = require('node:crypto');
 var tar = require('tar');
-var runtime = require('./capture-runtime');
+var runtime = require('./electron-runtime');
 
 async function fixture(t) {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-runtime-test-'));

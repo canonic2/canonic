@@ -1,6 +1,8 @@
-const productIcons = import.meta.glob('../../public/icons/*-blue.svg', {
-  query: '?raw', import: 'default', eager: true,
-});
+import workbench from '../../public/icons/workbench-blue.svg?raw';
+import sandbox from '../../public/icons/sandbox-blue.svg?raw';
+import playground from '../../public/icons/playground-blue.svg?raw';
+import shield from '../../public/icons/shield-blue.svg?raw';
+const productIcons = { workbench, sandbox, playground, shield };
 
 /* The Canonic wordmark and the four product marks, as SVG paths from the
    design. Each mark has a base shape and a blue accent; `module` names the
@@ -14,7 +16,7 @@ export const logo = {
 
 // Read the supplied exports so the website always uses the stored artwork.
 function productMark(name) {
-  const svg = productIcons[`../../public/icons/${name.toLowerCase()}-blue.svg`];
+  const svg = productIcons[name.toLowerCase()];
   const paths = [...svg.matchAll(/<path fill="([^"]+)" d="([^"]+)"\s*\/>/g)];
   if (paths.length !== 2) throw new Error(`Expected base and accent paths for ${name}`);
   return { base: paths[0][2], accent: paths[1][2] };

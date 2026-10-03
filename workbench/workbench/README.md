@@ -3,9 +3,9 @@
 A browser for the screens a project is designing: pick one in the sidebar, see
 it at a real device width, draw on it, and hand the picture to an agent.
 
-Nothing in this folder knows which project it is in. What it shows comes from
-one file at the project root — `workbench.yaml` — and that file is the whole of
-what a project has to write.
+Nothing in this folder knows which project it is in. `workbench.yaml` configures
+the project; screens come from declared pages, discovered TypeScript preview
+definitions, and configured implementation catalogs.
 
 This folder ships inside the Workbench extension and is served from there, so no
 project holds a copy and no page in one points at it. It is still only HTML and
@@ -13,7 +13,7 @@ script files: no build step and no runtime network. Lucide ships with the
 extension as a pinned dependency.
 
 The [user documentation](../docs/README.md) is the guide for people setting
-Workbench up. The [workbench specifications](../docs/specs/README.md) record the
+Workbench up. The [workbench specifications](../specs/README.md) record the
 observable contracts for shared behavior, Storybook, and other previews.
 
 ---
@@ -24,15 +24,22 @@ observable contracts for shared behavior, Storybook, and other previews.
 2. Write `workbench.yaml` at the project root (schema below).
 
 That is the whole of it. Pages need nothing added to preview well: the
-extension puts `actions.js` and `states.js` into every page it serves, which is
-what keeps a click from navigating you out of the screen you're reviewing and
-what makes `?state=…` mean something. A page opened straight off the filesystem
-gets neither, so it previews as authored and its links behave like links.
+server puts one `preview-compat.js` bundle into served HTML and managed
+previews (including Astro). It bundles `keys.js`, `actions.js` and `states.js`:
+keyboard forwarding, action handling, and page states, to keep navigation
+inside Workbench and make `?state=…` mean something. A page opened straight
+off the filesystem gets no injection, so it previews as authored and its links
+behave like links.
 
 ## workbench.yaml
 
 ```yaml
 name: Acme                    # the screen list header, and the tab title
+
+previews:                     # optional: TypeScript preview discovery; false turns it off
+  include:                    # project-relative globs; default **/*.workbench.ts and **/*.workbench.tsx
+    - src/**/*.workbench.ts
+  config: workbench.config.ts # project-relative adapter and compiler config; this is the default
 
 sections:                     # one entry in the screen list's Sections, in this order
   - name: Pages
@@ -56,8 +63,20 @@ sections:                     # one entry in the screen list's Sections, in this
     icon: component
     items:
       - label: Button
-        src: preview/components-button.html
+        src: components/button.html
 ```
+
+TypeScript previews in `.workbench.ts` and `.workbench.tsx` files are
+discovered without being listed. Each definition's title places it: the first
+segment is a section (`Previews` when there is only one segment), middle
+segments one folder, and the last the screen's label; its states come from the
+definition. `previews: false` turns discovery and execution off. Definitions
+run project code, so they need a trusted workspace. A handwritten screen may
+name a definition as its `src`; it keeps its place in `sections` and takes its
+states from the definition. See [TypeScript previews](../docs/workbench-previews.md)
+for definitions, the HTML, React, Vue, Astro and React Native Web adapters,
+controls, plugins, and portable exports. `preview/compiler.cjs` discovers and
+compiles them in a worker started by `preview-service.js`.
 
 State ids are kebab-case — they travel in a URL and in a screenshot's filename.
 Declaring one here is half of it: the page has to answer to the id, which
@@ -87,7 +106,7 @@ declared once at the top and referred to by name:
 ```yaml
 implementations:
   storybook:                  # any kebab-case name; it's the button's label unless `label` says otherwise
-    kind: storybook           # url | storybook | ios-simulator | window
+    kind: storybook           # workbench | url | storybook | ios-simulator | window
     url: auto                 # or an explicit http://localhost:6006
     root: ../product/packages/ui   # optional folder: where the code is, relative to this file or absolute
     catalog: true             # optional: import its titles and stories into the workbench
@@ -109,6 +128,9 @@ implementations:
   staging:
     kind: url
     base: https://staging.example.com
+  implementation:
+    kind: workbench           # this project's TypeScript previews: no url, start, or other root
+    label: Implementation
 
 sections:
   - name: Pages
@@ -123,10 +145,15 @@ sections:
         code:                 # implementation -> path or list of paths, relative to its root
           dev: packages/auth/src/pages/login
       - label: Button
-        src: preview/components-button.html
+        src: components/button.html
         implementations:
           storybook: Components/Button    # storybook kind: a title; its stories are read from the index
+          implementation: components/button   # workbench kind: a preview ID
 ```
+
+A `workbench` implementation's `root` can only be the project itself, and the
+preview's definition file is added to the screen's code pointers. An unknown
+preview ID is reported against the screen.
 
 `workbench.local.yaml` beside it is merged over: each implementation by
 name, every other top-level key whole. A missing one is the usual case; a
@@ -160,8 +187,8 @@ exact title can override its category:
         Auth: shield-check
 ```
 
-Handwritten screens may likewise set `icon: panel-top`; otherwise their
-section icon is used as before.
+Handwritten screens may likewise set `icon: panel-top`; otherwise they use
+their section's icon.
 
 `start` is available for Storybook and URL implementations. On extension
 activation, Workbench first checks the configured TCP port or HTTP(S) URL. If it
@@ -206,6 +233,19 @@ one origin — `http://127.0.0.1:3579/_workbench/`, stepping up a port when one
 is taken. Same origin lets the workbench read the live preview and synchronize
 it into the warm native capture frame. A foreign origin prevents that. The config
 is fetched too, which a `file://` page isn't allowed to do at all.
+
+TypeScript previews are compiled by a worker process that `preview-service.js`
+starts on the bundled Electron runtime's Node (plain Node from a source
+checkout); the server proxies `/_workbench/previews/` and the definition files'
+own paths to it. Managed previews share two reusable `preview-host.html`
+documents. Each loads the compatibility bundle and `/_workbench/preview-runtime.js`
+(`preview/browser.js`) once. `preview-host.js` fetches a compiled descriptor and
+calls the module's adapter-neutral `mount` entry point; `browser.js` owns
+cleanup of the adapter, canvas, event listeners, and revision timer. On
+promotion the outgoing host is cleared for its next selection. Library-owned
+CSSOM sheets stay connected and are enabled only for the module using them.
+Ordinary HTML and external lenses keep native document navigation. Portable
+exports are self-contained.
 
 The packaged extension starts its bundled Electron screenshot helper as soon
 as the workspace's server starts. It stays running until the extension shuts
@@ -271,7 +311,7 @@ settling and Storybook reuse do not navigate the visible preview.
 
 Hosted captures report native failures instead of invoking the expensive
 DOM-to-image renderer. Standalone `file://` use retains that renderer. Live
-mirroring currently rejects nested iframes and embedded documents. Closed
+mirroring rejects nested iframes and embedded documents. Closed
 shadow roots and browser-private UI are inaccessible; origin-tainted canvas or
 video pixels cannot be transferred. Linked stylesheets load from their URLs;
 runtime CSSOM edits to those sheets are not transferred. The mirror is not an
@@ -339,8 +379,10 @@ channel and keeps the preview runtime warm. It navigates to the story URL if
 Storybook does not acknowledge the switch.
 
 The last row is for working on the tool itself. `?root=` is how it is told
-where the project is, since it is no longer sitting inside one. Where something
-can't work, the workbench says so instead of coming up empty.
+where the project is, since the tool ships in the extension rather than inside
+the project. TypeScript previews need the server to compile them, so they
+appear only in the first two rows. Where something can't work, the workbench
+says so instead of coming up empty.
 
 Use **Select** (or Escape to leave a drawing tool) to interact with the preview.
 Selected annotations intercept input only on their marks and handles; clicks
@@ -362,10 +404,9 @@ interaction in those cases.
 ## Embedding and sign-in
 
 All design, URL, and Storybook lenses load in ordinary iframes. An iframe can
-sign in and maintain an app session. Workbench does not share the Chrome profile
-used by the old streamed browser or assume VS Code shares your normal browser's
-cookies. Sign in within the workbench's page, and use the app's logout to end
-that session.
+sign in and maintain an app session. Workbench does not assume VS Code shares
+your normal browser's cookies. Sign in within the workbench's page, and use the
+app's logout to end that session.
 
 For apps you control, configure their development environment:
 
@@ -386,13 +427,6 @@ and [third-party cookies](https://developer.mozilla.org/en-US/docs/Web/Privacy/G
 An embedding, login, or server failure stays in the iframe. Fix the app's
 configuration or use **Open on its own**; Workbench never switches to a stream.
 
-Remove `render: browser` or `render: iframe` from `workbench.yaml` and
-`workbench.local.yaml`. Legacy settings produce a migration message in the
-console and `/_workbench/config`, while the implementation still loads as an
-iframe. The separate **Sign in to an Implementation** and **Forget Implementation
-Sign-ins** commands and `/_workbench/live/*` and `/_workbench/lens/probe` routes
-have been removed. Existing Chrome profile data is left untouched on disk.
-
 ## The files
 
 | File | Job |
@@ -408,6 +442,8 @@ have been removed. Existing Chrome profile data is left untouched on disk.
 | `workbench.js` | routing, frame loading, resizing, the lens switcher, stories, the source menu |
 | `reference.js` | copies the current screen, state or story, and lens as a text reference |
 | `toolbar.js` | builds the top bar’s More menu, and folds secondary actions into it before the bar’s regions collide |
+| `preview-host.html` + `preview-host.js` | the reusable document a TypeScript preview mounts into |
+| `preview-controls.js` + `preview-controls.css` | shared input controls, reset, actions and docs, also included in portable browser exports |
 | `zoom.js` | zooms and pans the frame on the canvas, Figma-style, and labels it with its name and size |
 | `nav.js` + `nav.css` | the screen list, laid out like Sketch's sidebar: sections, then the chosen one's folders, screens and states, then the filter |
 | `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
@@ -420,6 +456,8 @@ have been removed. Existing Chrome profile data is left untouched on disk.
 | `workbench.css` | the chrome. Every value it uses is declared in it |
 | `icons.js` | turns any configured Lucide name into workbench SVG markup |
 | `modern-screenshot.js` | vendored DOM renderer for standalone file use |
+| `simulator.js` | the canvas side of the native window stream, and Simulator input |
+| `keys.js` | forwards editor shortcuts out of the workbench and its previews |
 | `actions.js` | the preview's half of the Actions toggle |
 | `states.js` | the preview's half of page states |
 
@@ -430,7 +468,8 @@ the Workbench sidebar in VS Code, where it stands in for a file tree. `nav.css`
 draws it in either place; it names no colours of its own, so `workbench.css`
 dresses it in the tool's grays and `sidebar.css` in the editor's theme.
 
-`actions.js` and `states.js` run inside previews served by Workbench, and they are
+The `preview-compat.js` bundle, built by `../preview-scripts.js`, runs inside
+previews served by Workbench. Its `actions.js` and `states.js` modules are
 the reason those pages can apply shell state without project code: off
 `file://` the frame is a foreign origin the shell can't reach into, so both
 flags travel in the URL and the page applies them to itself. Nothing references
@@ -446,7 +485,7 @@ default) or Storybook story, and the active lens with its implementation URL.
 It uses the resolved selection and works in both the editor and the standalone
 browser. Copying does not capture a screenshot, include markup, or send a handoff.
 
-**Download design-system ZIP bundle** exports the whole workbench rather than only the
+**Download design-system ZIP** exports the whole workbench rather than only the
 current screen. It starts from every design file and resolved component, page,
 and Storybook source pointer, follows local imports and referenced assets, and
 preserves project-relative paths. The archive includes Storybook and package
@@ -475,10 +514,16 @@ keeps the visible selection unchanged. A failed or unsupported reference does
 not discard the archive: `captureWarnings` in `canonic-export.json` names it,
 and the remaining references continue.
 
-The workbench downloads one outer `<design-system>-parts.zip` through the same
-browser download used by the original single-file export. Inside the bundle,
-every numbered ZIP is at most 10,000,000 bytes for tools with a 10 MB attachment
-limit. Parts are named `<design-system>-part-01-of-NN.zip`. Every part extracts
+When the project has TypeScript previews, the archive also holds a standalone
+browser viewer of them under `browser/`, built by `preview/portable.cjs`:
+serve the extracted directory with any static HTTP server and open
+`browser/index.html`. `canonic-export.json` lists its entries and build
+warnings under `browser`.
+
+An export that fits in 10,000,000 bytes downloads as one `<design-system>.zip`.
+A larger one downloads as one outer `<design-system>-parts.zip` holding
+numbered ZIPs of at most 10,000,000 bytes each, for tools with a 10 MB
+attachment limit. Parts are named `<design-system>-part-01-of-NN.zip`. Every part extracts
 into the same top-level directory, repeats `README.md` and
 `canonic-export.json`, and includes a `canonic-export-part-NN.json` file inventory.
 Extract the outer bundle first. Upload its numbered ZIPs together, or extract all

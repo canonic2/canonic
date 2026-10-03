@@ -56,8 +56,9 @@ implementations. `start` and `catalog` aren't available for windows.
   streams at a time.
 - The server looks up the app and the title in `workbench.yaml`. A page on the
   canvas can only ask for a window that a screen declares.
-- In VS Code, frames reach the canvas over a loopback HTTP stream. A standalone
-  browser uses an H.264 stream decoded with WebCodecs.
+- In VS Code, JPEG frames reach the canvas over a loopback HTTP stream at about
+  20 frames per second. A standalone browser uses an H.264 stream at about 30
+  frames per second, decoded with WebCodecs.
 - There is no fallback to browser screen sharing. If the helper can't capture,
   the canvas says why.
 
@@ -71,6 +72,9 @@ opens the right settings pane. Then:
 2. Turn on **Visual Studio Code**, or the editor named in the error.
 3. Quit and reopen the editor.
 4. Pick the screen again.
+
+When you run the server without the editor, grant the permission to the
+terminal app that started it.
 
 ## Screenshots and exports
 

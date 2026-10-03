@@ -59,6 +59,29 @@ input {
   height: 100%;
 }
 
+.sb-loading:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 16px;
+  color: var(--wb-fg-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sb-loading-spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--wb-line);
+  border-top-color: var(--wb-accent);
+  border-radius: 50%;
+  animation: sb-loading-turn 1s linear infinite;
+}
+
+@keyframes sb-loading-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sb-loading-spinner { animation: none; } }
+
 .sb .wb-browse-block:not([hidden]) + .wb-browse-head {
   padding-top: 12px;
 }

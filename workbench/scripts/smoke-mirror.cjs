@@ -4,7 +4,7 @@ var assert = require('node:assert/strict');
 var fs = require('node:fs');
 var path = require('node:path');
 var os = require('node:os');
-var runtime = require('../capture-runtime');
+var runtime = require('../electron-runtime');
 var engine = require('../electron-capture');
 var server = require('../server');
 

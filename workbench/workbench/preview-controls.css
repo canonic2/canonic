@@ -1,0 +1,10 @@
+/* Shared by Workbench and the standalone browser export. */
+#previewControls[hidden] { display: none; }
+.wb-preview-controls { position: fixed; z-index: 40; top: 58px; right: 12px; width: 280px; max-width: calc(100vw - 24px); max-height: calc(100vh - 90px); overflow: auto; padding: 16px; border: 1px solid var(--wb-line); border-radius: var(--wb-radius-8, 8px); background: var(--wb-panel); color: var(--wb-fg); box-shadow: 0 8px 30px #0004; font-size: 12px; }
+.wb-preview-controls[hidden] { display: none; }
+.wb-preview-controls h2 { margin: 0 0 16px; font-size: 14px; }
+.wb-preview-controls h3 { font-size: 12px; margin-top: 20px; }
+.wb-preview-controls label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.wb-preview-controls input, .wb-preview-controls select, .wb-preview-controls textarea, .wb-preview-controls button { font: inherit; color: inherit; background: var(--wb-raised); border: 1px solid var(--wb-line); border-radius: 4px; padding: 6px; }
+.wb-preview-controls input[type=checkbox] { align-self: flex-start; }
+.wb-preview-controls ol, .wb-preview-controls details { padding-left: 18px; overflow-wrap: anywhere; }

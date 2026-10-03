@@ -21,7 +21,9 @@ The dock floats at the bottom of the canvas.
 | **Save screenshot** | Downloads the frame with its marks. See [Screenshots](#screenshots). |
 | **Copy handoff** | Saves the screenshot and copies a prompt. See [Hand off to an agent](#hand-off-to-an-agent). |
 
-The number next to **Copy handoff** is how many marks the handoff will carry.
+While you have marks, a count such as **3 marks** beside **Copy handoff** shows
+how many the handoff will carry. Selecting a drawing tool you're already using
+returns to **Select**.
 
 Marks are drawn in one color and weight, so an agent can tell annotation from
 design. Text and comments can hang past the frame's edge onto the canvas;
@@ -32,7 +34,9 @@ screenshots are cropped to the frame either way.
 - **Select a mark** with the Select tool to show its handles. Drag it to move
   it, or drag a handle to resize it.
 - **Delete** or **Backspace** removes the selected mark.
-- **Escape** leaves a drawing tool, or finishes editing a note.
+- **Arrow keys** nudge the selected mark by 1 pixel, or 8 with Shift.
+- **Escape** leaves a drawing tool, finishes editing a note, or deselects the
+  mark.
 - **Marks don't block the page.** In Select mode, only a mark's outline and
   handles take clicks. Clicking inside an empty rectangle reaches the page
   underneath, so you can keep using the page while annotations are on it.
@@ -53,6 +57,10 @@ file, state, and lens:
 | `pages/sign-in.html`, first state, Design | `sign-in.jpg` |
 | Same, state `error` | `sign-in-error.jpg` |
 | Same, through the `staging` lens | `sign-in-error-staging.jpg` |
+| TypeScript preview `src/button.workbench.ts`, state `disabled` | `button.workbench-disabled.jpg` |
+
+On a Storybook lens, the story stands where the state does. The file goes to
+your browser's downloads, and a message names it.
 
 Screenshots use 90% JPEG quality. Their pixel size matches the frame's CSS
 size, so Retina displays don't double it. The camera doesn't write into your
@@ -75,11 +83,17 @@ runs in the background with no Dock icon or window. See
 
 | Included | Not included |
 | --- | --- |
-| The page's DOM, open shadow roots, and stylesheets | Content inside nested iframes |
-| Form values and scroll positions | Closed shadow roots |
-| Canvas and video frames | Canvas or video loaded from another origin without CORS |
-| Open dialogs and popovers, and CSS hover states | Browser UI, such as native select menus |
-| Animation at its current point | Changes still in progress at the moment of capture |
+| The page's DOM, open shadow roots, and stylesheets | Closed shadow roots |
+| Form values and scroll positions | Browser UI, such as native select menus |
+| Canvas and video frames | Changes still in progress at the moment of capture |
+| Open dialogs and popovers, and CSS hover states | Rules a script changes at runtime in a linked stylesheet |
+| Animation at its current point | |
+
+Some pages can't be captured at all, and the camera or handoff shows a message
+instead of a screenshot:
+
+- A page that contains an `iframe`, `object`, or `embed`.
+- A page with a canvas or video loaded from another origin without CORS.
 
 For a [URL lens](lenses.md#screenshots-through-a-url-lens) or a
 [Storybook lens](storybook.md#screenshots-of-stories), the helper loads the
@@ -125,14 +139,19 @@ that the screenshot shows the implementation while the design it should match
 is the screen's `src`. For a Storybook lens, it names the story and its id.
 When the screen has [code pointers](lenses.md#point-at-the-code), a `Source:`
 line gives their absolute paths, so the agent changes the right code. That
-line appears on the Design lens too.
+line appears on the Design lens too. For a
+[TypeScript preview](workbench-previews.md), it gives the preview's source
+file.
 
 When the elements under the marks can't be read, the prompt says so, and the
-coordinates are what the agent has to go on.
+coordinates are what the agent has to go on. A mark over empty space is
+counted, so the agent knows to check the screenshot. A handoff with no marks
+says the screenshot shows the screen as it stands.
 
-Handoffs need the VS Code extension; the button isn't shown in a standalone
-browser. Add `.canonic/.handoffs/` to `.gitignore`. The screenshots are review
-material, not source.
+Handoffs need the VS Code extension, which copies the prompt. The button shows
+in the editor and in a browser opened with **Workbench: Open Canvas in
+Browser**, but not when you run the server yourself. Add `.canonic/.handoffs/`
+to `.gitignore`. The screenshots are review material, not source.
 
 ### Writing good handoffs
 

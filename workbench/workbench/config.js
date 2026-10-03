@@ -234,8 +234,9 @@
     var problems = [];
     /* Screens refer to implementations by name, so those are read first. */
     var impls = window.wbManifest.implementations(raw && raw.implementations, problems);
+    var previews = window.wbManifest.previews(raw && raw.previews, problems);
     var found = sections(raw && raw.sections, impls, problems);
-    var importsCatalog = Object.keys(impls).some(function (key) { return impls[key].catalog; });
+    var importsCatalog = previews !== false || Object.keys(impls).some(function (key) { return impls[key].catalog; });
     if (!found.length && !importsCatalog) {
       problems.push('nothing to show — a config needs at least one section with one screen in it.');
       throw new Error(problems.join('\n'));
@@ -245,7 +246,7 @@
     if (problems.length) {
       console.warn('[workbench] ' + FILE + (hasLocal ? ' + ' + LOCAL : '') + ':\n' + problems.join('\n'));
     }
-    return { name: text(raw.name) || 'Workbench', sections: found, implementations: impls, root: root };
+    return { name: text(raw.name) || 'Workbench', sections: found, implementations: impls, previews: previews, root: root };
   }
 
   function trouble(file, error) {

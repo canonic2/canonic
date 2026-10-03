@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="workbench.css" />
   <link rel="stylesheet" href="nav.css" />
   <link rel="stylesheet" href="markup.css" />
+  <link rel="stylesheet" href="preview-controls.css" />
 </head>
 <body>
   <div class="wb">
@@ -109,6 +110,9 @@
         <!-- Project-wide actions, and whatever the bar folds away when the
              editor is narrow. toolbar.js builds the menu; these two buttons
              are only ever reached through it. -->
+        <button class="wb-action" type="button" id="previewControls" hidden
+                data-icon="sliders-horizontal" title="Preview controls" aria-label="Preview controls"
+                aria-expanded="false"></button>
         <span class="wb-toolbar-overflow" id="toolbarOverflow">
           <button class="wb-action" type="button" id="toolbarOverflowButton"
                   data-icon="ellipsis" title="More" aria-label="More"
@@ -156,7 +160,7 @@
 
     <main class="wb-canvas">
       <div class="wb-stage" id="stage">
-        <p class="wb-blank" id="blank">Pick a page or a component to see it here.</p>
+        <p class="wb-blank is-loading" id="blank" role="status">Loading screens…</p>
         <!-- The frame's name and its real size, above it the way a design
              tool labels a frame. Unscaled: zoom.js places it. -->
         <div class="wb-frame-label" id="frameLabel" hidden>
@@ -172,6 +176,7 @@
                  visible while the next one finishes loading behind it. -->
             <iframe class="is-active" id="frame" title="Preview" allow="clipboard-read; clipboard-write"></iframe>
             <iframe id="frameBuffer" title="Preview loading" aria-hidden="true" allow="clipboard-read; clipboard-write"></iframe>
+            <div class="wb-preview-loading" role="status"><span>Loading preview…</span></div>
             <canvas class="wb-simulator" id="simulatorCanvas" aria-label="Interactive iOS Simulator" hidden></canvas>
             <div class="wb-simulator-prompt" id="simulatorPrompt" hidden>
               <button class="wb-simulator-share" id="shareSimulator" type="button">Retry native stream</button>
@@ -325,5 +330,6 @@
   <script src="markup.js"></script>
   <script src="reference.js"></script>
   <script src="toolbar.js"></script>
+  <script src="preview-controls.js"></script>
 </body>
 </html>

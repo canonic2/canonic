@@ -6,6 +6,7 @@ setup. This page lists every key. For a guided introduction, start with
 
 - [A complete example](#a-complete-example)
 - [Top level](#top-level)
+- [Previews](#previews)
 - [Sections](#sections)
 - [Folders](#folders)
 - [Screens](#screens)
@@ -19,13 +20,20 @@ setup. This page lists every key. For a guided introduction, start with
 - [Local overrides](#local-overrides)
 - [YAML that the reader accepts](#yaml-that-the-reader-accepts)
 - [How problems are reported](#how-problems-are-reported)
+- [Editing with the form](#editing-with-the-form)
 
 ## A complete example
 
 ```yaml
 name: Acme
 
+previews:
+  include:
+    - packages/ui/**/*.workbench.tsx
+
 implementations:
+  preview:
+    kind: workbench
   storybook:
     kind: storybook
     url: auto
@@ -91,6 +99,7 @@ sections:
           - fit
           - responsive
         implementations:
+          preview: components/button
           storybook: Components/Button
         code:
           storybook: src/button
@@ -101,11 +110,40 @@ sections:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | string | no | Titles the screen list and the canvas tab. Defaults to `Workbench`. |
-| `sections` | list of [sections](#sections) | yes, unless a [catalog](#catalogs) supplies screens | The sidebar's sections, in order. |
+| `sections` | list of [sections](#sections) | no, unless `previews: false` and no [catalog](#catalogs) | The sidebar's sections, in order. |
+| `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
 | `implementations` | map of name to [implementation](#implementations) | no | Where screens also exist as running code. |
 
-A config with no usable section and no catalog fails with *nothing to show — a
-config needs at least one section with one screen in it.*
+With `previews: false`, no catalog, and no usable section, the config fails
+with *nothing to show — a config needs at least one section with one screen in
+it.*
+
+## Previews
+
+Workbench discovers [TypeScript previews](workbench-previews.md) in
+`**/*.workbench.ts` and `**/*.workbench.tsx` files without any configuration.
+Each preview becomes a screen, in the section named by the first segment of its
+title, or in **Previews** when the title has no `/`. Previews run
+project code, so in VS Code they need a trusted workspace.
+
+```yaml
+previews:
+  include:
+    - src/**/*.workbench.ts
+  config: workbench.config.ts
+```
+
+| Key | Type | Required | Description |
+| --- | --- | --- | --- |
+| `include` | list of glob patterns | no | Which files are preview definitions, relative to the project root. Replaces the default patterns. Patterns can't start with `/` or contain `..`. |
+| `config` | path | no | The preview configuration file, relative to the project root. Defaults to `workbench.config.ts`. See [Register other technologies](workbench-previews.md#register-other-technologies). |
+
+`previews: false` turns off discovery and never runs preview code. An invalid
+`previews` value is reported, and previews stay off until it is fixed.
+
+A screen whose `src` is a preview definition, such as
+`src: src/button.workbench.ts`, keeps its place in your sections and takes its
+states from the definition.
 
 ## Sections
 
@@ -120,7 +158,7 @@ sections:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | yes | The section's label. Screens imported by a [catalog](#catalogs) into a section with the same name are added to it. |
+| `name` | string | yes | The section's label. [Previews](#previews) and [catalog](#catalogs) screens that belong in a section with the same name are added to it. |
 | `icon` | Lucide icon name | no | Shown on the section and on its screens that don't set their own. Defaults to `file-text`. |
 | `items` | list of [screens](#screens) and [folders](#folders) | yes | A section with nothing usable in it is dropped and reported. |
 
@@ -152,7 +190,7 @@ items:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `label` | string | yes | The screen's name in the sidebar, in screenshots, and in handoffs. |
-| `src` | path | yes | The HTML file, relative to the project root. |
+| `src` | path | yes | The HTML file or [preview definition](#previews), relative to the project root. |
 | `icon` | Lucide icon name | no | Overrides the section's icon for this screen. |
 | `states` | list of [states](#states) | no | Variations of the page. Shown only when there are two or more. |
 | `viewports` | list of [viewports](#viewports) | no | Which frame sizes the screen supports. Defaults to all four. |
@@ -211,6 +249,8 @@ viewports:
 - Width buttons for viewports a screen doesn't list are disabled while it is
   showing.
 - A single value may be written without a list: `viewports: mobile`.
+- An unknown value is reported and skipped. If no value is valid, all four
+  are enabled.
 - [Design-system exports](design-system-export.md) capture one reference per
   listed viewport, removing duplicate sizes.
 
@@ -229,21 +269,25 @@ implementations:
 
 | Key | Kinds | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | all | yes | `url`, `storybook`, `ios-simulator`, or `window`. |
+| `kind` | all | yes | `workbench`, `url`, `storybook`, `ios-simulator`, or `window`. |
 | `label` | all | no | The lens button's label. Defaults to the name in sentence case. |
 | `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`. Screen paths are appended to it. A trailing slash is removed. |
 | `url` | `storybook` | yes | Storybook's origin, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). |
 | `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
 | `app` | `window` | yes | The macOS application whose window is streamed: its bundle ID, or part of it, such as `com.example.app`. Letters, digits, dots, and hyphens only. |
-| `root` | all | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
+| `root` | all but `workbench` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
 | `catalog` | `storybook`, `ios-simulator` | no | Import screens automatically. See [Catalogs](#catalogs). |
 | `start` | `url`, `storybook` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
-Guides: [URL implementations](lenses.md), [Storybook](storybook.md),
-[iOS Simulator](ios-simulator.md), [App windows](windows.md).
+A `workbench` implementation shows this project's
+[TypeScript previews](#previews). It takes no address, `start`, or `root`: its
+root is always the project root, and any other `root` is reported and the
+implementation dropped. A `catalog` or `start` on a kind that doesn't support
+it is reported and ignored.
 
-`render: browser` and `render: iframe` are no longer used. They are reported
-with a request to remove them, and the implementation still loads in an iframe.
+Guides: [TypeScript previews](workbench-previews.md#configure-discovery-and-lenses),
+[URL implementations](lenses.md), [Storybook](storybook.md),
+[iOS Simulator](ios-simulator.md), [App windows](windows.md).
 
 ## A screen's implementations
 
@@ -265,6 +309,18 @@ implementations:
   authored, and it is required.
 - A state without its own entry uses the default path.
 - A map key that isn't one of the screen's state ids is reported.
+
+**`workbench`**: a preview ID, such as `components/button`: kebab-case
+segments separated by `/`. Each of the screen's states opens the preview state
+with the same id, and any other state opens the preview's first state. The
+preview's source file is added to the screen's code pointers.
+
+```yaml
+implementations:
+  preview: components/button
+```
+
+An ID that matches no discovered preview is reported.
 
 **`storybook`**: a story title, exactly as Storybook shows it, including its
 prefix. `Components/Button` and `Button` are different titles.
@@ -370,7 +426,8 @@ catalog:
 ```
 
 The default icon is `book-open` for Storybook and `smartphone` for the
-Simulator. `catalog` is invalid on `url` implementations.
+Simulator. Other kinds don't take `catalog`; TypeScript previews are
+[discovered](#previews) without one.
 
 ## Local overrides
 
@@ -403,8 +460,8 @@ its own name.
 Workbench reads a subset of YAML with its own small parser, the same in the
 browser and the server:
 
-- Block mappings, block lists, strings, numbers, `true` and `false`, quotes,
-  and comments.
+- Block mappings, block lists, strings, numbers, `true`, `false`, `null`,
+  quotes, and comments.
 - No flow collections (`{a: b}`, `[a, b]`), multi-line strings, anchors,
   aliases, tags, or multiple documents.
 - Indent with spaces. Tabs are rejected.
@@ -423,18 +480,23 @@ everything else:
 - A screen, folder, section, state, or implementation that is invalid is
   dropped. Its problem names where it was, such as
   `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
-- In the canvas, every problem is written to the browser console.
-- `GET /_workbench/config` on the workbench server lists problems with
-  implementations, viewports, and `code` under `problems`, alongside the config
-  as your machine resolves it. A screen dropped for a bad `src`, label, state
-  id, or folder is left out of it without a problem, so check the console for
-  those. See
+- In the canvas, every problem found while reading the file is written to the
+  browser console.
+- `GET /_workbench/config` on the workbench server lists, under `problems`,
+  problems with implementations, previews, viewports, screens' implementation
+  mappings, and `code`, plus catalogs and previews that couldn't load. It sits
+  alongside the config as your machine resolves it. A screen dropped for a bad
+  `src`, label, state id, or folder is left out of it without a problem, so
+  check the console for those. See
   [Troubleshooting](troubleshooting.md#read-the-resolved-config).
+- When previews or a catalog are on, the Workbench view in VS Code shows the
+  same problems above its screen list.
 
 ## Editing with the form
 
 **Configure pages**, in the canvas toolbar's **More** menu, edits sections,
-screens, labels, source paths, and viewports in a form. Saving rewrites only the
+folders, screens, labels, source paths, and viewports in a form. See
+[Configure pages](canvas.md#configure-pages). Saving rewrites only the
 `sections` block of `workbench.yaml`. Implementations, states, implementation
 mappings, and code pointers are preserved. Comments outside `sections` are
-kept; comments inside it may be reformatted.
+kept; comments inside it are not.

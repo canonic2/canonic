@@ -5,7 +5,7 @@ var PassThrough = require('node:stream').PassThrough;
 var fs = require('node:fs');
 var capture = require('./electron-capture');
 var chromium = require('./capture');
-var bundledRuntime = require('./capture-runtime');
+var bundledRuntime = require('./electron-runtime');
 
 function fake(options) {
   options = options || {};

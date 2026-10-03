@@ -22,7 +22,8 @@ sections:
 - `src` is relative to the project root and cannot start with `/` or contain
   `..`, `:`, or `~`. An authored screen's first state is the page as authored;
   the address omits it. Other state IDs must be kebab-case.
-- The server injects `states.js` and `actions.js` into pages it serves. A
+- The server injects one `preview-compat.js` bundle, containing keyboard,
+  action, and state handling, into pages it serves. A
   selected nondefault state travels as `?state=<id>`. `states.js` sets
   `data-wb-state` on `<html>` and applies `data-wb-state-only`,
   `data-wb-state-not`, and `data-wb-set-<id>` declarations. Declaring a state
@@ -115,9 +116,9 @@ implementations:
 
 ## Verification points
 
-- [config.test.js](../../config.test.js) and
-  [manifest.test.js](../../workbench/manifest.test.js) cover paths, state
+- [config.test.js](../config.test.js) and
+  [manifest.test.js](../workbench/manifest.test.js) cover paths, state
   maps, and implementation validation.
-- [server.test.js](../../server.test.js) covers serving, imports, and export
-  warnings. [simulator.test.js](../../workbench/simulator.test.js) covers
+- [server.test.js](../server.test.js) covers serving, imports, and export
+  warnings. [simulator.test.js](../workbench/simulator.test.js) covers
   canvas stream behavior.

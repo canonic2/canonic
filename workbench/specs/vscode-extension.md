@@ -1,9 +1,9 @@
 # VS Code extension contract
 
 This spec covers the editor host around the [core workbench](core.md). Its
-implementation is in [extension.js](../../extension.js),
-[panel.js](../../panel.js), [screens.js](../../screens.js),
-[startup.js](../../startup.js), and [server.js](../../server.js).
+implementation is in [extension.js](../extension.js),
+[panel.js](../panel.js), [screens.js](../screens.js),
+[startup.js](../startup.js), and [server.js](../server.js).
 
 ## Activation and ownership
 
@@ -27,6 +27,11 @@ implementation is in [extension.js](../../extension.js),
   brings it forward, and leaves keyboard focus in the list. Closing the tab
   while the view stays visible leaves it closed until the view is selected
   again.
+- The tab opens before implementation readiness and remote port forwarding
+  finish, with a themed loading indicator. The sidebar identifies pending
+  catalogs and disables search until its list is ready. Server failure replaces
+  the tab's loading state with recovery instructions. Delayed startup must not
+  reopen a tab the user closed, and the latest screen pick wins during startup.
 - The Workbench sidebar view is an extension webview. It uses the same navigation
   model as the canvas and receives imported catalog data from the server
   through the extension host. Config watchers rebuild it after asking the
@@ -69,7 +74,7 @@ spawn these local helpers.
 
 ## Verification points
 
-- [panel.test.js](../../panel.test.js) checks tab reuse and message ordering.
-- [sidebar.test.js](../../workbench/sidebar.test.js) checks sidebar refresh.
-- [startup.test.js](../../startup.test.js) checks probes and terminal startup.
-- [server.test.js](../../server.test.js) checks serving and editor callbacks.
+- [panel.test.js](../panel.test.js) checks tab reuse and message ordering.
+- [sidebar.test.js](../workbench/sidebar.test.js) checks sidebar refresh.
+- [startup.test.js](../startup.test.js) checks probes and terminal startup.
+- [server.test.js](../server.test.js) checks serving and editor callbacks.

@@ -51,6 +51,7 @@ function serve(context, root, diagnostics) {
   }).then(function () {
     return server.start({
       root: root,
+      isTrusted: vscode.workspace.isTrusted,
       eagerCapture: true,
       captureStorage: path.join(context.globalStorageUri.fsPath, 'capture'),
       chromePath: vscode.workspace.getConfiguration('canonic').get('capture.chromePath') || undefined,
@@ -148,9 +149,16 @@ function activate(context) {
 
   /* In an editor tab of our own — see panel.js for why not the built-in
      browser. */
-  command('canonic.openWorkbench', function (running) {
-    return panel.show(context, running.url, '');
-  });
+  function openCanvas(options, hash) {
+    if (!root) {
+      vscode.window.showWarningMessage('There’s no workbench.yaml in this project — that file is what lists the screens Workbench shows.');
+      return;
+    }
+    return panel.show(context, ready.then(function (running) { return running && running.url; }), hash || '', options);
+  }
+  context.subscriptions.push(vscode.commands.registerCommand('canonic.openWorkbench', function () {
+    return openCanvas();
+  }));
 
   /* And in a real browser, for when the built-in one gets in the way. */
   command('canonic.openWorkbenchExternally', function (running) {
@@ -174,13 +182,7 @@ function activate(context) {
     root,
     function (target) {
       if (!target.src) return;
-      return ready.then(function (running) {
-        if (!running) {
-          vscode.window.showWarningMessage('The Workbench server isn’t running.');
-          return;
-        }
-        return panel.show(context, running.url, target.src + (target.state ? ':' + target.state : ''));
-      });
+      return openCanvas(null, target.src + (target.state ? ':' + target.state : ''));
     },
     /* And the way back: the canvas reports every screen it lands on, so the
        list marks it even when the move started over there. */
@@ -192,9 +194,7 @@ function activate(context) {
     /* Selecting the Workbench view opens the canvas, keeping the keyboard
        in the list. A server that failed to start has already said so. */
     function () {
-      return ready.then(function (running) {
-        if (running) return panel.show(context, running.url, '', { preserveFocus: true });
-      });
+      return openCanvas({ preserveFocus: true });
     }
   );
 }

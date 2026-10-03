@@ -482,6 +482,10 @@ function create(root, view, options) {
       if (owner) screenData[src].entries.push({ kind: 'source', implementation: entry.implementation, path: destinationFor(path.resolve(entry.path), owner) });
     });
   });
+  (options.portable && options.portable.previews || []).forEach(function (preview) {
+    if (!screenData[preview.file]) return;
+    preview.files.forEach(function (file) { add(file, ownerFor(file), 'Workbench preview dependency', preview.file); });
+  });
   owners.forEach(function (owner) {
     var storybook = path.join(owner.root, '.storybook');
     if (fs.existsSync(storybook)) add(storybook, owner, 'Storybook configuration');
@@ -552,7 +556,8 @@ function create(root, view, options) {
         linkDependency(file, local.info.manifest);
         linkDependency(file, local.target);
       }
-      else if (dependency) packages[dependency] = true;
+      else if (dependency && dependency !== '@canonic/workbench') packages[dependency] = true;
+      else if (dependency === '@canonic/workbench') return;
       else {
         var resolved = resolveReference(file, specifier, item.owner.root, allowedRoots);
         if (resolved) {
@@ -580,6 +585,9 @@ function create(root, view, options) {
     if (found && manifests.indexOf(found) === -1) manifests.push(found);
   });
   var dependencyVersions = {};
+  (options.portable && options.portable.previews || []).forEach(function (preview) {
+    (preview.packages || []).forEach(function (pkg) { packages[pkg.name] = true; dependencyVersions[pkg.name] = pkg.version; });
+  });
   manifests.forEach(function (manifest) {
     try {
       var pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
@@ -672,11 +680,15 @@ function create(root, view, options) {
     dependencies: Object.keys(packages).sort().map(function (name) { return { name: name, version: dependencyVersions[name] || null }; }),
     warnings: Array.from(new Set(warnings)).sort(),
     captureWarnings: Array.from(new Set(options.captureWarnings || [])).sort(),
+    browser: options.portable ? { entry: 'browser/index.html', manifest: 'browser/workbench.json',
+      previews: options.portable.previews.map(function (preview) { return { id: preview.id, source: preview.file, entry: preview.directory + '/index.html', states: preview.states }; }),
+      warnings: options.portable.warnings } : null,
   };
   var readme = '# ' + (view && view.name || 'Workbench') + ' design-system export\n\n' +
     'This archive was generated from Workbench. Workspace files keep their original project-relative paths at this archive’s root; sources outside the workspace are under `implementations/`.\n\n' +
     'The export starts with every design, component, page, and story source declared or discovered by the workbench, then includes their transitive local imports and referenced assets. Each generated screen guide embeds reference screenshots for its declared states or Storybook stories at the configured viewports: desktop, mobile, both for responsive, or the standard fit frame. Duplicate capture sizes are removed. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n' +
-    'See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each screen’s content hash. Each generated screen guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n';
+    'See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each screen’s content hash. Each generated screen guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n' +
+    (options.portable ? '\n## Portable browser previews\n\nServe this extracted directory with any static HTTP server and open `browser/index.html`. The viewer includes searchable previews, state and viewport selection, editable controls, reset, actions, and documentation. Copy its address to share a selection. These compiled Workbench previews need no Electron, Workbench, package installation, or build step. Direct preview pages accept `?state=<id>`. Original editable sources remain in their project-relative locations. Check `browser.warnings` in the export report for previews that could not be built.\n' : '');
   var generatedPackage = { private: true, name: slug(view && view.name) + '-design-system', version: '0.0.0', dependencies: {} };
   report.dependencies.forEach(function (dependency) { generatedPackage.dependencies[dependency.name] = dependency.version || '*'; });
   var entries = Array.from(files.values()).map(function (item) {
@@ -686,6 +698,14 @@ function create(root, view, options) {
     entries.push({ name: prefix + '/' + screen.readme, body: screenReadme(screen) });
   });
   screenshotEntries.forEach(function (entry) { entries.push(entry); });
+  (options.portable && options.portable.files || []).forEach(function (file) {
+    if (!/^browser\//.test(file.path) || file.path.split('/').some(function (part) { return part === '..'; })) throw new Error('Invalid portable export path');
+    entries.push({ name: prefix + '/' + file.path, body: Buffer.from(file.data, 'base64') });
+  });
+  if (options.portable && !files.has(path.join(root, 'workbench-env.d.ts'))) {
+    var types = fs.readFileSync(path.join(__dirname, 'preview', 'api.d.ts'), 'utf8');
+    entries.push({ name: prefix + '/workbench-env.d.ts', body: 'declare module "@canonic/workbench" {\n' + types + '\n}\n' });
+  }
   if (!files.has(path.join(root, 'package.json'))) {
     entries.push({ name: prefix + '/package.json', body: JSON.stringify(generatedPackage, null, 2) + '\n' });
   }

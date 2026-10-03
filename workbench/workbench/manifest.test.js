@@ -104,7 +104,7 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations: “Dev Server” must be kebab-case — it travels in a URL.',
     'implementations › dev: needs a base starting with http:// or https://.',
     'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
-    'implementations › docs: kind must be url, storybook, ios-simulator, or window.',
+    'implementations › docs: kind must be url, storybook, workbench, ios-simulator, or window.',
     'implementations › bare: needs a kind, and a url or base.',
     'implementations › staging: catalog is only available for Storybook and iOS Simulator implementations.',
     'implementations › staging: render is no longer used; remove it. URL and Storybook implementations use iframes.',

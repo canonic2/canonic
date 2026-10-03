@@ -13,7 +13,7 @@ export function docTitle(entry) {
 
 export const docGroups = [
   { title: 'Getting started', ids: ['index', 'getting-started', 'pages-and-states', 'canvas', 'markup-and-handoff'] },
-  { title: 'Connect your implementation', ids: ['lenses', 'storybook', 'ios-simulator', 'windows'] },
+  { title: 'Connect your implementation', ids: ['workbench-previews', 'lenses', 'storybook', 'ios-simulator', 'windows'] },
   { title: 'Reference', ids: ['configuration', 'design-system-export', 'extension', 'troubleshooting'] },
 ];
 
@@ -26,7 +26,7 @@ export function docsNavigation(entries) {
   const listed = new Set(docGroups.flatMap(group => group.ids));
   const rest = entries.filter(entry => !listed.has(entry.id)).sort((a, b) =>
     Number(b.id.endsWith('/index')) - Number(a.id.endsWith('/index')) || docTitle(a).localeCompare(docTitle(b)));
-  if (rest.length) groups.push({ title: 'For contributors', entries: rest });
+  if (rest.length) groups.push({ title: 'More guides', entries: rest });
   return groups;
 }
 

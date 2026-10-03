@@ -73,6 +73,39 @@ function fixture() {
   };
 }
 
+test('opens a loading tab immediately and reuses it when the server becomes ready', async function () {
+  var f = fixture();
+  var finish;
+  var ready = new Promise(function (resolve) { finish = resolve; });
+  var opening = f.panel.show(f.context, ready, 'pages/login.html');
+  assert.match(f.view.webview.html, /Opening Workbench/);
+  assert.doesNotMatch(f.view.webview.html, /<iframe/);
+  var latest = f.panel.show(f.context, ready, 'pages/new.html');
+  finish('http://127.0.0.1:3579/_workbench/');
+  assert.equal(await opening, f.view);
+  assert.equal(await latest, f.view);
+  assert.match(f.view.webview.html, /#pages\/new.html/);
+  f.dispose();
+});
+
+test('closing the loading tab prevents delayed startup from reopening it', async function () {
+  var f = fixture();
+  var finish;
+  var opening = f.panel.show(f.context, new Promise(function (resolve) { finish = resolve; }));
+  f.dispose();
+  finish('http://127.0.0.1:3579/_workbench/');
+  assert.equal(await opening, null);
+  assert.match(f.view.webview.html, /Opening Workbench/);
+});
+
+test('failed startup replaces the loading state with recovery instructions', async function () {
+  var f = fixture();
+  assert.equal(await f.panel.show(f.context, Promise.resolve(null)), null);
+  assert.match(f.view.webview.html, /Workbench couldn’t start/);
+  assert.match(f.view.webview.html, /Workbench log/);
+  f.dispose();
+});
+
 test('keeps sidebar navigation ready when wb-here precedes the iframe load event', async function () {
   var f = fixture();
   var url = 'http://127.0.0.1:3579/_workbench/';

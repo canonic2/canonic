@@ -12,23 +12,20 @@ var server = require('./server');
 var config = require('./config');
 var withPreviewScripts = server.withPreviewScripts;
 
-var KEYS = '<script src="/_workbench/keys.js"></script>';
-var ACTIONS = '<script src="/_workbench/actions.js"></script>';
-var STATES = '<script src="/_workbench/states.js"></script>';
-var SCRIPTS = KEYS + ACTIONS + STATES;
+var SCRIPTS = '<script src="/_workbench/preview-compat.js"></script>';
 
-test('puts all preview scripts first inside head', function () {
+test('puts one compatibility script first inside head', function () {
   var out = withPreviewScripts('<!doctype html><html><head><title>x</title></head><body></body></html>');
 
   assert.ok(out.indexOf('<head>' + SCRIPTS) !== -1);
   /* Before the page's own head, which is what "before its own scripts" means. */
-  assert.ok(out.indexOf(KEYS) < out.indexOf('<title>'));
+  assert.ok(out.indexOf(SCRIPTS) < out.indexOf('<title>'));
 });
 
 test('reads a head with attributes', function () {
   var out = withPreviewScripts('<html><head lang="en"><title>x</title></head></html>');
 
-  assert.ok(out.indexOf('<head lang="en">' + KEYS) !== -1);
+  assert.ok(out.indexOf('<head lang="en">' + SCRIPTS) !== -1);
 });
 
 test('is not fooled by header', function () {
@@ -36,7 +33,7 @@ test('is not fooled by header', function () {
 
   /* No <head> to speak of, so the scripts belong to <html> — and <header> is
      left exactly where it was. */
-  assert.ok(out.indexOf('<html>' + KEYS) !== -1);
+  assert.ok(out.indexOf('<html>' + SCRIPTS) !== -1);
   assert.ok(out.indexOf('<header class="a">hi</header>') !== -1);
 });
 

@@ -57,9 +57,9 @@ shown in Storybook's sidebar with `/` between levels. `Button` doesn't match
 title.
 
 On that screen, the lens switcher shows **Design** and **Storybook**. Choosing
-Storybook shows the title's first story, and a **story menu** beside the
-switcher lists the title's other stories. Switch between them without leaving
-the frame.
+Storybook shows the title's first story. The **State** menu, after the screen's
+name in the toolbar, lists the title's stories instead of the design's states.
+Switch between them without leaving the frame.
 
 The address records the story in the state slot, as the part of its id after
 `--`: the story `components-button--icon-only` is
@@ -76,8 +76,8 @@ implementations:
     catalog: true
 ```
 
-With `catalog: true`, every story title becomes a screen. `sections` becomes
-optional, so this can be the whole `workbench.yaml`:
+With `catalog: true`, every story title becomes a screen, and you don't need
+`sections`. This can be the whole `workbench.yaml`:
 
 ```yaml
 name: Acme UI
@@ -159,8 +159,8 @@ Values are [Lucide](https://lucide.dev/icons/) icon names in kebab-case.
 is useful when different machines or worktrees use different ports:
 
 1. Workbench looks through `package.json` files in the project, up to four
-   folders deep and skipping `node_modules`, for Storybook scripts that set
-   `-p` or `--port`.
+   folders deep and skipping `node_modules` and `.git`, for Storybook scripts
+   that set `-p` or `--port`.
 2. It tries those ports, then 6006 to 6010, on `127.0.0.1` and `localhost`, and
    uses the first one that serves `/index.json`.
 3. If none answers, the config route and the sidebar report that no running

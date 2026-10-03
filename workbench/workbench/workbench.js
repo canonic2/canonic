@@ -84,7 +84,7 @@
     document.querySelectorAll('.wb-width')
   );
 
-  var BLANK_TEXT = blank.textContent;
+  var BLANK_TEXT = 'Pick a page or a component to see it here.';
   var ACTIONS_TITLE = actionsToggle.title;
 
   var current = null;      /* src of the picked screen */
@@ -296,6 +296,11 @@
      path on the implementation. Stories are asked for first — see loadStory. */
   function viewUrl(item, lens, state) {
     if (!lens) return withFlags(item.src, state);
+    if (lens.kind === 'workbench') {
+      var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], state), config.root);
+      target.searchParams.set('actions', actionsOn ? 'on' : 'off');
+      return target.href;
+    }
     return window.wbLenses.url(lens, item.implementations[lens.key], state);
   }
 
@@ -400,7 +405,7 @@
       button.className = 'wb-lens';
       button.type = 'button';
       button.dataset.lens = key || '';
-      button.textContent = impl ? impl.label : 'Design';
+      button.textContent = impl ? impl.label : (item.workbench ? 'Workbench' : 'Design');
       button.title = impl ? 'This screen as ' + impl.label + ' has it' : 'This screen as designed';
       button.setAttribute('aria-pressed', String((lens ? lens.key : null) === key));
       button.addEventListener('click', function () {
@@ -414,7 +419,7 @@
   /* Through a lens the page is served by somebody else and actions.js isn't
      in it, so the switch has nothing to switch: it shows on and stays put. */
   function setActionsAvailability(lens) {
-    if (lens) {
+    if (lens && lens.kind !== 'workbench') {
       actionsToggle.disabled = true;
       actionsToggle.setAttribute('aria-checked', 'true');
       actionsToggle.title = 'Actions — always on here: ' + lens.label +
@@ -607,7 +612,7 @@
     sourceControl.hidden = !info;
     if (!info) return;
     if (info.design) {
-      sourceRow('Design', item.src, true, info.design, function () {
+      sourceRow(info.preview ? 'Workbench' : 'Design', item.src, true, info.design, function () {
         openSource(item.src, null);
       });
     }
@@ -683,6 +688,7 @@
     tellHost(current, reported, lens ? lens.key : null, story);
 
     view = null;
+    if (window.wbPreviewControls) window.wbPreviewControls.reset();
     drawLenses(item, lens);
     crumb.hidden = !item;
     crumbScreen.textContent = item ? item.label : '';
@@ -779,19 +785,61 @@
   /* Keep the current document visible while its replacement loads in the
      spare iframe, then exchange them in one paint. The first page has nothing
      to preserve, so it uses the frame background until ready. */
+  function warmFrame(target) {
+    target.wbWarmHost = true;
+    target.src = new URL('preview-host.html?actions=off', location.href).href;
+  }
+
+  function startWarmLoad(target) {
+    var address = target.wbRequestedUrl;
+    var seq = target.wbLoadSequence;
+    var renderer = target.contentWindow && target.contentWindow.wbPreviewHost;
+    if (!address || !renderer) return;
+    renderer.load(address).then(function () {
+      if (seq !== target.wbLoadSequence || target.wbRequestedUrl !== address) return;
+      frameLoaded({ currentTarget: target, warm: true });
+    }).catch(function () { /* The renderer displays its own loading failure. */ });
+  }
+
+  function prepareFrame(target, src) {
+    target.wbRequestedUrl = src;
+    target.wbLoadSequence = (target.wbLoadSequence || 0) + 1;
+    if (/\.workbench\.tsx?(?:[?#]|$)/.test(src) && new URL(src, location.href).origin === location.origin) {
+      if (target.wbWarmHost && target.contentWindow && target.contentWindow.wbPreviewHost) startWarmLoad(target);
+      else warmFrame(target);
+    } else {
+      target.wbWarmHost = false;
+      target.src = src;
+    }
+  }
+
   function loadPreview(src) {
-    if (!frame.getAttribute('src')) {
+    if (!frame.getAttribute('src') || (frame.wbWarmHost && !frame.wbRequestedUrl && !frameReady)) {
       frameWrap.classList.add('is-loading');
       frameReady = false;
-      frame.src = src;
+      prepareFrame(frame, src);
       return;
     }
     pendingFrame = frameBuffer;
-    pendingFrame.src = src;
+    prepareFrame(pendingFrame, src);
   }
 
   function frameLoaded(e) {
     var loaded = e.currentTarget;
+    if (loaded.wbWarmHost && !e.warm) {
+      startWarmLoad(loaded);
+      return;
+    }
+    try {
+      var preview = loaded.contentWindow;
+      if (preview && preview.__workbenchOptions && !preview.__workbenchReady && !preview.__workbenchError) {
+        var attempt = e.previewAttempt || 0;
+        if (attempt < 300) {
+          window.setTimeout(function () { frameLoaded({ currentTarget: loaded, previewAttempt: attempt + 1 }); }, 50);
+          return;
+        }
+      }
+    } catch (_) { /* Foreign-origin previews keep their existing load behavior. */ }
     if (loaded === pendingFrame) {
       window.requestAnimationFrame(function () {
         if (loaded !== pendingFrame) return;
@@ -810,7 +858,13 @@
         // loaded. Whichever wins must reveal the preview and enable prepare.
         frameWrap.classList.remove('is-loading');
         frameShell.hidden = false;
-        previous.removeAttribute('src');
+        previous.wbRequestedUrl = null;
+        previous.wbLoadSequence = (previous.wbLoadSequence || 0) + 1;
+        if (previous.wbWarmHost && previous.contentWindow && previous.contentWindow.wbPreviewHost) {
+          previous.contentWindow.wbPreviewHost.reset().catch(function () {});
+        } else {
+          previous.removeAttribute('src');
+        }
         reportRenderedStory();
         window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } }));
       });
@@ -822,12 +876,17 @@
         frameWrap.classList.remove('is-loading');
         frameShell.hidden = false;
         reportRenderedStory();
+        window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } }));
       });
     }
   }
 
   frame.addEventListener('load', frameLoaded);
   frameBuffer.addEventListener('load', frameLoaded);
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    warmFrame(frame);
+    warmFrame(frameBuffer);
+  }
 
   /* ---------------------------------------------------------------- host */
 
@@ -1285,6 +1344,7 @@
 
   function applyConfig(loaded, first) {
     loadResolved(function () {
+      blank.classList.remove('is-loading');
       config = loaded;
       if (resolved && resolved.implementations) config.implementations = resolved.implementations;
       groups = window.wbManifest.mergeSections(config.sections, (resolved && resolved.catalogSections) || []);
@@ -1330,6 +1390,7 @@
   /* No config, no workbench — say which file and why, where the screens would
      have been. The toolbar stays; it just has nothing to act on. */
   function refuse(error) {
+    blank.classList.remove('is-loading');
     blank.textContent = String(error.message || error);
     blank.hidden = false;
     console.error('[workbench] ' + String(error.message || error));

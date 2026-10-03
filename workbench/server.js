@@ -29,6 +29,9 @@ var handoff = require('./handoff');
 var config = require('./config');
 var remote = require('./remote');
 var designExport = require('./export');
+var previewService = require('./preview-service');
+var previewScripts = require('./preview-scripts');
+var previewCompiler = require('./preview/compiler.cjs');
 var windowStream = require('./window-stream');
 var manifest = require('./workbench/manifest');
 
@@ -305,7 +308,10 @@ function exportCapturePlan(view, baseUrl) {
   var items = screenItems((view && view.sections) || []).concat(screenItems((view && view.catalogSections) || []));
   var captures = [];
   var warnings = [];
+  var seen = new Set();
   items.forEach(function (item) {
+    if (seen.has(item.src)) return;
+    seen.add(item.src);
     var implementationKey = item.implementationOnly;
     var implementation = implementationKey && view.implementations[implementationKey];
     var variants = item.states && item.states.length ? item.states : [{ id: 'default', label: 'Default' }];
@@ -319,6 +325,19 @@ function exportCapturePlan(view, baseUrl) {
         if (!viewports.some(function (candidate) { return candidate.id === size.id; })) viewports.push(size);
       });
     });
+    var preview = view.screens[item.src] && view.screens[item.src].preview;
+    if (preview) {
+      variants = preview.states;
+      variants.forEach(function (state) {
+        viewports.forEach(function (size) {
+          var target = new URL(preview.file, baseUrl);
+          target.searchParams.set('state', state.id);
+          captures.push({ screen: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
+            viewport: size.id, viewportLabel: size.label, url: target.href, external: false, width: size.width, height: size.height });
+        });
+      });
+      return;
+    }
     if (implementationKey) {
       if (!implementation || implementation.kind !== 'storybook') {
         warnings.push(item.label + ': reference screenshots are not supported for ' + (implementation && implementation.kind || 'this implementation') + '.');
@@ -761,40 +780,12 @@ function saveShot(root, name, body, format) {
   return path.relative(root, file);
 }
 
-/* The preview's half, put in on the way out
-   -----------------------------------------
-   keys.js, actions.js and states.js run inside the previewed page rather than in the
-   shell around it, for the reason their own headers give: off file:// the
-   frame is a foreign origin, so the shell can't reach in. That used to mean
-   every page in every project carried two <script> tags pointing at a copy of
-   the workbench vendored into the repo — which is fine for a project that was
-   set up by hand, and impossible for one that just installed this.
-
-   So the server puts them in. A project's pages stay plain HTML that happens
-   to look right in the workbench, and nothing in the repo points at the tool.
-
-   They go first inside <head>, because both ask to run before the page's own
-   scripts. A document with no <head> gets them straight after <html>, and one
-   with neither gets them at the top — a fragment still renders, and all three
-   scripts do nothing at all when the URL asks them for nothing. */
-var INJECT =
-  '<script src="' + WORKBENCH_PREFIX + 'keys.js"></script>' +
-  '<script src="' + WORKBENCH_PREFIX + 'actions.js"></script>' +
-  '<script src="' + WORKBENCH_PREFIX + 'states.js"></script>';
-
-/* `\s` before the attributes so <header> isn't mistaken for <head>. */
-var HEAD_TAG = /<head(\s[^>]*)?>/i;
-var HTML_TAG = /<html(\s[^>]*)?>/i;
-
-function withPreviewScripts(html) {
-  var at = HEAD_TAG.exec(html) || HTML_TAG.exec(html);
-  if (!at) return INJECT + html;
-  var end = at.index + at[0].length;
-  return html.slice(0, end) + INJECT + html.slice(end);
-}
+/* Project pages and compiled previews share one compatibility injection,
+   placed before the page's own scripts. */
+var withPreviewScripts = previewScripts.withPreviewScripts;
 
 /* Serves one folder. `options.inject` marks the folder as the project's, whose
-   pages get the three scripts above; the workbench's own folder never does. */
+   pages get the compatibility bundle; the workbench's own folder never does. */
 function serveFile(root, pathname, res, options) {
   var rel = decodeURIComponent(pathname);
   if (rel.slice(-1) === '/') rel += 'index.html';
@@ -831,6 +822,8 @@ function start(options) {
   var createCapture = electronCapture.available() ? electronCapture.createWithFallback : nativeCapture.create;
   var capture = options.capture || createCapture({ chromePath: options.chromePath, inject: DESCRIBE_SOURCE, storage: options.captureStorage });
   var captureReady = Promise.resolve();
+  var previews = null;
+  var previewSettings = null;
   var windowVideo = options.windowStream || windowStream.create({
     storage: path.join(options.captureStorage || path.join(os.tmpdir(), 'canonic-workbench-capture'), 'window-capture'),
     path: WINDOW_STREAM_PATH,
@@ -974,6 +967,7 @@ function start(options) {
     var autoKeys = Object.keys(implementations).filter(function (key) {
       return implementations[key].kind === 'storybook' && implementations[key].auto;
     });
+    return importPreviews(view, sections, screens, problems, implementations).then(function () {
     return autoKeys.reduce(function (pending, key) {
       return pending.then(function () {
         if (autoStorybookAddresses[key]) {
@@ -1036,6 +1030,68 @@ function start(options) {
         problems: problems,
       });
     });
+    });
+  }
+
+  async function importPreviews(view, sections, screens, problems, implementations) {
+    if (view.previews === false) {
+      if (previews) { await previews.close(); previews = null; previewSettings = null; }
+      return;
+    }
+    if (options.isTrusted === false) {
+      if (previewCompiler.discover(root, view.previews && view.previews.include).length) problems.push('Workbench previews require a trusted workspace.');
+      return;
+    }
+    if (!previewCompiler.discover(root, view.previews && view.previews.include).length) return;
+    try {
+      var settings = JSON.stringify(view.previews || {});
+      if (previews && settings !== previewSettings) { await previews.close(); previews = null; }
+      if (!previews) {
+        previews = previewService.create(root, { previews: view.previews, storage: options.captureStorage,
+          diagnostic: diagnostic,
+          log: function (message) { diagnostic('warn', 'preview.worker', { message: message }); } });
+        previewSettings = settings;
+      }
+      var index = await previews.index();
+      problems.push.apply(problems, index.errors);
+      var byId = {};
+      index.previews.forEach(function (preview) {
+        byId[preview.id] = preview;
+        var parts = preview.title.split('/').filter(Boolean);
+        var group = parts.length > 1 ? parts.shift() : 'Previews';
+        var label = parts.pop() || preview.id;
+        var item = { src: preview.file, label: label, states: preview.states, workbench: true, icon: 'component' };
+        if (preview.viewports) item.viewports = preview.viewports;
+        var section = sections.find(function (section) { return section.group === group; });
+        if (!section) { section = { group: group, icon: 'component', items: [] }; sections.push(section); }
+        var folderName = parts.join(' / ');
+        if (folderName) {
+          var folder = section.items.find(function (item) { return item.folder === folderName; });
+          if (!folder) { folder = { folder: folderName, items: [] }; section.items.push(folder); }
+          folder.items.push(item);
+        } else section.items.push(item);
+        var previous = screens[preview.file];
+        screens[preview.file] = Object.assign({}, previous, { label: previous && previous.label || label,
+          design: path.join(root, preview.file), preview: preview, code: (previous && previous.code || []).concat([
+            { implementation: 'workbench', path: path.join(root, preview.source), relative: preview.source, exists: true },
+          ]) });
+      });
+      Object.keys(implementations).forEach(function (key) {
+        if (implementations[key].kind !== 'workbench') return;
+        implementations[key].base = '';
+        if (implementations[key].root !== root) problems.push('Workbench implementations use this project root; use previews.config to configure adapters.');
+        screenItems(view.sections).forEach(function (item) {
+          var reference = item.implementations && item.implementations[key];
+          if (!reference) return;
+          var preview = byId[reference.preview];
+          if (!preview) { problems.push(item.label + ': unknown Workbench preview “' + reference.preview + '”.'); return; }
+          reference.path = '/' + preview.file;
+          reference.states = {};
+          preview.states.forEach(function (state) { reference.states[state.id] = '/' + preview.file + '?state=' + encodeURIComponent(state.id); });
+          screens[item.src].code.push({ implementation: key, path: path.join(root, preview.source), relative: preview.source, exists: true });
+        });
+      });
+    } catch (error) { problems.push('Workbench previews: ' + String(error.message || error)); }
   }
 
   function implementation(key) {
@@ -1152,9 +1208,11 @@ function start(options) {
           diagnostic('info', 'export.progress', { completed: completed, total: job.total });
         }
       });
-    }).then(function (references) {
-      job.warnings = references.warnings.length;
+    }).then(async function (references) {
+      var portable = previews ? await previews.export() : null;
+      job.warnings = references.warnings.length + (portable ? portable.warnings.length : 0);
       job.archive = designExport.create(root, view, {
+        portable: portable,
         screenshots: references.screenshots,
         captureWarnings: references.warnings,
         maxArchiveBytes: options.exportMaxArchiveBytes,
@@ -1206,7 +1264,43 @@ function start(options) {
 
   var server = http.createServer(function (req, res) {
     var url = new URL(req.url, 'http://127.0.0.1');
-    var baseUrl = 'http://127.0.0.1:' + server.address().port + '/';
+    var address = server.address();
+    if (!address) { send(res, 503, 'Workbench is stopping.'); return; }
+    var baseUrl = 'http://127.0.0.1:' + address.port + '/';
+
+    if (url.pathname === WORKBENCH_PREFIX + 'preview-compat.js') {
+      send(res, 200, previewScripts.source, 'text/javascript; charset=utf-8');
+      return;
+    }
+    if (url.pathname === WORKBENCH_PREFIX + 'preview-runtime.js') {
+      serveFile(path.join(__dirname, 'preview'), '/browser.js', res);
+      return;
+    }
+
+    if (url.pathname.indexOf('/_workbench/previews/') === 0 || /\.workbench\.tsx?$/.test(url.pathname)) {
+      if (req.method !== 'GET') { send(res, 405, 'GET a Workbench preview here.'); return; }
+      // Assets belong to an already compiled preview. Recheck configuration
+      // and trust, but don't rebuild every catalog for each CSS/image/script.
+      if (url.pathname.indexOf('/_workbench/previews/') === 0 && previews) {
+        try {
+          var previewView = config.read(root);
+          if (previewView && previewView.previews !== false && options.isTrusted !== false &&
+              JSON.stringify(previewView.previews || {}) === previewSettings) {
+            previews.proxy(req, res, url.pathname.slice('/_workbench/previews'.length) + url.search)
+              .catch(function (error) { if (!res.headersSent) trouble(res, error, 500); else res.destroy(); });
+            return;
+          }
+        } catch (error) { trouble(res, error, 500); return; }
+      }
+      resolvedWithCatalogs().then(function (view) {
+        if (!previews || !view || view.previews === false || options.isTrusted === false) throw refused(404, 'Workbench previews are unavailable.');
+        if (url.pathname.indexOf('/_workbench/previews/') === 0) return previews.proxy(req, res, url.pathname.slice('/_workbench/previews'.length) + url.search);
+        var relative = decodeURIComponent(url.pathname.slice(1));
+        if (!view.screens[relative] || !view.screens[relative].preview) throw refused(404, 'This preview is not in the catalog.');
+        return previews.proxy(req, res, '/page?file=' + encodeURIComponent(relative));
+      }).catch(function (error) { if (!res.headersSent) trouble(res, error, 500); else res.destroy(); });
+      return;
+    }
 
     if (url.pathname === LOG_PATH) {
       if (req.method !== 'POST') {
@@ -1685,6 +1779,7 @@ function start(options) {
           return Promise.all([
             Promise.resolve(capture.close()).catch(function () {}),
             Promise.resolve(windowVideo.close()).catch(function () {}),
+            previews ? previews.close() : Promise.resolve(),
           ]);
         }).then(function () {
           return new Promise(function (resolve) {

@@ -10,9 +10,9 @@ var VERSION = '44.2.0';
 var TARGETS = ['darwin-x64', 'darwin-arm64', 'win32-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'];
 
 async function bundle(target) {
-  if (!TARGETS.includes(target)) throw new Error('Unsupported capture target: ' + target);
+  if (!TARGETS.includes(target)) throw new Error('Unsupported Electron runtime target: ' + target);
   var parts = target.split('-');
-  var work = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-capture-build-'));
+  var work = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-electron-build-'));
   try {
     var packager = (await import('@electron/packager')).packager;
     var results = await packager({
@@ -29,7 +29,7 @@ async function bundle(target) {
       electronZipDir: process.env.CANONIC_ELECTRON_ZIP_DIR || undefined,
       download: { cacheRoot: path.join(os.tmpdir(), 'canonic-electron-cache') },
     });
-    var destination = path.join(ROOT, 'capture-runtime');
+    var destination = path.join(ROOT, 'electron-runtime');
     fs.rmSync(destination, { recursive: true, force: true });
     fs.mkdirSync(destination, { recursive: true });
     var archive = path.join(destination, 'runtime.tar.gz');
@@ -43,7 +43,7 @@ async function bundle(target) {
     var hash = crypto.createHash('sha256');
     for await (var chunk of fs.createReadStream(archive)) hash.update(chunk);
     fs.writeFileSync(path.join(destination, 'runtime.json'), JSON.stringify({ target: target, electron: VERSION, sha256: hash.digest('hex') }) + '\n');
-    console.log('Bundled background capture helper for ' + target);
+    console.log('Bundled Electron runtime for capture and previews on ' + target);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

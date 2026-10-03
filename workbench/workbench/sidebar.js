@@ -36,6 +36,9 @@
   var problem = document.getElementById('problem');
   var diagnostics = document.getElementById('diagnostics');
   var search = document.getElementById('search');
+  var loading = document.getElementById('loading');
+  var loadingText = document.getElementById('loadingText');
+  search.disabled = true;
 
   var nav = null;
   var index = {};
@@ -57,6 +60,8 @@
   }
 
   function build(config) {
+    loading.hidden = true;
+    search.disabled = false;
     index = window.wbNav.index(config.sections);
 
     nav = window.wbNav.create({
@@ -82,13 +87,17 @@
   }
 
   function start(config) {
-    var imports = Object.keys(config.implementations || {}).some(function (key) {
+    var imports = config.previews !== false || Object.keys(config.implementations || {}).some(function (key) {
       return config.implementations[key].catalog;
     });
     if (!imports || !host) {
       build(config);
       return;
     }
+    var catalogs = Object.keys(config.implementations || {}).filter(function (key) {
+      return config.implementations[key].catalog;
+    }).map(function (key) { return config.implementations[key].label || key; });
+    loadingText.textContent = catalogs.length ? 'Waiting for ' + catalogs.join(', ') + '…' : 'Finding previews…';
     window.addEventListener('message', function catalog(e) {
       var data = e.data || {};
       if (data.type !== 'canonic-catalog') return;

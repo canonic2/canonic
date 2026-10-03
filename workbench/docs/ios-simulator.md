@@ -7,7 +7,8 @@ reviewing a native app alongside web screens.
 
 ## Requirements
 
-- **macOS with Xcode** and at least one booted Simulator.
+- **macOS 13 or later with Xcode**, which builds the capture helper the first
+  time a Simulator is streamed, and at least one booted Simulator.
 - **Screen Recording permission** for your editor. See [Permissions](#permissions).
 - **WebDriverAgent (WDA)** for taps and drags, installed through
   [Canonic Shield](#install-webdriveragent)'s iOS automation in the project.
@@ -70,11 +71,13 @@ implementations. `start` isn't available for the Simulator.
 ## How it works
 
 - A small native helper, built from source shipped in the extension, finds the
-  Simulator's window with ScreenCaptureKit and encodes it once with VideoToolbox
-  at about 30 frames per second.
-- In VS Code, frames reach the canvas over a loopback HTTP stream, which
-  doesn't depend on the editor's media codecs. A standalone browser uses an
-  H.264 stream decoded with WebCodecs.
+  Simulator's window with ScreenCaptureKit and encodes it once with VideoToolbox.
+  It's the same helper the [app window](windows.md) lens uses, and one window
+  streams at a time.
+- In VS Code, JPEG frames reach the canvas over a loopback HTTP stream at about
+  20 frames per second, which doesn't depend on the editor's media codecs. A
+  standalone browser uses an H.264 stream at about 30 frames per second,
+  decoded with WebCodecs.
 - Taps and drags on the canvas are sent to the device through WebDriverAgent.
 - There is no fallback to browser screen sharing. If the helper can't capture,
   the canvas says why.
@@ -89,6 +92,9 @@ opens the right settings pane. Then:
 2. Turn on **Visual Studio Code**, or the editor named in the error.
 3. Quit and reopen the editor.
 4. Pick the Simulator screen again.
+
+When you run the server without the editor, grant the permission to the
+terminal app that started it.
 
 ## Install WebDriverAgent
 

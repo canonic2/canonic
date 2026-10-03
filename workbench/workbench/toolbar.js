@@ -107,6 +107,8 @@
       sourceRows();
       row(document.getElementById('copyReference'));
       row(document.getElementById('open'));
+      var controls = document.getElementById('previewControls');
+      if (controls && !controls.hidden) row(controls);
     }
     var project = projectActions();
     if (project.length) {

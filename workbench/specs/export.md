@@ -2,10 +2,20 @@
 
 The design-system ZIP gathers the workbench's source closure and reference
 screenshots for its screens. It is a server-backed operation available from
-the editor or a hosted browser. See [server.js](../../server.js),
-[export.js](../../export.js), and [electron-capture.js](../../electron-capture.js).
+the editor or a hosted browser. See [server.js](../server.js),
+[export.js](../export.js), and [electron-capture.js](../electron-capture.js).
 
 ## Scope and job lifecycle
+
+TypeScript Workbench previews add a compiled `browser/` package and versioned
+browser catalog. Their original source closure comes from the compiler's
+resolved module graph, including adapter/environment dependencies. Browser
+bundles reuse the live runtime and open through a static HTTP server without
+Electron or Workbench. Build failures appear under `browser.warnings` while
+successful previews remain. Browser build products do not enter source hashes.
+The exported entry is an interactive viewer for the catalog, with navigation,
+states, viewports, resizable dimensions, shared input controls, actions, and docs.
+The CLI's `build` command uses the same portable builder without a running server.
 
 - Export starts from every design file and resolved component, page, and
   Storybook source pointer, follows reachable local imports and assets, and
@@ -55,9 +65,9 @@ adds a `captureWarnings` entry and the remaining references continue.
 
 ## Verification points
 
-- [server.test.js](../../server.test.js) checks capture plans, jobs, progress,
+- [server.test.js](../server.test.js) checks capture plans, jobs, progress,
   and warnings.
-- [export.test.js](../../export.test.js) checks source closure, screen hashes,
+- [export.test.js](../export.test.js) checks source closure, screen hashes,
   screenshot placement, and archive parts.
-- [electron-capture.test.js](../../electron-capture.test.js) and
-  [capture.test.js](../../capture.test.js) check renderer reuse and fallbacks.
+- [electron-capture.test.js](../electron-capture.test.js) and
+  [capture.test.js](../capture.test.js) check renderer reuse and fallbacks.

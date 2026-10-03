@@ -9,8 +9,11 @@ icon-source.svg
 scripts/**
 dist/**
 capture-helper/**
+# Never ship a leftover bundle from before the shared runtime was renamed.
+capture-runtime/**
 window-capture/simulator-demo/**
 docs/**
+specs/**
 workbench/README.md
 node_modules/**/README.md
 node_modules/**/*.map

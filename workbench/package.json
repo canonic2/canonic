@@ -16,11 +16,18 @@
     "serve": "node server.js",
     "package": "node scripts/package.cjs",
     "package:all": "node scripts/package-all.cjs",
-    "bundle-capture": "node scripts/bundle-capture.cjs"
+    "bundle-runtime": "node scripts/bundle-runtime.cjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
-    "@vscode/vsce": "3.9.2"
+    "@types/react": "19.3.0",
+    "@vscode/vsce": "3.9.2",
+    "astro": "7.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native-web": "0.21.3",
+    "typescript": "7.0.2",
+    "vue": "3.5.43"
   },
   "contributes": {
     "viewsContainers": {
@@ -103,7 +110,10 @@
     }
   },
   "dependencies": {
-    "tar": "7.5.22",
-    "lucide": "1.33.0"
+    "@vue/compiler-sfc": "3.5.43",
+    "esbuild-wasm": "0.28.2",
+    "lucide": "1.33.0",
+    "picomatch": "4.0.7",
+    "tar": "7.5.22"
   }
 }

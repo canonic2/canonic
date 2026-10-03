@@ -26,11 +26,11 @@ function page() {
     removeAttribute: function () {},
   };
   var markup = { innerHTML: '' };
-  var window = { requestAnimationFrame: paint, wbDOMMirror: { apply: async function (_, snapshot) { mirrors.push(snapshot.revision); } } };
+  var window = { setTimeout: setTimeout, requestAnimationFrame: paint, wbDOMMirror: { apply: async function (_, snapshot) { mirrors.push(snapshot.revision); } } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'capture-page.js'), 'utf8'), {
     window: window, document: { getElementById: function (id) { return id === 'captureFrame' ? frame : markup; } },
   });
-  return { prepare: window.wbCapture.prepare, loads: loads, mirrors: mirrors, sandbox: function () { return sandbox; }, paints: function () { return paints; }, markup: markup, scrolls: scrolls, behavior: function () { return behavior; } };
+  return { inner: inner, prepare: window.wbCapture.prepare, loads: loads, mirrors: mirrors, sandbox: function () { return sandbox; }, paints: function () { return paints; }, markup: markup, scrolls: scrolls, behavior: function () { return behavior; } };
 }
 
 test('an exact prepared view needs no navigation or extra settling before capture', async function () {
@@ -72,4 +72,26 @@ test('a request without a revision loads the page afresh every time', async func
   assert.equal(p.loads.length, 2);
   await p.prepare(Object.assign({}, request, { revision: '' }));
   assert.equal(p.loads.length, 3);
+});
+
+test('reference capture waits for Workbench setup and interaction playback', async function () {
+  var p = page();
+  p.inner.__workbenchOptions = {};
+  p.inner.__workbenchReady = false;
+  var complete = false;
+  var ready = p.prepare({ url: 'http://localhost/button.workbench.ts' }).then(function () { complete = true; });
+  await new Promise(setImmediate);
+  assert.equal(complete, false);
+  assert.equal(p.paints(), 0);
+  p.inner.__workbenchReady = true;
+  await ready;
+  assert.equal(complete, true);
+});
+
+test('Workbench render errors fail reference capture instead of exporting an error screenshot', async function () {
+  var p = page();
+  p.inner.__workbenchOptions = {};
+  p.inner.__workbenchError = 'Expected render failure';
+  await assert.rejects(p.prepare({ url: 'http://localhost/button.workbench.ts' }), /Expected render failure/);
+  assert.equal(p.paints(), 0);
 });

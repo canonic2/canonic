@@ -43,7 +43,11 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 ### Other places
 
 - **The Workbench log.** Run **Workbench: Show Log** for screenshot, server,
-  handoff, and Simulator errors.
+  handoff, preview worker, Simulator, and window stream errors. For slow
+  TypeScript previews, `preview.request.completed` events separate the time a
+  request waited in the worker's queue (`queueMs`) from compiling and serving
+  it (`workMs`), and `preview.browser.phase` events time setup, mounting,
+  fonts, images, and readiness.
 - **The canvas's developer tools.** In VS Code, run
   **Developer: Open Webview Developer Tools** to see the canvas's console.
   Config problems are logged there, as well as framing and cookie errors from
@@ -94,6 +98,35 @@ except for screens imported by a [catalog](configuration.md#catalogs).
 - Assets with root-relative paths (`/styles/app.css`) resolve from the project
   root. If your pages expect another root, use relative paths.
 - Open the page with **Open on its own** to see its own errors.
+
+## A TypeScript preview is missing or broken
+
+- **Missing from the list:** read `problems`. Each definition that couldn't be
+  loaded is named with its file and reason, such as a duplicate id or a
+  `source.entry` that doesn't exist. The other previews still show.
+- **Never discovered:** the file must end in `.workbench.ts` or
+  `.workbench.tsx`, match `previews.include` when you set it, and sit outside
+  hidden folders, `node_modules`, and build output such as `dist` and `build`.
+  `previews: false` turns discovery off.
+- **Added or removed a file:** run **Workbench: Refresh Screens**. Only changes
+  to the YAML files refresh the list on their own.
+- **`Workbench previews require a trusted workspace.`** Trust the folder.
+- **`Workbench previews: …`** The worker or `workbench.config.ts` failed. The
+  log's `preview.worker` entries hold the worker's error output.
+- **`unknown Workbench preview “…”`** A screen's `kind: workbench` lens names an
+  id that no definition declares.
+- **The canvas shows an error instead of the component:** the message is the
+  compile or render error, such as an unknown adapter or a framework package
+  that isn't installed in the project.
+
+To check every preview without the canvas, run the extension's checker on the
+project. It builds each preview and lists the failures:
+
+```sh
+node ~/.vscode/extensions/canonic.canonic-workbench-*/preview/cli.cjs check path/to/project
+```
+
+See [TypeScript Workbench previews](workbench-previews.md).
 
 ## States don't show or don't change anything
 
@@ -159,14 +192,18 @@ own** works while you fix the app.
 
 See [Storybook troubleshooting](storybook.md#troubleshooting).
 
+## Simulator and window streams
+
+See [iOS Simulator troubleshooting](ios-simulator.md#troubleshooting) and
+[App window troubleshooting](windows.md#troubleshooting).
+
 ## Screenshots look wrong
 
 | Symptom | Cause |
 | --- | --- |
 | A lens screenshot shows a sign-in page | Without the preview bridge, the screenshot helper loads the page in its own session. [Add the bridge](lenses.md#screenshots-through-a-url-lens). |
 | A lens screenshot doesn't show what you typed or scrolled to | Same cause: add the bridge. |
-| An iframe inside the page is empty | Nested frames aren't captured. |
-| A canvas or video area is blank | Its pixels come from another origin without CORS. |
+| Screenshots of one page fail with a message | The page contains an `iframe`, `object`, or `embed`, or a canvas or video loaded from another origin without CORS. These pages can't be captured. |
 | A font or image is missing in the first screenshot after loading | The helper's copy was still loading assets. Take it again. |
 | Screenshots fail with an error | Read **Workbench: Show Log**. If the bundled helper can't start, Workbench uses Chrome; set `canonic.capture.chromePath` if it can't find one. |
 
@@ -174,8 +211,9 @@ See [What screenshots can and can't include](markup-and-handoff.md#what-screensh
 
 ## Copy handoff is missing
 
-Handoffs need the VS Code extension. The button isn't shown in a standalone
-browser. Use the camera there instead.
+Handoffs need the VS Code extension's server. They work in the editor and in a
+browser opened with **Workbench: Open Canvas in Browser**, but not with a server
+you started yourself with `node server.js`. Use the camera there instead.
 
 ## Source links don't open
 
@@ -184,8 +222,8 @@ browser. Use the camera there instead.
   has no `root`.
 - The implementation needs a `root`, and each `code` path is relative to it.
   Check `exists` in the config route.
-- Opening files needs VS Code. In a standalone browser, the menu lists the
-  entries, but picking one reports *Couldn't open it*.
+- Opening files needs the VS Code extension's server. With a server you started
+  yourself, the menu lists the entries, but picking one reports *Couldn't open it*.
 
 ## Something changed after an update
 

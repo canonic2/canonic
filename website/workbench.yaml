@@ -1,0 +1,4 @@
+name: Canonic website
+previews:
+  include:
+    - previews/**/*.workbench.ts

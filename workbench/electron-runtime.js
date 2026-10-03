@@ -6,7 +6,7 @@ var fs = require('node:fs');
 var os = require('node:os');
 var path = require('node:path');
 var tar = require('tar');
-var BUNDLE = path.join(__dirname, 'capture-runtime');
+var BUNDLE = path.join(__dirname, 'electron-runtime');
 
 function executable(root, platform) {
   platform = platform || process.platform;
@@ -47,9 +47,9 @@ async function prepare(storage, bundle) {
   bundle = bundle || BUNDLE;
   var manifest = JSON.parse(await fs.promises.readFile(path.join(bundle, 'runtime.json'), 'utf8'));
   if (manifest.target !== process.platform + '-' + process.arch || !/^[a-f0-9]{64}$/.test(manifest.sha256)) {
-    throw new Error('The bundled capture runtime does not match this extension host');
+    throw new Error('The bundled Electron runtime does not match this extension host');
   }
-  storage = storage || path.join(os.tmpdir(), 'canonic-capture-runtime');
+  storage = storage || path.join(os.tmpdir(), 'canonic-electron-runtime');
   var destination = path.join(storage, manifest.sha256);
   var binary = executable(destination);
   if (!fs.existsSync(binary)) await extract(bundle, manifest, storage, destination, binary);
@@ -64,7 +64,7 @@ async function extract(bundle, manifest, storage, destination, binary) {
     var archive = path.join(bundle, 'runtime.tar.gz');
     var hash = crypto.createHash('sha256');
     for await (var chunk of fs.createReadStream(archive)) hash.update(chunk);
-    if (hash.digest('hex') !== manifest.sha256) throw new Error('The capture runtime archive is damaged');
+    if (hash.digest('hex') !== manifest.sha256) throw new Error('The Electron runtime archive is damaged');
     await tar.x({ file: archive, cwd: stage, strict: true });
     await fs.promises.access(executable(stage));
     try { await fs.promises.rename(stage, destination); }

@@ -12,6 +12,17 @@ root. In a multi-root workspace, the first folder with a `workbench.yaml` is
 served. A folder without one gets no server and no Workbench view. The
 commands stay available, and say why they can't run.
 
+Selecting Workbench or running **Workbench: Open Canvas** opens the tab
+immediately. It shows **Opening Workbench** while configured services, such as
+Storybook, start. The sidebar shows which catalogs it is waiting for, or
+**Finding previews…** during preview discovery. Search becomes available when
+the list is ready. The canvas shows **Loading screens…** while reading its
+catalogs, and **Loading preview…** for the first preview. Later screen changes
+keep the current preview visible until its replacement is ready.
+
+If the server cannot start, the tab points to the Workbench log. Closing a
+loading tab keeps it closed when startup finishes.
+
 ## Commands
 
 | Command | Does |
@@ -19,7 +30,7 @@ commands stay available, and say why they can't run.
 | **Workbench: Open Canvas** | Opens the canvas in an editor tab. |
 | **Workbench: Open Canvas in Browser** | Opens the same canvas in your default browser. |
 | **Workbench: Copy Canvas URL** | Copies the canvas address, for a bookmark, a script, or an agent. |
-| **Workbench: Refresh Screens** | Re-reads `workbench.yaml` and `workbench.local.yaml`, and refreshes the sidebar and canvas. This happens automatically when either file changes. |
+| **Workbench: Refresh Screens** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a preview file. |
 | **Workbench: Show Log** | Opens the Workbench output log. |
 
 ## Settings
@@ -38,7 +49,7 @@ Each project gets its own server:
   offers.
 - It serves the project at `/` and the workbench at `/_workbench/` on the same
   origin, which is what lets the workbench read and capture the live page.
-- It adds `keys.js`, `actions.js`, and `states.js` to the HTML pages it serves. See
+- It adds one `preview-compat.js` bundle to served HTML and managed previews. See
   [How pages are served](pages-and-states.md#how-pages-are-served).
 
 **Workbench: Copy Canvas URL** gives the actual address.
@@ -57,18 +68,31 @@ screenshots are fast:
 - If it crashes, it restarts and restores the latest view. A page that keeps
   hanging it is retried with a growing delay.
 
-If the helper can't be unpacked or started, or on a Linux machine without a
-display, Workbench takes screenshots with headless Chrome, Chromium, or Edge
+If the helper can't be unpacked or started, on macOS earlier than 13, or on a
+Linux machine without a display, Workbench takes screenshots with headless Chrome, Chromium, or Edge
 instead, and keeps using it until the server stops. Set
 `canonic.capture.chromePath` if the browser isn't in its standard location.
 
 The [iOS Simulator](ios-simulator.md) and [app window](windows.md) streams use
 a separate native helper and need Screen Recording permission.
 
+## The preview worker
+
+When the project has [TypeScript previews](workbench-previews.md), the server
+starts a separate worker process that compiles them and runs their project
+code: definitions, `workbench.config.ts`, compiler plugins, and Astro
+rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
+separate Node installation.
+
+- It starts the first time previews are listed and stops with the server.
+- If it stops, the next preview request starts a new one.
+- Changing the `previews` key in `workbench.yaml` restarts it with the new
+  settings. With `previews: false`, nothing is compiled and no worker runs.
+
 ## Logs
 
-Errors from the canvas, the screenshot helper, the server, and handoffs are
-written to the **Workbench** output log. Run **Workbench: Show Log** to open it.
+Errors from the canvas, the screenshot helper, the preview worker, the server,
+and handoffs are written to the **Workbench** output log. Run **Workbench: Show Log** to open it.
 
 - VS Code manages the log and its retention. Nothing is written to your project.
 - Each server stops logging after 2 MB in a session.
@@ -79,14 +103,14 @@ written to the **Workbench** output log. Run **Workbench: Show Log** to open it.
 
 Workbench doesn't declare support for untrusted workspaces, so VS Code doesn't
 run it in Restricted Mode. Trust the folder to use it. [Start commands](configuration.md#start-commands),
-which run shell commands from `workbench.yaml`, check trust again before they
-run.
+which run shell commands from `workbench.yaml`, and TypeScript previews, which
+run project code, check trust again before they run.
 
 ## Updating
 
 After installing a new version, run **Developer: Reload Window** in each open
 project window. Installing replaces the files on disk, but running windows,
-servers, and screenshot helpers keep the old code until their window reloads.
+servers, screenshot helpers, and preview workers keep the old code until their window reloads.
 Reloading the canvas or running **Refresh Screens** isn't enough.
 
 ## Running without VS Code
@@ -108,6 +132,7 @@ What works where:
 | --- | --- | --- | --- |
 | Screens, states, widths, zoom | Yes | Yes | Needs `--allow-file-access-from-files` |
 | Lenses | All | All | Frame only, no Storybook lookup |
+| TypeScript previews | Yes, in trusted workspaces | Yes | No |
 | Markup and camera | Yes, downloads a JPEG | Yes, downloads a JPEG | Yes, slower |
 | Handoff | Yes | No | No |
 | Open source files in the editor | Yes | No | No |

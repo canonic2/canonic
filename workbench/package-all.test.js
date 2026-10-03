@@ -2,7 +2,7 @@ var test = require('node:test');
 var assert = require('node:assert/strict');
 var path = require('node:path');
 var plan = require('./scripts/package-all.cjs').plan;
-var targets = require('./scripts/bundle-capture.cjs').targets;
+var targets = require('./scripts/bundle-runtime.cjs').targets;
 
 test('builds every target with the host last, so its runtime is left in place', function () {
   var p = plan([], 'darwin-arm64');
@@ -17,6 +17,6 @@ test('builds only the named targets, into the requested directory', function () 
   assert.equal(p.out, path.resolve('builds'));
 });
 
-test('rejects a target the capture runtime cannot be bundled for', function () {
+test('rejects a target the Electron runtime cannot be bundled for', function () {
   assert.throws(function () { plan(['alpine-x64'], 'darwin-x64'); }, /Unsupported target: alpine-x64/);
 });

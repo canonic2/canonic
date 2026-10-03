@@ -7,7 +7,7 @@ var os = require('node:os');
 var path = require('node:path');
 var readline = require('node:readline');
 var chromium = require('./capture');
-var runtime = require('./capture-runtime');
+var runtime = require('./electron-runtime');
 
 function Capture(options) {
   this.options = options || {};
