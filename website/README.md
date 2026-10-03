@@ -7,13 +7,21 @@ release downloads and publishes to GitHub Pages.
 
 | File | Job |
 | --- | --- |
-| `src/pages/index.astro` | the Workbench page |
+| `src/pages/index.astro` | the Workbench overview |
+| `src/pages/workbench/install.astro` | the Install page: the download for this computer, every platform's file, and the setup steps |
+| `src/pages/workbench/changelog.astro` | the Changelog page: every complete release, newest first, with its notes, links, and builds |
 | `src/layouts/Base.astro` | the page shell: head, the product bar and section links, and footer |
 | `src/components/Install.astro` | the download cards for a workbench release |
-| `src/lib/releases.js` | picks the release and checks its download links |
+| `src/components/DownloadScripts.astro` | the inline script that recommends this computer's download, and the Copy buttons |
+| `src/lib/workbench.js` | what every Workbench page shares: page URLs, the section links (Overview, Docs, Install, Changelog, GitHub), and the release data, fetched once per build |
+| `src/lib/releases.js` | lists complete releases, picks the one to link, reads their notes, and checks their download links |
 | `src/lib/marks.js` | the Canonic wordmark and product marks read from the stored SVG exports, in product order |
 | `src/data/screenshots.json` | the overview's numbered regions and the toolbar strip, written by `screenshots/capture.cjs` |
 | `src/styles/global.css` | light and dark tokens from the website design (warm grays, dark bands, Canonic blue) and every component's styles |
+| `src/content.config.ts` | loads Markdown directly from `../workbench/docs/` |
+| `src/pages/workbench/docs/[...slug].astro` | generated docs with guide navigation, section links, and previous/next links |
+| `src/lib/docs.js` | docs grouping, URLs, and Markdown link conversion |
+| `src/styles/docs.css` | responsive docs layout and Markdown typography |
 | `public/icons/` | original monochrome and blue-accent SVG exports for Workbench, Sandbox, Playground, Shield, and Studio |
 | `public/canonic.svg` | the Workbench favicon, with a blue accent and light/dark fills |
 | `public/images/` | screenshots of the workbench showing the Acme example |
@@ -27,14 +35,15 @@ From this folder:
 
 ```sh
 pnpm install
-pnpm run dev      # http://localhost:4321/canonic/
+pnpm run dev      # http://localhost:4321/
 pnpm test         # release selection
 pnpm run build    # writes dist/
 pnpm run preview  # serves dist/
 ```
 
-The site is served under `/canonic/`, so link to files in `public/` through
-`base` from `src/lib/base.js`, never with a leading `/`.
+The site is served at `https://canonic.sh/`, with `/` as its base path. Link
+to files in `public/` through `base` from `src/lib/base.js` so alternate
+deployment base paths also work.
 
 The page loads Geist and Geist Mono from Google Fonts, with system fonts as
 the fallback. A small script on the page marks the download for the visitor's
@@ -45,6 +54,39 @@ The dev server links the Install cards to GitHub's latest release. `pnpm run
 build` asks the GitHub API for the newest workbench release that has all six
 platform files, or for the release named by `WORKBENCH_TAG`, and links each
 file's exact download URL. Set `GITHUB_TOKEN` if the API rate-limits you.
+The pages share one request per build.
+
+The Changelog page lists every complete release from the same request. Each
+entry shows the release's notes from GitHub as plain text. The generated
+"Full Changelog" line becomes the entry's changelog button, and headings and
+the New Contributors list are left out. A release with no notes of its own
+shows only its links and builds, so edit a release's notes on GitHub to give
+it a summary. In dev the changelog still asks GitHub, and shows a link to the
+releases if it can't reach them.
+
+## Workbench documentation
+
+The docs live at `/workbench/docs/`. Astro's content collection reads every
+Markdown file in `../workbench/docs/`, including the contributor specifications.
+Edit those files directly; the website keeps no duplicate content and requires
+no frontmatter. In dev mode, Astro watches them for updates.
+
+`README.md` becomes the docs overview; `specs/README.md` becomes `/workbench/docs/specs/`.
+Other filenames become page URLs. Titles and the "On this page" list come from
+Markdown headings. `src/lib/docs.js` groups the main guides in reading order;
+additional files appear in the contributor group automatically. Relative guide
+links are converted to website URLs, preserving heading fragments. Links to
+source files outside the docs point to GitHub. The search field filters guides
+using their full Markdown text, loaded only when needed.
+
+The layout follows the Workbench docs reference: grouped left navigation, a
+reading column, a right-hand section list, dark code examples, and previous/next
+cards. On smaller screens, documentation navigation is collapsible. The docs
+remain readable and navigable without JavaScript; search is an enhancement.
+
+Website builds need the adjacent `workbench/docs/` directory. Both the full
+repository and the public `packages/` checkout supply this layout, including
+the GitHub Pages workflow.
 
 ## Publishing
 
@@ -56,8 +98,11 @@ the new release's download links. Until the first website tag, this uses the
 website on `main`. The repository's Pages source must be set to **GitHub
 Actions**. The `github-pages` environment must allow both `website/v*` and
 `workbench/v*` tag deployments. The published site is at
-`https://canonic2.github.io/canonic/`; with a custom domain, the workflow
-passes the new origin and base path to the build. If no workbench release
+`https://canonic.sh/`; set **Custom domain** to `canonic.sh` in the repository's
+Pages settings and enable **Enforce HTTPS** once the certificate is available.
+The workflow passes the configured origin and base path to the build, while
+local builds default to `https://canonic.sh/` at `/`. GitHub Actions publishing
+does not require a `CNAME` file. If no workbench release
 exists yet, the Install section waits for one. A website tag uses the newest
 published workbench release available when it deploys.
 

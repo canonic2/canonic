@@ -1,36 +1,17 @@
 ---
 import Base from '../layouts/Base.astro';
 import Install from '../components/Install.astro';
+import DownloadScripts from '../components/DownloadScripts.astro';
 import { base } from '../lib/base.js';
 import { products } from '../lib/marks.js';
-import { workbenchDownloads } from '../lib/releases.js';
+import { download, downloads as loadDownloads, github, pages, setupYaml, workbenchNav } from '../lib/workbench.js';
 // Written by screenshots/capture.cjs: the overview's numbered regions and
 // the toolbar strip's crops and hotspots, as percentages of each image.
 import screenshots from '../data/screenshots.json';
 
-// The newest workbench release, or the one WORKBENCH_TAG names. See
-// src/lib/releases.js.
-const repository = process.env.GITHUB_REPOSITORY || 'canonic2/canonic';
-const downloads = await workbenchDownloads({
-  repository,
-  tag: process.env.WORKBENCH_TAG,
-  token: process.env.GITHUB_TOKEN,
-  latest: import.meta.env.DEV,
-});
-if (!import.meta.env.DEV) {
-  console.log(downloads ? `Website links to workbench v${downloads.version}` : 'Website has no workbench release yet');
-}
+const downloads = await loadDownloads();
 const version = downloads && downloads.version;
 const mark = products.find(p => p.name === 'Workbench');
-
-const nav = [
-  { href: '#tour', label: 'Tour' },
-  { href: '#toolbar', label: 'Toolbar' },
-  { href: '#states', label: 'States' },
-  { href: '#markup', label: 'Markup' },
-  { href: '#lenses', label: 'Lenses' },
-  { href: '#install', label: 'Install' },
-];
 
 const statesYaml = `- label: Sign in
   src: pages/sign-in.html
@@ -39,24 +20,15 @@ const statesYaml = `- label: Sign in
       label: Default
     - id: error
       label: Wrong password`;
-
-const setupYaml = `name: Acme
-
-sections:
-  - name: Pages
-    icon: file-text
-    items:
-      - label: Sign in
-        src: pages/sign-in.html`;
 ---
 <Base
   title="Workbench by Canonic"
   description="A design workbench for the screens in your repo: every page and preview on one canvas in VS Code, marked up and handed to your agent."
   product="Workbench"
   version={version}
-  nav={nav}
-  github={`https://github.com/${repository}`}
-  download={{ href: '#install', label: 'Download' }}
+  nav={workbenchNav('Overview')}
+  github={github}
+  download={download}
 >
   <section class="hero">
     <div class="wrap">
@@ -70,6 +42,7 @@ sections:
         <div class="actions">
           <a class="btn" href="#install" id="heroDownload">Download for VS Code</a>
           <a class="btn btn-ghost" href="#tour">Take the tour</a>
+          <a class="btn btn-ghost" href={pages.docs}>Read the docs</a>
         </div>
       </div>
 
@@ -268,7 +241,7 @@ sections:
           <h2>Get Canonic Workbench.</h2>
           {downloads && <p class="lede">One <code>.vsix</code> file per platform. Choose the one that matches your computer.</p>}
         </div>
-        {downloads && <a class="text-link" href={downloads.url}>All files on GitHub →</a>}
+        <a class="text-link" href={pages.install}>Install guide →</a>
       </div>
 
       <Install downloads={downloads} />
@@ -278,7 +251,7 @@ sections:
           <span class="n">01</span>
           <span class="title">Install the .vsix</span>
           <p>In VS Code, open the Extensions view, click <b>⋯</b>, and choose <b>Install from VSIX…</b>. Or run:</p>
-          <span class="cmd"><code id="installCmd">code --install-extension &lt;file&gt;.vsix</code><button class="copy" type="button" aria-label="Copy the install command">Copy</button></span>
+          <span class="cmd"><code data-install-cmd>code --install-extension &lt;file&gt;.vsix</code><button class="copy" type="button" aria-label="Copy the install command">Copy</button></span>
         </li>
         <li><span class="n">02</span><span class="title">Reload VS Code</span><p>Run <b>Developer: Reload Window</b> from the Command Palette.</p></li>
         <li><span class="n">03</span><span class="title">Add workbench.yaml</span><p>Create it at the root of your project, like the <a href="#setup">example above</a>.</p></li>
@@ -321,45 +294,8 @@ sections:
   });
   if (hots[0]) show(hots[0]);
 })();
-
-/* Recommend the download for this computer: mark its card, name it in the
-   hero button, and put its file in the install command. Macs get the Apple
-   silicon build; the browser can't tell Intel apart reliably. */
-(function () {
-  var platform = '';
-  try {
-    platform = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '').toLowerCase();
-  } catch (e) { return; }
-  var os = platform.indexOf('mac') >= 0 ? 'mac' : platform.indexOf('win') >= 0 ? 'win' : (platform.indexOf('linux') >= 0 || platform.indexOf('x11') >= 0) ? 'linux' : null;
-  if (!os) return;
-  var target = { mac: 'darwin-arm64', win: 'win32-x64', linux: 'linux-x64' }[os];
-  var card = document.querySelector('.dl[data-target="' + target + '"]');
-  var hero = document.getElementById('heroDownload');
-  if (hero) hero.textContent = 'Download for ' + { mac: 'Mac', win: 'Windows', linux: 'Linux' }[os];
-  if (!card) return;
-  card.classList.add('is-recommended');
-  card.querySelector('.dl-rec').hidden = false;
-  card.setAttribute('aria-label', card.getAttribute('aria-label') + ', recommended for this computer');
-  var cmd = document.getElementById('installCmd');
-  if (cmd) cmd.textContent = 'code --install-extension ' + card.querySelector('.dl-file').textContent;
-})();
-
-/* Copy buttons copy the code beside them. */
-(function () {
-  document.addEventListener('click', function (e) {
-    var button = e.target.closest && e.target.closest('.copy');
-    if (!button) return;
-    var box = button.closest('.code, .cmd');
-    var code = box && box.querySelector('code');
-    if (!code || !navigator.clipboard) return;
-    navigator.clipboard.writeText(code.textContent).then(function () {
-      button.textContent = 'Copied';
-      clearTimeout(button.copyTimer);
-      button.copyTimer = setTimeout(function () { button.textContent = 'Copy'; }, 1600);
-    }, function () {});
-  });
-})();
 </script>
+<DownloadScripts />
 
   <Fragment slot="footer"><span>Screens shown are an example project.</span></Fragment>
 </Base>
