@@ -423,7 +423,6 @@ section .h-medium { font-size: clamp(26px, 3vw, 36px); line-height: 1.15; letter
 .platforms td { padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .platforms tbody tr:last-child td { border-bottom: 0; }
 .platforms tbody tr:hover { background: var(--row-hover); }
-.platforms tr.is-recommended { box-shadow: inset 3px 0 var(--btn); }
 .platforms-name { font-weight: 500; white-space: nowrap; }
 .platforms-name .dl-rec { margin-left: 8px; }
 .platforms-file { font-family: var(--mono); font-size: 13px; color: var(--muted); }

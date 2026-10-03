@@ -51,7 +51,7 @@ const year = new Date().getFullYear();
           </span>
         ))}
       </div>
-      {github && <a class="github" href={github}>GitHub <span aria-hidden="true">↗</span></a>}
+      {github && <a class="github" href={github} target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>}
     </div>
   </nav>
 
@@ -61,7 +61,7 @@ const year = new Date().getFullYear();
       <span class="sub-rule" aria-hidden="true"></span>
       <div class="sub-links">
         {nav.map(item => item.external
-          ? <a href={item.href}>{item.label} <span aria-hidden="true">↗</span></a>
+          ? <a href={item.href} target="_blank" rel="noopener">{item.label} <span aria-hidden="true">↗</span></a>
           : <a href={item.href} aria-current={item.current ? 'page' : undefined}>{item.label}</a>)}
       </div>
       {download && <a class="btn btn-sm" href={download.href}>{download.label}</a>}

@@ -414,9 +414,12 @@ everything else:
 - A screen, folder, section, state, or implementation that is invalid is
   dropped. Its problem names where it was, such as
   `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
-- In the canvas, problems are written to the browser console.
-- `GET /_workbench/config` on the workbench server lists them under
-  `problems`, alongside the config as your machine resolves it. See
+- In the canvas, every problem is written to the browser console.
+- `GET /_workbench/config` on the workbench server lists problems with
+  implementations, viewports, and `code` under `problems`, alongside the config
+  as your machine resolves it. A screen dropped for a bad `src`, label, state
+  id, or folder is left out of it without a problem, so check the console for
+  those. See
   [Troubleshooting](troubleshooting.md#read-the-resolved-config).
 
 ## Editing with the form

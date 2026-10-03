@@ -38,7 +38,7 @@ Each project gets its own server:
   offers.
 - It serves the project at `/` and the workbench at `/_workbench/` on the same
   origin, which is what lets the workbench read and capture the live page.
-- It adds `actions.js` and `states.js` to the HTML pages it serves. See
+- It adds `keys.js`, `actions.js`, and `states.js` to the HTML pages it serves. See
   [How pages are served](pages-and-states.md#how-pages-are-served).
 
 **Workbench: Copy Canvas URL** gives the actual address.

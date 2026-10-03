@@ -184,7 +184,7 @@ if (require.main === module) {
       state: 'Wrong password',
       width: 'Mobile · iPhone 15 Pro, 393 × 852',
       frame: { w: 393, h: 852 },
-      file: '.canonic/.handoffs/sign-in.png',
+      file: '.canonic/.handoffs/sign-in.jpg',
       marks: [
         { type: 'arrow', from: { x: 120, y: 210 }, to: { x: 168, y: 254 }, target: 'fh-button.primary “Sign in”' },
         { type: 'rect', box: { x: 24, y: 300, w: 342, h: 96 }, target: 'fh-field-text-input#email' },

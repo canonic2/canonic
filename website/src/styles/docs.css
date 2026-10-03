@@ -12,7 +12,7 @@
 .docs-group h2, .docs-toc h2 { margin: 0 0 10px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .docs-group a { display: block; padding: 8px 10px; border-radius: 8px; color: var(--muted); font-size: 14px; line-height: 1.4; text-decoration: none; }
 .docs-group a:hover { background: var(--surface-2); color: var(--fg); }
-.docs-group a[aria-current="page"] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: inset 3px 0 var(--accent); }
+.docs-group a[aria-current="page"] { background: var(--surface); color: var(--accent); font-weight: 600; }
 .docs-group[hidden], .docs-group a[hidden], .docs-search[hidden] { display: none; }
 .docs-install { display: flex; justify-content: space-between; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--fg); font-size: 14px; font-weight: 600; text-decoration: none; }
 .docs-install:hover { border-color: var(--fg); }
@@ -36,7 +36,7 @@
 .docs-prose table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 22px 0; font-size: 14px; line-height: 1.6; }
 .docs-prose th { background: var(--surface-2); font-weight: 600; }
 .docs-prose :is(th, td) { padding: 12px 14px; border: 1px solid var(--line); text-align: left; min-width: 100px; vertical-align: top; }
-.docs-prose blockquote { margin: 22px 0; padding: 16px 20px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--surface); color: var(--muted); }
+.docs-prose blockquote { margin: 22px 0; padding: 16px 20px; border-radius: 8px; background: var(--surface); color: var(--muted); }
 .docs-prose blockquote p:last-child { margin-bottom: 0; }
 .docs-prose hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
 .docs-page-footer { margin-top: 40px; font-size: 13px; }
