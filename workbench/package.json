@@ -2,7 +2,7 @@
   "name": "canonic-workbench",
   "displayName": "Workbench",
   "description": "A design workbench for the screens in your repo: every page and preview on one canvas, marked up and handed to your agent.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "canonic",
   "license": "MIT",
   "icon": "icon.png",
