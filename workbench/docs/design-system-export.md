@@ -73,8 +73,8 @@ up to four renderers in parallel and doesn't change what the canvas shows. A
 screenshot that fails, or a screen that can't be captured, such as an
 [iOS Simulator](ios-simulator.md) screen or one whose design file is missing,
 is listed under `captureWarnings` in `canonic-export.json`, and the rest of the
-export continues. When the download finishes, a message says how many
-screenshot warnings there were.
+export continues. When the download finishes, a message gives the total
+number of screenshot and TypeScript preview build warnings.
 
 ## TypeScript previews in the export
 
