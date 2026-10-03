@@ -83,7 +83,7 @@ function prompt(payload) {
   var marks = payload.marks || [];
   var out = [];
 
-  out.push('Here is a screen from the Canonic workbench.');
+  out.push('Here is a screen from Workbench.');
   out.push('');
   out.push('- Screen: ' + payload.label + ' — `' + payload.src + '`');
   /* Only when it isn't the default one — saying "State: Default" on every

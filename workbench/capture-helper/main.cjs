@@ -67,13 +67,23 @@ function resize(payload) {
   win.setContentSize(width, height);
 }
 
+async function restorePointer(payload) {
+  if (!payload.mirror) return;
+  var point = payload.mirror.pointer;
+  win.webContents.sendInputEvent({ type: 'mouseMove',
+    x: point ? Math.round(point.x) : width + 1, y: point ? Math.round(point.y) : height + 1 });
+  await win.webContents.executeJavaScript('new Promise(function (resolve) { requestAnimationFrame(function () { requestAnimationFrame(resolve); }); })');
+}
+
 async function prepare(request) {
   var base = httpUrl(request.base);
   if (base.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(base.hostname) ||
       httpUrl(request.payload.url).origin !== base.origin) throw new Error('Capture must use its workbench origin');
   resize(request.payload);
   await navigate(new URL('/_workbench/capture.html', base).href);
-  return win.webContents.executeJavaScript('window.wbCapture.prepare(' + JSON.stringify(request.payload) + ')');
+  var details = await win.webContents.executeJavaScript('window.wbCapture.prepare(' + JSON.stringify(request.payload) + ')');
+  await restorePointer(request.payload);
+  return details;
 }
 
 async function preparePage(request) {

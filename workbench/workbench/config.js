@@ -101,7 +101,7 @@
       fail(new Error(
         location.protocol === 'file:'
           ? 'Couldn’t read ' + FILE + '. Either it isn’t at the project root, or the ' +
-            'browser is refusing to read local files: serve the project — the Canonic ' +
+            'browser is refusing to read local files: serve the project — the Workbench ' +
             'extension does — or start the browser with --allow-file-access-from-files.'
           : 'Couldn’t read ' + FILE + '.'
       ));
@@ -245,7 +245,7 @@
     if (problems.length) {
       console.warn('[workbench] ' + FILE + (hasLocal ? ' + ' + LOCAL : '') + ':\n' + problems.join('\n'));
     }
-    return { name: text(raw.name) || 'Canonic', sections: found, implementations: impls, root: root };
+    return { name: text(raw.name) || 'Workbench', sections: found, implementations: impls, root: root };
   }
 
   function trouble(file, error) {

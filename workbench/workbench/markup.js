@@ -67,6 +67,7 @@
   var shapeMenu = document.getElementById('shapeMenu');
   var handoffControl = document.getElementById('handoffControl');
   var handoffButton = document.getElementById('handoff');
+  var markCount = document.getElementById('markCount');
   var toolButtons = slice(document.querySelectorAll('.wb-tool'));
   var menuItems = slice(shapeMenu.querySelectorAll('.wb-menu-item'));
 
@@ -87,9 +88,17 @@
     return el;
   }
 
+  /* How much the canvas is zoomed: the layer's drawn width over its own.
+     Marks live in the frame's pixels, so pointer travel is divided by it. */
+  function scaleOf(el) {
+    var r = el.getBoundingClientRect();
+    return el.offsetWidth ? r.width / el.offsetWidth : 1;
+  }
+
   function point(e) {
     var r = layer.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    var s = scaleOf(layer) || 1;
+    return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s };
   }
 
   /* ----------------------------------------------------------- the tools */
@@ -338,6 +347,7 @@
     var mark = { type: type, el: group, nodes: [hit, shown], geom: geom };
     marks.push(mark);
     render(mark);
+    countMarks();
     return mark;
   }
 
@@ -351,6 +361,7 @@
     var mark = { type: 'text', el: el, nodes: [], geom: { x: p.x, y: p.y - 12 } };
     marks.push(mark);
     render(mark);
+    countMarks();
 
     /* An empty note is a mis-click and drops itself. Otherwise the note stops
        being editable, so a later click picks it up to move instead of putting
@@ -396,6 +407,7 @@
     var mark = { type: 'comment', el: el, nodes: [], geom: { x: p.x, y: p.y } };
     marks.push(mark);
     render(mark);
+    countMarks();
 
     body.addEventListener('blur', function () {
       body.contentEditable = 'false';
@@ -420,6 +432,12 @@
     return mark;
   }
 
+  /* Beside the handoff: how many marks it will carry. */
+  function countMarks() {
+    markCount.hidden = !marks.length;
+    markCount.textContent = marks.length === 1 ? '1 mark' : marks.length + ' marks';
+  }
+
   function markOf(node) {
     for (var i = 0; i < marks.length; i++) {
       if (marks[i].el === node) return marks[i];
@@ -432,6 +450,7 @@
     if (at > -1) marks.splice(at, 1);
     mark.el.remove();
     if (selected === mark) select(null);
+    countMarks();
   }
 
   function undo() {
@@ -966,7 +985,8 @@
 
   function captureRequest(includeMarkup, flush) {
     if (!frame || !frame.getAttribute('src')) return null;
-    var box = frameWrap.getBoundingClientRect();
+    /* The frame's own size, not its zoomed one on screen. */
+    var box = { width: frameWrap.offsetWidth, height: frameWrap.offsetHeight };
     var url = frame.src;
     var currentView = viewNow();
     if (currentView.lens && currentView.url) url = currentView.url;
@@ -1122,12 +1142,13 @@
   }
 
   function renderShot() {
-    var box = frameShell.getBoundingClientRect();
     say('Rendering…');
     return window.modernScreenshot.domToBlob(frameShell, {
-      width: Math.round(box.width),
-      height: Math.round(box.height),
+      width: frameShell.offsetWidth,
+      height: frameShell.offsetHeight,
       scale: 1,
+      /* The canvas zoom is a view of the frame, not part of it. */
+      style: { transform: 'none' },
       type: 'image/jpeg',
       quality: 0.9,
       onCloneEachNode: function (node) {
@@ -1244,7 +1265,8 @@
   function intoFrame(p) {
     var lr = layer.getBoundingClientRect();
     var fr = frame.getBoundingClientRect();
-    return { x: p.x + lr.left - fr.left, y: p.y + lr.top - fr.top };
+    var s = scaleOf(layer) || 1;
+    return { x: p.x + (lr.left - fr.left) / s, y: p.y + (lr.top - fr.top) / s };
   }
 
   /* The element under a point and its name are describe.js's — the same
@@ -1345,7 +1367,7 @@
      marks could be read at all. On the design none of that is sent, and the
      prompt reads as it always has. */
   function payload(file, targets) {
-    var box = frameWrap.getBoundingClientRect();
+    var box = { width: frameWrap.offsetWidth, height: frameWrap.offsetHeight };
     var view = viewNow();
     var item = window.wbItem(view.src);
     /* The elements under the marks: read here when the frame can be read
@@ -1426,7 +1448,7 @@
           target: 'clipboard',
           message: String(err.message || err),
         });
-        say(err.explained ? String(err.message) : 'Couldn’t hand off — see the Canonic Workbench log.');
+        say(err.explained ? String(err.message) : 'Couldn’t hand off — see the Workbench log.');
         console.error('[workbench] handoff failed', err);
         finishHandoff();
       });

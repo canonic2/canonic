@@ -105,6 +105,9 @@ test('local capture accepts incremental records and rejects malformed or executa
     return server.capturePayload(Buffer.from(JSON.stringify({ url: '/page.html', width: 100, height: 100, mirror: value })), 'http://127.0.0.1:3579/');
   }
   assert.deepEqual(payload(mirror).mirror, mirror);
+  assert.deepEqual(payload(Object.assign({}, mirror, { pointer: { x: 32, y: 16 } })).mirror.pointer, { x: 32, y: 16 });
+  assert.throws(function () { payload(Object.assign({}, mirror, { pointer: { x: Infinity, y: 16 } })); }, /Invalid live DOM pointer/);
+  assert.throws(function () { payload(Object.assign({}, mirror, { pointer: { x: -1, y: 16 } })); }, /Invalid live DOM pointer/);
   assert.throws(function () { payload(Object.assign({}, mirror, { base: 12 })); }, /Invalid live DOM patch/);
   assert.throws(function () { payload(Object.assign({}, mirror, { nodes: [{ id: '2', type: 1, tag: 'script', ns: '', attrs: [], children: [] }] })); }, /Invalid live DOM patch/);
   assert.throws(function () { payload(Object.assign({}, mirror, { removed: [null] })); }, /Invalid live DOM patch/);

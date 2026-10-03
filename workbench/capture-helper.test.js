@@ -26,6 +26,21 @@ test('preparation primes readback once without resizing or encoding a discarded 
   assert.equal(reads, 2);
 });
 
+test('the Electron mirror restores the visible hover position and clears it when the pointer leaves', async function () {
+  var app = { setPath: function () {}, whenReady: function () { return { then: function () { return { catch: function () {} }; } }; } };
+  var state = { require: function (name) { return name === 'electron' ? { app: app } : {}; },
+    process: { platform: 'linux', env: { CANONIC_CAPTURE_PROFILE: '/temporary-profile' },
+      stdout: { on: function () {} }, stdin: { on: function () {} } } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'capture-helper/main.cjs'), 'utf8'), state);
+  var moved = [];
+  state.win = { webContents: { sendInputEvent: function (event) { moved.push([event.x, event.y]); },
+    executeJavaScript: async function () {} } };
+  await state.restorePointer({ mirror: { pointer: { x: 45.2, y: 28.8 } } });
+  state.width = 300; state.height = 200;
+  await state.restorePointer({ mirror: { pointer: null } });
+  assert.deepEqual(moved, [[45, 29], [301, 201]]);
+});
+
 test('switches stories inside an already loaded Storybook preview', async function () {
   var app = { setPath: function () {}, commandLine: { appendSwitch: function () {} },
     whenReady: function () { return { then: function () { return { catch: function () {} }; } }; } };

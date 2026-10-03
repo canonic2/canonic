@@ -1,6 +1,6 @@
-# Canonic
+# Workbench
 
-A design workbench for the screens already in your repo. Every page and preview
+By Canonic. A design workbench for the screens already in your repo. Every page and preview
 on one canvas, at a real device width — draw on one and hand the picture to your
 agent.
 
@@ -37,8 +37,8 @@ you list what you want to see in one file and it shows up.
            src: preview/components-button.html
    ```
 
-3. Open the folder. **Canonic** appears in the activity bar and the status bar;
-   either one opens the canvas.
+3. Open the folder. **Workbench** appears in the activity bar, and opens the
+   canvas.
 
 Your pages need nothing added to them — no script tags, no imports, no folder
 copied into the repo. The extension serves the workbench alongside your project
@@ -48,7 +48,7 @@ and every trace of this is gone.
 ## What you get
 
 - **The screen list in the sidebar**, where a file tree usually goes: sections
-  on a rail, folders, and the states of a screen listed under it.
+  listed above the chosen one's screens, folders, and the states of a screen under it.
 - **Page states.** One page, several versions — the empty form and the one that
   came back wrong. A state is CSS keyed off `html[data-wb-state]`, markup that
   only exists in some states, or an attribute applied in one; see
@@ -60,8 +60,8 @@ and every trace of this is gone.
 - **Handoff.** The screenshot is saved, the markup is cleared, and a written
   account of every mark is copied to the clipboard for any conversation.
 - **Bounded diagnostics.** Browser, capture, server, and handoff failures meet
-  in VS Code's session-managed **Canonic Workbench** log. Run **Canonic: Show
-  Workbench Log** to inspect it; VS Code owns retention, so logs do not grow in
+  in VS Code's session-managed **Workbench** log. Run **Workbench: Show
+  Log** to inspect it; VS Code owns retention, so logs do not grow in
   the project or enter source control. Each workbench server also stops logging
   after 2 MB in one session. Records contain event metadata and errors, never
   screenshots, page HTML, or handoff prompts.
@@ -154,12 +154,10 @@ belongs in `.gitignore`. The design lens itself never touches the network.
 
 | Command | Does |
 | --- | --- |
-| `Canonic: Open Workbench` | the canvas, in an editor tab |
-| `Canonic: Open Workbench in Browser` | the same thing, in your browser |
-| `Canonic: Copy Workbench URL` | the address, for a bookmark or a script |
-| `Canonic: Refresh Screens` | re-read `workbench.yaml` now |
-| `Canonic: Sign in to an Implementation…` | a Chrome window on the workbench's browser profile, to sign in to staging or production |
-| `Canonic: Forget Implementation Sign-ins` | remove that profile |
+| `Workbench: Open Canvas` | the canvas, in an editor tab |
+| `Workbench: Open Canvas in Browser` | the same thing, in your browser |
+| `Workbench: Copy Canvas URL` | the address, for a bookmark or a script |
+| `Workbench: Refresh Screens` | re-read `workbench.yaml` now |
 
 ## Settings
 
@@ -192,7 +190,7 @@ a lost base revision triggers a full retry of the exact requested state.
 also decides which folder gets served when a window holds several: the first one
 that has it.
 
-A folder without one gets no server and no status bar item. The commands stay
+A folder without one gets no server and no Workbench view. The commands stay
 registered, so running one from the palette explains itself rather than failing
 as a missing command.
 
@@ -217,7 +215,7 @@ HTML and script files with no build step; opening
 | --- | --- |
 | `extension.js` | activation, the server's lifecycle, commands, clipboard handoff |
 | `panel.js` | the canvas: one webview holding one iframe |
-| `screens.js` | the Screens view in the sidebar |
+| `screens.js` | the Workbench view in the sidebar |
 | `server.js` | the HTTP server, capture and lens endpoints, and script injection — plain node |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
 | `simulator-stream.js` + `simulator-stream-demo/Capture.swift` | native ScreenCaptureKit and VideoToolbox Simulator stream |
@@ -275,7 +273,7 @@ After installing, run **Developer: Reload Window** from the Command Palette
 in each open VS Code project window. Installing replaces the files on disk;
 already-running extension hosts and capture helpers keep their previous code
 until their window reloads. Reloading the preview or using **Refresh Screens**
-does not restart the extension. This also applies to `scripts/install-extension.sh`.
+does not restart the extension. This also applies to `scripts/install-workbench.mjs`.
 
 Building requires Node 22.12 or later; the extension host still supports Node
 18 or later. `npm run package` bundles pinned Electron 44.2.0 and produces a

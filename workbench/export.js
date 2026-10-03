@@ -74,7 +74,7 @@ function screenReadme(screen) {
       }).join('\n\n')
     : 'No reference screenshot was captured for this screen.';
   return '# ' + screen.label + '\n\n' +
-    'This file describes one Canonic workbench screen for AI agents and other importers.\n\n' +
+    'This file describes one Workbench screen for AI agents and other importers.\n\n' +
     '- Screen ID: `' + screen.id + '`\n' +
     '- Content hash: `' + screen.hash + '`\n' +
     '- Hash algorithm: SHA-256 over each included file’s archive-relative path and raw bytes, in lexical path order\n\n' +
@@ -673,8 +673,8 @@ function create(root, view, options) {
     warnings: Array.from(new Set(warnings)).sort(),
     captureWarnings: Array.from(new Set(options.captureWarnings || [])).sort(),
   };
-  var readme = '# ' + (view && view.name || 'Canonic') + ' design-system export\n\n' +
-    'This archive was generated from the Canonic workbench. Workspace files keep their original project-relative paths at this archive’s root; sources outside the workspace are under `implementations/`.\n\n' +
+  var readme = '# ' + (view && view.name || 'Workbench') + ' design-system export\n\n' +
+    'This archive was generated from Workbench. Workspace files keep their original project-relative paths at this archive’s root; sources outside the workspace are under `implementations/`.\n\n' +
     'The export starts with every design, component, page, and story source declared or discovered by the workbench, then includes their transitive local imports and referenced assets. Each generated screen guide embeds reference screenshots for its declared states or Storybook stories at the configured viewports: desktop, mobile, both for responsive, or the standard fit frame. Duplicate capture sizes are removed. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n' +
     'See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each screen’s content hash. Each generated screen guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n';
   var generatedPackage = { private: true, name: slug(view && view.name) + '-design-system', version: '0.0.0', dependencies: {} };
@@ -694,7 +694,7 @@ function create(root, view, options) {
   var download = archives.length === 1 ? archives[0] : {
     filename: prefix + '-parts.zip',
     body: zip([{ name: 'README.md', body:
-      '# Canonic export ZIP parts\n\n' +
+      '# Workbench export ZIP parts\n\n' +
       'This bundle contains ' + archives.length + ' attachment-sized ZIP files. Extract this outer ZIP, then upload the numbered ZIP parts together or extract every part into one directory.\n' },
     ].concat(archives.map(function (archive) {
       return { name: archive.filename, body: archive.body };

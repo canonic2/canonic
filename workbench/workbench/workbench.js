@@ -59,16 +59,19 @@
   var frameReady = false;
   var frameShell = document.getElementById('frameShell');
   var frameWrap = document.getElementById('frameWrap');
-  var frameSize = document.getElementById('frameSize');
+  var frameName = document.getElementById('frameName');
   var blank = document.getElementById('blank');
   var openLink = document.getElementById('open');
   var reload = document.getElementById('reload');
   var actionsToggle = document.getElementById('actionsToggle');
   var lensesBox = document.getElementById('lenses');
-  var storyControl = document.getElementById('storyControl');
-  var storyButton = document.getElementById('storyButton');
-  var storyName = document.getElementById('storyName');
-  var storyMenu = document.getElementById('storyMenu');
+  var crumb = document.getElementById('crumb');
+  var crumbScreen = document.getElementById('crumbScreen');
+  var stateControl = document.getElementById('stateControl');
+  var stateButton = document.getElementById('stateButton');
+  var stateName = document.getElementById('stateName');
+  var stateMenu = document.getElementById('stateMenu');
+  var projectName = document.getElementById('projectName');
   var sourceControl = document.getElementById('sourceControl');
   var sourceButton = document.getElementById('openSource');
   var sourceMenu = document.getElementById('sourceMenu');
@@ -382,12 +385,16 @@
     return out;
   }
 
+  /* A switcher needs at least two lenses to switch between. A design with no
+     implementation has one (itself); a screen imported from a single
+     implementation, with no design, has one too. Neither shows the control. */
   function drawLenses(item, lens) {
     lensesBox.innerHTML = '';
     var keys = lensesOf(item);
-    lensesBox.hidden = !keys.length;
-    if (!keys.length) return;
-    (item.implementationOnly ? keys : [null].concat(keys)).forEach(function (key) {
+    var choices = item && item.implementationOnly ? keys : [null].concat(keys);
+    lensesBox.hidden = choices.length < 2;
+    if (lensesBox.hidden) return;
+    choices.forEach(function (key) {
       var impl = key ? config.implementations[key] : null;
       var button = document.createElement('button');
       button.className = 'wb-lens';
@@ -446,7 +453,7 @@
       .catch(function (error) {
         delete storyCache[key];
         if (error instanceof TypeError) {
-          throw new Error('Stories need the workbench server — the Canonic extension runs one, and so does node server.js.');
+          throw new Error('Stories need the workbench server — the Workbench extension runs one, and so does node server.js.');
         }
         throw error;
       });
@@ -454,31 +461,67 @@
     return request;
   }
 
-  function openStories(open) {
-    storyMenu.hidden = !open;
-    storyButton.setAttribute('aria-expanded', String(open));
+  function openStates(open) {
+    stateMenu.hidden = !open;
+    stateButton.setAttribute('aria-expanded', String(open));
   }
 
-  function drawStories(list, picked, lens) {
-    storyMenu.innerHTML = '';
-    openStories(false);
-    storyControl.hidden = !list;
-    if (!list) return;
-    storyName.textContent = picked.name;
-    storyButton.title = 'Story: ' + picked.name + ' — pick another';
-    list.forEach(function (story) {
+  /* The breadcrumb's second half: which version of the screen is showing,
+     and the others to pick from — the screen's states on the design, the
+     title's stories under a Storybook lens. rows: [{ label, current, pick }],
+     or null when there is nothing to choose between. */
+  function drawStateMenu(rows, kind) {
+    stateMenu.innerHTML = '';
+    openStates(false);
+    stateControl.hidden = !rows;
+    if (!rows) return;
+    var picked = rows.filter(function (row) { return row.current; })[0] || rows[0];
+    stateName.textContent = picked.label;
+    stateButton.title = (kind === 'story' ? 'Story: ' : 'State: ') + picked.label + ' — pick another';
+    stateMenu.setAttribute('aria-label', kind === 'story' ? 'Story' : 'State');
+    rows.forEach(function (entry) {
       var row = document.createElement('button');
       row.className = 'wb-menu-row';
       row.type = 'button';
       row.setAttribute('role', 'menuitem');
-      row.setAttribute('aria-current', String(story.id === picked.id));
-      row.textContent = story.name;
+      row.setAttribute('aria-current', String(entry === picked));
+      row.textContent = entry.label;
       row.addEventListener('click', function () {
-        openStories(false);
-        writeHash(current, story.state, stage.dataset.width, lens.key);
+        openStates(false);
+        entry.pick();
       });
-      storyMenu.appendChild(row);
+      stateMenu.appendChild(row);
     });
+  }
+
+  function drawStories(list, picked, lens) {
+    drawStateMenu(list && list.map(function (story) {
+      return {
+        label: story.name,
+        current: story.id === picked.id,
+        pick: function () { writeHash(current, story.state, stage.dataset.width, lens.key); },
+      };
+    }), 'story');
+  }
+
+  /* A design's states, or a lens that answers to them. An implementation
+     with none of its own shows the screen itself and nothing to pick. */
+  function drawStates(item, lens) {
+    var states = statesOf(item);
+    var mapped = !lens || item.implementationOnly || !!item.implementations[lens.key].states;
+    if (!states || !mapped || (lens && lens.kind === 'ios-simulator')) {
+      drawStateMenu(null);
+      return;
+    }
+    drawStateMenu(states.map(function (state, i) {
+      return {
+        label: state.label,
+        current: currentState ? currentState === state.id : i === 0,
+        pick: function () {
+          writeHash(current, window.wbNav.statePick(item, state, i), stage.dataset.width);
+        },
+      };
+    }), 'state');
   }
 
   /* The story's turn of show(): the title's stories are asked for, the one
@@ -609,6 +652,11 @@
     document.title = [item.label, stateLabelText, lens ? lens.label : null, config.name]
       .filter(Boolean)
       .join(' · ');
+    /* Above the frame, a screen with states always names the one showing,
+       its first included — the breadcrumb does the same. */
+    var states = statesOf(item);
+    var shown = stateLabelText || (states && !lens ? states[0].label : null);
+    frameName.textContent = [item.label, shown].filter(Boolean).join(' / ');
   }
 
   function show(src, state) {
@@ -629,14 +677,18 @@
        pick came from — its own rows, a link in the preview, or the editor.
        Through a lens that doesn't answer to the screen's states, the row
        marked is the screen itself. */
-    var mapped = item.implementationOnly || !lens || (!story && !!item.implementations[lens.key].states);
+    var mapped = !item || item.implementationOnly || !lens || (!story && !!item.implementations[lens.key].states);
     var reported = mapped ? currentState : null;
     if (nav) nav.setCurrent(current, reported, item && item.group);
     tellHost(current, reported, lens ? lens.key : null, story);
 
     view = null;
     drawLenses(item, lens);
-    drawStories(null);
+    crumb.hidden = !item;
+    crumbScreen.textContent = item ? item.label : '';
+    /* A story's turn comes once the title's stories are in. */
+    if (item && !story) drawStates(item, lens);
+    else drawStateMenu(null);
     drawSources(item);
     setActionsAvailability(lens);
 
@@ -649,9 +701,8 @@
       blank.textContent = BLANK_TEXT;
       blank.hidden = false;
       openLink.removeAttribute('href');
-      /* The picked item names itself in the sidebar and the tab title —
-         the top bar stays for tools. */
       document.title = config.name;
+      frameName.textContent = '';
       return;
     }
 
@@ -818,9 +869,14 @@
      this workbench and is ignored. */
   window.addEventListener('message', function (e) {
     storySwitchEvent(e);
-    if (host && view && view.lens && view.lens.kind === 'storybook') {
+    /* Storybook's own key channel is the only way a cross-origin story's
+       keys reach the shell: zoom chords drive the canvas, editor chords go
+       on to the editor. */
+    if (view && view.lens && view.lens.kind === 'storybook') {
       var storyKey = window.wbKeys.storybook(e, frame, view.lens.url);
-      if (storyKey) window.wbKeys.forward(storyKey, host);
+      if (storyKey && !(window.wbZoom && window.wbZoom.key(storyKey.event)) && host) {
+        window.wbKeys.forward(storyKey, host);
+      }
     }
     var data = e.data || {};
 
@@ -834,9 +890,11 @@
     }
 
     if (data.type === 'wb-context-menu' && host && e.source === frame.contentWindow) {
+      /* The page reports its own pixels; the canvas may be zoomed. */
       var rect = frame.getBoundingClientRect();
+      var scale = rect.width / (frame.offsetWidth || rect.width || 1);
       host.postMessage({
-        type: 'wb-context-menu', x: rect.left + Number(data.x || 0), y: rect.top + Number(data.y || 0),
+        type: 'wb-context-menu', x: rect.left + Number(data.x || 0) * scale, y: rect.top + Number(data.y || 0) * scale,
         selection: String(data.selection || ''), editable: !!data.editable,
       }, '*');
       return;
@@ -896,11 +954,13 @@
   var resizableHeight = RESIZABLE_DEFAULT_HEIGHT;
 
   function showFrameSize() {
-    frameSize.textContent = resizableWidth + ' × ' + resizableHeight;
+    if (window.wbZoom) window.wbZoom.update();
   }
 
   /* A mode carries its width and, for devices with a real screen size, its
-     height too. Resizable restores the last freeform size instead. */
+     height too. Resizable restores the last freeform size instead. Fit is
+     sized by zoom.js, which knows how much stage there is. Every change of
+     mode fits the new frame to the canvas, the way a fresh frame opens. */
   function setWidth(mode) {
     var button = null;
     stage.dataset.width = mode;
@@ -922,6 +982,7 @@
         ? button.dataset.height + 'px'
         : '';
     }
+    if (window.wbZoom) window.wbZoom.fit();
     try {
       localStorage.setItem('canonic-workbench-width', mode);
     } catch (e) {
@@ -1022,7 +1083,9 @@
   });
 
   /* Chrome-style rails sit outside the preview. Side rails change width, the
-     bottom changes height, and either bottom corner changes both. */
+     bottom changes height, and either bottom corner changes both. Pointer
+     travel is screen pixels, so it is divided by the zoom; a left-edge drag
+     moves the frame over by what it grew, so the right edge stays put. */
   var frameDrag = null;
 
   function rememberFrameSize() {
@@ -1037,13 +1100,15 @@
   Array.prototype.forEach.call(document.querySelectorAll('.wb-frame-resize'), function (handle) {
     handle.addEventListener('pointerdown', function (e) {
       if (stage.dataset.width !== 'resizable') return;
-      var box = frameShell.getBoundingClientRect();
+      if (window.wbZoom) window.wbZoom.hold();
       frameDrag = {
         edge: handle.dataset.resize,
         x: e.clientX,
         y: e.clientY,
-        width: box.width,
-        height: box.height,
+        width: frameShell.offsetWidth,
+        height: frameShell.offsetHeight,
+        scale: window.wbZoom ? window.wbZoom.scale() : 1,
+        pan: window.wbZoom ? window.wbZoom.pan() : null,
       };
       handle.setPointerCapture(e.pointerId);
       shell.classList.add('is-frame-resizing');
@@ -1052,15 +1117,17 @@
 
     handle.addEventListener('pointermove', function (e) {
       if (!frameDrag) return;
-      var horizontal = frameDrag.edge.indexOf('left') > -1
-        ? frameDrag.x - e.clientX
-        : e.clientX - frameDrag.x;
+      var left = frameDrag.edge.indexOf('left') > -1;
+      var horizontal = (left ? frameDrag.x - e.clientX : e.clientX - frameDrag.x) / frameDrag.scale;
       if (frameDrag.edge !== 'bottom') {
         resizableWidth = Math.max(320, Math.round(frameDrag.width + horizontal));
         frameShell.style.width = resizableWidth + 'px';
+        if (left && frameDrag.pan) {
+          window.wbZoom.panTo(frameDrag.pan.x - (resizableWidth - frameDrag.width) * frameDrag.scale, frameDrag.pan.y);
+        }
       }
       if (frameDrag.edge.indexOf('bottom') > -1) {
-        resizableHeight = Math.max(320, Math.round(frameDrag.height + e.clientY - frameDrag.y));
+        resizableHeight = Math.max(320, Math.round(frameDrag.height + (e.clientY - frameDrag.y) / frameDrag.scale));
         frameShell.style.height = resizableHeight + 'px';
       }
       showFrameSize();
@@ -1097,24 +1164,24 @@
     loadPreview(view && view.url ? view.url : frame.src);
   });
 
-  storyButton.addEventListener('click', function () {
+  stateButton.addEventListener('click', function () {
     openSources(false);
-    openStories(storyMenu.hidden);
+    openStates(stateMenu.hidden);
   });
 
   sourceButton.addEventListener('click', function () {
-    openStories(false);
+    openStates(false);
     openSources(sourceMenu.hidden);
   });
 
   document.addEventListener('pointerdown', function (e) {
-    if (!storyMenu.hidden && !e.target.closest('.wb-stories')) openStories(false);
+    if (!stateMenu.hidden && !e.target.closest('.wb-states-control')) openStates(false);
     if (!sourceMenu.hidden && !e.target.closest('.wb-sources')) openSources(false);
   });
 
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    openStories(false);
+    openStates(false);
     openSources(false);
   });
 
@@ -1223,6 +1290,7 @@
       storyCache = {};
 
       document.title = config.name;
+      projectName.textContent = config.name;
 
       if (first) restore();
 
@@ -1233,9 +1301,10 @@
         nav.update(groups);
       } else {
         nav = window.wbNav.create({
-          rail: document.getElementById('rail'),
-          title: document.getElementById('sectionName'),
           search: search,
+          sections: document.getElementById('sections'),
+          sectionsBlock: document.getElementById('sectionsBlock'),
+          title: document.getElementById('sectionName'),
           list: document.getElementById('nav'),
           groups: groups,
           onPick: function (src, state) {

@@ -1,7 +1,8 @@
 /* The screen list
    ---------------
-   The rail and the panel beside it: one button per section, then that
-   section's screens — folders, states, and the filter over all of them.
+   Built the way Sketch's sidebar is: the config's sections listed on top, as
+   Sketch lists pages, and the chosen section's screens below — folders,
+   states, and the filter over all of them.
 
    It is its own file because two places need the same list. In a browser it
    is the workbench's own left edge. In an editor it is the Canonic sidebar, a
@@ -70,67 +71,95 @@
     return out;
   }
 
-  /* options: rail, title, search, list — the elements to build into; groups —
-     the config's sections; onPick(src, state) — what a picked row does;
-     onSection(name), for a host that names the section somewhere of its own;
-     and treeKeyboard, when the host wants the list to behave like an editor
-     tree with one tab stop and arrow-key focus. Only rail, list and groups are
-     required. */
+  /* options: list — where the screens go; sections — where the sections go,
+     with sectionsBlock, the part of the panel to hide when there is only one;
+     title — the heading over the screens, which names the section showing;
+     search — the filter; groups — the config's sections; onPick(src, state) —
+     what a picked row does; and treeKeyboard, when the host wants the list to
+     behave like a tree with one tab stop and arrow-key focus. Only list and
+     groups are required. */
   function create(options) {
-    var rail = options.rail;
-    var title = options.title || null;
     var search = options.search || null;
     var nav = options.list;
+    var sectionList = options.sections || null;
+    var sectionsBlock = options.sectionsBlock || null;
+    var title = options.title || null;
     var groups = options.groups || [];
     var onPick = options.onPick || function () {};
-    var onSection = options.onSection || function () {};
     var treeKeyboard = !!options.treeKeyboard;
 
-    var section = groups.length ? groups[0].group : null;
+    var section = groups.length ? groups[0].group : null; /* the section showing */
     var current = null;      /* src of the picked screen */
     var currentState = null; /* its state id, or null for the default one */
 
-    /* ------------------------------------------------------------- rail */
+    /* --------------------------------------------------------- sections */
 
-    function renderRail() {
-      rail.innerHTML = '';
+    /* Like the pages list above Sketch's layer list: every section, with how
+       many screens it holds; the one showing is tinted, and its screens are
+       listed below. A config with one section has nothing to choose, so the
+       list steps aside. */
+    function renderSections() {
+      if (!sectionList) return;
+      sectionList.innerHTML = '';
+      var several = groups.length > 1;
+      if (sectionsBlock) sectionsBlock.hidden = !several;
+      if (!several) return;
       groups.forEach(function (g) {
-        var button = document.createElement('button');
-        button.className = 'wb-rail-item';
-        button.type = 'button';
-        /* Icon-only: "Components" and "Design system" don't fit a 48px rail.
-           The tooltip names it, and the panel header keeps the active section
-           named on screen at all times. */
-        button.title = g.group;
-        button.setAttribute('aria-label', g.group);
-        button.setAttribute('aria-current', String(g.group === section));
-        if (g.icon) button.appendChild(window.wbIcon(g.icon, 20));
-
-        button.addEventListener('click', function () {
+        var row = document.createElement('button');
+        row.className = 'wb-section-row';
+        row.type = 'button';
+        row.dataset.section = g.group;
+        if (g.icon) row.appendChild(window.wbIcon(g.icon, 14));
+        row.appendChild(labelFor(g.group));
+        var count = document.createElement('span');
+        count.className = 'wb-count';
+        count.textContent = String(screensIn(g.items).length);
+        row.appendChild(count);
+        row.addEventListener('click', function () {
           setSection(g.group);
         });
-        rail.appendChild(button);
+        sectionList.appendChild(row);
+      });
+      markSection();
+    }
+
+    function markSection() {
+      if (title) title.textContent = filtering ? 'Results' : section || '';
+      if (!sectionList) return;
+      Array.prototype.forEach.call(sectionList.children, function (row) {
+        row.setAttribute('aria-current', String(row.dataset.section === section));
       });
     }
 
     function setSection(name) {
       section = name;
-      if (title) title.textContent = name;
-      Array.prototype.forEach.call(rail.children, function (b, i) {
-        b.setAttribute('aria-current', String(groups[i].group === name));
-      });
       render(search ? search.value : '');
-      onSection(name);
     }
 
     /* ------------------------------------------------------------ panel */
 
-    function itemButton(item) {
+    /* A long name ellipsizes rather than wrapping the row. */
+    function labelFor(text) {
+      var span = document.createElement('span');
+      span.className = 'wb-item-label';
+      span.textContent = text;
+      return span;
+    }
+
+    /* How far in a row sits. A tree row's highlight runs the panel's full
+       width, so the indent is padding inside the row, read from --wb-depth. */
+    function indent(el, depth) {
+      if (depth) el.style.setProperty('--wb-depth', String(depth));
+    }
+
+    function itemButton(item, depth) {
       var button = document.createElement('button');
       button.className = 'wb-item';
       button.type = 'button';
+      indent(button, depth);
       button.appendChild(window.wbIcon(item.icon, 14));
-      button.appendChild(document.createTextNode(item.label));
+      button.appendChild(labelFor(item.label));
+      button.title = item.label;
       button.dataset.src = item.src;
       button.setAttribute('aria-current', String(item.src === current));
       button.addEventListener('click', function () {
@@ -155,9 +184,9 @@
       return box.dataset.foldDefault === 'open' || box.dataset.src === current;
     }
 
-    /* Both folds in the panel are the same shape: a header row that turns its
-       caret, and the rows it holds indented under a hairline. What differs is
-       what the header does when you click it, which the caller wires up. */
+    /* Every fold in the panel is the same shape: a header row that turns its
+       caret, and the rows it holds a step further in. What differs is what
+       the header does when you click it, which the caller wires up. */
     function fold(spec) {
       var box = document.createElement('div');
       box.className = 'wb-fold-group ' + spec.className;
@@ -168,16 +197,25 @@
       var head = document.createElement('button');
       head.className = 'wb-item wb-fold-head';
       head.type = 'button';
+      indent(head, spec.depth);
       /* Caret, then the row's glyph, then its name — the caret belongs to the
          fold and is the only part of the row that turns. */
       var caret = window.wbIcon('chevron-down', 14);
       caret.classList.add('wb-fold');
       head.appendChild(caret);
-      head.appendChild(window.wbIcon(spec.icon, 14));
-      head.appendChild(document.createTextNode(spec.label));
+      if (spec.icon) head.appendChild(window.wbIcon(spec.icon, 14));
+      head.appendChild(labelFor(spec.label));
+      if (spec.count != null) {
+        var count = document.createElement('span');
+        count.className = 'wb-count';
+        count.textContent = String(spec.count);
+        head.appendChild(count);
+      }
 
       var list = document.createElement('div');
       list.className = 'wb-fold-list';
+      /* The guide beside the rows is drawn at the header's depth. */
+      indent(list, spec.depth);
       list.id = 'wb-fold-' + spec.key.replace(/[^a-z0-9]+/gi, '-');
       head.setAttribute('aria-controls', list.id);
 
@@ -193,13 +231,14 @@
 
     /* A folder of screens that belong to one flow. Its header only folds —
        there is nothing to put on the canvas for "Auth" itself. */
-    function folderGroup(entry, g) {
+    function folderGroup(entry, g, depth) {
       var parts = fold({
         className: 'wb-folder',
         key: 'folder:' + g.group + '/' + entry.folder,
         label: entry.folder,
         icon: 'folder',
         defaultOpen: true,
+        depth: depth,
       });
 
       parts.head.dataset.folder = entry.folder;
@@ -208,7 +247,7 @@
       });
 
       entry.items.forEach(function (item) {
-        parts.list.appendChild(rowFor(item));
+        parts.list.appendChild(rowFor(item, depth + 1));
       });
 
       return parts.box;
@@ -216,25 +255,29 @@
 
     /* A screen with states: the screen's own row, then one row per state, the
        way Storybook stacks a component's stories. */
-    function stateGroup(item, states) {
+    function stateGroup(item, states, depth) {
       var parts = fold({
         className: 'wb-states',
         key: item.src,
         src: item.src,
         label: item.label,
         icon: item.icon,
+        depth: depth,
       });
 
       parts.head.dataset.src = item.src;
+      parts.head.title = item.label;
 
       states.forEach(function (state, i) {
         var row = document.createElement('button');
         row.className = 'wb-item wb-state';
         row.type = 'button';
+        indent(row, depth + 1);
         /* Same glyph on every state row, on every screen: these rows are all
            the same kind of thing, and the label is what tells them apart. */
         row.appendChild(window.wbIcon('circle-dot', 13));
-        row.appendChild(document.createTextNode(state.label));
+        row.appendChild(labelFor(state.label));
+        row.title = state.label;
         row.dataset.src = item.src;
         row.dataset.state = state.id;
         row.addEventListener('click', function () {
@@ -263,9 +306,9 @@
       return parts.box;
     }
 
-    function rowFor(item) {
+    function rowFor(item, depth) {
       var states = statesOf(item);
-      return states ? stateGroup(item, states) : itemButton(item);
+      return states ? stateGroup(item, states, depth) : itemButton(item, depth);
     }
 
     /* Folder and state labels are searchable too, so "auth" or "wrong password"
@@ -293,8 +336,8 @@
       return haystack(entry).indexOf(q) > -1 ? entry : null;
     }
 
-    /* Empty filter shows the active section alone. A filter searches every
-       section and labels the groups, so typing "table" from Pages still finds
+    /* The section showing, alone. A filter searches every section instead,
+       each under a small label, so typing "button" from Pages still finds
        the component. */
     function render(filter) {
       var q = (filter || '').trim().toLowerCase();
@@ -304,7 +347,6 @@
 
       groups.forEach(function (g) {
         if (!q && g.group !== section) return;
-
         var matches = g.items.map(function (entry) {
           return matching(entry, q);
         }).filter(Boolean);
@@ -313,22 +355,19 @@
 
         var block = document.createElement('div');
         block.className = 'wb-group';
-
-        if (q) {
-          var label = document.createElement('span');
+        if (q && groups.length > 1) {
+          var label = document.createElement('p');
           label.className = 'wb-group-label';
-          if (g.icon) label.appendChild(window.wbIcon(g.icon, 13));
-          label.appendChild(document.createTextNode(g.group));
+          label.textContent = g.group;
           block.appendChild(label);
         }
-
         matches.forEach(function (entry) {
-          block.appendChild(isFolder(entry) ? folderGroup(entry, g) : rowFor(entry));
+          block.appendChild(isFolder(entry) ? folderGroup(entry, g, 0) : rowFor(entry, 0));
         });
-
         nav.appendChild(block);
       });
 
+      markSection();
       markCurrent();
 
       if (!shown) {
@@ -474,15 +513,15 @@
       });
     }
 
-    /* What the host calls when the selection changes, wherever it changed. */
+    /* What the host calls when the selection changes, wherever it changed.
+       A new screen brings its section into view — a linked hash, or a pick
+       made in the other half of the tool — but the same screen reported
+       again leaves the section you went browsing in alone. */
     function setCurrent(src, state, group) {
+      var moved = (src || null) !== current;
       current = src || null;
       currentState = state || null;
-
-      /* Follow the screen into its section, so a linked hash — or a pick made
-         in the other half of the tool — opens the rail on the right one.
-         setSection re-renders, which marks the row itself. */
-      if (current && group && group !== section) setSection(group);
+      if (moved && current && group && group !== section) setSection(group);
       else markCurrent();
     }
 
@@ -491,12 +530,10 @@
        keyboard listeners remain single and its hand-worked folds survive. */
     function update(nextGroups) {
       groups = nextGroups || [];
-      var stillThere = groups.some(function (group) {
-        return group.group === section;
-      });
+      var stillThere = groups.some(function (g) { return g.group === section; });
       if (!stillThere) section = groups.length ? groups[0].group : null;
-      renderRail();
-      setSection(section);
+      renderSections();
+      render(search ? search.value : '');
     }
 
     /* -------------------------------------------------------------- boot */
@@ -521,16 +558,13 @@
 
     nav.addEventListener('keydown', moveByKey);
 
-    renderRail();
-    setSection(section);
+    renderSections();
+    render('');
 
     return {
       setCurrent: setCurrent,
       reveal: reveal,
       update: update,
-      section: function () {
-        return section;
-      },
     };
   }
 

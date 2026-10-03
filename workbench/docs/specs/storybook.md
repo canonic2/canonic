@@ -28,7 +28,7 @@ implementations:
 - An explicit `url` is an HTTP(S) Storybook origin. `url: auto` checks ports
   found in project package scripts and ports 6006–6010 for a live
   `/index.json`. Detection never launches a process by itself.
-- `start` may launch a command in a trusted VS Code workspace. Canonic first
+- `start` may launch a command in a trusted VS Code workspace. Workbench first
   runs `check` (TCP `port` with optional `host`, or an HTTP(S) `url`). It opens
   a terminal and executes `command` in `cwd` only when that check fails. It
   then waits for `ready`, or `check` if `ready` is omitted, up to `timeout`
@@ -39,10 +39,10 @@ implementations:
 
 ## Catalog and story identity
 
-- Canonic reads Storybook's live `/index.json`. Only entries with
+- Workbench reads Storybook's live `/index.json`. Only entries with
   `type: story`, an ID, and a title become selectable stories. Entries are
   grouped by their exact `title`.
-- For a title such as `UI/Components/Button`, `UI` becomes a rail section,
+- For a title such as `UI/Components/Button`, `UI` becomes a section,
   `Components` becomes a folder, and `Button` becomes a screen. Titles with
   multiple stories expand into state rows; a one-story title stays one row.
   An imported screen has a synthetic `__storybook/…`
@@ -64,14 +64,14 @@ implementations:
 - The first story loads in the preview iframe. Later picks on the same
   Storybook origin ask the loaded preview to switch through Storybook's
   `setCurrentStory` channel. This keeps the Storybook runtime warm.
-- Canonic accepts `currentStoryWasSet` and `storyRendered` only from the active
+- Workbench accepts `currentStoryWasSet` and `storyRendered` only from the active
   or loading preview iframe, at the configured Storybook origin, and for the
   requested story ID.
   It reports the selection to the VS Code sidebar and signals a new frame to
   capture only after `storyRendered`. A pending selection keeps the editor
   bridge ready for another pick without claiming the old canvas has changed.
 - If Storybook does not acknowledge a switch within 1.5 seconds, or accepts
-  it but does not report rendering within 15 seconds, Canonic navigates to
+  it but does not report rendering within 15 seconds, Workbench navigates to
   that story's `iframe.html` URL. A newer pick cancels the older fallback.
   An initial load, a pending iframe navigation, or a different Storybook
   origin also uses iframe navigation.

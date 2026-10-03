@@ -1,26 +1,28 @@
 /* The screen list, dressed
    ------------------------
-   Everything nav.js builds: the rail, the panel title, the filter, and the
-   rows — folders, screens, states.
+   Everything nav.js builds: the section list, the heading over the screens,
+   the rows — folders, screens, states — and the search field under them.
+
+   It reads like Sketch's sidebar rather than an editor's file tree: rows are
+   rounded pills inset from the panel's edges, the section showing is tinted
+   in the list above, the screen on the canvas is a solid accent pill, carets
+   stay out of the way until the pointer is over the list, and thin path lines
+   show what a row belongs to.
 
    It is separate from workbench.css for the same reason nav.js is separate
-   from workbench.js. Two hosts show this list: the workbench, where it is the
-   tool's own left edge in Figma's grays, and the Canonic sidebar in VS Code,
-   where it stands in for a file tree and has to pass for one.
+   from workbench.js: two hosts show this list — the workbench's own left edge,
+   and the Canonic view in VS Code's sidebar. Both draw it the same way. What
+   they set is only the palette:
 
-   So nothing here picks a colour. Every value comes from a variable the host
-   sets — the palette from --wb-panel and its neighbours, declared in
-   workbench.css — and the handful of measurements that genuinely differ
-   between a design tool and an editor are read with the workbench's own value
-   as the fallback:
+     --wb-panel                  the panel behind the list
+     --wb-fg, --wb-fg-2, --wb-fg-3   text, from strongest to quietest
+     --wb-hover, --wb-raised     a hovered row, the search field
+     --wb-line                   hairlines and path lines
+     --wb-accent                 the section tint and focus rings
+     --wb-accent-strong          the selected row's fill
+     --wb-accent-text            accent-coloured text on the panel
 
-     --wb-row-pad-y, --wb-row-pad-x   a row's box
-     --wb-row-radius                  8px here, square in an editor
-     --wb-row-font, --wb-row-gap      the type, and the glyph's distance
-     --wb-nav-pad                     the scrolling list's own padding
-
-   Written as fallbacks rather than declared defaults so a host can set them
-   anywhere — on :root, on its own wrapper — without a specificity fight.
+   A row's depth arrives from nav.js as --wb-depth.
 */
 
 /* Lucide glyphs: stroked, inherit color, never shrink in a flex row. */
@@ -29,85 +31,303 @@
   display: block;
 }
 
-/* ------------------------------------------------------------------- rail */
+/* ------------------------------------------------------------------ layout */
 
-/* Fixed width — only the panel beside it resizes. */
-.wb-rail {
+.wb-browse {
+  --wb-row-h: 28px;
+  --wb-row-x: 8px;    /* a row's own inset, before its depth */
+  --wb-indent: 16px;  /* one level of nesting */
   display: flex;
   flex-direction: column;
-  gap: var(--wb-space-4);
-  padding: var(--wb-space-8) var(--wb-space-4);
-  background: var(--wb-panel);
-  border-right: 1px solid var(--wb-line);
-  overflow: hidden;
+  min-height: 0;
 }
 
-.wb-rail-item {
+.wb-browse-block[hidden],
+.wb-browse-head:empty {
+  display: none;
+}
+
+/* "Sections", then the name of the section listed below: plain title case,
+   the way Sketch heads its Documents and page lists. */
+.wb-browse-head {
+  margin: 0;
+  padding: 14px 16px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--wb-fg);
+}
+
+/* A hairline under the section list separates choosing from browsing. */
+.wb-browse-block {
+  flex: none;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+  margin: 0 0 2px;
+  border-bottom: 1px solid var(--wb-line);
+}
+
+/* --------------------------------------------------------------- sections */
+
+.wb-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px;
+}
+
+.wb-section-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 40px;
-  padding: 0;
-  font-family: inherit;
+  gap: 8px;
+  height: var(--wb-row-h);
+  padding: 0 var(--wb-row-x);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
   color: var(--wb-fg-2);
   background: none;
   border: 0;
-  border-radius: var(--wb-radius-md);
+  border-radius: 7px;
   cursor: pointer;
 }
 
-.wb-rail-item:hover {
+.wb-section-row .wb-icon {
+  color: var(--wb-fg-3);
+}
+
+.wb-section-row:hover {
   background: var(--wb-hover);
   color: var(--wb-fg);
 }
 
-.wb-rail-item[aria-current='true'] {
-  background: var(--wb-selected);
-  color: var(--wb-accent);
+/* The section showing: a soft tint, not the solid fill — that belongs to the
+   screen on the canvas, and only one row in the panel should claim it. */
+.wb-section-row[aria-current='true'] {
+  background: color-mix(in srgb, var(--wb-accent) 16%, transparent);
+  color: var(--wb-accent-text);
 }
 
-.wb-rail-item:focus-visible {
+.wb-section-row[aria-current='true'] .wb-icon,
+.wb-section-row[aria-current='true'] .wb-count {
+  color: var(--wb-accent-text);
+}
+
+.wb-section-row:focus-visible,
+.wb-item:focus-visible {
   outline: 2px solid var(--wb-accent);
   outline-offset: -2px;
 }
 
-/* ------------------------------------------------------------------ panel */
-
-.wb-panel-title {
-  margin: 0;
-  padding: var(--wb-space-16) var(--wb-space-12) var(--wb-space-4);
-  font-size: 13px;
-  font-weight: 590;
-  letter-spacing: -0.01em;
-  color: var(--wb-fg);
+.wb-count {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-fg-3);
 }
 
+/* ------------------------------------------------------------------ rows */
+
+.wb-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+
+/* While filtering, every section that matched, each under a small label. */
+.wb-group + .wb-group {
+  margin-top: 8px;
+}
+
+.wb-group-label {
+  margin: 0;
+  padding: 8px var(--wb-row-x) 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wb-fg-3);
+}
+
+.wb-item {
+  /* Where this row's content starts: its depth, past its own inset. */
+  --wb-depth-pad: calc(var(--wb-row-x) + var(--wb-depth, 0) * var(--wb-indent));
+  /* Positioned so a hovered or selected pill paints over the path line. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--wb-row-h);
+  box-sizing: border-box;
+  margin: 0 0 1px;
+  padding: 0 var(--wb-row-x) 0 var(--wb-depth-pad);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--wb-fg);
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+/* A long name ellipsizes; it never wraps a row onto two lines. */
+.wb-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rows that don't fold keep the caret's place, so every glyph at a depth
+   starts on the same line however many screens have states. */
+.wb-item:not(.wb-fold-head) {
+  padding-left: calc(var(--wb-depth-pad) + 12px + 4px);
+}
+
+.wb-item .wb-icon {
+  color: var(--wb-fg-3);
+}
+
+.wb-item:hover {
+  background: var(--wb-hover);
+}
+
+/* The screen on the canvas: one solid accent pill, white text and glyphs. */
+.wb-item[aria-current='true'],
+.wb-item[aria-current='true']:hover {
+  background: var(--wb-accent-strong);
+  color: #ffffff;
+}
+
+.wb-item[aria-current='true'] .wb-icon {
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------------ folds */
+
+.wb-fold-head {
+  gap: 4px;
+}
+
+.wb-fold-head .wb-fold + .wb-icon {
+  margin-right: 4px;
+}
+
+/* The caret sits in the gutter and only shows while the pointer is over the
+   list, or the row has focus — except on a closed fold, which has to say it
+   holds more. */
+.wb-fold-head .wb-fold {
+  width: 12px;
+  height: 12px;
+  color: var(--wb-fg-3);
+  opacity: 0;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.wb-nav:hover .wb-fold,
+.wb-fold-head:focus-visible .wb-fold,
+.wb-fold-head[aria-expanded='false'] .wb-fold {
+  opacity: 1;
+}
+
+.wb-fold-head[aria-expanded='false'] .wb-fold {
+  transform: rotate(-90deg);
+}
+
+/* A screen whose state is on the canvas: its own row is a header, so it
+   gets the weight but not the fill — the state underneath has that. */
+.wb-fold-head[aria-current='true'],
+.wb-fold-head[aria-current='true']:hover {
+  background: none;
+  color: var(--wb-fg);
+  font-weight: 600;
+}
+
+.wb-fold-head[aria-current='true']:hover {
+  background: var(--wb-hover);
+}
+
+.wb-fold-head[aria-current='true'] .wb-icon {
+  color: var(--wb-fg-3);
+}
+
+/* Path lines, as Sketch draws them: down from the middle of the parent's
+   glyph, beside the rows it holds. */
+.wb-folder > .wb-fold-list,
+.wb-states > .wb-fold-list {
+  position: relative;
+}
+
+.wb-folder > .wb-fold-list::before,
+.wb-states > .wb-fold-list::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 6px;
+  left: calc(var(--wb-row-x) + var(--wb-depth, 0) * var(--wb-indent) + 12px + 4px + 7px);
+  width: 1px;
+  background: var(--wb-line);
+  pointer-events: none;
+}
+
+.wb-folder > .wb-fold-head {
+  color: var(--wb-fg-2);
+}
+
+.wb-state {
+  color: var(--wb-fg-2);
+}
+
+.wb-empty {
+  margin: 0;
+  padding: 16px var(--wb-row-x);
+  font-size: 12px;
+  color: var(--wb-fg-3);
+}
+
+/* ----------------------------------------------------------------- search */
+
+/* At the bottom, as in Sketch: a rounded field that never scrolls away. */
 .wb-search {
   position: relative;
-  padding: var(--wb-space-12);
+  flex: none;
+  padding: 8px;
+  border-top: 1px solid var(--wb-line);
 }
 
 .wb-search-icon {
   position: absolute;
-  left: 20px;
+  left: 18px;
   top: 50%;
-  transform: translateY(-50%);
   display: flex;
   color: var(--wb-fg-3);
+  transform: translateY(-50%);
   pointer-events: none;
+}
+
+.wb-search-icon .wb-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .wb-search input {
   width: 100%;
+  height: 28px;
   box-sizing: border-box;
-  height: 30px;
-  padding: 0 var(--wb-space-8) 0 32px;
-  font-family: inherit;
-  font-size: 12px;
+  padding: 0 8px 0 30px;
+  font: inherit;
+  font-size: 13px;
   color: var(--wb-fg);
   background: var(--wb-raised);
   border: 1px solid transparent;
-  border-radius: var(--wb-radius-md);
+  border-radius: 8px;
   outline: none;
 }
 
@@ -117,160 +337,9 @@
 
 .wb-search input:focus {
   border-color: var(--wb-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-accent) 22%, transparent);
 }
 
-.wb-nav {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--wb-nav-pad, 0 var(--wb-space-8) var(--wb-space-24));
-}
-
-.wb-group + .wb-group {
-  margin-top: var(--wb-space-16);
-}
-
-.wb-group-label {
-  display: flex;
-  align-items: center;
-  gap: var(--wb-space-8);
-  padding: var(--wb-space-8) var(--wb-space-8) var(--wb-space-4);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--wb-fg-3);
-}
-
-.wb-item {
-  display: flex;
-  align-items: center;
-  gap: var(--wb-row-gap, var(--wb-space-8));
-  width: 100%;
-  box-sizing: border-box;
-  text-align: left;
-  padding: var(--wb-row-pad-y, var(--wb-space-8)) var(--wb-row-pad-x, var(--wb-space-8));
-  margin-bottom: var(--wb-space-2);
-  font-family: inherit;
-  font-size: var(--wb-row-font, 13px);
-  color: var(--wb-fg-2);
-  background: none;
-  border: 0;
-  border-radius: var(--wb-row-radius, var(--wb-radius-md));
-  cursor: pointer;
-}
-
-/* Rows that don't fold still hold the caret's place, so every glyph in the
-   panel starts on the same line however many screens have states — and
-   giving a screen states later doesn't shove its neighbours sideways. */
-.wb-item:not(.wb-fold-head):not(.wb-state) {
-  padding-left: calc(var(--wb-row-pad-x, var(--wb-space-8)) + 14px + var(--wb-space-4));
-}
-
-/* The glyph names the row; the label is what you read. So it sits a step
-   back from the text, and only steps forward on the row you picked — the
-   same accent the rail gives the section you're in. */
-.wb-item .wb-icon {
-  flex: none;
-  color: var(--wb-fg-3);
-}
-
-.wb-item:hover {
-  background: var(--wb-hover);
-  color: var(--wb-fg);
-}
-
-.wb-item:hover .wb-icon {
-  color: var(--wb-fg-2);
-}
-
-/* Selected row is a raised gray, the way a picked page reads in Figma. */
-.wb-item[aria-current='true'],
-.wb-item[aria-current='true']:hover {
-  background: var(--wb-selected);
-  color: var(--wb-fg);
-  font-weight: 590;
-}
-
-.wb-item[aria-current='true'] .wb-icon,
-.wb-item[aria-current='true']:hover .wb-icon {
-  color: var(--wb-accent);
-}
-
-.wb-item:focus-visible {
-  outline: 2px solid var(--wb-accent);
-  outline-offset: -2px;
-}
-
-/* Two things fold in this panel: a folder of screens, and a screen that has
-   states. Both wear the same header — caret, glyph, name — with the caret
-   tighter to the glyph than the glyph is to the label, so the two icons read
-   as one cluster the row opens from. */
-.wb-fold-head {
-  gap: var(--wb-space-4);
-}
-
-.wb-fold-head .wb-fold + .wb-icon {
-  margin-right: var(--wb-space-4);
-}
-
-.wb-fold-head .wb-fold {
-  transition: transform 120ms ease;
-}
-
-.wb-fold-head[aria-expanded='false'] .wb-fold {
-  transform: rotate(-90deg);
-}
-
-/* A header takes the weight of the current screen but not the selected
-   background: the row actually on the canvas is the state underneath it, and
-   only one row in the panel should read as picked. */
-.wb-fold-head[aria-current='true'],
-.wb-fold-head[aria-current='true']:hover {
-  background: none;
-  color: var(--wb-fg);
-  font-weight: 590;
-}
-
-.wb-fold-head[aria-current='true'] .wb-icon {
-  color: var(--wb-fg-3);
-}
-
-.wb-fold-head[aria-current='true']:hover {
-  background: var(--wb-hover);
-}
-
-/* A screen's states are indented under a hairline: they are versions of the
-   row above them, and the offset is what says so. */
-.wb-states > .wb-fold-list {
-  margin: 0 0 var(--wb-space-2) 15px;
-  padding-left: var(--wb-space-8);
-  border-left: 1px solid var(--wb-line);
-}
-
-/* A folder's screens are not. They are the same kind of row as the folder
-   header, listed under a heading rather than filed inside a box, so they
-   keep the panel's one left edge — the caret is only there to hide them. */
-.wb-folder > .wb-fold-list {
-  margin: 0;
-}
-
-/* A folder is a shelf, not a screen — its name sits in the quiet caps the
-   panel already uses for section labels while filtering. */
-.wb-folder > .wb-fold-head {
-  color: var(--wb-fg-3);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.wb-state {
-  font-size: calc(var(--wb-row-font, 13px) - 1px);
-}
-
-.wb-empty {
-  padding: var(--wb-space-16) var(--wb-space-8);
-  font-size: 12px;
-  color: var(--wb-fg-3);
+.wb-search input::-webkit-search-cancel-button {
+  display: none;
 }

@@ -1,7 +1,7 @@
-/* Canonic — the editor half
+/* Workbench — the editor half
    -------------------------
-   Starts the workbench server when a project that has a workbench opens, puts
-   it one click away in the status bar, and says so when a screenshot lands.
+   Starts the workbench server when a project that has a workbench opens, and
+   says so in the status bar when a screenshot lands.
    Everything that isn't editor-shaped lives in server.js.
 
    This is installed once, globally, and knows nothing about any particular
@@ -33,17 +33,11 @@ function workbenchRoot() {
   return null;
 }
 
-/* Everything that only makes sense once there is a workbench: the status bar
-   item, the server, and shutting it down again. Answers with the running
-   server, or null if it couldn't start. */
+/* Everything that only makes sense once there is a workbench: the server, and
+   shutting it down again. Answers with the running server, or null if it
+   couldn't start. The canvas opens from the Workbench view in the activity bar
+   or the Open Workbench command; there is no status bar item. */
 function serve(context, root, diagnostics) {
-  var status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
-  status.text = '$(device-camera) Canonic';
-  status.tooltip = 'Open the Canonic workbench';
-  status.command = 'canonic.openWorkbench';
-  status.show();
-  context.subscriptions.push(status);
-
   /* One server for the window, started once and awaited by every command —
      so clicking before it's up waits rather than starting a second one. */
   var ready = Promise.resolve().then(function () {
@@ -96,18 +90,12 @@ function serve(context, root, diagnostics) {
       },
     });
   })
-    .then(
-      function (running) {
-        status.tooltip = 'Open the Canonic workbench · ' + running.url;
-        return running;
-      },
-      function (err) {
-        vscode.window.showErrorMessage(
-          'The Canonic workbench couldn’t start: ' + String(err.message || err)
-        );
-        return null;
-      }
-    );
+    .catch(function (err) {
+      vscode.window.showErrorMessage(
+        'Workbench couldn’t start: ' + String(err.message || err)
+      );
+      return null;
+    });
 
   context.subscriptions.push({
     dispose: function () {
@@ -126,7 +114,7 @@ function activate(context) {
      is served there, but the commands are still registered, so they can say
      why rather than leaving the palette pointing at a command that isn't
      there. */
-  var diagnostics = vscode.window.createOutputChannel('Canonic Workbench', { log: true });
+  var diagnostics = vscode.window.createOutputChannel('Workbench', { log: true });
   context.subscriptions.push(diagnostics);
   var root = workbenchRoot();
   if (root) diagnostics.info('extension.activated ' + JSON.stringify({ workspace: root }));
@@ -138,7 +126,7 @@ function activate(context) {
     })
   );
 
-  /* What keeps the Canonic icon out of the activity bar of every project that
+  /* What keeps the Workbench icon out of the activity bar of every project that
      has nothing to do with it: the view is contributed with a `when` on this
      key, and a container whose only view is hidden isn't drawn at all. */
   vscode.commands.executeCommand('setContext', 'canonic.hasWorkbench', !!root);
@@ -150,8 +138,8 @@ function activate(context) {
           if (running) return run(running);
           vscode.window.showWarningMessage(
             root
-              ? 'The Canonic workbench server isn’t running.'
-              : 'There’s no workbench.yaml in this project — that file is what lists the screens Canonic shows.'
+              ? 'The Workbench server isn’t running.'
+              : 'There’s no workbench.yaml in this project — that file is what lists the screens Workbench shows.'
           );
         });
       })
@@ -188,7 +176,7 @@ function activate(context) {
       if (!target.src) return;
       return ready.then(function (running) {
         if (!running) {
-          vscode.window.showWarningMessage('The Canonic workbench server isn’t running.');
+          vscode.window.showWarningMessage('The Workbench server isn’t running.');
           return;
         }
         return panel.show(context, running.url, target.src + (target.state ? ':' + target.state : ''));
@@ -200,6 +188,13 @@ function activate(context) {
     panel.refresh,
     function () {
       return ready.then(function (running) { return running ? running.config() : null; });
+    },
+    /* Selecting the Workbench view opens the canvas, keeping the keyboard
+       in the list. A server that failed to start has already said so. */
+    function () {
+      return ready.then(function (running) {
+        if (running) return panel.show(context, running.url, '', { preserveFocus: true });
+      });
     }
   );
 }

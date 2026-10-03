@@ -1,6 +1,6 @@
 {
   "name": "canonic-workbench",
-  "displayName": "Canonic",
+  "displayName": "Workbench",
   "description": "A design workbench for the screens in your repo: every page and preview on one canvas, marked up and handed to your agent.",
   "version": "0.4.0",
   "publisher": "canonic",
@@ -27,7 +27,7 @@
       "activitybar": [
         {
           "id": "canonic",
-          "title": "Canonic",
+          "title": "Workbench",
           "icon": "icon.svg"
         }
       ]
@@ -37,7 +37,7 @@
         {
           "type": "webview",
           "id": "canonic.screens",
-          "name": "Screens",
+          "name": "Workbench",
           "when": "canonic.hasWorkbench"
         }
       ]
@@ -45,30 +45,30 @@
     "commands": [
       {
         "command": "canonic.openWorkbench",
-        "title": "Open Workbench",
-        "category": "Canonic",
+        "title": "Open Canvas",
+        "category": "Workbench",
         "icon": "$(open-preview)"
       },
       {
         "command": "canonic.openWorkbenchExternally",
-        "title": "Open Workbench in Browser",
-        "category": "Canonic"
+        "title": "Open Canvas in Browser",
+        "category": "Workbench"
       },
       {
         "command": "canonic.copyWorkbenchUrl",
-        "title": "Copy Workbench URL",
-        "category": "Canonic"
+        "title": "Copy Canvas URL",
+        "category": "Workbench"
       },
       {
         "command": "canonic.refreshScreens",
         "title": "Refresh Screens",
-        "category": "Canonic",
+        "category": "Workbench",
         "icon": "$(refresh)"
       },
       {
         "command": "canonic.showWorkbenchLog",
-        "title": "Show Workbench Log",
-        "category": "Canonic"
+        "title": "Show Log",
+        "category": "Workbench"
       }
     ],
     "menus": {
@@ -92,7 +92,7 @@
       ]
     },
     "configuration": {
-      "title": "Canonic",
+      "title": "Workbench",
       "properties": {
         "canonic.capture.chromePath": {
           "type": "string",

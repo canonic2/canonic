@@ -1,0 +1,208 @@
+{
+  "regions": [
+    {
+      "n": 1,
+      "name": "screen list",
+      "box": {
+        "left": 0.21,
+        "top": 5.47,
+        "width": 16.81,
+        "height": 94.19
+      },
+      "pin": {
+        "left": 8.61,
+        "top": 50.58
+      }
+    },
+    {
+      "n": 2,
+      "name": "top bar",
+      "box": {
+        "left": 0.21,
+        "top": 0.35,
+        "width": 99.58,
+        "height": 4.42
+      },
+      "pin": {
+        "left": 48.3,
+        "top": 2.56
+      }
+    },
+    {
+      "n": 3,
+      "name": "canvas",
+      "box": {
+        "left": 17.43,
+        "top": 5.47,
+        "width": 82.36,
+        "height": 94.19
+      },
+      "pin": {
+        "left": 20,
+        "top": 25.99
+      }
+    },
+    {
+      "n": 4,
+      "name": "markup bar",
+      "box": {
+        "left": 47.95,
+        "top": 93.37,
+        "width": 21.32,
+        "height": 4.42
+      },
+      "pin": {
+        "left": 45.8,
+        "top": 95.58
+      }
+    }
+  ],
+  "toolbar": [
+    {
+      "name": "actions",
+      "src": "images/toolbar-actions.png",
+      "width": 165,
+      "height": 50,
+      "alt": "The Actions toggle, switched off, enlarged.",
+      "controls": [
+        {
+          "label": "Actions — let links navigate and forms submit",
+          "left": 5.29,
+          "width": 89.42
+        }
+      ]
+    },
+    {
+      "name": "frame",
+      "src": "images/toolbar-frame.png",
+      "width": 395,
+      "height": 50,
+      "alt": "The frame and screen controls, enlarged: four frame sizes, then Reload, Open the source, Copy reference, Open on its own, and More.",
+      "controls": [
+        {
+          "label": "Fit",
+          "left": 2.22,
+          "width": 11.39
+        },
+        {
+          "label": "Laptop, MacBook Pro 14, 1512 by 982 points",
+          "left": 12.34,
+          "width": 11.39
+        },
+        {
+          "label": "Mobile, iPhone 15 Pro, 393 by 852 points",
+          "left": 22.47,
+          "width": 11.39
+        },
+        {
+          "label": "Resizable viewport",
+          "left": 32.59,
+          "width": 11.39
+        },
+        {
+          "label": "Reload",
+          "left": 46.52,
+          "width": 10.76
+        },
+        {
+          "label": "Open the source",
+          "left": 56.65,
+          "width": 10.76
+        },
+        {
+          "label": "Copy reference",
+          "left": 66.77,
+          "width": 10.76
+        },
+        {
+          "label": "Open on its own",
+          "left": 76.9,
+          "width": 10.76
+        },
+        {
+          "label": "More",
+          "left": 87.03,
+          "width": 10.76
+        }
+      ]
+    },
+    {
+      "name": "markup",
+      "src": "images/toolbar-markup.png",
+      "width": 394,
+      "height": 50,
+      "alt": "The markup tools from the bar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear markup, and Save screenshot.",
+      "controls": [
+        {
+          "label": "Select",
+          "left": 2.22,
+          "width": 10.79
+        },
+        {
+          "label": "Scribble",
+          "left": 11.75,
+          "width": 10.79
+        },
+        {
+          "label": "Arrow",
+          "left": 21.27,
+          "width": 10.79
+        },
+        {
+          "label": "Rectangle",
+          "left": 30.79,
+          "width": 10.79
+        },
+        {
+          "label": "Text",
+          "left": 45.4,
+          "width": 10.79
+        },
+        {
+          "label": "Comment",
+          "left": 54.92,
+          "width": 10.79
+        },
+        {
+          "label": "Undo last mark",
+          "left": 67.94,
+          "width": 10.79
+        },
+        {
+          "label": "Clear markup",
+          "left": 77.46,
+          "width": 10.79
+        },
+        {
+          "label": "Save screenshot",
+          "left": 86.98,
+          "width": 10.79
+        }
+      ]
+    },
+    {
+      "name": "zoom",
+      "src": "images/toolbar-zoom.png",
+      "width": 150,
+      "height": 40,
+      "alt": "The zoom control, enlarged: Zoom out, the zoom level, and Zoom in.",
+      "controls": [
+        {
+          "label": "Zoom out",
+          "left": 5.83,
+          "width": 26.67
+        },
+        {
+          "label": "Zoom options",
+          "left": 27.5,
+          "width": 45
+        },
+        {
+          "label": "Zoom in",
+          "left": 67.5,
+          "width": 26.67
+        }
+      ]
+    }
+  ]
+}

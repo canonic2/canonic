@@ -3,7 +3,7 @@
    One webview panel holding one iframe holding the workbench. What this buys
    over `simpleBrowser.show`, which is what this replaces: no address bar, no
    back and forward, no reload button, no browser at all — a tab called
-   Canonic with the design in it. The workbench's own toolbar already carries
+   Workbench with the design in it. The workbench's own toolbar already carries
    the two browser affordances that were ever wanted here (reload, and open
    this on its own), so the rest was chrome around chrome.
 
@@ -26,7 +26,7 @@
 var vscode = require('vscode');
 
 var VIEW_TYPE = 'canonic.workbench';
-var TITLE = 'Canonic';
+var TITLE = 'Workbench';
 
 var panel = null;   /* the one open panel, or null */
 var current = null; /* the hash the workbench has acknowledged with wb-here */
@@ -76,7 +76,7 @@ function html(url, origin) {
     '</style>',
     '</head>',
     '<body>',
-    '<iframe id="frame" title="Canonic workbench" allow="clipboard-read; clipboard-write"></iframe>',
+    '<iframe id="frame" title="Workbench" allow="clipboard-read; clipboard-write"></iframe>',
     '<script nonce="' + key + '">',
     '  var editor = acquireVsCodeApi();',
     '  var frame = document.getElementById("frame");',
@@ -217,9 +217,12 @@ function html(url, origin) {
 }
 
 /* Opens the workbench at `hash` ("pages/sign-in.html:error", or "" for
-   whatever it was last on), reusing the open panel when there is one. */
-function show(context, url, hash) {
+   whatever it was last on), reusing the open panel when there is one.
+   `options.preserveFocus` leaves the keyboard where it was when a new panel
+   opens — the sidebar, when selecting the Workbench view is what opened it. */
+function show(context, url, hash, options) {
   var target = String(hash || '');
+  var preserveFocus = !!(options && options.preserveFocus);
 
   /* Remote and Codespaces hand out a different address than 127.0.0.1; local
      editors get the same string back. */
@@ -241,7 +244,10 @@ function show(context, url, hash) {
       return panel;
     }
 
-    panel = vscode.window.createWebviewPanel(VIEW_TYPE, TITLE, vscode.ViewColumn.Active, {
+    panel = vscode.window.createWebviewPanel(VIEW_TYPE, TITLE, {
+      viewColumn: vscode.ViewColumn.Active,
+      preserveFocus: preserveFocus,
+    }, {
       enableScripts: true,
       /* A design you tabbed away from should be there when you tab back,
          still at the width you set and still on the screen you were on. */

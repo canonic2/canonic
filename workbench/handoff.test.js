@@ -65,7 +65,7 @@ test('reads exactly as it did for a design without code pointers', function () {
   });
 
   assert.equal(text, [
-    'Here is a screen from the Canonic workbench.',
+    'Here is a screen from Workbench.',
     '',
     '- Screen: Sign in — `pages/sign-in.html`',
     '- State: Wrong password',

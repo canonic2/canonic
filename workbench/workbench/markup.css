@@ -1,9 +1,8 @@
 /* Markup chrome
    -------------
-   The drawing tools in the top bar, the handoff control on the right, and the
-   layer they draw on. Behaviour for all three lives in
-   markup.js beside this file — the handoff sends the marks, so it is drawn
-   here with them even though it sits in the other cluster.
+   The drawing tools and the handoff in the bar floating over the canvas, and
+   the layer they draw on. Behaviour for all three lives in markup.js beside
+   this file; workbench.css places the bar.
 
    THE COLOURS BELOW BELONG TO THE TOOL, NOT THE REVIEWED PRODUCT. Like the
    Figma grays in workbench.css, they are a deliberate exception to "no hex
@@ -58,28 +57,75 @@
   align-items: center;
 }
 
-/* No editor clipboard bridge, no rule dividing it from the frame controls. */
 .wb-handoff-control[hidden],
-.wb-handoff-control[hidden] + .wb-sep {
+.wb-mark-count[hidden] {
   display: none;
 }
 
-/* The one labelled button in the bar: copying a complete handoff is distinct
-   from the icon-only reference and screenshot actions beside it. */
+/* The one filled button on screen: the handoff is what the marks are for. */
 .wb-handoff {
-  width: auto;
+  display: flex;
+  align-items: center;
   gap: var(--wb-space-4);
-  padding: 0 var(--wb-space-8);
+  height: 30px;
+  padding: 0 var(--wb-space-12) 0 var(--wb-space-8);
+  color: #ffffff;
+  background: var(--wb-accent-strong);
+  border: 0;
+  border-radius: var(--wb-radius-md);
   font: inherit;
   font-size: 12px;
+  font-weight: 590;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-handoff .wb-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.wb-handoff:hover {
+  background: var(--wb-accent);
+}
+
+.wb-handoff:focus-visible {
+  outline: 2px solid var(--wb-fg);
+  outline-offset: 2px;
 }
 
 .wb-handoff:disabled,
 .wb-handoff:disabled:hover {
+  background: var(--wb-selected);
   color: var(--wb-fg-3);
-  background: none;
   cursor: default;
+}
+
+/* "3 marks", with a dot in the marks' own colour. */
+.wb-mark-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 var(--wb-space-4) 0 var(--wb-space-8);
+  color: var(--wb-fg-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-mark-count::before {
+  width: 6px;
+  height: 6px;
+  content: '';
+  background: var(--wb-markup);
+  border-radius: 50%;
+}
+
+.wb-dock > .wb-handoff-control {
+  margin-left: var(--wb-space-4);
+}
+
+.wb-dock > .wb-mark-count[hidden] + .wb-handoff-control {
+  margin-left: var(--wb-space-8);
 }
 
 .wb-caret {
@@ -322,7 +368,7 @@
 .wb-sel-box {
   fill: none;
   stroke: var(--wb-fg-3);
-  stroke-width: 1;
+  stroke-width: calc(1px / var(--wb-zoom, 1));
   stroke-linecap: butt;
 }
 
@@ -333,7 +379,10 @@
 .wb-handle {
   fill: var(--wb-accent);
   stroke: var(--wb-fg);
-  stroke-width: 1.5;
+  /* The same size on screen at any canvas zoom: they are the tool's, not
+     part of the picture. */
+  r: calc(6px / var(--wb-zoom, 1));
+  stroke-width: calc(1.5px / var(--wb-zoom, 1));
   pointer-events: all;
 }
 
@@ -364,10 +413,12 @@
 
 /* ---------------------------------------------------------------- toast */
 
+/* Above the floating tool bar, which it would otherwise cover. */
 .wb-toast {
   position: fixed;
+  z-index: 20;
   left: 50%;
-  bottom: var(--wb-space-24);
+  bottom: 76px;
   transform: translateX(-50%);
   margin: 0;
   padding: var(--wb-space-8) var(--wb-space-12);

@@ -74,6 +74,16 @@
     return true;
   }
 
+  /* ⌘= ⌘- ⌘0 zoom the workbench canvas, the way they zoom a Figma canvas,
+     rather than the editor window around it. zoom.js handles them. */
+  function zoomChord(e) {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return false;
+    var key = String(e.key || '');
+    var code = String(e.code || '');
+    return key === '=' || key === '+' || key === '-' || key === '_' || key === '0' ||
+      /^(Equal|Minus|Digit0|NumpadAdd|NumpadSubtract|Numpad0)$/.test(code);
+  }
+
   function belongsToEditor(e) {
     var key = String(e.key || '');
     var lower = key.toLowerCase();
@@ -83,6 +93,7 @@
        deliberately local everywhere: a selection in a preview is still a
        real browser selection even when its target is not itself editable. */
     if (e.getModifierState && e.getModifierState('AltGraph')) return false;
+    if (zoomChord(e)) return false;
     if (command && !e.altKey && LOCAL_COMMAND_KEYS[lower] &&
         (!e.shiftKey || lower === 'z' || lower === 'v')) return false;
     if (editingTarget(e) && /^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End|Backspace|Delete)$/.test(key)) return false;
@@ -197,12 +208,14 @@
     }
     if (!data || data.key !== 'storybook-channel' || !data.event || data.event.type !== 'previewKeydown') return null;
     var key = data.event.args && data.event.args[0] && data.event.args[0].event;
-    if (!key || (!belongsToEditor(key) && (key.metaKey || key.ctrlKey || key.altKey))) return null;
+    if (!key) return null;
+    /* Zoom chords come back too, for the canvas rather than the editor. */
+    if (!zoomChord(key) && !belongsToEditor(key) && (key.metaKey || key.ctrlKey || key.altKey)) return null;
     return packet(Object.assign({}, key, { type: 'keydown' }));
   }
 
   window.wbKeys = {
     relay: relay, forward: forward, belongsToEditor: belongsToEditor, storybook: storybook,
-    editingTarget: editingTarget,
+    editingTarget: editingTarget, zoomChord: zoomChord,
   };
 })();

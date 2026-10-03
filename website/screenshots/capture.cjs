@@ -1,14 +1,15 @@
 /* Regenerates the site's screenshots from the Acme fixture beside this file.
    Starts the extension's server on the fixture, drives headless Chrome through
-   the extension's own DevTools driver, and writes JPEGs into ../images.
+   the extension's own DevTools driver, and writes JPEGs into ../public/images.
 
-   It also measures the workbench's four regions in the overview and rewrites
-   the numbered outlines between the region markers in ../index.html, so the
-   numbers stay on the rail, screen list, toolbar, and canvas. For the toolbar
-   section it crops each group of controls at high resolution and writes the
-   strip: the crops side by side, with a hotspot button over every control. It
-   first checks that the page's control list names the same controls in the
-   same order, since the hotspots take their captions from that list.
+   It also measures the workbench's four regions in the overview and writes
+   them to ../src/data/screenshots.json, where the page draws the numbered
+   outlines, so the numbers stay on the screen list, top bar, canvas, and
+   markup bar. For the toolbar section it crops each group of controls at high
+   resolution and records the strip there too: each crop, with a hotspot over
+   every control. It first checks that the page's control list names the same
+   controls in the same order, since the hotspots take their captions from
+   that list.
 
    node packages/website/screenshots/capture.cjs
 
@@ -19,18 +20,19 @@ var path = require('node:path');
 var EXTENSION = path.resolve(__dirname, '../../workbench');
 var capture = require(path.join(EXTENSION, 'capture.js'));
 var FIXTURE = path.join(__dirname, 'fixture');
-var OUT = path.resolve(__dirname, '../images');
-var PAGE = path.resolve(__dirname, '../index.html');
-// The overview is a full desktop window. The state and markup shots use the
-// narrowest window that still shows the markup tools; below about 1120 the
-// toolbar folds them into its More menu.
+var OUT = path.resolve(__dirname, '../public/images');
+var PAGE = path.resolve(__dirname, '../src/pages/index.astro');
+var DATA = path.resolve(__dirname, '../src/data/screenshots.json');
+// The overview is a full desktop window. The state and markup shots use a
+// narrower window, which the canvas zooms to fit.
 var W = 1440, SIDE = 1120, H = 860, SCALE = 2;
 // Toolbar crops render at 4x and are shown at ZOOM times their CSS size.
 var TOOLBAR_SCALE = 4, ZOOM = 1.25;
 var TOOLBAR = [
   { name: 'actions', selector: '#actionsToggle', alt: 'The Actions toggle, switched off, enlarged.' },
-  { name: 'markup', selector: '.wb-markup', alt: 'The markup tools, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear markup, and Save screenshot.' },
-  { name: 'frame', selector: '.wb-topbar-right', alt: 'The frame and screen controls, enlarged: four frame sizes, then Reload, Open the source, Copy reference, Configure pages, Design-system ZIP, and Open on its own.' },
+  { name: 'frame', selector: '.wb-topbar-right', alt: 'The frame and screen controls, enlarged: four frame sizes, then Reload, Open the source, Copy reference, Open on its own, and More.' },
+  { name: 'markup', selector: '.wb-markup', alt: 'The markup tools from the bar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear markup, and Save screenshot.' },
+  { name: 'zoom', selector: '#zoomControl', alt: 'The zoom control, enlarged: Zoom out, the zoom level, and Zoom in.' },
 ];
 
 function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -66,7 +68,7 @@ async function main() {
     async function shot(name) {
       var r = await t.send('Page.captureScreenshot', { format: 'jpeg', quality: 86 });
       fs.writeFileSync(path.join(OUT, name), Buffer.from(r.data, 'base64'));
-      console.log('wrote images/' + name);
+      console.log('wrote public/images/' + name);
     }
     function mouse(type, x, y) {
       return t.send('Input.dispatchMouseEvent', { type: type, x: x, y: y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
@@ -87,10 +89,11 @@ async function main() {
       await t.evaluate('document.querySelector(' + JSON.stringify(selector) + ').click()');
       await wait(100);
     }
-    // An element's box inside the preview, in workbench coordinates.
+    // An element's box inside the preview, in workbench coordinates. The
+    // canvas may be zoomed, so the page's own pixels are scaled to it.
     function rectOf(selector) {
-      return t.evaluate('(function(){var f=document.getElementById("frame"),o=f.getBoundingClientRect(),r=f.contentDocument.querySelector(' +
-        JSON.stringify(selector) + ').getBoundingClientRect();return {x:o.x+r.x,y:o.y+r.y,w:r.width,h:r.height};})()');
+      return t.evaluate('(function(){var f=document.getElementById("frame"),o=f.getBoundingClientRect(),s=o.width/f.offsetWidth,r=f.contentDocument.querySelector(' +
+        JSON.stringify(selector) + ').getBoundingClientRect();return {x:o.x+r.x*s,y:o.y+r.y*s,w:r.width*s,h:r.height*s};})()');
     }
 
     await open('#pages/sign-in.html', W);
@@ -111,11 +114,10 @@ async function main() {
       var png = await t.send('Page.captureScreenshot', { format: 'png', clip: Object.assign({ scale: 1 }, crop) });
       var file = 'toolbar-' + group.name + '.png';
       fs.writeFileSync(path.join(OUT, file), Buffer.from(png.data, 'base64'));
-      console.log('wrote images/' + file);
+      console.log('wrote public/images/' + file);
       strip.push(stripGroup(group, file, crop, m.controls));
     }
-    fs.writeFileSync(PAGE, replaceBlock(page, 'toolbar-strip', strip.join('\n')));
-    console.log('wrote index.html toolbar');
+    writeData('toolbar', strip);
 
     await open('#pages/sign-in.html:error@393', SIDE);
     await shot('states.jpg');
@@ -150,28 +152,28 @@ function measureRegions() {
   function box(el) { var r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }
   var top = box(document.querySelector('.wb-topbar'));
   var toggle = box(document.getElementById('actionsToggle'));
-  var tools = box(document.querySelector('.wb-markup'));
-  var rail = box(document.getElementById('rail'));
-  var railEnd = box(document.getElementById('rail').lastElementChild || document.getElementById('rail'));
+  var widths = box(document.querySelector('.wb-widths'));
   var side = box(document.querySelector('.wb-sidebar'));
   var nav = box(document.getElementById('nav').lastElementChild || document.getElementById('nav'));
   var canvas = box(document.querySelector('.wb-canvas'));
+  var dock = box(document.getElementById('dock'));
   return {
     width: innerWidth, height: innerHeight,
     regions: [
-      { n: 1, name: 'rail', box: rail, at: [rail.x + rail.w / 2, railEnd.y + railEnd.h + 32] },
-      { n: 2, name: 'screen list', box: side, at: [side.x + side.w / 2, nav.y + nav.h + 40] },
-      { n: 3, name: 'toolbar', box: top, at: [(toggle.x + toggle.w + tools.x) / 2, top.y + top.h / 2] },
-      { n: 4, name: 'canvas', box: canvas, at: [canvas.x + 48, canvas.y + canvas.h * 0.22] },
+      { n: 1, name: 'screen list', box: side, at: [side.x + side.w / 2, nav.y + nav.h + 40] },
+      { n: 2, name: 'top bar', box: top, at: [(toggle.x + toggle.w + widths.x) / 2, top.y + top.h / 2] },
+      { n: 3, name: 'canvas', box: canvas, at: [canvas.x + 40, canvas.y + canvas.h * 0.22] },
+      { n: 4, name: 'markup bar', box: dock, at: [dock.x - 28, dock.y + dock.h / 2] },
     ],
   };
 }
 
 /* Runs in the workbench. A toolbar group's box and its visible controls, left
-   to right. The caret beside Rectangle belongs to the shape tool. */
+   to right. The caret beside Rectangle belongs to the shape tool. The crop
+   follows whichever bar the group sits in. */
 function measureToolbar(selector) {
   var group = document.querySelector(selector);
-  var bar = document.querySelector('.wb-topbar').getBoundingClientRect();
+  var bar = group.closest('.wb-topbar, .wb-dock, .wb-zoom').getBoundingClientRect();
   var controls = group.matches('button, a') ? [group] : Array.prototype.filter.call(
     group.querySelectorAll('button, a'),
     function (el) { return el.offsetParent && !el.closest('[hidden]') && !el.closest('.wb-menu') && !el.classList.contains('wb-caret'); });
@@ -188,7 +190,7 @@ function measureToolbar(selector) {
    the measured controls in order, or a hotspot would caption the wrong one. */
 function checkLegend(page, name, controls) {
   var list = new RegExp('<dl class="controls" data-group="' + name + '"[^>]*>([\\s\\S]*?)</dl>').exec(page);
-  if (!list) throw new Error('index.html has no control list for toolbar group ' + name);
+  if (!list) throw new Error('index.astro has no control list for toolbar group ' + name);
   var labels = [], item = /data-label="([^"]*)"/g, hit;
   while ((hit = item.exec(list[1]))) labels.push(hit[1]);
   var found = controls.map(function (c) { return c.label; });
@@ -200,34 +202,35 @@ function checkLegend(page, name, controls) {
 /* One group of the strip: its crop, and a hotspot over each control. The
    hotspot is a little wider than the control, and as tall as the crop. */
 function stripGroup(group, file, crop, controls) {
-  function pct(v) { return (v / crop.width * 100).toFixed(2) + '%'; }
-  var spots = controls.map(function (c) {
-    return '          <button class="hot" type="button" style="left: ' + pct(c.x - 3 - crop.x) + '; width: ' + pct(c.w + 6) +
-      '" data-label="' + c.label + '"></button>';
-  }).join('\n');
-  return '        <div class="strip-group" data-group="' + group.name + '">\n' +
-    '          <img src="images/' + file + '" width="' + Math.round(crop.width * ZOOM) + '" height="' +
-    Math.round(crop.height * ZOOM) + '" alt="' + group.alt + '">\n' + spots + '\n        </div>';
+  return {
+    name: group.name, src: 'images/' + file,
+    width: Math.round(crop.width * ZOOM), height: Math.round(crop.height * ZOOM), alt: group.alt,
+    controls: controls.map(function (c) {
+      return { label: c.label, left: pct(c.x - 3 - crop.x, crop.width), width: pct(c.w + 6, crop.width) };
+    }),
+  };
 }
 
-function replaceBlock(page, name, html) {
-  var marked = new RegExp('(<!-- ' + name + ':start[^>]*-->)[\\s\\S]*?(\\s*<!-- ' + name + ':end -->)');
-  if (!marked.test(page)) throw new Error('index.html has no ' + name + ':start / ' + name + ':end markers');
-  return page.replace(marked, function (_, a, b) { return a + '\n' + html + b; });
-}
+function pct(v, of) { return Number((v / of * 100).toFixed(2)); }
 
 function writeRegions(m) {
-  function pct(v, of) { return (v / of * 100).toFixed(2) + '%'; }
   var inset = 3;
-  var html = m.regions.map(function (r) {
+  writeData('regions', m.regions.map(function (r) {
     var b = r.box;
-    return '      <span class="region" style="left: ' + pct(b.x + inset, m.width) + '; top: ' + pct(b.y + inset, m.height) +
-      '; width: ' + pct(b.w - inset * 2, m.width) + '; height: ' + pct(b.h - inset * 2, m.height) + '" aria-hidden="true"></span>\n' +
-      '      <span class="pin" style="left: ' + pct(r.at[0], m.width) + '; top: ' + pct(r.at[1], m.height) +
-      '" title="' + r.name + '" aria-hidden="true">' + r.n + '</span>';
-  }).join('\n');
-  fs.writeFileSync(PAGE, replaceBlock(fs.readFileSync(PAGE, 'utf8'), 'regions', html));
-  console.log('wrote index.html regions');
+    return {
+      n: r.n, name: r.name,
+      box: { left: pct(b.x + inset, m.width), top: pct(b.y + inset, m.height), width: pct(b.w - inset * 2, m.width), height: pct(b.h - inset * 2, m.height) },
+      pin: { left: pct(r.at[0], m.width), top: pct(r.at[1], m.height) },
+    };
+  }));
+}
+
+/* The page reads its regions and toolbar strip from this file. */
+function writeData(key, value) {
+  var data = JSON.parse(fs.readFileSync(DATA, 'utf8'));
+  data[key] = value;
+  fs.writeFileSync(DATA, JSON.stringify(data, null, 2) + '\n');
+  console.log('wrote src/data/screenshots.json ' + key);
 }
 
 main().catch(function (error) { console.error(error); process.exitCode = 1; });

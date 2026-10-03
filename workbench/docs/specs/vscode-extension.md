@@ -12,18 +12,22 @@ implementation is in [extension.js](../../extension.js),
   workbench and explains why the command cannot open one.
 - In a multi-root window, the first folder with `workbench.yaml` owns the
   window's workbench. The extension starts one loopback server for that folder,
-  contributes a Canonic status item and Screens sidebar, and closes the server
-  on disposal. The Canonic activity-bar view is hidden without a workbench.
+  contributes the Workbench sidebar view, and closes the server
+  on disposal. The Workbench activity-bar view is hidden without a workbench.
 - The server serves project files at `/` and packaged workbench files at
   `/_workbench/` on the same origin. Commands open its URL in a VS Code editor
   tab or an external browser, or copy the URL. Server and capture failures go
-  to the **Canonic Workbench** output channel.
+  to the **Workbench** output channel.
 - A newly installed build needs a VS Code window reload before that window
   runs its new extension code.
 
 ## Editor surfaces and messages
 
-- The Screens sidebar is an extension webview. It uses the same navigation
+- Selecting the Workbench view in the activity bar opens the workbench tab, or
+  brings it forward, and leaves keyboard focus in the list. Closing the tab
+  while the view stays visible leaves it closed until the view is selected
+  again.
+- The Workbench sidebar view is an extension webview. It uses the same navigation
   model as the canvas and receives imported catalog data from the server
   through the extension host. Config watchers rebuild it after asking the
   canvas to refresh, so a new row does not target an old manifest.

@@ -41,7 +41,7 @@ async function startOne(root, impl, options) {
     report(impl.key + ': already running');
   } else {
     var terminal = options.createTerminal({
-      name: 'Canonic: ' + impl.label,
+      name: 'Workbench: ' + impl.label,
       cwd: path.resolve(root, start.cwd),
     });
     terminal.show(true);

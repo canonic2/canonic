@@ -216,3 +216,68 @@ test('reports a fallback story only after its spare frame becomes visible', asyn
   stories.state.reportRenderedStory();
   assert.deepEqual(stories.reported, ['secondary']);
 });
+
+function lensSwitcher(item) {
+  var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
+  var start = source.indexOf('  function lensesOf(');
+  var end = source.indexOf('  /* Through a lens the page is served by somebody else');
+  var box = { hidden: false, innerHTML: '', children: [], appendChild: function (el) { this.children.push(el); } };
+  var context = {
+    config: {
+      implementations: {
+        storybook: { key: 'storybook', label: 'Storybook' },
+        dev: { key: 'dev', label: 'Dev' },
+      },
+    },
+    lensesBox: box,
+    document: {
+      createElement: function () {
+        return { dataset: {}, setAttribute: function () {}, addEventListener: function () {} };
+      },
+    },
+  };
+  vm.runInNewContext(source.slice(start, end) + '\ndrawLenses(item, null);', Object.assign(context, { item: item }));
+  return { hidden: box.hidden, labels: box.children.map(function (b) { return b.textContent; }) };
+}
+
+test('opening on no screen still tells the host it is ready', function () {
+  /* The editor holds sidebar picks until the first wb-here. A throw on the
+     empty route meant it never came, and no page could be picked. */
+  var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
+  var start = source.indexOf('  function show(');
+  var end = source.indexOf('  /* ----------------------------------------------------------- actions */');
+  var told = [];
+  function noop() {}
+  var el = function () { return { hidden: false, textContent: '', removeAttribute: noop }; };
+  var context = {
+    index: {}, showSeq: 0, view: null, current: 'old.html', currentState: null, renderedStory: null,
+    nav: { setCurrent: noop },
+    cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
+    updateWidthAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
+    drawSources: noop, setActionsAvailability: noop,
+    tellHost: function (src, state, lens) { told.push([src, state, lens]); },
+    window: { wbSimulator: { hide: noop } },
+    crumb: el(), crumbScreen: el(), frameShell: el(), frame: el(), frameBuffer: el(),
+    blank: el(), openLink: el(), frameName: el(), document: {}, config: { name: 'Acme' },
+    BLANK_TEXT: '',
+  };
+  vm.runInNewContext(source.slice(start, end) + '\nshow(null, null);', context);
+  assert.deepEqual(told, [[null, null, null]]);
+  assert.equal(context.blank.hidden, false);
+});
+
+test('the lens switcher only appears when there are two lenses to switch between', function () {
+  assert.deepEqual(lensSwitcher({ src: 'a.html' }), { hidden: true, labels: [] });
+  assert.deepEqual(
+    lensSwitcher({ implementationOnly: 'storybook', implementations: { storybook: { title: 'Button' } } }),
+    { hidden: true, labels: [] }
+  );
+  assert.deepEqual(
+    lensSwitcher({ src: 'a.html', implementations: { dev: '/a' } }),
+    { hidden: false, labels: ['Design', 'Dev'] }
+  );
+  assert.deepEqual(
+    lensSwitcher({ implementationOnly: 'storybook', implementations: { storybook: { title: 'Button' }, dev: '/b' } }),
+    { hidden: false, labels: ['Storybook', 'Dev'] }
+  );
+});

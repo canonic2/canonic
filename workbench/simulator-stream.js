@@ -106,7 +106,7 @@ Manager.prototype.start = function (request) {
         windowsHide: true,
         env: Object.assign({}, process.env, {
           CANONIC_SCREEN_CAPTURE_OWNER:
-            self.options.permissionOwner || 'the application running Canonic',
+            self.options.permissionOwner || 'the application running Workbench',
         }),
       });
       self.child = child;

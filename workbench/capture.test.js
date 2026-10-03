@@ -76,6 +76,20 @@ test('Chrome JPEG capture keeps quality and format when retrying without optimiz
   assert.equal(calls[1].optimizeForSpeed, undefined);
 });
 
+test('the Chrome mirror moves its pointer to reproduce hover before capturing', async function () {
+  var calls = [];
+  var fake = { target: {
+    send: async function (method, params) { calls.push([method, params]); },
+    evaluate: async function (script) { calls.push(['evaluate', script]); },
+  } };
+  await capture.Capture.prototype.restorePointer.call(fake, { width: 300, height: 200,
+    mirror: { pointer: { x: 45, y: 28 } } });
+  assert.deepEqual(calls[0], ['Input.dispatchMouseEvent', { type: 'mouseMoved', x: 45, y: 28 }]);
+  assert.match(calls[1][1], /requestAnimationFrame/);
+  await capture.Capture.prototype.restorePointer.call(fake, { width: 300, height: 200, mirror: { pointer: null } });
+  assert.deepEqual(calls[2], ['Input.dispatchMouseEvent', { type: 'mouseMoved', x: 301, y: 201 }]);
+});
+
 test('puts an explicitly configured Chrome ahead of platform defaults', function () {
   var candidates = capture.chromeCandidates(
     { CANONIC_CHROME_PATH: '/chosen/chrome' },

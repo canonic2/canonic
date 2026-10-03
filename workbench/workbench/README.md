@@ -1,4 +1,4 @@
-# Canonic workbench
+# Workbench
 
 A browser for the screens a project is designing: pick one in the sidebar, see
 it at a real device width, draw on it, and hand the picture to an agent.
@@ -7,7 +7,7 @@ Nothing in this folder knows which project it is in. What it shows comes from
 one file at the project root — `workbench.yaml` — and that file is the whole of
 what a project has to write.
 
-This folder ships inside the Canonic extension and is served from there, so no
+This folder ships inside the Workbench extension and is served from there, so no
 project holds a copy and no page in one points at it. It is still only HTML and
 script files: no build step and no runtime network. Lucide ships with the
 extension as a pinned dependency.
@@ -19,7 +19,7 @@ contracts for shared behavior, Storybook, and other previews.
 
 ## Putting it in a project
 
-1. Install the Canonic extension.
+1. Install the Workbench extension.
 2. Write `workbench.yaml` at the project root (schema below).
 
 That is the whole of it. Pages need nothing added to preview well: the
@@ -31,9 +31,9 @@ gets neither, so it previews as authored and its links behave like links.
 ## workbench.yaml
 
 ```yaml
-name: Acme                    # the top bar, and the tab title
+name: Acme                    # the screen list header, and the tab title
 
-sections:                     # one per rail button, in this order
+sections:                     # one entry in the screen list's Sections, in this order
   - name: Pages
     icon: file-text           # any kebab-case Lucide icon name
     items:
@@ -72,7 +72,7 @@ and `fit` captures the standard 1440 × 900 frame. When `viewports` is omitted,
 all four modes are enabled. The configuration GUI omits the property when all
 four are selected.
 
-Use **Configure pages** in the workbench toolbar to add or remove sections and
+Use **Configure pages** in the workbench toolbar’s More menu to add or remove sections and
 pages, edit labels and source paths, and select supported viewports. Saving
 rewrites only the `sections` block in `workbench.yaml`; implementations and
 comments outside that block are preserved. Advanced state, implementation, and
@@ -133,9 +133,9 @@ it goes in `.gitignore`.
 them, so the two never disagree about which lens a screen has.
 
 With `catalog: true`, a Storybook implementation can be the whole workbench;
-`sections` may be omitted. Canonic reads Storybook's live `/index.json`, turns
+`sections` may be omitted. Workbench reads Storybook's live `/index.json`, turns
 each title into a screen and each story under that title into a workbench state.
-The first title segment becomes a rail section, any middle segments become one
+The first title segment becomes a section, any middle segments become one
 folder, and the last segment labels the screen. Generated screens open directly
 through Storybook and use its component and story paths as source pointers when
 `root` is configured. Manual sections can coexist with imported catalogs and are
@@ -160,7 +160,7 @@ Handwritten screens may likewise set `icon: panel-top`; otherwise their
 section icon is used as before.
 
 `start` is available for Storybook and URL implementations. On extension
-activation, Canonic first checks the configured TCP port or HTTP(S) URL. If it
+activation, Workbench first checks the configured TCP port or HTTP(S) URL. If it
 is already available, it leaves it running. Otherwise it opens a VS Code
 terminal in `cwd` and runs `command`. It then waits up to `timeout` seconds
 for `ready` (or `check` when `ready` is omitted) before importing the catalog.
@@ -222,6 +222,8 @@ acknowledged revision. The helper applies them directly to a scriptless,
 sandboxed document, retaining unchanged elements and decoded images. Application
 code runs in the visible preview only. Canvas pixels, readable video frames, dialog/popover state and
 animation phases are also transferred; styles are not computed for every node.
+The mirror carries the pointer position, and the helper restores it before capture
+so CSS hover menus paint as they do in the preview.
 Mutations and input schedule coalesced updates without starving preparation on
 animated pages. A 250 ms heartbeat checks for changes. Mutations invalidate
 cached attributes; a lightweight traversal still checks live properties,
@@ -262,7 +264,7 @@ video pixels cannot be transferred. Linked stylesheets load from their URLs;
 runtime CSSOM edits to those sheets are not transferred. The mirror is not an
 OS screen recording.
 External iframe lenses can opt into the cooperative preview bridge by loading
-`/_workbench/preview-bridge.js` from the embedding Canonic origin. The bridge
+`/_workbench/preview-bridge.js` from the embedding Workbench origin. The bridge
 transfers the visible document, including form values and nested and viewport
 scroll, to the same inert capture mirror used for local pages. The receiver
 accepts messages only from the active iframe at its configured origin, and the
@@ -270,7 +272,7 @@ preview bridge answers only a loopback parent. It transfers DOM state, not code,
 cookies, storage or network credentials.
 
 For Storybook, load the bridge from `web/preview.tsx` only when the catalog is
-embedded by a loopback Canonic workbench:
+embedded by a loopback Workbench:
 
 ```ts
 if (typeof window !== "undefined" && window.parent !== window) {
@@ -298,7 +300,7 @@ VS Code cannot spawn a local helper.
 
 | How | Camera | Handoff | Config | Lenses |
 | --- | --- | --- | --- | --- |
-| The Canonic extension | downloads a JPEG | saved image + prompt copied to clipboard | yes | all, and open-in-editor |
+| The Workbench extension | downloads a JPEG | saved image + prompt copied to clipboard | yes | all, and open-in-editor |
 | `node server.js <project>` | downloads a JPEG | no | yes | all but open-in-editor |
 | `file://…/index.html?root=…` | downloads a JPEG | no | needs `--allow-file-access-from-files` | the frame only: no story lookup |
 
@@ -307,8 +309,7 @@ for handoffs are transient review artifacts rather than project source. The
 standalone camera button does not write there.
 
 Failures from the browser, capture server, and editor handoff are written to
-VS Code's session-managed **Canonic Workbench** log. Open it with **Canonic:
-Show Workbench Log**. VS Code owns log retention; Canonic does not create an
+VS Code's session-managed **Workbench** log. Open it with **Workbench: Show Log**. VS Code owns log retention; Workbench does not create an
 unbounded project log, and each workbench server has a 2 MB session budget.
 Diagnostic records are bounded metadata only and omit screenshots, mirrored
 HTML, and handoff prompts.
@@ -319,7 +320,7 @@ A screenshot of it is taken by the screenshot helper going there itself
 is under each mark with `describe.js`. URL and Storybook lenses use the
 workbench's iframes. An explicitly configured `ios-simulator` lens instead uses
 the native ScreenCaptureKit stream and WDA input path described above.
-After the first Storybook preview loads, Canonic switches stories through its
+After the first Storybook preview loads, Workbench switches stories through its
 channel and keeps the preview runtime warm. It navigates to the story URL if
 Storybook does not acknowledge the switch.
 
@@ -347,7 +348,7 @@ interaction in those cases.
 ## Embedding and sign-in
 
 All design, URL, and Storybook lenses load in ordinary iframes. An iframe can
-sign in and maintain an app session. Canonic does not share the Chrome profile
+sign in and maintain an app session. Workbench does not share the Chrome profile
 used by the old streamed browser or assume VS Code shares your normal browser's
 cookies. Sign in within the workbench's page, and use the app's logout to end
 that session.
@@ -369,7 +370,7 @@ For apps you control, configure their development environment:
 See [frame ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors)
 and [third-party cookies](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies).
 An embedding, login, or server failure stays in the iframe. Fix the app's
-configuration or use **Open on its own**; Canonic never switches to a stream.
+configuration or use **Open on its own**; Workbench never switches to a stream.
 
 Remove `render: browser` or `render: iframe` from `workbench.yaml` and
 `workbench.local.yaml`. Legacy settings produce a migration message in the
@@ -382,7 +383,7 @@ have been removed. Existing Chrome profile data is left untouched on disk.
 
 | File | Job |
 | --- | --- |
-| `index.html` | the shell: top bar, rail, sidebar, canvas |
+| `index.html` | the shell: top bar, sidebar, canvas, and the markup and zoom bars floating over it |
 | `config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |
 | `config-editor.js` | edits sections, pages, paths, and supported viewports through the local server |
 | `yaml.js` | the part of YAML a config is written in |
@@ -392,8 +393,9 @@ have been removed. Existing Chrome profile data is left untouched on disk.
 | `describe.js` | names the element under a point — here, and inside pages the server's browser opens |
 | `workbench.js` | routing, frame loading, resizing, the lens switcher, stories, the source menu |
 | `reference.js` | copies the current screen, state or story, and lens as a text reference |
-| `toolbar.js` | measures the top bar and moves secondary actions into the More menu before its regions collide |
-| `nav.js` + `nav.css` | the screen list: rail, filter, folders, states |
+| `toolbar.js` | builds the top bar’s More menu, and folds secondary actions into it before the bar’s regions collide |
+| `zoom.js` | zooms and pans the frame on the canvas, Figma-style, and labels it with its name and size |
+| `nav.js` + `nav.css` | the screen list, laid out like Sketch's sidebar: sections, then the chosen one's folders, screens and states, then the filter |
 | `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
 | `markup.js` + `markup.css` | the draw layer, screenshots, and clipboard handoff |
 | `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
@@ -408,19 +410,19 @@ have been removed. Existing Chrome profile data is left untouched on disk.
 | `states.js` | the preview's half of page states |
 
 `nav.js` is the list and nothing else: it is handed the config's sections and
-answers with a rail and a panel that call back with the screen you picked. Two
+answers with a section list and a screen list that call back with the screen you picked. Two
 places build one — the workbench, where it is the left edge of the window, and
-the Canonic sidebar in VS Code, where it stands in for a file tree. `nav.css`
+the Workbench sidebar in VS Code, where it stands in for a file tree. `nav.css`
 draws it in either place; it names no colours of its own, so `workbench.css`
 dresses it in the tool's grays and `sidebar.css` in the editor's theme.
 
-`actions.js` and `states.js` run inside previews served by Canonic, and they are
+`actions.js` and `states.js` run inside previews served by Workbench, and they are
 the reason those pages can apply shell state without project code: off
 `file://` the frame is a foreign origin the shell can't reach into, so both
 flags travel in the URL and the page applies them to itself. Nothing references
 them — the server puts them into each page it serves, which is why a project's
 plain pages stay plain HTML. External previews opt into `preview-bridge.js`
-themselves because Canonic does not rewrite another server's response.
+themselves because Workbench does not rewrite another server's response.
 
 ## The address bar
 
@@ -501,13 +503,21 @@ and a screen without it shows its design. Once the canvas has settled, the
 address is rewritten to say exactly what's showing.
 
 **Fit** alone follows the available workbench space. Device presets keep their
-declared width and height and make the stage scroll when the editor is smaller;
-**Resizable** likewise keeps its last manually chosen dimensions. This mirrors
-the fixed-frame behavior of design tools instead of silently scaling a selected
-device down to the window.
+declared width and height; **Resizable** likewise keeps its last manually
+chosen dimensions. The page always lays out at that real size. What changes
+with the window is the canvas zoom, as in a design tool: a new frame size, or
+a resized editor, zooms the frame to fit (never past 100%) until you zoom or
+pan by hand. `zoom.js` owns this, with Figma's controls — ⌘/Ctrl with the
+wheel or a pinch zooms at the pointer, the wheel pans, Space-drag or the middle
+button pans, ⌘= and ⌘- step by powers of two, ⌘0 and ⇧0 go to 100%, and ⇧1
+fits. Those chords stay with the workbench rather than reaching the editor.
+They are read inside previews the workbench serves, and through Storybook's
+key channel for a Storybook lens; another origin's iframe keeps its own wheel.
+Screenshots and handoffs are always taken at the frame's real size, whatever
+the zoom.
 
 It is also how the workbench is driven from outside. Embedded in an editor —
-the Canonic extension puts it in a tab with the screen list in the sidebar —
+the Workbench extension puts it in a tab with the screen list in the sidebar —
 a picked screen arrives as a `wb-go` message carrying that same hash, from the
 host and only the host, and the workbench answers every routing with a
 `wb-here` saying which screen and state it settled on — and which lens, which
@@ -516,5 +526,5 @@ instruction, which is why there is only one of them to maintain, and
 `wb-here` is what keeps the sidebar marked when the canvas moves on its own —
 a link followed in a live preview.
 
-Embedded, the workbench also drops its own rail and panel: the list is in the
+Embedded, the workbench also drops its own screen list: the list is in the
 sidebar, and two of them would be one too many.

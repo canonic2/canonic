@@ -1,7 +1,7 @@
 # Workbench specifications
 
 These files record the current, observable contract of the workbench shipped in
-the Canonic VS Code extension. They are a starting point for reviewing changes:
+the Workbench VS Code extension. They are a starting point for reviewing changes:
 update the relevant spec when behavior changes, then update the implementation
 and its tests. The [workbench README](../../workbench/README.md) remains the
 setup and operations guide.

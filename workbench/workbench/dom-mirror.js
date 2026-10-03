@@ -17,6 +17,7 @@
     var snapshots = new WeakMap();
     var observers = new Map();
     var stopped = false;
+    var pointer = null;
     var win = doc.defaultView;
     var session = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
     function id(node) {
@@ -41,12 +42,27 @@
     var events = ['input', 'change', 'click', 'keydown', 'toggle', 'focusin', 'focusout', 'load'];
     observe(doc);
     events.forEach(function (event) { doc.addEventListener(event, notify, true); });
+    function moved(event) {
+      if (event.pointerType === 'touch') return;
+      var first = !pointer;
+      pointer = { x: event.clientX, y: event.clientY };
+      if (first || event.type === 'pointerover') notify();
+    }
+    function left(event) {
+      if (event.relatedTarget) return;
+      pointer = null;
+      notify();
+    }
+    doc.addEventListener('pointerover', moved, true);
+    doc.addEventListener('pointermove', moved, true);
+    doc.addEventListener('pointerout', left, true);
 
     function equal(a, b) { return a === b || JSON.stringify(a) === JSON.stringify(b); }
     function sameIds(a, b) { return a === b || (!!a && !!b && a.length === b.length && a.every(function (key, index) { return key === b[index]; })); }
     function wire(data, base) {
       var result = { version: 1, revision: data.revision, base: base ? base.revision : null,
-        root: data.root, nodes: [], removed: [], states: [], cleared: [], defined: data.defined, animations: data.animations };
+        root: data.root, nodes: [], removed: [], states: [], cleared: [], defined: data.defined, animations: data.animations,
+        pointer: data.pointer };
       if (!base) {
         result.nodes = Array.from(data.nodes.values()); result.states = Array.from(data.states.values());
       } else {
@@ -189,14 +205,15 @@
           observer.disconnect(); tree.removeEventListener('scroll', notify, true); observers.delete(tree);
         }
       });
-      var data = { nodes: nodes, states: states, root: rootId, defined: Array.from(defined), animations: animations };
+      var data = { nodes: nodes, states: states, root: rootId, defined: Array.from(defined), animations: animations,
+        pointer: pointer && { x: pointer.x, y: pointer.y } };
       function sameMap(a, b) {
         if (a.size !== b.size) return false;
         for (var entry of a) if (b.get(entry[0]) !== entry[1]) return false;
         return true;
       }
       if (latest && sameMap(nodes, latest.nodes) && sameMap(states, latest.states) &&
-          equal(data.defined, latest.defined) && equal(animations, latest.animations)) data = latest;
+          equal(data.defined, latest.defined) && equal(animations, latest.animations) && equal(data.pointer, latest.pointer)) data = latest;
       else {
         data.sequence = ++sequence; data.revision = session + '-' + sequence;
         function versions(current, before, priorVersions) {
@@ -232,6 +249,9 @@
         observers.forEach(function (observer, tree) { observer.disconnect(); tree.removeEventListener('scroll', notify, true); });
         observers.clear();
         events.forEach(function (event) { doc.removeEventListener(event, notify, true); });
+        doc.removeEventListener('pointerover', moved, true);
+        doc.removeEventListener('pointermove', moved, true);
+        doc.removeEventListener('pointerout', left, true);
       }
     };
   }

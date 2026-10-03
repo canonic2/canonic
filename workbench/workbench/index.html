@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Replaced with the project's name as soon as the config is read. -->
-  <title>Canonic</title>
+  <title>Workbench</title>
   <!-- The chrome brings its own values. Nothing here loads the project's
        tokens: the workbench is the tool, and it has to look the same in a
        project whose scale is named differently or not at all. The product's
@@ -25,12 +25,27 @@
         <progress id="exportProgressBar" value="0" max="1"></progress>
       </div>
     </div>
-    <!-- Full-width top bar in three: the preview's own switch on the left, the
-         markup tools centred on the bar, the frame controls on the right. The
-         project isn't named up here — the tab says it, the sidebar lists it,
-         and the design is what you came to look at. -->
+    <!-- Full-width top bar in three: where you are on the left, the lens
+         centred on the bar, the frame controls on the right. The markup tools
+         float over the canvas instead, beside the thing they draw on. -->
     <header class="wb-topbar">
       <div class="wb-topbar-left">
+        <!-- The screen, then which of its states — or, under a Storybook
+             lens, which of its stories — is showing, with the others one
+             click away. Rows are built in workbench.js. -->
+        <div class="wb-crumb" id="crumb" hidden>
+          <span class="wb-crumb-screen" id="crumbScreen"></span>
+          <span class="wb-states-control" id="stateControl" hidden>
+            <span class="wb-crumb-sep" aria-hidden="true">/</span>
+            <button class="wb-action wb-crumb-state" type="button" id="stateButton"
+                    aria-haspopup="true" aria-expanded="false" title="Pick a state">
+              <span id="stateName"></span>
+              <span class="wb-crumb-caret" data-icon="chevron-down"></span>
+            </button>
+            <div class="wb-menu wb-menu-column" id="stateMenu" role="menu" aria-label="State" hidden></div>
+          </span>
+        </div>
+
         <!-- Off by default: clicking around a screen you're reviewing
              shouldn't navigate you out of it. Turn it on to walk the real
              flow. Enforced inside the page by actions.js, which the server
@@ -42,32 +57,159 @@
                 role="switch" aria-checked="false"
                 title="Actions — let links navigate and forms submit">
           <span data-icon="mouse-pointer-click"></span>
-          <span>Actions</span>
+          <span class="wb-toggle-label">Actions</span>
           <span class="wb-toggle-track"><span class="wb-toggle-knob"></span></span>
         </button>
+      </div>
 
-        <!-- The lens: the design, or one of the screen's implementations in
-             its place. Only there when the screen has one; Design is always
-             first. Rows are built in workbench.js from the config. -->
+      <!-- The lens: the design, or one of the screen's implementations in
+           its place. Only there when the screen has one; Design is always
+           first. Rows are built in workbench.js from the config. -->
+      <div class="wb-topbar-center">
         <div class="wb-lenses" id="lenses" role="group" aria-label="Lens" hidden></div>
-
-        <!-- Under a Storybook lens, which of the title's stories is showing.
-             Same split-button shape as the agent control. -->
-        <span class="wb-stories" id="storyControl" hidden>
-          <button class="wb-action wb-story" type="button" id="storyButton"
-                  aria-haspopup="true" aria-expanded="false" title="Pick a story">
-            <span data-icon="book-open"></span>
-            <span id="storyName"></span>
-            <span class="wb-story-caret" data-icon="chevron-down"></span>
-          </button>
-          <div class="wb-menu wb-menu-column" id="storyMenu" role="menu" aria-label="Story" hidden></div>
-        </span>
       </div>
 
       <!-- data-icon is filled in from icons.js; every icon-only
            control keeps a title and an aria-label so it still says what it
            does. -->
-      <div class="wb-topbar-center">
+      <div class="wb-topbar-right">
+        <div class="wb-widths" role="group" aria-label="Frame width">
+          <button class="wb-width" type="button" data-width="fit"
+                  data-icon="minimize-2" title="Fit" aria-label="Fit"></button>
+          <button class="wb-width" type="button" data-width="1512" data-height="982"
+                  data-icon="monitor" title="Laptop · MacBook Pro 14, 1512 × 982"
+                  aria-label="Laptop, MacBook Pro 14, 1512 by 982 points"></button>
+          <button class="wb-width" type="button" data-width="393" data-height="852"
+                  data-icon="smartphone" title="Mobile · iPhone 15 Pro, 393 × 852"
+                  aria-label="Mobile, iPhone 15 Pro, 393 by 852 points"></button>
+          <button class="wb-width" type="button" data-width="resizable"
+                  data-icon="scaling" title="Resizable · drag an outside edge or corner"
+                  aria-label="Resizable viewport"></button>
+        </div>
+
+        <button class="wb-action" type="button" id="reload"
+                data-icon="rotate-cw" title="Reload" aria-label="Reload"></button>
+
+        <!-- The screen's source: the design file, and where each of its
+             implementations keeps the code, as the extension resolves them
+             on this machine. Hidden when nothing is serving that answer. -->
+        <span class="wb-sources" id="sourceControl" hidden>
+          <button class="wb-action" type="button" id="openSource"
+                  data-icon="code" title="Open the source" aria-label="Open the source"
+                  aria-haspopup="true" aria-expanded="false"></button>
+          <div class="wb-menu wb-menu-column wb-menu-sources" id="sourceMenu" role="menu" aria-label="Source" hidden></div>
+        </span>
+
+        <button class="wb-action" type="button" id="copyReference"
+                data-icon="copy" title="Copy reference" aria-label="Copy reference"></button>
+
+        <a class="wb-action" id="open" target="_blank" rel="noopener"
+           data-icon="external-link" title="Open on its own" aria-label="Open on its own"></a>
+
+        <!-- Project-wide actions, and whatever the bar folds away when the
+             editor is narrow. toolbar.js builds the menu; these two buttons
+             are only ever reached through it. -->
+        <span class="wb-toolbar-overflow" id="toolbarOverflow">
+          <button class="wb-action" type="button" id="toolbarOverflowButton"
+                  data-icon="ellipsis" title="More" aria-label="More"
+                  aria-haspopup="true" aria-expanded="false"></button>
+          <div class="wb-menu wb-menu-column wb-toolbar-overflow-menu" id="toolbarOverflowMenu"
+               role="menu" aria-label="More" hidden></div>
+        </span>
+
+        <button class="wb-action wb-in-menu" type="button" id="configureProject" hidden
+                data-icon="settings-2" title="Configure pages"
+                aria-label="Configure pages"></button>
+
+        <button class="wb-action wb-in-menu" type="button" id="exportProject" hidden
+                data-icon="archive" title="Download design-system ZIP"
+                aria-label="Download design-system ZIP"></button>
+      </div>
+    </header>
+
+    <!-- The project's screens, laid out like Sketch's sidebar: the sections
+         on top, the chosen one's screens below, the filter at the bottom.
+         Resizable. -->
+    <aside class="wb-sidebar wb-browse">
+      <header class="wb-sidebar-head">
+        <img class="wb-sidebar-mark" src="canonic.svg" alt="" width="16" height="16" />
+        <h1 class="wb-project-name" id="projectName"></h1>
+      </header>
+
+      <section class="wb-browse-block" id="sectionsBlock" hidden>
+        <h2 class="wb-browse-head">Sections</h2>
+        <nav class="wb-sections" id="sections" aria-label="Sections"></nav>
+      </section>
+
+      <h2 class="wb-browse-head" id="sectionName"></h2>
+      <nav class="wb-nav" id="nav" aria-label="Screens"></nav>
+
+      <div class="wb-search">
+        <span class="wb-search-icon" data-icon="search"></span>
+        <input id="search" type="search" placeholder="Search screens…" autocomplete="off" aria-label="Search screens and states" />
+      </div>
+
+      <!-- Drag to resize, double-click to reset. -->
+      <div class="wb-resizer" id="resizer" role="separator" aria-orientation="vertical"
+           aria-label="Resize sidebar" tabindex="0"></div>
+    </aside>
+
+    <main class="wb-canvas">
+      <div class="wb-stage" id="stage">
+        <p class="wb-blank" id="blank">Pick a page or a component to see it here.</p>
+        <!-- The frame's name and its real size, above it the way a design
+             tool labels a frame. Unscaled: zoom.js places it. -->
+        <div class="wb-frame-label" id="frameLabel" hidden>
+          <span class="wb-frame-name" id="frameName"></span>
+          <span class="wb-frame-size" id="frameSize" aria-live="polite"></span>
+        </div>
+        <!-- The shell carries the viewport size and, in Resizable mode, puts
+             5px drag rails outside the preview instead of over its content.
+             zoom.js scales and moves it as one piece. -->
+        <div class="wb-frame-shell" id="frameShell" hidden>
+          <div class="wb-frame" id="frameWrap">
+            <!-- Two frames prevent navigation flashes: the active page stays
+                 visible while the next one finishes loading behind it. -->
+            <iframe class="is-active" id="frame" title="Preview" allow="clipboard-read; clipboard-write"></iframe>
+            <iframe id="frameBuffer" title="Preview loading" aria-hidden="true" allow="clipboard-read; clipboard-write"></iframe>
+            <canvas class="wb-simulator" id="simulatorCanvas" aria-label="Interactive iOS Simulator" hidden></canvas>
+            <div class="wb-simulator-prompt" id="simulatorPrompt" hidden>
+              <button class="wb-simulator-share" id="shareSimulator" type="button">Retry native stream</button>
+              <span id="simulatorStatus"></span>
+            </div>
+          </div>
+          <!-- Marks share the frame's box but live outside its clip, so a
+               note can hang past the edge onto the stage while the page
+               stays clipped — and a focused note can never scroll the frame.
+               Shapes go in the SVG; text boxes are siblings of it.
+               Screenshots render the shell, whose viewport crops to the same
+               box the frame clip used to. -->
+          <div class="wb-markup-layer" id="markupLayer">
+            <svg id="markupSvg" aria-hidden="true">
+              <defs>
+                <!-- A plain triangle, 16px in user units rather than stroke
+                     multiples: the weight never changes, so the head shouldn't
+                     either. refX sits at the triangle's middle so the head
+                     overshoots the line's end and buries its round cap where
+                     the triangle is still wider than the stroke. -->
+                <marker id="wb-arrowhead" markerWidth="16" markerHeight="11" refX="8" refY="5.5"
+                        orient="auto" markerUnits="userSpaceOnUse">
+                  <path d="M0,0 L16,5.5 L0,11 z" fill="currentColor" stroke="none" />
+                </marker>
+              </defs>
+            </svg>
+          </div>
+          <span class="wb-frame-resize wb-frame-resize-left" data-resize="left"></span>
+          <span class="wb-frame-resize wb-frame-resize-right" data-resize="right"></span>
+          <span class="wb-frame-resize wb-frame-resize-bottom" data-resize="bottom"></span>
+          <span class="wb-frame-resize wb-frame-resize-bottom-left" data-resize="bottom-left"></span>
+          <span class="wb-frame-resize wb-frame-resize-bottom-right" data-resize="bottom-right"></span>
+        </div>
+      </div>
+
+      <!-- Markup and handoff float over the canvas they draw on. Select is
+           the one way back to using the page itself. -->
+      <div class="wb-dock" id="dock" role="toolbar" aria-label="Markup and handoff">
         <div class="wb-markup" role="group" aria-label="Markup">
           <button class="wb-action wb-tool" type="button" data-tool="pointer"
                   data-icon="mouse-pointer-2" title="Select · Esc" aria-label="Select"></button>
@@ -114,135 +256,27 @@
                   data-icon="camera" title="Save screenshot" aria-label="Save screenshot"></button>
         </div>
 
-        <span class="wb-toolbar-overflow" id="toolbarOverflow" hidden>
-          <button class="wb-action" type="button" id="toolbarOverflowButton"
-                  data-icon="ellipsis" title="More toolbar actions" aria-label="More toolbar actions"
-                  aria-haspopup="true" aria-expanded="false"></button>
-          <div class="wb-menu wb-menu-column wb-toolbar-overflow-menu" id="toolbarOverflowMenu"
-               role="menu" aria-label="More toolbar actions" hidden></div>
-        </span>
-      </div>
-
-      <div class="wb-topbar-right">
-        <!-- Save the annotated screenshot, then copy its handoff prompt. The
-             extension capability probe keeps this out of standalone views. -->
+        <!-- How many marks the handoff will carry, then the handoff itself:
+             the annotated screenshot saved, its prompt copied. The extension
+             capability probe keeps the button out of standalone views. -->
+        <span class="wb-mark-count" id="markCount" hidden></span>
         <span class="wb-handoff-control" id="handoffControl" hidden>
-          <button class="wb-action wb-handoff" type="button" id="handoff"
+          <button class="wb-handoff" type="button" id="handoff"
                   title="Copy handoff" aria-label="Copy handoff">
             <span data-icon="sparkles"></span>
             <span>Copy handoff</span>
           </button>
         </span>
-
-        <span class="wb-sep"></span>
-
-        <div class="wb-widths" role="group" aria-label="Frame width">
-          <button class="wb-width" type="button" data-width="fit"
-                  data-icon="minimize-2" title="Fit" aria-label="Fit"></button>
-          <button class="wb-width" type="button" data-width="1512" data-height="982"
-                  data-icon="monitor" title="Laptop · MacBook Pro 14, 1512 × 982"
-                  aria-label="Laptop, MacBook Pro 14, 1512 by 982 points"></button>
-          <button class="wb-width" type="button" data-width="393" data-height="852"
-                  data-icon="smartphone" title="Mobile · iPhone 15 Pro, 393 × 852"
-                  aria-label="Mobile, iPhone 15 Pro, 393 by 852 points"></button>
-          <button class="wb-width" type="button" data-width="resizable"
-                  data-icon="scaling" title="Resizable · drag an outside edge or corner"
-                  aria-label="Resizable viewport"></button>
-        </div>
-
-        <button class="wb-action" type="button" id="reload"
-                data-icon="rotate-cw" title="Reload" aria-label="Reload"></button>
-
-        <!-- The screen's source: the design file, and where each of its
-             implementations keeps the code, as the extension resolves them
-             on this machine. Hidden when nothing is serving that answer. -->
-        <span class="wb-sources" id="sourceControl" hidden>
-          <button class="wb-action" type="button" id="openSource"
-                  data-icon="code" title="Open the source" aria-label="Open the source"
-                  aria-haspopup="true" aria-expanded="false"></button>
-          <div class="wb-menu wb-menu-column wb-menu-sources" id="sourceMenu" role="menu" aria-label="Source" hidden></div>
-        </span>
-
-        <button class="wb-action" type="button" id="copyReference"
-                data-icon="copy" title="Copy reference" aria-label="Copy reference"></button>
-
-        <button class="wb-action" type="button" id="configureProject" hidden
-                data-icon="settings-2" title="Configure pages"
-                aria-label="Configure workbench pages"></button>
-
-        <button class="wb-action" type="button" id="exportProject" hidden
-                data-icon="archive" title="Download design-system ZIP bundle"
-                aria-label="Download design-system ZIP bundle"></button>
-
-        <a class="wb-action" id="open" target="_blank" rel="noopener"
-           data-icon="external-link" title="Open on its own" aria-label="Open on its own"></a>
-      </div>
-    </header>
-
-    <!-- Level one: fixed-width rail, one entry per section. -->
-    <nav class="wb-rail" id="rail" aria-label="Sections"></nav>
-
-    <!-- Level two: the section's contents. This is the resizable one. -->
-    <aside class="wb-sidebar">
-      <h2 class="wb-panel-title" id="sectionName"></h2>
-
-      <div class="wb-search">
-        <span class="wb-search-icon" data-icon="search"></span>
-        <input id="search" type="search" placeholder="Filter…" autocomplete="off" aria-label="Filter pages and components" />
       </div>
 
-      <nav class="wb-nav" id="nav" aria-label="Pages and components"></nav>
-
-      <!-- Drag to resize, double-click to reset. -->
-      <div class="wb-resizer" id="resizer" role="separator" aria-orientation="vertical"
-           aria-label="Resize sidebar" tabindex="0"></div>
-    </aside>
-
-    <main class="wb-canvas">
-      <div class="wb-stage" id="stage">
-        <p class="wb-blank" id="blank">Pick a page or a component to see it here.</p>
-        <!-- The shell carries the viewport size and, in Resizable mode, puts
-             5px drag rails outside the preview instead of over its content. -->
-        <div class="wb-frame-shell" id="frameShell" hidden>
-          <div class="wb-frame" id="frameWrap">
-            <!-- Two frames prevent navigation flashes: the active page stays
-                 visible while the next one finishes loading behind it. -->
-            <iframe class="is-active" id="frame" title="Preview" allow="clipboard-read; clipboard-write"></iframe>
-            <iframe id="frameBuffer" title="Preview loading" aria-hidden="true" allow="clipboard-read; clipboard-write"></iframe>
-            <canvas class="wb-simulator" id="simulatorCanvas" aria-label="Interactive iOS Simulator" hidden></canvas>
-            <div class="wb-simulator-prompt" id="simulatorPrompt" hidden>
-              <button class="wb-simulator-share" id="shareSimulator" type="button">Retry native stream</button>
-              <span id="simulatorStatus"></span>
-            </div>
-          </div>
-          <!-- Marks share the frame's box but live outside its clip, so a
-               note can hang past the edge onto the stage while the page
-               stays clipped — and a focused note can never scroll the frame.
-               Shapes go in the SVG; text boxes are siblings of it.
-               Screenshots render the shell, whose viewport crops to the same
-               box the frame clip used to. -->
-          <div class="wb-markup-layer" id="markupLayer">
-            <svg id="markupSvg" aria-hidden="true">
-              <defs>
-                <!-- A plain triangle, 16px in user units rather than stroke
-                     multiples: the weight never changes, so the head shouldn't
-                     either. refX sits at the triangle's middle so the head
-                     overshoots the line's end and buries its round cap where
-                     the triangle is still wider than the stroke. -->
-                <marker id="wb-arrowhead" markerWidth="16" markerHeight="11" refX="8" refY="5.5"
-                        orient="auto" markerUnits="userSpaceOnUse">
-                  <path d="M0,0 L16,5.5 L0,11 z" fill="currentColor" stroke="none" />
-                </marker>
-              </defs>
-            </svg>
-          </div>
-          <span class="wb-frame-resize wb-frame-resize-left" data-resize="left"></span>
-          <span class="wb-frame-resize wb-frame-resize-right" data-resize="right"></span>
-          <span class="wb-frame-resize wb-frame-resize-bottom" data-resize="bottom"></span>
-          <span class="wb-frame-resize wb-frame-resize-bottom-left" data-resize="bottom-left"></span>
-          <span class="wb-frame-resize wb-frame-resize-bottom-right" data-resize="bottom-right"></span>
-          <span class="wb-frame-size" id="frameSize" aria-live="polite"></span>
-        </div>
+      <div class="wb-zoom" id="zoomControl" role="group" aria-label="Zoom">
+        <button class="wb-action" type="button" id="zoomOut"
+                data-icon="minus" title="Zoom out · ⌘−" aria-label="Zoom out"></button>
+        <button class="wb-zoom-value" type="button" id="zoomValue"
+                title="Zoom options" aria-haspopup="true" aria-expanded="false">100%</button>
+        <button class="wb-action" type="button" id="zoomIn"
+                data-icon="plus" title="Zoom in · ⌘+" aria-label="Zoom in"></button>
+        <div class="wb-menu wb-menu-column wb-zoom-menu" id="zoomMenu" role="menu" aria-label="Zoom" hidden></div>
       </div>
     </main>
 
@@ -283,6 +317,7 @@
   <script src="simulator.js"></script>
   <script src="describe.js"></script>
   <script src="config-editor.js"></script>
+  <script src="zoom.js"></script>
   <script src="workbench.js"></script>
   <script src="capture-sync.js"></script>
   <script src="dom-mirror.js"></script>

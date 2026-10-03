@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Screens</title>
-  <!-- The Canonic extension inserts a <base>, the project root, and a content
+  <!-- The Workbench extension inserts a <base>, the project root, and a content
        policy here: this document is loaded into a webview whose address is the
        editor's, so the base is the only thing that says where this folder
        actually is. Everything below is relative to it. -->
@@ -12,21 +12,23 @@
   <link rel="stylesheet" href="sidebar.css" />
 </head>
 <body>
-  <!-- The same two levels the workbench has, in the editor's sidebar: the
-       rail picks the section, the panel lists it. There is no panel title —
-       the view's own header carries the section's name, which is where an
-       editor puts it. -->
-  <div class="sb">
-    <nav class="wb-rail" id="rail" aria-label="Sections"></nav>
+  <!-- The same list the workbench has, laid out like Sketch's sidebar: the
+       sections on top, the chosen one's screens below, the filter at the
+       bottom. The view's own header carries the project's name. -->
+  <div class="sb wb-browse">
+    <section class="wb-browse-block" id="sectionsBlock" hidden>
+      <h2 class="wb-browse-head">Sections</h2>
+      <nav class="wb-sections" id="sections" aria-label="Sections"></nav>
+    </section>
 
-    <div class="sb-panel">
-      <div class="wb-search">
-        <input id="search" type="text" role="searchbox" placeholder="Filter…" autocomplete="off"
-               aria-label="Filter pages and components" />
-      </div>
+    <h2 class="wb-browse-head" id="sectionName"></h2>
+    <div class="sb-diagnostics" id="diagnostics" role="status" hidden></div>
+    <nav class="wb-nav" id="nav" aria-label="Screens"></nav>
 
-      <div class="sb-diagnostics" id="diagnostics" role="status" hidden></div>
-      <nav class="wb-nav" id="nav" aria-label="Pages and components"></nav>
+    <div class="wb-search">
+      <span class="wb-search-icon" data-icon="search"></span>
+      <input id="search" type="text" role="searchbox" placeholder="Search screens…" autocomplete="off"
+             aria-label="Search screens and states" />
     </div>
   </div>
 

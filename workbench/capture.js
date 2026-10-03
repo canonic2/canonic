@@ -532,6 +532,17 @@ Capture.prototype.metrics = function (width, height) {
   });
 };
 
+Capture.prototype.restorePointer = function (payload) {
+  if (!payload.mirror) return Promise.resolve();
+  var point = payload.mirror.pointer;
+  var x = point ? point.x : payload.width + 1;
+  var y = point ? point.y : payload.height + 1;
+  var self = this;
+  return this.target.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x, y: y }).then(function () {
+    return self.target.evaluate('new Promise(function (resolve) { requestAnimationFrame(function () { requestAnimationFrame(resolve); }); })');
+  });
+};
+
 Capture.prototype.prepareNow = function (baseUrl, payload) {
   var width = Math.max(1, Math.round(Number(payload.width) || 0));
   var height = Math.max(1, Math.round(Number(payload.height) || 0));
@@ -547,6 +558,8 @@ Capture.prototype.prepareNow = function (baseUrl, payload) {
     })
     .then(function () {
       return self.target.evaluate('window.wbCapture.prepare(' + JSON.stringify(payload) + ')');
+    }).then(function (details) {
+      return self.restorePointer(payload).then(function () { return details; });
     });
 };
 

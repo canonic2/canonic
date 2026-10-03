@@ -1,0 +1,94 @@
+---
+/* The page shell every module shares: head, a product bar listing every
+   Canonic product, the current product's section links, and the footer. */
+import '../styles/global.css';
+import { base } from '../lib/base.js';
+import { logo, products } from '../lib/marks.js';
+
+const { title, description, product, version, nav = [], github, download } = Astro.props;
+const year = new Date().getFullYear();
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content={description}>
+<link rel="icon" href={`${base}canonic.svg`} type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap">
+<script is:inline>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+
+<header class="top">
+  <nav class="products" aria-label="Products">
+    <div class="wrap">
+      <a class="logo" href={base} aria-label="Canonic home">
+        <svg viewBox={logo.viewBox} role="img" aria-label="canonic"><path d={logo.base} fill="currentColor" /><path d={logo.accent} class="accent" /></svg>
+      </a>
+      <div class="tabs">
+        {products.map(p => p.name === product ? (
+          <a class="tab" href={base} aria-current="page">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path d={p.base} fill="currentColor" /><path d={p.accent} class="accent" /></svg>
+            {p.name}
+          </a>
+        ) : p.module ? (
+          <a class="tab" href={`${base}${p.name.toLowerCase()}/`}>
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path d={p.base} fill="currentColor" /><path d={p.accent} class="accent" /></svg>
+            {p.name}
+          </a>
+        ) : (
+          <span class="tab is-soon">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path d={p.base} fill="currentColor" /><path d={p.accent} fill="currentColor" /></svg>
+            {p.name}
+            <span class="soon">Soon</span>
+            <span class="tip" aria-hidden="true">{p.name}: {p.tagline}, coming soon</span>
+          </span>
+        ))}
+      </div>
+      {github && <a class="github" href={github}>GitHub <span aria-hidden="true">↗</span></a>}
+    </div>
+  </nav>
+
+  <nav class="sub" aria-label={product}>
+    <div class="wrap">
+      <span class="sub-name">{product}{version && <span class="sub-version">v{version}</span>}</span>
+      <span class="sub-rule" aria-hidden="true"></span>
+      <div class="sub-links">
+        {nav.map(item => <a href={item.href}>{item.label}</a>)}
+      </div>
+      {download && <a class="btn btn-sm" href={download.href}>{download.label}</a>}
+    </div>
+  </nav>
+</header>
+
+<main id="content" tabindex="-1">
+  <slot />
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-top">
+      <a class="logo" href={base} aria-label="Canonic home">
+        <svg viewBox={logo.viewBox} role="img" aria-label="canonic"><path d={logo.base} fill="currentColor" /><path d={logo.accent} class="accent" /></svg>
+      </a>
+      <div class="foot-col">
+        <span class="foot-head">Products</span>
+        {products.map(p => p.module
+          ? <a href={p.name === product ? base : `${base}${p.name.toLowerCase()}/`}>{p.name}</a>
+          : <span class="foot-soon">{p.name} · Soon</span>)}
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© {year} Canonic</span>
+      <slot name="footer" />
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

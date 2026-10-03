@@ -1,0 +1,21 @@
+---
+/* The download cards for a workbench release, from workbenchDownloads() in
+   src/lib/releases.js. A small script on the page marks the card that matches
+   the visitor's computer. */
+const { downloads } = Astro.props;
+---
+{downloads ? (
+  <div class="downloads">
+    {downloads.files.map(file => (
+      <a class="dl" href={file.url} data-target={file.target} aria-label={`Download for ${file.computer}: ${file.name}`}>
+        <span class="dl-text">
+          <span class="dl-label">{file.computer}<span class="dl-rec" hidden>For this computer</span></span>
+          <span class="dl-file">{file.name}</span>
+        </span>
+        <svg class="dl-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10" /></svg>
+      </a>
+    ))}
+  </div>
+) : (
+  <p class="lede">Workbench downloads will appear after the first successful workbench release.</p>
+)}

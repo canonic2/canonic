@@ -105,8 +105,10 @@ function catalogFailure(error) {
    `open` is given { src, state } and puts it on the canvas. `follow` takes a
    listener called with { src, state } whenever the canvas moves, and answers
    with the way to stop listening. `catalog` asks the running server for any
-   Storybook sections it imported, which the webview cannot fetch cross-origin. */
-function register(context, root, open, follow, refresh, catalog) {
+   Storybook sections it imported, which the webview cannot fetch cross-origin.
+   `shown` is called whenever the view comes into sight — selecting Workbench
+   in the activity bar — so the canvas opens beside the list. */
+function register(context, root, open, follow, refresh, catalog, shown) {
   var project = vscode.Uri.file(root);
   var dir = vscode.Uri.joinPath(context.extensionUri, 'workbench');
   var lucide = vscode.Uri.file(require.resolve('lucide/dist/umd/lucide.min.js'));
@@ -131,7 +133,7 @@ function register(context, root, open, follow, refresh, catalog) {
       view.webview.html = page(view.webview, dir, project, builds);
     } catch (error) {
       view.webview.html = nothing(
-        'Canonic couldn’t read its own ' + PAGE + ': ' + String(error.message || error)
+        'Workbench couldn’t read its own ' + PAGE + ': ' + String(error.message || error)
       );
     }
   }
@@ -183,18 +185,10 @@ function register(context, root, open, follow, refresh, catalog) {
           return;
         }
 
-        /* The rail picks the section, and the view's own header names it,
-           which is where an editor puts that rather than in a heading of the
-           page's own. */
-        if (type === 'canonic-section') {
-          view.title = String(message.name || '');
-          return;
-        }
-
-        /* A freshly built list, naming the project it just read and asking
-           what the canvas is already on. */
+        /* A freshly built list, asking what the canvas is already on. The
+           view's header just says Workbench: the container and its one view
+           share that name, so the editor shows it once, with nothing after. */
         if (type === 'canonic-ready') {
-          view.description = message.name ? String(message.name) : undefined;
           post(where);
         }
       });
@@ -204,12 +198,21 @@ function register(context, root, open, follow, refresh, catalog) {
         post(moved);
       });
 
+      /* The list is half the tool; the canvas is the other half. Selecting
+         the view opens the canvas too, or brings it forward if it is open.
+         Closing the canvas while the list stays in sight leaves it closed. */
+      var seen = view.onDidChangeVisibility(function () {
+        if (view && view.visible && shown) shown();
+      });
+
       view.onDidDispose(function () {
         stop();
+        seen.dispose();
         view = null;
       });
 
       build();
+      if (view.visible && shown) shown();
     },
   };
 

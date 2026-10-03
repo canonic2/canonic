@@ -41,9 +41,10 @@ web-page capture, not an operating-system screenshot of VS Code.
   continuously mirrors its active, live document into the helper's inert
   `/_workbench/capture.html` surface. The first update is complete; later
   updates are revisioned patches. Open shadow roots, stylesheets, form and
-  scroll state, canvas pixels, readable video frames, animation state, and
-  annotations are included. Application scripts run in the visible preview,
-  not in the capture document.
+  scroll state, canvas pixels, readable video frames, animation state, pointer
+  position, and annotations are included. The helper restores the pointer before
+  reading pixels so CSS hover states appear in the screenshot. Application
+  scripts run in the visible preview, not in the capture document.
 - Mutations and inputs schedule preparation; a 250 ms heartbeat catches
   changes that do not emit those events. The helper retains unchanged nodes
   and decoded assets. Before a click capture, the workbench flushes the

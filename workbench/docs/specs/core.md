@@ -18,7 +18,7 @@ The editor host and screenshot processes have separate
 - The config accepts block YAML. Names and IDs used in addresses are checked;
   invalid entries are reported rather than silently converted into screens.
   The browser and server use the same implementation rules from `manifest.js`.
-- `sections` contains ordered rail sections. Each section contains screens and
+- `sections` contains ordered screen-list sections. Each section contains screens and
   optionally one level of folders. Imported catalog sections join matching
   authored sections by name. A failed catalog leaves usable authored screens
   available and adds a diagnostic.
@@ -36,7 +36,7 @@ The editor host and screenshot processes have separate
   The workbench reports settled selections with `wb-here`. The sidebar follows
   changes made inside the canvas, including a local link followed in a live
   authored page. Picks wait while the embedded workbench refreshes its config.
-- The rail selects a section; the filter searches screens across sections,
+- The sidebar lists the sections, then the chosen section's screens; the filter searches screens across sections,
   including state and folder labels. A screen with multiple states expands to
   state rows. An imported title is a disclosure row: its named states are the
   selectable stories. A single-state authored screen stays one row.
@@ -52,14 +52,15 @@ The editor host and screenshot processes have separate
 - An ordinary iframe navigation uses a spare iframe. The current preview stays
   visible until its replacement loads, then the frames exchange roles. A
   superseded load must not replace a newer selection.
-- The toolbar exposes the effective lens, current Storybook story where
-  applicable, source files when resolved, reload, screenshot, and handoff
-  actions. A preview from an external origin remains inside an iframe; the
+- The top bar exposes the screen with its state or Storybook story picker, the
+  effective lens, source files when resolved, and reload. Markup, screenshot,
+  and handoff actions float over the canvas. Canvas zoom scales the frame
+  without changing its layout size; captures use the real frame size. A preview from an external origin remains inside an iframe; the
   workbench does not read its DOM directly.
 
 ## Editor lifecycle and failure behavior
 
-- There is one Canonic workbench tab per VS Code window. The screen sidebar
+- There is one Workbench tab per VS Code window. The screen sidebar
   remains separate and follows the canvas. Reloading the VS Code window is
   required to activate a newly installed extension build.
 - The sidebar watches `workbench.yaml` and `workbench.local.yaml`. Its rebuild

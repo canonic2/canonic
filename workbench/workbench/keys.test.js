@@ -58,6 +58,21 @@ test('relays editor chords and blocks their browser default where needed', funct
   assert.equal(f.sent[0].event.shiftKey, true);
 });
 
+test('keeps canvas zoom chords out of the editor relay', function () {
+  var f = load();
+  [
+    event({ key: '0', code: 'Digit0', metaKey: true }),
+    event({ key: '=', code: 'Equal', metaKey: true }),
+    event({ key: '+', code: 'Equal', metaKey: true, shiftKey: true }),
+    event({ key: '-', code: 'Minus', ctrlKey: true }),
+  ].forEach(function (e) { f.listeners.keydown(e); });
+  assert.equal(f.sent.length, 0);
+
+  /* Other digits still reach the editor, e.g. ⌘1 to focus an editor group. */
+  f.listeners.keydown(event({ key: '1', code: 'Digit1', metaKey: true }));
+  assert.equal(f.sent.length, 1);
+});
+
 test('keeps editing commands local and forwards ordinary keys without cancelling typing', function () {
   var f = load();
   var typed = event({ key: 'a', code: 'KeyA' });

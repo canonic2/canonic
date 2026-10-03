@@ -1,6 +1,6 @@
 /* The editor's half of the workbench
    ----------------------------------
-   The screen list, running in the Canonic view in VS Code's sidebar. It reads
+   The screen list, running in the Workbench view in VS Code's sidebar. It reads
    the same workbench.yaml the workbench does, builds the same list nav.js
    builds, and hands every pick to the extension.
 
@@ -11,7 +11,6 @@
    a screen here and pasting a URL there end up in the same place.
 
      out  canonic-pick     the screen picked, as a hash
-     out  canonic-section  the section the rail is on, for the view's title
      out  canonic-ready    the list is built, and what project it read
      in   canonic-here     the screen the workbench is showing now
 
@@ -61,8 +60,10 @@
     index = window.wbNav.index(config.sections);
 
     nav = window.wbNav.create({
-      rail: document.getElementById('rail'),
       search: search,
+      sections: document.getElementById('sections'),
+      sectionsBlock: document.getElementById('sectionsBlock'),
+      title: document.getElementById('sectionName'),
       list: document.getElementById('nav'),
       groups: config.sections,
       treeKeyboard: true,
@@ -71,12 +72,6 @@
          business, and a pick from here shouldn't resize it. */
       onPick: function (src, state) {
         send({ type: 'canonic-pick', hash: src + (state ? ':' + state : '') });
-      },
-
-      /* The view's header is where an editor names what you're looking at, so
-         the section's name goes there rather than into a heading of our own. */
-      onSection: function (name) {
-        send({ type: 'canonic-section', name: name });
       },
     });
 

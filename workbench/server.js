@@ -720,6 +720,9 @@ function mirrorPayload(value) {
       !value.revision || value.revision.length > 160 || !Array.isArray(value.states) ||
       !Array.isArray(value.defined) || !Array.isArray(value.animations)) throw new Error('Invalid live DOM snapshot');
   if (value.version === 1) {
+    var pointer = value.pointer;
+    if (pointer != null && (!Number.isFinite(pointer.x) || !Number.isFinite(pointer.y) ||
+        pointer.x < 0 || pointer.y < 0 || pointer.x > 8192 || pointer.y > 8192)) throw new Error('Invalid live DOM pointer');
     function key(v) { return typeof v === 'string' && v.length > 0 && v.length <= 160; }
     if (!key(value.root) || (value.base !== null && !key(value.base)) || !Array.isArray(value.nodes) ||
         !Array.isArray(value.removed) || !value.removed.every(key) || !Array.isArray(value.cleared) || !value.cleared.every(key) ||
@@ -733,8 +736,11 @@ function mirrorPayload(value) {
               (attr[2] === null || typeof attr[2] === 'string') && !/^on|^http-equiv$/i.test(attr[0]); }) &&
             Array.isArray(node.children) && node.children.every(key) && (node.shadow === undefined || (Array.isArray(node.shadow) && node.shadow.every(key)));
         })) throw new Error('Invalid live DOM patch');
-    return { version: 1, revision: value.revision, base: value.base, root: value.root, nodes: value.nodes,
-      removed: value.removed, states: value.states, cleared: value.cleared, defined: value.defined, animations: value.animations };
+    var result = { version: 1, revision: value.revision, base: value.base, root: value.root, nodes: value.nodes,
+      removed: value.removed, states: value.states, cleared: value.cleared, defined: value.defined, animations: value.animations,
+    };
+    if ('pointer' in value) result.pointer = pointer ? { x: pointer.x, y: pointer.y } : null;
+    return result;
   }
   if (typeof value.html !== 'string') throw new Error('Invalid live DOM snapshot');
   return { html: value.html, revision: value.revision, states: value.states, defined: value.defined, animations: value.animations };
