@@ -7,6 +7,15 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## 0.7.0
+
+- Define screens and components in `.workbench.ts` or `.workbench.tsx` files, with named states and adapters for HTML, React, Vue, Astro, and React Native Web. See the TypeScript Workbench previews guide.
+- Use **Preview controls** to edit inputs, reset a state, inspect actions, and read documentation. Edits stay temporary.
+- Compare a design with a TypeScript preview using a `workbench` lens.
+- Export compiled previews in the design-system ZIP, or build a standalone browser viewer with the included command-line tool. The viewer includes states, viewports, controls, actions, and documentation; Astro exports include authored states without editable inputs.
+- The canvas opens with a loading indicator while services start, and the sidebar identifies pending catalogs and preview discovery.
+- Screen switching keeps the current screen visible while the next loads, reuses managed preview renderers, and avoids waiting for offscreen lazy images.
+
 ## 0.6.0
 
 - New `window` implementation kind: stream a window of any running macOS app onto the canvas, such as an Android emulator or a desktop build. Declare the app's bundle ID once, and map each screen to part of a window title. See the App windows guide.

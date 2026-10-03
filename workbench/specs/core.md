@@ -48,12 +48,17 @@ compilation, and screenshot processes have separate
 - Every configuration, catalog, preview, and implementation problem names
   where it came from, for example
   `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
-- Problems found while the browser reads the YAML (dropped sections, folders,
-  screens, and states) are written to the canvas's browser console.
-- Implementation, viewport, mapping, code-pointer, `previews`, catalog, and
-  preview-compilation problems are listed under `problems` in
-  `/_workbench/config`. In VS Code, the Workbench sidebar shows that list
-  above its screens; see [the extension contract](vscode-extension.md#sidebar-and-problems).
+- Every surface shows the same problems list (decided 2026-10-03): the VS Code
+  sidebar above its screens, and the canvas wherever it runs (the editor tab,
+  **Open Canvas in Browser**, and a standalone server). `/_workbench/config`
+  lists them under `problems`.
+- The list covers every entry dropped while reading the YAML (sections,
+  folders, screens, states, and invalid `src` values), implementation,
+  viewport, mapping, code-pointer, `previews`, catalog, and
+  preview-compilation problems, and implementations that are not running,
+  including a stopped Storybook used only by mappings and a mapped Simulator
+  device that is not booted. See
+  [the extension contract](vscode-extension.md#sidebar-and-problems).
 - Missing previews, invalid configuration, stopped implementations, and
   capture errors give a named problem. A failure in one imported catalog must
   not remove valid authored screens.
@@ -135,12 +140,11 @@ Checked against the working tree on 2026-10-03.
 - **No sidebar problems when nothing is imported.** With `previews: false` and
   no catalog, the VS Code sidebar builds from the YAML without asking the
   server, so implementation and mapping problems are not shown there.
-
-## Open questions
-
-- Should the canvas show the server's `problems` (in the browser, and for
-  entries dropped while reading the YAML), so every surface reports the same
-  list?
+- **Some failures never become problems.** A stopped Storybook used only by
+  mappings, a mapped Simulator whose device is not booted, and an authored
+  entry with an invalid `src` or state id fail only on the canvas or are
+  dropped silently; see [other previews](other-previews.md#current-gaps) and
+  [Storybook](storybook.md#current-gaps).
 
 ## Verification points
 
