@@ -1387,7 +1387,8 @@
       }),
     };
     if (view.lens) {
-      out.lens = { key: view.lens.key, label: view.lens.label, kind: view.lens.kind, url: view.url };
+      out.lens = { key: view.lens.key, label: view.lens.label, kind: view.lens.kind,
+        url: window.wbLenses ? window.wbLenses.upstream(view.lens, view.url) : view.url };
       out.inspected = readable || !!targets;
     }
     if (view.story) out.story = { id: view.story.id, name: view.story.name };

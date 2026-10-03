@@ -89,6 +89,7 @@ function storyNavigation() {
       pick: function (list, picked) { return list.find(function (story) { return story.state === picked; }); },
       storyUrl: function (_lens, id) { return lens.url + '/iframe.html?id=' + id + '&viewMode=story'; },
       storyOpenUrl: function (_lens, id) { return lens.url + '/?path=/story/' + id; },
+      upstream: function (_lens, address) { return address; },
       selectStory: function (target, implementation, id) {
         assert.equal(target, frame);
         sent.push([{ event: { type: 'setCurrentStory', args: [{ storyId: id }] } }, implementation.url]);

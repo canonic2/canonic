@@ -48,7 +48,7 @@ async function main() {
   var origin = 'http://127.0.0.1:' + app.address().port;
   fs.writeFileSync(path.join(root, 'fixture.html'), '<html><body><h1>Design fixture</h1></body></html>');
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Iframe smoke\nimplementations:\n' +
-    '  dev:\n    kind: url\n    base: ' + origin + '\n    render: browser\n' +
+    '  dev:\n    kind: url\n    base: ' + origin + '\n' +
     '  storybook:\n    kind: storybook\n    url: ' + origin + '\n' +
     'sections:\n  - name: Screens\n    items:\n      - label: Fixture\n        src: fixture.html\n' +
     '        implementations:\n          dev: /app\n          storybook: Fixture\n');
@@ -67,9 +67,12 @@ async function main() {
     await target.send('Emulation.setDeviceMetricsOverride', {
       width: 2000, height: 1000, deviceScaleFactor: 1, mobile: false,
     });
+    // Lenses frame the fixture through the workbench's implementation proxy,
+    // so its messages arrive from the proxy's loopback origin.
     await target.send('Page.addScriptToEvaluateOnNewDocument', { source:
       'window.fixtureMessages=[];addEventListener("message",function(e){' +
-      'if(e.origin===' + JSON.stringify(origin) + '&&e.data.type==="fixture-ready")window.fixtureMessages.push(e.data);});',
+      'if(e.origin!==location.origin&&e.origin!==' + JSON.stringify(origin) + '&&/^http:\\/\\/127\\.0\\.0\\.1:/.test(e.origin)&&' +
+      'e.data&&e.data.type==="fixture-ready")window.fixtureMessages.push(e.data);});',
     });
     async function until(expression) {
       var deadline = Date.now() + 10000;

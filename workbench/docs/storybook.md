@@ -207,7 +207,9 @@ Start commands run only in trusted workspaces, and only in VS Code. See
 ## Switching stories
 
 The first story loads in an iframe at
-`<url>/iframe.html?id=<story-id>&viewMode=story`. After that, Workbench
+`<url>/iframe.html?id=<story-id>&viewMode=story`, through the loopback proxy
+Workbench runs for each implementation (see
+[Embedding and sign-in](lenses.md#embedding-and-sign-in)). After that, Workbench
 switches stories through Storybook's own channel, so the preview stays loaded
 and switching is fast. If Storybook doesn't confirm a switch within about
 1.5 seconds, or doesn't finish rendering within 15 seconds, Workbench loads the
@@ -219,31 +221,12 @@ Storybook doesn't forward keys while a text field in the story is focused.
 
 ## Screenshots of stories
 
-Without extra setup, a screenshot of a story is taken by the screenshot helper
-loading the story's URL itself, with your marks laid over it. Anything you
-changed by interacting with the story, such as typed text, an opened menu, or a
-scroll position, isn't included.
-
-To capture exactly what you see, load the
-[preview bridge](lenses.md#screenshots-through-a-url-lens) in
-`.storybook/preview.ts` (or `preview.js`), only when a local workbench frames
-the story:
-
-```ts
-// .storybook/preview.ts
-if (typeof window !== 'undefined' && window.parent !== window && document.referrer) {
-  const parent = new URL(document.referrer);
-  if (['127.0.0.1', 'localhost', '[::1]'].includes(parent.hostname)) {
-    const script = document.createElement('script');
-    script.src = `${parent.origin}/_workbench/preview-bridge.js`;
-    document.head.appendChild(script);
-  }
-}
-```
-
-The bridge sends the visible document, form values, and scroll positions to
-the workbench. It doesn't send cookies, storage, credentials, or code, and it
-only answers a workbench on a loopback address.
+A screenshot of a story shows it as you see it, including anything you
+changed by interacting: an opened modal or menu, typed text, a scroll position.
+Your Storybook needs no setup for this. Workbench's proxy adds the
+[preview bridge](lenses.md#screenshots-through-a-url-lens) to the story's page,
+and the bridge sends the live document to the workbench. It doesn't send
+cookies, storage, credentials, or code.
 
 ## Exports
 
@@ -260,6 +243,6 @@ found.
 | No Storybook lens on a screen | The title is exact. Ask the [stories route](troubleshooting.md#check-a-storybook-title), which lists near matches. |
 | Catalog is empty | Storybook isn't running, or isn't at `url`. The config route's `problems` says which. Open `<url>/index.json` in a browser. |
 | `url: auto` finds nothing | Storybook isn't on a scripted port or 6006 to 6010. Set `url` explicitly, or in `workbench.local.yaml`. |
-| Lens is blank | Open `<url>/iframe.html` directly. Check the console for framing errors from custom headers. |
+| Lens is blank | Open `<url>/iframe.html` directly, and check the frame's console. |
 | No source links | `root` is missing or points at the wrong folder. It should be the folder Storybook runs from. |
-| Screenshots don't match what you see | Add the preview bridge. |
+| Screenshots don't match what you see | The story hadn't finished loading, so the bridge hadn't connected. Take the screenshot again. |

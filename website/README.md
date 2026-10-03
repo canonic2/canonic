@@ -15,15 +15,16 @@ release downloads and publishes to GitHub Pages.
 | `src/components/DownloadScripts.astro` | the inline script that recommends this computer's download, and the Copy buttons |
 | `src/lib/workbench.js` | what every Workbench page shares: page URLs, the section links (Overview, Docs, Install, Changelog, GitHub), and the release data, fetched once per build |
 | `src/lib/releases.js` | lists complete releases, picks the one to link, reads their notes, and checks their download links |
-| `src/lib/marks.js` | the Canonic wordmark and product marks read from the stored SVG exports, in product order |
+| `src/lib/marks.js` | the Canonic lockup and product marks read from the stored SVG exports, in product order |
 | `src/data/screenshots.json` | the overview's numbered regions and the toolbar strip, written by `screenshots/capture.cjs` |
 | `src/styles/global.css` | light and dark tokens from the website design (warm grays, dark bands, Canonic blue) and every component's styles |
 | `src/content.config.ts` | loads Markdown directly from `../workbench/docs/` |
 | `src/pages/workbench/docs/[...slug].astro` | generated docs with guide navigation, section links, and previous/next links |
 | `src/lib/docs.js` | docs grouping, URLs, and Markdown link conversion |
 | `src/styles/docs.css` | responsive docs layout and Markdown typography |
-| `public/icons/` | original monochrome and blue-accent SVG exports for Workbench, Sandbox, Playground, Shield, and Studio |
-| `public/canonic.svg` | the Workbench favicon, with a blue accent and light/dark fills |
+| `public/icons/` | original monochrome and blue-accent SVG exports for Workbench, Sandbox, Playground, Shield, Studio, and Link |
+| `public/logos/` | original Canonic symbol, wordmark, lockup, and app icon exports |
+| `public/canonic.svg` | the Canonic symbol favicon, with a blue accent and light/dark fills |
 | `public/images/` | screenshots of the workbench showing the Acme example |
 | `screenshots/` | the Acme fixture and the script that regenerates the screenshots |
 | `astro.config.mjs` | the Pages origin and base path |
@@ -160,10 +161,11 @@ Keep the fixture on Acme and example.com placeholders.
 
 ## Product icons
 
-Store design exports unchanged in `public/icons/<product>.svg` and
-`public/icons/<product>-blue.svg`. The website reads its product paths from
-these files. Studio is stored for future use; it is not part of the current
-product navigation.
+Store original design exports unchanged in the repository's root `assets/`
+folder. Run `node scripts/refresh-brand-assets.cjs` from the repository root
+to refresh the self-contained package copies and presentation variants.
+The website reads paths and view boxes from `public/icons/` and `public/logos/`.
+Studio and Link are stored for future use outside the current product navigation.
 
 Workbench also ships the mark in `../workbench/icon.svg` (white for VS Code),
 `../workbench/workbench/canonic.svg` (blue accent with a dark-theme fill),

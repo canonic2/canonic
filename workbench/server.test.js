@@ -420,6 +420,13 @@ test('answers the config as this machine resolves it', async function () {
     assert.strictEqual(answer.status, 200);
     assert.strictEqual(answer.body.ok, true);
     assert.strictEqual(answer.body.implementations.dev.root, made.product);
+    /* The browser frames both implementations through one loopback proxy for
+       their shared origin; the original address stays alongside. */
+    var proxied = answer.body.implementations.dev.base;
+    assert.match(proxied, /^http:\/\/127\.0\.0\.1:\d+$/);
+    assert.notStrictEqual(proxied, 'http://127.0.0.1:' + running.port);
+    assert.strictEqual(answer.body.implementations.dev.upstream, 'http://localhost:6006');
+    assert.strictEqual(answer.body.implementations.storybook.url, proxied);
     assert.deepStrictEqual(answer.body.screens['pages/sign-in.html'].code, [
       { implementation: 'dev', path: path.join(made.product, 'src', 'button'), relative: 'src/button', exists: true },
     ]);
@@ -845,7 +852,8 @@ test('automatically detects a running Storybook from the project script', async 
   try {
     var answer = await get(running.port, server.CONFIG_PATH);
     assert.strictEqual(answer.status, 200);
-    assert.strictEqual(answer.body.implementations.storybook.url, storybook.url);
+    assert.strictEqual(answer.body.implementations.storybook.upstream, storybook.url);
+    assert.match(answer.body.implementations.storybook.url, /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.strictEqual(answer.body.catalogSections[0].items[0].label, 'Button');
   } finally {
     await running.close();

@@ -105,9 +105,10 @@ instead of a screenshot:
 - A page with a canvas or video loaded from another origin without CORS.
 
 For a [URL lens](lenses.md#screenshots-through-a-url-lens) or a
-[Storybook lens](storybook.md#screenshots-of-stories), the helper loads the
-page itself unless the page loads the preview bridge. Without the bridge, a
-page behind sign-in may be captured as its sign-in page.
+[Storybook lens](storybook.md#screenshots-of-stories), the preview bridge
+Workbench adds to the page sends its live document, so the screenshot shows
+what you see. If the bridge hasn't connected yet, the helper loads the page
+itself, and a page behind sign-in may be captured as its sign-in page.
 
 ## Hand off to an agent
 

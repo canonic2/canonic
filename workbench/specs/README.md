@@ -20,6 +20,7 @@ decisions, or findings change, and add new topics to the index below. Use the
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
 | [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
+| [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
 

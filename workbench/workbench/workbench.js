@@ -313,7 +313,9 @@
        the spare iframe loads behind it. */
     frameShell.hidden = !frame.getAttribute('src');
     loadPreview(url);
-    openLink.href = url;
+    /* A lens loads through the workbench's proxy; on its own, the page
+       opens at the implementation's own address. */
+    openLink.href = view && view.lens ? window.wbLenses.upstream(view.lens, url) : url;
   }
 
   var pendingStorySwitch = null;
@@ -550,7 +552,7 @@
         view.url = window.wbLenses.storyUrl(lens, picked.id);
         view.code = codeFor(item, picked);
         if (!reuseStoryFrame(previousView, lens, picked.id, seq)) showFrame(view.url);
-        openLink.href = window.wbLenses.storyOpenUrl(lens, picked.id);
+        openLink.href = window.wbLenses.upstream(lens, window.wbLenses.storyOpenUrl(lens, picked.id));
         drawStories(list, picked, lens);
         setTitle(item, picked.name, lens);
         syncHash();

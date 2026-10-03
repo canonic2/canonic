@@ -181,15 +181,16 @@ The screen's `viewports` doesn't list it. Hover over the button to see why. See
 
 ## A URL lens is blank, refuses to load, or loses its sign-in
 
-Open the canvas's developer tools and look for:
+Workbench loads the page through a loopback proxy that removes framing
+headers (see [Embedding and sign-in](lenses.md#embedding-and-sign-in)). If it
+still doesn't load:
 
-- **`X-Frame-Options` or `frame-ancestors` errors:** the app refuses to be
-  framed. Relax that in its development environment. See
-  [Allow framing](lenses.md#allow-framing).
-- **Cookie warnings:** the session cookie isn't sent in a frame. See
-  [Keep the session](lenses.md#keep-the-session).
-- **Connection refused:** the server isn't running. Add a
+- **The frame says the app isn't answering:** the server isn't running. Add a
   [start command](lenses.md#start-the-server-automatically), or start it.
+- **Sign-in doesn't stick:** the sign-in returned to your app's own origin
+  instead of the proxy. See [Keep the session](lenses.md#keep-the-session).
+- **Something else:** open the canvas's developer tools and read the frame's
+  console.
 
 Workbench never falls back to another way of showing the page. **Open on its
 own** works while you fix the app.
@@ -217,8 +218,7 @@ See [iOS Simulator troubleshooting](ios-simulator.md#troubleshooting) and
 
 | Symptom | Cause |
 | --- | --- |
-| A lens screenshot shows a sign-in page | Without the preview bridge, the screenshot helper loads the page in its own session. [Add the bridge](lenses.md#screenshots-through-a-url-lens). |
-| A lens screenshot doesn't show what you typed or scrolled to | Same cause: add the bridge. |
+| A lens screenshot shows a sign-in page, or not what you typed, opened, or scrolled to | The page hadn't finished loading, so its preview bridge hadn't connected, and the helper loaded the URL itself. Take the screenshot again. See [Screenshots through a URL lens](lenses.md#screenshots-through-a-url-lens). |
 | Screenshots of one page fail with a message | The page contains an `iframe`, `object`, or `embed`, or a canvas or video loaded from another origin without CORS. These pages can't be captured. |
 | A font or image is missing in the first screenshot after loading | The helper's copy was still loading assets. Take it again. |
 | Screenshots fail with an error | Read **Workbench: Show Log**. The screenshot helper needs macOS 13 or later, Windows, or Linux with a display; see [The screenshot helper](extension.md#the-screenshot-helper). |

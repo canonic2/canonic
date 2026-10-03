@@ -96,14 +96,15 @@ web-page capture, not an operating-system screenshot of VS Code.
   speculative updates. A lost mirror base triggers a full snapshot retry of
   that requested state. Preparation resumes after capture, including after
   failure.
-- **URL and Storybook lenses.** These are cross-origin. With the cooperative
-  [preview bridge](../docs/lenses.md#screenshots-through-a-url-lens), the
-  visible iframe sends full live snapshots, which the helper renders on the
-  same inert capture surface. Without the bridge, the helper navigates to the
-  URL in its own browser session, restores scroll, waits for fonts and
-  visible images, and overlays marks. An iframe login does not automatically
-  sign in the helper, and form input or other interaction in the iframe is
-  not reflected.
+- **URL and Storybook lenses.** These are cross-origin, loaded through the
+  [implementation proxy](implementation-proxy.md), which adds the
+  [preview bridge](../docs/lenses.md#screenshots-through-a-url-lens) to each
+  page. The visible iframe sends full live snapshots, which the helper renders
+  on the same inert capture surface. Until the bridge has sent its first
+  snapshot, the helper navigates to the URL in its own browser session,
+  restores scroll, waits for fonts and visible images, and overlays marks. An
+  iframe login does not sign in the helper, and interaction in the iframe is
+  not reflected in that fallback.
 - **iOS Simulator and window lenses.** These show a native window stream.
   Their camera and handoff use the canvas DOM renderer on the visible frame,
   not the Electron helper. Screen Recording permission belongs to the
@@ -129,8 +130,10 @@ numbered suffixes.
 A handoff prompt names the screen, state, width, saved screenshot, each mark
 with its position and the element under it, the lens's implementation and
 URL, and any code pointers or TypeScript preview source. The element under a
-mark comes from the visible document for local pages, and from the helper's
-page for unbridged lenses. The prompt says when elements could not be read.
+mark comes from the visible document for local pages, from the mirrored copy
+on the capture surface for bridged lenses
+([capture-page.js](../workbench/capture-page.js)), and from the helper's page
+for the URL fallback. The prompt says when elements could not be read.
 See [handoff.js](../handoff.js).
 
 ## Failure behavior
@@ -183,15 +186,6 @@ cases, and embedded documents or tainted pixels.
   or video ([dom-mirror.js](../workbench/dom-mirror.js)), instead of
   rendering those regions blank. The user guides describe the current failure;
   update them with the fix.
-- A bridged lens handoff carries no element descriptions: the server renders
-  the mirror with `capture`, which does not evaluate mark anchors, and the
-  browser cannot read the cross-origin frame. Unbridged lens handoffs do name
-  elements.
-
-### Open questions
-
-- Should bridged lens handoffs name the elements under marks, for example by
-  asking the bridge to describe anchor points?
 
 ## Verification points
 
@@ -215,8 +209,11 @@ cases, and embedded documents or tainted pixels.
   request, flush, resync retry, no-DOM-fallback rule, Simulator rendering,
   preparation scheduling, the inert surface, and pointer revisions.
 - [server.test.js](../server.test.js) covers payload validation, origin
-  checks, mirror validation, JPEG saving and handoff, warm-up, and bridged
-  captures. [handoff.test.js](../handoff.test.js) covers the prompt.
+  checks, mirror validation, JPEG saving and handoff, warm-up, bridged
+  captures, and proxied implementation addresses in the config.
+  [proxy.test.js](../proxy.test.js) covers bridge injection, header and cookie
+  rewriting, redirects, request bodies, WebSocket upgrades, and a stopped
+  implementation. [handoff.test.js](../handoff.test.js) covers the prompt.
 - Manual, on a desktop after `npm run bundle-runtime`:
   [smoke-capture.cjs](../scripts/smoke-capture.cjs) (warm reuse, reloads,
   resizing, implementation handoffs, Dock visibility, crash recovery),
@@ -226,4 +223,5 @@ cases, and embedded documents or tainted pixels.
   to the machine and fixture they ran on, not to VS Code click latency.
   [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) drives an installed Chrome
   through the development driver [chrome.cjs](../scripts/chrome.cjs) to check
-  lens iframes and sessions; the extension never uses that driver.
+  lens iframes and sessions through the implementation proxy; the extension
+  never uses that driver.

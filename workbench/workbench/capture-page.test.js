@@ -3,7 +3,7 @@ var test = require('node:test');
 var fs = require('node:fs');
 var path = require('node:path');
 var vm = require('node:vm');
-function page() {
+function page(extra) {
   var loads = []; var paints = 0; var scrolls = []; var mirrors = []; var sandbox;
   var listeners = {};
   var behavior = 'smooth';
@@ -26,7 +26,7 @@ function page() {
     removeAttribute: function () {},
   };
   var markup = { innerHTML: '' };
-  var window = { setTimeout: setTimeout, requestAnimationFrame: paint, wbDOMMirror: { apply: async function (_, snapshot) { mirrors.push(snapshot.revision); } } };
+  var window = Object.assign({ setTimeout: setTimeout, requestAnimationFrame: paint, wbDOMMirror: { apply: async function (_, snapshot) { mirrors.push(snapshot.revision); } } }, extra);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'capture-page.js'), 'utf8'), {
     window: window, document: { getElementById: function (id) { return id === 'captureFrame' ? frame : markup; } },
   });
@@ -56,6 +56,17 @@ test('live updates reuse an inert document, exact captures skip apply, and navig
   assert.deepEqual(p.loads, ['srcdoc', 'srcdoc']);
   delete request.mirror; await p.prepare(request);
   assert.equal(p.loads.at(-1), request.url);
+});
+
+test('a mirrored capture names the element under each mark from its own copy', async function () {
+  var asked = [];
+  var p = page({ wbDescribe: { at: function (doc, x, y) { asked.push([doc, x, y]); return 'button.create “Create Customer”'; } } });
+  var result = await p.prepare({ url: 'http://localhost/one', revision: '1', mirror: { revision: 'snapshot-1' },
+    anchors: [{ x: 120, y: 40 }, null] });
+  assert.deepEqual(Array.from(result.targets), ['button.create “Create Customer”', null]);
+  assert.equal(asked.length, 1); assert.equal(asked[0][0], p.inner.document); assert.deepEqual(asked[0].slice(1), [120, 40]);
+  var plain = await p.prepare({ url: 'http://localhost/one', revision: '1', mirror: { revision: 'snapshot-1' } });
+  assert.equal(plain.targets, undefined);
 });
 
 test('a reload revision refreshes even the same URL; geometry and marks settle without reloading', async function () {

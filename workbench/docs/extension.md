@@ -149,9 +149,11 @@ Network access:
 - The extension sends no telemetry and downloads nothing at runtime. The
   runtime it needs ships inside the `.vsix`.
 - The canvas loads what you point it at: your own pages and their assets,
-  [URL implementations](lenses.md), and Storybook. Without the
-  [preview bridge](lenses.md#screenshots-through-a-url-lens), the screenshot
-  helper loads a lens's URL itself to capture it.
+  [URL implementations](lenses.md), and Storybook. Implementations load
+  through a proxy on `127.0.0.1` that adds the
+  [preview bridge](lenses.md#screenshots-through-a-url-lens) to their pages.
+  If the bridge hasn't connected, the screenshot helper loads a lens's URL
+  itself to capture it.
 - `url: auto` probes local ports for a running Storybook, and start commands
   probe the `check` and `ready` addresses you configure.
 - A handoff goes only to your clipboard and `.canonic/.handoffs/`. Nothing is

@@ -22,7 +22,8 @@
       if (!state) state = states[0] || { id: 'default', label: 'Default' };
       lines.push('- State: ' + named(state.label, state.id));
     }
-    lines.push('- Lens: ' + (lens ? named(lens.label, lens.key) + ' — `' + view.url + '`' : 'Design'));
+    var address = lens && window.wbLenses ? window.wbLenses.upstream(lens, view.url) : view.url;
+    lines.push('- Lens: ' + (lens ? named(lens.label, lens.key) + ' — `' + address + '`' : 'Design'));
     return lines.join('\n');
   }
 
