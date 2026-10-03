@@ -7,6 +7,12 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## 0.8.0
+
+- Screenshots and handoffs come only from the capture helper bundled with the extension. Workbench no longer falls back to Chrome, and the `canonic.capture.chromePath` setting is gone; you can remove it from your settings.
+- On a host that can't run the helper (macOS 12 or earlier, or Linux without a display), screenshots fail with that reason instead of opening Chrome. See The VS Code extension guide.
+- New guides for previewing React, React Native Web, Vue, Astro, and HTML, and for registering custom adapters. The extension guide now covers which files Workbench writes, its network access, updating, and uninstalling.
+
 ## 0.7.0
 
 - Define screens and components in `.workbench.ts` or `.workbench.tsx` files, with named states and adapters for HTML, React, Vue, Astro, and React Native Web. See the TypeScript Workbench previews guide.
