@@ -181,85 +181,61 @@ starts the app differently. Every key is listed in
 
 ## Embedding and sign-in
 
-A URL lens loads your app in an ordinary iframe. Typing, scrolling, selection,
-and sign-in all happen in that page. For that to work, your app's development
-environment has to allow being framed, and its session has to work inside a
-frame.
+A URL lens loads your app in an ordinary iframe, through a proxy Workbench
+runs for each implementation origin. The proxy listens on its own loopback
+port, such as `http://127.0.0.1:50353`, and passes every request and WebSocket
+on to your app. Typing, scrolling, selection, and sign-in all happen in your
+app's own page, and your app sees requests addressed to its own host, with
+`Origin` and `Referer` to match. Nothing in your app needs to change.
 
-### Allow framing
+On the way back, the proxy:
 
-If the lens stays blank, or the browser console reports `X-Frame-Options` or
-`frame-ancestors`, the app refuses to be framed:
-
-- In development, the simplest fix is not to send `X-Frame-Options` and not to
-  restrict `frame-ancestors`.
-- If you need a policy, `frame-ancestors` must allow **every** ancestor. In a
-  standalone browser that is the workbench, `http://127.0.0.1:3579` (or the
-  port it reports). Inside VS Code the workbench is itself inside the editor's
-  webviews, which are further ancestors. The console message names the
-  ancestor that was refused.
-- Keep production policies as they are. Change development and preview
-  environments only.
-
-See [frame-ancestors on MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors).
+- adds one script to each page, the preview bridge, which sends the page's
+  live document to the workbench for
+  [screenshots](#screenshots-through-a-url-lens);
+- drops headers that would keep the page out of a frame: `X-Frame-Options`,
+  `Content-Security-Policy`, and the cross-origin opener, embedder, and
+  resource policies;
+- removes `Domain`, `Secure`, and `SameSite` from cookies, so they belong to
+  the proxy's address;
+- keeps redirects to your app's origin on the proxy.
 
 ### Keep the session
 
 Sign in inside the lens, and sign out with the app's own logout. The lens has
-its own browser session, separate from your regular browser and from the
-screenshot helper. If sign-in doesn't stick:
+its own browser session, separate from your regular browser. The workbench and
+the proxy are both on `127.0.0.1`, so your app's cookies are first-party in the
+lens.
 
-- **Use the same host name everywhere.** `localhost` and `127.0.0.1` are
-  different sites, so cookies set on one aren't sent to the other.
-- **Cookies in a frame are third-party when the frame is cross-site.** They
-  need `SameSite=None; Secure`, and browser restrictions on third-party
-  cookies can still block them. Inside VS Code, the editor's own webview is the
-  top-level page, so expect the iframe to be treated as cross-site.
-- **Some identity providers refuse to be framed.** Use a popup or redirect
-  sign-in flow your app supports, so the session is established in the lens's
-  browser context. Signing in from your regular browser doesn't share the
-  session.
+- Sign-in that goes through an identity provider returns to the callback
+  address registered with it: your app's own origin, not the proxy. The lens
+  doesn't keep that session. Use a sign-in your development build serves
+  itself.
+- Links and scripts that spell out your app's full origin, such as
+  `http://localhost:3000/settings`, leave the proxy. Relative links stay on it.
 
-See [third-party cookies on MDN](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies).
-When embedding fails, the failure stays in the frame. Workbench doesn't switch
-to another way of showing the page; fix the app's configuration or use
-**Open on its own**.
+When a page fails to load, the failure stays in the frame; use **Open on its
+own** to compare. If the app isn't running, the proxy answers that it isn't
+answering.
 
 ## Screenshots through a URL lens
 
-A URL lens shows another origin's page, so the workbench can't read it
-directly. Screenshots of it work in one of two ways.
+Screenshots and handoffs of a URL lens show the page as you see it: open
+dialogs and menus, form values, and scroll positions included. The preview
+bridge the proxy adds to each page sends its live document to the workbench,
+which renders it in the screenshot helper.
 
-**Without the preview bridge**, the screenshot helper loads the same URL
-itself, in its own browser session, and lays your marks over the result. This
-works for public pages. For a page behind sign-in, the helper isn't signed in,
-so the screenshot may show your sign-in page. Form input, scroll positions, and
-anything you changed by interacting are also not reflected.
-
-**With the preview bridge**, the page sends its live document to the workbench,
-which captures exactly what you see, including form values and scroll positions.
-To opt in, load `/_workbench/preview-bridge.js` from the workbench's origin in
-your app's development build, only when it is framed by a local workbench:
-
-```js
-if (typeof window !== 'undefined' && window.parent !== window && document.referrer) {
-  const parent = new URL(document.referrer);
-  if (['127.0.0.1', 'localhost', '[::1]'].includes(parent.hostname)) {
-    const script = document.createElement('script');
-    script.src = `${parent.origin}/_workbench/preview-bridge.js`;
-    document.head.appendChild(script);
-  }
-}
-```
-
-- Browsers remove the path from a cross-origin referrer, so the check is on
-  the loopback host, not on `/_workbench/`. The bridge repeats it for every
-  message.
 - The bridge sends the visible document: DOM, open shadow roots, styles, form
   values, and scroll positions. It doesn't send cookies, storage,
   credentials, or code.
-- The workbench accepts bridge messages only from the active iframe, at the
-  implementation's configured origin.
+- It answers only a workbench on a loopback address, and the workbench accepts
+  its messages only from the active iframe.
+
+If the bridge can't connect, for example because the page hasn't finished
+loading, the screenshot helper loads the same URL itself, in its own session,
+and lays your marks over the result. That copy starts fresh: it doesn't
+include what you did in the page, and a page behind sign-in may show its
+sign-in screen.
 
 ## Compare a design with a Workbench preview
 

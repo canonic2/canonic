@@ -7,6 +7,12 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## Unreleased
+
+- Screenshots and handoffs of Storybook and URL lenses show what you see, including opened modals and menus, typed text, and scroll positions. Workbench loads those pages through a local proxy that adds its preview bridge, so your Storybook and app need no changes. If you added the bridge loader to `.storybook/preview` yourself, you can remove it.
+- Handoffs through a lens name the element under each mark as it is on the page you see.
+- Lens pages load even when the app sends `X-Frame-Options` or a `frame-ancestors` policy.
+
 ## 0.8.0
 
 - Screenshots and handoffs come only from the capture helper bundled with the extension. Workbench no longer falls back to Chrome, and the `canonic.capture.chromePath` setting is gone; you can remove it from your settings.

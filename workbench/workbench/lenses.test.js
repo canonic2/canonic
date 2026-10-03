@@ -34,6 +34,19 @@ test('addresses one story alone, and inside Storybook', function () {
   );
 });
 
+test('names a proxied address at the implementation’s own origin', function () {
+  var lenses = load();
+  var proxied = { key: 'storybook', kind: 'storybook', url: 'http://127.0.0.1:50353', upstream: 'http://localhost:6006' };
+  assert.equal(
+    lenses.upstream(proxied, 'http://127.0.0.1:50353/iframe.html?id=a--b&viewMode=story'),
+    'http://localhost:6006/iframe.html?id=a--b&viewMode=story'
+  );
+  var app = { key: 'dev', kind: 'url', base: 'http://127.0.0.1:50400', upstream: 'https://staging.example.com' };
+  assert.equal(lenses.upstream(app, 'http://127.0.0.1:50400/login'), 'https://staging.example.com/login');
+  assert.equal(lenses.upstream(storybook, 'http://localhost:6006/iframe.html'), 'http://localhost:6006/iframe.html');
+  assert.equal(lenses.upstream(proxied, 'http://elsewhere.example.com/'), 'http://elsewhere.example.com/');
+});
+
 test('picks the story the address means, else the first', function () {
   var lenses = load();
   var stories = [{ id: 'a--default', state: 'default' }, { id: 'a--icon-only', state: 'icon-only' }];

@@ -317,33 +317,23 @@ shadow roots and browser-private UI are inaccessible; origin-tainted canvas or
 video pixels cannot be transferred. Linked stylesheets load from their URLs;
 runtime CSSOM edits to those sheets are not transferred. The mirror is not an
 OS screen recording.
-External iframe lenses can opt into the cooperative preview bridge by loading
-`/_workbench/preview-bridge.js` from the embedding Workbench origin. The bridge
-transfers the visible document, including form values and nested and viewport
-scroll, to the same inert capture mirror used for local pages. The receiver
-accepts messages only from the active iframe at its configured origin, and the
-preview bridge answers only a loopback parent. It transfers DOM state, not code,
-cookies, storage or network credentials.
+URL and Storybook lenses load through `../proxy.js`: one loopback proxy per
+implementation origin, on its own port so absolute paths such as
+`/@vite/client` keep working. The config route hands the browser the proxy
+address (the original stays in `upstream`); the server keeps talking to the
+implementation directly. The proxy passes requests and WebSockets through,
+drops framing headers, rewrites cookies and redirects to its own origin, and
+adds `/_workbench/preview-bridge.js` to the top of every HTML document a
+navigation loads. The bridge transfers the visible document, including form
+values and nested and viewport scroll, to the same inert capture mirror used
+for local pages. The receiver accepts messages only from the active iframe at
+its configured origin, and the preview bridge answers only a loopback parent.
+It transfers DOM state, not code, cookies, storage or network credentials.
 
-For Storybook, load the bridge from `web/preview.tsx` only when the catalog is
-embedded by a loopback Workbench:
-
-```ts
-if (typeof window !== "undefined" && window.parent !== window) {
-  const parent = new URL(document.referrer);
-  if (["127.0.0.1", "localhost", "[::1]"].includes(parent.hostname)) {
-    const script = document.createElement("script");
-    script.src = `${parent.origin}/_workbench/preview-bridge.js`;
-    document.head.appendChild(script);
-  }
-}
-```
-
-Browsers strip the path from a cross-origin referrer, so the loader deliberately
-checks the loopback origin rather than `/_workbench/`; the bridge itself repeats
-that check for every message. An external lens without that script retains URL capture. Its screenshot helper
-has a separate session; signing in inside the iframe does not sign the helper in,
-and captures of protected pages may show their sign-in page.
+Until the bridge has sent its first snapshot, a lens capture falls back to the
+helper loading the URL in its own session; signing in inside the iframe does
+not sign the helper in, and that copy shows none of the reviewer's
+interaction.
 
 An unbundled source checkout or Linux host without a display uses the existing
 headless Chrome/Chromium/Edge path. If the bundled helper cannot unpack or start,
@@ -404,29 +394,20 @@ interaction in those cases.
 
 ## Embedding and sign-in
 
-All design, URL, and Storybook lenses load in ordinary iframes. An iframe can
-sign in and maintain an app session. Workbench does not assume VS Code shares
+All design, URL, and Storybook lenses load in ordinary iframes. URL and
+Storybook lenses come through the implementation proxy (see the capture
+section above), which drops `X-Frame-Options`, `Content-Security-Policy`, and
+cross-origin opener, embedder, and resource policies, and rewrites cookies to
+its own origin. The proxy and the workbench share `127.0.0.1`, so an app's
+cookies are first-party in the lens. Workbench does not assume VS Code shares
 your normal browser's cookies. Sign in within the workbench's page, and use the
-app's logout to end that session.
+app's logout to end that session. An identity provider's callback returns to
+the app's own origin rather than the proxy, so that session is not kept in the
+lens.
 
-For apps you control, configure their development environment:
-
-- Allow the workbench in `Content-Security-Policy: frame-ancestors`, accounting
-  for every ancestor when it is nested inside VS Code. Remove conflicting
-  `X-Frame-Options` restrictions in that environment. Keep production policy
-  scoped to its intended embedding hosts.
-- Prefer a same-site development setup where possible. Cross-site iframe cookies
-  need `SameSite=None; Secure`, and browser third-party cookie restrictions can
-  still block them. Consistent hostnames matter: `localhost` and `127.0.0.1`
-  are different sites. VS Code's outer webview also affects the embedding context.
-- If your identity provider refuses embedded login, use an app-supported popup
-  or redirect flow that establishes the session in the workbench's browser
-  context; opening your regular browser does not automatically share a session.
-
-See [frame ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors)
-and [third-party cookies](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies).
-An embedding, login, or server failure stays in the iframe. Fix the app's
-configuration or use **Open on its own**; Workbench never switches to a stream.
+A login or server failure stays in the iframe; the proxy answers 502 when the
+implementation isn't running. Use **Open on its own**, which opens the
+implementation's own address; Workbench never switches to a stream.
 
 ## The files
 
@@ -452,7 +433,7 @@ configuration or use **Open on its own**; Workbench never switches to a stream.
 | `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
 | `capture-sync.js` | coalesces preparation, checks readiness and retries failures |
 | `dom-mirror.js` | caches node records, sends revisioned patches and applies them to the inert capture document |
-| `preview-bridge.js` | opt-in external-preview sender for live DOM and scroll state |
+| `preview-bridge.js` | external-preview sender for live DOM and scroll state, added to lens pages by the implementation proxy |
 | `preview-bridge-client.js` | validates bridge messages from the active configured iframe |
 | `workbench.css` | the chrome. Every value it uses is declared in it |
 | `icons.js` | turns any configured Lucide name into workbench SVG markup |
@@ -475,8 +456,9 @@ the reason those pages can apply shell state without project code: off
 `file://` the frame is a foreign origin the shell can't reach into, so both
 flags travel in the URL and the page applies them to itself. Nothing references
 them — the server puts them into each page it serves, which is why a project's
-plain pages stay plain HTML. External previews opt into `preview-bridge.js`
-themselves because Workbench does not rewrite another server's response.
+plain pages stay plain HTML. Lens pages from another server get only
+`preview-bridge.js`, from the implementation proxy: the compatibility bundle's
+form and navigation handling would change how those apps behave.
 
 ## The address bar
 

@@ -135,6 +135,17 @@
     });
   }
 
+  /* The element under each mark, read from the mirrored document: a lens's
+     page is another origin the workbench can't read, but its copy here can. */
+  function targets(anchors) {
+    if (!Array.isArray(anchors) || !anchors.length || !window.wbDescribe) return undefined;
+    return anchors.map(function (point) {
+      if (!point) return null;
+      try { return window.wbDescribe.at(frame.contentDocument, Number(point.x), Number(point.y)); }
+      catch (_) { return null; }
+    });
+  }
+
   function result(payload) {
     var win = frame.contentWindow;
     var requested = payload.scroll || { x: 0, y: 0 };
@@ -146,6 +157,7 @@
         appliedX: win.scrollX || win.pageXOffset || 0,
         appliedY: win.scrollY || win.pageYOffset || 0,
       },
+      targets: targets(payload.anchors),
     };
   }
 

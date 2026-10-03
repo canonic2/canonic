@@ -71,19 +71,21 @@ Configuration: [Implementations](../docs/configuration.md#implementations) and
 - With a single path, the lens shows that path for every state and hides the
   state menu. With a state map, the state menu stays and each pick loads its
   path.
-- The URL lens opens the external page in an iframe. Apps must permit
-  embedding and manage their own session in that context. When embedding
-  fails, the failure stays in the frame; Workbench does not switch to another
-  way of showing the page. **Open on its own** opens the URL in the browser.
+- The URL lens opens the external page in an iframe, through the
+  [implementation proxy](implementation-proxy.md). Apps need no embedding
+  changes; they manage their own session in that context. When a page fails to
+  load, the failure stays in the frame; Workbench does not switch to another
+  way of showing the page. **Open on its own** opens the implementation's own
+  URL in the browser.
 - A URL implementation may use the optional `start` command
   ([vscode-extension.md](vscode-extension.md#implementation-startup)). This is
   a VS Code startup feature, not a requirement to view a hosted
   implementation.
-- An external page may opt into the cooperative preview bridge,
-  `/_workbench/preview-bridge.js`. Without it,
-  [screenshot capture](capture.md) visits the URL in the helper's separate
-  session, whose authentication and interaction state may differ from the
-  visible iframe.
+- Projects install nothing for capture. The
+  [implementation proxy](implementation-proxy.md) adds the preview bridge to
+  every page the lens loads, so [screenshot capture](capture.md) shows the
+  live page. Lenses must not go back to framing the implementation's own
+  address; that spec explains why.
 
 ### Implementation roots and code pointers
 

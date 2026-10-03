@@ -14,7 +14,9 @@
    selectStory asks a loaded preview to switch stories without navigation.
    storybookEvent reads acknowledgements from that preview's channel.
    pick        which of a title's stories the address means: the one whose
-               state matches, else the first. */
+               state matches, else the first.
+   upstream    an address at the implementation's own origin rather than its
+               proxy, for what people and agents read. */
 (function () {
   function url(impl, ref, state) {
     var path = (state && ref.states && ref.states[state]) || ref.path;
@@ -63,6 +65,19 @@
     return typeof id === 'string' ? { type: type, id: id } : null;
   }
 
+  /* The frame loads an implementation through the workbench's proxy. A
+     handoff or reference names the implementation's own address instead,
+     which outlives this session's proxy port. */
+  function upstream(impl, address) {
+    if (!impl || !impl.upstream || typeof address !== 'string') return address;
+    var proxied = impl.base || impl.url || '';
+    try {
+      var from = new URL(proxied).origin;
+      if (address.indexOf(from) !== 0) return address;
+      return new URL(impl.upstream).origin + address.slice(from.length);
+    } catch (error) { return address; }
+  }
+
   function pick(stories, state) {
     for (var i = 0; i < stories.length; i++) {
       if (stories[i].state === state) return stories[i];
@@ -72,6 +87,6 @@
 
   window.wbLenses = {
     url: url, storyUrl: storyUrl, storyOpenUrl: storyOpenUrl,
-    selectStory: selectStory, storybookEvent: storybookEvent, pick: pick,
+    selectStory: selectStory, storybookEvent: storybookEvent, pick: pick, upstream: upstream,
   };
 })();

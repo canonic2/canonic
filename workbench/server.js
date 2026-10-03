@@ -30,6 +30,7 @@ var remote = require('./remote');
 var designExport = require('./export');
 var previewService = require('./preview-service');
 var previewScripts = require('./preview-scripts');
+var implementationProxy = require('./proxy');
 var previewCompiler = require('./preview/compiler.cjs');
 var windowStream = require('./window-stream');
 var manifest = require('./workbench/manifest');
@@ -822,6 +823,13 @@ function start(options) {
   var captureReady = Promise.resolve();
   var previews = null;
   var previewSettings = null;
+  /* Lenses frame implementations through these, so every page carries the
+     preview bridge and its live DOM reaches capture. */
+  var proxies = implementationProxy.create({
+    bridge: function () {
+      return 'http://127.0.0.1:' + server.address().port + WORKBENCH_PREFIX + 'preview-bridge.js';
+    },
+  });
   var windowVideo = options.windowStream || windowStream.create({
     storage: path.join(options.captureStorage || path.join(os.tmpdir(), 'canonic-workbench-capture'), 'window-capture'),
     path: WINDOW_STREAM_PATH,
@@ -1106,7 +1114,28 @@ function start(options) {
         impl = Object.assign({}, impl, { url: autoStorybookAddresses[key] });
       }
       return originOf(impl);
-    }).filter(Boolean);
+    }).filter(Boolean).concat(proxies.origins());
+  }
+
+  /* The config as the browser gets it: URL and Storybook implementations at
+     their proxies. The server itself keeps talking to them directly. */
+  function proxied(view) {
+    if (!view) return Promise.resolve(view);
+    var implementations = Object.assign({}, view.implementations);
+    return Promise.all(Object.keys(implementations).map(function (key) {
+      var impl = implementations[key];
+      var field = impl.kind === 'url' ? 'base' : impl.kind === 'storybook' ? 'url' : null;
+      if (!field || !/^https?:\/\//i.test(impl[field] || '')) return null;
+      return proxies.address(impl[field]).then(function (address) {
+        var copy = Object.assign({}, impl, { upstream: impl[field] });
+        copy[field] = address;
+        implementations[key] = copy;
+      }, function (error) {
+        diagnostic('warn', 'proxy.failed', { implementation: key, message: String(error.message || error) });
+      });
+    })).then(function () {
+      return Object.assign({}, view, { implementations: implementations });
+    });
   }
 
   function json(res, status, body) {
@@ -1343,6 +1372,7 @@ function start(options) {
     if (url.pathname === CONFIG_PATH) {
       Promise.resolve()
         .then(resolvedWithCatalogs)
+        .then(proxied)
         .then(function (view) {
           if (!view) json(res, 404, { ok: false, error: 'There is no ' + config.FILE + ' at the project root.' });
           else json(res, 200, Object.assign({ ok: true }, view));
@@ -1560,7 +1590,8 @@ function start(options) {
             }
             var file = saveShot(root, payload.name, png, payload.format);
             onShot(file);
-            json(res, 200, { ok: true, file: file, targets: (shot && shot.targets) || null });
+            var targets = shot && (shot.targets || (shot.captureDetails && shot.captureDetails.targets));
+            json(res, 200, { ok: true, file: file, targets: targets || null });
           });
         })
         .catch(function (err) {
@@ -1777,6 +1808,7 @@ function start(options) {
           return Promise.all([
             Promise.resolve(capture.close()).catch(function () {}),
             Promise.resolve(windowVideo.close()).catch(function () {}),
+            proxies.close(),
             previews ? previews.close() : Promise.resolve(),
           ]);
         }).then(function () {

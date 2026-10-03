@@ -82,10 +82,12 @@ The keys, their validation, and examples are in the
 
 ## Screenshots and export
 
-- Without the preview bridge, a screenshot of a story is taken by the capture
-  helper loading the story URL itself, so interaction state isn't included.
-  Loading `/_workbench/preview-bridge.js` from `.storybook/preview` lets the
-  workbench capture the live story. See [capture.md](capture.md).
+- A screenshot of a story captures the live story, including opened modals,
+  typed text, and scroll, with no Storybook changes: the
+  [implementation proxy](implementation-proxy.md) adds the preview bridge to
+  `iframe.html`. Stories must not be framed from Storybook's own address or
+  served from the workbench's origin instead; see that spec. Capture is in
+  [capture.md](capture.md).
 - Design-system export plans a reference for each imported story at each of
   the screen's viewports; imported screens declare none, so they use fit,
   desktop, and mobile. A state without a story ID becomes a warning. An
