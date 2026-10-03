@@ -59,7 +59,7 @@ VS Code extension host
   ├─ loopback workbench server ── project and workbench pages
   ├─ VS Code webviews ── sidebar and workbench tab
   ├─ screenshot capture service ── bundled Electron helper or Chrome fallback
-  └─ Simulator stream helper ── ScreenCaptureKit and WDA path on macOS
+  └─ window capture helper ── ScreenCaptureKit stream of the Simulator window, with WDA input, on macOS
 ```
 
 The screenshot helper renders web pages for [interactive capture](capture.md)

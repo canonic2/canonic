@@ -104,7 +104,7 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations: “Dev Server” must be kebab-case — it travels in a URL.',
     'implementations › dev: needs a base starting with http:// or https://.',
     'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
-    'implementations › docs: kind must be url, storybook, or ios-simulator.',
+    'implementations › docs: kind must be url, storybook, ios-simulator, or window.',
     'implementations › bare: needs a kind, and a url or base.',
     'implementations › staging: catalog is only available for Storybook and iOS Simulator implementations.',
     'implementations › staging: render is no longer used; remove it. URL and Storybook implementations use iframes.',
@@ -128,6 +128,42 @@ test('accepts automatic Storybook and catalogued iOS Simulator implementations',
     key: 'simulator', label: 'Simulator', kind: 'ios-simulator', root: null,
     device: 'booted', catalog: true, catalogIcon: 'smartphone', catalogIcons: {},
   });
+});
+
+test('accepts a window implementation by application, and screens map it to a window title', function () {
+  var problems = [];
+  var implementations = manifest.implementations({
+    emulator: { kind: 'window', app: 'com.example.emulator' },
+    blank: { kind: 'window' },
+    spaced: { kind: 'window', app: 'Example App' },
+    started: { kind: 'window', app: 'example', start: { command: 'run', check: { port: 3000 } }, catalog: true },
+  }, problems);
+  assert.deepEqual(implementations.emulator, {
+    key: 'emulator', label: 'Emulator', kind: 'window', root: null, app: 'com.example.emulator',
+  });
+  assert.equal(implementations.blank, undefined);
+  assert.equal(implementations.spaced, undefined);
+  assert.deepEqual(problems, [
+    'implementations › blank: needs an app — the application’s bundle ID, or part of it, such as com.example.app.',
+    'implementations › spaced: needs an app — the application’s bundle ID, or part of it, such as com.example.app.',
+    'implementations › started: catalog is only available for Storybook and iOS Simulator implementations.',
+    'implementations › started: start is available for URL and Storybook implementations.',
+  ]);
+
+  problems = [];
+  var lenses = manifest.screenLenses(
+    { emulator: 'Example Phone', started: '' },
+    { label: 'Sign in', src: 'pages/sign-in.html' },
+    implementations,
+    'Pages › Sign in',
+    problems
+  );
+  assert.deepEqual(lenses, { emulator: { window: 'Example Phone' } });
+  assert.deepEqual(problems, ['Pages › Sign in: implementation “started” needs the window’s title, or part of it.']);
+  assert.equal(manifest.streamed(implementations.emulator), true);
+  assert.equal(manifest.streamed({ kind: 'ios-simulator' }), true);
+  assert.equal(manifest.streamed({ kind: 'url' }), false);
+  assert.equal(manifest.streamed(null), false);
 });
 
 test('refuses an implementations block that is not a map', function () {

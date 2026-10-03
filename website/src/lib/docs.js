@@ -13,7 +13,7 @@ export function docTitle(entry) {
 
 export const docGroups = [
   { title: 'Getting started', ids: ['index', 'getting-started', 'pages-and-states', 'canvas', 'markup-and-handoff'] },
-  { title: 'Connect your implementation', ids: ['lenses', 'storybook', 'ios-simulator'] },
+  { title: 'Connect your implementation', ids: ['lenses', 'storybook', 'ios-simulator', 'windows'] },
   { title: 'Reference', ids: ['configuration', 'design-system-export', 'extension', 'troubleshooting'] },
 ];
 
@@ -49,11 +49,28 @@ export function rewriteDocLink(url, source, base = '/') {
   return `https://github.com/canonic2/canonic/blob/main/workbench/${repositoryPath}${match[2]}`;
 }
 
+// Links that leave the site open in a new tab.
+export function isExternalLink(href, site) {
+  if (!/^https?:\/\//i.test(href || '')) return false;
+  return !site || new URL(href).origin !== new URL(site).origin;
+}
+
 export function docsMarkdown() {
   return {
     name: 'workbench-docs-links',
     hooks: {
       'astro:config:setup': ({ config }) => {
+        config.markdown.processor.options.hastPlugins.push({
+          name: 'workbench-docs-external-links',
+          element: {
+            filter: ['a'],
+            visit: (node, context) => {
+              if (!isExternalLink(node.properties?.href, config.site)) return;
+              context.setProperty(node, 'target', '_blank');
+              context.setProperty(node, 'rel', 'noopener');
+            },
+          },
+        });
         // Extend Astro's default Sätteri processor without adding a renderer.
         const rewrite = (node, context) => {
           const source = context.fileURL && fileURLToPath(context.fileURL);

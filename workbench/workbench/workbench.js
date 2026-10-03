@@ -509,7 +509,7 @@
   function drawStates(item, lens) {
     var states = statesOf(item);
     var mapped = !lens || item.implementationOnly || !!item.implementations[lens.key].states;
-    if (!states || !mapped || (lens && lens.kind === 'ios-simulator')) {
+    if (!states || !mapped || window.wbManifest.streamed(lens)) {
       drawStateMenu(null);
       return;
     }
@@ -722,8 +722,8 @@
       return;
     }
 
-    if (lens && lens.kind === 'ios-simulator') {
-      var simulatorRef = item.implementations[lens.key];
+    if (window.wbManifest.streamed(lens)) {
+      var streamRef = item.implementations[lens.key];
       currentState = null;
       view.url = null;
       frameReady = false;
@@ -735,8 +735,10 @@
       blank.hidden = true;
       openLink.removeAttribute('href');
       window.wbSimulator.show({
+        kind: lens.kind,
         implementation: lens.key,
-        udid: simulatorRef.device,
+        udid: streamRef.device,
+        src: item.src,
         label: item.label,
       });
       setTitle(item, null, lens);
@@ -1153,7 +1155,7 @@
 
   reload.addEventListener('click', function () {
     if (!current) return;
-    if (view && view.lens && view.lens.kind === 'ios-simulator') {
+    if (view && window.wbManifest.streamed(view.lens)) {
       window.wbSimulator.reload();
       return;
     }

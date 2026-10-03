@@ -94,6 +94,25 @@ implementations:
   receives an export warning instead of a fabricated reference image.
   See the [export contract](export.md) for its capture plan and archive.
 
+## Window implementations
+
+```yaml
+implementations:
+  emulator:
+    kind: window
+    app: com.example.emulator
+```
+
+- `app` is required: a bundle ID or part of one, in letters, digits, dots,
+  and hyphens. A screen maps the implementation to a window title or part of
+  one. The helper streams the largest on-screen window whose bundle ID and
+  title contain those values, ignoring case.
+- The canvas posts the implementation and the screen's `src` to
+  `/_workbench/window/stream`. The server answers only when that screen maps
+  that `window` implementation, and takes the app and title from the config.
+- Window lenses are view-only, have no state picker, and share one native
+  stream with the Simulator. `start` and `catalog` are reported as problems.
+
 ## Verification points
 
 - [config.test.js](../../config.test.js) and

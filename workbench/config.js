@@ -225,6 +225,13 @@ function resolve(root, config) {
         design: path.resolve(root, item.src),
         code: code,
       };
+      /* The server opens a window stream only for a window a screen names. */
+      Object.keys(item.implementations || {}).forEach(function (key) {
+        var ref = item.implementations[key];
+        if (!ref.window) return;
+        screens[item.src].windows = screens[item.src].windows || {};
+        screens[item.src].windows[key] = ref.window;
+      });
     });
   });
 

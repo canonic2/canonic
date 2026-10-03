@@ -62,8 +62,8 @@ display, Workbench takes screenshots with headless Chrome, Chromium, or Edge
 instead, and keeps using it until the server stops. Set
 `canonic.capture.chromePath` if the browser isn't in its standard location.
 
-The [iOS Simulator](ios-simulator.md) stream uses a separate native helper and
-needs Screen Recording permission.
+The [iOS Simulator](ios-simulator.md) and [app window](windows.md) streams use
+a separate native helper and need Screen Recording permission.
 
 ## Logs
 

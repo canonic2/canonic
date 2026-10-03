@@ -30,6 +30,7 @@
 .docs-prose li { margin: 7px 0; }
 .docs-prose li > p { margin-bottom: 8px; }
 .docs-prose a { text-underline-offset: 3px; }
+.docs-prose a[target="_blank"]::after { content: " ↗"; }
 .docs-prose code { white-space: normal; }
 .docs-prose pre { padding: 20px; margin: 22px 0; border: 1px solid var(--ink-line); border-radius: 12px; font-size: 13px; line-height: 1.7; overflow-wrap: normal; }
 .docs-prose pre code { white-space: pre; }

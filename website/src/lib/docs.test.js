@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { docsHref, docsNavigation, rewriteDocLink } from './docs.js';
+import { docsHref, docsNavigation, isExternalLink, rewriteDocLink } from './docs.js';
 
 const source = fileURLToPath(new URL('../../../workbench/docs/README.md', import.meta.url));
 const spec = fileURLToPath(new URL('../../../workbench/docs/specs/core.md', import.meta.url));
@@ -19,6 +19,15 @@ test('repository source links go to GitHub while external and fragment links sta
   assert.equal(rewriteDocLink('../../workbench/markup.js', spec), 'https://github.com/canonic2/canonic/blob/main/workbench/workbench/markup.js');
   for (const url of ['#states', 'https://example.com/docs.md', 'mailto:acme@example.com', '/absolute/path']) {
     assert.equal(rewriteDocLink(url, source), url);
+  }
+});
+
+test('only links to another origin count as external', () => {
+  const site = 'https://example.com';
+  assert.equal(isExternalLink('https://github.com/canonic2/canonic', site), true);
+  assert.equal(isExternalLink('http://example.org/', site), true);
+  for (const url of ['https://example.com/workbench/docs/', '/workbench/docs/', '#states', 'mailto:acme@example.com', undefined]) {
+    assert.equal(isExternalLink(url, site), false);
   }
 });
 

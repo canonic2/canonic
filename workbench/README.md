@@ -220,7 +220,7 @@ HTML and script files with no build step; opening
 | `screens.js` | the Workbench view in the sidebar |
 | `server.js` | the HTTP server, capture and lens endpoints, and script injection — plain node |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
-| `simulator-stream.js` + `simulator-stream-demo/Capture.swift` | native ScreenCaptureKit and VideoToolbox Simulator stream |
+| `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window; the iOS Simulator lens uses it |
 | `capture-runtime.js` | verifies and unpacks the bundled runtime once into extension storage |
 | `capture.js` | Chromium over a private DevTools pipe for fallback screenshots |
 | `remote.js` | fetches the configured Storybook's index |

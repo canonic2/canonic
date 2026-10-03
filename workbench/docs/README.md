@@ -23,6 +23,7 @@ Nothing is bundled into your pages, and nothing is copied into your repository.
 | [Lenses and URL implementations](lenses.md) | Show a screen as it runs on a dev server or staging, point at its code, and start the server automatically |
 | [Storybook](storybook.md) | Map screens to stories, or import a whole Storybook as the workbench |
 | [iOS Simulator](ios-simulator.md) | Stream and drive a booted Simulator on the canvas |
+| [App windows](windows.md) | Stream a window from any macOS app, such as an Android emulator |
 
 ## Reference
 

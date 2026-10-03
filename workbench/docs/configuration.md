@@ -229,17 +229,18 @@ implementations:
 
 | Key | Kinds | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | all | yes | `url`, `storybook`, or `ios-simulator`. |
+| `kind` | all | yes | `url`, `storybook`, `ios-simulator`, or `window`. |
 | `label` | all | no | The lens button's label. Defaults to the name in sentence case. |
 | `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`. Screen paths are appended to it. A trailing slash is removed. |
 | `url` | `storybook` | yes | Storybook's origin, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). |
 | `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
+| `app` | `window` | yes | The macOS application whose window is streamed: its bundle ID, or part of it, such as `com.example.app`. Letters, digits, dots, and hyphens only. |
 | `root` | all | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
 | `catalog` | `storybook`, `ios-simulator` | no | Import screens automatically. See [Catalogs](#catalogs). |
 | `start` | `url`, `storybook` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
 Guides: [URL implementations](lenses.md), [Storybook](storybook.md),
-[iOS Simulator](ios-simulator.md).
+[iOS Simulator](ios-simulator.md), [App windows](windows.md).
 
 `render: browser` and `render: iframe` are no longer used. They are reported
 with a request to remove them, and the implementation still loads in an iframe.
@@ -278,6 +279,14 @@ implementations:
 ```yaml
 implementations:
   simulator: iPhone 16 Pro
+```
+
+**`window`**: the window's title, or part of it, ignoring case. When several
+of the app's windows match, the largest is streamed.
+
+```yaml
+implementations:
+  emulator: Example Phone
 ```
 
 A screen may only name implementations declared at the top level.

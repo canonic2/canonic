@@ -1,0 +1,88 @@
+# App windows
+
+A `window` implementation streams a window of any running macOS app onto the
+canvas: an Android emulator, a desktop app, a native build, or anything else
+with a window. You can compare it with the design, mark it up, and hand it off
+like any other screen. The stream is for viewing; clicks on it don't reach the
+app.
+
+## Requirements
+
+- **macOS 13 or later with Xcode**, which builds the capture helper the first
+  time a window is streamed.
+- **Screen Recording permission** for your editor. See [Permissions](#permissions).
+- The window must be **open and visible on screen**. A minimized window or one
+  on another Space can't be captured.
+
+## Configure it
+
+Declare the app once, then name the window on each screen that shows it:
+
+```yaml
+implementations:
+  emulator:
+    kind: window
+    app: com.example.emulator
+
+sections:
+  - name: Screens
+    items:
+      - label: Sign in
+        src: design/sign-in.html
+        viewports:
+          - mobile
+        implementations:
+          emulator: Example Phone
+```
+
+The screen gets an **Emulator** lens next to **Design**. Bring the app to the
+matching screen, then switch between the two to compare.
+
+`app` is the application's bundle ID, or any part of it: `com.example.emulator`
+and `emulator` both match an app whose bundle ID is `com.example.emulator`.
+To find an app's bundle ID, run `osascript -e 'id of app "Example"'`.
+
+The value on the screen is the window's title, or any part of it, ignoring
+case. When several of the app's windows match, the largest one is streamed.
+
+`root` and [code pointers](lenses.md#point-at-the-code) work as for other
+implementations. `start` and `catalog` aren't available for windows.
+
+## How it works
+
+- A small native helper, built from source shipped in the extension, finds the
+  window with ScreenCaptureKit and encodes it once with VideoToolbox. It's the
+  same helper the [iOS Simulator](ios-simulator.md) lens uses, and one window
+  streams at a time.
+- The server looks up the app and the title in `workbench.yaml`. A page on the
+  canvas can only ask for a window that a screen declares.
+- In VS Code, frames reach the canvas over a loopback HTTP stream. A standalone
+  browser uses an H.264 stream decoded with WebCodecs.
+- There is no fallback to browser screen sharing. If the helper can't capture,
+  the canvas says why.
+
+## Permissions
+
+macOS attributes Screen Recording to the app that launched the helper, which is
+your editor. The first time, macOS asks, or the canvas reports a denial and
+opens the right settings pane. Then:
+
+1. Open **System Settings** › **Privacy & Security** › **Screen & System Audio Recording**.
+2. Turn on **Visual Studio Code**, or the editor named in the error.
+3. Quit and reopen the editor.
+4. Pick the screen again.
+
+## Screenshots and exports
+
+The camera and handoff capture the current stream frame with your marks. A
+[design-system export](design-system-export.md) captures the design page, not
+the window.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| “No visible … window was found” | Open the window and keep it on screen. The error lists the visible windows: check that `app` is part of the bundle ID and the screen's value is part of the title. |
+| Black canvas or a permission error | Grant Screen Recording to the editor, then restart it. |
+| The wrong window shows | Make the screen's title more specific. The largest matching window wins. |
+| The lens is missing | Read the [config route](troubleshooting.md#read-the-resolved-config)'s `problems`: `app` must be a bundle ID or part of one, with no spaces. |

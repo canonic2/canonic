@@ -5,13 +5,13 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>canonic-simulator-stream</string>
+  <string>canonic-window-capture</string>
   <key>CFBundleIdentifier</key>
-  <string>com.canonic.simulator-stream-demo</string>
+  <string>com.canonic.window-capture</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Canonic Simulator Stream</string>
+  <string>Canonic Window Capture</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -23,6 +23,6 @@
   <key>LSUIElement</key>
   <true/>
   <key>NSScreenCaptureUsageDescription</key>
-  <string>Streams the iOS Simulator into the local Canonic workbench demo.</string>
+  <string>Streams a chosen window, such as the iOS Simulator, into the local Canonic workbench.</string>
 </dict>
 </plist>

@@ -1,7 +1,9 @@
 # iOS Simulator stream harness
 
-This harness exercises the same ScreenCaptureKit and VideoToolbox helper used
-by the Canonic workbench. It relays low-latency H.264 over a local WebSocket and
+This harness exercises the window capture helper in the parent folder
+(`window-capture/Capture.swift`), the same ScreenCaptureKit and VideoToolbox
+helper the Canonic workbench uses, pointed at the Simulator with
+`--app simulator`. It relays low-latency H.264 over a local WebSocket and
 decodes it into a browser canvas with WebCodecs, without the rest of the
 workbench UI.
 
@@ -11,7 +13,7 @@ Recording permission for the application running the demo (usually Terminal);
 restart that application after granting permission.
 
 ```sh
-cd packages/workbench/simulator-stream-demo
+cd packages/workbench/window-capture/simulator-demo
 node server.js
 ```
 

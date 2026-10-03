@@ -1,7 +1,9 @@
-/* Interactive iOS Simulator surface
-   ---------------------------------
+/* Native window surface
+   ---------------------
    A ScreenCaptureKit helper sends hardware-encoded H.264 over a loopback
-   WebSocket, outside VS Code's display-capture policy. WDA supplies input. */
+   WebSocket, outside VS Code's display-capture policy. Two lenses use it: the
+   iOS Simulator, where WDA supplies input, and a window lens, which streams
+   a declared application's window to look at. */
 (function () {
   var canvas = document.getElementById('simulatorCanvas');
   var context = canvas.getContext('2d', { alpha: false });
@@ -9,19 +11,33 @@
   var share = document.getElementById('shareSimulator');
   var status = document.getElementById('simulatorStatus');
   var active = null;
-  var streamUdid = null;
+  var streamId = null;
   var screen = null;
   var pointer = null;
   var nativeSocket = null;
   var nativeReader = null;
   var decoder = null;
-  var connectingUdid = null;
+  var connectingId = null;
   var reconnectTimer = null;
   var jpegBusy = false;
   var pendingJpeg = null;
 
   function message(text) {
     status.textContent = text;
+  }
+
+  /* What the status line calls the selected surface. */
+  function noun(selected) {
+    return selected && selected.kind === 'window' ? 'Window' : 'Simulator';
+  }
+
+  /* Whether the selected surface is ready: video, plus WDA for the Simulator. */
+  function ready(selected) {
+    return selected.kind === 'window' || !!screen;
+  }
+
+  function readyMessage(selected) {
+    return selected.kind === 'window' ? 'Live' : 'Interactive';
   }
 
   function diagnostic(event, error) {
@@ -45,22 +61,22 @@
       body: JSON.stringify(body),
     }).then(function (response) {
       return response.json().then(function (answer) {
-        if (!response.ok || !answer.ok) throw new Error(answer.error || 'Simulator request failed.');
+        if (!response.ok || !answer.ok) throw new Error(answer.error || 'Stream request failed.');
         return answer;
       });
     });
   }
 
   function disconnected(selected) {
-    if (streamUdid === selected.udid) {
-      streamUdid = null;
+    if (streamId === selected.id) {
+      streamId = null;
       screen = null;
       canvas.classList.remove('is-interactive');
     }
-    if (!active || active.udid !== selected.udid) return;
+    if (!active || active.id !== selected.id) return;
     prompt.hidden = false;
     share.disabled = false;
-    message('Simulator stream disconnected. Reconnecting…');
+    message(noun(selected) + ' stream disconnected. Reconnecting…');
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(connectNative, 1000);
   }
@@ -76,7 +92,7 @@
     decoder = null;
     jpegBusy = false;
     pendingJpeg = null;
-    if (streamUdid === selected.udid) streamUdid = null;
+    if (streamId === selected.id) streamId = null;
   }
 
   function startWda(selected) {
@@ -85,7 +101,7 @@
       implementation: selected.implementation,
       udid: selected.udid,
     }).then(function (answer) {
-      if (!active || active.udid !== selected.udid) return;
+      if (!active || active.id !== selected.id) return;
       screen = answer.screen;
       canvas.classList.add('is-interactive');
     }, function (error) {
@@ -95,36 +111,45 @@
     });
   }
 
+  /* Where to ask for the stream: the Simulator by device, a window by the
+     screen that names it. The server looks up the rest in the config. */
+  function streamRequest(selected, codec) {
+    if (selected.kind === 'window') {
+      return ['/_workbench/window/stream', { implementation: selected.implementation, src: selected.src, codec: codec }];
+    }
+    return ['/_workbench/simulator/stream', { implementation: selected.implementation, udid: selected.udid, codec: codec }];
+  }
+
   function connectNative() {
-    if (!active || connectingUdid) return;
+    if (!active || connectingId) return;
     var selected = active;
-    connectingUdid = selected.udid;
+    var name = noun(selected);
+    connectingId = selected.id;
     share.disabled = true;
     message('Connecting to “' + selected.label + '”…');
     stopNative(selected);
-    startWda(selected).then(function () {
-      if (streamUdid === selected.udid) message('Interactive');
-    }).catch(function (error) {
-      diagnostic('simulator.interaction.failed', error);
-      console.error('[workbench] Simulator interaction failed', error);
-    });
-    post('/_workbench/simulator/stream', {
-      implementation: selected.implementation,
-      udid: selected.udid,
-      /* VS Code does not promise the proprietary H.264 decoder exposed by a
-         full browser. JPEG uses the webview's ordinary image decoder. */
-      codec: window.parent === window && 'VideoDecoder' in window ? 'h264' : 'jpeg',
-    }).then(function (answer) {
-      if (!active || active.udid !== selected.udid) return;
+    if (selected.kind !== 'window') {
+      startWda(selected).then(function () {
+        if (streamId === selected.id) message('Interactive');
+      }).catch(function (error) {
+        diagnostic('simulator.interaction.failed', error);
+        console.error('[workbench] Simulator interaction failed', error);
+      });
+    }
+    /* VS Code does not promise the proprietary H.264 decoder exposed by a
+       full browser. JPEG uses the webview's ordinary image decoder. */
+    var request = streamRequest(selected, window.parent === window && 'VideoDecoder' in window ? 'h264' : 'jpeg');
+    post(request[0], request[1]).then(function (answer) {
+      if (!active || active.id !== selected.id) return;
       function painted(width, height) {
-        streamUdid = selected.udid;
+        streamId = selected.id;
         prompt.hidden = true;
-        message(screen ? 'Interactive' : 'Video live · starting interaction…');
+        message(ready(selected) ? readyMessage(selected) : 'Video live · starting interaction…');
       }
       if (answer.codec === 'h264') {
         decoder = new VideoDecoder({
           output: function (frame) {
-            if (!active || active.udid !== selected.udid) { frame.close(); return; }
+            if (!active || active.id !== selected.id) { frame.close(); return; }
             if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
               canvas.width = frame.displayWidth;
               canvas.height = frame.displayHeight;
@@ -134,7 +159,7 @@
             frame.close();
           },
           error: function (error) {
-            message('Simulator decoder failed: ' + String(error.message || error));
+            message(name + ' decoder failed: ' + String(error.message || error));
             diagnostic('simulator.decoder.failed', error);
           },
         });
@@ -144,7 +169,7 @@
         if (jpegBusy) { pendingJpeg = bytes.slice(); return; }
         jpegBusy = true;
         createImageBitmap(new Blob([bytes], { type: 'image/jpeg' })).then(function (bitmap) {
-          if (!active || active.udid !== selected.udid) { bitmap.close(); return; }
+          if (!active || active.id !== selected.id) { bitmap.close(); return; }
           if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
             canvas.width = bitmap.width;
             canvas.height = bitmap.height;
@@ -153,7 +178,7 @@
           painted(canvas.width, canvas.height);
           bitmap.close();
         }).catch(function (error) {
-          message('Simulator image decode failed: ' + String(error.message || error));
+          message(name + ' image decode failed: ' + String(error.message || error));
           diagnostic('simulator.image-decode.failed', error);
         }).finally(function () {
           jpegBusy = false;
@@ -166,14 +191,14 @@
       }
       function readHttpStream() {
         return fetch(answer.stream, { cache: 'no-store' }).then(function (response) {
-          if (!response.ok || !response.body) throw new Error('Simulator stream answered ' + response.status + '.');
+          if (!response.ok || !response.body) throw new Error(name + ' stream answered ' + response.status + '.');
           var reader = response.body.getReader();
           nativeReader = reader;
           var pending = new Uint8Array(0);
-          message('Waiting for Simulator video…');
+          message('Waiting for ' + name + ' video…');
           function read() {
             return reader.read().then(function (result) {
-              if (result.done) throw new Error('Simulator stream ended.');
+              if (result.done) throw new Error(name + ' stream ended.');
               if (nativeReader !== reader) return;
               var joined = new Uint8Array(pending.length + result.value.length);
               joined.set(pending);
@@ -191,7 +216,7 @@
           }
           return read();
         }).catch(function (error) {
-          if (!active || active.udid !== selected.udid || nativeReader === null) return;
+          if (!active || active.id !== selected.id || nativeReader === null) return;
           nativeReader = null;
           diagnostic('simulator.http-stream.failed', error);
           disconnected(selected);
@@ -205,7 +230,7 @@
       var socket = new WebSocket(protocol + '//' + location.host + answer.stream);
       nativeSocket = socket;
       socket.binaryType = 'arraybuffer';
-      socket.onopen = function () { message('Waiting for Simulator video…'); };
+      socket.onopen = function () { message('Waiting for ' + name + ' video…'); };
       socket.onmessage = function (event) {
         var data = new Uint8Array(event.data);
         if (data.length < 10) return;
@@ -217,7 +242,7 @@
             type: data[0] === 1 ? 'key' : 'delta', timestamp: timestamp, data: data.subarray(9),
           }));
         } catch (error) {
-          message('Simulator decode failed: ' + String(error.message || error));
+          message(name + ' decode failed: ' + String(error.message || error));
         }
       };
       socket.onclose = function () {
@@ -228,17 +253,17 @@
         disconnected(selected);
       };
       socket.onerror = function () {
-        message('Simulator stream connection failed.');
+        message(name + ' stream connection failed.');
         diagnostic('simulator.websocket.failed', 'WebSocket connection failed');
       };
     }).catch(function (error) {
       prompt.hidden = false;
       share.disabled = false;
-      message('Simulator stream failed: ' + String(error.message || error));
+      message(name + ' stream failed: ' + String(error.message || error));
       diagnostic('simulator.stream.failed', error);
-      console.error('[workbench] native Simulator stream failed', error);
+      console.error('[workbench] native ' + name + ' stream failed', error);
     }).finally(function () {
-      if (connectingUdid === selected.udid) connectingUdid = null;
+      if (connectingId === selected.id) connectingId = null;
     });
   }
 
@@ -312,17 +337,27 @@
   canvas.addEventListener('pointercancel', function () { pointer = null; });
   share.addEventListener('click', choose);
 
+  /* `options`: { kind: 'ios-simulator', implementation, udid, label } or
+     { kind: 'window', implementation, src, label }. */
   window.wbSimulator = {
     show: function (options) {
-      active = options;
+      active = Object.assign({}, options, {
+        id: options.kind === 'window' ? options.implementation + '\n' + options.src : options.udid,
+      });
+      /* A window takes no input; drop any Simulator's WDA screen. */
+      if (active.kind === 'window') {
+        screen = null;
+        canvas.classList.remove('is-interactive');
+      }
       canvas.hidden = false;
-      var current = streamUdid === options.udid && !!screen;
+      canvas.setAttribute('aria-label', active.kind === 'window' ? 'Live window: ' + active.label : 'Interactive iOS Simulator');
+      var current = streamId === active.id && ready(active);
       prompt.hidden = current;
       share.disabled = false;
       if (current) {
-        message('Interactive');
+        message(readyMessage(active));
       } else {
-        message('Connecting to “' + options.label + '”…');
+        message('Connecting to “' + active.label + '”…');
         connectNative();
       }
     },
@@ -331,6 +366,6 @@
       canvas.hidden = true;
       prompt.hidden = true;
     },
-    reload: function () { if (active && streamUdid !== active.udid) connectNative(); },
+    reload: function () { if (active && streamId !== active.id) connectNative(); },
   };
 })();
