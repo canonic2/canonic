@@ -133,7 +133,7 @@ node packages/website/screenshots/capture.cjs
 ```
 
 The script starts `packages/workbench/server.js` on `screenshots/fixture`, drives
-headless Chrome through `packages/workbench/capture.js`, and overwrites the screenshots
+headless Chrome through `packages/workbench/scripts/chrome.cjs`, and overwrites the screenshots
 in `public/images/`. Set `CHROME_PATH` to choose a browser.
 
 - The overview is a 1440 × 860 window. The script also measures the workbench's

@@ -8,25 +8,18 @@ records the contract, how it is built, and what is still open. See
 [browser.js](../preview/browser.js), [server.js](../server.js), and
 [manifest.js](../workbench/manifest.js).
 
-**Status (2026-10-03):** uncommitted and unreleased. The 0.6.0
-[changelog](../CHANGELOG.md) and commit history do not mention previews.
-Product intent is stated only in [the spec index](README.md#preview-types),
-[core](core.md#canvas-and-frame), [export](export.md#source-closure),
-and the user guides. Unless marked **Stated intent**, sections below describe
-**verified behavior** read from code and tests, not agreed requirements.
+The sections below are the agreed contract. Where the code does not yet meet
+it, the gap is marked; unresolved choices are under
+[open questions](#open-questions).
 
 ## Purpose and scope
 
 Previews render project components on the canvas through Workbench's own
 compiler, and the design-system export carries them as runnable, server-free
 output. They cover HTML, React, Vue, Astro, React Native Web, and
-project-registered adapters. Per the guide, they do not run a project's
-application server, `astro.config.*`, or middleware; a whole application stays
-a [URL lens](other-previews.md). No stated product goal beyond the intent below
-was found.
-
-**Stated intent** ([index](README.md#preview-types), [core](core.md),
-[export](export.md)):
+project-registered adapters. They do not run a project's application server,
+`astro.config.*`, or middleware; a whole application stays a
+[URL lens](implementations.md#url-implementations).
 
 - Previews are discovered by default and open in the native **Workbench** lens.
 - Source compiles in a managed worker. Live and portable output share one
@@ -38,7 +31,6 @@ was found.
   without Electron or Workbench; failed builds become warnings while successful
   previews remain; browser build products do not enter source hashes. The CLI
   `build` uses the same builder without a server.
-- Existing preview kinds remain supported.
 
 ## Workflows
 
@@ -183,25 +175,32 @@ reached through `node_modules` are listed by name and version.
 - Definitions and config are bundled for Node and executed only in a forked
   worker, never in the extension host or capture renderer. The worker serves a
   loopback port and handles one request at a time.
-- It starts lazily on the first catalog read that finds definitions, is
-  replaced when `previews` settings change, and is closed for `previews: false`
-  and on server shutdown (forced after 3 seconds). Startup times out after
-  30 seconds; catalog reads after 120, exports after 300, proxied requests after
-  120. If it exits, the next request starts another.
+- It starts lazily on the first config resolution that finds definitions in a
+  trusted workspace with previews enabled, and must report its port within
+  30 seconds or startup fails with a problem. A change to the resolved
+  `previews` value replaces it on the next resolution; `previews: false`
+  closes it. Catalog reads time out after 120 seconds, exports after 300,
+  and proxied requests after 120.
+- If it exits unexpectedly, the next preview request or config resolution
+  starts a new one; there is no proactive restart.
+- It stops with the server, which asks it to close and kills it after
+  3 seconds. It also exits when its parent's IPC channel disconnects.
+- Its error output is logged as `preview.worker` (each chunk truncated), and
+  per-request timing as `preview.request.completed`.
 - Compiled output is cached against the size and modification time of every
   file it read; config changes clear the cache. Input-edit renders are not
   cached. Only discovered definitions inside the project compile.
 - In an untrusted server (`isTrusted: false`), no definition runs, discovered
   files produce `Workbench previews require a trusted workspace.`, and preview
-  routes answer 404. The flag is read once at server start.
+  routes answer 404. When trust applies is part of the
+  [extension's trust contract](vscode-extension.md#workspace-trust).
 
 ### Runtime selection
 
-The worker uses the extension's bundled Electron in Node mode when that runtime
-matches the host platform and architecture (and, on Linux, a display is
-present; on macOS, Darwin 22 or later). Otherwise it uses the current
-process's executable: Node for the standalone server. `NODE_OPTIONS` is
-removed from its environment. Compilation uses `esbuild-wasm`.
+The worker runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
+in Node mode when that runtime is used on the host, and otherwise on the
+current process's executable (Node for the standalone server). `NODE_OPTIONS`
+is removed from its environment. Compilation uses `esbuild-wasm`.
 
 ### Readiness and errors
 
@@ -271,6 +270,20 @@ removed from its environment. Compilation uses `esbuild-wasm`.
   both succeeded and wrote the viewer. No other adapter, platform, or packaged
   VSIX was tried.
 
+## Implementation gaps
+
+- **Possible duplicate workers (hypothesis, from code reading).**
+  `importPreviews` in [server.js](../server.js) closes the old worker on a
+  `previews` change, then sets `previews = null` after an `await`. Two
+  overlapping resolutions after a YAML edit (the sidebar's catalog request and
+  the canvas refresh both resolve the config) could each pass that check; the
+  later one would then discard the worker the earlier one created without
+  closing it, leaving it running until the extension host exits. Not
+  reproduced.
+- **Idle worker after previews disappear.** When discovery finds no
+  definitions, resolution returns before touching the running worker, so it
+  keeps running until the server stops or `previews` changes.
+
 ## Open questions
 
 1. **Unknown lens ID.** The problem is reported, but the lens stays on the
@@ -288,11 +301,11 @@ removed from its environment. Compilation uses `esbuild-wasm`.
    packaged or installed VSIX, on other platforms, or with React, Vue, or Astro
    resolving from the user's project. The documented install path assumes a
    folder without a platform suffix, which matched the local install.
-4. **Trust gate reach.** The extension declares no untrusted-workspace
-   support, so VS Code does not run it in Restricted Mode, and the standalone
-   server treats a missing flag as trusted. When can a user see the
-   trusted-workspace problem? Granting trust later is not observed by a
-   running server.
-5. **JSON vs. cloneable data.** Validation checks that state data serializes
+4. **JSON vs. cloneable data.** Validation checks that state data serializes
    as JSON; the runtime uses `structuredClone`, and the guide says "plain,
    cloneable data". Which is the contract?
+5. **Unexpected worker exit.** Should it be logged and reported as a problem,
+   rather than surfacing only as a failed request until the next one restarts
+   the worker?
+6. **Trust.** Whether the trust gate is reachable at all is an
+   [extension question](vscode-extension.md#open-questions).

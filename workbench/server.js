@@ -4,7 +4,7 @@
    workbench's screenshots.
 
    Two reasons this exists rather than a static server:
-   - The native Chromium capture surface and its preview have to share an
+   - The capture helper's surface and its preview have to share an
      origin; the live-DOM fallback also needs that access to read the frame.
    - A page can't write a file. Every browser-side route to the workspace —
      a download, the File System Access API — either lands in the wrong
@@ -23,7 +23,6 @@ var path = require('path');
 var childProcess = require('child_process');
 var crypto = require('crypto');
 
-var nativeCapture = require('./capture');
 var electronCapture = require('./electron-capture');
 var handoff = require('./handoff');
 var config = require('./config');
@@ -86,7 +85,7 @@ var EXPORT_VIEWPORTS = {
 };
 
 /* What the marks are dressed in when they're laid over a page the workbench
-   doesn't serve — see capture.js. The tokens markup.css leans on come from
+   doesn't serve — see capture-scripts.js. The tokens markup.css leans on come from
    the workbench's own stylesheet, scoped to the layer so the page underneath
    never sees them; the hit areas and handles are the canvas's, not the
    picture's. */
@@ -819,8 +818,7 @@ function serveFile(root, pathname, res, options) {
    of the user. */
 function start(options) {
   var root = path.resolve(options.root);
-  var createCapture = electronCapture.available() ? electronCapture.createWithFallback : nativeCapture.create;
-  var capture = options.capture || createCapture({ chromePath: options.chromePath, inject: DESCRIBE_SOURCE, storage: options.captureStorage });
+  var capture = options.capture || electronCapture.createService({ inject: DESCRIBE_SOURCE, storage: options.captureStorage });
   var captureReady = Promise.resolve();
   var previews = null;
   var previewSettings = null;

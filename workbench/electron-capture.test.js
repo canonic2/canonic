@@ -4,7 +4,6 @@ var EventEmitter = require('node:events');
 var PassThrough = require('node:stream').PassThrough;
 var fs = require('node:fs');
 var capture = require('./electron-capture');
-var chromium = require('./capture');
 var bundledRuntime = require('./electron-runtime');
 
 function fake(options) {
@@ -128,77 +127,20 @@ test('a missing executable does not poison subsequent launch attempts or leave p
   assert.ok(profiles.every(function (profile) { return !fs.existsSync(profile); }));
 });
 
-function fallback(t) {
-  var calls = [];
-  var engine = {};
-  ['warm', 'prepare', 'preparePage', 'capture', 'capturePage', 'captureExportPage', 'close'].forEach(function (method) {
-    engine[method] = function () {
-      calls.push([method, Array.from(arguments)]);
-      if (method === 'capture') return Buffer.from('chrome png');
-      if (method === 'capturePage' || method === 'captureExportPage') return { png: Buffer.from('chrome page'), targets: ['h1'] };
-    };
-  });
-  var create = t.mock.method(chromium, 'create', function () { return engine; });
-  return { calls: calls, create: create };
-}
-
-test('an extraction failure retries the request in Chrome and keeps every capture route there', async function (t) {
-  var native = fallback(t);
-  var unpack = t.mock.method(bundledRuntime, 'prepare', async function () { throw new Error('Damaged archive'); });
-  var options = { chromePath: '/configured/chrome', inject: 'describe source', storage: '/capture/storage' };
-  var helper = capture.createWithFallback(options);
-  t.after(function () { return helper.close(); });
-  var base = 'http://localhost:3579';
-  var payload = { url: base + '/page', width: 393, height: 852, revision: '2', markup: 'marks' };
-  await helper.warm(base);
-  await helper.prepare(base, payload);
-  await helper.preparePage(payload);
-  assert.equal((await helper.capture(base, payload)).toString(), 'chrome png');
-  assert.deepEqual(await helper.capturePage(payload), { png: Buffer.from('chrome page'), targets: ['h1'] });
-  assert.deepEqual(await helper.captureExportPage(payload), { png: Buffer.from('chrome page'), targets: ['h1'] });
-  await helper.close();
-  assert.equal(unpack.mock.callCount(), 1);
-  assert.equal(native.create.mock.callCount(), 1);
-  assert.equal(native.create.mock.calls[0].arguments[0], options);
-  assert.deepEqual(native.calls, [
-    ['warm', [base]], ['prepare', [base, payload]], ['preparePage', [payload]],
-    ['capture', [base, payload]], ['capturePage', [payload]], ['captureExportPage', [payload]], ['close', []],
-  ]);
-  await assert.rejects(helper.capturePage(payload), /closed/);
+test('a host without the bundled runtime gets the reason from every request', async function (t) {
+  t.mock.method(bundledRuntime, 'unavailable', function () { return 'it needs macOS 13 or later'; });
+  var service = capture.createService({ storage: '/capture/storage' });
+  t.after(function () { return service.close(); });
+  await assert.rejects(service.warm('http://localhost'), /bundled capture runtime, and it needs macOS 13 or later/);
+  await assert.rejects(service.capturePage({ url: 'https://example.com/' }), /it needs macOS 13 or later/);
 });
 
-test('startup timeout falls back once for concurrent shots and stops helper recovery', async function (t) {
-  var native = fallback(t);
-  var runtime = fake({ noReady: true });
-  var helper = capture.createWithFallback({ spawn: runtime.spawn, timeout: 30, retryDelay: 10 });
-  t.after(function () { return helper.close(); });
-  var shots = await Promise.all([
-    helper.capturePage({ url: 'https://example.com/first' }),
-    helper.capturePage({ url: 'https://example.com/second' }),
-  ]);
-  assert.ok(shots.every(function (shot) { return shot.png.toString() === 'chrome page'; }));
-  assert.equal(native.create.mock.callCount(), 1);
-  assert.deepEqual(native.calls.map(function (call) { return call[1][0].url; }), [
-    'https://example.com/first', 'https://example.com/second',
-  ]);
-  var starts = runtime.children.length;
-  await new Promise(function (resolve) { setTimeout(resolve, 60); });
-  assert.equal(runtime.children.length, starts);
-  assert.ok(runtime.children.every(function (child) { return child.exitCode !== null && !fs.existsSync(child.profile); }));
-});
-
-test('page errors and command timeouts do not switch a running helper to Chrome', async function (t) {
-  var native = fallback(t);
-  var runtime = fake({ command: function (request, answer, child) {
-    if (request.method === 'warm') answer();
-    else if (request.payload.url === '/error') child.stdout.write(JSON.stringify({ id: request.id, error: 'Page failed' }) + '\n');
-  } });
-  var helper = capture.createWithFallback({ spawn: runtime.spawn, timeout: 30 });
-  t.after(function () { return helper.close(); });
-  await helper.warm('http://localhost');
-  await assert.rejects(helper.capturePage({ url: '/error' }), /Page failed/);
-  await assert.rejects(helper.capturePage({ url: '/slow' }), /timed out/);
-  assert.equal(native.create.mock.callCount(), 0);
+test('a startup failure is reported rather than retried in another engine', async function (t) {
+  t.mock.method(bundledRuntime, 'unavailable', function () { return null; });
+  t.mock.method(bundledRuntime, 'prepare', async function () { throw new Error('Damaged archive'); });
+  var service = capture.createService({ storage: '/capture/storage', retryDelay: 60000 });
+  t.after(function () { return service.close(); });
+  await assert.rejects(service.capturePage({ url: 'https://example.com/' }), /Damaged archive/);
 });
 
 test('retries one capture when a running Electron helper exits unexpectedly', async function (t) {
@@ -207,23 +149,12 @@ test('retries one capture when a running Electron helper exits unexpectedly', as
     if (request.method === 'capturePage' && attempts++ === 0) child.kill();
     else answer();
   } });
-  var helper = capture.createWithFallback({ spawn: runtime.spawn, retryDelay: 1000 });
+  var helper = capture.createService({ spawn: runtime.spawn, retryDelay: 1000 });
   t.after(function () { return helper.close(); });
   var result = await helper.capturePage({ url: 'https://example.com/story', width: 393, height: 852 });
   assert.equal(result.png.toString(), 'png');
   assert.equal(runtime.children.length, 2);
   assert.deepEqual(runtime.commands.map(function (request) { return request.method; }), ['capturePage', 'capturePage']);
-});
-
-test('closing during startup does not create a fallback browser', async function (t) {
-  var native = fallback(t);
-  var runtime = fake({ noReady: true });
-  var helper = capture.createWithFallback({ spawn: runtime.spawn, timeout: 100 });
-  var starting = assert.rejects(helper.warm('http://localhost'), /exited|closed/);
-  await until(function () { return runtime.children.length; });
-  await helper.close();
-  await starting;
-  assert.equal(native.create.mock.callCount(), 0);
 });
 
 test('JPEG requests reach the helper and return format-neutral implementation images', async function (t) {
@@ -242,7 +173,7 @@ test('JPEG requests reach the helper and return format-neutral implementation im
 
 test('an export pool reuses the warm service and closes only its extra workers', async function () {
   var runtime = fake();
-  var service = capture.createWithFallback({ spawn: runtime.spawn });
+  var service = capture.createService({ spawn: runtime.spawn });
   await service.warm('http://localhost:3579/');
   assert.equal(runtime.children.length, 1);
   var pool = service.createPool(4);

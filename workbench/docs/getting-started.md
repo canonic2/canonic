@@ -25,23 +25,29 @@ code --install-extension canonic-workbench-darwin-arm64.vsix
 ```
 
 Or open the Extensions view in VS Code, choose **…** › **Install from VSIX…**, and pick the
-file. Cursor, Windsurf, and other VS Code forks accept the same file through their own
-command or menu.
+file. Cursor, Windsurf, and other VS Code forks accept the same file, from the same
+Extensions view menu or from their own command-line tool, such as
+`cursor --install-extension`.
 
 Each file bundles the runtime its platform needs for screenshots and
 TypeScript previews, so there is nothing else to install. VS Code 1.75 or later
-is required.
+is required. Screenshots need macOS 13 or later, Windows, or Linux with a
+display; see [The screenshot helper](extension.md#the-screenshot-helper).
 
 > The release builds are unsigned. Desktop macOS is the most exercised
 > platform; Windows and Linux builds have not been validated as thoroughly.
 
 If VS Code was already open on a project, run **Developer: Reload Window**
-after installing or updating, so running windows pick up the new version.
+after installing, so running windows pick up the extension. To update or remove
+it later, see [Updating](extension.md#updating) and
+[Uninstalling](extension.md#uninstalling).
 
 ## 2. Write `workbench.yaml`
 
 Create `workbench.yaml` at the root of your project. Every `src` is a path from
-that root:
+that root. Workbench looks for the file at the top of each folder open in
+VS Code, so in a monorepo either put it at the repository root, or open the
+folder that contains it; see [Projects in a subfolder](extension.md#projects-in-a-subfolder).
 
 ```yaml
 name: Acme
@@ -65,7 +71,8 @@ sections:
         src: components/button.html
 ```
 
-- `name` titles the screen list and the canvas tab.
+- `name` titles the screen list in a standalone browser and names
+  [design-system exports](design-system-export.md).
 - Each **section** becomes a button in the sidebar's section list. `icon` is any
   [Lucide](https://lucide.dev/icons/) icon name, written in kebab-case.
 - Each **item** is a screen: a `label` and the HTML file to show.
@@ -105,8 +112,8 @@ canvas opens in an editor tab and shows the screen at a real device width.
 Try these:
 
 - Pick **Wrong password** under **Sign in** to switch state.
-- Use the width buttons in the toolbar for desktop, mobile, a resizable frame,
-  or **Fit**.
+- Use the width buttons in the toolbar for **Laptop**, **Mobile**, a
+  **Resizable** frame, or **Fit**.
 - Draw on the screen with the markup tools at the bottom, then select
   **Copy handoff**. The annotated screenshot is saved and a prompt describing
   every mark is copied to your clipboard, ready to paste to an agent.
@@ -133,6 +140,10 @@ workbench.local.yaml
   [Local overrides](configuration.md#local-overrides).
 - `.canonic/.handoffs/` holds the screenshots that handoffs save.
 
+Workbench writes nothing else into the project unless you save
+**Configure pages**, which rewrites `workbench.yaml`. See
+[Files and network access](extension.md#files-and-network-access).
+
 ## 6. Preview a component from your code
 
 Design pages show what a screen should look like. A TypeScript preview renders
@@ -158,21 +169,26 @@ export default definePreview({
 Run **Workbench: Refresh Screens**. A second **Button** appears under
 **Components**, with **Default** and **Disabled** states, rendered with your
 project's own React. You don't install anything for the import: Workbench
-supplies `@canonic/workbench` when it compiles the file. HTML, Vue, Astro, and
-React Native Web components work the same way; see
-[TypeScript Workbench previews](workbench-previews.md).
+supplies `@canonic/workbench` when it compiles the file. Other frameworks work
+the same way; each has its own guide: [React](react.md),
+[React Native Web](react-native-web.md), [Vue](vue.md), [HTML](html.md), and
+[Astro](astro.md). For anything else, see [Custom adapters](custom-adapters.md).
 
-## Removing Workbench
+## Removing Workbench from a project
 
-Delete `workbench.yaml`, along with any `.workbench.ts` and `.workbench.tsx`
-files, `workbench.config.ts`, and `workbench-env.d.ts` you added. Your pages
-contain nothing Workbench-specific beyond optional state attributes and CSS,
-which are inert without it.
+Delete `workbench.yaml` and `workbench.local.yaml`, along with any
+`.workbench.ts` and `.workbench.tsx` files, `workbench.config.ts`, and
+`workbench-env.d.ts` you added, and the `.canonic/.handoffs/` folder. Your
+pages contain nothing Workbench-specific beyond optional state attributes and
+CSS, which are inert without it. To remove the extension itself, see
+[Uninstalling](extension.md#uninstalling).
 
 ## Next steps
 
 - Add controls, hooks, and other frameworks to previews:
   [TypeScript Workbench previews](workbench-previews.md).
+- Learn the canvas's controls and shortcuts: [Using the canvas](canvas.md).
+- Hand a marked-up screen to your agent: [Markup and handoff](markup-and-handoff.md).
 - Give pages more states and choose their viewports:
   [Pages and states](pages-and-states.md).
 - Show the same screen as it runs on your dev server:

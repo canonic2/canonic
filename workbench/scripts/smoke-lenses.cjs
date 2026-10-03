@@ -7,7 +7,7 @@ var os = require('node:os');
 var path = require('node:path');
 var http = require('node:http');
 var server = require('../server');
-var Browser = require('../capture').Browser;
+var Browser = require('./chrome.cjs').Browser;
 
 async function main() {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-lenses-smoke-'));

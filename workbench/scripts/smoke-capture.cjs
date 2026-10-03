@@ -6,6 +6,7 @@ var os = require('node:os');
 var path = require('node:path');
 var http = require('node:http');
 var engine = require('../electron-capture');
+var runtime = require('../electron-runtime');
 var server = require('../server');
 async function until(check) {
   var deadline = Date.now() + 15000;
@@ -15,7 +16,7 @@ async function until(check) {
   }
 }
 async function main() {
-  assert.ok(engine.available(), 'Run npm run bundle-runtime on a desktop first');
+  assert.ok(runtime.available(), 'Run npm run bundle-runtime on a desktop first');
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-capture-smoke-'));
   var helper = engine.create({ inject: fs.readFileSync(path.join(__dirname, '../workbench/describe.js'), 'utf8') +
     '\nwindow.__wbDescribeAt = function(x, y) { return window.wbDescribe.at(document, x, y); };' });

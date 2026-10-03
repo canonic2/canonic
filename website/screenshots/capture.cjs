@@ -1,6 +1,7 @@
 /* Regenerates the site's screenshots from the Acme fixture beside this file.
    Starts the extension's server on the fixture, drives headless Chrome through
-   the extension's own DevTools driver, and writes JPEGs into ../public/images.
+   the extension's development DevTools driver, and writes JPEGs into
+   ../public/images.
 
    It also measures the workbench's four regions in the overview and writes
    them to ../src/data/screenshots.json, where the page draws the numbered
@@ -18,7 +19,7 @@ var cp = require('node:child_process');
 var fs = require('node:fs');
 var path = require('node:path');
 var EXTENSION = path.resolve(__dirname, '../../workbench');
-var capture = require(path.join(EXTENSION, 'capture.js'));
+var chrome = require(path.join(EXTENSION, 'scripts/chrome.cjs'));
 var FIXTURE = path.join(__dirname, 'fixture');
 var OUT = path.resolve(__dirname, '../public/images');
 var PAGE = path.resolve(__dirname, '../src/pages/index.astro');
@@ -53,10 +54,10 @@ function serve() {
 
 async function main() {
   var server = await serve();
-  var cap = capture.create({ chromePath: process.env.CHROME_PATH || undefined });
+  var browser = new chrome.Browser();
   try {
-    await cap.launch();
-    var t = cap.target;
+    await browser.launch();
+    var t = await browser.createTarget();
     async function open(hash, width, scale) {
       await t.send('Emulation.setDeviceMetricsOverride', { width: width, height: H, deviceScaleFactor: scale || SCALE, mobile: false });
       // A same-address navigation fires no load event, so start from blank.
@@ -151,7 +152,7 @@ async function main() {
     await wait(200);
     await shot('workbench-previews.jpg');
   } finally {
-    await cap.close();
+    await browser.close();
     server.process.removeAllListeners('exit');
     server.process.kill();
   }

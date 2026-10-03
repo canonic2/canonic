@@ -6,7 +6,7 @@ var fs = require('node:fs');
 var os = require('node:os');
 var path = require('node:path');
 var readline = require('node:readline');
-var chromium = require('./capture');
+var scripts = require('./capture-scripts');
 var runtime = require('./electron-runtime');
 
 function Capture(options) {
@@ -179,8 +179,8 @@ Capture.prototype.capturePage = function (payload) {
   this.desired = { method: 'preparePage', payload: payload, inject: this.options.inject };
   ++this.generation;
   var request = Object.assign({}, this.desired, {
-    method: 'capturePage', overlay: chromium.overlayScript(payload), removeOverlay: chromium.removeOverlayScript,
-    describe: payload.anchors && payload.anchors.length ? chromium.describeScript(payload.anchors) : null,
+    method: 'capturePage', overlay: scripts.overlayScript(payload), removeOverlay: scripts.removeOverlayScript,
+    describe: payload.anchors && payload.anchors.length ? scripts.describeScript(payload.anchors) : null,
   });
   var self = this;
   return this.serial(function () { return self.send(request); }).then(function (result) {
@@ -193,9 +193,9 @@ Capture.prototype.capturePage = function (payload) {
 Capture.prototype.captureExportPage = function (payload) {
   var request = {
     method: 'captureExportPage', payload: payload, inject: this.options.inject,
-    settle: chromium.settleScript(), settleFast: chromium.settleScript({ quiet: false, imageTimeout: 250 }),
-    switchStory: chromium.storybookSwitchScript(payload.url),
-    overlay: chromium.overlayScript(payload), removeOverlay: chromium.removeOverlayScript,
+    settle: scripts.settleScript(), settleFast: scripts.settleScript({ quiet: false, imageTimeout: 250 }),
+    switchStory: scripts.storybookSwitchScript(payload.url),
+    overlay: scripts.overlayScript(payload), removeOverlay: scripts.removeOverlayScript,
   };
   this.desired = request;
   ++this.generation;
@@ -221,49 +221,36 @@ Capture.prototype.close = function () {
   return this.closing;
 };
 
-/* Retry a failed startup through Chrome, then keep that engine for this
-   server's lifetime. Page errors still belong to the helper: a bad URL or a
-   slow page should not silently replace a working renderer. */
-function createWithFallback(options) {
-  var helper = new Capture(options);
-  var switching = null;
+var METHODS = ['warm', 'prepare', 'preparePage', 'capture', 'capturePage', 'captureExportPage'];
+
+/* The service the server uses. A helper that exits mid-request gets that
+   request once more on its replacement. On a host that can't run the bundled
+   runtime, every request fails with the reason instead. */
+function createService(options) {
+  options = options || {};
+  var reason = options.spawn || options.executable ? null : runtime.unavailable();
+  var helper = reason ? null : new Capture(options);
   var closed = false;
-  var closing = null;
   var service = {};
-  ['warm', 'prepare', 'preparePage', 'capture', 'capturePage', 'captureExportPage'].forEach(function (method) {
+  METHODS.forEach(function (method) {
     service[method] = async function () {
       if (closed) throw new Error('Capture service is closed');
-      var args = arguments;
-      if (!switching) {
-        try { return await helper[method].apply(helper, args); }
-        catch (error) {
-          if (error.code === 'CAPTURE_PROCESS_EXITED') {
-            try { return await helper[method].apply(helper, args); }
-            catch (retryError) { error = retryError; }
-          }
-          if (closed || (!switching && error.code !== 'CAPTURE_STARTUP_FAILED')) throw error;
-          if (!switching) {
-            switching = helper.close().then(function () { return chromium.create(options); });
-          }
-        }
+      if (reason) throw new Error('Screenshots need the bundled capture runtime, and ' + reason + '.');
+      try { return await helper[method].apply(helper, arguments); }
+      catch (error) {
+        if (error.code !== 'CAPTURE_PROCESS_EXITED' || closed) throw error;
+        return helper[method].apply(helper, arguments);
       }
-      var fallback = await switching;
-      if (closed) throw new Error('Capture service is closed');
-      return fallback[method].apply(fallback, args);
     };
   });
   service.close = function () {
-    if (closing) return closing;
     closed = true;
-    closing = helper.close().then(async function () {
-      if (switching) await (await switching).close();
-    });
-    return closing;
+    return helper ? helper.close() : Promise.resolve();
   };
   service.createPool = function (size) {
     if (closed) throw new Error('Capture service is closed');
     var extras = Array.from({ length: Math.max(0, (Math.floor(size) || 1) - 1) }, function () {
-      return createWithFallback(options);
+      return createService(options);
     });
     return {
       // Activation has already warmed this service. Let the export make
@@ -275,4 +262,4 @@ function createWithFallback(options) {
   return service;
 }
 
-module.exports = { create: function (options) { return new Capture(options); }, createWithFallback: createWithFallback, Capture: Capture, available: runtime.available };
+module.exports = { create: function (options) { return new Capture(options); }, createService: createService, Capture: Capture };

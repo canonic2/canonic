@@ -54,7 +54,6 @@ function serve(context, root, diagnostics) {
       isTrusted: vscode.workspace.isTrusted,
       eagerCapture: true,
       captureStorage: path.join(context.globalStorageUri.fsPath, 'capture'),
-      chromePath: vscode.workspace.getConfiguration('canonic').get('capture.chromePath') || undefined,
       screenCapturePermissionOwner: vscode.env.appName || 'Visual Studio Code',
       onLog: function (record) {
         var details = Object.assign({ workspace: root }, record.details || {});

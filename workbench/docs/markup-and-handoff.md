@@ -22,7 +22,9 @@ The dock floats at the bottom of the canvas.
 | **Copy handoff** | Saves the screenshot and copies a prompt. See [Hand off to an agent](#hand-off-to-an-agent). |
 
 While you have marks, a count such as **3 marks** beside **Copy handoff** shows
-how many the handoff will carry. Selecting a drawing tool you're already using
+how many the handoff will carry. A drawing tool stays selected after each mark,
+so you can draw several in a row, and the new mark is selected so you can
+nudge or resize it straight away. Selecting a drawing tool you're already using
 returns to **Select**.
 
 Marks are drawn in one color and weight, so an agent can tell annotation from
@@ -37,6 +39,11 @@ screenshots are cropped to the frame either way.
 - **Arrow keys** nudge the selected mark by 1 pixel, or 8 with Shift.
 - **Escape** leaves a drawing tool, finishes editing a note, or deselects the
   mark.
+- **Double-click** a note or comment with the Select tool to edit its text. A
+  note or comment left empty is removed.
+- **Shift** while drawing keeps arrows and lines at 45° steps and makes
+  rectangles and circles square. Shift while dragging a corner handle keeps
+  them square.
 - **Marks don't block the page.** In Select mode, only a mark's outline and
   handles take clicks. Clicking inside an empty rectangle reaches the page
   underneath, so you can keep using the page while annotations are on it.
@@ -45,6 +52,8 @@ screenshots are cropped to the frame either way.
   on the design and then check the same spots on the implementation.
 - Marks stay in place when you zoom and pan, because they scale with the
   frame.
+
+Every key is listed in [Keyboard shortcuts](canvas.md#keyboard-shortcuts).
 
 ## Screenshots
 
@@ -109,8 +118,9 @@ act on:
    project, named like the camera's file. A second handoff of the same view
    gets `-2`, `-3`, and so on.
 2. The marks are cleared from the canvas.
-3. A prompt is copied to your clipboard. Paste it into Claude Code, Codex, or
-   any other conversation.
+3. A prompt is copied to your clipboard, and VS Code confirms it with a
+   notification. Paste it into Claude Code, Codex, Cursor's chat, or any other
+   conversation.
 
 The prompt says which screen, state, and width the screenshot shows, where it
 is saved, and what each mark is, with its position and the element under it:
@@ -152,6 +162,25 @@ Handoffs need the VS Code extension, which copies the prompt. The button shows
 in the editor and in a browser opened with **Workbench: Open Canvas in
 Browser**, but not when you run the server yourself. Add `.canonic/.handoffs/`
 to `.gitignore`. The screenshots are review material, not source.
+
+### Pasting into an agent
+
+The handoff isn't tied to any agent: it is text on your clipboard and a JPEG
+in your project. Nothing is sent anywhere until you paste it.
+
+- **Run the agent in the project folder.** The screenshot path, such as
+  `.canonic/.handoffs/sign-in-error.jpg`, is relative to the folder that holds
+  `workbench.yaml`. An agent working in that folder, such as Claude Code or
+  Codex in a terminal there, or the chat of the editor window that has the
+  project open, can open the file from that path.
+- **Agents that can't read image files still get the request.** The prompt
+  describes every mark, its position, and the element under it in words, so
+  the screenshot corroborates rather than carries it.
+- **Attach the image yourself** when your agent only accepts pasted or
+  attached images. The file is in `.canonic/.handoffs/`.
+- **Give it the code.** [Code pointers](lenses.md#point-at-the-code) add a
+  `Source:` line with absolute paths, so an agent working in another folder,
+  such as an app repository beside a design repository, still finds the code.
 
 ### Writing good handoffs
 

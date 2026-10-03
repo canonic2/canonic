@@ -168,14 +168,9 @@ and the [workbench.yaml reference](https://canonic.sh/workbench/docs/configurati
 | `Workbench: Refresh Screens` | re-read the config and find TypeScript previews again |
 | `Workbench: Show Log` | the Workbench log, for failures from the browser, capture, server, and handoffs |
 
-## Settings
-
-`canonic.capture.chromePath` — an explicit Chrome, Chromium, or Edge executable
-for fallback screenshots. Packaged desktop builds take screenshots with a
-bundled background Electron helper, with no visible window or Dock icon and no
-VS Code startup flags. An installation without one, or a helper that cannot
-unpack or start, uses Chrome instead. Leave the setting empty to detect Chrome
-from its standard location when it is needed. See
+Screenshots come from a bundled background Electron helper, with no visible
+window or Dock icon and no VS Code startup flags. It runs on macOS 13 or later,
+Windows, and Linux with a display. See
 [the VS Code extension](https://canonic.sh/workbench/docs/extension/) for the
 server, its ports, the screenshot helper, and workspace trust.
 
@@ -204,9 +199,9 @@ HTML and script files with no build step; opening
 | `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, the portable viewer, and the `cli.cjs` command line |
 | `export.js` | the design-system ZIP export |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
+| `capture-scripts.js` | scripts the screenshot helper runs in a page: the markup overlay, element descriptions, and export settling |
 | `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window, for the iOS Simulator and window lenses |
 | `electron-runtime.js` | verifies and unpacks the bundled Electron runtime, shared by capture and the preview worker, once into extension storage |
-| `capture.js` | Chromium over a private DevTools pipe for fallback screenshots |
 | `remote.js` | fetches the configured Storybook's index |
 | `config.js` + `yaml.js` | reads `workbench.yaml` and `workbench.local.yaml` on this machine: absolute paths, implementation origins |
 | `handoff.js` | composes the prompt an agent is handed. Pure string work |
@@ -296,7 +291,7 @@ remove runtimes left by other versions, so the cache holds one at a time.
 Configure macOS signing/notarization before distributing public releases;
 the local development package is not notarized. The `LSUIElement` setting must
 be applied before signing. Other desktop targets and remote hosts need
-native validation; Linux hosts without a display use the Chrome fallback.
+native validation; Linux hosts without a display have no screenshots.
 
 ### GitHub builds and releases
 
@@ -377,9 +372,11 @@ For a native smoke check, run `npm run bundle-runtime`, then
 capture reuse, reloads, resizing, implementation handoffs, Dock visibility,
 and crash recovery. Ordinary `npm test` needs no desktop or Electron process.
 
-`node scripts/smoke-lenses.cjs` uses an installed Chrome with temporary app and
-Storybook fixtures to check native iframe input, sign-in, session persistence
-across reloads and lens changes, and viewport resizing.
+`node scripts/smoke-lenses.cjs` drives an installed Chrome, through the
+development driver in `scripts/chrome.cjs`, with temporary app and Storybook
+fixtures to check native iframe input, sign-in, session persistence across
+reloads and lens changes, and viewport resizing. Set `CHROME_PATH` to choose
+the browser. The extension itself never uses Chrome.
 
 ## Licence
 

@@ -8,8 +8,9 @@ app.
 
 ## Requirements
 
-- **macOS 13 or later with Xcode**, which builds the capture helper the first
-  time a window is streamed.
+- **macOS 13 or later with Xcode, or the Xcode Command Line Tools**
+  (`xcode-select --install`). Their Swift compiler builds the capture helper
+  the first time a window is streamed.
 - **Screen Recording permission** for your editor. See [Permissions](#permissions).
 - The window must be **open and visible on screen**. A minimized window or one
   on another Space can't be captured.
@@ -53,7 +54,8 @@ implementations. `start` and `catalog` aren't available for windows.
 - A small native helper, built from source shipped in the extension, finds the
   window with ScreenCaptureKit and encodes it once with VideoToolbox. It's the
   same helper the [iOS Simulator](ios-simulator.md) lens uses, and one window
-  streams at a time.
+  streams at a time. Two canvases streaming at once, such as the editor tab
+  and a browser opened with **Open Canvas in Browser**, interrupt each other.
 - The server looks up the app and the title in `workbench.yaml`. A page on the
   canvas can only ask for a window that a screen declares.
 - In VS Code, JPEG frames reach the canvas over a loopback HTTP stream at about
