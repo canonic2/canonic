@@ -106,6 +106,11 @@ does not require a `CNAME` file. If no workbench release
 exists yet, the Install section waits for one. A website tag uses the newest
 published workbench release available when it deploys.
 
+GitHub Pages names each deployment after its commit, and a second deploy from
+an already-deployed commit leaves the first one live. Put each website tag on
+a commit that has never been deployed: never on a `workbench/v*` tag's commit,
+whose release has already deployed the site.
+
 ## Updating screenshots
 
 When the workbench UI changes, regenerate the images from the repository root:

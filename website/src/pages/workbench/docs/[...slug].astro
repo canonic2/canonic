@@ -51,7 +51,7 @@ const description = entry.body.split('\n\n').find(paragraph => !paragraph.starts
       <div class="docs-breadcrumb"><a href={docsHref('index', base)}>Workbench docs</a><span aria-hidden="true">/</span><span>{group.title}</span></div>
       <div class="docs-prose"><Content /></div>
       <div class="docs-page-footer">
-        <a href={`${github}/blob/main/workbench/docs/${entry.id.replace(/(^|\/)index$/, '$1README')}.md`}>View Markdown on GitHub ↗</a>
+        <a target="_blank" rel="noopener" href={`${github}/blob/main/workbench/docs/${entry.id.replace(/(^|\/)index$/, '$1README')}.md`}>View Markdown on GitHub ↗</a>
       </div>
       <nav class="docs-pagination" aria-label="Guide navigation">
         {previous ? <a href={docsHref(previous.id, base)}><span>← Previous</span><strong>{docTitle(previous)}</strong></a> : <span />}
