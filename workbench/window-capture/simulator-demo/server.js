@@ -1,6 +1,7 @@
-/* ScreenCaptureKit simulator stream proof of concept.
-   Builds the Swift helper, relays its length-prefixed Annex B H.264 frames to
-   browser WebSocket clients, and serves the WebCodecs canvas demo. */
+/* iOS Simulator harness for the window capture helper.
+   Builds the Swift helper in the parent folder, relays its length-prefixed
+   Annex B H.264 frames to browser WebSocket clients, and serves the WebCodecs
+   canvas demo. */
 var childProcess = require('node:child_process');
 var crypto = require('node:crypto');
 var fs = require('node:fs');
@@ -9,14 +10,14 @@ var path = require('node:path');
 var url = require('node:url');
 
 var ROOT = __dirname;
-var SOURCE = path.join(ROOT, 'Capture.swift');
-var PLIST = path.join(ROOT, 'Info.plist');
+var SOURCE = path.join(ROOT, '..', 'Capture.swift');
+var PLIST = path.join(ROOT, '..', 'Info.plist');
 var BUILD = path.join(ROOT, '.build');
-var APP = path.join(BUILD, 'Canonic Simulator Stream.app');
+var APP = path.join(BUILD, 'Canonic Window Capture.app');
 var CONTENTS = path.join(APP, 'Contents');
-var HELPER = path.join(CONTENTS, 'MacOS', 'canonic-simulator-stream');
+var HELPER = path.join(CONTENTS, 'MacOS', 'canonic-window-capture');
 var PORT = Number(process.env.CANONIC_SIMULATOR_STREAM_PORT || 4587);
-var IOS_AUTOMATION_MODULE = url.pathToFileURL(path.join(ROOT, '..', '..', 'src', 'automation', 'ios.mjs')).href;
+var IOS_AUTOMATION_MODULE = url.pathToFileURL(path.join(ROOT, '..', '..', '..', '..', 'shield', 'src', 'automation', 'ios.mjs')).href;
 var wdaFlow = null;
 var wdaReady = null;
 var wdaScreen = null;
@@ -193,7 +194,7 @@ server.on('upgrade', function (req, socket) {
 });
 
 var title = process.argv.slice(2).join(' ').trim();
-var helper = childProcess.spawn(HELPER, title ? [title] : [], { stdio: ['ignore', 'pipe', 'pipe'] });
+var helper = childProcess.spawn(HELPER, ['--app', 'simulator'].concat(title ? [title] : []), { stdio: ['ignore', 'pipe', 'pipe'] });
 helper.stderr.setEncoding('utf8');
 helper.stderr.on('data', function (chunk) { process.stderr.write(chunk); });
 helper.on('exit', function (code, signal) {

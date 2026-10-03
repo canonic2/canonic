@@ -5,13 +5,14 @@ A design screen is one picture of something that also exists as code. A
 same width, with your marks over it. Switch between them to compare the
 design with what was built, then hand the difference to an agent.
 
-There are three kinds of implementation:
+There are four kinds of implementation:
 
 | Kind | Shows | Guide |
 | --- | --- | --- |
 | `url` | A page from any web server: your dev server, a preview deployment, staging | This page |
 | `storybook` | One Storybook story, without Storybook's own interface | [Storybook](storybook.md) |
 | `ios-simulator` | A live, interactive stream of a booted iOS Simulator | [iOS Simulator](ios-simulator.md) |
+| `window` | A live stream of a window from any macOS app, such as an Android emulator | [App windows](windows.md) |
 
 This page covers how lenses work in general and how to set up a `url`
 implementation.

@@ -10,7 +10,7 @@ setup and operations guide.
 | --- | --- |
 | [Core workbench](core.md) | Configuration, navigation, selection, frames, editor integration, and failures shared by every screen |
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
-| [Other previews](other-previews.md) | Authored pages, URL implementations, and iOS Simulator implementations |
+| [Other previews](other-previews.md) | Authored pages, URL implementations, iOS Simulator implementations, and window implementations |
 | [VS Code extension](vscode-extension.md) | Activation, webviews, server and process lifecycle, startup, and editor handoff |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, fallbacks, and limits |
 | [Design-system export](export.md) | Background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
@@ -29,6 +29,7 @@ The workbench is one implementation in `packages/workbench/workbench/`. Projects
 | Storybook catalog | `catalog: true` on a Storybook implementation | Imported titles and stories, without a design lens |
 | iOS Simulator mapping | A lens on an authored page | A stream from the selected booted device |
 | iOS Simulator catalog | `catalog: true` on a Simulator implementation | Imported booted devices, without a design lens |
+| Window mapping | A lens on an authored page | A stream of the named window from the configured macOS app |
 
 The specs describe VS Code behavior unless they explicitly mention standalone
 browser or server use. A `file://` workbench has no server-backed catalog or

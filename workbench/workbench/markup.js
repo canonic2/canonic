@@ -921,7 +921,7 @@
 
   function simulatorView() {
     var current = viewNow();
-    return !!(current.lens && current.lens.kind === 'ios-simulator');
+    return window.wbManifest.streamed(current.lens);
   }
 
   window.addEventListener('wb-say', function (e) {

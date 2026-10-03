@@ -17,6 +17,9 @@
        staging:
          kind: url
          base: https://staging.example.com
+       emulator:
+         kind: window                     # a live stream of an app's window, on macOS
+         app: com.example.emulator        # bundle ID, or part of it
 
      sections:
        - name: Pages
@@ -28,7 +31,8 @@
                staging:
                  default: /
                  error: /?error=1
-             code:                        # implementation -> path(s), relative to its root
+               emulator: Example Phone    # the window's title, or part of it
+             code:                       # implementation -> path(s), relative to its root
                dev: packages/auth/src/pages/login
 
    Machine-specific parts — a folder path, a port — go in workbench.local.yaml
@@ -45,6 +49,9 @@
   var KEY = /^[a-z0-9-]+$/;
   var HTTP = /^https?:\/\/[^/]+/i;
   var SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+  var BUNDLE = /^[A-Za-z0-9.-]+$/;
+  /* Kinds shown as a live stream of a native window rather than an iframe. */
+  var STREAMED = ['ios-simulator', 'window'];
   var VIEWPORTS = ['fit', 'desktop', 'mobile', 'responsive'];
 
   function text(value) {
@@ -217,13 +224,20 @@
         return;
       }
       var kind = text(spec.kind);
-      if (kind !== 'url' && kind !== 'storybook' && kind !== 'ios-simulator') {
-        problems.push(where + ': kind must be url, storybook, or ios-simulator.');
+      if (kind !== 'url' && kind !== 'storybook' && kind !== 'ios-simulator' && kind !== 'window') {
+        problems.push(where + ': kind must be url, storybook, ios-simulator, or window.');
         return;
       }
       var impl = { key: key, label: text(spec.label) || labelOf(key), kind: kind, root: null };
       if (kind === 'ios-simulator') {
         impl.device = text(spec.device) || 'booted';
+      } else if (kind === 'window') {
+        var app = text(spec.app);
+        if (!BUNDLE.test(app)) {
+          problems.push(where + ': needs an app — the application’s bundle ID, or part of it, such as com.example.app.');
+          return;
+        }
+        impl.app = app;
       } else {
         var field = kind === 'url' ? 'base' : 'url';
         var implementationAddress = text(spec[field]);
@@ -256,7 +270,7 @@
       }
 
       if (spec.start !== undefined) {
-        if (kind === 'ios-simulator') {
+        if (kind === 'ios-simulator' || kind === 'window') {
           problems.push(where + ': start is available for URL and Storybook implementations.');
         } else {
           impl.start = startup(spec.start, where, problems);
@@ -349,6 +363,17 @@
         return;
       }
 
+      if (impl.kind === 'window') {
+        var windowTitle = text(value);
+        if (!windowTitle) {
+          problems.push(where + ': implementation “' + key + '” needs the window’s title, or part of it.');
+          return;
+        }
+        out[key] = { window: windowTitle };
+        count += 1;
+        return;
+      }
+
       if (typeof value === 'string' || typeof value === 'number') {
         var single = pathOf(value, key, impl, where, problems);
         if (single === null) return;
@@ -425,8 +450,14 @@
     return out.length ? out : undefined;
   }
 
+  /* Whether a lens shows a native window's stream instead of a page. */
+  function streamed(lens) {
+    return !!lens && STREAMED.indexOf(lens.kind) > -1;
+  }
+
   return {
     merge: merge,
+    streamed: streamed,
     implementations: implementations,
     screenViewports: screenViewports,
     viewportWidths: viewportWidths,

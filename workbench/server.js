@@ -29,7 +29,7 @@ var handoff = require('./handoff');
 var config = require('./config');
 var remote = require('./remote');
 var designExport = require('./export');
-var simulatorStream = require('./simulator-stream');
+var windowStream = require('./window-stream');
 var manifest = require('./workbench/manifest');
 
 var SHOT_PATH = '/_workbench/shot';
@@ -50,6 +50,7 @@ var EXPORT_PATH = '/_workbench/export';
 var SIMULATOR_PATH = '/_workbench/simulator';
 var SIMULATOR_INPUT_PATH = '/_workbench/simulator/input';
 var SIMULATOR_STREAM_PATH = '/_workbench/simulator/stream';
+var WINDOW_STREAM_PATH = '/_workbench/window/stream';
 var HANDOFFS_DIR = path.join('.canonic', '.handoffs');
 
 /* Two folders, one origin
@@ -830,9 +831,10 @@ function start(options) {
   var createCapture = electronCapture.available() ? electronCapture.createWithFallback : nativeCapture.create;
   var capture = options.capture || createCapture({ chromePath: options.chromePath, inject: DESCRIBE_SOURCE, storage: options.captureStorage });
   var captureReady = Promise.resolve();
-  var simulatorVideo = options.simulatorStream || simulatorStream.create({
-    storage: path.join(options.captureStorage || path.join(os.tmpdir(), 'canonic-workbench-capture'), 'simulator-stream'),
-    permissionOwner: options.simulatorPermissionOwner,
+  var windowVideo = options.windowStream || windowStream.create({
+    storage: path.join(options.captureStorage || path.join(os.tmpdir(), 'canonic-workbench-capture'), 'window-capture'),
+    path: WINDOW_STREAM_PATH,
+    permissionOwner: options.screenCapturePermissionOwner,
   });
   var onShot = options.onShot || function () {};
   var onLog = options.onLog || function () {};
@@ -1293,10 +1295,55 @@ function start(options) {
     /* VS Code's webview forwarding does not reliably preserve a WebSocket
        upgrade. Embedded JPEG clients use this ordinary streamed response;
        the private token and loopback binding are the same as the socket. */
-    if (url.pathname === SIMULATOR_STREAM_PATH && req.method === 'GET') {
-      if (!simulatorVideo.acceptHttp || !simulatorVideo.acceptHttp(req, res)) {
-        send(res, 403, 'That Simulator stream is not active.');
+    if (url.pathname === WINDOW_STREAM_PATH && req.method === 'GET') {
+      if (!windowVideo.acceptHttp || !windowVideo.acceptHttp(req, res)) {
+        send(res, 403, 'That window stream is not active.');
       }
+      return;
+    }
+
+    /* A window lens: stream the window a screen names from the app its
+       implementation declares. The page only says which screen; the app and
+       title come from the config, so a page can't ask for any other window. */
+    if (url.pathname === WINDOW_STREAM_PATH) {
+      if (req.method !== 'POST') {
+        send(res, 405, 'POST a window stream request here.');
+        return;
+      }
+      readBody(req, MAX_HANDOFF)
+        .then(function (body) {
+          var ask = JSON.parse(body.toString('utf8'));
+          return resolvedWithCatalogs().then(function (view) {
+            var key = String(ask.implementation || '');
+            var src = String(ask.src || '');
+            var impl = view && view.implementations[key];
+            var screen = view && Object.prototype.hasOwnProperty.call(view.screens, src) ? view.screens[src] : null;
+            var title = screen && screen.windows && screen.windows[key];
+            if (!impl || impl.kind !== 'window' || !title) {
+              throw refused(403, 'that window isn’t declared by this workbench');
+            }
+            if (ask.stop) {
+              return Promise.resolve(windowVideo.stop()).then(function () {
+                json(res, 200, { ok: true, stopped: true });
+              });
+            }
+            var codec = ask.codec === 'jpeg' ? 'jpeg' : 'h264';
+            return Promise.resolve(windowVideo.start({
+              app: impl.app,
+              source: title,
+              id: key + '\n' + src,
+              codec: codec,
+            })).then(function (result) {
+              json(res, 200, {
+                ok: true,
+                stream: WINDOW_STREAM_PATH + '?token=' + encodeURIComponent(result.token),
+                source: result.source,
+                codec: result.codec || codec,
+              });
+            });
+          });
+        })
+        .catch(function (err) { trouble(res, err, 500); });
       return;
     }
 
@@ -1322,21 +1369,22 @@ function start(options) {
             }
             if (url.pathname === SIMULATOR_STREAM_PATH) {
               if (ask.stop) {
-                return Promise.resolve(simulatorVideo.stop()).then(function () {
+                return Promise.resolve(windowVideo.stop()).then(function () {
                   json(res, 200, { ok: true, stopped: true });
                 });
               }
-              return Promise.resolve(simulatorVideo.start({
+              return Promise.resolve(windowVideo.start({
                 source: view.screens[Object.keys(view.screens).find(function (src) {
                   return src.indexOf('__ios-simulator/' + key + '/') === 0
                     && view.screens[src].simulator && view.screens[src].simulator.udid === udid;
                 })].label,
-                udid: udid,
+                app: 'simulator',
+                id: udid,
                 codec: ask.codec === 'jpeg' ? 'jpeg' : 'h264',
               })).then(function (result) {
                 json(res, 200, {
                   ok: true,
-                  stream: SIMULATOR_STREAM_PATH + '?token=' + encodeURIComponent(result.token),
+                  stream: WINDOW_STREAM_PATH + '?token=' + encodeURIComponent(result.token),
                   source: result.source,
                   codec: result.codec || (ask.codec === 'jpeg' ? 'jpeg' : 'h264'),
                 });
@@ -1583,7 +1631,7 @@ function start(options) {
   });
 
   server.on('upgrade', function (req, socket) {
-    if (!simulatorVideo.accept(req, socket)) socket.destroy();
+    if (!windowVideo.accept(req, socket)) socket.destroy();
   });
 
   /* Loopback only — this serves a whole folder, and it isn't anybody else's
@@ -1636,7 +1684,7 @@ function start(options) {
         return Promise.all(stops).then(function () {
           return Promise.all([
             Promise.resolve(capture.close()).catch(function () {}),
-            Promise.resolve(simulatorVideo.close()).catch(function () {}),
+            Promise.resolve(windowVideo.close()).catch(function () {}),
           ]);
         }).then(function () {
           return new Promise(function (resolve) {
@@ -1673,6 +1721,7 @@ module.exports = {
   SIMULATOR_PATH: SIMULATOR_PATH,
   SIMULATOR_INPUT_PATH: SIMULATOR_INPUT_PATH,
   SIMULATOR_STREAM_PATH: SIMULATOR_STREAM_PATH,
+  WINDOW_STREAM_PATH: WINDOW_STREAM_PATH,
   storybookPorts: storybookPorts,
   simulatorCatalog: simulatorCatalog,
   withPreviewScripts: withPreviewScripts,

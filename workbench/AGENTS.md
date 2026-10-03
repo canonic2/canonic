@@ -12,7 +12,8 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
 - `server.js`, `config.js`, `screens.js`, `yaml.js`: the local HTTP server on
   127.0.0.1 (port 3579 and up) and the config it serves.
 - `capture*.js`, `electron-capture.js`, `capture-helper/`, `capture-runtime/`:
-  screenshots. `simulator-stream.js`: the iOS Simulator lens.
+  screenshots. `window-stream.js`, `window-capture/`: the native window
+  stream behind the iOS Simulator lens.
 - `handoff.js`, `export.js`: handoffs and the design-system export.
   `remote.js`: requests to implementations.
 - `workbench/`: the browser canvas: manifest reader, states, lenses,

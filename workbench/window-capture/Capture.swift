@@ -7,6 +7,14 @@ import Foundation
 import ScreenCaptureKit
 import VideoToolbox
 
+/* Streams one on-screen window, chosen by its application and title, as
+   length-prefixed H.264 or JPEG frames on stdout.
+
+   canonic-window-capture [--jpeg] [--app <bundle id or part of it>] [title]
+
+   The largest visible match wins. Workbench's iOS Simulator lens passes
+   `--app simulator`; nothing here is specific to the Simulator. */
+
 private func stderr(_ message: String) {
   FileHandle.standardError.write(Data((message + "\n").utf8))
 }
@@ -38,7 +46,7 @@ private final class H264Encoder {
       compressionSessionOut: &created
     )
     guard status == noErr, let created else {
-      throw NSError(domain: "CanonicSimulatorStream", code: Int(status), userInfo: [
+      throw NSError(domain: "CanonicWindowCapture", code: Int(status), userInfo: [
         NSLocalizedDescriptionKey: "Could not create the H.264 encoder (VideoToolbox status \(status)).",
       ])
     }
@@ -167,7 +175,7 @@ private final class JPEGEncoder {
       compressionSessionOut: &created
     )
     guard status == noErr, let created else {
-      throw NSError(domain: "CanonicSimulatorStream", code: Int(status), userInfo: [
+      throw NSError(domain: "CanonicWindowCapture", code: Int(status), userInfo: [
         NSLocalizedDescriptionKey: "Could not create the JPEG encoder (VideoToolbox status \(status)).",
       ])
     }
@@ -256,7 +264,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate {
 }
 
 @main
-private struct SimulatorCapture {
+private struct WindowCapture {
   private static var permissionOwner: String {
     let value = ProcessInfo.processInfo.environment["CANONIC_SCREEN_CAPTURE_OWNER"]?
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,22 +303,34 @@ private struct SimulatorCapture {
         let owner = permissionOwner
         stderr("Requesting Screen Recording permission for \(owner)…")
         guard requestScreenCapturePermission() else {
-          throw NSError(domain: "CanonicSimulatorStream", code: 1, userInfo: [
+          throw NSError(domain: "CanonicWindowCapture", code: 1, userInfo: [
             NSLocalizedDescriptionKey: "Enable \(owner) in Screen & System Audio Recording, restart it, then retry.",
           ])
         }
       }
 
       var arguments = Array(CommandLine.arguments.dropFirst())
-      let jpeg = arguments.first == "--jpeg"
-      if jpeg { arguments.removeFirst() }
+      var jpeg = false
+      var requestedApp: String?
+      while let flag = arguments.first, flag.hasPrefix("--") {
+        arguments.removeFirst()
+        if flag == "--jpeg" {
+          jpeg = true
+        } else if flag == "--app", !arguments.isEmpty {
+          requestedApp = arguments.removeFirst().lowercased()
+        } else {
+          throw NSError(domain: "CanonicWindowCapture", code: 3, userInfo: [
+            NSLocalizedDescriptionKey: "Unknown argument \(flag).",
+          ])
+        }
+      }
       let requestedTitle = arguments.first?.lowercased()
       let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
       let candidates = content.windows.filter { window in
         let bundle = window.owningApplication?.bundleIdentifier.lowercased() ?? ""
         let title = window.title?.lowercased() ?? ""
-        let simulator = bundle == "com.apple.iphonesimulator" || bundle.contains("simulator")
-        return simulator && (requestedTitle == nil || title.contains(requestedTitle!))
+        return (requestedApp == nil || bundle.contains(requestedApp!))
+          && (requestedTitle == nil || title.contains(requestedTitle!))
       }
       let ordered = candidates.sorted { left, right in
         let leftArea = left.frame.width * left.frame.height
@@ -322,8 +342,8 @@ private struct SimulatorCapture {
           guard let app = window.owningApplication?.applicationName, let title = window.title, !title.isEmpty else { return nil }
           return "\(app): \(title)"
         }.prefix(12).joined(separator: ", ")
-        throw NSError(domain: "CanonicSimulatorStream", code: 2, userInfo: [
-          NSLocalizedDescriptionKey: "No visible Simulator window was found. Visible windows: \(visible)",
+        throw NSError(domain: "CanonicWindowCapture", code: 2, userInfo: [
+          NSLocalizedDescriptionKey: "No visible \(requestedApp.map { $0 + " " } ?? "")window was found. Visible windows: \(visible)",
         ])
       }
 
@@ -350,10 +370,10 @@ private struct SimulatorCapture {
       try stream.addStreamOutput(
         output,
         type: SCStreamOutputType.screen,
-        sampleHandlerQueue: DispatchQueue(label: "canonic.simulator.capture")
+        sampleHandlerQueue: DispatchQueue(label: "canonic.window.capture")
       )
       try await stream.startCapture()
-      stderr("Streaming \(window.title ?? "Simulator") as \(jpeg ? "JPEG" : "H.264") at \(width)x\(height), \(framesPerSecond) fps")
+      stderr("Streaming \(window.title ?? "window") as \(jpeg ? "JPEG" : "H.264") at \(width)x\(height), \(framesPerSecond) fps")
 
       /* async main is already hosted by libdispatch. After the AppKit
          initialization above its continuation runs on the main actor, where
@@ -364,7 +384,7 @@ private struct SimulatorCapture {
       await withUnsafeContinuation { (_: UnsafeContinuation<Void, Never>) in }
       withExtendedLifetime(lifetime) {}
     } catch {
-      stderr("Simulator stream failed: \(error.localizedDescription)")
+      stderr("Window capture failed: \(error.localizedDescription)")
       exit(1)
     }
   }

@@ -1,16 +1,20 @@
-/* Native iOS Simulator video
-   --------------------------
+/* Native window video
+   -------------------
    ScreenCaptureKit produces low-latency H.264 in a small ad-hoc-signed helper.
    This manager builds it once, launches it under the stable host application's
-   privacy identity, and fans its frames to authorized loopback clients. */
+   privacy identity, and fans its frames to authorized loopback clients.
+   A start request's `app` picks the application whose window is captured and
+   its `source` the window title; `options.path` is the route clients connect
+   to. The iOS Simulator and window lenses share one manager, so one window
+   streams at a time. */
 var childProcess = require('node:child_process');
 var crypto = require('node:crypto');
 var fs = require('node:fs');
 var os = require('node:os');
 var path = require('node:path');
 
-var SOURCE = path.join(__dirname, 'simulator-stream-demo', 'Capture.swift');
-var PLIST = path.join(__dirname, 'simulator-stream-demo', 'Info.plist');
+var SOURCE = path.join(__dirname, 'window-capture', 'Capture.swift');
+var PLIST = path.join(__dirname, 'window-capture', 'Info.plist');
 
 function run(file, args) {
   return new Promise(function (resolve, reject) {
@@ -22,11 +26,11 @@ function run(file, args) {
 }
 
 async function prepare(storage) {
-  if (process.platform !== 'darwin') throw new Error('Native Simulator streaming requires macOS.');
-  storage = storage || path.join(os.tmpdir(), 'canonic-simulator-stream');
-  var app = path.join(storage, 'Canonic Simulator Stream.app');
+  if (process.platform !== 'darwin') throw new Error('Native window streaming requires macOS.');
+  storage = storage || path.join(os.tmpdir(), 'canonic-window-capture');
+  var app = path.join(storage, 'Canonic Window Capture.app');
   var contents = path.join(app, 'Contents');
-  var executable = path.join(contents, 'MacOS', 'canonic-simulator-stream');
+  var executable = path.join(contents, 'MacOS', 'canonic-window-capture');
   var stamp = path.join(storage, 'runtime.json');
   var hash = crypto.createHash('sha256')
     .update(await fs.promises.readFile(SOURCE)).update(await fs.promises.readFile(PLIST)).digest('hex');
@@ -64,14 +68,14 @@ function websocketFrame(payload) {
 
 function helperError(stderr, fallback) {
   var lines = String(stderr || '').trim().split(/\r?\n/).filter(Boolean);
-  return String(lines.pop() || fallback).replace(/^Simulator stream failed:\s*/, '');
+  return String(lines.pop() || fallback).replace(/^Window capture failed:\s*/, '');
 }
 
 function Manager(options) {
   this.options = options || {};
   this.child = null;
   this.starting = null;
-  this.udid = null;
+  this.id = null;
   this.codec = null;
   this.token = null;
   this.clients = new Set();
@@ -83,24 +87,27 @@ function Manager(options) {
 
 Manager.prototype.start = function (request) {
   var codec = request.codec === 'jpeg' ? 'jpeg' : 'h264';
-  if (this.child && this.udid === request.udid && this.codec === codec && !this.child.killed) {
+  if (this.child && this.id === request.id && this.codec === codec && !this.child.killed) {
     return Promise.resolve({ token: this.token, source: request.source, codec: codec });
   }
-  if (this.starting && this.udid === request.udid && this.codec === codec) return this.starting;
+  if (this.starting && this.id === request.id && this.codec === codec) return this.starting;
   this.stop();
   var generation = ++this.generation;
-  this.udid = request.udid;
+  this.id = request.id;
   this.codec = codec;
   this.token = crypto.randomBytes(24).toString('hex');
   var self = this;
   var preparing = (this.options.prepare || prepare)(this.options.storage).then(function (file) {
-    if (generation !== self.generation) throw new Error('Simulator stream start was superseded.');
+    if (generation !== self.generation) throw new Error('Window stream start was superseded.');
     return new Promise(function (resolve, reject) {
       /* Launch directly so macOS attributes Screen Recording to the stable
          host application (VS Code in the extension), not this rebuilt ad-hoc
          helper. The name only makes that ownership explicit in its error. */
-      var args = request.source ? [request.source] : [];
-      if (codec === 'jpeg') args.unshift('--jpeg');
+      var args = [];
+      if (codec === 'jpeg') args.push('--jpeg');
+      var app = request.app || self.options.app;
+      if (app) args.push('--app', app);
+      if (request.source) args.push(request.source);
       var child = (self.options.spawn || childProcess.spawn)(file, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
@@ -112,7 +119,7 @@ Manager.prototype.start = function (request) {
       self.child = child;
       var stderr = '';
       var settled = false;
-      var timer = setTimeout(function () { fail(new Error('Simulator stream startup timed out' + (stderr ? ': ' + stderr : ''))); }, 20000);
+      var timer = setTimeout(function () { fail(new Error('Window stream startup timed out' + (stderr ? ': ' + stderr : ''))); }, 20000);
       function fail(error) {
         if (!settled) { settled = true; clearTimeout(timer); reject(error); }
       }
@@ -120,7 +127,7 @@ Manager.prototype.start = function (request) {
       child.once('exit', function (code, signal) {
         var current = self.child === child;
         if (current) self.child = null;
-        fail(new Error(helperError(stderr, 'Simulator stream stopped (' + (signal || code) + ')')));
+        fail(new Error(helperError(stderr, 'Window stream stopped (' + (signal || code) + ')')));
         if (current) {
           self.clients.forEach(function (socket) { socket.destroy(); });
           self.clients.clear();
@@ -173,7 +180,7 @@ Manager.prototype.frames = function (chunk) {
 Manager.prototype.accept = function (req, socket) {
   var target;
   try { target = new URL(req.url, 'http://127.0.0.1'); } catch (_) { return false; }
-  if (target.pathname !== '/_workbench/simulator/stream' || target.searchParams.get('token') !== this.token || !this.child) return false;
+  if (target.pathname !== this.options.path || target.searchParams.get('token') !== this.token || !this.child) return false;
   var key = req.headers['sec-websocket-key'];
   if (!key) return false;
   var accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
@@ -194,7 +201,7 @@ Manager.prototype.accept = function (req, socket) {
 Manager.prototype.acceptHttp = function (req, res) {
   var target;
   try { target = new URL(req.url, 'http://127.0.0.1'); } catch (_) { return false; }
-  if (target.pathname !== '/_workbench/simulator/stream' || target.searchParams.get('token') !== this.token || !this.child) return false;
+  if (target.pathname !== this.options.path || target.searchParams.get('token') !== this.token || !this.child) return false;
   res.writeHead(200, {
     'Content-Type': 'application/octet-stream',
     'Cache-Control': 'no-store',
@@ -223,7 +230,7 @@ Manager.prototype.stop = function () {
   if (this.child && !this.child.killed) this.child.kill('SIGTERM');
   this.child = null;
   this.starting = null;
-  this.udid = null;
+  this.id = null;
   this.codec = null;
   this.token = null;
   this.pending = Buffer.alloc(0);

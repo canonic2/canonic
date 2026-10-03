@@ -2,7 +2,9 @@ var assert = require('node:assert/strict');
 var test = require('node:test');
 var EventEmitter = require('node:events');
 var PassThrough = require('node:stream').PassThrough;
-var simulatorStream = require('./simulator-stream');
+var windowStream = require('./window-stream');
+
+var STREAM = '/_workbench/example/stream';
 
 function child() {
   var proc = new EventEmitter();
@@ -20,13 +22,14 @@ function child() {
 test('starts one native stream and sends clients complete H.264 packets', async function (t) {
   var proc = child();
   var starts = [];
-  var manager = simulatorStream.create({
+  var manager = windowStream.create({
     prepare: async function () { return '/helper'; },
     permissionOwner: 'Visual Studio Code',
+    path: STREAM,
     spawn: function (file, args, options) { starts.push([file, args, options]); return proc; },
   });
   t.after(function () { return manager.close(); });
-  var started = manager.start({ udid: 'SIM-1', source: 'iPhone 17' });
+  var started = manager.start({ id: 'SIM-1', source: 'iPhone 17' });
   proc.stderr.write('Streaming iPhone 17 at 480x1092, 30 fps\n');
   var answer = await started;
   assert.equal(starts[0][0], '/helper');
@@ -42,7 +45,7 @@ test('starts one native stream and sends clients complete H.264 packets', async 
   socket.write = function (data) { writes.push(data); return true; };
   socket.destroy = function () { socket.destroyed = true; socket.emit('close'); };
   assert.equal(manager.accept({
-    url: '/_workbench/simulator/stream?token=' + answer.token,
+    url: STREAM + '?token=' + answer.token,
     headers: { 'sec-websocket-key': 'test-key' },
   }, socket), true);
 
@@ -60,34 +63,50 @@ test('starts one native stream and sends clients complete H.264 packets', async 
   assert.equal(writes[1].subarray(-encoded.length).compare(encoded), 0);
 });
 
-test('starts a JPEG stream for an embedded webview client', async function (t) {
+test('starts a JPEG stream of the configured application for an embedded webview client', async function (t) {
   var proc = child();
   var starts = [];
-  var manager = simulatorStream.create({
+  var manager = windowStream.create({
     prepare: async function () { return '/helper'; },
+    app: 'simulator',
     spawn: function (file, args) { starts.push([file, args]); return proc; },
   });
   t.after(function () { return manager.close(); });
-  var started = manager.start({ udid: 'SIM-1', source: 'iPhone 17', codec: 'jpeg' });
+  var started = manager.start({ id: 'SIM-1', source: 'iPhone 17', codec: 'jpeg' });
   proc.stderr.write('Streaming iPhone 17 as JPEG at 480x1092, 20 fps\n');
   var answer = await started;
-  assert.deepEqual(starts[0], ['/helper', ['--jpeg', 'iPhone 17']]);
+  assert.deepEqual(starts[0], ['/helper', ['--jpeg', '--app', 'simulator', 'iPhone 17']]);
   assert.equal(answer.codec, 'jpeg');
 });
 
 test('rejects a WebSocket without the active private token', function () {
-  var manager = simulatorStream.create();
-  assert.equal(manager.accept({ url: '/_workbench/simulator/stream?token=nope', headers: {} }, {}), false);
+  var manager = windowStream.create({ path: STREAM });
+  assert.equal(manager.accept({ url: STREAM + '?token=nope', headers: {} }, {}), false);
+});
+
+test('rejects a client on another route even with the active token', async function (t) {
+  var proc = child();
+  var manager = windowStream.create({
+    prepare: async function () { return '/helper'; },
+    path: STREAM,
+    spawn: function () { return proc; },
+  });
+  t.after(function () { return manager.close(); });
+  var started = manager.start({ id: 'SIM-1', codec: 'jpeg' });
+  proc.stderr.write('Streaming Example as JPEG at 480x1092, 20 fps\n');
+  var answer = await started;
+  assert.equal(manager.acceptHttp({ url: '/_workbench/other/stream?token=' + answer.token }, {}), false);
 });
 
 test('streams framed packets over HTTP for an embedded webview', async function (t) {
   var proc = child();
-  var manager = simulatorStream.create({
+  var manager = windowStream.create({
     prepare: async function () { return '/helper'; },
+    path: STREAM,
     spawn: function () { return proc; },
   });
   t.after(function () { return manager.close(); });
-  var started = manager.start({ udid: 'SIM-1', source: 'iPhone 17', codec: 'jpeg' });
+  var started = manager.start({ id: 'SIM-1', source: 'iPhone 17', codec: 'jpeg' });
   proc.stderr.write('Streaming iPhone 17 as JPEG at 480x1092, 20 fps\n');
   var answer = await started;
   var response = new EventEmitter();
@@ -99,7 +118,7 @@ test('streams framed packets over HTTP for an embedded webview', async function 
   response.write = function (data) { writes.push(data); return true; };
   response.end = function () { response.ended = true; };
   assert.equal(manager.acceptHttp({
-    url: '/_workbench/simulator/stream?token=' + answer.token,
+    url: STREAM + '?token=' + answer.token,
     on: request.on.bind(request),
   }, response), true);
   assert.equal(response.status, 200);
@@ -124,7 +143,7 @@ test('streams framed packets over HTTP for an embedded webview', async function 
   late.write = function (data) { lateWrites.push(data); return true; };
   late.end = function () {};
   assert.equal(manager.acceptHttp({
-    url: '/_workbench/simulator/stream?token=' + answer.token,
+    url: STREAM + '?token=' + answer.token,
     on: lateRequest.on.bind(lateRequest),
   }, late), true);
   assert.equal(lateWrites.length, 1, 'a late client immediately receives the retained frame');
@@ -133,11 +152,20 @@ test('streams framed packets over HTTP for an embedded webview', async function 
 
 test('does not repeat the helper error prefix in the workbench message', function () {
   assert.equal(
-    simulatorStream.helperError(
+    windowStream.helperError(
       'Requesting Screen Recording permission for Visual Studio Code…\n' +
-        'Simulator stream failed: Enable Visual Studio Code in Screen & System Audio Recording, restart it, then retry.\n',
+        'Window capture failed: Enable Visual Studio Code in Screen & System Audio Recording, restart it, then retry.\n',
       'stopped'
     ),
     'Enable Visual Studio Code in Screen & System Audio Recording, restart it, then retry.'
   );
+});
+
+test('the packaged extension ships the helper source it builds', function () {
+  var fs = require('node:fs');
+  var path = require('node:path');
+  var ignore = fs.readFileSync(path.join(__dirname, '.vscodeignore'), 'utf8').split(/\r?\n/);
+  assert.ok(fs.existsSync(path.join(__dirname, 'window-capture', 'Capture.swift')));
+  assert.ok(fs.existsSync(path.join(__dirname, 'window-capture', 'Info.plist')));
+  assert.equal(ignore.some(function (line) { return /^window-capture\/(\*\*)?$/.test(line.trim()); }), false);
 });

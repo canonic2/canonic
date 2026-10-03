@@ -282,7 +282,7 @@ test('negotiates a native Simulator stream only for a configured device', async 
   var running = await server.start({
     root: root,
     capture: { close: function () {} },
-    simulatorStream: nativeStream,
+    windowStream: nativeStream,
     simulators: function () { return [{ name: 'iPhone 17', udid: 'SIM-1', runtime: 'iOS 26.2' }]; },
   });
   try {
@@ -290,10 +290,10 @@ test('negotiates a native Simulator stream only for a configured device', async 
       implementation: 'ios', udid: 'SIM-1',
     });
     assert.strictEqual(started.status, 200);
-    assert.strictEqual(started.body.stream, server.SIMULATOR_STREAM_PATH + '?token=stream-token');
+    assert.strictEqual(started.body.stream, server.WINDOW_STREAM_PATH + '?token=stream-token');
     assert.strictEqual(started.body.codec, 'h264');
     assert.deepStrictEqual(calls[0], ['start', {
-      source: 'iPhone 17', udid: 'SIM-1', codec: 'h264',
+      source: 'iPhone 17', app: 'simulator', id: 'SIM-1', codec: 'h264',
     }]);
     var refused = await post(running.port, server.SIMULATOR_STREAM_PATH, {
       implementation: 'ios', udid: 'SIM-2', offer: 'offer-sdp',
@@ -301,6 +301,71 @@ test('negotiates a native Simulator stream only for a configured device', async 
     assert.strictEqual(refused.status, 403);
     var stopped = await post(running.port, server.SIMULATOR_STREAM_PATH, {
       implementation: 'ios', udid: 'SIM-1', stop: true,
+    });
+    assert.strictEqual(stopped.status, 200);
+    assert.deepStrictEqual(calls[1], ['stop']);
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('streams only the window a screen names, from its implementation’s app', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-window-stream-'));
+  fs.mkdirSync(path.join(root, 'pages'));
+  fs.writeFileSync(path.join(root, 'pages', 'sign-in.html'), '<!doctype html><title>Sign in</title>');
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), [
+    'name: Window stream',
+    'implementations:',
+    '  emulator:',
+    '    kind: window',
+    '    app: com.example.emulator',
+    '  dev:',
+    '    kind: url',
+    '    base: http://localhost:3000',
+    'sections:',
+    '  - name: Pages',
+    '    items:',
+    '      - label: Sign in',
+    '        src: pages/sign-in.html',
+    '        implementations:',
+    '          emulator: Example Phone',
+    '          dev: /sign-in',
+  ].join('\n'));
+  var calls = [];
+  var nativeStream = {
+    start: function (request) {
+      calls.push(['start', request]);
+      return { token: 'window-token', source: request.source, codec: request.codec };
+    },
+    stop: function () { calls.push(['stop']); },
+    accept: function () { return false; },
+    close: function () {},
+  };
+  var running = await server.start({ root: root, capture: { close: function () {} }, windowStream: nativeStream });
+  try {
+    var started = await post(running.port, server.WINDOW_STREAM_PATH, {
+      implementation: 'emulator', src: 'pages/sign-in.html', codec: 'jpeg',
+    });
+    assert.strictEqual(started.status, 200);
+    assert.strictEqual(started.body.stream, server.WINDOW_STREAM_PATH + '?token=window-token');
+    assert.strictEqual(started.body.codec, 'jpeg');
+    assert.deepStrictEqual(calls[0], ['start', {
+      app: 'com.example.emulator', source: 'Example Phone', id: 'emulator\npages/sign-in.html', codec: 'jpeg',
+    }]);
+
+    var undeclared = await post(running.port, server.WINDOW_STREAM_PATH, {
+      implementation: 'emulator', src: 'pages/other.html',
+    });
+    assert.strictEqual(undeclared.status, 403);
+    var notWindow = await post(running.port, server.WINDOW_STREAM_PATH, {
+      implementation: 'dev', src: 'pages/sign-in.html',
+    });
+    assert.strictEqual(notWindow.status, 403);
+    assert.strictEqual(calls.length, 1);
+
+    var stopped = await post(running.port, server.WINDOW_STREAM_PATH, {
+      implementation: 'emulator', src: 'pages/sign-in.html', stop: true,
     });
     assert.strictEqual(stopped.status, 200);
     assert.deepStrictEqual(calls[1], ['stop']);

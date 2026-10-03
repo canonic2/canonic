@@ -9,7 +9,7 @@ icon-source.svg
 scripts/**
 dist/**
 capture-helper/**
-simulator-stream-demo/**
+window-capture/simulator-demo/**
 docs/**
 workbench/README.md
 node_modules/**/README.md

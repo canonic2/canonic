@@ -87,7 +87,7 @@ declared once at the top and referred to by name:
 ```yaml
 implementations:
   storybook:                  # any kebab-case name; it's the button's label unless `label` says otherwise
-    kind: storybook           # url | storybook | ios-simulator
+    kind: storybook           # url | storybook | ios-simulator | window
     url: auto                 # or an explicit http://localhost:6006
     root: ../product/packages/ui   # optional folder: where the code is, relative to this file or absolute
     catalog: true             # optional: import its titles and stories into the workbench
@@ -103,6 +103,9 @@ implementations:
     kind: ios-simulator
     device: booted            # every booted Simulator, or one exact name/UDID
     catalog: true
+  emulator:
+    kind: window              # a live stream of one macOS app's window
+    app: com.example.emulator # bundle ID, or part of it; a screen names the window title
   staging:
     kind: url
     base: https://staging.example.com
@@ -185,6 +188,13 @@ webview `display-capture` restriction. WDA forwards taps and drags from the canv
 `node .canonic/src/automation/ios-cli.mjs install-wda`. The default `device:
 booted` imports every booted device; an exact device name or UDID narrows it.
 
+A `window` implementation uses the same helper for any macOS app: `app` is
+part of its bundle ID, and each screen maps it to part of a window title. The
+canvas posts only the implementation and screen to `/_workbench/window/stream`;
+the server reads the app and title from the config, so a page can't open any
+other window. Window lenses take no input, have no catalog or `start`, and
+share the one native stream with the Simulator.
+
 Whatever the config gets wrong is reported rather than guessed at. A bad line
 names its line number; a screen missing a `src` is dropped and logged with the
 section it was in, and the rest of the sidebar still builds.
@@ -201,8 +211,10 @@ The packaged extension starts its bundled Electron screenshot helper as soon
 as the workspace's server starts. It stays running until the extension shuts
 down. On macOS it is a background agent with no Dock icon or visible window;
 users do not need to change how VS Code starts or install a capture browser.
-Simulator streaming uses a separate **Canonic Simulator Stream** helper built
-from the source shipped in the extension. ScreenCaptureKit reads the window,
+Simulator streaming uses a separate **Canonic Window Capture** helper built
+from the source shipped in the extension (`window-capture/`). It captures one
+application's window, and the Simulator lens points it at the Simulator.
+ScreenCaptureKit reads the window,
 VideoToolbox encodes it once, and a loopback HTTP stream carries JPEG frames to
 the embedded canvas without depending on VS Code's optional media codecs or
 WebSocket forwarding. A standalone browser uses the lower-bandwidth
@@ -320,7 +332,8 @@ A screenshot of it is taken by the screenshot helper going there itself
 (`/_workbench/capture/page`), with the marks laid over. The helper names what
 is under each mark with `describe.js`. URL and Storybook lenses use the
 workbench's iframes. An explicitly configured `ios-simulator` lens instead uses
-the native ScreenCaptureKit stream and WDA input path described above.
+the native ScreenCaptureKit stream and WDA input path described above, and a
+`window` lens uses the same stream without input.
 After the first Storybook preview loads, Workbench switches stories through its
 channel and keeps the preview runtime warm. It navigates to the story URL if
 Storybook does not acknowledge the switch.
