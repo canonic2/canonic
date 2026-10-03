@@ -12,8 +12,9 @@ project holds a copy and no page in one points at it. It is still only HTML and
 script files: no build step and no runtime network. Lucide ships with the
 extension as a pinned dependency.
 
-The [workbench specifications](../docs/specs/README.md) record the observable
-contracts for shared behavior, Storybook, and other previews.
+The [user documentation](../docs/README.md) is the guide for people setting
+Workbench up. The [workbench specifications](../docs/specs/README.md) record the
+observable contracts for shared behavior, Storybook, and other previews.
 
 ---
 

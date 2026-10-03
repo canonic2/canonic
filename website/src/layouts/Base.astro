@@ -1,6 +1,7 @@
 ---
 /* The page shell every module shares: head, a product bar listing every
-   Canonic product, the current product's section links, and the footer. */
+   Canonic product, the current product's section links, and the footer.
+   A nav item marked `external` leaves the site and gets an arrow. */
 import '../styles/global.css';
 import { base } from '../lib/base.js';
 import { logo, products } from '../lib/marks.js';
@@ -59,7 +60,9 @@ const year = new Date().getFullYear();
       <span class="sub-name">{product}{version && <span class="sub-version">v{version}</span>}</span>
       <span class="sub-rule" aria-hidden="true"></span>
       <div class="sub-links">
-        {nav.map(item => <a href={item.href}>{item.label}</a>)}
+        {nav.map(item => item.external
+          ? <a href={item.href}>{item.label} <span aria-hidden="true">↗</span></a>
+          : <a href={item.href} aria-current={item.current ? 'page' : undefined}>{item.label}</a>)}
       </div>
       {download && <a class="btn btn-sm" href={download.href}>{download.label}</a>}
     </div>

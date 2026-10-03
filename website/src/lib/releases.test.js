@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { TARGETS, latestDownloads, releaseDownloads, selectRelease } from './releases.js';
+import { TARGETS, completeReleases, latestDownloads, releaseDownloads, releaseNotes, selectRelease } from './releases.js';
 
 const repository = 'canonic2/canonic';
 const targets = TARGETS.map(({ target }) => target);
@@ -35,6 +35,41 @@ test('the newest complete workbench release wins', () => {
   assert.equal(selectRelease([release('1.0.1'), release('1.0.3', 'linux-arm64'), newest]), newest);
   assert.equal(selectRelease([release('1.0.3', 'linux-arm64')]), null);
   assert.throws(() => releaseDownloads(release('1.0.3', 'linux-arm64'), repository), /missing/);
+});
+
+test('the changelog lists complete releases, newest version first', () => {
+  const draft = { ...release('2.0.0'), draft: true };
+  const listed = completeReleases([release('1.2.0'), release('1.10.0'), draft, release('1.11.0', 'win32-x64'), release('0.9.9')]);
+  assert.deepEqual(listed.map(item => item.tag_name), ['workbench/v1.10.0', 'workbench/v1.2.0', 'workbench/v0.9.9']);
+});
+
+test('generated release notes become text blocks and a changelog link', () => {
+  const notes = releaseNotes([
+    '<!-- Release notes generated using configuration in .github/release.yml -->',
+    "## What's Changed",
+    '* Add canvas zoom by @acme in https://github.com/canonic2/canonic/pull/4',
+    '* Fix the **More** menu in [narrow windows](https://example.com/)',
+    '',
+    'Workbench now opens `workbench.yaml` from any folder.',
+    '## New Contributors',
+    '* @acme made their first contribution',
+    '',
+    '**Full Changelog**: https://github.com/canonic2/canonic/compare/workbench/v0.4.0...workbench/v0.5.0',
+  ].join('\n'));
+  assert.deepEqual(notes.blocks, [
+    { items: ['Add canvas zoom by @acme in https://github.com/canonic2/canonic/pull/4', 'Fix the More menu in narrow windows'] },
+    { text: 'Workbench now opens workbench.yaml from any folder.' },
+  ]);
+  assert.equal(notes.changes, 'https://github.com/canonic2/canonic/compare/workbench/v0.4.0...workbench/v0.5.0');
+});
+
+test('a release without its own notes links to its commit history', () => {
+  const first = { ...release('1.0.1'), body: '**Full Changelog**: https://example.com/elsewhere', published_at: '2026-09-27T17:57:53Z' };
+  const info = releaseDownloads(first, repository);
+  assert.deepEqual(info.notes, []);
+  assert.equal(info.changes, `https://github.com/${repository}/commits/workbench/v1.0.1`);
+  assert.equal(info.published, '2026-09-27T17:57:53Z');
+  assert.equal(info.tag, 'workbench/v1.0.1');
 });
 
 test('download links must stay on the repository\'s releases', () => {

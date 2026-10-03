@@ -71,7 +71,9 @@ and every trace of this is gone.
   dev server, on staging — one click away from the design, in the same frame,
   with the same marks over it. See below.
 
-The full config schema, the address-bar format, and what each file does are in
+The [documentation](docs/README.md) covers setup, pages and states, lenses,
+Storybook, the iOS Simulator, markup and handoffs, export, and every
+`workbench.yaml` key. What each source file does is in
 [workbench/README.md](workbench/README.md).
 
 ## Implementation lenses
