@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import http from 'node:http';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,15 +9,31 @@ import { parseSpaceRequest } from './coordinator.ts';
 const require = createRequire(import.meta.url);
 const server = require('../../server.js');
 
+/* Each test's server listens on the first free default port, so consecutive
+   tests share one. A fresh connection per request, as in server.test.js, keeps
+   a pooled keep-alive socket to the closed server from receiving the request. */
+function request(url: string, init: { method?: string, headers?: Record<string, string>, body?: string } = {}) {
+  return new Promise<{ status: number, text(): Promise<string>, json(): Promise<any> }>((resolve, reject) => {
+    const req = http.request(url, { method: init.method || 'GET', headers: init.headers, agent: false }, res => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode || 0, text: async () => body, json: async () => JSON.parse(body) }));
+    });
+    req.on('error', reject);
+    req.end(init.body);
+  });
+}
+
 test('space coordination uses registered IDs, publishes complete context, and rejects cross-origin requests', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'canonic-canvas-space-'));
   writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
   const running = await server.start({ root, capture: { close() {} } });
   const origin = new URL(running.url).origin;
   try {
-    const list = await (await fetch(origin + '/_workbench/spaces')).json();
+    const list = await (await request(origin + '/_workbench/spaces')).json();
     async function operation(body: unknown, from = origin) {
-      return fetch(origin + '/_workbench/canvas/space', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: from }, body: JSON.stringify(body) });
+      return request(origin + '/_workbench/canvas/space', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: from }, body: JSON.stringify(body) });
     }
     const catalog = await operation({ id: list.current, operation: 'config' });
     assert.equal(catalog.status, 200); assert.equal((await catalog.json()).config.name, 'Acme');
@@ -25,11 +42,11 @@ test('space coordination uses registered IDs, publishes complete context, and re
     const view = { version: 2, canvas: 'canvas', selected: 'a', text: 'All artboards', artboards: ['a','b'].map(id => ({ id, space: { id: list.current, name: 'Acme' }, src: id + '.html', size: { width: 393, height: 852 }, status: 'loading' })) };
     const posted = await operation({ id: list.current, operation: 'context', body: { client: 'canvas', view } });
     assert.equal(posted.status, 200);
-    assert.deepEqual((await (await fetch(origin + '/_workbench/view')).json()).view, { ...view, artboards: view.artboards.map(b => ({ ...b, state: null, lens: null })) });
+    assert.deepEqual((await (await request(origin + '/_workbench/view')).json()).view, { ...view, artboards: view.artboards.map(b => ({ ...b, state: null, lens: null })) });
     await operation({ id: list.current, operation: 'context', body: { client: 'canvas', closed: true } });
-    assert.equal((await (await fetch(origin + '/_workbench/view')).json()).open, false);
+    assert.equal((await (await request(origin + '/_workbench/view')).json()).open, false);
     assert.throws(() => parseSpaceRequest({ id: list.current, operation: 'arbitrary', url: 'https://example.com' }), /Invalid/);
-    const html = await (await fetch(running.url)).text();
+    const html = await (await request(running.url)).text();
     assert.match(html, /id="stateButton"/);
     assert.match(html, /id="topbarOverflowMenu"/);
     assert.doesNotMatch(html, /canvasStage|duplicateArtboard|canvas-toolbar/);
@@ -43,7 +60,7 @@ test('authored Simulator mapping resolves a device name to its UDID and excludes
   const calls: unknown[] = [];
   const running = await server.start({ root, capture: { close() {} }, simulators: () => [{ name: 'Acme Phone', udid: 'A' }, { name: 'Other Phone', udid: 'B' }], windowStream: { start(input: unknown) { calls.push(input); return { token: 'token' }; }, stop() {}, accept() { return false; }, close() {} } });
   try {
-    async function start(udid: string) { return fetch(new URL('/_workbench/simulator/stream', running.url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ implementation: 'ios', udid }) }); }
+    async function start(udid: string) { return request(new URL('/_workbench/simulator/stream', running.url).href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ implementation: 'ios', udid }) }); }
     assert.equal((await start('Acme Phone')).status, 200);
     assert.deepEqual(calls, [{ id: 'A', app: 'simulator', source: 'Acme Phone', codec: 'h264' }]);
     assert.equal((await start('B')).status, 403);
