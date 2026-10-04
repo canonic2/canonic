@@ -183,6 +183,14 @@ list previews. Import only types from component files.
 - An alias for `react-native` in `workbench.config.ts` replaces the built-in
   one, if you need your own shim.
 
+## Data and providers
+
+Providers, inputs, and data work as they do for [React](react.md#add-providers-and-context).
+A screen that loads its data over the network keeps doing so: answer its
+`fetch` and XMLHttpRequest calls per state with
+[`requests`](preview-data.md#request-mocks), or wrap it in a provider
+holding fixture data from an environment.
+
 ## Replace native-only modules
 
 A module that needs native code can't run in the browser. Replace it in one of

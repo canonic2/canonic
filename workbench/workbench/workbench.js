@@ -923,6 +923,71 @@
     if (host) host.postMessage({ type: 'wb-refresh-failed' }, '*');
   }
 
+  /* ------------------------------------------------------------ projects */
+
+  /* A workbench with more than one project names the one showing at the
+     start of the breadcrumb, and, in a browser, swaps the sidebar's header
+     for a switcher. Each project is its own server, so switching is going to
+     another address: the editor does that for its tab, which it is asked to
+     with wb-project; a browser asks this server for the project's address,
+     starting its server if it has to, and goes there. One project shows
+     neither, and a server that doesn't answer is one project. */
+  function switchProject(id) {
+    if (host) {
+      host.postMessage({ type: 'wb-project', id: id }, '*');
+      return;
+    }
+    fetch('/_workbench/projects/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (answer) {
+        if (!answer || !answer.ok) throw new Error((answer && answer.error) || 'The project didn’t open.');
+        location.href = answer.url;
+      })
+      .catch(function (error) {
+        window.alert('Couldn’t open that project — ' + String(error.message || error));
+      });
+  }
+
+  var crumbSwitcher = null;
+  var sideSwitcher = null;
+
+  /* Read on start and again whenever the config is: a project's name,
+     color and icon come from its workbench.yaml. */
+  function loadProjects() {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    fetch('/_workbench/projects')
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (answer) {
+        var several = !!(answer && answer.ok && answer.projects && answer.projects.length > 1);
+        document.getElementById('projectCrumb').hidden = !several;
+        document.getElementById('projects').hidden = !several || !!host;
+        document.getElementById('sidebarHead').hidden = several && !host;
+        if (!several) return;
+        if (!crumbSwitcher) {
+          crumbSwitcher = window.wbProjects.create({
+            button: document.getElementById('projectCrumbButton'),
+            menu: document.getElementById('projectCrumbMenu'),
+            onPick: switchProject,
+          });
+        }
+        crumbSwitcher.set(answer.projects, answer.current);
+        if (host) return;
+        if (!sideSwitcher) {
+          sideSwitcher = window.wbProjects.create({
+            button: document.getElementById('projectButton'),
+            menu: document.getElementById('projectMenu'),
+            onPick: switchProject,
+          });
+        }
+        sideSwitcher.set(answer.projects, answer.current);
+      })
+      .catch(function () { /* one project, as far as anyone can tell */ });
+  }
+
   /* Links in a live preview ask the shell to navigate so they get the same
      double-buffered transition as sidebar choices.
 
@@ -985,6 +1050,21 @@
         refuse(error);
         tellHostRefreshFailed();
       });
+      return;
+    }
+
+    /* A TypeScript preview asking for another: a link its definition maps,
+       or context.navigate. It names the preview by ID; the screen is
+       whichever one renders it. */
+    if (data.type === 'workbench-preview' && data.event === 'navigate') {
+      if (e.source !== frame.contentWindow || e.origin !== location.origin) return;
+      var screens = (resolved && resolved.screens) || {};
+      var target = Object.keys(screens).find(function (src) {
+        return index[src] && screens[src].preview && screens[src].preview.id === data.preview;
+      });
+      if (!target) return;
+      if (nav) nav.reveal(target);
+      writeHash(target, stateOf(index[target], data.state), stage.dataset.width);
       return;
     }
 
@@ -1356,6 +1436,7 @@
 
       document.title = config.name;
       projectName.textContent = config.name;
+      loadProjects();
 
       if (first) restore();
 
@@ -1397,6 +1478,8 @@
     blank.textContent = String(error.message || error);
     blank.hidden = false;
     console.error('[workbench] ' + String(error.message || error));
+    /* A project whose config is broken can still be switched away from. */
+    loadProjects();
   }
 
   window.wbConfig.load(start, refuse);

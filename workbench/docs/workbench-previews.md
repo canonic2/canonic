@@ -5,6 +5,14 @@ in named states, next to your design pages. You define it in a
 `.workbench.ts` or `.workbench.tsx` file, with an adapter for HTML, React, Vue,
 Astro, React Native Web, or a technology you register yourself.
 
+Like a story in Storybook, a preview renders your real component or page, but
+not a running copy of your app. Each state supplies the data the screen would
+load, through props, providers, or [mocked requests](preview-data.md#request-mocks),
+and Workbench keeps it on the canvas: its links open other previews, and
+everything else it would do on a real site, such as following a route,
+submitting a form, or starting a download, is recorded under **Actions**
+instead. See [Preview data, mocks, and actions](preview-data.md).
+
 This page covers what every preview shares: definitions, states, controls,
 lifecycle hooks, the command-line tools, and portable exports. Each framework
 has its own guide:
@@ -90,14 +98,16 @@ the discovery patterns.
 | `adapter` | Required. `html`, `react`, `vue`, `astro`, `react-native-web`, or a [registered](#register-other-technologies) name. |
 | `source` | Required. `entry` is the file to render, relative to the definition and inside the project. `export` names its export and defaults to `default`. |
 | `inputs` | Data passed to the source: props for React and Vue, `Astro.props` for Astro. |
-| `controls` | Inputs you can edit in **Preview controls**. See [Controls and actions](#controls-and-actions). |
+| `controls` | Inputs you can edit in **Preview controls**. See [Controls](preview-data.md#controls). |
 | `states` | A map of kebab-case state IDs to [states](#states). |
+| `links` | The addresses the source links or submits to, each mapped to the preview it opens. See [Links and navigation](preview-data.md#links-and-navigation). |
+| `requests` | Answers to the page's `fetch` and `XMLHttpRequest` calls. See [Request mocks](preview-data.md#request-mocks). |
 | `viewports` | The frame sizes the preview supports: any of `fit`, `desktop`, `mobile`, and `responsive`. See [Viewports](pages-and-states.md#viewports). |
 | `docs` | Text shown under **Documentation** in **Preview controls**. |
-| `fixtures`, `globals` | Data the source and hooks read from the [context](#lifecycle-hooks). |
+| `fixtures`, `globals` | Data and settings that environments, hooks, and request handlers read from the context. See [Fixtures and globals](preview-data.md#fixtures-and-globals). |
 | `styles` | Stylesheets to load with the preview, relative to the definition. |
 | `assets` | Extra local files or folders the source or a compiler plugin reads at runtime, relative to the definition. |
-| `environment` | A module, relative to the definition, that wraps or configures every state. See [Lifecycle hooks](#lifecycle-hooks). |
+| `environment` | A module, relative to the definition, that wraps or configures every state. See [Environments](preview-data.md#environments). |
 | `setup`, `play`, `ready` | [Lifecycle hooks](#lifecycle-hooks) for every state. |
 
 `inputs`, `fixtures`, and `globals` must be plain, cloneable data.
@@ -108,9 +118,11 @@ Each state can set:
 
 - `label`, the name in the sidebar. It defaults to the ID in title case, so
   `is-busy` reads **Is Busy**.
-- `inputs`, `fixtures`, and `globals`, which override the preview's values of
-  the same name.
+- `inputs`, `fixtures`, and `globals`, which override the preview's values
+  key by key; see [What you can set, and where](preview-data.md#what-you-can-set-and-where).
 - `source`, to render a different entry or export in this state.
+- `requests`, tried before the preview's
+  [request mocks](preview-data.md#which-mock-answers).
 - `setup`, `play`, and `ready` hooks.
 
 The first state is the one a preview opens in. Every state also opens directly
@@ -127,48 +139,42 @@ keyed off it works as it does in [design pages](pages-and-states.md#1-css-keyed-
 this page for each one's guide. Any other name must be
 [registered](#register-other-technologies).
 
-## Controls and actions
+## Data, controls, and actions
 
-When a preview is ready, **Preview controls** appears in the toolbar. It opens
-a panel with:
+A preview gets the data its real screen would load, and you can change it per
+state and while you review. [Preview data, mocks, and actions](preview-data.md)
+covers all of it:
 
-- a field for each entry in `controls`,
-- **Reset state**, which drops your edits and the action log and renders the
-  state again,
-- **Actions**, the last 30 calls to `context.action(name, ...values)`,
-- **Documentation**, the preview's `docs` text, when it has some.
-
-| Control `type` | Field | Options |
-| --- | --- | --- |
-| `text` | Text box | |
-| `number` | Number box | `min`, `max`, `step` |
-| `boolean` | Checkbox | |
-| `select` | Menu | `options`, a nonempty list of strings or numbers |
-| `json` | Text area of JSON | |
-
-Every control also takes a `label`, which defaults to the input's name. An edit
-applies when the field changes. Edits last until you reset, change state, or
-leave the screen; they never change the definition, screenshots of reference
-states, or exports.
+- **Inputs and controls:** props for the component, and fields under
+  **Preview controls** that edit them live. **Reset state** drops your edits
+  and the action log.
+- **Fixtures and globals:** data and settings for the code around the component.
+- **Environments:** providers, plugins, stores, and setup, for one preview or,
+  from `workbench.config.ts`, for the whole project.
+- **Request mocks:** answers to the page's own `fetch` and XMLHttpRequest
+  calls, with empty, loading, error, and offline states.
+- **Actions:** what the screen tried to do, listed under **Actions** in
+  **Preview controls**.
+- **Links and navigation:** links that open other previews, with the
+  toolbar's **Actions** switch on.
 
 ## Lifecycle hooks
 
 Hooks and sources receive a context with `id`, `state`, `inputs`, `fixtures`,
-`globals`, an abort `signal`, `action(name, ...values)`, and `error(error)`.
+`globals`, an abort `signal`, `action(name, ...values)`, `navigate(to)`, and
+`error(error)`.
 
 - `setup(context)` runs before the source mounts and may return a cleanup
-  function. It runs from the `environment`, then the preview, then the state.
+  function. It runs from the project's [environment](preview-data.md#environments),
+  then the preview's `environment`, then the preview, then the state.
+  [Request mocks](preview-data.md#request-mocks) are already active, so
+  `setup` can fetch.
 - `play({ canvas, ...context })` runs after mounting, for an interaction
   sequence such as opening a menu. The preview's runs before the state's.
 - `ready(context)` runs last, for anything the preview must wait for.
 
-The `environment` module can export `setup` and `ready`, and one adapter hook:
-
-| Adapter | Export |
-| --- | --- |
-| `react` | `wrap(element, context)`, returning the element wrapped in providers |
-| `vue` | `configure(app, context)`, to install plugins, and `wrap(vnode, context)` |
-| `html`, `astro` | `mount(canvas, context)`, called after the rendered HTML is in place |
+An [environment](preview-data.md#environments) module can export `setup` and
+`ready` too, and a hook for its adapter, such as `wrap` for React.
 
 A preview is ready once its hooks finish, its fonts load, and its visible
 images load or 3 seconds pass. Screenshots and handoffs wait for that, and fail

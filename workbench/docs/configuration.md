@@ -30,6 +30,8 @@ to be the top of an open folder; see
 
 ```yaml
 name: Acme
+color: green
+icon: brand/logo.svg
 
 previews:
   include:
@@ -113,10 +115,13 @@ sections:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | no | Titles the screen list and the browser tab in a standalone browser, and names [design-system exports](design-system-export.md). The canvas defaults to `Workbench`, and exports to the project folder's name. In VS Code, the canvas tab is always *Workbench*. |
+| `name` | string | no | Titles the screen list and the browser tab in a standalone browser, names the project in the [project switcher](projects.md), and names [design-system exports](design-system-export.md). The canvas defaults to `Workbench`, and the switcher and exports to the project folder's name. In VS Code, the canvas tab is always *Workbench*. |
+| `color` | string | no | The project's color in the [project switcher](projects.md#name-color-and-icon): `blue`, `green`, `orange`, `purple`, `pink`, `teal`, `red`, `yellow`, `gray`, or a hex value such as `"#2f7d55"`. Quote a hex value. Defaults to a color chosen from the project's folder. |
+| `icon` | string | no | The project's icon in the switcher: a [Lucide](https://lucide.dev/icons/) icon name such as `rocket`, or a project-relative `.svg`, `.png`, `.jpg`, `.webp`, or `.gif` file of at most 256 KB, such as `brand/logo.svg`. Defaults to the first letter of `name`. |
 | `sections` | list of [sections](#sections) | no, unless `previews: false` and no [catalog](#catalogs) | The sidebar's sections, in order. |
 | `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
 | `implementations` | map of name to [implementation](#implementations) | no | Where screens also exist as running code. |
+| `projects` | map of id to [project](#projects) | no | Several projects in this one file. Without it, the file is one project. |
 
 With `previews: false`, no catalog, and no usable section, the config fails
 with *nothing to show — a config needs at least one section with one screen in
@@ -441,6 +446,62 @@ The default icon is `book-open` for Storybook and `smartphone` for the
 Simulator. Other kinds don't take `catalog`; TypeScript previews are
 [discovered](#previews) without one.
 
+## Projects
+
+One `workbench.yaml` can describe several projects, such as a product and its
+design system, and the [project switcher](projects.md) lists each one. List
+them under `projects`, keyed by an id:
+
+```yaml
+previews: false              # shared by every project
+implementations:
+  storybook:                 # shared by every project
+    kind: storybook
+    url: auto
+
+projects:
+  web:
+    name: Acme Web
+    color: blue
+    sections:
+      - name: Pages
+        items:
+          - label: Sign in
+            src: pages/sign-in.html
+  design-system:
+    name: Acme Design System
+    icon: palette
+    root: packages/ui        # served from this folder instead
+    sections:
+      - name: Components
+        items:
+          - label: Button
+            src: button.html
+```
+
+| Key | Type | Required | Description |
+| --- | --- | --- | --- |
+| *id* | kebab-case string | yes | The project's id in this file, such as `web`. Renaming it makes it a different project to Workbench, which forgets the window's choice of it. |
+| `root` | string | no | The folder the project serves and resolves its paths against, relative to this file's folder, or absolute. Defaults to this file's folder, so several projects can share one. |
+| `name`, `color`, `icon` | | no | As at the [top level](#top-level), for this project. They aren't inherited: a project without a `name` is named after its id, such as *Design system*. |
+| `sections`, `previews`, `implementations` | | no | As at the top level, for this project. |
+
+Every other key at the top level is shared. A project starts from the top
+level, and its own keys replace the shared ones, except `implementations`,
+which merges by name: a project can change one shared implementation's
+`base` and keep the rest, or add its own.
+
+Every path in a project is relative to its `root`: its `src` values, its
+`icon` image, its preview discovery, and the `root` of each implementation it
+uses, shared ones included.
+
+**Configure pages** saves the project's own `sections` under its entry in
+`projects`, even when it was showing the shared ones, so the other projects
+keep theirs.
+
+A file with `projects` that lists no valid project is read as one project
+from its top-level keys, and the problem is reported.
+
 ## Local overrides
 
 `workbench.local.yaml` beside `workbench.yaml` holds what belongs to one
@@ -461,6 +522,9 @@ It is merged over `workbench.yaml`:
   replace the committed ones by name, so the example above changes `dev`'s
   `base` and `root` and keeps its `kind` and `start`. A `start` block is
   replaced whole.
+- `projects` merges by id, and each project merges the way the whole file
+  does, so a local file can change one project's implementation and leave
+  everything else.
 - Every other top-level key, such as `name` or `sections`, replaces the
   committed one whole.
 
@@ -477,6 +541,7 @@ Common uses:
 | Storybook's port isn't one `url: auto` finds | The Storybook implementation's `url` |
 | You don't want TypeScript previews compiled | `previews: false` |
 | You want your own screen list for a while | A `sections` list, which replaces the committed one |
+| You tell projects apart differently in the [project switcher](projects.md) | Your own `name`, `color`, or `icon` |
 
 Saving **Configure pages** edits `workbench.yaml`, not the local file. Saving
 `workbench.local.yaml` refreshes the screen list and canvas in VS Code, as

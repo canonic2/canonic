@@ -21,6 +21,12 @@ project-registered adapters. They do not run a project's application server,
 `astro.config.*`, or middleware; a whole application stays a
 [URL lens](implementations.md#url-implementations).
 
+- **Requirement (decided 2026-10-03):** a preview is a mock of its screen, in
+  the way a Storybook story is, not a running copy of the application.
+  Workbench owns everything that would take it off the screen: links and forms
+  open other previews through the canvas or are recorded as actions, and the
+  Actions switch governs both. Nothing in a preview navigates the frame or
+  starts a download. See [links and navigation](#links-and-navigation).
 - Previews are discovered by default and open in the native **Workbench** lens.
 - Source compiles in a managed worker. Live and portable output share one
   adapter and state lifecycle, and that lifecycle is shared by every built-in
@@ -87,6 +93,73 @@ project-registered adapters. They do not run a project's application server,
   preview: in development the page polls a revision URL every second and
   reloads when it changes. This is a full reload, not hot module replacement.
 - Astro input edits re-render through the worker; frontmatter runs in Node.
+
+### Links and navigation
+
+- `links` maps addresses to targets: a preview ID, `{ preview, state }`, or
+  `{ state }` for the same preview. Validation rejects a non-map and targets
+  that are neither; the catalog carries each target normalized to
+  `{ preview, state? }`. A target naming an unknown preview or state is a
+  problem (`<file>: link <href> names unknown Workbench preview “<id>”.`, or
+  `… names unknown state “<state>” of <id>.`); the other previews still load.
+- While a preview is mounted, the runtime ([browser.js](../preview/browser.js))
+  registers `wbPreviewActions.follow`, which [actions.js](../workbench/actions.js)
+  calls for every link click and form submit with actions on, after in-page
+  fragments and before its `.html` hand-off. A key matches when the link and
+  the key, both resolved against `document.baseURI`, have the same origin,
+  path, and query; the fragment is ignored.
+- A match posts `{ type: 'workbench-preview', event: 'navigate', id, preview,
+  state }` to the parent. The canvas finds the screen whose resolved preview
+  has that ID, reveals it, and routes to it with the state (unknown states fall
+  back to the default); an ID with no screen is ignored. The portable viewer
+  selects the preview from its catalog.
+- No match: the click or submit is prevented and logged through the context's
+  `action`: `navigate` with the raw `href`, or `submit` with the raw `action`
+  (omitted when empty) and the form's fields as an object (files by name).
+- `context.navigate(to)` takes the same targets, does nothing with actions
+  off, and without a parent frame logs `navigate` with `<id>[?state=<state>]`.
+- A portable page has no `actions.js`; the runtime installs its own capture
+  listeners and behaves as actions on, leaving fragment links to the browser.
+- With actions off, `actions.js` stops links and forms before the runtime sees
+  them, and nothing is logged.
+
+### Data: request mocks and the project environment
+
+- **Requirement (decided 2026-10-03):** a preview supplies the data its real
+  screen loads, in whatever way that screen loads it, for every adapter:
+  `inputs` for props, an environment for providers and stores, `requests` for
+  the screen's own network calls, and `aliases` for modules. Projects can run
+  any code in environments and hooks; `requests` is the built-in tool for the
+  common case.
+- `requests` (preview and state) maps keys `[METHOD] /path [Operation]` or a
+  full URL to a response object or a function `(request, context)`.
+  Validation checks key shape and value type. Matching
+  ([requests.js](../preview/requests.js)): the state's map before the
+  preview's, declaration order within each; a bare path matches any origin;
+  `*` matches any characters; a key's query parameters must be present with
+  those values; the operation is the body's `operationName`, or the name in
+  its `query`, or the same from the query string.
+- In the browser, `requests.js` is the first import of every compiled preview
+  and replaces `window.fetch` and `XMLHttpRequest` on evaluation, before any
+  project module runs. `boot` activates the render's maps before `setup` and
+  deactivates them on shutdown. With no maps active, both pass through.
+  `/_workbench/` requests on the page's origin always pass through.
+- With maps active, an unmatched request answers 404 with a JSON body naming
+  it and logs `request` `<METHOD> <path> — no mock`. Writes (methods other
+  than GET, HEAD, OPTIONS; for GraphQL, mutations) log `request` with the
+  label and parsed body. `pending` waits until the caller's or the render's
+  signal aborts; `failed` rejects with a `TypeError` (XHR: `error` event);
+  `passthrough` sends the original request. The Actions switch does not
+  affect requests.
+- Astro: the compiler swaps `globalThis.fetch` for the state's maps around
+  each server render, relative URLs resolving against `http://localhost/`,
+  with a 10-second abort. Unmatched requests are not logged there.
+- `workbench.config.ts` `environment` (a path from the project root, inside
+  the project, or a map from adapter name to such a path, so React and Vue
+  previews get environments of their own; an unlisted adapter gets none) is imported into every compiled preview and composed with the
+  preview's by `combine` in [browser.js](../preview/browser.js): project
+  `setup`/`mount` first with cleanups last, `ready` and `configure` in the
+  same order, and `wrap` outermost.
 
 ### Compare a design via a `workbench` lens
 
@@ -236,7 +309,30 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
   refusal of external pages. [workbench/preview.test.js](../workbench/preview.test.js)
   checks mounting into the warm spare frame.
 - [preview-scripts.test.js](../preview-scripts.test.js) checks the shared
-  compatibility injection.
+  compatibility injection, and that in-page fragments scroll in both switch
+  positions while a mounted preview's `follow` sees links and forms only with
+  actions on.
+- [preview-runtime.test.js](../preview-runtime.test.js) "links open mapped
+  previews…" and "without the actions switch…" cover matching, state-only
+  targets, logged links and forms, `navigate` with actions off, release of
+  `follow` on dispose, and the portable fallback. [preview.test.js](../preview.test.js)
+  "preview links are validated…" covers validation, normalization, and the
+  unknown-target problems.
+- [requests.test.js](../requests.test.js) covers key matching, precedence,
+  handler functions, GraphQL operations, logging, 404s for unmatched
+  requests, Workbench bypass, and `pending`/`failed`/`delay`/`passthrough`.
+  [preview-runtime.test.js](../preview-runtime.test.js) covers activation per
+  render and `combine`; [preview-astro.test.js](../preview-astro.test.js)
+  covers frontmatter fetches per state. [preview.test.js](../preview.test.js) "the project environment
+  applies…" covers the single and per-adapter forms and a missing file.
+- Not covered by automated tests: the XMLHttpRequest replacement and the
+  project environment in a compiled preview (verified in Chrome on
+  2026-10-03; see decisions). The recipes in
+  [preview-data.md](../docs/preview-data.md) were run as written in Chrome on
+  2026-10-03 (React, Vue, and Astro); none uses a third-party data or router
+  library, since none is installed in this repository.
+- Not covered by automated tests: the canvas and viewer handling of
+  `navigate` (verified by hand; see the 2026-10-03 entries under decisions).
 - Not covered: [manifest.test.js](../workbench/manifest.test.js) and
   [server.test.js](../server.test.js) have no TypeScript-preview cases; no test
   covers an unknown lens ID, manual-placement viewports, definition watching,
@@ -270,7 +366,48 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
   both succeeded and wrote the viewer. No other adapter, platform, or packaged
   VSIX was tried.
 
+- **2026-10-03, website previews before `links`**: with the standalone server
+  on `packages/website` and headless Chrome, every link in the Overview
+  preview reached the browser with actions on: `/workbench/install/` loaded a
+  route the server doesn't have, and the `.vsix` links downloaded from GitHub.
+  With actions off, every link was stopped, including the page's own `#tour`
+  and `#install` anchors. The hand-off in `actions.js` recognized only `.html`
+  addresses, so no preview could reach another.
+- **2026-10-03, after `links`**: on the same setup, with actions on, `#tour`
+  scrolled the page (scrollY 1380), the `.vsix`, docs, and GitHub links were
+  prevented and listed under **Actions** as `navigate`, and `/workbench/install/`
+  switched the canvas to `previews/install.workbench.ts`. With actions off,
+  the same links were prevented and nothing was logged. The resolved config
+  had no problems. The portable viewer's `navigate` handling was not run.
+- **2026-10-03, how two client projects mock page data in Storybook.** One
+  renders real data-fetching pages and answers GraphQL operations by name from
+  typed fixtures through a custom Apollo link, with per-story overrides for
+  empty, never-resolving loading, and error states, a seeded session in
+  `localStorage`, and a memory router that logs navigation. The other splits
+  pages into a data provider and a view and renders the view inside its
+  context provider with fixture values, seeding stores directly and swapping
+  native modules at the bundler. `requests` covers the first without a custom
+  client; environments and `aliases` already covered the second.
+- **2026-10-03, request mocks in Chrome**: a React fixture whose page keeps
+  `window.fetch` from load time and also uses XMLHttpRequest rendered its
+  default, empty, loading, and 500 states from mocks; the project environment
+  wrapped the preview's and its `setup` ran; a POST was listed under
+  **Actions**.
+- **The warm preview host carries a `<base>`** pointing at the compiled
+  output, so a fragment-only `href` resolves to another document there; this
+  is why `actions.js` scrolls fragments itself.
+
 ## Implementation gaps
+
+- **Script navigation is not intercepted.** `location.assign`, `location.href`
+  writes, `window.open`, and `form.submit()` (which fires no submit event)
+  still leave the preview. Sources route them through `context.navigate`.
+- **Request mocks cover fetch and asynchronous XMLHttpRequest only.**
+  Synchronous XHR, WebSocket, EventSource, `navigator.sendBeacon`, and
+  requests from service workers or workers reach the network. Batched GraphQL
+  requests (an array body) are matched without an operation name.
+- **Modifier clicks are claimed too.** A Cmd- or Ctrl-click on a link in a
+  preview is mapped or logged like a plain click, never opened in a new tab.
 
 - **Possible duplicate workers (hypothesis, from code reading).**
   `importPreviews` in [server.js](../server.js) closes the old worker on a

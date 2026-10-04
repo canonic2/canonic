@@ -107,35 +107,84 @@ function parseFile(body, name) {
   }
 }
 
+/* Which project's config to read. A folder is the workbench.yaml in it, and
+   the first of its projects when it lists several; { dir, key } is the
+   project `key` of the file in `dir`. */
+function locate(where) {
+  if (typeof where === 'string') return { dir: path.resolve(where), key: null };
+  return { dir: path.resolve(where.dir), key: where.key || null };
+}
+
+/* Both files, local over committed, or null without a workbench.yaml. */
+function readRaw(dir) {
+  var main = readFile(dir, FILE);
+  if (main === null) return null;
+  var local = readFile(dir, LOCAL);
+  var raw = parseFile(main, FILE);
+  if (local !== null) raw = manifest.merge(raw, parseFile(local, LOCAL));
+  return { raw: raw, local: local !== null };
+}
+
+/* The projects a workbench.yaml holds, each { key, root }: one with a null
+   key for a file without `projects`, and for a file that doesn't parse, so
+   it is still listed and can show its error. Empty without the file. */
+function projectsIn(dir) {
+  dir = path.resolve(dir);
+  var found;
+  try {
+    found = readRaw(dir);
+  } catch (error) {
+    return [{ key: null, root: dir }];
+  }
+  if (!found) return [];
+  var keys = manifest.projectKeys(found.raw, []);
+  if (!keys.length) return [{ key: null, root: dir }];
+  return keys.map(function (key) {
+    var picked = manifest.selectProject(found.raw, key, []);
+    return { key: key, root: picked.root ? path.resolve(dir, picked.root) : dir };
+  });
+}
+
 /* The config, or null when the project has no workbench.yaml at all — which
    is a project the tree simply has nothing to show for, not an error worth
    raising. A workbench.local.yaml beside it is merged over it when there is
-   one; a missing one is the usual case. */
-function read(root) {
-  var main = readFile(root, FILE);
-  if (main === null) return null;
-  var local = readFile(root, LOCAL);
-
-  var raw = parseFile(main, FILE);
-  if (local !== null) raw = manifest.merge(raw, parseFile(local, LOCAL));
+   one; a missing one is the usual case. `root` is the folder the project
+   serves, which every path in it is relative to. */
+function read(where) {
+  var at = locate(where);
+  var found = readRaw(at.dir);
+  if (!found) return null;
 
   var problems = [];
+  var picked = manifest.selectProject(found.raw, at.key, problems);
+  var raw = picked.raw;
+  var root = picked.root ? path.resolve(at.dir, picked.root) : at.dir;
   var impls = manifest.implementations(raw && raw.implementations, problems);
+
+  var mark = manifest.projectMark(raw, problems);
 
   return {
     name: text(raw && raw.name) || path.basename(root),
+    key: picked.key,
+    root: root,
+    mark: mark,
     sections: sections(raw && raw.sections, impls, problems),
     implementations: impls,
     previews: manifest.previews(raw && raw.previews, problems),
     problems: problems,
-    files: { main: true, local: local !== null },
+    files: { main: true, local: found.local },
   };
 }
 
-function source(root) {
-  var body = readFile(root, FILE);
+/* The committed file, for the page form: its text, and the sections the
+   project shows — its own, or the shared ones it inherits. */
+function source(where) {
+  var at = locate(where);
+  var body = readFile(at.dir, FILE);
   if (body === null) return null;
-  return { body: body, raw: parseFile(body, FILE) };
+  var raw = parseFile(body, FILE);
+  var picked = manifest.selectProject(raw, at.key, []);
+  return { body: body, raw: raw, key: picked.key, sections: picked.raw.sections || [] };
 }
 
 function replaceTopLevel(body, key, replacement) {
@@ -158,14 +207,69 @@ function replaceTopLevel(body, key, replacement) {
   return lines.join('\n').replace(/\n*$/, '\n');
 }
 
-function updateSections(root, updated) {
+function indentOf(line) {
+  return /^ */.exec(line)[0].length;
+}
+
+function isBlank(line) {
+  return /^\s*(#.*)?$/.test(line);
+}
+
+/* The block of `key:` among the direct children of lines [from, to): its
+   first line, the line after its last, and its indent. Without one, where a
+   new child would go and at what indent. */
+function childBlock(lines, from, to, key, fallbackIndent) {
+  var depth = null;
+  var pattern = null;
+  for (var i = from; i < to; i += 1) {
+    if (isBlank(lines[i])) continue;
+    var indent = indentOf(lines[i]);
+    if (depth === null) {
+      depth = indent;
+      pattern = new RegExp('^ {' + depth + '}' + key.replace(/[-]/g, '\\-') + '\\s*:');
+    }
+    if (indent < depth) break;
+    if (indent !== depth || !pattern.test(lines[i])) continue;
+    var end = i + 1;
+    while (end < to && (isBlank(lines[end]) || indentOf(lines[end]) > depth)) end += 1;
+    while (end > i + 1 && !lines[end - 1].trim()) end -= 1;
+    return { start: i, end: end, indent: depth };
+  }
+  var after = to;
+  while (after > from && !lines[after - 1].trim()) after -= 1;
+  return { start: -1, end: after, indent: depth === null ? fallbackIndent : depth };
+}
+
+/* `projects.<key>.sections` replaced in place, or added at the end of that
+   project, leaving every other line of the file as it was. */
+function replaceProjectSections(body, key, updated) {
+  var lines = String(body).split(/\r?\n/);
+  var projects = childBlock(lines, 0, lines.length, 'projects', 0);
+  if (projects.start === -1) throw new Error('There is no projects block in ' + FILE + '.');
+  var project = childBlock(lines, projects.start + 1, projects.end, key, projects.indent + 2);
+  if (project.start === -1) throw new Error('There is no project “' + key + '” in ' + FILE + '.');
+  var block = childBlock(lines, project.start + 1, project.end, 'sections', project.indent + 2);
+  var pad = new Array(block.indent + 1).join(' ');
+  var replacement = yaml.stringify({ sections: updated }).trim().split('\n').map(function (line) {
+    return line ? pad + line : line;
+  });
+  if (block.start === -1) lines.splice.apply(lines, [block.end, 0].concat(replacement));
+  else lines.splice.apply(lines, [block.start, block.end - block.start].concat(replacement));
+  return lines.join('\n').replace(/\n*$/, '\n');
+}
+
+/* The page form's save. A project of a file that lists several gets its own
+   sections, so the others keep theirs, shared or not. */
+function updateSections(where, updated) {
   if (!Array.isArray(updated)) throw new Error('sections must be a list.');
-  var current = source(root);
+  var at = locate(where);
+  var current = source(at);
   if (!current) throw new Error('There is no ' + FILE + ' at the project root.');
-  var replacement = yaml.stringify({ sections: updated }).trim();
-  var next = replaceTopLevel(current.body, 'sections', replacement);
+  var next = current.key
+    ? replaceProjectSections(current.body, current.key, updated)
+    : replaceTopLevel(current.body, 'sections', yaml.stringify({ sections: updated }).trim());
   parseFile(next, FILE);
-  var target = path.join(root, FILE);
+  var target = path.join(at.dir, FILE);
   var temporary = target + '.canonic-' + process.pid + '-' + Date.now();
   try {
     fs.writeFileSync(temporary, next, { mode: fs.statSync(target).mode });
@@ -173,7 +277,7 @@ function updateSections(root, updated) {
   } finally {
     try { fs.unlinkSync(temporary); } catch (_) {}
   }
-  return source(root);
+  return source(at);
 }
 
 function screensIn(items, out) {
@@ -190,8 +294,12 @@ function screensIn(items, out) {
    implementation hasn't said where it lives, which is named as a problem. */
 function resolve(root, config) {
   if (!config) return null;
-  root = path.resolve(root);
+  root = path.resolve(config.root || root);
   var problems = config.problems.slice();
+  var mark = config.mark || { color: null, icon: null, image: null };
+  if (mark.image && !fs.existsSync(path.resolve(root, mark.image))) {
+    problems.push('icon: ' + mark.image + ' isn’t in the project.');
+  }
 
   var impls = {};
   Object.keys(config.implementations).forEach(function (key) {
@@ -238,6 +346,7 @@ function resolve(root, config) {
 
   return {
     name: config.name,
+    mark: mark,
     sections: config.sections,
     implementations: impls,
     screens: screens,
@@ -249,6 +358,8 @@ function resolve(root, config) {
 
 module.exports = {
   read: read,
+  list: projectsIn,
+  locate: locate,
   resolve: resolve,
   source: source,
   updateSections: updateSections,

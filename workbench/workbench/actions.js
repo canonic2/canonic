@@ -17,9 +17,14 @@
    the toolbar already shows why.
 
    What this does not touch: hover, press, and focus styling, pickers, code
-   boxes, disclosure — everything that only changes how the page looks or what
-   it holds. That is the design. Only the things that would take you off the
-   screen are stopped.
+   boxes, disclosure, links to a spot on the same page — everything that only
+   changes how the page looks or what it holds. That is the design. Only the
+   things that would take you off the screen are stopped.
+
+   A TypeScript preview is a mock, not a site: on, its links and forms still
+   never reach the browser. The preview runtime claims them through `follow`
+   and either opens another preview or logs them in the Actions panel — see
+   preview/browser.js.
 
    Nothing in a project points at this file. The extension's server puts it
    into its compatibility bundle, first in <head>, ahead of the page's own scripts
@@ -28,7 +33,7 @@
 (function () {
   var flag = /[?&]actions=(on|off)/.exec(location.search);
   var on = !flag || flag[1] === 'on';
-  window.wbPreviewActions = {
+  var actions = window.wbPreviewActions = {
     configure: function (search) {
       var next = /[?&]actions=(on|off)/.exec(search);
       on = !next || next[1] === 'on';
@@ -36,7 +41,27 @@
       silenceForms();
     },
     apply: silenceForms,
+    on: function () { return on; },
+    /* Set by a preview while it is mounted: follow(href, kind, element)
+       takes a link ('link') or a form ('submit') the page is about to leave
+       by, and returns true once it has dealt with it. */
+    follow: null,
   };
+
+  /* A link to a spot on this page — "#tour" — moves within the screen, so
+     neither switch position stops it. It is scrolled to by hand: a preview
+     host page carries a <base>, against which "#tour" would resolve to a
+     different document altogether. A bare "#" is the placeholder link of a
+     design page and goes nowhere. */
+  function inPage(e, href) {
+    if (!href || href.charAt(0) !== '#' || href.length < 2) return false;
+    var id;
+    try { id = decodeURIComponent(href.slice(1)); } catch (error) { id = href.slice(1); }
+    var target = document.getElementById(id) || document.getElementsByName(id)[0];
+    e.preventDefault();
+    if (target) target.scrollIntoView();
+    return true;
+  }
 
   /* A live page sits one frame deeper than the workbench shell. Relay editor
      shortcuts now; navigation being on or off has no bearing on the editor. */
@@ -120,8 +145,11 @@
         for (var i = 0; i < path.length; i++) {
           var el = path[i];
           if (el.tagName !== 'A' || !el.hasAttribute('href')) continue;
+          var href = el.getAttribute('href');
+          if (inPage(e, href)) return;
           if (!on) { e.preventDefault(); return; }
-          handOff(e, candidate(el.getAttribute('href')));
+          if (actions.follow && actions.follow(href, 'link', el)) { e.preventDefault(); return; }
+          handOff(e, candidate(href));
           return;
         }
       },
@@ -138,6 +166,7 @@
         if (!on) { e.preventDefault(); return; }
         var form = e.target;
         if (!form || form.tagName !== 'FORM') return;
+        if (actions.follow && actions.follow(form.getAttribute('action') || '', 'submit', form)) { e.preventDefault(); return; }
         handOff(e, candidate(form.getAttribute('action')));
       },
       true

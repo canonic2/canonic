@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workbench view</title>
+  <link rel="stylesheet" href="../workbench/nav.css" />
+  <link rel="stylesheet" href="../workbench/sidebar.css" />
+  <link rel="stylesheet" href="design.css" />
+</head>
+<body>
+  <!-- VS Code's Workbench view: the project switcher over the screen list,
+       built by the same project-switcher.js and nav.js the extension ships,
+       from a sample project. States: default, menu (the project menu open
+       over the list), filtered (a search typed). -->
+  <div class="wb-projects" id="projects">
+    <button class="wb-projects-button" type="button" id="projectButton"></button>
+    <div class="wb-projects-menu" id="projectMenu"></div>
+  </div>
+
+  <div class="sb wb-browse">
+    <section class="wb-browse-block" id="sectionsBlock" hidden>
+      <h2 class="wb-browse-head">Sections</h2>
+      <nav class="wb-sections" id="sections" aria-label="Sections"></nav>
+    </section>
+    <h2 class="wb-browse-head" id="sectionName"></h2>
+    <nav class="wb-nav" id="nav" aria-label="Screens"></nav>
+    <div class="wb-search">
+      <span class="wb-search-icon" data-icon="search"></span>
+      <input id="search" type="text" role="searchbox" placeholder="Search screens…" autocomplete="off"
+             aria-label="Search screens and states" />
+    </div>
+  </div>
+
+  <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
+  <script src="../workbench/icons.js"></script>
+  <script src="../workbench/nav.js"></script>
+  <script src="../workbench/project-switcher.js"></script>
+  <script src="projects.js"></script>
+  <script>
+    var state = new URLSearchParams(location.search).get('state') || 'default';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (el) {
+      el.appendChild(window.wbIcon(el.dataset.icon));
+    });
+
+    var shell = document.querySelector('.sb');
+    var switcher = window.wbProjects.create({
+      button: document.getElementById('projectButton'),
+      menu: document.getElementById('projectMenu'),
+      onPick: function () {},
+      onAdd: function () {},
+      onRemove: function () {},
+      onToggle: function (open) { shell.classList.toggle('is-dimmed', open); },
+    });
+    switcher.set(window.designProjects.projects, window.designProjects.current);
+
+    var groups = [
+      {
+        group: 'Pages', icon: 'file-text', items: [
+          { folder: 'Auth', items: [
+            { label: 'Sign in', src: 'pages/sign-in.html', states: [
+              { id: 'default', label: 'Default' }, { id: 'error', label: 'Wrong password' }, { id: 'loading', label: 'Signing in' },
+            ] },
+            { label: 'Reset password', src: 'pages/reset.html' },
+          ] },
+          { label: 'Dashboard', src: 'pages/dashboard.html', states: [
+            { id: 'default', label: 'Default' }, { id: 'empty', label: 'New workspace' },
+          ] },
+          { label: 'Projects', src: 'pages/projects.html' },
+        ],
+      },
+      { group: 'Components', icon: 'component', items: [
+        { label: 'Button', src: 'components/button.html' },
+        { label: 'Card', src: 'components/card.html' },
+      ] },
+    ];
+    var search = document.getElementById('search');
+    /* As sidebar.js does: indexing gives each row its section's glyph. */
+    window.wbNav.index(groups);
+    var nav = window.wbNav.create({
+      search: search,
+      sections: document.getElementById('sections'),
+      sectionsBlock: document.getElementById('sectionsBlock'),
+      title: document.getElementById('sectionName'),
+      list: document.getElementById('nav'),
+      groups: groups,
+      treeKeyboard: true,
+      onPick: function (src, picked) { nav.setCurrent(src, picked, 'Pages'); },
+    });
+    nav.reveal('pages/sign-in.html');
+    nav.setCurrent('pages/sign-in.html', null, 'Pages');
+
+    if (state === 'menu') switcher.toggle(true);
+    if (state === 'filtered') {
+      search.value = 'sign';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  </script>
+</body>
+</html>

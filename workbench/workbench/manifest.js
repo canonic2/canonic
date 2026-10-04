@@ -186,6 +186,20 @@
     local = isMap(local) ? local : {};
     for (key in base) out[key] = base[key];
     for (key in local) {
+      /* Projects merge by key, each one the way the whole file does, so a
+         local file can change one project's port and leave the rest. */
+      if (key === 'projects' && isMap(base.projects) && isMap(local.projects)) {
+        var projects = {};
+        var id;
+        for (id in base.projects) projects[id] = base.projects[id];
+        for (id in local.projects) {
+          projects[id] = isMap(projects[id]) && isMap(local.projects[id])
+            ? merge(projects[id], local.projects[id])
+            : local.projects[id];
+        }
+        out.projects = projects;
+        continue;
+      }
       if (key !== 'implementations' || !isMap(base.implementations) || !isMap(local.implementations)) {
         out[key] = local[key];
         continue;
@@ -501,9 +515,100 @@
     return !!lens && STREAMED.indexOf(lens.kind) > -1;
   }
 
+  /* How the project is marked in the project switcher: `color`, one of the
+     named colours or a hex value, and `icon`, a Lucide icon name or an image
+     file in the project. Both are optional; without them the mark is the
+     name's first letter on a colour chosen from the project's folder. A value
+     that can't be used is named in `problems` and left out. */
+  var PROJECT_COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'teal', 'red', 'yellow', 'gray'];
+  var HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+  var IMAGE = /\.(?:svg|png|jpe?g|webp|gif)$/i;
+
+  function projectMark(raw, problems) {
+    var out = { color: null, icon: null, image: null };
+    raw = isMap(raw) ? raw : {};
+    if (raw.color !== undefined && raw.color !== null && raw.color !== '') {
+      var color = text(raw.color).toLowerCase();
+      if (PROJECT_COLORS.indexOf(color) > -1 || HEX.test(color)) out.color = color;
+      else problems.push('color: must be one of ' + PROJECT_COLORS.join(', ') + ', or a hex colour such as #2f7d55.');
+    }
+    if (raw.icon !== undefined && raw.icon !== null && raw.icon !== '') {
+      var icon = text(raw.icon);
+      if (KEY.test(icon)) out.icon = icon;
+      else if (IMAGE.test(icon) && icon.charAt(0) !== '/' && icon.indexOf('..') === -1 && !SCHEME.test(icon) && icon.indexOf('\\') === -1) out.image = icon;
+      else problems.push('icon: must be a kebab-case Lucide icon name, or a project-relative .svg, .png, .jpg, .webp, or .gif file.');
+    }
+    return out;
+  }
+
+  /* Several projects in one file
+     ----------------------------
+     A file may list projects under `projects`, keyed by kebab-case id. Each
+     is a config of its own — `name`, `color`, `icon`, `sections`, `previews`,
+     `implementations` — plus an optional `root`, the folder it serves and
+     resolves its paths against, relative to the file's folder. Every other
+     top-level key is shared: a project starts from the top level and its own
+     keys replace those, with `implementations` merged by name. A project's
+     `name`, `color` and `icon` are its own and never inherited; its name
+     defaults to its id. A file without `projects` is one project, as ever. */
+  var PROJECT_OWN = ['name', 'color', 'icon', 'root'];
+
+  function projectKeys(raw, problems) {
+    if (!isMap(raw) || raw.projects === undefined || raw.projects === null) return [];
+    if (!isMap(raw.projects)) {
+      problems.push('projects: must be a map of project ids to projects.');
+      return [];
+    }
+    return Object.keys(raw.projects).filter(function (key) {
+      if (!KEY.test(key)) {
+        problems.push('projects: “' + key + '” must be a kebab-case id.');
+        return false;
+      }
+      if (!isMap(raw.projects[key])) {
+        problems.push('projects › ' + key + ': must be a map.');
+        return false;
+      }
+      return true;
+    });
+  }
+
+  /* The config one project sees, and where it lives: { raw, key, root }.
+     `key` null, or one the file doesn't list, picks the first project; a
+     file without projects answers with itself. `root` is the project's own,
+     as written, or null for the file's folder. */
+  function selectProject(raw, key, problems) {
+    var keys = projectKeys(raw, problems);
+    if (!keys.length) {
+      var whole = {};
+      Object.keys(isMap(raw) ? raw : {}).forEach(function (name) { if (name !== 'projects') whole[name] = raw[name]; });
+      return { raw: whole, key: null, root: null };
+    }
+    var picked = keys.indexOf(key) > -1 ? key : keys[0];
+    if (key && picked !== key) problems.push('projects: there is no project “' + key + '”.');
+    var shared = {};
+    Object.keys(raw).forEach(function (name) {
+      if (name !== 'projects' && PROJECT_OWN.indexOf(name) === -1) shared[name] = raw[name];
+    });
+    var entry = raw.projects[picked];
+    var own = {};
+    Object.keys(entry).forEach(function (name) { if (name !== 'root') own[name] = entry[name]; });
+    var effective = merge(shared, own);
+    if (!text(effective.name)) effective.name = labelOf(picked);
+    var root = entry.root === undefined || entry.root === null || entry.root === '' ? null : text(entry.root);
+    if (entry.root !== undefined && entry.root !== null && entry.root !== '' && (!root || SCHEME.test(root))) {
+      problems.push('projects › ' + picked + ': root must be a folder path.');
+      root = null;
+    }
+    return { raw: effective, key: picked, root: root };
+  }
+
   return {
     merge: merge,
     streamed: streamed,
+    projectKeys: projectKeys,
+    selectProject: selectProject,
+    projectMark: projectMark,
+    PROJECT_COLORS: PROJECT_COLORS,
     implementations: implementations,
     previews: previews,
     screenViewports: screenViewports,

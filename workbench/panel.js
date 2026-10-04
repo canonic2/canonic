@@ -35,6 +35,8 @@ var watchers = [];
 var loaded = false;
 var pendingTarget = '';
 var navigation = 0;
+var generation = 0; /* bumped when the tab is pointed at another server */
+var projectPicked = function () {};
 
 function loadingHtml(failed) {
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
@@ -194,6 +196,12 @@ function html(url, origin) {
     '      relayKey(data);',
     '      return;',
     '    }',
+    '    /* Another project, picked in the canvas. The extension switches the',
+    '       tab and the sidebar together, by loading another server here. */',
+    '    if (data.type === "wb-project" && e.source === frame.contentWindow) {',
+    '      editor.postMessage({ type: "wb-project", id: String(data.id || "") });',
+    '      return;',
+    '    }',
     '    if (data.type === "canonic-go") {',
     '      /* A sidebar pick can beat the cross-origin frame to readiness.',
     '         Keep the latest one and send it after the first wb-here. */',
@@ -268,6 +276,10 @@ function show(context, url, hash, options) {
        asked for. `current` follows it too, so a pick that matches where a
        link already took you isn't dropped as a repeat. */
     panel.webview.onDidReceiveMessage(function (message) {
+      if (message && message.type === 'wb-project') {
+        projectPicked(message.id);
+        return;
+      }
       if (!message || message.type !== 'wb-here') return;
       current = message.src ? message.src + (message.state ? ':' + message.state : '') : null;
       moved({ src: message.src || null, state: message.state || null });
@@ -281,14 +293,19 @@ function show(context, url, hash, options) {
     }, null, context.subscriptions);
 
   }
-  var opened = panel;
-  /* Open the tab before awaiting service readiness or remote port forwarding.
-     A closed loading tab must stay closed when either finishes. */
+  return load(panel, url, request, target);
+}
+
+/* Open the tab before awaiting service readiness or remote port forwarding.
+   A closed loading tab must stay closed when either finishes, and one that
+   has since been pointed at another project's server must not go back. */
+function load(opened, url, request, target) {
+  var serving = generation;
   return Promise.resolve(url).then(function (address) {
     if (!address) throw new Error('Workbench server is not running');
     return vscode.env.asExternalUri(vscode.Uri.parse(address));
   }).then(function (external) {
-    if (panel !== opened) return null;
+    if (panel !== opened || serving !== generation) return null;
     var address = external.toString();
     var origin = address.replace(/^([a-z]+:\/\/[^/]+).*$/i, '$1');
     if (!loaded) {
@@ -299,9 +316,35 @@ function show(context, url, hash, options) {
     }
     return opened;
   }).catch(function () {
-    if (panel === opened && !loaded) opened.webview.html = loadingHtml(true);
+    if (panel === opened && serving === generation && !loaded) opened.webview.html = loadingHtml(true);
     return null;
   });
+}
+
+/* Another project: an open tab loads that project's server in place of the
+   one it shows, through the same loading state as a first open. Each project
+   is its own origin, so the canvas comes back the way it was last left in
+   that project. A closed tab stays closed; the next show() opens the new
+   server, because that is the URL it will be given. */
+function retarget(url) {
+  generation += 1;
+  current = null;
+  pendingTarget = '';
+  navigation += 1;
+  moved({ src: null, state: null });
+  if (!panel) return Promise.resolve(null);
+  loaded = false;
+  panel.webview.html = loadingHtml(false);
+  return load(panel, url, navigation, '');
+}
+
+function isOpen() {
+  return !!panel;
+}
+
+/* Who to tell when a project is picked in the canvas. */
+function onProject(fn) {
+  projectPicked = fn || function () {};
 }
 
 /* Who to tell when the canvas moves. Answers with the way to stop listening,
@@ -323,4 +366,4 @@ function refresh() {
   return panel.webview.postMessage({ type: 'canonic-refresh' });
 }
 
-module.exports = { show: show, onHere: onHere, refresh: refresh };
+module.exports = { show: show, onHere: onHere, refresh: refresh, retarget: retarget, onProject: onProject, isOpen: isOpen };

@@ -65,9 +65,12 @@ async function startOne(root, impl, options) {
   report(impl.key + ': did not become ready within ' + start.timeout + ' seconds');
 }
 
-function run(root, options) {
+/* `where` is the project's folder, or { dir, key } for one project of a
+   workbench.yaml that lists several; see config.read. */
+function run(where, options) {
   options = options || {};
-  var read = config.read(root);
+  var read = config.read(where);
+  var root = read ? read.root : null;
   if (!read) return Promise.resolve();
   var starts = Object.keys(read.implementations).map(function (key) {
     return read.implementations[key];

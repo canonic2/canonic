@@ -55,8 +55,25 @@ input {
   -webkit-user-select: text;
 }
 
+body {
+  display: flex;
+  flex-direction: column;
+  --wb-menu-bg: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--wb-panel)));
+}
+
 .sb {
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sb[hidden] {
+  display: none;
+}
+
+/* The list steps back while the project menu is open over it. */
+.sb.is-dimmed {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .sb-loading:not([hidden]) {

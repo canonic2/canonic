@@ -32,12 +32,20 @@ release downloads and publishes to GitHub Pages.
 ## Developing
 
 The Overview, Install page, and page shell have Astro `.workbench.ts` definitions
-in `previews/`. The repository's workbench discovers them alongside the Acme
-demo. To open only the website, run `node packages/workbench/server.js packages/website`
-from the repository root and use its reported workbench URL. The shell exposes
+in `previews/`. They are the **Website** project of the repository's
+`workbench.yaml`, served from this folder: pick **Website** in the Workbench
+view's project switcher, or run `node packages/workbench/server.js .` from the
+repository root and open the address printed beside *Website*. The shell exposes
 editable props and a versioned state. These previews use the project's installed
 Astro compiler; they do not start the Astro application server. Content-backed
 docs and application integrations can still be reviewed through a URL lens.
+
+The previews are mocks of the pages. Each definition's `links` maps the site's
+routes that have a preview, `/` and `/workbench/install/`, so with Actions on
+the header and buttons move between them on the canvas. Links to the docs, the
+changelog, GitHub, and the `.vsix` downloads are recorded under **Actions**
+instead of followed. When you add a page preview, add its route to the other
+definitions' `links`.
 
 The site uses pnpm; `packageManager` in `package.json` pins its version.
 From this folder:

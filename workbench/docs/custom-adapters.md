@@ -235,8 +235,8 @@ module.
 | --- | --- |
 | `canvas` | The empty element to render into. |
 | `source` | The export of the state's `source.entry` named by `source.export` (`default` when omitted), after your plugins compile it. |
-| `context` | The [preview context](workbench-previews.md#lifecycle-hooks): `id`, `state`, `inputs`, `fixtures`, `globals`, `signal`, `action`, and `error`. |
-| `environment` | Everything the definition's `environment` module exports, or `{}` when it has none. Define your own hooks here, such as `wrap` above. |
+| `context` | The [preview context](workbench-previews.md#lifecycle-hooks): `id`, `state`, `inputs`, `fixtures`, `globals`, `signal`, `action`, `navigate`, and `error`. |
+| `environment` | Everything the definition's `environment` module exports, or `{}` when it has none. Define your own hooks here, such as `wrap` above. With a [project-wide environment](preview-data.md#environments) too, the two are combined: `setup`, `mount`, `ready`, `configure`, and `wrap` run both, the project's outside, and other exports come from the definition's module first. |
 
 - `mount` may return a cleanup function, or a promise for one. Workbench waits
   for the promise before it runs `play` and `ready` hooks and marks the preview
@@ -249,6 +249,9 @@ module.
   `context.error(error)`.
 - How inputs reach the component is up to the runtime: props, properties,
   attributes, or a store.
+- The runtime needs nothing for [request mocks](preview-data.md#request-mocks)
+  or [links](preview-data.md#links-and-navigation): Workbench answers the
+  page's requests and handles its links whatever renders it.
 
 Previews with custom adapters export to the
 [portable viewer](workbench-previews.md#portable-exports) like any other, with
@@ -270,6 +273,7 @@ import { defineConfig } from '@canonic/workbench';
 
 export default defineConfig({
   adapters: { /* name: { runtime, plugins } */ },
+  environment: './src/workbench/environment.tsx',
   plugins: [],
   aliases: {},
   dedupe: [],
@@ -281,6 +285,7 @@ export default defineConfig({
 | Key | Type | Description |
 | --- | --- | --- |
 | `adapters` | map of name to `{ runtime, plugins? }` | Adapters that definitions name in `adapter`. |
+| `environment` | path, or map of adapter name to path | An [environment](preview-data.md#environments) around every preview, or around each adapter's previews, relative to the project root. |
 | `plugins` | list of esbuild plugins | Plugins for every preview. |
 | `aliases` | map of import specifier to path or package | Redirects exact imports. |
 | `dedupe` | list of package names | Packages resolved from the definition's folder. |

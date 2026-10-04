@@ -215,20 +215,24 @@ These aren't rewritten, so a relative path in them doesn't load:
 
 A relative link resolves against the compiled preview's folder, not your HTML
 file's folder, so it doesn't reach the page next to your file. A link that
-starts with `/` resolves from the project root. As on design pages, links don't
-navigate while the toolbar's **Actions** switch is off, the default; see
-[Links and actions](pages-and-states.md#links-and-actions). Links don't add
-screens: write a preview, or list a design page, for each page you want.
-
-To record link clicks instead, use an [environment](#environment-mount).
+starts with `/` resolves from the project root. Links don't add screens: write
+a preview for each page you want, and map the addresses your page links to in
+the definition's `links`. With the toolbar's **Actions** switch on, a mapped
+link opens its preview, and any other link, such as **Compare plans** without a
+`pages/compare` preview, is recorded under **Actions** as `navigate`. See
+[Links and navigation](preview-data.md#links-and-navigation).
 
 ## Inputs, states, and actions
 
 While a state renders, `window.workbench` holds the preview's context: `id`,
 `state`, `inputs`, `fixtures`, `globals`, `signal`, `action(name, ...values)`,
-and `error(error)`. Your HTML doesn't receive inputs any other way; a script
-reads them and updates the page, as `pricing.ts` does. Outside Workbench,
-`window.workbench` is undefined.
+`navigate(to)`, and `error(error)`. Your HTML doesn't receive inputs any other
+way; a script reads them and updates the page, as `pricing.ts` does. Outside
+Workbench, `window.workbench` is undefined.
+
+A page whose scripts load their data with `fetch` or XMLHttpRequest needs no
+changes: answer those requests per state with
+[`requests`](preview-data.md#request-mocks).
 
 Every state change, input edit, and **Reset state** renders the page again from
 the start: Workbench removes the content, restores the `<html>` and `<body>`
@@ -330,20 +334,17 @@ for a [function source](#render-from-a-function). The environment can also
 export `setup` and `ready`; see
 [Lifecycle hooks](workbench-previews.md#lifecycle-hooks).
 
-`site/pricing/pricing-environment.ts` records link clicks under **Actions**
-instead of following them:
+`site/pricing/pricing-environment.ts` makes **Choose plan**, a button rather
+than a link, open a checkout preview:
 
 ```ts
 import type { PreviewContext } from '@canonic/workbench';
 
 // Runs after the HTML is in place and its scripts have run.
 export function mount(canvas: HTMLElement, context: PreviewContext) {
-  for (const link of canvas.querySelectorAll('a')) {
-    link.addEventListener('click', event => {
-      event.preventDefault();
-      context.action('navigate', link.getAttribute('href'));
-    }, { signal: context.signal });
-  }
+  canvas.querySelector('.plan-cta')?.addEventListener('click', () => {
+    context.navigate('pages/checkout');
+  }, { signal: context.signal });
 }
 ```
 
@@ -354,7 +355,8 @@ Add it to the definition, with a path relative to the definition:
   environment: './pricing-environment.ts',
 ```
 
-Clicking **Compare plans** now records `navigate` with `./compare.html`.
+With a `pages/checkout` preview in the project and **Actions** on, clicking
+**Choose plan** opens it. `pricing.ts` still records `choose-plan` first.
 
 ## Errors and fixes
 

@@ -7,6 +7,20 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## Unreleased
+
+- Workbench previews behave like Storybook stories: they stay on the canvas. Map the addresses a preview links to in its definition's new `links`, and with Actions on those links open the mapped preview. Every other link and form, including routes without a preview, other sites, and downloads, is recorded under Actions instead of followed. `context.navigate` opens a preview from a script. See Links and navigation in Preview data, mocks, and actions.
+- Links to a spot on the same page, such as `#features`, scroll to it whether Actions is on or off.
+- Previews can answer the requests their page makes. A definition's new `requests` mocks `fetch` and XMLHttpRequest calls by method and path, or by GraphQL operation name, with per-state overrides for empty, loading, error, and offline states. It works with any adapter, and with `fetch` in Astro frontmatter. See Preview data, mocks, and actions.
+- `environment` in `workbench.config.ts` wraps every preview in shared providers and setup, like Storybook's global decorators. Projects that mix frameworks can give each adapter its own.
+- A new guide, Preview data, mocks, and actions, covers inputs and controls, fixtures, environments, request mocks, the action log, and links, with recipes for common kinds of screens.
+- One window can switch between several projects, such as a product and its design system. A switcher at the top of the Workbench view lists every folder of the window that has a `workbench.yaml`, plus projects you add from elsewhere on disk with Add a project…, which every window remembers. With more than one project, the canvas toolbar starts with the project too. Each project keeps its own server, port, and settings, and starts the first time you open it. A window with one project works as before. See Several projects.
+- One `workbench.yaml` can describe several projects under `projects`, each with its own name, mark, screens, and implementations, sharing the file's folder or serving its own `root`. Keys outside `projects` are shared by all of them. See Projects in the workbench.yaml reference.
+- A multi-root workspace lists the projects of every folder with a `workbench.yaml`, instead of serving only the first folder.
+- New commands: Workbench: Switch Project… and Workbench: Add Project….
+- `color` and `icon` at the top of `workbench.yaml` mark the project in the switcher, beside its `name`. A color is a named color or a hex value; an icon is a Lucide icon name or an image in the project. Set them in `workbench.local.yaml` to mark a project differently on your machine. See Name, color, and icon in Several projects.
+- `server.js` takes several project folders and serves each on its own port, with the same switcher in the browser.
+
 ## 0.9.0
 
 - Screenshots and handoffs of Storybook and URL lenses show the page as you see it: an opened modal or menu, typed text, and scroll positions. Workbench loads those pages through a local proxy that adds its preview bridge, so your Storybook and app need no changes. If you added the bridge loader to `.storybook/preview` yourself, you can remove it. See Storybook and Lenses and URL implementations.

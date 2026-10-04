@@ -343,3 +343,243 @@
 .wb-search input::-webkit-search-cancel-button {
   display: none;
 }
+
+/* --------------------------------------------------------------- projects */
+
+/* The project switcher (project-switcher.js): the current project's mark and
+   name over the list, and a menu of every project under it. Its menu sits in
+   front of the list, so it takes a panel colour of its own when the host
+   gives one:
+
+     --wb-menu-bg                the menu behind the projects */
+
+.wb-project-mark {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  background: #2f5cff;
+}
+
+.wb-project-mark[data-color='green'] { background: #2f7d55; }
+.wb-project-mark[data-color='orange'] { background: #b4572a; }
+.wb-project-mark[data-color='purple'] { background: #7246d6; }
+.wb-project-mark[data-color='pink'] { background: #b83a78; }
+.wb-project-mark[data-color='teal'] { background: #17788a; }
+.wb-project-mark[data-color='red'] { background: #c2362f; }
+.wb-project-mark[data-color='yellow'] { background: #d9a400; color: #1d1d1d; }
+.wb-project-mark[data-color='gray'] { background: #5f6368; }
+
+/* A light hex colour, from workbench.yaml. */
+.wb-project-mark.is-light {
+  color: #1d1d1d;
+}
+
+/* An image with no colour of its own. */
+.wb-project-mark.is-bare {
+  background: none;
+}
+
+.wb-project-mark > .wb-icon {
+  width: 62%;
+  height: 62%;
+}
+
+.wb-project-mark.has-image {
+  overflow: hidden;
+}
+
+.wb-project-mark > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* On a colour, an image keeps a little room from the edge. */
+.wb-project-mark.has-image:not(.is-bare) > img {
+  width: 76%;
+  height: 76%;
+}
+
+.wb-projects {
+  position: relative;
+  padding: 8px 8px 4px;
+}
+
+.wb-projects[hidden] {
+  display: none;
+}
+
+.wb-projects-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  text-align: left;
+  color: var(--wb-fg);
+  background: var(--wb-raised);
+  border: 1px solid var(--wb-line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.wb-projects-button:hover,
+.wb-projects-button[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--wb-fg) 11%, transparent);
+}
+
+.wb-projects-button:focus-visible,
+.wb-projects-item:focus-visible,
+.wb-projects-remove:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: -2px;
+}
+
+.wb-projects-button .wb-project-mark {
+  width: 24px;
+  height: 24px;
+}
+
+.wb-projects-name,
+.wb-projects-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-projects-caret {
+  color: var(--wb-fg-3);
+}
+
+.wb-projects-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  max-height: min(420px, calc(100vh - 80px));
+  overflow: auto;
+  padding: 4px;
+  background: var(--wb-menu-bg, var(--wb-panel));
+  border: 1px solid var(--wb-line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+}
+
+.wb-projects-menu[hidden] {
+  display: none;
+}
+
+.wb-projects-heading {
+  padding: 8px 8px 6px;
+  color: var(--wb-fg-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wb-projects-row {
+  position: relative;
+  display: flex;
+}
+
+.wb-projects-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 560;
+  text-align: left;
+  color: var(--wb-fg);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wb-projects-item:hover,
+.wb-projects-item[aria-checked='true'] {
+  background: var(--wb-hover);
+}
+
+.wb-projects-check {
+  color: var(--wb-accent-text);
+  visibility: hidden;
+}
+
+.wb-projects-item[aria-checked='true'] .wb-projects-check {
+  visibility: visible;
+}
+
+/* A project the user added can be taken off the list; it shows its button
+   in place of the check while the row is hovered or focused. */
+.wb-projects-remove {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--wb-fg-3);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.wb-projects-row:hover .wb-projects-remove,
+.wb-projects-remove:focus-visible {
+  opacity: 1;
+}
+
+.wb-projects-row:hover .wb-projects-item:has(+ .wb-projects-remove) .wb-projects-check,
+.wb-projects-row:focus-within .wb-projects-item:has(+ .wb-projects-remove:focus-visible) .wb-projects-check {
+  visibility: hidden;
+}
+
+.wb-projects-remove:hover {
+  color: var(--wb-fg);
+  background: color-mix(in srgb, var(--wb-fg) 12%, transparent);
+}
+
+.wb-projects-rule {
+  height: 1px;
+  margin: 4px 4px;
+  background: var(--wb-line);
+}
+
+.wb-projects-add {
+  color: var(--wb-fg-2);
+  font-weight: 500;
+}
+
+.wb-projects-add .wb-icon {
+  margin: 0 3px;
+}

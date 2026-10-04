@@ -7,10 +7,13 @@ and processes.
 
 ## Activation
 
-The extension activates when an open folder contains `workbench.yaml` at its
-root. In a multi-root workspace, the first folder with a `workbench.yaml` is
-served. A folder without one gets no server and no Workbench view. The
-commands stay available, and say why they can't run.
+The extension serves an open folder that contains `workbench.yaml` at its
+root. The file is one project, or several when it lists
+[`projects`](configuration.md#projects). In a multi-root workspace, every
+folder with a `workbench.yaml` adds its projects, and the first one shows
+unless the window last showed another; see [Several projects](projects.md). A window without one gets no server and no
+Workbench view, unless you have [added projects](projects.md#add-a-project).
+The commands stay available, and say why they can't run.
 
 Selecting Workbench or running **Workbench: Open Canvas** opens the tab
 immediately. It shows **Opening Workbench** while configured services, such as
@@ -42,10 +45,10 @@ through an implementation's [`root`](configuration.md#implementations), such as
 
 ### Several projects
 
-Each VS Code window serves its own project, with its own server, screenshot
-helper, and port. Open each project in its own window to work on several at
-once. One window serves only one workbench, so a multi-root workspace with two
-`workbench.yaml` files shows the first.
+One window can switch between several projects: those described by the
+`workbench.yaml` of the window's folders, which can list several each, and of
+folders you add from elsewhere on disk. Each project has its own server and
+port. See [Several projects](projects.md).
 
 ## Commands
 
@@ -55,7 +58,11 @@ once. One window serves only one workbench, so a multi-root workspace with two
 | **Workbench: Open Canvas in Browser** | Opens the same canvas in your default browser. |
 | **Workbench: Copy Canvas URL** | Copies the canvas address, for a bookmark, a script, or an agent. |
 | **Workbench: Refresh Screens** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a preview file. |
+| **Workbench: Switch Project…** | Lists the [projects](projects.md) and shows the one you pick. |
+| **Workbench: Add Project…** | Adds a folder with a `workbench.yaml` to the projects and switches to it. |
 | **Workbench: Show Log** | Opens the Workbench output log. |
+
+**Open Canvas in Browser** and **Copy Canvas URL** use the current project.
 
 ## The server
 
@@ -64,8 +71,8 @@ Each project gets its own server:
 - It listens on **127.0.0.1 only**. It serves your project folder, so nothing
   outside your machine can reach it.
 - It uses port **3579**, then 3580 to 3583, then any free port the system
-  offers. With several windows open, each project gets the next free port, in
-  the order the windows started.
+  offers. With several windows or projects running, each project gets the next
+  free port, in the order the servers started.
 - It serves the project at `/` and the workbench at `/_workbench/` on the same
   origin, which is what lets the workbench read and capture the live page.
 - It adds one `preview-compat.js` bundle to served HTML and managed previews. See
@@ -76,8 +83,8 @@ Each project gets its own server:
 ## The screenshot helper
 
 Packaged builds include a screenshot helper built on Electron. It starts with
-the project's server and stays running until the extension stops, so
-screenshots are fast:
+the first project's server, is shared by every project in the window, and
+stays running until the extension stops, so screenshots are fast:
 
 - It keeps an inert, scriptless copy of the page you're viewing up to date in
   the background. See [How screenshots are taken](markup-and-handoff.md#how-screenshots-are-taken).
@@ -195,7 +202,9 @@ node ~/.vscode/extensions/canonic.canonic-workbench-*/server.js path/to/project
 
 It prints `workbench on http://127.0.0.1:3579/_workbench/` (or the port it
 got). Open that address in a browser. Without a project argument, it serves
-the current folder. Stop it with Ctrl+C.
+the current folder. Give it several project folders to switch between them in
+the browser; see [Several projects](projects.md#in-a-browser). Stop it with
+Ctrl+C.
 
 The folder name ends in the version and platform, such as
 `canonic.canonic-workbench-0.7.0-darwin-arm64`. On Windows, extensions are in
@@ -214,6 +223,7 @@ What works where:
 | Open source files in the editor | Yes | No |
 | Start commands | Yes | No |
 | Design-system export | Yes | Yes |
+| Switch projects | Yes; add and remove in VS Code | Between the folders it was given |
 | Problems listed above the screens | VS Code's screen list only | No; read the [config route](troubleshooting.md#read-the-resolved-config) |
 
 ## Platform support

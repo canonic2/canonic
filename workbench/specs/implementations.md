@@ -53,8 +53,14 @@ it, and where the code falls short.
   `<html>` carries `data-wb-actions="on"` or `"off"`.
 - With actions on, a same-origin link or form action to an `.html` page is
   handed to the workbench, which switches to that screen when it is configured
-  and reveals it in the sidebar. Other sites, same-page anchors, `mailto:`,
-  and downloads keep their browser behavior.
+  and reveals it in the sidebar. Other sites, `mailto:`, and downloads keep
+  their browser behavior.
+- A link whose `href` is a fragment of the same page (`#tour`, not a bare `#`)
+  scrolls to its target whether actions are on or off. The script scrolls it
+  itself, because the warm preview host's `<base>` would otherwise resolve the
+  fragment to another document.
+- A mounted TypeScript preview claims its links and forms before this
+  hand-off; see [previews](previews.md#links-and-navigation).
 - Browser form validation is turned off (`noValidate`) on the page's forms
   whether actions are on or off, so a `required` field never stops a flow.
 - The Actions switch applies only to pages the workbench serves. Through a

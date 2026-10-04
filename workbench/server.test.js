@@ -1250,3 +1250,166 @@ test('bridged implementation captures use the supplied live DOM instead of reloa
   assert.match(calls[0][2].url, /\/_workbench\/bridged-preview$/);
   assert.match(calls[0][1], /^http:\/\/127\.0\.0\.1:/);
 });
+
+/* ------------------------------------------------------------- projects */
+
+function workbenchProject(name) {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-' + name.toLowerCase() + '-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: ' + name + '\nsections: []\n');
+  return root;
+}
+
+function postFrom(port, pathname, payload, headers) {
+  var body = JSON.stringify(payload || {});
+  return new Promise(function (resolve, reject) {
+    var req = http.request({
+      host: '127.0.0.1', port: port, path: pathname, method: 'POST', agent: false,
+      headers: Object.assign({ 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, headers),
+    }, function (res) {
+      var chunks = [];
+      res.on('data', function (chunk) { chunks.push(chunk); });
+      res.on('end', function () {
+        resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
+      });
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+test('a server on its own lists its one project as current', async function () {
+  var root = workbenchProject('Acme');
+  var running = await server.start({ root: root, capture: { close: function () {} } });
+  try {
+    var answer = await get(running.port, server.PROJECTS_PATH);
+    assert.strictEqual(answer.status, 200);
+    assert.strictEqual(answer.body.projects.length, 1);
+    assert.strictEqual(answer.body.projects[0].name, 'Acme');
+    assert.strictEqual(answer.body.current, answer.body.projects[0].id);
+
+    var self = await post(running.port, server.PROJECTS_OPEN_PATH, { id: answer.body.current });
+    assert.strictEqual(self.body.url, running.url);
+    var other = await post(running.port, server.PROJECTS_OPEN_PATH, { id: '0123456789' });
+    assert.strictEqual(other.status, 404);
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('servers sharing a project list switch between each other, starting the other on demand', async function () {
+  var projects = require('./projects');
+  var acme = workbenchProject('Acme');
+  var example = workbenchProject('Example');
+  var closed = 0;
+  var shared = { close: function () { closed += 1; } };
+  var hub = projects.create({
+    start: function (project) {
+      return server.start({
+        root: project.root, config: { dir: project.dir, key: project.key },
+        capture: shared, captureShared: true, projects: hub,
+      });
+    },
+  });
+  hub.set([{ dir: acme }, { dir: example }]);
+  try {
+    var first = await hub.open(projects.projectId(acme));
+    var listed = await get(first.port, server.PROJECTS_PATH);
+    assert.deepStrictEqual(listed.body.projects.map(function (p) { return p.name; }), ['Acme', 'Example']);
+    assert.strictEqual(listed.body.current, projects.projectId(acme));
+    assert.strictEqual(hub.started(projects.projectId(example)), null);
+
+    var opened = await post(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) });
+    assert.strictEqual(opened.status, 200);
+    var second = await hub.started(projects.projectId(example));
+    assert.strictEqual(opened.body.url, second.url);
+    assert.notStrictEqual(second.url, first.url);
+    var fromSecond = await get(second.port, server.PROJECTS_PATH);
+    assert.strictEqual(fromSecond.body.current, projects.projectId(example));
+
+    /* Another page — another site, or another of these servers — can't start projects. */
+    var foreign = await postFrom(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) },
+      { Origin: 'http://127.0.0.1:' + second.port });
+    assert.strictEqual(foreign.status, 403);
+    var crossSite = await postFrom(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) },
+      { 'Sec-Fetch-Site': 'cross-site' });
+    assert.strictEqual(crossSite.status, 403);
+    var own = await postFrom(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) },
+      { Origin: 'http://127.0.0.1:' + first.port, 'Sec-Fetch-Site': 'same-origin' });
+    assert.strictEqual(own.status, 200);
+  } finally {
+    await hub.close();
+    fs.rmSync(acme, { recursive: true, force: true });
+    fs.rmSync(example, { recursive: true, force: true });
+  }
+  /* The shared screenshot service belongs to whoever made it. */
+  assert.strictEqual(closed, 0);
+});
+
+test('a project of a file that lists several serves its own root and reads its own config', async function () {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-multi-server-'));
+  fs.mkdirSync(path.join(dir, 'ui'));
+  fs.writeFileSync(path.join(dir, 'ui', 'button.html'), '<!doctype html><html><head></head><body>Button</body></html>');
+  fs.writeFileSync(path.join(dir, 'workbench.yaml'), [
+    'previews: false',
+    'projects:',
+    '  web:',
+    '    name: Acme Web',
+    '    sections:',
+    '      - name: Pages',
+    '        items:',
+    '          - label: Home',
+    '            src: index.html',
+    '  ui:',
+    '    name: Acme UI',
+    '    root: ui',
+    '    sections:',
+    '      - name: Components',
+    '        items:',
+    '          - label: Button',
+    '            src: button.html',
+  ].join('\n') + '\n');
+  var running = await server.start({
+    root: path.join(dir, 'ui'), config: { dir: dir, key: 'ui' }, capture: { close: function () {} },
+  });
+  try {
+    var resolved = await get(running.port, server.CONFIG_PATH);
+    assert.strictEqual(resolved.body.name, 'Acme UI');
+    assert.deepStrictEqual(Object.keys(resolved.body.screens), ['button.html']);
+    assert.strictEqual(resolved.body.screens['button.html'].design, path.join(dir, 'ui', 'button.html'));
+
+    var page = await getRaw(running.port, '/button.html');
+    assert.match(page.body.toString(), /Button/);
+
+    /* The canvas is told where the file is and which project it is. */
+    var canvas = await getRaw(running.port, '/_workbench/');
+    assert.match(canvas.body.toString(), /<meta name="canonic-config" content="\/_workbench\/manifest\/" \/>/);
+    assert.match(canvas.body.toString(), /<meta name="canonic-project" content="ui" \/>/);
+    var manifestFile = await getRaw(running.port, '/_workbench/manifest/workbench.yaml');
+    assert.strictEqual(manifestFile.status, 200);
+    assert.match(manifestFile.body.toString(), /projects:/);
+    assert.strictEqual((await getRaw(running.port, '/_workbench/manifest/package.json')).status, 404);
+
+    var form = await get(running.port, server.CONFIG_FILE_PATH);
+    assert.strictEqual(form.body.sections[0].name, 'Components');
+
+    var listed = await get(running.port, server.PROJECTS_PATH);
+    assert.strictEqual(listed.body.projects[0].name, 'Acme UI');
+    assert.strictEqual(listed.body.current, require('./projects').projectId(dir, 'ui'));
+  } finally {
+    await running.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a single-project canvas is served unchanged', async function () {
+  var root = workbenchProject('Acme');
+  var running = await server.start({ root: root, capture: { close: function () {} } });
+  try {
+    var canvas = await getRaw(running.port, '/_workbench/');
+    assert.doesNotMatch(canvas.body.toString(), /canonic-config|canonic-project/);
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

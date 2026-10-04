@@ -177,6 +177,36 @@ A page in `src/pages/` is not routed. `Astro.params` is `{}`, and
 `getStaticPaths` isn't called, so a dynamic route such as `[slug].astro` should
 read what it needs from props in the preview.
 
+When the frontmatter loads data with `fetch`, answer it with
+[`requests`](preview-data.md#request-mocks); the mocks apply while the
+page renders in Node as well as to scripts in the frame:
+
+```ts
+  requests: { 'GET /api/plans': { body: plans } },
+  states: {
+    default: {},
+    empty: { requests: { 'GET /api/plans': { body: [] } } },
+  },
+```
+
+Relative URLs resolve against `http://localhost/` there. The page waits for
+every fetch before it renders, so `pending` and long `delay` values have no
+loading state to show: a render that waits more than 10 seconds fails.
+
+Since the page isn't routed, its links to your other routes have nowhere to go.
+Map each route that has a preview of its own, and the navigation in a shared
+layout opens it with **Actions** on:
+
+```ts
+  links: {
+    '/': 'pages/home',
+    '/pricing/': 'pages/pricing',
+  },
+```
+
+Other links, including downloads and other sites, are recorded under
+**Actions**. See [Links and navigation](preview-data.md#links-and-navigation).
+
 ## What runs where
 
 - **In Workbench's preview worker (Node):** the frontmatter of every component,

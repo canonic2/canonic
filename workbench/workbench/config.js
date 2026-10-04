@@ -80,6 +80,28 @@
 
   var root = projectRoot();
 
+  /* WHICH CONFIG. A workbench.yaml can list several projects, each with a
+     root of its own, so the file isn't always at the root and isn't always
+     all one project. Whoever serves a project like that says so: <meta
+     name="canonic-config"> is the folder holding the file, and <meta
+     name="canonic-project"> is the project's key in it. Without them the file
+     is at the root, and a file that lists projects shows its first. */
+  function meta(name) {
+    var tag = document.querySelector('meta[name="' + name + '"]');
+    return tag && tag.content ? tag.content : '';
+  }
+
+  var configBase = (function () {
+    var given = meta('canonic-config');
+    if (!given) return root;
+    try {
+      return new URL(given.slice(-1) === '/' ? given : given + '/', document.baseURI).href;
+    } catch (error) {
+      return root;
+    }
+  })();
+  var projectKey = meta('canonic-project') || null;
+
   function get(url, ok, fail) {
     var request = new XMLHttpRequest();
     request.open('GET', url, true);
@@ -232,10 +254,12 @@
 
   function normalize(raw, hasLocal) {
     var problems = [];
+    raw = window.wbManifest.selectProject(raw, projectKey, problems).raw;
     /* Screens refer to implementations by name, so those are read first. */
     var impls = window.wbManifest.implementations(raw && raw.implementations, problems);
     var previews = window.wbManifest.previews(raw && raw.previews, problems);
     var found = sections(raw && raw.sections, impls, problems);
+    var mark = window.wbManifest.projectMark(raw, problems);
     var importsCatalog = previews !== false || Object.keys(impls).some(function (key) { return impls[key].catalog; });
     if (!found.length && !importsCatalog) {
       problems.push('nothing to show — a config needs at least one section with one screen in it.');
@@ -246,7 +270,7 @@
     if (problems.length) {
       console.warn('[workbench] ' + FILE + (hasLocal ? ' + ' + LOCAL : '') + ':\n' + problems.join('\n'));
     }
-    return { name: text(raw.name) || 'Workbench', sections: found, implementations: impls, previews: previews, root: root };
+    return { name: text(raw.name) || 'Workbench', mark: mark, sections: found, implementations: impls, previews: previews, root: root };
   }
 
   function trouble(file, error) {
@@ -255,6 +279,7 @@
 
   window.wbConfig = {
     root: root,
+    project: projectKey,
     FILE: FILE,
     LOCAL: LOCAL,
 
@@ -262,10 +287,10 @@
        couldn't. Either way the caller decides what the shell does about it. */
     load: function (ok, fail) {
       get(
-        root + FILE,
+        configBase + FILE,
         function (main) {
           getOptional(
-            root + LOCAL,
+            configBase + LOCAL,
             function (local) {
               var config;
               var raw;

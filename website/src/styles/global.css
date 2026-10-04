@@ -36,6 +36,7 @@
   --ink-dim: #8a8a82;
   --ink-strong: #ffffff;
   --ink-focus: #8fa8ff;
+  --ink-hover: #b3c4ff;
   --ink-copy: #d8d8d2;
   --ink-rule: #2b2b28;
   --soon-mark: #6b6b64;
@@ -165,6 +166,7 @@ main:focus { outline: none; }
 .products :focus-visible, .ink :focus-visible { outline-color: var(--ink-focus); }
 .products .wrap { display: flex; align-items: stretch; gap: 0 28px; min-height: 64px; }
 .logo { display: flex; align-items: center; color: var(--ink-strong); padding: 16px 4px; border-radius: 6px; }
+.logo:hover { color: var(--ink-hover); }
 .logo svg { height: 24px; width: auto; display: block; }
 .tabs { display: flex; align-items: stretch; gap: 0 4px; flex: 1; }
 .tab {

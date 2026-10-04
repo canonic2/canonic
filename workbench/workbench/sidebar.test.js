@@ -4,7 +4,9 @@ var path = require('node:path');
 var test = require('node:test');
 var vm = require('node:vm');
 
-function loadSidebar(overrides) {
+function loadSidebar(overrides, projects) {
+  var switcher = null;
+  var shell = { hidden: false, dimmed: false, classList: { toggle: function (name, on) { shell.dimmed = on; } } };
   var listeners = {};
   var posted = [];
   var diagnostics = { hidden: true, textContent: '' };
@@ -16,6 +18,9 @@ function loadSidebar(overrides) {
     loadingText: { textContent: '' },
     rail: {},
     nav: {},
+    projects: { hidden: true },
+    projectButton: {},
+    projectMenu: {},
   };
   var built = null;
   var config = Object.assign({
@@ -27,6 +32,12 @@ function loadSidebar(overrides) {
     addEventListener: function (type, listener) { listeners[type] = listener; },
     removeEventListener: function () {},
     wbIcon: function () {},
+    wbProjects: {
+      create: function (options) {
+        switcher = { options: options, set: function (list, current) { switcher.list = list; switcher.current = current; } };
+        return switcher;
+      },
+    },
     wbConfig: { load: function (ok) { ok(config); } },
     wbManifest: {
       mergeSections: function (base, imported) { return base.concat(imported); },
@@ -37,7 +48,11 @@ function loadSidebar(overrides) {
     },
   };
   var document = {
-    querySelector: function () { return { hidden: false }; },
+    querySelector: function (selector) {
+      if (selector === '.sb') return shell;
+      if (selector === 'meta[name="canonic-projects"]') return projects ? { content: projects } : null;
+      return { hidden: false };
+    },
     querySelectorAll: function () { return []; },
     getElementById: function (id) { return elements[id]; },
   };
@@ -59,8 +74,41 @@ function loadSidebar(overrides) {
     search: elements.search,
     receive: function (data) { listeners.message({ data: data }); },
     built: function () { return built; },
+    switcher: function () { return switcher; },
+    shell: shell,
+    projects: elements.projects,
   };
 }
+
+test('the sidebar shows the project switcher from the projects the extension lists', function () {
+  var listed = { current: 'a1', projects: [{ id: 'a1', name: 'Acme', removable: false }, { id: 'b2', name: 'Example', removable: true }] };
+  var sidebar = loadSidebar({ implementations: {}, previews: false }, JSON.stringify(listed));
+  var switcher = sidebar.switcher();
+
+  assert.equal(sidebar.projects.hidden, false);
+  assert.equal(switcher.current, 'a1');
+  assert.equal(switcher.list.map(function (p) { return p.name; }).join(), 'Acme,Example');
+
+  switcher.options.onPick('b2');
+  switcher.options.onAdd();
+  switcher.options.onRemove('b2');
+  assert.deepEqual(JSON.parse(JSON.stringify(sidebar.posted.slice(-3))), [
+    { type: 'canonic-project', id: 'b2' },
+    { type: 'canonic-add-project' },
+    { type: 'canonic-remove-project', id: 'b2' },
+  ]);
+
+  switcher.options.onToggle(true);
+  assert.equal(sidebar.shell.dimmed, true);
+  switcher.options.onToggle(false);
+  assert.equal(sidebar.shell.dimmed, false);
+});
+
+test('the sidebar has no switcher without a project list', function () {
+  var sidebar = loadSidebar({ implementations: {}, previews: false });
+  assert.equal(sidebar.switcher(), null);
+  assert.equal(sidebar.projects.hidden, true);
+});
 
 test('the sidebar shows catalog diagnostics while still building imported screens', function () {
   var sidebar = loadSidebar();

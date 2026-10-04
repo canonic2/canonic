@@ -162,8 +162,16 @@ screen to the next.
 
 A link or form to an `.html` page in the project that isn't a screen does
 nothing. List the page in `workbench.yaml` to make it reachable. Links to other
-sites, to project paths that don't end in `.html`, `mailto:` links, downloads,
-and same-page anchors behave as usual.
+sites, to project paths that don't end in `.html`, `mailto:` links, and
+downloads behave as usual.
+
+A link to a spot on the same page, such as `href="#pricing"`, scrolls to it
+whether actions are on or off.
+
+[Workbench previews](preview-data.md#links-and-navigation) are mocks
+rather than pages: with actions on, their links open the previews their
+definition maps them to, and any other link or form is recorded under
+**Actions** instead of followed.
 
 Either way, browser form validation is off, so a `required` field doesn't stop
 a flow.

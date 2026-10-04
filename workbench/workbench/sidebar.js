@@ -12,6 +12,8 @@
 
      out  canonic-pick     the screen picked, as a hash
      out  canonic-ready    the list is built, and what project it read
+     out  canonic-project  another project picked, by id
+     out  canonic-add-project, canonic-remove-project   the list of projects
      in   canonic-here     the screen the workbench is showing now
 
    canonic-here is the return leg: follow a link inside a live preview and the
@@ -52,6 +54,34 @@
   function send(message) {
     if (host) host.postMessage(message);
   }
+
+  /* The projects come in with the page, from the extension: switching one
+     rebuilds this page against the other project's root, so the list never
+     has to change under a page that is already built. Shown whenever there
+     is a host, even for one project, because it is also where Add a
+     project… lives. A project that fails to load still has the switcher. */
+  function projects() {
+    var meta = document.querySelector('meta[name="canonic-projects"]');
+    if (!meta || !host) return;
+    var listed;
+    try {
+      listed = JSON.parse(meta.content);
+    } catch (error) {
+      return;
+    }
+    var switcher = window.wbProjects.create({
+      button: document.getElementById('projectButton'),
+      menu: document.getElementById('projectMenu'),
+      onPick: function (id) { send({ type: 'canonic-project', id: id }); },
+      onAdd: function () { send({ type: 'canonic-add-project' }); },
+      onRemove: function (id) { send({ type: 'canonic-remove-project', id: id }); },
+      onToggle: function (open) { shell.classList.toggle('is-dimmed', open); },
+    });
+    switcher.set(listed.projects, listed.current);
+    document.getElementById('projects').hidden = false;
+  }
+
+  projects();
 
   function showProblems(problems) {
     problems = (problems || []).filter(Boolean);

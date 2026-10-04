@@ -229,6 +229,58 @@ textarea,
   display: none;
 }
 
+/* The project, ahead of the screen, when there is more than one. */
+.wb-project-crumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wb-project-crumb[hidden] {
+  display: none;
+}
+
+.wb-action.wb-project-crumb-button {
+  width: auto;
+  max-width: 200px;
+  gap: var(--wb-space-8);
+  padding: 0 var(--wb-space-4);
+  color: var(--wb-fg-2);
+  font: inherit;
+}
+
+.wb-project-crumb-button[aria-expanded='true'] {
+  background: var(--wb-hover);
+}
+
+.wb-project-crumb-button .wb-project-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+.wb-project-crumb-button .wb-projects-caret {
+  display: none;
+}
+
+.wb-project-crumb-menu {
+  top: calc(100% + var(--wb-space-8));
+  left: 0;
+  right: auto;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 24px));
+}
+
+/* Nothing on the canvas yet: the project stands alone, without a slash. */
+.wb-topbar-left:has(.wb-crumb[hidden]) .wb-project-crumb .wb-crumb-sep {
+  display: none;
+}
+
 .wb-crumb-screen {
   overflow: hidden;
   color: var(--wb-fg-2);
@@ -358,6 +410,7 @@ textarea,
   max-width: none;
 }
 
+.wb-topbar.is-toolbar-tight .wb-project-crumb .wb-projects-name,
 .wb-topbar.is-toolbar-tight .wb-crumb-screen,
 .wb-topbar.is-toolbar-tight .wb-crumb-sep,
 .wb-topbar.is-toolbar-tight .wb-toggle-label {
@@ -548,6 +601,14 @@ textarea,
   align-items: center;
   gap: var(--wb-space-8);
   padding: var(--wb-space-16) var(--wb-space-16) var(--wb-space-8);
+}
+
+.wb-sidebar-head[hidden] {
+  display: none;
+}
+
+.wb-sidebar .wb-projects {
+  padding: var(--wb-space-12) var(--wb-space-8) var(--wb-space-4);
 }
 
 .wb-sidebar-mark {

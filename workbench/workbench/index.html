@@ -31,6 +31,15 @@
          float over the canvas instead, beside the thing they draw on. -->
     <header class="wb-topbar">
       <div class="wb-topbar-left">
+        <!-- Which project, when the workbench has more than one: its mark and
+             name, with the others one click away. Drawn by
+             project-switcher.js from /_workbench/projects. -->
+        <span class="wb-project-crumb" id="projectCrumb" hidden>
+          <button class="wb-action wb-project-crumb-button" type="button" id="projectCrumbButton"></button>
+          <div class="wb-projects-menu wb-project-crumb-menu" id="projectCrumbMenu"></div>
+          <span class="wb-crumb-sep" aria-hidden="true">/</span>
+        </span>
+
         <!-- The screen, then which of its states — or, under a Storybook
              lens, which of its stories — is showing, with the others one
              click away. Rows are built in workbench.js. -->
@@ -135,10 +144,16 @@
          on top, the chosen one's screens below, the filter at the bottom.
          Resizable. -->
     <aside class="wb-sidebar wb-browse">
-      <header class="wb-sidebar-head">
+      <header class="wb-sidebar-head" id="sidebarHead">
         <img class="wb-sidebar-mark" src="canonic.svg" alt="" width="16" height="16" />
         <h1 class="wb-project-name" id="projectName"></h1>
       </header>
+
+      <!-- In place of the header when there is more than one project. -->
+      <div class="wb-projects" id="projects" hidden>
+        <button class="wb-projects-button" type="button" id="projectButton"></button>
+        <div class="wb-projects-menu" id="projectMenu"></div>
+      </div>
 
       <section class="wb-browse-block" id="sectionsBlock" hidden>
         <h2 class="wb-browse-head">Sections</h2>
@@ -323,6 +338,7 @@
   <script src="describe.js"></script>
   <script src="config-editor.js"></script>
   <script src="zoom.js"></script>
+  <script src="project-switcher.js"></script>
   <script src="workbench.js"></script>
   <script src="capture-sync.js"></script>
   <script src="dom-mirror.js"></script>

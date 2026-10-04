@@ -86,6 +86,11 @@
   frame.addEventListener('load', function () { window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } })); });
   window.addEventListener('message', function (event) {
     if (event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.type !== 'workbench-preview' || event.data.id !== selected?.id) return;
+    if (event.data.event === 'navigate') {
+      var next = catalog.previews.find(function (preview) { return preview.id === event.data.preview; });
+      if (next) choose(next, new URLSearchParams({ state: event.data.state || '', viewport: viewport.value }));
+      return;
+    }
     if (event.data.state && event.data.state !== state.value) return;
     if (event.data.event === 'ready') notice('Ready · ' + selected.adapter);
     if (event.data.event === 'error') notice(event.data.message, true);

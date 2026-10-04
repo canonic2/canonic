@@ -26,6 +26,7 @@ var crypto = require('crypto');
 var electronCapture = require('./electron-capture');
 var handoff = require('./handoff');
 var config = require('./config');
+var projects = require('./projects');
 var remote = require('./remote');
 var designExport = require('./export');
 var previewService = require('./preview-service');
@@ -50,6 +51,9 @@ var CONFIG_PATH = '/_workbench/config';
 var CONFIG_FILE_PATH = '/_workbench/config-file';
 var OPEN_PATH = '/_workbench/open';
 var STORIES_PATH = '/_workbench/stories';
+var PROJECTS_PATH = '/_workbench/projects';
+var PROJECTS_OPEN_PATH = '/_workbench/projects/open';
+var MANIFEST_PATH = '/_workbench/manifest/';
 var EXPORT_PATH = '/_workbench/export';
 var SIMULATOR_PATH = '/_workbench/simulator';
 var SIMULATOR_INPUT_PATH = '/_workbench/simulator/input';
@@ -809,6 +813,9 @@ function serveFile(root, pathname, res, options) {
     if (options && options.inject && ext === '.html') {
       body = Buffer.from(withPreviewScripts(body.toString('utf8')), 'utf8');
     }
+    if (options && options.head && ext === '.html') {
+      body = Buffer.from(body.toString('utf8').replace('<head>', '<head>\n' + options.head), 'utf8');
+    }
     send(res, 200, body, TYPES[ext] || 'application/octet-stream');
   });
 }
@@ -819,9 +826,16 @@ function serveFile(root, pathname, res, options) {
    `onOpen` is handed an absolute path the config resolves to — a screen's
    design file, or where its implementation's code is — and puts it in front
    of the user. */
+/* The screenshot service a server makes when it isn't given one. Servers for
+   several projects can share one, started with `captureShared` so closing one
+   project leaves the service to whoever made it. */
+function createCapture(storage) {
+  return electronCapture.createService({ inject: DESCRIBE_SOURCE, storage: storage });
+}
+
 function start(options) {
   var root = path.resolve(options.root);
-  var capture = options.capture || electronCapture.createService({ inject: DESCRIBE_SOURCE, storage: options.captureStorage });
+  var capture = options.capture || createCapture(options.captureStorage);
   var captureReady = Promise.resolve();
   var previews = null;
   var previewSettings = null;
@@ -837,6 +851,24 @@ function start(options) {
     path: WINDOW_STREAM_PATH,
     permissionOwner: options.screenCapturePermissionOwner,
   });
+  /* The other workbenches this one can switch to, from whoever started it:
+     { list(), open(id) } — see projects.js. Without one, the project is the
+     only one there is. */
+  var projectList = options.projects || null;
+  /* Which config is this project's: the workbench.yaml in `config.dir`, and
+     project `config.key` of the ones it lists. By default the file at the
+     root this serves, and its first project. */
+  var where = {
+    dir: path.resolve((options.config && options.config.dir) || root),
+    key: (options.config && options.config.key) || null,
+  };
+  var projectSelf = projects.projectId(where.dir, where.key);
+  /* A project whose config isn't at its root, or isn't the whole file, tells
+     the canvas so; the canvas then reads the file from MANIFEST_PATH. */
+  var canvasHead = where.key || where.dir !== root
+    ? '<meta name="canonic-config" content="' + MANIFEST_PATH + '" />\n' +
+      (where.key ? '<meta name="canonic-project" content="' + where.key + '" />\n' : '')
+    : '';
   var onShot = options.onShot || function () {};
   var onLog = options.onLog || function () {};
   var logLimit = options.logLimit || MAX_LOG_SESSION;
@@ -960,7 +992,7 @@ function start(options) {
      afternoon. Null when the project has no workbench.yaml; throws when the
      file is there and wrong. */
   function resolved() {
-    return config.resolve(root, config.read(root));
+    return config.resolve(root, config.read(where));
   }
 
   /* Catalog imports are the one asynchronous part of configuration: the
@@ -1085,6 +1117,16 @@ function start(options) {
             { implementation: 'workbench', path: path.join(root, preview.source), relative: preview.source, exists: true },
           ]) });
       });
+      index.previews.forEach(function (preview) {
+        Object.keys(preview.links || {}).forEach(function (href) {
+          var to = preview.links[href];
+          var target = byId[to.preview];
+          if (!target) problems.push(preview.file + ': link ' + href + ' names unknown Workbench preview “' + to.preview + '”.');
+          else if (to.state && !target.states.some(function (state) { return state.id === to.state; })) {
+            problems.push(preview.file + ': link ' + href + ' names unknown state “' + to.state + '” of ' + to.preview + '.');
+          }
+        });
+      });
       Object.keys(implementations).forEach(function (key) {
         if (implementations[key].kind !== 'workbench') return;
         implementations[key].base = '';
@@ -1139,6 +1181,18 @@ function start(options) {
     })).then(function () {
       return Object.assign({}, view, { implementations: implementations });
     });
+  }
+
+  /* A browser names the page a request came from. One from another site, or
+     from another of these servers, is refused; a request without an Origin
+     is not a page's at all — curl, or a test. */
+  function sameOrigin(req) {
+    var site = req.headers['sec-fetch-site'];
+    if (site && site !== 'same-origin' && site !== 'none') return false;
+    var origin = req.headers.origin;
+    if (!origin) return true;
+    var port = server.address().port;
+    return origin === 'http://127.0.0.1:' + port || origin === 'http://localhost:' + port;
   }
 
   function json(res, status, body) {
@@ -1242,6 +1296,7 @@ function start(options) {
       var portable = previews ? await previews.export() : null;
       job.warnings = references.warnings.length + (portable ? portable.warnings.length : 0);
       job.archive = designExport.create(root, view, {
+        manifest: path.join(where.dir, config.FILE),
         portable: portable,
         screenshots: references.screenshots,
         captureWarnings: references.warnings,
@@ -1306,6 +1361,10 @@ function start(options) {
       serveFile(path.join(__dirname, 'preview'), '/browser.js', res);
       return;
     }
+    if (url.pathname === WORKBENCH_PREFIX + 'preview-requests.js') {
+      serveFile(path.join(__dirname, 'preview'), '/requests.js', res);
+      return;
+    }
 
     if (url.pathname.indexOf('/_workbench/previews/') === 0 || /\.workbench\.tsx?$/.test(url.pathname)) {
       if (req.method !== 'GET') { send(res, 405, 'GET a Workbench preview here.'); return; }
@@ -1313,7 +1372,7 @@ function start(options) {
       // and trust, but don't rebuild every catalog for each CSS/image/script.
       if (url.pathname.indexOf('/_workbench/previews/') === 0 && previews) {
         try {
-          var previewView = config.read(root);
+          var previewView = config.read(where);
           if (previewView && previewView.previews !== false && options.isTrusted !== false &&
               JSON.stringify(previewView.previews || {}) === previewSettings) {
             previews.proxy(req, res, url.pathname.slice('/_workbench/previews'.length) + url.search)
@@ -1371,9 +1430,9 @@ function start(options) {
     if (url.pathname === CONFIG_FILE_PATH) {
       if (req.method === 'GET') {
         try {
-          var configSource = config.source(root);
+          var configSource = config.source(where);
           if (!configSource) json(res, 404, { ok: false, error: 'There is no ' + config.FILE + ' at the project root.' });
-          else json(res, 200, { ok: true, sections: configSource.raw.sections || [] });
+          else json(res, 200, { ok: true, sections: configSource.sections });
         } catch (error) { trouble(res, error, 400); }
         return;
       }
@@ -1381,10 +1440,46 @@ function start(options) {
       readBody(req, MAX_HANDOFF)
         .then(function (body) {
           var ask = JSON.parse(body.toString('utf8'));
-          var saved = config.updateSections(root, ask.sections);
-          json(res, 200, { ok: true, sections: saved.raw.sections || [] });
+          var saved = config.updateSections(where, ask.sections);
+          json(res, 200, { ok: true, sections: saved.sections });
         })
         .catch(function (error) { trouble(res, error, 400); });
+      return;
+    }
+
+    /* The projects the canvas can switch between, this one marked current.
+       Opening one answers with its workbench URL, starting its server first
+       if it isn't running. Only a page this server served may ask: starting a
+       project can run its start commands. */
+    if (url.pathname === PROJECTS_PATH) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') { send(res, 405, 'GET the projects here.'); return; }
+      Promise.resolve()
+        .then(function () {
+          return projectList ? projectList.list() : [projects.describe({ dir: where.dir, key: where.key, root: root })];
+        })
+        .then(function (listed) {
+          json(res, 200, { ok: true, current: projectSelf, projects: listed });
+        })
+        .catch(function (err) { trouble(res, err, 500); });
+      return;
+    }
+
+    if (url.pathname === PROJECTS_OPEN_PATH) {
+      if (req.method !== 'POST') { send(res, 405, 'POST a project id here.'); return; }
+      if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'Only the workbench can switch projects.' }); return; }
+      readBody(req, MAX_VIEW)
+        .then(function (body) {
+          var ask = JSON.parse(body.toString('utf8'));
+          var id = String((ask && ask.id) || '');
+          if (id === projectSelf) return { url: 'http://127.0.0.1:' + server.address().port + WORKBENCH_PATH };
+          if (!projectList) throw refused(404, 'That project isn’t in the Workbench list.');
+          return Promise.resolve(projectList.open(id)).then(function (opened) {
+            diagnostic('info', 'project.opened', { project: id });
+            return { url: opened.url };
+          });
+        })
+        .then(function (answer) { json(res, 200, Object.assign({ ok: true }, answer)); })
+        .catch(function (err) { trouble(res, err, 400); });
       return;
     }
 
@@ -1765,10 +1860,20 @@ function start(options) {
       return;
     }
 
+    /* The project's workbench.yaml and workbench.local.yaml, wherever they
+       are — for a project whose config isn't at the root this serves. Only
+       those two files. */
+    if (url.pathname.indexOf(MANIFEST_PATH) === 0) {
+      var manifestName = url.pathname.slice(MANIFEST_PATH.length);
+      if (manifestName !== config.FILE && manifestName !== config.LOCAL) { send(res, 404, 'Not a Workbench config file.'); return; }
+      serveFile(where.dir, '/' + manifestName, res);
+      return;
+    }
+
     /* The tool, out of the extension. Its own paths are relative, so keeping
        the leading slash is what makes /_workbench/ mean the folder's root. */
     if (url.pathname.indexOf(WORKBENCH_PREFIX) === 0) {
-      serveFile(WORKBENCH_DIR, url.pathname.slice(WORKBENCH_PREFIX.length - 1), res);
+      serveFile(WORKBENCH_DIR, url.pathname.slice(WORKBENCH_PREFIX.length - 1), res, { head: canvasHead });
       return;
     }
 
@@ -1820,6 +1925,15 @@ function start(options) {
       url: 'http://127.0.0.1:' + port + WORKBENCH_PATH,
       config: resolvedWithCatalogs,
 
+      /* Points .canonic/.workbench/server.json at this server again. Projects
+         that share a root share that file; the one being shown claims it, so
+         agents in that folder read the view the user has open. */
+      announce: function () {
+        try { shown.announce('http://127.0.0.1:' + port + '/'); } catch (error) {
+          diagnostic('warn', 'view.announce.failed', { message: String(error.message || error) });
+        }
+      },
+
       close: function () {
         diagnostic('info', 'session.stopping', { port: port });
         shown.close();
@@ -1832,7 +1946,7 @@ function start(options) {
         });
         return Promise.all(stops).then(function () {
           return Promise.all([
-            Promise.resolve(capture.close()).catch(function () {}),
+            options.captureShared ? Promise.resolve() : Promise.resolve(capture.close()).catch(function () {}),
             Promise.resolve(windowVideo.close()).catch(function () {}),
             proxies.close(),
             previews ? previews.close() : Promise.resolve(),
@@ -1868,6 +1982,9 @@ module.exports = {
   OPEN_PATH: OPEN_PATH,
   SHOT_PATH: SHOT_PATH,
   STORIES_PATH: STORIES_PATH,
+  PROJECTS_PATH: PROJECTS_PATH,
+  PROJECTS_OPEN_PATH: PROJECTS_OPEN_PATH,
+  createCapture: createCapture,
   EXPORT_PATH: EXPORT_PATH,
   SIMULATOR_PATH: SIMULATOR_PATH,
   SIMULATOR_INPUT_PATH: SIMULATOR_INPUT_PATH,
@@ -1878,22 +1995,51 @@ module.exports = {
   withPreviewScripts: withPreviewScripts,
 };
 
-/* `node server.js <folder>` — the same server the extension runs, for when
-   you want it without the editor. */
+/* `node server.js [folder...]` — the same server the extension runs, for when
+   you want it without the editor. Each folder's workbench.yaml is one
+   project, or one per entry of its `projects`. One project is one workbench,
+   as in the editor; several are several workbenches the canvas switches
+   between, each on its own server, all started here and sharing one
+   screenshot service. */
 if (require.main === module) {
-  start({
-    root: process.argv[2] || process.cwd(),
-    eagerCapture: true,
-    onShot: function (file) {
-      console.log('saved ' + file);
-    },
-  }).then(
-    function (running) {
+  var dirs = process.argv.slice(2);
+  if (!dirs.length) dirs = [process.cwd()];
+  var onShot = function (file) {
+    console.log('saved ' + file);
+  };
+  var failed = function (err) {
+    console.error(String(err.message || err));
+    process.exit(1);
+  };
+  var found = [];
+  dirs.forEach(function (dir) {
+    config.list(dir).forEach(function (project) { found.push(Object.assign({ dir: path.resolve(dir) }, project)); });
+  });
+
+  if (found.length <= 1) {
+    var only = found[0] || { dir: path.resolve(dirs[0]), key: null, root: path.resolve(dirs[0]) };
+    start({ root: only.root, config: { dir: only.dir, key: only.key }, eagerCapture: true, onShot: onShot }).then(function (running) {
       console.log('workbench on ' + running.url);
-    },
-    function (err) {
-      console.error(String(err.message || err));
-      process.exit(1);
-    }
-  );
+    }, failed);
+  } else {
+    var missing = dirs.filter(function (dir) { return !projects.hasWorkbench(dir); });
+    if (missing.length) failed(new Error('There’s no ' + config.FILE + ' in ' + missing.join(', ') + '.'));
+    var shared = createCapture();
+    var hub = projects.create({
+      start: function (project) {
+        return start({
+          root: project.root, config: { dir: project.dir, key: project.key },
+          capture: shared, captureShared: true, eagerCapture: true,
+          projects: hub, onShot: onShot,
+        });
+      },
+    });
+    hub.set(dirs.map(function (dir) { return { dir: dir }; }));
+    var listed = hub.list();
+    Promise.all(listed.map(function (project) { return hub.open(project.id); })).then(function (servers) {
+      servers.forEach(function (running, i) {
+        console.log('workbench on ' + running.url + '  ' + listed[i].name);
+      });
+    }, failed);
+  }
 }

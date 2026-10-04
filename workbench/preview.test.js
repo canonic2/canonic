@@ -194,6 +194,43 @@ test('a Workbench implementation maps a design to managed preview states', async
   } finally { await running.close(); }
 });
 
+test('the project environment applies to every preview, or per adapter name', async t => {
+  const files = (config) => ({
+    'workbench.config.ts': `export default ${config};`,
+    'button.workbench.ts': definition('html', './button.ts'),
+    'button.ts': 'export default function(canvas, ctx) { canvas.textContent = ctx.inputs.label; }',
+    'environment.ts': 'export function setup() { document.title = "ACME_PROJECT_ENVIRONMENT"; }',
+  });
+  const compiled = async config => (await new Compiler(fixture(t, files(config))).compile('button.workbench.ts', false)).outputs.get('preview.js').toString();
+  assert.match(await compiled(`{ environment: './environment.ts' }`), /ACME_PROJECT_ENVIRONMENT/);
+  assert.match(await compiled(`{ environment: { html: './environment.ts' } }`), /ACME_PROJECT_ENVIRONMENT/);
+  assert.doesNotMatch(await compiled(`{ environment: { react: './environment.ts' } }`), /ACME_PROJECT_ENVIRONMENT/);
+  await assert.rejects(new Compiler(fixture(t, files(`{ environment: './missing.ts' }`))).compile('button.workbench.ts', false), /must be a file inside the project/);
+});
+
+test('preview links are validated and name previews and states that exist', async t => {
+  const page = (id, links) => `import { definePreview } from '@canonic/workbench';
+export default definePreview({ id: '${id}', adapter: 'html', source: { entry: './page.ts' }, states: { default: {}, sent: {} }, links: ${links} });`;
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\n',
+    'page.ts': 'export default function(canvas) { canvas.textContent = "Acme"; }',
+    'start.workbench.ts': page('pages/start', `{ '/next/': 'pages/next', '/reset/': { state: 'sent' }, '/gone/': 'pages/gone', '/lost/': { preview: 'pages/next', state: 'lost' } }`),
+    'next.workbench.ts': page('pages/next', `{ '/': 'pages/start' }`),
+    'broken.workbench.ts': page('pages/broken', `{ '/next/': { label: 'Next' } }`),
+  });
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  try {
+    const config = await running.config();
+    assert.deepEqual(config.screens['start.workbench.ts'].preview.links['/reset/'], { preview: 'pages/start', state: 'sent' });
+    assert.equal(config.problems.length, 3);
+    assert.match(config.problems[0], /^broken\.workbench\.ts: .*link \/next\/ must name a preview ID, or \{ preview, state \}\.$/);
+    assert.deepEqual(config.problems.slice(1), [
+      'start.workbench.ts: link /gone/ names unknown Workbench preview “pages/gone”.',
+      'start.workbench.ts: link /lost/ names unknown state “lost” of pages/next.',
+    ]);
+  } finally { await running.close(); }
+});
+
 test('portable compiler source closure is hashed and browser files are included in the archive', async t => {
   const root = fixture(t, {
     'workbench.yaml': 'name: Acme\n',

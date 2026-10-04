@@ -2,7 +2,7 @@ import { definePreview } from '@canonic/workbench';
 
 export default definePreview({
   id: 'website/shell',
-  title: 'Website/Components/Page shell',
+  title: 'Components/Page shell',
   adapter: 'astro',
   source: { entry: '../src/layouts/Base.astro' },
   inputs: {
@@ -12,6 +12,7 @@ export default definePreview({
     version: '',
     nav: [{ label: 'Overview', href: '/', current: true }],
   },
+  links: { '/': 'website/overview' },
   controls: { title: { type: 'text' }, version: { type: 'text' }, nav: { type: 'json' } },
   states: {
     default: {},

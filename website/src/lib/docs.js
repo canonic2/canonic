@@ -12,8 +12,8 @@ export function docTitle(entry) {
 }
 
 export const docGroups = [
-  { title: 'Getting started', ids: ['index', 'getting-started', 'pages-and-states', 'canvas', 'markup-and-handoff'] },
-  { title: 'Previews', ids: ['workbench-previews', 'react', 'react-native-web', 'vue', 'astro', 'html', 'custom-adapters'] },
+  { title: 'Getting started', ids: ['index', 'getting-started', 'pages-and-states', 'canvas', 'markup-and-handoff', 'projects'] },
+  { title: 'Previews', ids: ['workbench-previews', 'preview-data', 'react', 'react-native-web', 'vue', 'astro', 'html', 'custom-adapters'] },
   { title: 'Connect your implementation', ids: ['lenses', 'storybook', 'ios-simulator', 'windows'] },
   { title: 'Reference', ids: ['configuration', 'design-system-export', 'extension', 'troubleshooting'] },
 ];

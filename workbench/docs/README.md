@@ -19,12 +19,14 @@ list you edit in the canvas. See
 | [Pages and states](pages-and-states.md) | Write design pages, give one page several states, and choose its viewports |
 | [Using the canvas](canvas.md) | Find your way around the sidebar, the toolbar, frame widths, zoom, and links |
 | [Markup and handoff](markup-and-handoff.md) | Annotate a screen, save screenshots, and hand the result to an agent |
+| [Several projects](projects.md) | Switch between projects in one window, add projects from elsewhere on disk, and serve several from the command line |
 
 ## Previews
 
 | Guide | Read it to |
 | --- | --- |
-| [TypeScript Workbench previews](workbench-previews.md) | Define a preview, its states and editable inputs, and its hooks; check previews from the command line and build a portable viewer |
+| [TypeScript Workbench previews](workbench-previews.md) | Define a preview, its states, and its hooks; check previews from the command line and build a portable viewer |
+| [Preview data, mocks, and actions](preview-data.md) | Give a screen its props, providers, and data; mock its requests; log its actions; and link previews into flows |
 | [React](react.md) | Preview React components, with providers, styles, and assets |
 | [React Native Web](react-native-web.md) | Preview React Native components in the browser, with web-only files and mocks for native modules |
 | [Vue](vue.md) | Preview Vue single-file components, with plugins, slots, and events |
