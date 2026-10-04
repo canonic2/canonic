@@ -7,9 +7,11 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## Unreleased
+## 0.11.0
 
-- Preview definitions type-check in your project: install the types with `npm install --save-dev @canonic2/workbench`, and `tsc` and your editor resolve `import { definePreview } from '@canonic2/workbench'`. Workbench still compiles previews with its own copy. See Types in TypeScript Workbench previews.
+- Preview definitions type-check in your project. Install the types with `npm install --save-dev @canonic2/workbench`, and `tsc` and your editor resolve `import { definePreview } from '@canonic2/workbench'`. Workbench still compiles previews with its own copy, so the installed version affects types only. See Types in TypeScript Workbench previews.
+- Action needed: preview definitions and `workbench.config.ts` import from `@canonic2/workbench`. Change `from '@canonic/workbench'` to `from '@canonic2/workbench'` in your `.workbench.ts` and `.workbench.tsx` files; previews that still import the old name fail to build. If you use a `workbench-env.d.ts` from `init`, delete it and run `init` again, or install the package instead.
+- Workbench is on the Visual Studio Marketplace: search for Workbench in the Extensions view, or update from there from now on. The VSIX files stay on GitHub Releases.
 
 ## 0.10.0
 
