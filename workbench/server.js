@@ -33,6 +33,7 @@ var previewScripts = require('./preview-scripts');
 var implementationProxy = require('./proxy');
 var previewCompiler = require('./preview/compiler.cjs');
 var windowStream = require('./window-stream');
+var agentView = require('./agent-view');
 var manifest = require('./workbench/manifest');
 
 var SHOT_PATH = '/_workbench/shot';
@@ -76,6 +77,7 @@ var MAX_SHOT = 64 * 1024 * 1024; /* comfortably covers a desktop frame PNG */
 var MAX_CAPTURE = 16 * 1024 * 1024; /* live DOM, styles, media state and marks */
 var MAX_HANDOFF = 1024 * 1024; /* a canvas full of marks is a few kB */
 var MAX_LOG = 16 * 1024; /* diagnostics are metadata, never screenshots or prompts */
+var MAX_VIEW = 16 * 1024; /* a screen reference, a few lines of text */
 var MAX_LOG_SESSION = 2 * 1024 * 1024; /* one noisy workbench cannot grow forever */
 var REMOTE_TIMEOUT = 5000; /* a dev server that isn't running says so quickly */
 var EXPORT_CAPTURE_WORKERS = 4;
@@ -841,6 +843,7 @@ function start(options) {
   var loggedBytes = 0;
   var logLimitReported = false;
   var hasHandoff = typeof options.onHandoff === 'function';
+  var shown = agentView.create({ root: root, now: options.now, staleMs: options.viewStaleMs });
   var onHandoff =
     options.onHandoff ||
     function () {
@@ -1344,6 +1347,25 @@ function start(options) {
       return;
     }
 
+    /* Each canvas posts the screen it shows; agents GET the latest one. */
+    if (url.pathname === agentView.VIEW_PATH) {
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        json(res, 200, Object.assign({ ok: true }, shown.current()));
+        return;
+      }
+      if (req.method !== 'POST') {
+        send(res, 405, 'POST the canvas view here, or GET the current one.');
+        return;
+      }
+      readBody(req, MAX_VIEW)
+        .then(function (body) {
+          shown.report(JSON.parse(body.toString('utf8')));
+          json(res, 200, { ok: true });
+        })
+        .catch(function (err) { trouble(res, err, 400); });
+      return;
+    }
+
     /* The form editor changes only the committed sections block. The rest of
        the file, including implementations and its comments, stays untouched. */
     if (url.pathname === CONFIG_FILE_PATH) {
@@ -1782,6 +1804,9 @@ function start(options) {
 
   return listen(PORTS).then(function (port) {
     diagnostic('info', 'session.started', { port: port });
+    try { shown.announce('http://127.0.0.1:' + port + '/'); } catch (error) {
+      diagnostic('warn', 'view.announce.failed', { message: String(error.message || error) });
+    }
     if (options.eagerCapture) {
       captureReady = Promise.resolve().then(function () {
         return capture.warm('http://127.0.0.1:' + port + '/');
@@ -1797,6 +1822,7 @@ function start(options) {
 
       close: function () {
         diagnostic('info', 'session.stopping', { port: port });
+        shown.close();
         var stops = Object.keys(simulatorSessions).map(function (udid) {
           return Promise.resolve(simulatorSessions[udid]).then(function (session) {
             return runIosCli([

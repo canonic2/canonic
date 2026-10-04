@@ -1108,6 +1108,26 @@ test('advertises clipboard handoff only when the editor provides it', async func
   assert.deepEqual(await available(function () {}), { ok: true, available: true });
 });
 
+test('serves the canvas view to agents and announces itself to a Canonic project', async function (t) {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-view-test-'));
+  fs.mkdirSync(path.join(root, '.canonic'));
+  var running = await server.start({ root: root, capture: { close: function () {} } });
+  var announced = path.join(root, '.canonic', '.workbench', 'server.json');
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+
+  assert.equal(JSON.parse(fs.readFileSync(announced, 'utf8')).url, 'http://127.0.0.1:' + running.port + '/');
+  var view = { text: '- Screen: Home — `home.html`\n- State: Default — `default`\n- Lens: Design', src: 'home.html' };
+  var posted = await post(running.port, '/_workbench/view', { client: 'tab', view: view });
+  assert.equal(posted.status, 200);
+  var read = await (await fetch('http://127.0.0.1:' + running.port + '/_workbench/view')).json();
+  assert.equal(read.open, true);
+  assert.deepEqual(read.view, view);
+  assert.equal((await post(running.port, '/_workbench/view', { view: view })).status, 400);
+
+  await running.close();
+  assert.equal(fs.existsSync(announced), false);
+});
+
 test('JPEG captures keep their format through saving, readback, upload and handoff', async function (t) {
   var made = project('http://localhost:6006');
   var image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);

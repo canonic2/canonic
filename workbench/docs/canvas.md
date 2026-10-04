@@ -203,6 +203,15 @@ implementation URL. Paste it into a conversation to point an agent or a
 colleague at a screen. It doesn't take a screenshot or include markup. For
 those, use a [handoff](markup-and-handoff.md#hand-off-to-an-agent).
 
+Agents can also read the same reference without a paste. Every open canvas
+tells the Workbench server which screen it shows, and
+`GET /_workbench/view` on the server returns the reference from the canvas
+you changed most recently. Projects configured with Canonic's Shield can give
+it to Claude Code and Codex with every prompt, and to MCP clients through a
+`current_view` tool. A project with a `.canonic` folder gets the server's
+address in `.canonic/.workbench/server.json`; add that folder to
+`.gitignore`.
+
 ## Configure pages
 
 **More** › **Configure pages** edits the screen list in a form:

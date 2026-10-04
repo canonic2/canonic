@@ -69,7 +69,9 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
   `wb-go` and settled canvas selections as `wb-here`. It holds a pick until
   the frame has reported `wb-here` and until any config refresh is
   acknowledged. The sidebar follows navigation initiated in the canvas,
-  including links followed in a live page.
+  including links followed in a live page. Chats in the editor don't see
+  the tab as context; [agent context](agent-context.md) covers how they learn
+  which screen it shows.
 - Source actions ask the extension to open a file in the editor or reveal a
   directory; the server only opens paths the resolved config names. A handoff
   asks it to copy the generated prompt to the clipboard; the server has
