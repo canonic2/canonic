@@ -113,9 +113,11 @@ and have no Design choice. Their source links come from Storybook's own
 
 ### Mixing imported and hand-written screens
 
-`catalog` and `sections` work together. Hand-written sections stay exactly as
-written. An imported section with the same name as a hand-written one is
-merged into it, so you can put design pages next to the stories they became:
+`catalog` and `sections` work together. An imported section with the same name
+as a hand-written or preview section is merged into it. Within that section,
+folders with exactly the same name share one folder, with imported screens
+added after the existing screens. You can put design pages and previews next
+to their stories:
 
 ```yaml
 implementations:

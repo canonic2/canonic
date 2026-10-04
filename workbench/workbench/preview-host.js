@@ -8,6 +8,7 @@ let fetching;
 let activeModule;
 const retainedStyles = new Set();
 const moduleStyles = new Map();
+const moduleBodyNodes = new Map();
 const pageListeners = [];
 const pageTimers = new Set();
 const pageIntervals = new Set();
@@ -143,7 +144,21 @@ function load(address) {
       activeModule = content.module;
       enableStyles();
       const stylesBeforeImport = new Map(Array.from(retainedStyles, style => [style, styleSize(style)]));
-      const module = await import(content.module);
+      // Import-time DOM (for example an SVG symbol sprite) is not recreated by
+      // cached imports. Restore it before mounting, but keep mount-time DOM
+      // outside this cache so portals and other page content are still cleared.
+      for (const node of moduleBodyNodes.get(content.module) || []) document.body.append(node);
+      const bodyBeforeImport = new Set(document.body.childNodes);
+      let module;
+      try {
+        module = await import(content.module);
+      } finally {
+        // A superseded or failed import may already have created its nodes.
+        // Remember them before the next queued load clears the document.
+        const nodes = moduleBodyNodes.get(content.module) || new Set();
+        for (const node of document.body.childNodes) if (!bodyBeforeImport.has(node)) nodes.add(node);
+        moduleBodyNodes.set(content.module, nodes);
+      }
       if (ticket !== generation) return;
       rememberStyles(stylesBeforeImport);
       enableStyles();

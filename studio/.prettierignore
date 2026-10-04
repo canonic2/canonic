@@ -1,0 +1,9 @@
+node_modules/
+**/node_modules/
+.runtime/
+.studio/
+artifacts/
+dist/
+**/.pnpm-store/
+pnpm-lock.yaml
+**/pnpm-lock.yaml

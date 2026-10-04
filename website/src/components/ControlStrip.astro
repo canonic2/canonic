@@ -1,0 +1,77 @@
+---
+/* The toolbar screenshots with a hotspot over each control. Pointing at,
+   focusing, or tapping a hotspot captions it from the control's entry in the
+   list (the default slot): a [data-label] row with a <dt> and a <dd>, so each
+   description is written once. Without JavaScript the list is the reference. */
+import { base } from '../lib/base.js';
+
+interface Props {
+  /** screenshots.json's `toolbar`: each group's image and its controls. */
+  groups: {
+    name: string; src: string; width: number; height: number; alt: string;
+    controls: { label: string; left: number; width: number }[];
+  }[];
+}
+const { groups } = Astro.props;
+---
+<canonic-control-strip>
+  <div class="strip">
+    {groups.map(group => (
+      <div class="strip-group" data-group={group.name}>
+        <img src={base + group.src} width={group.width} height={group.height} alt={group.alt}>
+        {group.controls.map(control => (
+          <button class="hot" type="button" style={`left: ${control.left}%; width: ${control.width}%`} data-label={control.label}></button>
+        ))}
+      </div>
+    ))}
+  </div>
+  <div class="caption" aria-live="polite">
+    <p class="caption-name"></p>
+    <p class="caption-text"></p>
+  </div>
+  <details class="all-controls">
+    <summary>All controls</summary>
+    <slot />
+  </details>
+</canonic-control-strip>
+
+<script>
+  let captions = 0;
+
+  class CanonicControlStrip extends HTMLElement {
+    connectedCallback() {
+      const strip = this.querySelector('.strip');
+      const caption = this.querySelector<HTMLElement>('.caption');
+      const name = this.querySelector('.caption-name');
+      const text = this.querySelector('.caption-text');
+      if (!strip || !caption || !name || !text) return;
+      caption.id ||= `control-caption-${++captions}`;
+      const rows = new Map<string, Element>();
+      this.querySelectorAll('.controls [data-label]').forEach(row => rows.set(row.getAttribute('data-label') || '', row));
+      const hots = [...strip.querySelectorAll<HTMLButtonElement>('.hot')];
+      for (const hot of hots) {
+        const row = rows.get(hot.dataset.label || '');
+        if (!row) { hot.hidden = true; continue; }
+        hot.setAttribute('aria-label', row.querySelector('dt')?.textContent || '');
+        hot.setAttribute('aria-describedby', caption.id);
+      }
+      // The last control pointed at stays captioned.
+      const show = (hot: HTMLButtonElement) => {
+        const row = rows.get(hot.dataset.label || '');
+        if (!row || hot.classList.contains('is-active')) return;
+        hots.forEach(other => other.classList.toggle('is-active', other === hot));
+        name.textContent = row.querySelector('dt')?.textContent || '';
+        text.innerHTML = row.querySelector('dd')?.innerHTML || '';
+      };
+      for (const type of ['pointerover', 'focusin', 'click']) {
+        strip.addEventListener(type, event => {
+          const hot = (event.target as Element).closest<HTMLButtonElement>('.hot');
+          if (hot) show(hot);
+        });
+      }
+      const first = hots.find(hot => !hot.hidden);
+      if (first) show(first);
+    }
+  }
+  if (!customElements.get('canonic-control-strip')) customElements.define('canonic-control-strip', CanonicControlStrip);
+</script>

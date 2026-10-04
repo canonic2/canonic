@@ -8,6 +8,8 @@ export default definePreview({
   links: {
     '/': 'website/overview',
     '/workbench/install/': 'website/install',
+    '/workbench/changelog/': 'website/changelog',
+    '/workbench/docs/': 'website/docs',
   },
   viewports: ['desktop', 'mobile', 'responsive'],
 });

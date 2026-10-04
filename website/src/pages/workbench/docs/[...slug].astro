@@ -1,9 +1,10 @@
 ---
 import { getCollection, render } from 'astro:content';
 import Base from '../../../layouts/Base.astro';
+import DocsSidebar from '../../../components/DocsSidebar.astro';
 import { base } from '../../../lib/base.js';
 import { docTitle, docsHref, docsNavigation } from '../../../lib/docs.js';
-import { download, downloads, github, pages, workbenchNav } from '../../../lib/workbench.js';
+import { download, downloads, github, workbenchNav } from '../../../lib/workbench.js';
 import '../../../styles/docs.css';
 
 export async function getStaticPaths() {
@@ -29,24 +30,7 @@ const description = entry.body.split('\n\n').find(paragraph => !paragraph.starts
 <Base title={`${title} · Workbench docs · Canonic`} description={description} product="Workbench"
   version={version} nav={workbenchNav('Docs')} github={github} download={download}>
   <div class="docs-shell wrap">
-    <details class="docs-sidebar" open>
-      <summary>Documentation <span aria-hidden="true">⌄</span></summary>
-      <div class="docs-sidebar-body">
-        <div class="docs-search" hidden>
-          <label for="docs-search">Search the docs</label>
-          <input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index={`${base}workbench/docs/search.json`} />
-          <p class="docs-search-status" role="status"></p>
-        </div>
-        <nav id="docs-navigation" aria-label="Documentation">
-          {groups.map(group => <div class="docs-group">
-            <h2>{group.title}</h2>
-            {group.entries.map(page => <a href={docsHref(page.id, base)} data-doc-id={page.id}
-              aria-current={page.id === entry.id ? 'page' : undefined}>{docTitle(page)}</a>)}
-          </div>)}
-        </nav>
-        <a class="docs-install" href={pages.install}>Get Workbench <span aria-hidden="true">→</span></a>
-      </div>
-    </details>
+    <DocsSidebar groups={groups} current={entry.id} />
     <article class="docs-article">
       <div class="docs-breadcrumb"><a href={docsHref('index', base)}>Workbench docs</a><span aria-hidden="true">/</span><span>{group.title}</span></div>
       <div class="docs-prose"><Content /></div>
@@ -65,46 +49,3 @@ const description = entry.body.split('\n\n').find(paragraph => !paragraph.starts
     </aside>}
   </div>
 </Base>
-
-<script>
-  const sidebar = document.querySelector<HTMLDetailsElement>('.docs-sidebar');
-  const mobile = matchMedia('(max-width: 820px)');
-  if (sidebar) {
-    sidebar.open = !mobile.matches;
-    mobile.addEventListener('change', () => { sidebar.open = !mobile.matches; });
-  }
-  const search = document.querySelector<HTMLInputElement>('#docs-search');
-  if (search) {
-    search.closest<HTMLElement>('.docs-search').hidden = false;
-    const links = [...document.querySelectorAll<HTMLAnchorElement>('[data-doc-id]')];
-    const status = document.querySelector<HTMLElement>('.docs-search-status');
-    let index: Promise<{ id: string; text: string }[]> | undefined;
-    let generation = 0;
-    search.addEventListener('input', async () => {
-      const current = ++generation;
-      const query = search.value.trim().toLowerCase();
-      if (!query) {
-        links.forEach(link => { link.hidden = false; });
-        document.querySelectorAll<HTMLElement>('.docs-group').forEach(group => { group.hidden = false; });
-        status.textContent = '';
-        return;
-      }
-      try {
-        index ||= fetch(search.dataset.index).then(response => {
-          if (!response.ok) throw new Error('Search unavailable');
-          return response.json();
-        }).catch(error => { index = undefined; throw error; });
-        const entries = await index;
-        if (current !== generation) return;
-        const matches = new Set(entries.filter(entry => query.split(/\s+/).every(word => entry.text.includes(word))).map(entry => entry.id));
-        links.forEach(link => { link.hidden = !matches.has(link.dataset.docId); });
-        document.querySelectorAll<HTMLElement>('.docs-group').forEach(group => {
-          group.hidden = !group.querySelector('a:not([hidden])');
-        });
-        status.textContent = matches.size ? `${matches.size} matching guides` : 'No matching guides';
-      } catch {
-        if (current === generation) status.textContent = 'Search unavailable. Browse the guides below.';
-      }
-    });
-  }
-</script>

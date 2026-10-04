@@ -1,10 +1,14 @@
 ---
 import Base from '../layouts/Base.astro';
-import Install from '../components/Install.astro';
-import DownloadScripts from '../components/DownloadScripts.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import ControlStrip from '../components/ControlStrip.astro';
+import DownloadCards from '../components/DownloadCards.astro';
+import Feature from '../components/Feature.astro';
+import InstallCommand from '../components/InstallCommand.astro';
+import SectionHead from '../components/SectionHead.astro';
 import { base } from '../lib/base.js';
 import { products } from '../lib/marks.js';
-import { download, downloads as loadDownloads, github, pages, setupYaml, workbenchNav } from '../lib/workbench.js';
+import { download, downloads as loadDownloads, github, marketplace, pages, setupYaml, workbenchNav } from '../lib/workbench.js';
 // Written by screenshots/capture.cjs: the overview's numbered regions and
 // the toolbar strip's crops and hotspots, as percentages of each image.
 import screenshots from '../data/screenshots.json';
@@ -22,8 +26,8 @@ const statesYaml = `- label: Sign in
       label: Wrong password`;
 ---
 <Base
-  title="Workbench by Canonic"
-  description="A design workbench for the screens in your repo: every page and preview on one canvas in VS Code, marked up and handed to your agent."
+  title="Canonic Workbench"
+  description="A VS Code extension that renders a project's pages and component previews on one canvas at device widths, with markup and screenshots for coding agents."
   product="Workbench"
   version={version}
   nav={workbenchNav('Overview')}
@@ -37,12 +41,12 @@ const statesYaml = `- label: Sign in
           <svg viewBox={mark.viewBox} aria-hidden="true"><path d={mark.base} fill="currentColor" /><path d={mark.accent} class="accent" /></svg>
           Canonic Workbench{version && ` v${version}`}
         </a>
-        <h1>Every screen in your repo, on one canvas.</h1>
-        <p>A VS Code extension for reviewing screens and components. Define TypeScript previews or connect your existing pages and tools, see each screen at a real device width, draw on it, and hand the picture to your agent.</p>
+        <h1>Preview your project’s pages and components in VS Code.</h1>
+        <p>A VS Code extension that renders HTML pages, TypeScript component previews, Storybook stories, and running apps on one canvas at device widths. You can draw on a screen and copy the marks, with a screenshot, as a prompt for a coding agent.</p>
         <div class="actions">
-          <a class="btn" href="#install" id="heroDownload">Download for VS Code</a>
-          <a class="btn btn-ghost" href="#tour">Take the tour</a>
-          <a class="btn btn-ghost" href={pages.docs}>Read the docs</a>
+          <a class="btn" href="#install">Install</a>
+          <a class="btn btn-ghost" href="#tour">Interface</a>
+          <a class="btn btn-ghost" href={pages.docs}>Docs</a>
         </div>
       </div>
 
@@ -67,49 +71,29 @@ const statesYaml = `- label: Sign in
   <section id="tour" class="tour band">
     <div class="wrap">
       <div class="toolbar-block">
-        <div class="section-head">
-          <span class="kicker">Tour</span>
-          <h2>Four areas, one window.</h2>
-          <p class="lede">Workbench reads <code>workbench.yaml</code> at the root of your project, shows discovered TypeScript previews alongside manual pages in the sidebar, and imports the implementation catalogs you enable.</p>
-        </div>
+        <SectionHead kicker="Interface" title="Layout">
+          Workbench reads <code>workbench.yaml</code> at the root of your project. The sidebar lists the pages it declares, the TypeScript previews it finds, and the screens from any implementation catalogs you enable, such as a Storybook. Matching section and folder names bring those screens together in one list.
+        </SectionHead>
         <ol class="areas">
-          <li><span class="n">01</span><h3>Screen list</h3><p>Laid out like Sketch’s sidebar: the sections in <code>workbench.yaml</code>, such as Pages and Components, listed on top, and the chosen one’s screens and folders below, with search at the bottom. A screen with states lists them underneath it. In VS Code this list sits in the sidebar, where the file tree usually goes, under a switcher for the projects you’ve added, such as a product and its design system.</p></li>
-          <li><span class="n">02</span><h3>Top bar</h3><p>The screen and its state on the left, with the other states a click away, then the Actions toggle. Lenses sit in the middle; frame sizes and screen actions on the right. When space runs short, secondary actions move into the More menu.</p></li>
-          <li><span class="n">03</span><h3>Canvas</h3><p>The screen itself, live, in a frame of the size you picked. It’s your real page, not a picture of it. Zoom and pan it like a design canvas; the page keeps its real width. Managed previews reuse their renderer when you switch screens. The current screen stays visible while its replacement loads, and offscreen lazy images don’t hold it up.</p></li>
-          <li><span class="n">04</span><h3>Markup bar</h3><p>Drawing tools and the handoff, floating under the frame. Select is the one way back to using the page.</p></li>
+          <li><span class="n">01</span><h3>Screen list</h3><p>The sections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected section’s screens and folders below; search at the bottom. A screen’s states are listed under it. In VS Code the list is in the sidebar, under a switcher for the projects you’ve added.</p></li>
+          <li><span class="n">02</span><h3>Top bar</h3><p>The screen and its state on the left, then the Actions toggle. The lens switcher in the middle; frame sizes and screen actions on the right. Controls that don’t fit move into the More menu.</p></li>
+          <li><span class="n">03</span><h3>Canvas</h3><p>The screen, rendered live in a frame of the selected size. Zoom and pan change the view; the page keeps its layout width. The current screen stays visible while the next one loads.</p></li>
+          <li><span class="n">04</span><h3>Markup bar</h3><p>Drawing tools and the handoff, under the frame. Select returns to using the page.</p></li>
         </ol>
       </div>
 
       <div class="toolbar-block" id="toolbar">
-        <div class="section-head">
-          <span class="kicker">Toolbar</span>
-          <h2>Every control, in place.</h2>
-          <p class="lede">The Actions toggle and the frame and screen controls run across the top of the workbench; the markup tools and the zoom control float over the bottom of the canvas. Point at or tap a control to see what it does.</p>
-        </div>
+        <SectionHead kicker="Toolbar" title="Controls">
+          The Actions toggle and the frame and screen controls are along the top; the markup tools and zoom are at the bottom of the canvas. Point at or tap a control to see what it does.
+        </SectionHead>
 
-        <div class="strip">
-          {screenshots.toolbar.map(group => (
-            <div class="strip-group" data-group={group.name}>
-              <img src={base + group.src} width={group.width} height={group.height} alt={group.alt}>
-              {group.controls.map(control => (
-                <button class="hot" type="button" style={`left: ${control.left}%; width: ${control.width}%`} data-label={control.label}></button>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div class="caption" id="toolbarCaption" aria-live="polite">
-          <p class="caption-name">Actions</p>
-          <p class="caption-text">Off by default, so clicking around a screen you’re reviewing doesn’t navigate you out of it. Turn it on to let links navigate and forms submit, and walk the real flow.</p>
-        </div>
-
-        <details class="all-controls">
-          <summary>All controls</summary>
+        <ControlStrip groups={screenshots.toolbar}>
           <div class="controls-groups">
             <div class="controls-col">
               <div class="controls-group">
                 <h3>Interaction</h3>
                 <dl class="controls" data-group="actions">
-                  <div data-label="Actions — let links navigate and forms submit"><dt>Actions</dt><dd>Off by default, so clicking around a screen you’re reviewing doesn’t navigate you out of it. Turn it on to let links navigate and forms submit, and walk the real flow.</dd></div>
+                  <div data-label="Actions — let links navigate and forms submit"><dt>Actions</dt><dd>Off by default: links and form submissions are logged instead of followed. Turn it on to let links navigate and forms submit.</dd></div>
                 </dl>
               </div>
               <div class="controls-group">
@@ -124,6 +108,7 @@ const statesYaml = `- label: Sign in
               <div class="controls-group">
                 <h3>Zoom</h3>
                 <dl class="controls" data-group="zoom">
+                  <div data-label="Recenter view"><dt>Recenter view</dt><dd>Brings the frame back to the middle of the canvas at the current zoom level.</dd></div>
                   <div data-label="Zoom out"><dt>Zoom out</dt><dd>Halves the zoom, to the next power of two. <kbd>⌘−</kbd> or <kbd>Ctrl −</kbd>.</dd></div>
                   <div data-label="Zoom options"><dt>Zoom level</dt><dd>Opens zoom to fit, zoom to 100%, 50%, and 200%.</dd></div>
                   <div data-label="Zoom in"><dt>Zoom in</dt><dd>Doubles the zoom, to the next power of two. <kbd>⌘+</kbd> or <kbd>Ctrl +</kbd>.</dd></div>
@@ -136,10 +121,10 @@ const statesYaml = `- label: Sign in
               <dl class="controls" data-group="markup">
                 <div data-label="Select"><dt>Select</dt><dd>Use the page, and pick or move marks. <kbd>Esc</kbd> returns here from any drawing tool.</dd></div>
                 <div data-label="Scribble"><dt>Scribble</dt><dd>Freehand drawing.</dd></div>
-                <div data-label="Arrow"><dt>Arrow</dt><dd>Point at something.</dd></div>
+                <div data-label="Arrow"><dt>Arrow</dt><dd>An arrow.</dd></div>
                 <div data-label="Rectangle"><dt>Shapes</dt><dd>Rectangle by default. The small arrow beside it switches to a line or a circle.</dd></div>
                 <div data-label="Text"><dt>Text</dt><dd>A label placed on the screen.</dd></div>
-                <div data-label="Comment"><dt>Comment</dt><dd>A pinned note, for feedback that needs more than a word.</dd></div>
+                <div data-label="Comment"><dt>Comment</dt><dd>A pinned note.</dd></div>
                 <div data-label="Undo last mark"><dt>Undo</dt><dd>Removes the last mark. <kbd>⌘Z</kbd> or <kbd>Ctrl Z</kbd>.</dd></div>
                 <div data-label="Clear markup"><dt>Clear markup</dt><dd>Removes every mark on the screen.</dd></div>
                 <div data-label="Save screenshot"><dt>Save screenshot</dt><dd>Downloads a JPEG of the screen with your marks on it.</dd></div>
@@ -160,55 +145,37 @@ const statesYaml = `- label: Sign in
               </dl>
             </div>
           </div>
-        </details>
+        </ControlStrip>
       </div>
     </div>
   </section>
 
   <section class="features">
     <div class="wrap">
-      <div class="feature" id="states">
-        <div class="feature-text">
-          <span class="kicker">States</span>
-          <h2>A screen is more than one picture.</h2>
-          <p>Sign in has the empty form you land on and the one that comes back with a wrong password. Each state is listed under its screen, the way Storybook lists stories under a component.</p>
-          <p>Have the page respond to the state. Match CSS on <code>html[data-wb-state="error"]</code>, keep an element only in some states with <code>data-wb-state-only="error"</code>, or fill in a value with <code>data-wb-set-error="value=…"</code>. Your pages need no scripts added.</p>
-          <div class="code">
-            <div class="code-head"><span class="code-file">workbench.yaml</span><button class="copy" type="button" aria-label="Copy the states example">Copy</button></div>
-            <pre><code>{statesYaml}</code></pre>
-          </div>
-        </div>
-        <figure class="feature-media shot">
+      <Feature id="states" kicker="States" title="Screens with several states">
+          <p>A screen can have several states, such as a sign-in form when empty and after a wrong password. States are listed under their screen, like stories under a component in Storybook.</p>
+          <p>An HTML page reads its state from <code>html[data-wb-state]</code>. Match CSS on <code>html[data-wb-state="error"]</code>, keep an element only in some states with <code>data-wb-state-only="error"</code>, or set a value with <code>data-wb-set-error="value=…"</code>. No scripts are added to your pages.</p>
+          <CodeBlock file="workbench.yaml" code={statesYaml} copies="the states example" />
+        <figure class="feature-media shot" slot="media">
           <img src={`${base}images/states.jpg`} width="1120" height="860" loading="lazy" alt="The Wrong password state of the sign-in page at mobile width: an error message above filled-in fields, with the password field outlined in red.">
         </figure>
-      </div>
+      </Feature>
 
-      <div class="feature" id="markup">
-        <div class="feature-text">
-          <span class="kicker">Markup and handoff</span>
-          <h2>Draw on the live page. Hand it to your agent.</h2>
-          <p>Boxes, arrows, scribbles, and pinned comments sit above the running screen, so you can keep using it with Select. Select a mark to move it, nudge it with the arrow keys, or delete it with <kbd>Delete</kbd>.</p>
-          <p>In VS Code, <b>Copy handoff</b> saves the screenshot to the project’s ignored <code>.canonic/.handoffs/</code> folder, clears the markup, and copies a written account of every mark to the clipboard. The account says what’s under each mark and which file the screen comes from. Paste it into any agent conversation.</p>
-        </div>
-        <figure class="feature-media shot">
+      <Feature id="markup" kicker="Markup and handoff" title="Annotate a screen and copy it for an agent">
+          <p>Boxes, arrows, scribbles, and pinned comments are drawn over the running screen, which stays usable with Select. Select a mark to move it, nudge it with the arrow keys, or delete it with <kbd>Delete</kbd>.</p>
+          <p>In VS Code, <b>Copy handoff</b> saves a screenshot to the project’s ignored <code>.canonic/.handoffs/</code> folder, clears the marks, and copies a text description of each mark to the clipboard: the element under it and the screen’s source file. Paste it into a coding agent’s chat.</p>
+        <figure class="feature-media shot" slot="media">
           <img src={`${base}images/markup.jpg`} width="1120" height="860" loading="lazy" alt="The error state with markup: a red box around the error message, an arrow pointing to it, and a wavy line under the password field.">
         </figure>
-      </div>
+      </Feature>
 
-      <div class="feature" id="lenses">
-        <div class="feature-text">
-          <span class="kicker">Lenses</span>
-          <h2>Your previews, in their own language.</h2>
-          <p>Define components and screens in TypeScript <code>.workbench.ts</code> files. The default Workbench lens supports HTML, React, Vue, Astro, and React Native Web, with adapters for other technologies, named states, editable inputs, and an action log. Exports include an independent browser viewer with states, viewports, controls, actions, and docs. Astro exports include the authored states; editing Astro props requires the live Workbench server. Storybook, dev servers, staging, the iOS Simulator, and macOS app windows remain available as additional lenses.</p>
-          <p>Like a Storybook story, a preview renders your real page and gives it its data per state: props, providers from a project-wide environment, or mocked responses to the page’s own requests, so a screen that loads data shows its empty, loading, and error states unchanged. Its links open other previews, and anything else it would do on a live site, such as a download or another route, is logged as an action instead. See <a href={`${pages.docs}preview-data/#choose-how-to-give-a-screen-its-data`}>Give a screen its data</a>.</p>
-          <p>The choice stays as you move between screens, and the address carries it, so a copied link opens the same view. A project can also configure a start command and a readiness check for a Storybook or local server; in a trusted VS Code workspace, Workbench starts it in a terminal only when the check fails. The canvas opens immediately with a loading indicator while services start, and the sidebar names the catalogs it is waiting for.</p>
+      <Feature id="lenses" kicker="Lenses" title="TypeScript previews and lenses">
+          <p>Define components and screens in <code>.workbench.ts</code> files. Built-in adapters render HTML, React, Vue, Astro, and React Native Web, and you can register others. Each preview has named states, editable inputs, and an action log. A screen can also show its implementation as a lens: a Storybook story, a dev or staging URL, the iOS Simulator, or a macOS app window.</p>
+          <p>Each state gives the preview its data: props, providers from a project-wide environment, or mocked responses to the page’s <code>fetch</code> and XMLHttpRequest calls. Links can open other previews; other navigation, such as a download or a route without a preview, is logged as an action. See <a href={`${pages.docs}preview-data/#choose-how-to-give-a-screen-its-data`}>Give a screen its data</a>.</p>
+          <p>The selected lens stays as you change screens and is part of the address, so a copied link opens the same view. SVG icon sprites in TypeScript previews remain available as you switch states or return to a screen. For a Storybook or local server, a project can configure a start command and a readiness check; in a trusted workspace, Workbench runs the command in a terminal when the check fails. The design-system export includes a static viewer for the previews; Astro previews export their authored states only.</p>
           <img src={`${base}images/workbench-previews.jpg`} alt="Acme TypeScript preview with its named states and editable input controls" loading="lazy" />
-        </div>
-        <div class="feature-media">
-          <div class="code">
-            <div class="code-head"><span class="code-file">address</span><button class="copy" type="button" aria-label="Copy the address example">Copy</button></div>
-            <pre><code>#pages/sign-in.html:error@393~staging</code></pre>
-          </div>
+        <div class="feature-media" slot="media">
+          <CodeBlock file="address" code="#pages/sign-in.html:error@393~staging" copies="the address example" />
           <table class="address">
             <tbody>
               <tr><td><code>pages/sign-in.html</code></td><td>the screen’s design file</td></tr>
@@ -218,7 +185,7 @@ const statesYaml = `- label: Sign in
             </tbody>
           </table>
         </div>
-      </div>
+      </Feature>
     </div>
   </section>
 
@@ -226,79 +193,37 @@ const statesYaml = `- label: Sign in
     <div class="wrap">
       <div class="setup-text">
         <span class="kicker">Setup</span>
-        <h2>Start with one configuration file.</h2>
-        <p class="lede">The tool ships inside the extension. Workbench turns on in a folder with a <code>workbench.yaml</code>; your pages and optional TypeScript preview definitions stay in your project.</p>
+        <h2>Configuration</h2>
+        <p class="lede">Workbench activates in a folder with a <code>workbench.yaml</code> at its root. Your pages and preview definitions stay in your project; the extension adds nothing to them.</p>
       </div>
-      <div class="code">
-        <div class="code-head"><span class="code-file">workbench.yaml</span><button class="copy" type="button" aria-label="Copy the workbench.yaml example">Copy</button></div>
-        <pre><code>{setupYaml}</code></pre>
-      </div>
+      <CodeBlock file="workbench.yaml" code={setupYaml} copies="the workbench.yaml example" />
     </div>
   </section>
 
   <section id="install" class="install">
     <div class="wrap">
       <div class="install-head">
-        <div class="section-head">
-          <span class="kicker">Install{version && ` · v${version}`}</span>
-          <h2>Get Canonic Workbench.</h2>
-          {downloads && <p class="lede">One <code>.vsix</code> file per platform. Choose the one that matches your computer.</p>}
-        </div>
+        <SectionHead kicker={`Install${version ? ` · v${version}` : ''}`} title="Install">
+          In VS Code, search for <b>Canonic Workbench</b> in the Extensions view, or see it on the <a href={marketplace} target="_blank" rel="noopener">Visual Studio Marketplace ↗</a>. For Cursor, Windsurf, and other VS Code forks, install the <code>.vsix</code> for your platform{downloads ? ':' : ' from GitHub.'}
+        </SectionHead>
         <a class="text-link" href={pages.install}>Install guide →</a>
       </div>
 
-      <Install downloads={downloads} />
+      <DownloadCards downloads={downloads} />
 
       <ol class="steps">
         <li>
           <span class="n">01</span>
-          <span class="title">Install the .vsix</span>
-          <p>In VS Code, open the Extensions view, click <b>⋯</b>, and choose <b>Install from VSIX…</b>. Or run:</p>
-          <span class="cmd"><code data-install-cmd>code --install-extension &lt;file&gt;.vsix</code><button class="copy" type="button" aria-label="Copy the install command">Copy</button></span>
+          <span class="title">Install a .vsix</span>
+          <p>Only needed outside the Marketplace. In the Extensions view, click <b>⋯</b> and choose <b>Install from VSIX…</b>, or run:</p>
+          <InstallCommand />
         </li>
-        <li><span class="n">02</span><span class="title">Reload VS Code</span><p>Run <b>Developer: Reload Window</b> from the Command Palette.</p></li>
+        <li><span class="n">02</span><span class="title">Reload the window</span><p>If the editor was already open, run <b>Developer: Reload Window</b> from the Command Palette.</p></li>
         <li><span class="n">03</span><span class="title">Add workbench.yaml</span><p>Create it at the root of your project, like the <a href="#setup">example above</a>.</p></li>
-        <li><span class="n">04</span><span class="title">Open the canvas</span><p>Workbench appears in the activity bar, and opens the canvas.</p></li>
+        <li><span class="n">04</span><span class="title">Open the canvas</span><p>Open the <b>Workbench</b> view in the activity bar and pick a screen.</p></li>
       </ol>
     </div>
   </section>
-
-<script is:inline>
-/* The toolbar strip: each hotspot captions itself from the control list, so
-   the descriptions live in one place. The last control stays captioned. */
-(function () {
-  var strip = document.querySelector('.strip');
-  var name = document.querySelector('.caption-name');
-  var text = document.querySelector('.caption-text');
-  if (!strip || !name || !text) return;
-  var entries = {};
-  document.querySelectorAll('.controls [data-label]').forEach(function (row) {
-    entries[row.getAttribute('data-label')] = row;
-  });
-  var hots = strip.querySelectorAll('.hot');
-  hots.forEach(function (hot) {
-    var row = entries[hot.getAttribute('data-label')];
-    if (!row) { hot.hidden = true; return; }
-    hot.setAttribute('aria-label', row.querySelector('dt').textContent);
-    hot.setAttribute('aria-describedby', 'toolbarCaption');
-  });
-  function show(hot) {
-    var row = entries[hot.getAttribute('data-label')];
-    if (!row || hot.classList.contains('is-active')) return;
-    hots.forEach(function (h) { h.classList.toggle('is-active', h === hot); });
-    name.textContent = row.querySelector('dt').textContent;
-    text.innerHTML = row.querySelector('dd').innerHTML;
-  }
-  ['pointerover', 'focusin', 'click'].forEach(function (type) {
-    strip.addEventListener(type, function (e) {
-      var hot = e.target.closest && e.target.closest('.hot');
-      if (hot) show(hot);
-    });
-  });
-  if (hots[0]) show(hots[0]);
-})();
-</script>
-<DownloadScripts />
 
   <Fragment slot="footer"><span>Screens shown are an example project.</span></Fragment>
 </Base>

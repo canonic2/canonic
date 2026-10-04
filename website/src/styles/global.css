@@ -334,6 +334,11 @@ section h2 {
 .feature-media { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
 /* Code cards */
+/* The site's custom elements: blocks unless their class sets a display, and
+   wrappers that leave their children's layout alone. */
+canonic-code-block, canonic-install-command, canonic-downloads, canonic-recommended-download { display: block; }
+canonic-control-strip, canonic-docs-sidebar { display: contents; }
+
 .code { background: var(--ink); color: var(--ink-fg); border-radius: 16px; padding: 20px 24px 24px; min-width: 0; }
 .code :focus-visible { outline-color: var(--ink-focus); }
 .code-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; min-height: 40px; }

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { docGroups } from './doc-groups.js';
 
 const docsRoot = path.resolve(fileURLToPath(new URL('../../../workbench/docs/', import.meta.url)));
 
@@ -11,12 +12,7 @@ export function docTitle(entry) {
   return entry.body.match(/^#\s+(.+)$/m)?.[1].replace(/`/g, '') || entry.id;
 }
 
-export const docGroups = [
-  { title: 'Getting started', ids: ['index', 'getting-started', 'pages-and-states', 'canvas', 'markup-and-handoff', 'projects'] },
-  { title: 'Previews', ids: ['workbench-previews', 'preview-data', 'react', 'react-native-web', 'vue', 'astro', 'html', 'custom-adapters'] },
-  { title: 'Connect your implementation', ids: ['lenses', 'storybook', 'ios-simulator', 'windows'] },
-  { title: 'Reference', ids: ['configuration', 'design-system-export', 'extension', 'troubleshooting'] },
-];
+export { docGroups };
 
 export function docsNavigation(entries) {
   const byId = new Map(entries.map(entry => [entry.id, entry]));
@@ -56,33 +52,43 @@ export function isExternalLink(href, site) {
   return !site || new URL(href).origin !== new URL(site).origin;
 }
 
+// Code highlighting for every Markdown page, shared with the docs preview.
+export const shikiConfig = { theme: 'github-dark', langAlias: { gitignore: 'plaintext' } };
+
+/* The Sätteri plugins that rewrite guide links and open external links in a
+   new tab. The site adds them to Astro's processor; the docs preview in
+   previews/ renders with the same plugins. */
+export function docsMarkdownPlugins({ site, base = '/' }) {
+  const rewrite = (node, context) => {
+    const source = context.fileURL && fileURLToPath(context.fileURL);
+    if (!source || !source.startsWith(docsRoot + path.sep)) return;
+    context.setProperty(node, 'url', rewriteDocLink(node.url, source, base));
+  };
+  return {
+    hastPlugins: [{
+      name: 'workbench-docs-external-links',
+      element: {
+        filter: ['a'],
+        visit: (node, context) => {
+          if (!isExternalLink(node.properties?.href, site)) return;
+          context.setProperty(node, 'target', '_blank');
+          context.setProperty(node, 'rel', 'noopener');
+        },
+      },
+    }],
+    mdastPlugins: [{ name: 'workbench-docs-links', link: rewrite, definition: rewrite }],
+  };
+}
+
 export function docsMarkdown() {
   return {
     name: 'workbench-docs-links',
     hooks: {
       'astro:config:setup': ({ config }) => {
-        config.markdown.processor.options.hastPlugins.push({
-          name: 'workbench-docs-external-links',
-          element: {
-            filter: ['a'],
-            visit: (node, context) => {
-              if (!isExternalLink(node.properties?.href, config.site)) return;
-              context.setProperty(node, 'target', '_blank');
-              context.setProperty(node, 'rel', 'noopener');
-            },
-          },
-        });
         // Extend Astro's default Sätteri processor without adding a renderer.
-        const rewrite = (node, context) => {
-          const source = context.fileURL && fileURLToPath(context.fileURL);
-          if (!source || !source.startsWith(docsRoot + path.sep)) return;
-          context.setProperty(node, 'url', rewriteDocLink(node.url, source, config.base));
-        };
-        config.markdown.processor.options.mdastPlugins.push({
-          name: 'workbench-docs-links',
-          link: rewrite,
-          definition: rewrite,
-        });
+        const plugins = docsMarkdownPlugins({ site: config.site, base: config.base });
+        config.markdown.processor.options.hastPlugins.push(...plugins.hastPlugins);
+        config.markdown.processor.options.mdastPlugins.push(...plugins.mdastPlugins);
       },
     },
   };

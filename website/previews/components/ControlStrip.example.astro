@@ -1,0 +1,31 @@
+---
+/* The control strip with the overview's toolbar screenshots and a short
+   control list: every hotspot without a row in the list stays hidden. */
+import ControlStrip from '../../src/components/ControlStrip.astro';
+import screenshots from '../../src/data/screenshots.json';
+---
+<section class="tour band">
+  <div class="wrap">
+    <div class="toolbar-block">
+      <ControlStrip groups={screenshots.toolbar}>
+        <div class="controls-groups">
+          <div class="controls-group">
+            <h3>Markup</h3>
+            <dl class="controls" data-group="markup">
+              <div data-label="Select"><dt>Select</dt><dd>Use the page, and pick or move marks. <kbd>Esc</kbd> returns here from any drawing tool.</dd></div>
+              <div data-label="Scribble"><dt>Scribble</dt><dd>Freehand drawing.</dd></div>
+              <div data-label="Arrow"><dt>Arrow</dt><dd>An arrow.</dd></div>
+            </dl>
+          </div>
+          <div class="controls-group">
+            <h3>Frame and screen</h3>
+            <dl class="controls" data-group="frame">
+              <div data-label="Fit"><dt>Fit</dt><dd>The frame fills whatever space the workbench has.</dd></div>
+              <div data-label="Reload"><dt>Reload</dt><dd>Reloads the screen.</dd></div>
+            </dl>
+          </div>
+        </div>
+      </ControlStrip>
+    </div>
+  </div>
+</section>

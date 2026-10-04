@@ -9,18 +9,19 @@ release downloads and publishes to GitHub Pages.
 | --- | --- |
 | `src/pages/index.astro` | the Workbench overview |
 | `src/pages/workbench/install.astro` | the Install page: the download for this computer, every platform's file, and the setup steps |
-| `src/pages/workbench/changelog.astro` | the Changelog page: every complete release, newest first, with its notes, links, and builds |
+| `src/pages/workbench/changelog.astro` | the Changelog page: every published release, newest first, with its notes, links, and builds where it has them |
 | `src/layouts/Base.astro` | the page shell: head, the product bar and section links, and footer |
-| `src/components/Install.astro` | the download cards for a workbench release |
-| `src/components/DownloadScripts.astro` | the inline script that recommends this computer's download, and the Copy buttons |
+| `src/components/` | the site's components, each with a preview in `previews/components/`; see [Components](#components) |
+| `src/scripts/` | browser code the components share: platform detection, copying, and the `<canonic-downloads>` element |
 | `src/lib/workbench.js` | what every Workbench page shares: page URLs, the section links (Overview, Docs, Install, Changelog, GitHub), and the release data, fetched once per build |
-| `src/lib/releases.js` | lists complete releases, picks the one to link, reads their notes, and checks their download links |
+| `src/lib/releases.js` | lists releases, picks the complete one to link, reads their notes, and checks their download links |
 | `src/lib/marks.js` | the Canonic wordmark and product marks read from the stored SVG exports, in product order |
 | `src/data/screenshots.json` | the overview's numbered regions and the toolbar strip, written by `screenshots/capture.cjs` |
 | `src/styles/global.css` | light and dark tokens from the website design (warm grays, dark bands, Canonic blue) and every component's styles |
 | `src/content.config.ts` | loads Markdown directly from `../workbench/docs/` |
 | `src/pages/workbench/docs/[...slug].astro` | generated docs with guide navigation, section links, and previous/next links |
-| `src/lib/docs.js` | docs grouping, URLs, and Markdown link conversion |
+| `src/lib/docs.js` | docs navigation, URLs, and the Markdown link and highlighting settings |
+| `src/lib/doc-groups.js` | the docs sidebar's groups, by guide id |
 | `src/styles/docs.css` | responsive docs layout and Markdown typography |
 | `public/icons/` | original monochrome and blue-accent SVG exports for Workbench, Sandbox, Playground, Shield, Studio, and Link |
 | `public/logos/` | original Canonic symbol, wordmark, lockup, and app icon exports |
@@ -29,23 +30,64 @@ release downloads and publishes to GitHub Pages.
 | `screenshots/` | the Acme fixture and the script that regenerates the screenshots |
 | `astro.config.mjs` | the Pages origin and base path |
 
+## Components
+
+Everything a page repeats, and everything with behavior, is a component in
+`src/components/`. Behavior lives in a custom element defined in the
+component's own `<script>`: the component renders working HTML on the
+server, and the element enhances it in the browser. Pages work without
+JavaScript.
+
+| Component | Element | Job |
+| --- | --- | --- |
+| `CodeBlock` | `<canonic-code-block>` | a code sample with its file name and a Copy button |
+| `InstallCommand` | `<canonic-install-command>` | the `code --install-extension` command, naming this computer's `.vsix`, with a Copy button |
+| `DownloadCards` | `<canonic-downloads>` | a card per platform's `.vsix`, marking this computer's |
+| `PlatformTable` | `<canonic-downloads>` | every platform's `.vsix` in a table, marking this computer's |
+| `RecommendedDownload` | `<canonic-recommended-download>` | the Install page's panel for this computer's `.vsix` |
+| `ControlStrip` | `<canonic-control-strip>` | the toolbar screenshots, captioning each control from the control list in its slot |
+| `DocsSidebar` | `<canonic-docs-sidebar>` | the docs navigation and search |
+| `SectionHead`, `PageHero`, `Feature`, `ReleaseEntry` | none | static markup the pages repeat |
+
+Custom elements are named `canonic-*` and share browser code from
+`src/scripts/`. They don't use shadow DOM, so the scoped and global styles
+apply. A component's `<script>` must not be `is:inline`, so it is bundled
+and runs once per page. `global.css` gives the elements a `display`.
+
+Each component has a Workbench preview in `previews/components/`. A component
+that takes slots is previewed through a small example component beside its
+definition.
+
 ## Developing
 
-The Overview, Install page, and page shell have Astro `.workbench.ts` definitions
-in `previews/`. They are the **Website** project of the repository's
+Every page and the page shell have Astro `.workbench.ts` definitions in
+`previews/`: Overview, Install, Changelog, and Docs, which has a state per
+guide in the docs sidebar. They are the **Website** project of the repository's
 `workbench.yaml`, served from this folder: pick **Website** in the Workbench
 view's project switcher, or run `node packages/workbench/server.js .` from the
 repository root and open the address printed beside *Website*. The shell exposes
 editable props and a versioned state. These previews use the project's installed
-Astro compiler; they do not start the Astro application server. Content-backed
-docs and application integrations can still be reviewed through a URL lens.
+Astro compiler; they do not start the Astro application server.
+
+The docs route reads the guides through `astro:content`, which needs Astro's
+application pipeline. `workbench.config.ts` stands in for it: it renders every
+guide with `@astrojs/markdown-satteri`, Astro's own Markdown processor (a dev
+dependency pinned to the version Astro uses), with the site's link plugins and
+Shiki settings from `src/lib/docs.js`. `previews/docs-page.astro` gives the
+docs route the props its `getStaticPaths` would. The rendered guides aren't
+tied to their files, so after editing a guide, restart the Workbench server to
+see the change in the preview.
 
 The previews are mocks of the pages. Each definition's `links` maps the site's
-routes that have a preview, `/` and `/workbench/install/`, so with Actions on
-the header and buttons move between them on the canvas. Links to the docs, the
-changelog, GitHub, and the `.vsix` downloads are recorded under **Actions**
-instead of followed. When you add a page preview, add its route to the other
-definitions' `links`.
+routes that have a preview, `/`, `/workbench/install/`, `/workbench/changelog/`,
+and each guide under `/workbench/docs/`, so with Actions on the header, buttons,
+and docs navigation move between them on the canvas. Links to GitHub and the
+`.vsix` downloads are recorded under **Actions** instead of followed. When you add a page preview,
+add its route to the other definitions' `links`. The Changelog preview answers
+the GitHub releases request with fixed releases, with a state for each case:
+releases with and without builds, no releases, and GitHub unavailable. In
+development, release data isn't cached, so each preview state gets its own
+answer.
 
 The site uses pnpm; `packageManager` in `package.json` pins its version.
 From this folder:

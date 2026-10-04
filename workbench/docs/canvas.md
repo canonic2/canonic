@@ -96,7 +96,9 @@ The canvas behaves like Figma's:
 
 The zoom control has **Zoom out** and **Zoom in** buttons on either side of the
 current level. Select the level for a menu with the same commands plus 50% and
-200%.
+200%. **Recenter view**, beside the zoom buttons, brings the frame back to
+the middle of the canvas without changing the zoom level or the page's scroll
+position.
 
 Until you zoom or pan by hand, the frame stays fitted: changing width or
 resizing the editor fits it again. Fitting never magnifies past 100%.

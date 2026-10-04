@@ -2,69 +2,36 @@
 /* The Install page: the recommended download, every platform's file, and the
    steps to add the extension to VS Code. */
 import Base from '../../layouts/Base.astro';
-import DownloadScripts from '../../components/DownloadScripts.astro';
-import { download, downloads as loadDownloads, github, pages, setupYaml, workbenchNav } from '../../lib/workbench.js';
+import CodeBlock from '../../components/CodeBlock.astro';
+import InstallCommand from '../../components/InstallCommand.astro';
+import PageHero from '../../components/PageHero.astro';
+import PlatformTable from '../../components/PlatformTable.astro';
+import RecommendedDownload from '../../components/RecommendedDownload.astro';
+import { download, downloads as loadDownloads, github, marketplace, pages, setupYaml, workbenchNav } from '../../lib/workbench.js';
 
 const downloads = await loadDownloads();
 const version = downloads && downloads.version;
-const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
 ---
 <Base
   title="Install Canonic Workbench"
-  description="Download the Canonic Workbench .vsix for your computer and add it to VS Code."
+  description="Install Canonic Workbench from the Visual Studio Marketplace, or download the .vsix for your platform."
   product="Workbench"
   version={version}
   nav={workbenchNav('Install')}
   github={github}
   download={download}
 >
-  <section class="page-hero">
-    <div class="wrap narrow">
-      <span class="kicker">Install{version && ` · v${version}`}</span>
-      <h1>Install Canonic Workbench</h1>
-      <p class="lede">There’s one <code>.vsix</code> file per platform. Pick the one that matches your computer, add it to VS Code, then add a <code>workbench.yaml</code>.</p>
-    </div>
-  </section>
+  <PageHero kicker={`Install${version ? ` · v${version}` : ''}`} title="Install Canonic Workbench">
+    In VS Code, search for <b>Canonic Workbench</b> in the Extensions view, or see it on the <a href={marketplace} target="_blank" rel="noopener">Visual Studio Marketplace ↗</a>. For Cursor, Windsurf, and other VS Code forks, install the <code>.vsix</code> for your platform from this page. Then add a <code>workbench.yaml</code> to your project.
+  </PageHero>
 
   <section class="platforms-section" aria-labelledby="platforms-title">
     <div class="wrap narrow">
       {downloads ? (
         <>
-          <div class="rec ink" id="recommended" hidden>
-            <div class="rec-text">
-              <span class="rec-kicker">For this computer</span>
-              <span class="rec-name" data-rec-name></span>
-              <span class="rec-file" data-rec-file></span>
-            </div>
-            <a class="btn" href={downloads.url} data-rec-link>
-              <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
-              Download .vsix
-            </a>
-            <p class="rec-alt" data-rec-alt hidden><span data-rec-alt-ask></span> <a href={downloads.url}></a></p>
-          </div>
-
+          <RecommendedDownload downloads={downloads} />
           <h2 id="platforms-title" class="h-small">All platforms</h2>
-          <div class="table-box">
-            <table class="platforms">
-              <thead>
-                <tr><th scope="col">Computer</th><th scope="col">File</th><th scope="col"><span class="visually-hidden">Download</span></th></tr>
-              </thead>
-              <tbody>
-                {downloads.files.map(file => (
-                  <tr data-target={file.target} data-file={file.name} data-short={file.short} data-href={file.url}>
-                    <td class="platforms-name">{file.computer}<span class="dl-rec" data-rec-badge hidden>This computer</span></td>
-                    <td class="platforms-file">{file.name}</td>
-                    <td class="platforms-get">
-                      <a class="get" href={file.url} aria-label={`Download ${file.name}`}>
-                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
-                        Download
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PlatformTable downloads={downloads} />
           <a class="text-link start" href={downloads.url} target="_blank" rel="noopener">{version ? `Release v${version} on GitHub ↗` : 'Latest release on GitHub ↗'}</a>
         </>
       ) : (
@@ -78,27 +45,24 @@ const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
 
   <section class="band">
     <div class="wrap narrow add-steps">
-      <h2 class="h-medium">Add it to VS Code</h2>
+      <h2 class="h-medium">Install a .vsix</h2>
       <ol class="numbered">
         <li>
           <span class="num" aria-hidden="true">1</span>
           <div class="numbered-body">
-            <p>In VS Code, open the Extensions view, click <b>⋯</b>, and choose <b>Install from VSIX…</b> Or run:</p>
-            <span class="cmd"><code data-install-cmd>code --install-extension &lt;file&gt;.vsix</code><button class="copy" type="button" aria-label="Copy the install command">Copy</button></span>
+            <p>In the Extensions view, click <b>⋯</b> and choose <b>Install from VSIX…</b>, or run:</p>
+            <InstallCommand />
           </div>
         </li>
         <li>
           <span class="num" aria-hidden="true">2</span>
-          <div class="numbered-body"><p>If VS Code was already open, run <b>Developer: Reload Window</b> from the Command Palette.</p></div>
+          <div class="numbered-body"><p>If the editor was already open, run <b>Developer: Reload Window</b> from the Command Palette.</p></div>
         </li>
         <li>
           <span class="num" aria-hidden="true">3</span>
           <div class="numbered-body">
             <p>Add a <code>workbench.yaml</code> at the root of your project:</p>
-            <div class="code">
-              <div class="code-head"><span class="code-file">workbench.yaml</span><button class="copy" type="button" aria-label="Copy the workbench.yaml example">Copy</button></div>
-              <pre><code>{setupYaml}</code></pre>
-            </div>
+            <CodeBlock file="workbench.yaml" code={setupYaml} copies="the workbench.yaml example" />
           </div>
         </li>
         <li>
@@ -106,19 +70,19 @@ const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
           <div class="numbered-body"><p>The <b>Workbench</b> icon appears in the activity bar. Pick a screen there, or run <b>Workbench: Open Canvas</b>, to open the canvas.</p></div>
         </li>
       </ol>
-      <p class="install-note">Requires VS Code 1.75 or later. Cursor, Windsurf, and other VS Code forks install the same file. The builds are unsigned; desktop macOS is the most tested platform.</p>
+      <p class="install-note">Requires VS Code 1.75 or later. The <code>.vsix</code> files are the same builds as the Marketplace’s. They are unsigned; desktop macOS is the most tested platform.</p>
     </div>
   </section>
 
   <section class="next-section">
     <div class="wrap narrow cards">
       <div class="card">
-        <h3>Nothing to clean up</h3>
-        <p>Workbench only turns on in a folder with a <code>workbench.yaml</code>. Delete that file and nothing else remains in your project.</p>
+        <h3>Removing it</h3>
+        <p>Workbench only activates in a folder with a <code>workbench.yaml</code>. To remove it from a project, delete the files listed in <a href={`${pages.docs}getting-started/#removing-workbench-from-a-project`}>Removing Workbench from a project</a>.</p>
       </div>
       <div class="card">
-        <h3>Servers start themselves</h3>
-        <p>With a start command and a readiness check configured, Workbench starts your Storybook or local server in a terminal, only in a trusted workspace and only when the check fails.</p>
+        <h3>Starting servers</h3>
+        <p>With a start command and a readiness check configured, Workbench starts your Storybook or local server in a terminal, in a trusted workspace, when the check fails.</p>
       </div>
       <a class="card card-next" href={pages.docs}>
         <span>Next</span>
@@ -126,6 +90,4 @@ const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
       </a>
     </div>
   </section>
-
-  <DownloadScripts />
 </Base>

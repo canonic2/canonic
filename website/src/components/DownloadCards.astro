@@ -1,0 +1,28 @@
+---
+/* One card per platform's .vsix, from workbenchDownloads() in
+   src/lib/releases.js. The card for the visitor's computer is marked. */
+interface Props {
+  /** The release's downloads, or null before the first release. */
+  downloads: { files: { target: string; computer: string; short: string; name: string; url: string }[] } | null;
+}
+const { downloads } = Astro.props;
+---
+{downloads ? (
+  <canonic-downloads class="downloads">
+    {downloads.files.map(file => (
+      <a class="dl" href={file.url} data-target={file.target} aria-label={`Download for ${file.computer}: ${file.name}`}>
+        <span class="dl-text">
+          <span class="dl-label">{file.computer}<span class="dl-rec" data-rec-badge hidden>For this computer</span></span>
+          <span class="dl-file">{file.name}</span>
+        </span>
+        <svg class="dl-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10" /></svg>
+      </a>
+    ))}
+  </canonic-downloads>
+) : (
+  <p class="lede">Workbench downloads will appear after the first successful workbench release.</p>
+)}
+
+<script>
+  import '../scripts/downloads';
+</script>

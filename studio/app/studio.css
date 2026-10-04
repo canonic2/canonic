@@ -1,0 +1,226 @@
+:root {
+  color-scheme: dark;
+  font:
+    13px system-ui,
+    sans-serif;
+  color: #ddd;
+  background: #1f1f1f;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  padding: 6px 10px;
+  border: 1px solid #555;
+  background: #292929;
+}
+button:hover {
+  background: #383838;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #aaa;
+  outline-offset: 2px;
+}
+[hidden] {
+  display: none !important;
+}
+.project-bar {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #444;
+}
+#projects {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+}
+.project-tab {
+  display: flex;
+  border: 1px solid transparent;
+}
+.project-tab.active {
+  border-color: #aaa;
+}
+.project-tab button {
+  border: 0;
+  white-space: nowrap;
+}
+.workspace-bar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 12px;
+  border-bottom: 1px solid #444;
+}
+#project-name {
+  width: 224px;
+  padding-left: 12px;
+  flex-shrink: 0;
+}
+#session-name {
+  white-space: nowrap;
+}
+#branch {
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.view-switch {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.selected {
+  background: #494949;
+}
+aside {
+  position: absolute;
+  top: 106px;
+  bottom: 26px;
+  left: 0;
+  width: 224px;
+  border-right: 1px solid #444;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+#sessions {
+  overflow-y: auto;
+}
+.session-button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 4px;
+  text-align: left;
+  margin-bottom: 8px;
+}
+.session-button.active {
+  border-color: #bbb;
+}
+.session-button strong,
+.session-button small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-button small {
+  color: #bbb;
+}
+.sidebar-bottom {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #444;
+}
+#endpoint {
+  display: block;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+main {
+  position: absolute;
+  top: 106px;
+  left: 224px;
+  right: 0;
+  bottom: 26px;
+  overflow: auto;
+}
+#welcome,
+#loading,
+#session-form {
+  padding: 32px;
+}
+h1 {
+  font-size: 24px;
+}
+h2 {
+  font-size: 18px;
+}
+p {
+  line-height: 1.6;
+}
+#error {
+  position: fixed;
+  z-index: 10;
+  top: 54px;
+  left: 224px;
+  right: 0;
+  height: 52px;
+  padding: 8px 12px;
+  background: #442c2c;
+  color: #ffd2d2;
+  overflow: auto;
+}
+#logs {
+  margin: 0;
+  padding: 20px;
+  font: 12px/1.6 monospace;
+  white-space: pre-wrap;
+}
+#session-form {
+  max-width: 540px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+}
+input {
+  padding: 10px;
+  border: 1px solid #666;
+  background: #222;
+}
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+footer {
+  position: absolute;
+  bottom: 0;
+  height: 26px;
+  left: 0;
+  right: 0;
+  padding: 4px 12px;
+  display: flex;
+  gap: 20px;
+  border-top: 1px solid #444;
+  font-size: 11px;
+}
+#checkout {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #bbb;
+}

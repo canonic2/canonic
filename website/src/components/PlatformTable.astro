@@ -1,0 +1,34 @@
+---
+/* Every platform's .vsix in a table, with the row for the visitor's computer
+   marked. */
+interface Props {
+  downloads: { files: { target: string; computer: string; name: string; url: string }[] };
+}
+const { downloads } = Astro.props;
+const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
+---
+<canonic-downloads class="table-box">
+  <table class="platforms">
+    <thead>
+      <tr><th scope="col">Computer</th><th scope="col">File</th><th scope="col"><span class="visually-hidden">Download</span></th></tr>
+    </thead>
+    <tbody>
+      {downloads.files.map(file => (
+        <tr data-target={file.target}>
+          <td class="platforms-name">{file.computer}<span class="dl-rec" data-rec-badge hidden>This computer</span></td>
+          <td class="platforms-file">{file.name}</td>
+          <td class="platforms-get">
+            <a class="get" href={file.url} aria-label={`Download ${file.name}`}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
+              Download
+            </a>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</canonic-downloads>
+
+<script>
+  import '../scripts/downloads';
+</script>

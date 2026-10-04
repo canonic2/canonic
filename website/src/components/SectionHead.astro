@@ -1,0 +1,13 @@
+---
+/* A section's kicker, heading, and optional lede (the default slot). */
+interface Props {
+  kicker: string;
+  title: string;
+}
+const { kicker, title } = Astro.props;
+---
+<div class="section-head">
+  <span class="kicker">{kicker}</span>
+  <h2>{title}</h2>
+  {Astro.slots.has('default') && <p class="lede"><slot /></p>}
+</div>

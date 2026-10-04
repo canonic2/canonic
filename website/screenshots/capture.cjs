@@ -33,7 +33,7 @@ var TOOLBAR = [
   { name: 'actions', selector: '#actionsToggle', alt: 'The Actions toggle, switched off, enlarged.' },
   { name: 'frame', selector: '.wb-topbar-right', alt: 'The frame and screen controls, enlarged: four frame sizes, then Reload, Open the source, Copy reference, Open on its own, and More.' },
   { name: 'markup', selector: '.wb-markup', alt: 'The markup tools from the bar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear markup, and Save screenshot.' },
-  { name: 'zoom', selector: '#zoomControl', alt: 'The zoom control, enlarged: Zoom out, the zoom level, and Zoom in.' },
+  { name: 'zoom', selector: '#zoomControl', alt: 'The zoom control, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.' },
 ];
 
 function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }

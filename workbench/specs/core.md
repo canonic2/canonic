@@ -113,7 +113,9 @@ compilation, and screenshot processes have separate
   server is running). Narrow canvases fold secondary actions into **More**.
   Markup, screenshot, and handoff actions float over the canvas.
 - Canvas zoom scales the frame without changing its layout size; captures use
-  the real frame size. A preview from an external origin remains inside an
+  the real frame size. **Recenter view** beside the zoom controls centers the
+  frame at its current zoom without reloading or scrolling the preview.
+  A preview from an external origin remains inside an
   iframe; the workbench does not read its DOM directly.
 
 ## Verified behavior

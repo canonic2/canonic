@@ -78,6 +78,37 @@ test('bundles React and Vue SFCs with scoped styles using project framework vers
   }
 });
 
+test('live builds serve separate source maps and reuse artifacts across compiler restarts until source or config changes', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('html', './button.ts'),
+    'button.ts': 'export default function(canvas) { canvas.textContent = "ACME_FIRST" + CONFIG_LABEL; }',
+    'workbench.config.ts': `import fs from 'node:fs';
+      export default { define: { CONFIG_LABEL: '"CONFIG_FIRST"' }, plugins: [{ name: 'compile-counter',
+        setup() { fs.appendFileSync(__dirname + '/build-count.txt', 'build\\n'); } }] };`,
+  });
+  const first = await new Compiler(root).compile('button.workbench.ts');
+  const js = first.outputs.get('preview.js').toString();
+  assert.match(js, /sourceMappingURL=preview.js.map/);
+  assert.doesNotMatch(js, /sourceMappingURL=data:/);
+  assert.ok(JSON.parse(first.outputs.get('preview.js.map')).sources.some(source => source.endsWith('button.ts')));
+  const restarted = await new Compiler(root).compile('button.workbench.ts');
+  assert.equal(restarted.revision, first.revision);
+  assert.deepEqual(restarted.outputs, first.outputs);
+  assert.equal(fs.readFileSync(path.join(root, 'build-count.txt'), 'utf8'), 'build\n');
+  fs.writeFileSync(path.join(root, 'button.ts'), 'export default function(canvas) { canvas.textContent = "ACME_CHANGED_SOURCE" + CONFIG_LABEL; }');
+  const changed = await new Compiler(root).compile('button.workbench.ts');
+  assert.notEqual(changed.revision, first.revision);
+  assert.match(changed.outputs.get('preview.js').toString(), /ACME_CHANGED_SOURCE/);
+  const config = path.join(root, 'workbench.config.ts');
+  fs.writeFileSync(config, fs.readFileSync(config, 'utf8').replace('CONFIG_FIRST', 'CONFIG_CHANGED'));
+  const configured = await new Compiler(root).compile('button.workbench.ts');
+  assert.notEqual(configured.revision, changed.revision);
+  assert.match(configured.outputs.get('preview.js').toString(), /CONFIG_CHANGED/);
+  assert.equal(fs.readFileSync(path.join(root, 'build-count.txt'), 'utf8'), 'build\nbuild\nbuild\n');
+  fs.unlinkSync(path.join(root, 'button.ts'));
+  await assert.rejects(new Compiler(root).compile('button.workbench.ts'), /source must exist/);
+});
+
 test('custom adapters and compiler plugins use the same browser export path', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('acme', './button.acme'),

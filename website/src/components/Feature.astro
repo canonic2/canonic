@@ -1,0 +1,19 @@
+---
+/* One feature on the overview: a kicker and heading over its text (the
+   default slot), beside its media (the `media` slot: a screenshot figure or
+   a code sample). */
+interface Props {
+  id: string;
+  kicker: string;
+  title: string;
+}
+const { id, kicker, title } = Astro.props;
+---
+<div class="feature" id={id}>
+  <div class="feature-text">
+    <span class="kicker">{kicker}</span>
+    <h2>{title}</h2>
+    <slot />
+  </div>
+  <slot name="media" />
+</div>

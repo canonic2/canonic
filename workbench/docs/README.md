@@ -1,8 +1,9 @@
 # Workbench documentation
 
-Workbench is a VS Code extension that puts every screen in your repository on
-one canvas, at real device widths. You can draw on a screen, compare it with
-its implementation, and hand an annotated screenshot to your coding agent.
+Workbench is a VS Code extension that renders a project's screens on one
+canvas at device widths. You can draw on a screen, compare it with its
+implementation, and copy an annotated screenshot and a description of the
+marks for a coding agent.
 
 A project's configuration is `workbench.yaml` at the project root. Screens can
 come from HTML design pages you list there, from TypeScript previews of your

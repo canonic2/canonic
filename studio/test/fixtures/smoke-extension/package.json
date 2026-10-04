@@ -1,0 +1,16 @@
+{
+  "name": "studio-smoke",
+  "publisher": "canonic",
+  "version": "0.0.1",
+  "displayName": "Studio IDE Verification",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.cjs"
+}

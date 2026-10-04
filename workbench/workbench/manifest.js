@@ -334,6 +334,14 @@
      section, not duplicate buttons that both claim the same selection. */
   function mergeSections(base, imported) {
     function clone(items) { return (items || []).map(function (item) { return item.folder ? Object.assign({}, item, { items: clone(item.items) }) : Object.assign({}, item); }); }
+    function mergeItems(target, items) {
+      items.forEach(function (item) {
+        var folder = item.folder && target.find(function (candidate) { return candidate.folder === item.folder; });
+        if (folder) mergeItems(folder.items, item.items || []);
+        else target.push(item);
+      });
+      return target;
+    }
     var out = (base || []).map(function (section) {
       return Object.assign({}, section, { items: clone(section.items) });
     });
@@ -350,11 +358,11 @@
         if (original) { original.states = item.states; original.workbench = true; if (!original.viewports && item.viewports) original.viewports = item.viewports; return null; }
         return item;
       }).filter(Boolean); }
-      var items = remaining(section.items);
+      var items = remaining(clone(section.items));
       if (!items.length) return;
       var found = out.find(function (candidate) { return candidate.group === section.group; });
-      if (found) found.items = found.items.concat(items);
-      else out.push(Object.assign({}, section, { items: items }));
+      if (found) mergeItems(found.items, items);
+      else out.push(Object.assign({}, section, { items: mergeItems([], items) }));
     });
     return out;
   }

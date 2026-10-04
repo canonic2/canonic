@@ -1,10 +1,11 @@
-/* One compiler for live previews and portable exports. WASM keeps the installed
-   extension independent of the host CPU and avoids downloading native tools. */
+/* One compiler for live previews and portable exports. Each platform VSIX
+   carries its own native compiler; projects install no build tools. */
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const Module = require('node:module');
-const esbuild = require('esbuild-wasm');
+const esbuild = require('./engine.cjs');
+const { BuildCache } = require('./build-cache.cjs');
 const picomatch = require('picomatch');
 const API = path.join(__dirname, 'api.js');
 const OMIT = new Set(['node_modules', '.git', '.canonic', '.claude', '.codex', 'dist', 'build', 'coverage', '.next', '.astro']);
@@ -36,6 +37,18 @@ function discover(root, include) {
   }
   walk(root);
   return files;
+}
+
+// A request for one known definition does not need to walk the whole project.
+// Apply the same glob, hidden-folder, output-folder and symlink rules as index.
+function discoveredFile(root, file, include) {
+  const relative = path.relative(root, file);
+  if (!picomatch(include || ['**/*.workbench.ts', '**/*.workbench.tsx'])(slash(relative))) return false;
+  let current = root;
+  return relative.split(path.sep).every(name => {
+    current = path.join(current, name);
+    return !name.startsWith('.') && !OMIT.has(name) && !fs.lstatSync(current).isSymbolicLink();
+  });
 }
 
 function validate(raw, file, root) {
@@ -102,6 +115,7 @@ class Compiler {
     this.config = {};
     this.configFiles = new Map();
     this.definitions = new Map();
+    this.diskCache = new BuildCache(this.root, options);
   }
   tracked(meta) {
     return Object.keys(meta.inputs).filter(file => !file.startsWith('workbench:')).map(file => path.resolve(this.root, file)).filter(file => fs.existsSync(file));
@@ -170,7 +184,14 @@ class Compiler {
     const key = file + ':' + development + (renderRequest ? ':' + JSON.stringify(renderRequest) : '');
     const cached = this.cache.get(key);
     if (cached && this.fresh(cached.watched)) return cached;
-    if (!discover(this.root, this.options.include).includes(file)) throw new Error('Not a declared Workbench preview definition.');
+    if (!discoveredFile(this.root, file, this.options.include)) throw new Error('Not a declared Workbench preview definition.');
+    if (!renderRequest) {
+      const stored = this.diskCache.read(key);
+      if (stored && stored.watched instanceof Map && stored.outputs instanceof Map && this.fresh(stored.watched)) {
+        this.cache.set(key, stored);
+        return stored;
+      }
+    }
     const evaluated = await this.definition(file);
     const definition = validate(evaluated.value, file, this.root);
     const config = this.config;
@@ -400,7 +421,7 @@ class Compiler {
     const portableNote = Object.keys(rendered).length ? 'Astro input edits require the live Workbench server. This export contains the authored states.' : '';
     const browserDefinition = portableNote && !development ? '{ ...definition, controls: {}, docs: (definition.docs || "") + "\\n" + ' + JSON.stringify(portableNote) + ' }' : 'definition';
     const entry = lines.join('\n') + '\nexport function mount(options) { return boot(' + browserDefinition + ', {' + sourceMap.join(',') + '}, adapter, ' + (environments.length === 2 ? 'combine(projectEnvironment, environment)' : environments[0] || '{}') + ', options); }\nif (!window.__workbenchHost) mount(window.__workbenchOptions);';
-    const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: entry, loader: 'js', resolveDir: path.dirname(file) }, outdir, entryNames: 'preview', external: development ? ['/_workbench/preview-runtime.js', '/_workbench/preview-requests.js'] : [], sourcemap: development ? 'inline' : false }));
+    const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: entry, loader: 'js', resolveDir: path.dirname(file) }, outdir, entryNames: 'preview', external: development ? ['/_workbench/preview-runtime.js', '/_workbench/preview-requests.js'] : [], sourcemap: development ? 'linked' : false }));
     for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
     for (const dependency of this.tracked(result.metafile)) dependencies.add(dependency);
     for (const asset of definition.assets || []) {
@@ -444,7 +465,10 @@ class Compiler {
       watched: new Map(Array.from(dependencies).map(file => [file, stamp(file)])) };
     // Input edits can create arbitrarily many variants. Keep only authored
     // reference builds in the compiler cache.
-    if (!renderRequest) this.cache.set(key, compiled);
+    if (!renderRequest) {
+      this.cache.set(key, compiled);
+      this.diskCache.write(key, compiled);
+    }
     return compiled;
   }
 }

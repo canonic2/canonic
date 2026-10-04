@@ -6,7 +6,12 @@ takes about five minutes.
 
 ## 1. Install the extension
 
-Download the `.vsix` for your computer from the
+In VS Code, search for **Canonic Workbench** in the Extensions view and click
+**Install**, or install it from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=canonic.canonic-workbench).
+
+Cursor, Windsurf, and other VS Code forks don't use the Visual Studio
+Marketplace. For them, download the `.vsix` for your computer from the
 [latest Workbench release](https://github.com/canonic2/canonic/releases/latest):
 
 | Computer | File |
@@ -24,9 +29,8 @@ Install it from the terminal:
 code --install-extension canonic-workbench-darwin-arm64.vsix
 ```
 
-Or open the Extensions view in VS Code, choose **…** › **Install from VSIX…**, and pick the
-file. Cursor, Windsurf, and other VS Code forks accept the same file, from the same
-Extensions view menu or from their own command-line tool, such as
+Or open the Extensions view, choose **…** › **Install from VSIX…**, and pick the
+file. Forks have the same menu, and their own command-line tool, such as
 `cursor --install-extension`.
 
 Each file bundles the runtime its platform needs for screenshots and

@@ -5,6 +5,7 @@ import { workbenchDownloads, workbenchReleases } from './releases.js';
 
 export const repository = process.env.GITHUB_REPOSITORY || 'canonic2/canonic';
 export const github = `https://github.com/${repository}`;
+export const marketplace = 'https://marketplace.visualstudio.com/items?itemName=canonic.canonic-workbench';
 
 export const pages = {
   overview: base,
@@ -24,7 +25,7 @@ export function workbenchNav(current) {
   ].map(item => ({ ...item, current: item.label === current }));
 }
 
-export const download = { href: pages.install, label: 'Download' };
+export const download = { href: pages.install, label: 'Install' };
 
 /* The smallest workbench.yaml, shown by the overview and the Install page. */
 export const setupYaml = `name: Acme
@@ -54,15 +55,17 @@ export function downloads() {
   return downloadsRequest;
 }
 
-/* Every complete release, newest first. A build stops if GitHub can't be
-   reached; the dev server shows a link to GitHub's releases instead. */
+/* Every published release, newest first. A build asks GitHub once and stops
+   if it can't be reached. The dev server and Workbench previews ask on every
+   render, and show a link to GitHub's releases when it can't be reached. */
 let releasesRequest;
 export function releases() {
-  releasesRequest ||= workbenchReleases({ repository, token: process.env.GITHUB_TOKEN }).catch(error => {
-    if (!import.meta.env.DEV) throw error;
-    console.warn(`Changelog unavailable in dev: ${error.message}`);
-    releasesRequest = undefined;
-    return null;
-  });
+  if (import.meta.env.DEV) {
+    return workbenchReleases({ repository, token: process.env.GITHUB_TOKEN, cache: false }).catch(error => {
+      console.warn(`Changelog unavailable in dev: ${error.message}`);
+      return null;
+    });
+  }
+  releasesRequest ||= workbenchReleases({ repository, token: process.env.GITHUB_TOKEN });
   return releasesRequest;
 }

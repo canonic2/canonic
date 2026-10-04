@@ -126,13 +126,16 @@ async function githubJson(endpoint, token) {
 }
 
 // One request per repository for the whole build, shared by every page.
+// `cache: false` asks GitHub again, for the dev server and previews, whose
+// modules stay loaded between renders.
 const releaseLists = new Map();
 function checkRepository(repository) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error('Invalid GitHub repository name');
 }
 
-function listReleases(repository, token) {
+function listReleases(repository, token, cache = true) {
   checkRepository(repository);
+  if (!cache) return githubJson(`repos/${repository}/releases?per_page=100`, token);
   if (!releaseLists.has(repository)) {
     releaseLists.set(repository, githubJson(`repos/${repository}/releases?per_page=100`, token).catch(error => {
       releaseLists.delete(repository);
@@ -142,8 +145,8 @@ function listReleases(repository, token) {
   return releaseLists.get(repository);
 }
 
-async function resolveRelease(repository, tag, token) {
-  const releases = await listReleases(repository, token);
+async function resolveRelease(repository, tag, token, cache) {
+  const releases = await listReleases(repository, token, cache);
   if (tag) {
     const release = releases.find(item => item.tag_name === tag);
     if (!release) throw new Error(`Release ${tag} was not found`);
@@ -154,14 +157,14 @@ async function resolveRelease(repository, tag, token) {
 }
 
 /* Null when no workbench release exists yet. */
-export async function workbenchDownloads({ repository, tag, token, latest }) {
+export async function workbenchDownloads({ repository, tag, token, latest, cache = true }) {
   checkRepository(repository);
   if (latest) return latestDownloads(repository);
-  const release = await resolveRelease(repository, tag, token);
+  const release = await resolveRelease(repository, tag, token, cache);
   return release && releaseDownloads(release, repository);
 }
 
 /* Every published workbench release, newest first, for the changelog. */
-export async function workbenchReleases({ repository, token }) {
-  return publishedReleases(await listReleases(repository, token)).map(release => releaseDetails(release, repository));
+export async function workbenchReleases({ repository, token, cache = true }) {
+  return publishedReleases(await listReleases(repository, token, cache)).map(release => releaseDetails(release, repository));
 }

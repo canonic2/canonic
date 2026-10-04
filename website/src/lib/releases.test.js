@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { TARGETS, completeReleases, latestDownloads, publishedReleases, releaseDetails, releaseDownloads, releaseNotes, selectRelease } from './releases.js';
+import { TARGETS, completeReleases, latestDownloads, publishedReleases, releaseDetails, releaseDownloads, releaseNotes, selectRelease, workbenchReleases } from './releases.js';
 
 const repository = 'canonic2/canonic';
 const targets = TARGETS.map(({ target }) => target);
@@ -80,6 +80,18 @@ test('a release without its own notes links to its commit history', () => {
   assert.equal(info.changes, `https://github.com/${repository}/commits/workbench/v1.0.1`);
   assert.equal(info.published, '2026-09-27T17:57:53Z');
   assert.equal(info.tag, 'workbench/v1.0.1');
+});
+
+test('a build asks GitHub once per repository; uncached lookups ask every time', async t => {
+  const answers = [[release('1.0.0')], [release('1.1.0')], [release('1.2.0')]];
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => answers[calls++] }));
+  const versions = async options => (await workbenchReleases({ repository, ...options })).map(item => item.version);
+  assert.deepEqual(await versions({}), ['1.0.0']);
+  assert.deepEqual(await versions({}), ['1.0.0']);
+  assert.deepEqual(await versions({ cache: false }), ['1.1.0']);
+  assert.deepEqual(await versions({ cache: false }), ['1.2.0']);
+  assert.equal(calls, 3);
 });
 
 test('download links must stay on the repository\'s releases', () => {

@@ -134,6 +134,16 @@
     var aw = Math.max(1, v.w - INSET.left - INSET.right);
     var ah = Math.max(1, v.h - INSET.top - INSET.bottom);
     z = clamp(Math.min(1, aw / w, ah / h));
+    center();
+  }
+
+  function center() {
+    var w = frameShell.offsetWidth;
+    var h = frameShell.offsetHeight;
+    var v = view();
+    if (!w || !h || !v.w || !v.h) return apply();
+    var aw = Math.max(1, v.w - INSET.left - INSET.right);
+    var ah = Math.max(1, v.h - INSET.top - INSET.bottom);
     x = INSET.left + (aw - w * z) / 2;
     y = INSET.top + (ah - h * z) / 2;
     apply();
@@ -169,6 +179,7 @@
     else if (name === 'out') zoomCentered(stepOut(z));
     else if (name === 'actual') zoomCentered(1);
     else if (name === 'fit') fit();
+    else if (name === 'center') { fitted = false; center(); }
     else if (typeof name === 'number') zoomCentered(name);
   }
 
@@ -340,6 +351,7 @@
 
   document.getElementById('zoomIn').addEventListener('click', function () { run('in'); });
   document.getElementById('zoomOut').addEventListener('click', function () { run('out'); });
+  document.getElementById('zoomCenter').addEventListener('click', function () { run('center'); });
   percent.addEventListener('click', function () {
     if (menu.hidden) openMenu(); else closeMenu();
   });

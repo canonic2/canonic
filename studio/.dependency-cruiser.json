@@ -1,0 +1,46 @@
+{
+  "forbidden": [
+    { "name": "no-cycles", "severity": "error", "from": {}, "to": { "circular": true } },
+    { "name": "no-unresolved", "severity": "error", "from": {}, "to": { "couldNotResolve": true } },
+    {
+      "name": "production-no-tests",
+      "severity": "error",
+      "from": { "path": "^(src|app)/" },
+      "to": { "path": "^test/" }
+    },
+    {
+      "name": "domain-no-desktop",
+      "severity": "error",
+      "from": { "path": "^src/" },
+      "to": { "path": "^app/|^electron$" }
+    },
+    {
+      "name": "modules-no-application",
+      "severity": "error",
+      "from": { "path": "^src/modules/" },
+      "to": { "path": "^src/application/" }
+    },
+    {
+      "name": "projects-sessions-no-execution",
+      "severity": "error",
+      "from": { "path": "^src/modules/(projects|sessions)/" },
+      "to": { "path": "^src/modules/(runtime|ide)/" }
+    },
+    {
+      "name": "renderer-no-node",
+      "severity": "error",
+      "from": { "path": "^app/(renderer/|studio\\.ts)" },
+      "to": { "path": "^node:|^electron$", "dependencyTypesNot": ["type-only"] }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "exclude": "(^|/)(node_modules|dist|\\.studio|\\.runtime|\\.pnpm-store|artifacts)/",
+    "tsConfig": { "fileName": "tsconfig.json" },
+    "tsPreCompilationDeps": false,
+    "enhancedResolveOptions": {
+      "exportsFields": ["exports"],
+      "conditionNames": ["import", "node", "default"]
+    }
+  }
+}

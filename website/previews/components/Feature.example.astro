@@ -1,0 +1,16 @@
+---
+/* A feature with text and a code sample, as on the overview. */
+import CodeBlock from '../../src/components/CodeBlock.astro';
+import Feature from '../../src/components/Feature.astro';
+const { kicker, title } = Astro.props;
+---
+<section class="features">
+  <div class="wrap">
+    <Feature id="example" kicker={kicker} title={title}>
+      <p>A screen can have several states, such as a sign-in form when empty and after a wrong password.</p>
+      <div class="feature-media" slot="media">
+        <CodeBlock file="workbench.yaml" code={'- label: Sign in\n  states:\n    - id: error\n      label: Wrong password'} copies="the example" />
+      </div>
+    </Feature>
+  </div>
+</section>

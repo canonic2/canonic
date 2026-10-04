@@ -1,0 +1,8 @@
+---
+/* A release entry inside the changelog's list, as the Changelog renders it. */
+import ReleaseEntry from '../../src/components/ReleaseEntry.astro';
+const { release, latest } = Astro.props;
+---
+<div class="wrap narrower">
+  <ol class="releases"><ReleaseEntry release={release} latest={latest} /></ol>
+</div>

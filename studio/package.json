@@ -1,0 +1,56 @@
+{
+  "name": "@canonic/studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Canonic Studio: projects and concurrent Code OSS workspaces",
+  "type": "module",
+  "main": "dist/app/main.js",
+  "scripts": {
+    "setup": "node scripts/setup.ts",
+    "start": "pnpm run build && node scripts/launch.ts",
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts",
+    "check": "node scripts/quality.ts",
+    "check:full": "node scripts/quality.ts --full",
+    "check:contracts": "node scripts/check.ts",
+    "check:build": "node scripts/build-check.ts",
+    "check:lockfile": "pnpm install --lockfile-only --frozen-lockfile --ignore-scripts --offline",
+    "check:security": "pnpm audit --prod --audit-level high",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix --max-warnings=0",
+    "analyze": "knip --no-config-hints",
+    "circular": "depcruise --config .dependency-cruiser.json src app scripts test/integration test/helpers",
+    "test:watch": "node --test --watch test/*.test.ts",
+    "test:coverage": "node --experimental-test-coverage --test --test-coverage-include='src/**/*.ts' --test-coverage-exclude='src/modules/ide/**' --test-coverage-exclude='src/modules/runtime/compose.ts' --test-coverage-lines=95 --test-coverage-branches=80 --test-coverage-functions=90 test/*.test.ts",
+    "fixture:install": "pnpm --dir test/fixtures/fullstack install --frozen-lockfile --ignore-scripts --store-dir .pnpm-store --config.confirmModulesPurge=false",
+    "typecheck:fixture": "pnpm --dir test/fixtures/fullstack run typecheck",
+    "config:check": "node scripts/config-check.ts",
+    "doctor": "node scripts/doctor.ts",
+    "smoke": "pnpm run build && node test/integration/launch.ts",
+    "smoke:startup": "pnpm run build && node test/integration/launch.ts --empty",
+    "test:fullstack": "node test/integration/fullstack.ts",
+    "smoke:fullstack": "pnpm run build && node test/integration/launch.ts --fullstack"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.1",
+    "dependency-cruiser": "17.3.8",
+    "electron": "44.2.0",
+    "eslint": "10.12.0",
+    "eslint-config-prettier": "10.1.8",
+    "knip": "6.39.0",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

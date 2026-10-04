@@ -40,6 +40,9 @@ The keys, their validation, and examples are in the
 - An imported section joins an authored section with the same name. Imported
   screens have a synthetic `__storybook/<implementation>/<component>.html`
   address, open straight on the Storybook lens, and have no Design lens.
+  Folders with exactly the same name within that section join the existing
+  folder, including folders supplied by TypeScript previews. Screens retain
+  their own addresses, states, and lenses.
 - A story's workbench state is the part of its ID after `--`; the address
   stores that state and the story keeps its full Storybook ID. The preview URL
   is `<url>/iframe.html?id=<story-id>&viewMode=story`. **Open on its own**

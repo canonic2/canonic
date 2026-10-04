@@ -168,10 +168,12 @@ Network access:
 
 ## Updating
 
-Workbench isn't installed from the Marketplace, so it doesn't update itself.
-Download the newer `.vsix` from the
+An install from the Visual Studio Marketplace updates like any other
+extension. For an install from a `.vsix`, download the newer `.vsix` from the
 [latest release](https://github.com/canonic2/canonic/releases/latest) and
 install it the same way as the first one; it replaces the installed version.
+To switch a `.vsix` install in VS Code to Marketplace updates, uninstall it
+and install **Canonic Workbench** from the Extensions view.
 
 Then run **Developer: Reload Window** in each open project window. Installing
 replaces the files on disk, but running windows, servers, screenshot helpers,

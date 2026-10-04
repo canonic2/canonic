@@ -64,6 +64,10 @@ project-registered adapters. They do not run a project's application server,
   between are joined with ` / ` into one folder. A title without `/` goes in
   **Previews**; a missing title uses the ID. Screens use the `component` icon.
 - Imported sections merge into authored sections with the same name.
+  Within a section, folders with exactly the same name merge across authored
+  pages, previews, and implementation catalogs. The first folder keeps its
+  position and metadata; later screens append in source order. Matching names
+  in different sections remain separate, as do names with different casing.
 - An authored screen whose `src` is a definition file keeps its place and
   label and takes the definition's states; the imported duplicate is dropped.
   The file must still match discovery. Viewports: see
@@ -84,6 +88,12 @@ project-registered adapters. They do not run a project's application server,
   rather than navigating the iframe. A newer load supersedes a queued one, and
   page-level listeners, timers, and animation frames from the outgoing preview
   are released while the compatibility bridge stays installed.
+- Body nodes created during a preview module's import, such as SVG symbol
+  sprites, are retained by compiled module URL and restored before its next
+  mount. They are detached while another module is active or the host is reset.
+  Nodes created during mounting, including portals, are cleared on departure.
+  Imports that finish after being superseded still retain their nodes for a
+  later return; a failed mount does not discard import-time nodes.
 - When ready, the preview reports its inputs, controls, docs, and last 30
   actions to the canvas, which shows **Preview controls**: one field per
   control (`text`, `number`, `boolean`, `select`, `json`), **Reset state**,
@@ -312,7 +322,8 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
   assets, Node-only frontmatter, live input renders, portable states, missing
   dependencies and unsupported integrations, aliases and defines.
 - [workbench/preview-host.test.js](../workbench/preview-host.test.js): warm
-  host reuse, superseded loads, style retention, listener and timer release,
+  host reuse, superseded loads, style and import-time body node retention,
+  module isolation, recovery after failed mounts, listener and timer release,
   refusal of external pages. [workbench/preview.test.js](../workbench/preview.test.js)
   checks mounting into the warm spare frame.
 - [preview-scripts.test.js](../preview-scripts.test.js) checks the shared

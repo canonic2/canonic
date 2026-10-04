@@ -1,4 +1,6 @@
 .DS_Store
+website/.canonic/.handoffs/
+website/.canonic/.workbench/
 node_modules/
 website/dist/
 website/.astro/

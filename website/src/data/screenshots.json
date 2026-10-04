@@ -183,24 +183,29 @@
     {
       "name": "zoom",
       "src": "images/toolbar-zoom.png",
-      "width": 150,
+      "width": 183,
       "height": 40,
-      "alt": "The zoom control, enlarged: Zoom out, the zoom level, and Zoom in.",
+      "alt": "The zoom control, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.",
       "controls": [
         {
+          "label": "Recenter view",
+          "left": 4.79,
+          "width": 21.92
+        },
+        {
           "label": "Zoom out",
-          "left": 5.83,
-          "width": 26.67
+          "left": 22.6,
+          "width": 21.92
         },
         {
           "label": "Zoom options",
-          "left": 27.5,
-          "width": 45
+          "left": 40.41,
+          "width": 36.99
         },
         {
           "label": "Zoom in",
-          "left": 67.5,
-          "width": 26.67
+          "left": 73.29,
+          "width": 21.92
         }
       ]
     }

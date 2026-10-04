@@ -59,6 +59,34 @@ test('merges imported items into a manual section with the same name', function 
   assert.equal(manual[0].items.length, 1);
 });
 
+test('merges preview and Storybook folders by exact name within their section without mutating inputs', function () {
+  var previews = [{ group: 'Web App', icon: 'component', items: [
+    { folder: 'Pages', icon: 'folder', items: [{ label: 'Jobs', src: 'jobs.workbench.ts', workbench: true }] },
+    { label: 'Welcome', src: 'welcome.html' },
+  ] }];
+  var stories = [{ group: 'Web App', icon: 'monitor', items: [
+    { folder: 'Pages', icon: 'book-open', items: [{ label: 'Account', src: '__storybook/account.html' }] },
+    { folder: 'Forms', items: [{ label: 'Contact', src: '__storybook/contact.html' }] },
+    { folder: 'pages', items: [{ label: 'Other', src: '__storybook/other.html' }] },
+  ] }, { group: 'Auth', items: [
+    { folder: 'Pages', items: [{ label: 'Sign in', src: '__storybook/sign-in.html' }] },
+  ] }];
+  var before = JSON.stringify([previews, stories]);
+  var merged = manifest.mergeSections(previews, stories);
+  assert.equal(merged[0].icon, 'component');
+  assert.deepEqual(merged[0].items.map(function (item) { return item.folder || item.label; }), ['Pages', 'Welcome', 'Forms', 'pages']);
+  assert.equal(merged[0].items[0].icon, 'folder');
+  assert.deepEqual(merged[0].items[0].items.map(function (item) { return item.label; }), ['Jobs', 'Account']);
+  assert.equal(merged[1].items[0].items[0].label, 'Sign in');
+  assert.equal(JSON.stringify([previews, stories]), before);
+  var again = manifest.mergeSections(merged, [{ group: 'Web App', items: [
+    { folder: 'Forms', items: [{ label: 'Search', src: 'search.workbench.ts', workbench: true }] },
+  ] }]);
+  assert.deepEqual(again[0].items[2].items.map(function (item) { return item.label; }), ['Contact', 'Search']);
+  assert.equal(merged[0].items[2].items.length, 1);
+  assert.equal(stories[0].items[1].items.length, 1);
+});
+
 test('reads the declared implementations', function () {
   var problems = [];
   var impls = manifest.implementations(

@@ -1,0 +1,21 @@
+{
+  "name": "Studio Midnight",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#1c1e23",
+    "editor.foreground": "#dce2ef",
+    "sideBar.background": "#191b20",
+    "activityBar.background": "#17191e",
+    "statusBar.background": "#252e40",
+    "tab.activeBackground": "#1c1e23",
+    "tab.inactiveBackground": "#17191e",
+    "editorGroupHeader.tabsBackground": "#17191e",
+    "focusBorder": "#8baadb",
+    "button.background": "#516d98"
+  },
+  "tokenColors": [
+    { "scope": "comment", "settings": { "foreground": "#7f8b9e" } },
+    { "scope": "string", "settings": { "foreground": "#a8c9a0" } },
+    { "scope": "keyword", "settings": { "foreground": "#bba7e1" } }
+  ]
+}

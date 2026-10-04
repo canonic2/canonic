@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'"
+    />
+    <title>Canonic Studio</title>
+    <link rel="stylesheet" href="studio.css" />
+  </head>
+  <body>
+    <header class="project-bar">
+      <b>Studio</b>
+      <nav id="projects" aria-label="Projects"></nav>
+      <button id="open-project">Open project</button>
+    </header>
+    <div class="workspace-bar">
+      <span id="project-name">Studio</span><strong id="session-name">Choose a session</strong
+      ><code id="branch"></code>
+      <div class="view-switch">
+        <button data-mode="code" class="selected">Code</button
+        ><button data-mode="preview">Preview</button><button data-mode="logs">Logs</button>
+      </div>
+    </div>
+    <aside>
+      <div class="section-title">
+        Sessions <button id="new-session" aria-label="New session">+</button>
+      </div>
+      <nav id="sessions" aria-label="Sessions"></nav>
+      <div class="sidebar-bottom">
+        <p id="service-status">No session selected</p>
+        <code id="endpoint"></code><button id="toggle-service">Start runtime</button>
+      </div>
+    </aside>
+    <main>
+      <div id="welcome">
+        <h1>Canonic Studio</h1>
+        <p>Open a Git project, then create a session for each task.</p>
+        <button id="open-workspace">Open this workspace</button>
+      </div>
+      <div id="loading" hidden><p>Working…</p></div>
+      <div id="error" role="alert" hidden></div>
+      <pre id="logs" hidden></pre>
+      <form id="session-form" hidden>
+        <h2>New session</h2>
+        <p>Create a branch and worktree for this task.</p>
+        <label>Task name<input id="task-name" required maxlength="80" autocomplete="off" /></label>
+        <label
+          >Starting branch or commit<input id="base-ref" value="HEAD" required autocomplete="off"
+        /></label>
+        <div class="form-actions">
+          <button type="button" id="cancel-session">Cancel</button
+          ><button type="submit">Create session</button>
+        </div>
+      </form>
+    </main>
+    <footer><span id="status">Ready</span><span id="checkout"></span></footer>
+    <script type="module" src="studio.ts"></script>
+  </body>
+</html>

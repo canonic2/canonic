@@ -2,6 +2,7 @@
 node_modules/
 *.vsix
 electron-runtime/
+preview/bin/
 # Legacy generated bundles may remain after updating a source checkout.
 capture-runtime/
 dist/

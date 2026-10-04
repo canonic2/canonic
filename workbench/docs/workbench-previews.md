@@ -81,6 +81,11 @@ section, its last the screen, and any segments between them a folder:
 **Components** section. A title without `/` goes in a **Previews** section.
 Without a `title`, the `id` is used.
 
+Sections and folders with exactly matching names are shared with your
+hand-written screens and imported Storybook catalogs. For example, a preview
+titled `Web App/Pages/Jobs` and a story titled `Web App/Pages/Account` appear
+in one **Pages** folder under **Web App**.
+
 A file that fails to load or has an invalid definition is reported with the
 other [configuration problems](troubleshooting.md#read-the-resolved-config).
 The remaining previews still load.
@@ -129,6 +134,9 @@ Each state can set:
 The first state is the one a preview opens in. Every state also opens directly
 with `?state=<id>` on the preview's address; an unknown state shows an error.
 A preview without `states` has one state, `default`.
+
+SVG icon sprites registered when your preview module loads remain available
+when you switch states or return to that preview.
 
 The `<html>` element carries `data-wb-state` with the current state ID, so CSS
 keyed off it works as it does in [design pages](pages-and-states.md#1-css-keyed-off-the-root).

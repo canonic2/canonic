@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
 const { pathToFileURL } = require('node:url');
-const esbuild = require('esbuild-wasm');
+const esbuild = require('./engine.cjs');
 const crypto = require('node:crypto');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 

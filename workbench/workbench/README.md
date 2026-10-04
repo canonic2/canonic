@@ -560,7 +560,9 @@ a resized editor, zooms the frame to fit (never past 100%) until you zoom or
 pan by hand. `zoom.js` owns this, with Figma's controls — ⌘/Ctrl with the
 wheel or a pinch zooms at the pointer, the wheel pans, Space-drag or the middle
 button pans, ⌘= and ⌘- step by powers of two, ⌘0 and ⇧0 go to 100%, and ⇧1
-fits. Those chords stay with the workbench rather than reaching the editor.
+fits. **Recenter view**, beside the zoom controls, centers the frame without
+changing its zoom or the page's scroll position. Those chords stay with the
+workbench rather than reaching the editor.
 They are read inside previews the workbench serves, and through Storybook's
 key channel for a Storybook lens; another origin's iframe keeps its own wheel.
 Screenshots and handoffs are always taken at the frame's real size, whatever

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/main.ts",
+    "app/preload.cts",
+    "app/studio.ts",
+    "scripts/*.ts",
+    "test/*.test.ts",
+    "test/integration/desktop.ts",
+    "eslint.config.js"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "app/**/*.{ts,cts}",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "!test/fixtures/**"
+  ],
+  "ignore": ["test/fixtures/**"],
+  "ignoreDependencies": [],
+  "ignoreBinaries": []
+}

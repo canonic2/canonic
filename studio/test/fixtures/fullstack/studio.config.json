@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "runtime": {
+    "provision": ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"],
+    "command": ["$NODE", "node_modules/turbo/bin/turbo", "run", "dev"],
+    "ports": ["FRONTEND_PORT", "BACKEND_PORT", "REDIS_PORT"],
+    "previewPort": "FRONTEND_PORT",
+    "readyPath": "/api/health",
+    "compose": { "file": "compose.yaml" }
+  }
+}

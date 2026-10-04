@@ -1,0 +1,21 @@
+{
+  "name": "studio-theme",
+  "displayName": "Studio Theme",
+  "publisher": "canonic",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Themes"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "Studio Midnight",
+        "uiTheme": "vs-dark",
+        "path": "./theme.json"
+      }
+    ]
+  }
+}
