@@ -180,7 +180,7 @@ the canvas or running **Refresh Screens** isn't enough.
 
 ## Uninstalling
 
-Uninstall **Workbench** from the Extensions view, or from the terminal:
+Uninstall **Canonic Workbench** from the Extensions view, or from the terminal:
 
 ```sh
 code --uninstall-extension canonic.canonic-workbench
