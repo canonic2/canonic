@@ -1,4 +1,4 @@
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 export default definePreview({
   id: 'components/interactive-button', title: 'Components/Interactive button',
   adapter: 'html', source: { entry: './interactive-button.ts' }, styles: ['../acme.css'],

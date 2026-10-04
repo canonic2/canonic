@@ -43,8 +43,9 @@ project-registered adapters. They do not run a project's application server,
 ### Author and discover
 
 - A definition default-exports `definePreview({...})` from
-  `@canonic/workbench`. Workbench resolves that specifier to its own bundled
-  module; the project installs nothing. The framework itself (React, Vue,
+  `@canonic2/workbench`. Workbench resolves that specifier to its own bundled
+  module, even when the project installs the package, so builds never depend
+  on the installed version. The framework itself (React, Vue,
   Astro, React Native Web) must come from the project.
 - Discovery walks the project for `**/*.workbench.ts` and `**/*.workbench.tsx`,
   in sorted order, skipping dot-prefixed entries, symbolic links, and
@@ -227,6 +228,12 @@ reached through `node_modules` are listed by name and version.
 - `styles`, `assets`, and `environment` resolve from the definition. Declared
   assets must stay inside the project.
 - [api.d.ts](../preview/api.d.ts) types state inputs against preview inputs.
+- `preview/` is published to npm as `@canonic2/workbench` (`api.js`,
+  `api.d.ts`) at the extension's version by each `workbench/v*` release, so
+  `tsc` and editors resolve the import from an ordinary dev dependency. It
+  must type-check with `Bundler` and `NodeNext` resolution, from ESM and
+  CommonJS projects. Publishing uses npm trusted publishing from
+  `extension.yml`; the release refuses a tag whose package version differs.
 
 ### Adapters and project configuration
 

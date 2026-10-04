@@ -106,7 +106,7 @@ html[data-wb-state="annual"] .plan { border-color: #1f5eff; }
 `site/pricing/pricing.ts`:
 
 ```ts
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 
 // Set while Workbench renders the page, and undefined anywhere else.
 const preview = (window as Window & { workbench?: PreviewContext }).workbench;
@@ -125,7 +125,7 @@ if (preview) {
 `site/pricing/pricing.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'pages/pricing',
@@ -268,7 +268,7 @@ may return a cleanup function. Use this for a component that isn't a page.
 `site/components/banner.ts`:
 
 ```ts
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 import './banner.css';
 
 export function mountBanner(canvas: HTMLElement, context: PreviewContext) {
@@ -301,7 +301,7 @@ export function mountBanner(canvas: HTMLElement, context: PreviewContext) {
 `site/components/banner.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/banner',
@@ -338,7 +338,7 @@ export `setup` and `ready`; see
 than a link, open a checkout preview:
 
 ```ts
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 
 // Runs after the HTML is in place and its scripts have run.
 export function mount(canvas: HTMLElement, context: PreviewContext) {

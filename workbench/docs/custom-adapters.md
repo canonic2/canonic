@@ -54,7 +54,7 @@ acme-ui/
 
 ```ts
 import fs from 'node:fs';
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 // Imports ending in `?inline` load the file's text, for shadow DOM styles.
 const inlineText = {
@@ -88,7 +88,7 @@ export default defineConfig({
 inputs as properties, and logs the element's events in **Actions**:
 
 ```ts
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 
 type ElementClass = CustomElementConstructor & { events?: string[] };
 
@@ -176,7 +176,7 @@ declare module '*?inline' {
 `wrap`:
 
 ```ts
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 
 export function wrap(element: HTMLElement, context: PreviewContext) {
   const theme = document.createElement('div');
@@ -189,7 +189,7 @@ export function wrap(element: HTMLElement, context: PreviewContext) {
 `src/acme-button.workbench.ts` uses the adapter by name:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/acme-button',
@@ -266,10 +266,10 @@ preview.
 
 Workbench runs the file in Node. Relative imports are bundled with it; packages
 are loaded from your project's `node_modules`. `defineConfig` from
-`@canonic/workbench` only adds types.
+`@canonic2/workbench` only adds types.
 
 ```ts
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
   adapters: { /* name: { runtime, plugins } */ },
@@ -300,7 +300,7 @@ kebab-case names, such as `web-components`. Each value has:
 - `runtime`: the [runtime module](#the-runtime-module), relative to the project
   root.
 - `plugins`: esbuild plugins for previews that use this adapter only.
-  `defineAdapter` from `@canonic/workbench` types one adapter on its own.
+  `defineAdapter` from `@canonic2/workbench` types one adapter on its own.
 
 ### plugins
 

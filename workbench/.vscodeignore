@@ -16,6 +16,8 @@ docs/**
 specs/**
 design/**
 workbench/README.md
+preview/README.md
+preview/LICENSE
 node_modules/**/README.md
 node_modules/**/*.map
 node_modules/**/*.d.ts

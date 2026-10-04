@@ -558,8 +558,8 @@ function create(root, view, options) {
         linkDependency(file, local.info.manifest);
         linkDependency(file, local.target);
       }
-      else if (dependency && dependency !== '@canonic/workbench') packages[dependency] = true;
-      else if (dependency === '@canonic/workbench') return;
+      else if (dependency && dependency !== '@canonic2/workbench') packages[dependency] = true;
+      else if (dependency === '@canonic2/workbench') return;
       else {
         var resolved = resolveReference(file, specifier, item.owner.root, allowedRoots);
         if (resolved) {
@@ -706,7 +706,7 @@ function create(root, view, options) {
   });
   if (options.portable && !files.has(path.join(root, 'workbench-env.d.ts'))) {
     var types = fs.readFileSync(path.join(__dirname, 'preview', 'api.d.ts'), 'utf8');
-    entries.push({ name: prefix + '/workbench-env.d.ts', body: 'declare module "@canonic/workbench" {\n' + types + '\n}\n' });
+    entries.push({ name: prefix + '/workbench-env.d.ts', body: 'declare module "@canonic2/workbench" {\n' + types + '\n}\n' });
   }
   if (!files.has(path.join(root, 'package.json'))) {
     entries.push({ name: prefix + '/package.json', body: JSON.stringify(generatedPackage, null, 2) + '\n' });

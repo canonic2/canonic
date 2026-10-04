@@ -93,7 +93,7 @@ const { name, price, featured = false } = Astro.props;
 `src/components/PlanCard.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/plan-card',
@@ -147,7 +147,7 @@ const { plans = [] } = Astro.props;
 
 ```ts
 // src/pages/pricing.workbench.ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'pages/pricing',
@@ -313,7 +313,7 @@ The definition's `styles`, `environment`, and hooks work as they do for the
 `workbench.config.ts`:
 
 ```ts
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
   define: {
@@ -338,7 +338,7 @@ export default defineConfig({
   ```ts
   // workbench.config.ts
   import path from 'node:path';
-  import { defineConfig } from '@canonic/workbench';
+  import { defineConfig } from '@canonic2/workbench';
 
   const content = {
     name: 'acme-content',

@@ -93,7 +93,7 @@ rest of the export, use the `build` command in
 
 The original definitions and sources stay editable at their project-relative
 paths. When the project has no `workbench-env.d.ts`, the export adds one with
-the `@canonic/workbench` types. `browser/workbench.json` lists the previews and
+the `@canonic2/workbench` types. `browser/workbench.json` lists the previews and
 their states, and `canonic-export.json` lists the compiled entries and any
 previews that failed to build under `browser`.
 

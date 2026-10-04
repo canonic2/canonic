@@ -1,5 +1,5 @@
 // Workbench authoring types. No runtime package installation is required.
-declare module "@canonic/workbench" {
+declare module "@canonic2/workbench" {
   export type Viewport = 'fit' | 'desktop' | 'mobile' | 'responsive';
   export interface PreviewContext<T extends Record<string, unknown> = Record<string, unknown>> {
     id: string;

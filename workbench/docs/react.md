@@ -76,7 +76,7 @@ export function Button({ label, tone = 'primary', disabled = false, icon, onClic
 `src/components/Button.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/button',
@@ -164,7 +164,7 @@ the tree to render. It runs on every render, so read the current state from
 
 ```tsx
 import { cloneElement, type ReactElement } from 'react';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 import { ThemeProvider, type Theme } from '@/theme';
 
 export function setup(context: PreviewContext) {
@@ -182,7 +182,7 @@ export function wrap(element: ReactElement<Record<string, unknown>>, context: Pr
 `src/components/Card.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/card',
@@ -282,7 +282,7 @@ in `workbench.config.ts`.
 `workbench.config.ts` at the project root:
 
 ```ts
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
   aliases: { '@acme/analytics': './src/preview/analytics-mock.ts' },
@@ -306,7 +306,7 @@ hooks fail with an error such as
 `dedupe` so every import of them resolves from the definition's folder:
 
 ```ts
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
   dedupe: ['react', 'react-dom'],

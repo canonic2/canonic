@@ -72,7 +72,7 @@ const emit = defineEmits<{ press: [label: string] }>();
 `src/components/AcmeButton.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/button',
@@ -134,7 +134,7 @@ under **Actions** in **Preview controls**, add an `environment` module whose
 
 ```ts
 import { camelize, cloneVNode, toHandlerKey, type VNode } from 'vue';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 
 // Adds a listener for every event the component declares in `emits`,
 // and records each emit under Actions.
@@ -218,7 +218,7 @@ const emit = defineEmits<{ edit: [] }>();
 `src/components/AcmeCard.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/card',
@@ -279,7 +279,7 @@ Add `configure` to `preview/vue-environment.ts`, next to `wrap`:
 
 ```ts
 import { camelize, cloneVNode, toHandlerKey, type App, type VNode } from 'vue';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 import { createAcmeI18n } from '../src/i18n';
 
 // Runs before every render, on a new app.
@@ -309,7 +309,7 @@ const locale = inject<string>('acme:locale');
 `src/components/AcmeGreeting.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/greeting',
@@ -398,7 +398,7 @@ your project.
   exports.
 
 ```ts
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
   aliases: { 'acme-analytics': './preview/analytics-mock.ts' },

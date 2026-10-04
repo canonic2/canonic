@@ -7,6 +7,10 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## Unreleased
+
+- Preview definitions type-check in your project: install the types with `npm install --save-dev @canonic2/workbench`, and `tsc` and your editor resolve `import { definePreview } from '@canonic2/workbench'`. Workbench still compiles previews with its own copy. See Types in TypeScript Workbench previews.
+
 ## 0.10.0
 
 - Workbench previews behave like Storybook stories: they stay on the canvas. Map the addresses a preview links to in its definition's new `links`, and with Actions on those links open the mapped preview. Every other link and form, including routes without a preview, other sites, and downloads, is recorded under Actions instead of followed. `context.navigate` opens a preview from a script. See Links and navigation in Preview data, mocks, and actions.

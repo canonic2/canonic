@@ -11,7 +11,7 @@ async function main() {
     const declarations = fs.readFileSync(path.join(__dirname, 'api.d.ts'), 'utf8');
     const types = path.join(root, 'workbench-env.d.ts');
     if (!fs.existsSync(types)) fs.writeFileSync(types, '// Workbench authoring types. No runtime package installation is required.\n' +
-      'declare module "@canonic/workbench" {\n' + declarations.split('\n').map(line => '  ' + line).join('\n') + '\n}\n');
+      'declare module "@canonic2/workbench" {\n' + declarations.split('\n').map(line => '  ' + line).join('\n') + '\n}\n');
     const yaml = path.join(root, 'workbench.yaml');
     if (!fs.existsSync(yaml)) fs.writeFileSync(yaml, 'name: ' + JSON.stringify(path.basename(root)) + '\n');
     console.log('Workbench authoring types and manifest ready in ' + root);

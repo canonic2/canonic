@@ -21,7 +21,7 @@ description is [Design-system export](../docs/design-system-export.md).
   need. Installed dependencies, build output, secrets, tests, and unrelated
   files are excluded. When the project has no root `package.json`, the export
   adds one listing the external packages the sources import. With previews
-  and no `workbench-env.d.ts`, it adds one with the `@canonic/workbench`
+  and no `workbench-env.d.ts`, it adds one with the `@canonic2/workbench`
   types.
 
 ## Job lifecycle
