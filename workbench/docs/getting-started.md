@@ -151,7 +151,7 @@ the real component from your source, in named states. Next to a React
 `src/Button.tsx` that exports `Button`, add `src/Button.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/button',
@@ -168,8 +168,9 @@ export default definePreview({
 
 Run **Workbench: Refresh Screens**. A second **Button** appears under
 **Components**, with **Default** and **Disabled** states, rendered with your
-project's own React. You don't install anything for the import: Workbench
-supplies `@canonic/workbench` when it compiles the file. Other frameworks work
+project's own React. Workbench supplies `@canonic2/workbench` when it compiles
+the file; to type-check it, run `npm install --save-dev @canonic2/workbench`
+(see [Types](workbench-previews.md#types)). Other frameworks work
 the same way; each has its own guide: [React](react.md),
 [React Native Web](react-native-web.md), [Vue](vue.md), [HTML](html.md), and
 [Astro](astro.md). For anything else, see [Custom adapters](custom-adapters.md).

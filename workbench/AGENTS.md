@@ -62,7 +62,8 @@ Builds made for another platform are unsigned and untested there. Keep
 temporary fixtures and captures in a temporary directory.
 
 Releases are cut from a `workbench/v<version>` tag after bumping `version` in
-`package.json` and both entries at the top of `package-lock.json`, and adding
+`package.json` and `preview/package.json` (which the release publishes to npm
+as `@canonic2/workbench`) and both entries at the top of `package-lock.json`, and adding
 the version's entry to `CHANGELOG.md`: it becomes the release's notes on
 GitHub and the website, and the release workflow refuses a tag without one.
 Never push a tag without the user's go-ahead.

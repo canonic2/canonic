@@ -1,4 +1,4 @@
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'website/overview',

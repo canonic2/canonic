@@ -1,9 +1,15 @@
 {
-  "name": "@canonic/workbench",
-  "version": "0.1.0",
-  "description": "Framework-neutral TypeScript previews for Canonic Workbench",
+  "name": "@canonic2/workbench",
+  "version": "0.10.0",
+  "description": "Types and define helpers for Canonic Workbench previews",
+  "keywords": ["workbench", "preview", "design system", "storybook"],
+  "homepage": "https://canonic.sh",
+  "repository": { "type": "git", "url": "git+https://github.com/canonic2/canonic.git", "directory": "workbench/preview" },
   "type": "module",
+  "main": "./api.js",
+  "types": "./api.d.ts",
   "exports": { ".": { "types": "./api.d.ts", "default": "./api.js" } },
+  "sideEffects": false,
   "files": ["api.js", "api.d.ts"],
   "license": "MIT"
 }

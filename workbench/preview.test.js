@@ -19,7 +19,7 @@ function fixture(t, files) {
   fs.symlinkSync(path.join(__dirname, 'node_modules'), path.join(root, 'node_modules'), 'junction');
   return root;
 }
-const definition = (adapter, entry, extra = '') => `import { definePreview } from '@canonic/workbench';
+const definition = (adapter, entry, extra = '') => `import { definePreview } from '@canonic2/workbench';
 export default definePreview({ id: 'components/button', title: 'Components/Button', adapter: '${adapter}', source: { entry: '${entry}' },
 inputs: { label: 'Continue' }, states: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
 
@@ -83,7 +83,7 @@ test('custom adapters and compiler plugins use the same browser export path', as
     'button.workbench.ts': definition('acme', './button.acme'),
     'button.acme': 'Custom adapter',
     'adapter.ts': 'export function mount(canvas, source, ctx) { canvas.textContent = source + ctx.inputs.label; }',
-    'workbench.config.ts': `import fs from 'node:fs'; import { defineConfig } from '@canonic/workbench';
+    'workbench.config.ts': `import fs from 'node:fs'; import { defineConfig } from '@canonic2/workbench';
 export default defineConfig({ adapters: { acme: { runtime: './adapter.ts', plugins: [{ name: 'acme', setup(build) { build.onLoad({filter:/\\.acme$/}, args => ({ contents: JSON.stringify(fs.readFileSync(args.path,'utf8')), loader:'json' })); } }] } } });`,
   });
   const built = await new Compiler(root).compile('button.workbench.ts', false);
@@ -209,7 +209,7 @@ test('the project environment applies to every preview, or per adapter name', as
 });
 
 test('preview links are validated and name previews and states that exist', async t => {
-  const page = (id, links) => `import { definePreview } from '@canonic/workbench';
+  const page = (id, links) => `import { definePreview } from '@canonic2/workbench';
 export default definePreview({ id: '${id}', adapter: 'html', source: { entry: './page.ts' }, states: { default: {}, sent: {} }, links: ${links} });`;
   const root = fixture(t, {
     'workbench.yaml': 'name: Acme\n',
@@ -245,7 +245,7 @@ test('portable compiler source closure is hashed and browser files are included 
     files: Array.from(built.outputs, ([name, body]) => ({ path: 'browser/' + built.slug + '/' + name, data: Buffer.from(body).toString('base64') })), warnings: [] };
   const output = exporter.create(root, view, { portable });
   assert.ok(output.report.screens[0].files.includes('fixture.ts'));
-  assert.ok(!output.report.dependencies.some(pkg => pkg.name === '@canonic/workbench'));
+  assert.ok(!output.report.dependencies.some(pkg => pkg.name === '@canonic2/workbench'));
   assert.equal(output.report.browser.previews[0].source, 'button.workbench.ts');
   assert.ok(output.body.includes(Buffer.from('browser/' + built.slug + '/index.html')));
   const first = output.report.screens[0].hash;
@@ -267,6 +267,32 @@ test('authoring declarations infer input types and reject invalid state inputs',
   assert.equal(valid.status, 0, valid.stdout + valid.stderr);
   fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts').replace("label: 'Disabled'", 'label: 123'));
   assert.notEqual(check().status, 0);
+});
+
+test('the published package types definitions in installed projects', t => {
+  const cp = require('node:child_process');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-preview-package-'));
+  t.after(() => fs.rmSync(work, { recursive: true, force: true }));
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const [packed] = JSON.parse(cp.execFileSync(npm, ['pack', '--json', '--pack-destination', work], { cwd: path.join(__dirname, 'preview'), encoding: 'utf8', shell: process.platform === 'win32' }));
+  assert.deepEqual(packed.files.map(file => file.path).sort(), ['LICENSE', 'README.md', 'api.d.ts', 'api.js', 'package.json']);
+  const tsc = path.join(path.dirname(require.resolve('typescript')), '..', 'bin', 'tsc');
+  for (const [type, resolution] of [['module', 'Bundler'], ['module', 'NodeNext'], ['commonjs', 'NodeNext']]) {
+    const root = path.join(work, type + '-' + resolution);
+    const installed = path.join(root, 'node_modules', '@canonic2', 'workbench');
+    fs.mkdirSync(installed, { recursive: true });
+    require('tar').x({ file: path.join(work, packed.filename), cwd: installed, strip: 1, sync: true });
+    const module = resolution === 'NodeNext' ? 'NodeNext' : 'ESNext';
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ type }));
+    fs.writeFileSync(path.join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, target: 'ES2022', module, moduleResolution: resolution, types: [] }, include: ['*.ts'] }));
+    fs.writeFileSync(path.join(root, 'button.ts'), 'export default function(canvas: HTMLElement) { canvas.textContent = "Hello"; }');
+    fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts'));
+    const check = () => cp.spawnSync(process.execPath, [tsc, '-p', root], { encoding: 'utf8' });
+    const valid = check();
+    assert.equal(valid.status, 0, type + ' ' + resolution + ': ' + valid.stdout + valid.stderr);
+    fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts').replace("label: 'Disabled'", 'label: 123'));
+    assert.match(check().stdout, /button\.workbench\.ts.*TS2322/);
+  }
 });
 
 test('portable build includes the interactive viewer and shared controls while retaining successful previews', async t => {

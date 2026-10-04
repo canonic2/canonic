@@ -41,7 +41,7 @@ You need:
 1. Write a definition next to the component, such as `src/Button.workbench.ts`:
 
    ```ts
-   import { definePreview } from '@canonic/workbench';
+   import { definePreview } from '@canonic2/workbench';
 
    export default definePreview({
      id: 'components/button',
@@ -60,8 +60,9 @@ You need:
    });
    ```
 
-   You don't install `@canonic/workbench`: Workbench supplies it when it
-   compiles the file. For editor types, see [Command-line tools](#command-line-tools).
+   Workbench supplies `@canonic2/workbench` when it compiles the file. For
+   TypeScript and your editor, install it as a development dependency; see
+   [Types](#types).
    This example renders a React component; each framework guide has a complete
    example of its own.
 
@@ -209,6 +210,23 @@ A screen can show a preview as a lens next to its design, with a `workbench`
 implementation. See
 [Compare a design with a Workbench preview](lenses.md#compare-a-design-with-a-workbench-preview).
 
+## Types
+
+Install the authoring types so `tsc` and your editor resolve
+`@canonic2/workbench`:
+
+```sh
+npm install --save-dev @canonic2/workbench
+```
+
+Use `pnpm add -D` or `yarn add -D` with those package managers. The types
+check that each state's `inputs` match the preview's. Workbench still compiles
+previews with its own copy, so the installed version affects types only; keep
+it at the version of your extension to type the newest fields.
+
+Without an installed package, the `init` command below writes the same types to
+a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
+
 ## Command-line tools
 
 The extension includes a command-line tool at `preview/cli.cjs` in its install
@@ -220,12 +238,9 @@ node ~/.vscode/extensions/canonic.canonic-workbench-<version>/preview/cli.cjs ch
 
 | Command | What it does |
 | --- | --- |
-| `init <project>` | Writes `workbench-env.d.ts`, the types for `@canonic/workbench`, and a `workbench.yaml` named after the folder. Existing files are left alone. |
+| `init <project>` | Writes `workbench-env.d.ts`, the types for `@canonic2/workbench`, and a `workbench.yaml` named after the folder. Existing files are left alone. |
 | `check <project>` | Finds and compiles every preview without opening a browser. Prints `Built <id>` for each, lists every failure, and exits with an error if there were any. |
 | `build <project> [output]` | Writes the [standalone viewer](#portable-exports) to `output`, or `workbench-static` in the project. The folder must be empty or missing. Successful previews are written even when others fail; failures are listed and the exit code is nonzero. |
-
-For types in your editor, include `workbench-env.d.ts` in your
-`tsconfig.json`. The types check that state `inputs` match the preview's.
 
 ## Portable exports
 

@@ -107,7 +107,7 @@ export function tap() {
 `src/components/ProfileCard.workbench.ts`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'components/profile-card',
@@ -136,7 +136,7 @@ export default definePreview({
 ```tsx
 import { cloneElement, type ReactElement } from 'react';
 import { View } from 'react-native';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 
 export function wrap(element: ReactElement<Record<string, unknown>>, context: PreviewContext) {
   return (
@@ -202,7 +202,7 @@ two ways:
   mock affects previews only:
 
   ```ts
-  import { defineConfig } from '@canonic/workbench';
+  import { defineConfig } from '@canonic2/workbench';
 
   export default defineConfig({
     aliases: { 'react-native-haptic-feedback': './src/preview/haptics-mock.ts' },
@@ -258,7 +258,7 @@ Some React Native packages assume Metro, React Native's bundler. Settings in
 
 ```ts
 import fs from 'node:fs';
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 // acme-native-lib publishes JSX in .js files.
 const jsxInJs = {

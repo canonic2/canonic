@@ -109,7 +109,7 @@ class Compiler {
   fresh(files) { return Array.from(files).every(([file, value]) => stamp(file) === value); }
   apiPlugin() {
     return { name: 'workbench-api', setup(build) {
-      build.onResolve({ filter: /^@canonic\/workbench$/ }, () => ({ path: API }));
+      build.onResolve({ filter: /^@canonic2\/workbench$/ }, () => ({ path: API }));
     } };
   }
   async evaluate(file) {

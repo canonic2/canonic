@@ -195,7 +195,7 @@ to have set up. There are two kinds, and a preview can use both:
 
 ```ts
 // workbench.config.ts
-import { defineConfig } from '@canonic/workbench';
+import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({ environment: './src/workbench/environment.tsx' });
 ```
@@ -239,7 +239,7 @@ changeable per state:
 ```tsx
 // src/workbench/environment.tsx
 import type { ReactElement } from 'react';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 import { ThemeProvider } from '../theme';
 import { SessionContext } from '../session';
 
@@ -443,7 +443,7 @@ preview's own keys before the shared ones:
 
 ```ts
 // src/workbench/mocks.ts
-import type { RequestMocks } from '@canonic/workbench';
+import type { RequestMocks } from '@canonic2/workbench';
 
 export const session: RequestMocks = {
   'GET /api/me': { body: { id: 'u-1', name: 'Ada Lovelace' } },
@@ -607,7 +607,7 @@ export function CustomersPage() {
 `src/pages/customers.workbench.tsx`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'pages/customers',
@@ -642,7 +642,7 @@ environment with each state's fixtures:
 
 ```tsx
 import type { ReactElement } from 'react';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 import { AlbumContext } from './album-context';
 
 export function wrap(element: ReactElement, context: PreviewContext) {
@@ -659,7 +659,7 @@ export function wrap(element: ReactElement, context: PreviewContext) {
 `src/pages/album/album.workbench.tsx`:
 
 ```ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 import { album } from './album-fixtures';
 
 export default definePreview({
@@ -682,7 +682,7 @@ environment's `configure`, which runs for every render's new app:
 ```ts
 // src/workbench/vue-environment.ts
 import type { App } from 'vue';
-import type { PreviewContext } from '@canonic/workbench';
+import type { PreviewContext } from '@canonic2/workbench';
 import { cartKey } from '../cart';
 
 export function configure(app: App, context: PreviewContext) {
@@ -707,7 +707,7 @@ const plans = response.ok ? await response.json() : null;
 
 ```ts
 // src/pages/plans.workbench.ts
-import { definePreview } from '@canonic/workbench';
+import { definePreview } from '@canonic2/workbench';
 
 export default definePreview({
   id: 'pages/plans',

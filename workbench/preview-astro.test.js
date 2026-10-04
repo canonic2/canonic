@@ -13,7 +13,7 @@ function fixture(t, files = {}) {
   fs.symlinkSync(process.env.CANONIC_ASTRO_TEST_MODULES || path.join(__dirname, 'node_modules'), path.join(root, 'node_modules'), 'junction');
   const defaults = {
     'workbench.yaml': 'name: Acme\n',
-    'button.workbench.ts': `import { definePreview } from '@canonic/workbench';
+    'button.workbench.ts': `import { definePreview } from '@canonic2/workbench';
       export default definePreview({ id: 'components/button', adapter: 'astro', source: { entry: './Button.astro' },
         inputs: { label: 'Continue', disabled: false }, controls: { label: { type: 'text' } },
         states: { default: {}, disabled: { inputs: { disabled: true } }, alternate: { source: { entry: './Alternate.astro' } } } });`,
@@ -68,7 +68,7 @@ test('Astro renders props, states, slots and alternate sources, packages client 
 
 test('Astro frontmatter fetches are answered by the state request mocks', async t => {
   const root = fixture(t, {
-    'plans.workbench.ts': `import { definePreview } from '@canonic/workbench';
+    'plans.workbench.ts': `import { definePreview } from '@canonic2/workbench';
       export default definePreview({ id: 'pages/plans', adapter: 'astro', source: { entry: './Plans.astro' },
         requests: { 'GET /api/plans': { body: [{ name: 'Team' }, { name: 'Business' }] } },
         states: { default: {}, empty: { requests: { 'GET /api/plans': { body: [] } } },
