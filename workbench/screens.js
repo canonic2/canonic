@@ -50,23 +50,41 @@ function policy(webview) {
   ].join('; ');
 }
 
-/* Four things are added on the way in, and only four: a <base> saying where
+/* Five things are added on the way in, and only five: a <base> saying where
    the workbench folder is, the policy saying what the page may load, the
    project root — which the page can't work out for itself, because a webview's
-   address is the editor's — and which build this is. A <meta> rather than a
-   script tag so nothing inline has to be allowed through the policy.
+   address is the editor's — the projects to switch between, and which build
+   this is. <meta> rather than script tags so nothing inline has to be allowed
+   through the policy.
 
    The build number is there to make the string differ. Assigning `webview.html`
    only takes when the value changes; an identical one is dropped, so without a
    stamp the second build of a page whose base and policy are fixed for the life
    of the view would silently do nothing. */
-function page(webview, dir, root, build) {
+function attribute(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/* A different project is a different root, so switching builds a new page
+   anyway, and the list of projects never has to change under one that's
+   built. */
+function page(webview, dir, project, build, projects) {
   var body = fs.readFileSync(path.join(dir.fsPath, PAGE), 'utf8');
+  var root = vscode.Uri.file(project.root);
+  /* A project whose workbench.yaml isn't at its root, or is one of several
+     in the file, says where the file is and which project it is. */
+  var where = '';
+  if (project.dir && project.dir !== project.root) {
+    where += '  <meta name="canonic-config" content="' + webview.asWebviewUri(vscode.Uri.file(project.dir)).toString() + '/" />\n';
+  }
+  if (project.key) where += '  <meta name="canonic-project" content="' + attribute(project.key) + '" />\n';
   return body.replace(
     '<head>',
     '<head>\n' +
       '  <base href="' + webview.asWebviewUri(dir).toString() + '/" />\n' +
       '  <meta name="canonic-root" content="' + webview.asWebviewUri(root).toString() + '/" />\n' +
+      where +
+      '  <meta name="canonic-projects" content="' + attribute(JSON.stringify(projects || { projects: [] })) + '" />\n' +
       '  <meta name="canonic-build" content="' + build + '" />\n' +
       '  <meta http-equiv="Content-Security-Policy" content="' + policy(webview) + '" />'
   );
@@ -102,18 +120,34 @@ function catalogFailure(error) {
 
 /* Builds the view and keeps it in step with both sides.
 
-   `open` is given { src, state } and puts it on the canvas. `follow` takes a
-   listener called with { src, state } whenever the canvas moves, and answers
-   with the way to stop listening. `catalog` asks the running server for any
-   Storybook sections it imported, which the webview cannot fetch cross-origin.
-   `shown` is called whenever the view comes into sight — selecting Workbench
-   in the activity bar — so the canvas opens beside the list. */
-function register(context, root, open, follow, refresh, catalog, shown) {
-  var project = vscode.Uri.file(root);
+   `projects()` answers with { current, projects } — the id of the project
+   showing, and every project the switcher lists (see projects.js) — and
+   `project()` with the one showing as { root, dir, key }: the folder it
+   serves, the folder of its workbench.yaml, and its key in that file when
+   the file lists several. `open` is given
+   { src, state } and puts it on the canvas. `follow` takes a listener called
+   with { src, state } whenever the canvas moves, and answers with the way to
+   stop listening. `catalog` asks the running server for any Storybook
+   sections it imported, which the webview cannot fetch cross-origin. `shown`
+   is called whenever the view comes into sight — selecting Workbench in the
+   activity bar — so the canvas opens beside the list. `pickProject(id)`,
+   `addProject()` and `removeProject(id)` carry the switcher's choices.
+
+   Answers with { retarget() }, for when the project showing has changed or
+   the list of projects has: the watcher moves to the current project's file
+   and the page is rebuilt. */
+function register(context, options) {
+  var open = options.open;
+  var follow = options.follow;
+  var refresh = options.refresh;
+  var catalog = options.catalog;
+  var shown = options.shown;
   var dir = vscode.Uri.joinPath(context.extensionUri, 'workbench');
   var lucide = vscode.Uri.file(require.resolve('lucide/dist/umd/lucide.min.js'));
   var lucideDir = vscode.Uri.file(path.dirname(lucide.fsPath));
   var view = null;
+  var project = options.project();
+  var watcher = null;
 
   /* What the canvas is showing, as far as this side knows — so a view that
      was closed and reopened, or a page that reloaded, comes back marked. */
@@ -126,11 +160,28 @@ function register(context, root, open, follow, refresh, catalog, shown) {
   /* Counted so every build is a different string — see page(). */
   var builds = 0;
 
+  /* What the page may load: its own folder, the icons, the project's root
+     and the folder of its workbench.yaml — which change with the project, so
+     they are set on every build. */
+  function resources() {
+    var roots = [dir, lucideDir];
+    if (project) {
+      roots.push(vscode.Uri.file(project.root));
+      if (project.dir && project.dir !== project.root) roots.push(vscode.Uri.file(project.dir));
+    }
+    view.webview.options = { enableScripts: true, localResourceRoots: roots };
+  }
+
   function build() {
     if (!view) return;
     builds += 1;
+    if (!project) {
+      view.webview.html = nothing('There’s no project to show.');
+      return;
+    }
     try {
-      view.webview.html = page(view.webview, dir, project, builds);
+      resources();
+      view.webview.html = page(view.webview, dir, project, builds, options.projects());
     } catch (error) {
       view.webview.html = nothing(
         'Workbench couldn’t read its own ' + PAGE + ': ' + String(error.message || error)
@@ -150,11 +201,6 @@ function register(context, root, open, follow, refresh, catalog, shown) {
     resolveWebviewView: function (resolved) {
       view = resolved;
 
-      view.webview.options = {
-        enableScripts: true,
-        localResourceRoots: [dir, lucideDir, project],
-      };
-
       /* Listening before building: setting the html starts the page, and its
          first message is the one asking what the canvas is showing. */
       view.webview.onDidReceiveMessage(function (message) {
@@ -170,6 +216,21 @@ function register(context, root, open, follow, refresh, catalog, shown) {
             src: colon === -1 ? hash : hash.slice(0, colon),
             state: colon === -1 ? null : hash.slice(colon + 1),
           });
+          return;
+        }
+
+        if (type === 'canonic-project') {
+          if (options.pickProject) options.pickProject(String(message.id || ''));
+          return;
+        }
+
+        if (type === 'canonic-add-project') {
+          if (options.addProject) options.addProject();
+          return;
+        }
+
+        if (type === 'canonic-remove-project') {
+          if (options.removeProject) options.removeProject(String(message.id || ''));
           return;
         }
 
@@ -235,13 +296,40 @@ function register(context, root, open, follow, refresh, catalog, shown) {
      with nothing to resolve against — and the view goes permanently blank. The
      selection is not lost by the rebuild: the fresh page asks for it with
      canonic-ready and post() answers. */
-  var watcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(root, '{workbench.yaml,workbench.local.yaml}')
-  );
-  ['onDidChange', 'onDidCreate', 'onDidDelete'].forEach(function (event) {
-    watcher[event](rebuild);
+  function watch() {
+    if (watcher) watcher.dispose();
+    watcher = null;
+    if (!project) return;
+    watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(project.dir || project.root), '{workbench.yaml,workbench.local.yaml}')
+    );
+    ['onDidChange', 'onDidCreate', 'onDidDelete'].forEach(function (event) {
+      watcher[event](rebuild);
+    });
+  }
+  watch();
+
+  /* Another project, or another list of them. The canvas is switched by the
+     extension; this page only has to follow, so there is nothing to refresh
+     over there first. The selection belongs to the old project and is
+     dropped — the canvas reports the new one with its first wb-here. */
+  function retarget() {
+    var next = options.project();
+    if (JSON.stringify(next) !== JSON.stringify(project)) {
+      var moved = !next || !project || next.dir !== project.dir || next.key !== project.key;
+      var refile = !next || !project || next.dir !== project.dir;
+      project = next;
+      if (moved) where = { src: null, state: null };
+      if (refile) watch();
+    }
+    build();
+  }
+
+  context.subscriptions.push({
+    dispose: function () {
+      if (watcher) watcher.dispose();
+    },
   });
-  context.subscriptions.push(watcher);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('canonic.openScreen', function (target) {
@@ -252,6 +340,8 @@ function register(context, root, open, follow, refresh, catalog, shown) {
        being worked on. */
     vscode.commands.registerCommand('canonic.refreshScreens', rebuild)
   );
+
+  return { retarget: retarget };
 }
 
 module.exports = { register: register };

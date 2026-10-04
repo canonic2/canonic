@@ -8,6 +8,7 @@ it.
 
 | Part | Where | Does |
 | --- | --- | --- |
+| Project switcher | Top of the screen list | The project showing, and the others to switch to. In VS Code it's always there, for **Add a project…**; in a browser, only with more than one project. See [Several projects](projects.md). |
 | Screen list | The **Workbench** view in VS Code's activity bar, or the left edge of a standalone browser window | Sections, then the chosen section's folders, screens, and states, with a filter |
 | Toolbar | Top of the canvas | Screen and state, actions, lens, width, reload, source, reference, and more |
 | Frame | Middle | The screen, labeled with its name and size |
@@ -43,15 +44,16 @@ reset the width. The width is remembered.
 
 | Control | Does |
 | --- | --- |
+| **Project** | The project's mark and name, before the screen. Select it to switch to another [project](projects.md). Shown when there is more than one project. |
 | **Screen / state** | The screen's name, then the state showing. Select the state to pick another. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
-| **Actions** | Lets links navigate and forms submit in the page. Off by default. Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
+| **Actions** | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
 | **Lens** | Switches between **Design** and each [implementation](lenses.md) the screen has. Shown when there are at least two to choose from. A TypeScript preview's own lens is labeled **Workbench**. |
 | **Widths** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Frame widths](#frame-widths). |
 | **Reload** | Reloads the current page. |
 | **Open the source** (`</>`) | Lists the design file and the screen's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file. A path that isn't on this machine is listed but can't be opened. |
 | **Copy reference** | Copies a short text reference to the current view. See [Copy a reference](#copy-a-reference). |
 | **Open on its own** | Opens the current page in your browser, outside the workbench. |
-| **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Controls and actions](workbench-previews.md#controls-and-actions). |
+| **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Preview data, mocks, and actions](preview-data.md). |
 | **More** | **Configure pages** and **Download design-system ZIP**. Shown when the workbench server is running. |
 
 When the canvas is narrow, **Reload**, **Open the source**, **Copy reference**,

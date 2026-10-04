@@ -1,21 +1,22 @@
 # VS Code extension contract
 
 This spec covers the editor host around the [core workbench](core.md). Its
-implementation is in [extension.js](../extension.js), [panel.js](../panel.js),
+implementation is in [extension.js](../extension.js), [projects.js](../projects.js), [panel.js](../panel.js),
 [screens.js](../screens.js), [startup.js](../startup.js),
 [server.js](../server.js), and [preview-service.js](../preview-service.js).
 The user-facing reference is [The VS Code extension](../docs/extension.md).
 
 ## Activation and ownership
 
-- The extension activates when the workspace contains `workbench.yaml`. A
-  command can also activate it elsewhere, but without that file it serves no
-  workbench and explains why the command cannot open one.
-- In a multi-root window, the first folder with `workbench.yaml` owns the
-  window's workbench. The extension starts one loopback server for that folder,
-  contributes the Workbench sidebar view, and closes the server and its helper
-  processes on disposal. The Workbench activity-bar view is hidden without a
-  workbench.
+- The extension activates when the workspace contains `workbench.yaml`, and
+  after startup in every window, so projects the user added are reachable
+  anywhere. A window with no project serves nothing; its commands explain why
+  they cannot open a workbench.
+- See [Projects](#projects) for which folders are projects and which one a
+  window shows. Each project gets its own loopback server. The extension
+  contributes the Workbench sidebar view, and closes every server and helper
+  process on disposal. The Workbench activity-bar view is hidden in a window
+  with no project.
 - The server listens on 127.0.0.1 only, trying ports 3579–3583 and then any
   free port. It serves project files at `/` and packaged workbench files at
   `/_workbench/` on the same origin.
@@ -40,7 +41,11 @@ The user-facing reference is [The VS Code extension](../docs/extension.md).
 | **Workbench: Open Canvas in Browser** | Opens the extension's running server in the default browser. |
 | **Workbench: Copy Canvas URL** | Copies the running server's workbench URL. |
 | **Workbench: Refresh Screens** | Refreshes the canvas and rebuilds the sidebar (see [Refresh](#refresh)). |
+| **Workbench: Switch Project…** | Quick pick of the projects, current one checked, with **Add a project…**; picking one switches and opens the tab. |
+| **Workbench: Add Project…** | Folder picker; adds a folder with `workbench.yaml` and switches to it. |
 | **Workbench: Show Log** | Shows the **Workbench** output channel. |
+
+Open Canvas in Browser and Copy Canvas URL act on the current project.
 
 The extension contributes no settings.
 
@@ -76,6 +81,83 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
   directory; the server only opens paths the resolved config names. A handoff
   asks it to copy the generated prompt to the clipboard; the server has
   already saved the screenshot.
+
+## Projects
+
+Implemented in [projects.js](../projects.js), [extension.js](../extension.js),
+and [project-switcher.js](../workbench/project-switcher.js). User guide:
+[Several projects](../docs/projects.md).
+
+- Projects come from `workbench.yaml` files. A file without `projects` is one
+  project served from its folder; a file with `projects` is one project per
+  valid entry, each served from its `root` (relative to the file's folder,
+  default that folder, so several may share one). Shared top-level keys are
+  inherited, `implementations` merged by name; `name`, `color`, `icon`, and
+  `root` are not (`selectProject` in [manifest.js](../workbench/manifest.js),
+  used by both readers). Folders are the window's that have a file, in folder
+  order, then the folders the user added (stored in `globalState`, shared by
+  every window). A folder in both is listed once, as the window's, and is not
+  removable. An added folder whose `workbench.yaml` is missing is hidden but
+  stays stored. Files are reread on every listing, so projects added,
+  removed, or re-rooted in the file show up without a reload; a running
+  server whose project left the file, or whose root changed, stops.
+- A project's id is the first 10 hex digits of the SHA-1 of its file's
+  resolved folder, with `#<key>` appended for a project under `projects` (so
+  single-project ids are unchanged). Its name is the manifest `name`, else
+  the folder name (single project) or a label from its key, and the folder
+  name when the manifest does not parse.
+- A server for a project that isn't its file's whole config, or whose root
+  isn't the file's folder, is started with `config: { dir, key }`. It reads
+  that project's config, serves the file and its local override at
+  `/_workbench/manifest/`, and injects `canonic-config` and `canonic-project`
+  metas into the canvas page; the sidebar gets the same metas from the
+  extension and watches the file's folder. **Configure pages** writes
+  `projects.<key>.sections` in place, adding it to the entry when the project
+  showed the shared sections. Agents: projects sharing a root share its
+  `server.json`; selecting a project re-announces its server there.
+- Removal acts on the added folder, so it removes every project its file
+  lists. Its mark takes the manifest's `color` (named
+  or hex) and `icon` (Lucide name or project image), validated by
+  `projectMark` in [manifest.js](../workbench/manifest.js) for both readers,
+  with `workbench.local.yaml` merged over them. Without a color, the color is
+  derived from the id, except behind an image, which gets none. Images travel
+  as data URIs of at most 256 KB, because every surface draws every
+  project's mark and none can read another project's folder; a missing, large,
+  or escaping image falls back to the initial, and a missing one is a config
+  problem.
+- The sidebar rereads the list on every build, and the canvas on every config
+  load or refresh, so an edited name, color, or icon shows without a reload.
+- One project is current per window. The window remembers it in
+  `workspaceState` by path; otherwise, and when the remembered one leaves the
+  list, the first listed project is current.
+- One server per project, started on first open and kept until the project
+  leaves the list or the extension stops. A window's own current project
+  starts at activation (the single-project behavior); an added project starts
+  when the view or canvas opens. A failed start is forgotten so the next open
+  retries. All servers share one capture service, closed after them.
+- Switching retargets the tab to the new server through the loading state and
+  rebuilds the sidebar against the new root, watcher included. The previous
+  project's selection is dropped. Switching is possible from the sidebar's
+  switcher, the canvas breadcrumb (relayed as `wb-project` through the panel
+  wrapper), and **Switch Project…**.
+- **Add a project…** refuses a folder without `workbench.yaml`. Removing an
+  added project deletes it from `globalState` and stops its server; if it was
+  current, the first project becomes current.
+- The list is reread when the window's folders change and when the window
+  gains focus, because `globalState` changes made in another window raise no
+  event.
+- The server answers `GET /_workbench/projects` with `{ current, projects }`;
+  a server started without a list reports only itself. `POST
+  /_workbench/projects/open` with `{ id }` answers the project's workbench URL,
+  starting it if needed. It is refused (403) for a request whose `Origin` is
+  not the server's own or whose `Sec-Fetch-Site` is cross-site or same-site,
+  since starting a project can run its start commands.
+- The canvas shows the breadcrumb project and, outside the editor, a sidebar
+  switcher only with two or more projects. The editor's sidebar always shows
+  the switcher, as the home of **Add a project…**.
+- `node server.js a b …` starts every project eagerly, shares one capture
+  service, and prints one `workbench on <url>  <name>` line per project. One
+  folder behaves and prints as before.
 
 ## Sidebar and problems
 
@@ -155,6 +237,14 @@ or handoff prompts.
 
 ## Decisions
 
+- **One server per project (2026-10-03).** The server, config readers,
+  preview worker, agent view, and every route assume one root. A server per
+  project keeps the single-project path unchanged and isolates each project's
+  origin (and so its canvas storage); the cost is a port and a preview worker
+  per opened project, so servers start lazily and share one capture service.
+- **Added projects are global, current project is per window (2026-10-03).**
+  A user adds a project to Workbench, not to one window; which one a window
+  shows is that window's state.
 - **Watch preview definitions (2026-10-03).** Adding a preview should not need
   a manual refresh, so definition files are watched alongside the YAML files.
 
@@ -169,6 +259,11 @@ or handoff prompts.
   the server's `127.0.0.1` address without `asExternalUri`; in a remote
   workspace that names the remote machine. The tab uses `asExternalUri`, and
   **Open Canvas in Browser** relies on `openExternal`.
+
+- **Added projects and workspace trust.** VS Code trust covers the open
+  workspace only. An added project outside it runs start commands and
+  previews under the window's trust flag; the guide tells users to add only
+  folders they trust.
 
 ## Open questions
 
@@ -192,6 +287,15 @@ or handoff prompts.
 - [sidebar.test.js](../workbench/sidebar.test.js) checks the waiting text,
   disabled search, the problems list, preview-only catalog requests, and the
   immediate build when previews are off.
+- [projects.test.js](../projects.test.js) checks naming and fallback, ids,
+  deduplication, lazy and single starts, retry after a failed start, and
+  stopping on removal and close. [server.test.js](../server.test.js) checks
+  the projects routes, on-demand start through another server, and the
+  cross-origin refusal. [panel.test.js](../panel.test.js) checks retargeting
+  an open tab, a slower earlier load not winning, a closed tab staying
+  closed, and `wb-project` relay. [screens.test.js](../screens.test.js) and
+  [sidebar.test.js](../workbench/sidebar.test.js) check the projects meta,
+  watcher and resource retargeting, and the switcher's messages.
 - [startup.test.js](../startup.test.js) checks probes, terminal startup only
   when the check fails, and skipping in untrusted workspaces.
 - [server.test.js](../server.test.js) checks that only config-resolved paths
@@ -201,5 +305,8 @@ or handoff prompts.
   never runs definitions when untrusted or disabled.
 - Manual, not automated: worker restart after it is killed, worker restart on
   a `previews` change, the YAML watcher, **Refresh Screens** after adding a
-  definition (until definition watching is implemented and tested), activity-bar visibility without `workbench.yaml`, and handoff
-  from **Open Canvas in Browser**.
+  definition (until definition watching is implemented and tested), activity-bar visibility without `workbench.yaml`, handoff
+  from **Open Canvas in Browser**, and in VS Code: adding, switching, and
+  removing projects, the window-focus reread, and extension.js wiring. The
+  canvas and sidebar switchers were exercised in headless Chrome against
+  `node server.js` with two fixture projects (2026-10-03).

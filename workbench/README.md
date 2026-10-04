@@ -196,7 +196,7 @@ HTML and script files with no build step; opening
 | `startup.js` | checks configured implementations and starts their `start` commands |
 | `server.js` | the HTTP server, capture, export, preview and lens endpoints, and script injection — plain node |
 | `preview-scripts.js` | the `preview-compat.js` bundle (`keys.js`, `actions.js`, `states.js`) injected into served pages |
-| `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, the portable viewer, and the `cli.cjs` command line |
+| `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, request mocks, the portable viewer, and the `cli.cjs` command line |
 | `export.js` | the design-system ZIP export |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
 | `capture-scripts.js` | scripts the screenshot helper runs in a page: the markup overlay, element descriptions, and export settling |

@@ -249,7 +249,11 @@ Each render creates a new app with Vue's `createApp` and mounts it into the
 canvas. Changing state, editing an input, or resetting unmounts that app and
 creates another. Before each app mounts, Workbench calls the environment's
 `configure(app, context)` export, which may be async. Install plugins and
-`provide` values there.
+`provide` values there. For plugins every screen needs, name the module once
+as the [project-wide environment](preview-data.md#environments).
+A component that loads its own data with `fetch`, axios, or a client built on
+them needs no store setup: answer its requests per state with
+[`requests`](preview-data.md#request-mocks).
 
 `src/i18n.ts`, a small plugin for this example:
 

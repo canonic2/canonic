@@ -66,6 +66,28 @@ test('Astro renders props, states, slots and alternate sources, packages client 
   assert.match(changed.rendered.default.html, /<section>/);
 });
 
+test('Astro frontmatter fetches are answered by the state request mocks', async t => {
+  const root = fixture(t, {
+    'plans.workbench.ts': `import { definePreview } from '@canonic/workbench';
+      export default definePreview({ id: 'pages/plans', adapter: 'astro', source: { entry: './Plans.astro' },
+        requests: { 'GET /api/plans': { body: [{ name: 'Team' }, { name: 'Business' }] } },
+        states: { default: {}, empty: { requests: { 'GET /api/plans': { body: [] } } },
+          failed: { requests: { 'GET /api/plans': { status: 500 } } } } });`,
+    'Plans.astro': `---
+      const response = await fetch('/api/plans');
+      const plans = response.ok ? await response.json() : null;
+      ---
+      {plans ? <ul>{plans.map(plan => <li>{plan.name}</li>)}</ul> : <p>Plans could not load</p>}
+      {plans && !plans.length && <p>No plans</p>}`,
+  });
+  const original = globalThis.fetch;
+  const built = await new Compiler(root).compile('plans.workbench.ts', false);
+  assert.equal(globalThis.fetch, original);
+  assert.match(built.rendered.default.html, /<li>Team<\/li><li>Business<\/li>/);
+  assert.match(built.rendered.empty.html, /No plans/);
+  assert.match(built.rendered.failed.html, /Plans could not load/);
+});
+
 test('live Astro input renders have their own served assets and validate state and input requests', async t => {
   const root = fixture(t);
   const running = await server.start({ root, capture: { close: async () => {} } });

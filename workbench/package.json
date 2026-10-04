@@ -9,7 +9,7 @@
   "engines": { "vscode": "^1.75.0", "node": ">=18" },
   "categories": ["Visualization", "Other"],
   "keywords": ["design", "design system", "preview", "screenshot", "storybook", "implementation", "lens"],
-  "activationEvents": ["workspaceContains:workbench.yaml"],
+  "activationEvents": ["workspaceContains:workbench.yaml", "onStartupFinished"],
   "main": "./extension.js",
   "scripts": {
     "test": "node --test",
@@ -76,10 +76,24 @@
         "command": "canonic.showWorkbenchLog",
         "title": "Show Log",
         "category": "Workbench"
+      },
+      {
+        "command": "canonic.addProject",
+        "title": "Add Project…",
+        "category": "Workbench"
+      },
+      {
+        "command": "canonic.switchProject",
+        "title": "Switch Project…",
+        "category": "Workbench"
       }
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "canonic.switchProject",
+          "when": "canonic.hasWorkbench"
+        },
         {
           "command": "canonic.refreshScreens",
           "when": "canonic.hasWorkbench"

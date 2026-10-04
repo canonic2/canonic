@@ -4,8 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function runtime(state = 'default', painted = true) {
+function runtime(state = 'default', painted = true, actions = null) {
   const handlers = new Map();
+  const documentHandlers = new Map();
   const messages = [];
   const diagnostics = [];
   const canvas = { children: [], removed: false, remove() { this.removed = true; }, replaceChildren(...children) { this.children = children; } };
@@ -13,18 +14,22 @@ function runtime(state = 'default', painted = true) {
     addEventListener(name, handler) { handlers.set(name, handler); },
     removeEventListener(name, handler) { if (handlers.get(name) === handler) handlers.delete(name); },
     dispatchEvent() {},
+    wbPreviewActions: actions,
   };
   const parent = { postMessage(message) { messages.push(message); } };
   const document = {
     createElement: () => canvas,
     body: { append() {} },
     documentElement: { dataset: {} },
+    baseURI: 'http://127.0.0.1/previews/page.workbench.ts?state=' + state,
+    addEventListener(name, handler) { documentHandlers.set(name, handler); },
+    removeEventListener(name, handler) { if (documentHandlers.get(name) === handler) documentHandlers.delete(name); },
     images: [], fonts: { ready: Promise.resolve() },
   };
   const source = fs.readFileSync(path.join(__dirname, 'preview/browser.js'), 'utf8');
-  const boot = vm.runInNewContext(source.replace('export async function', 'async function') + '\nboot;', {
+  const boot = vm.runInNewContext(source.replace(/^export /gm, '') + '\nboot;', {
     window, parent, document, location: { href: 'http://127.0.0.1/preview?state=' + state, origin: 'http://127.0.0.1' },
-    URL, AbortController, structuredClone,
+    URL, AbortController, structuredClone, FormData: class { constructor(form) { return Object.entries(form.fields); } },
     CustomEvent: class { constructor(name, options) { this.type = name; this.detail = options.detail; } },
     requestAnimationFrame: painted ? queueMicrotask : () => {},
     fetch: (_url, options) => { diagnostics.push(JSON.parse(options.body)); return Promise.resolve(); },
@@ -34,7 +39,7 @@ function runtime(state = 'default', painted = true) {
     clearInterval() {},
     setInterval() {},
   });
-  return { boot, window, document, canvas, messages, diagnostics, handlers,
+  return { boot, window, document, canvas, messages, diagnostics, handlers, documentHandlers,
     async command(data) {
       handlers.get('message')({ source: parent, origin: 'http://127.0.0.1', data: { type: 'workbench-preview-command', ...data } });
       for (let i = 0; i < 8; i++) await new Promise(setImmediate);
@@ -141,6 +146,78 @@ test('actions from initial play remain available when the host inspects the read
   assert.equal(ready.event, 'ready');
   assert.deepEqual(JSON.parse(JSON.stringify(ready.actions)), [{ name: 'clicked', values: ['Continue'] }]);
   assert.equal(r.window.__workbenchReady, true);
+});
+
+test('links open mapped previews and log every other destination as an action', async () => {
+  let on = true;
+  const actions = { configure() {}, on: () => on, follow: null };
+  const r = runtime('default', true, actions);
+  const preview = { id: 'pages/start', links: { '/next/': 'pages/next', 'done.html': { state: 'done' } }, states: { default: {}, done: {} } };
+  const renderer = await r.boot(preview, { default: 'page', done: 'page' }, { mount() {} }, {});
+  const sent = () => r.messages.at(-1);
+  assert.equal(actions.follow('/next/', 'link'), true);
+  assert.deepEqual({ ...sent(), state: sent().state }, { type: 'workbench-preview', event: 'navigate', id: 'pages/start', preview: 'pages/next', state: null });
+  actions.follow('http://127.0.0.1/previews/done.html#top', 'link');
+  assert.deepEqual([sent().preview, sent().state], ['pages/start', 'done']);
+  actions.follow('https://example.com/acme.zip', 'link');
+  assert.deepEqual([sent().event, sent().name, [...sent().values]], ['action', 'navigate', ['https://example.com/acme.zip']]);
+  actions.follow('/sign-up', 'submit', { fields: { email: 'ada@example.com' } });
+  assert.deepEqual([sent().name, [...sent().values]], ['submit', ['/sign-up', '{"email":"ada@example.com"}']]);
+  on = false;
+  const count = r.messages.length;
+  r.window.workbench.navigate('pages/next');
+  assert.equal(r.messages.length, count);
+  await renderer.dispose();
+  assert.equal(actions.follow, null);
+});
+
+test('without the actions switch a portable preview still claims links but not in-page anchors', async () => {
+  const r = runtime();
+  await r.boot({ id: 'pages/start', links: { '/next/': 'pages/next' } }, { default: 'page' }, { mount() {} }, {});
+  const click = href => {
+    const link = { tagName: 'A', hasAttribute: () => true, getAttribute: () => href };
+    let prevented = false;
+    r.documentHandlers.get('click')({ composedPath: () => [link], preventDefault: () => { prevented = true; } });
+    return prevented;
+  };
+  assert.equal(click('#install'), false);
+  assert.equal(click('/next/'), true);
+  assert.equal(r.messages.at(-1).preview, 'pages/next');
+});
+
+test('each render activates its state request mocks before setup and disposal deactivates them', async () => {
+  const r = runtime('empty');
+  const activations = [];
+  r.window.__workbenchRequests = {
+    activate: (levels, context) => activations.push([levels, context.state]),
+    deactivate: () => activations.push('off'),
+  };
+  const preview = { id: 'pages/customers', requests: { '/api/customers': { body: ['Ada'] } },
+    setup: () => { activations.push('setup'); },
+    states: { default: {}, empty: { requests: { '/api/customers': { body: [] } } } } };
+  const renderer = await r.boot(preview, { default: 'page' }, { mount() {} }, {});
+  assert.deepEqual(JSON.parse(JSON.stringify(activations)), [
+    [[{ '/api/customers': { body: [] } }, { '/api/customers': { body: ['Ada'] } }], 'empty'], 'setup']);
+  await renderer.dispose();
+  assert.equal(activations.at(-1), 'off');
+});
+
+test('a project environment wraps outside a preview environment and its hooks run first', async () => {
+  const source = fs.readFileSync(path.join(__dirname, 'preview/browser.js'), 'utf8');
+  const combine = vm.runInNewContext(source.replace(/^export /gm, '') + '\ncombine;', {});
+  const order = [];
+  const environment = name => ({
+    setup: () => { order.push(name + ' setup'); return () => order.push(name + ' cleanup'); },
+    wrap: tree => name + '(' + tree + ')',
+  });
+  const combined = combine({ ...environment('project'), theme: 'dark', locale: 'en' }, { ...environment('preview'), theme: 'light' });
+  assert.equal(combined.wrap('page', {}), 'project(preview(page))');
+  assert.deepEqual([combined.theme, combined.locale], ['light', 'en']);
+  const cleanup = await combined.setup({});
+  await cleanup();
+  assert.deepEqual(order, ['project setup', 'preview setup', 'preview cleanup', 'project cleanup']);
+  const only = { wrap: tree => tree };
+  assert.equal(combine({}, only), only);
 });
 
 test('missing state exports and render failures prevent capture readiness', async () => {

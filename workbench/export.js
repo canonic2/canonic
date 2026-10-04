@@ -468,7 +468,9 @@ function create(root, view, options) {
     linked.forEach(function (file) { dependencies.get(from).add(file); });
   }
 
-  add(path.join(root, 'workbench.yaml'), owners[0], 'workbench manifest');
+  /* A project of a file that lists several, or whose root is elsewhere,
+     names its file; one outside the project isn't exported. */
+  add(options.manifest || path.join(root, 'workbench.yaml'), owners[0], 'workbench manifest');
   Object.keys((view && view.screens) || {}).forEach(function (src) {
     var screen = view.screens[src];
     if (screen.design) {

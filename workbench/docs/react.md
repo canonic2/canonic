@@ -211,7 +211,15 @@ export default definePreview({
 - The environment can also export `setup` and `ready`, which run with the
   [lifecycle hooks](workbench-previews.md#lifecycle-hooks) of the preview and
   its states.
-- Several definitions can share one environment module.
+- Several definitions can share one environment module. For providers every
+  screen needs, name it once as the
+  [project-wide environment](preview-data.md#environments)
+  instead.
+- A data client such as Apollo, React Query, or SWR can stay real: wrap the
+  component in it as usual and answer its requests with
+  [`requests`](preview-data.md#request-mocks), so each state shows its
+  own data. To seed the client's cache instead, do it in `wrap` or `setup` from
+  `context.fixtures`.
 
 Workbench doesn't add `React.StrictMode`. Return it from `wrap` if you want
 it.
@@ -312,7 +320,8 @@ design system.
 
 - The adapter renders a component in the browser. It doesn't run your
   application's server, server components, server actions, or framework data
-  loaders. Supply data through inputs, `fixtures`, or mocked modules.
+  loaders. Supply data through inputs, providers in an environment,
+  [request mocks](preview-data.md#request-mocks), or mocked modules.
 - Inputs can't hold functions or elements. Use a
   [preview-only module or an environment](#props-children-and-callbacks).
 - Saving a file reloads the preview; component state isn't preserved.

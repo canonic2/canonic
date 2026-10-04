@@ -332,3 +332,93 @@ test('derives a story’s state from its id', function () {
   assert.equal(manifest.storyState('button--default'), 'default');
   assert.equal(manifest.storyState('odd'), 'odd');
 });
+
+test('a project mark takes a named or hex colour, and a Lucide icon or a project image', function () {
+  var problems = [];
+  assert.deepEqual(manifest.projectMark({ color: 'Green', icon: 'rocket' }, problems), { color: 'green', icon: 'rocket', image: null });
+  assert.deepEqual(manifest.projectMark({ color: '#2F7D55', icon: 'assets/logo.svg' }, problems), { color: '#2f7d55', icon: null, image: 'assets/logo.svg' });
+  assert.deepEqual(manifest.projectMark({ color: '#abc' }, problems), { color: '#abc', icon: null, image: null });
+  assert.deepEqual(manifest.projectMark({}, problems), { color: null, icon: null, image: null });
+  assert.deepEqual(problems, []);
+});
+
+test('an unusable project colour or icon is named and left out', function () {
+  var problems = [];
+  var mark = manifest.projectMark({ color: 'chartreuse', icon: '../logo.svg' }, problems);
+  assert.deepEqual(mark, { color: null, icon: null, image: null });
+  assert.equal(problems.length, 2);
+  assert.match(problems[0], /^color: must be one of blue/);
+  assert.match(problems[1], /^icon: must be a kebab-case Lucide icon name/);
+
+  ['/abs/logo.svg', 'https://example.com/logo.png', 'logo.pdf', 'Rocket Ship'].forEach(function (icon) {
+    var found = [];
+    assert.equal(manifest.projectMark({ icon: icon }, found).image, null, icon);
+    assert.equal(found.length, 1, icon);
+  });
+});
+
+test('a file without projects is one project, as it always was', function () {
+  var problems = [];
+  var picked = manifest.selectProject({ name: 'Acme', sections: [{ name: 'Pages' }] }, null, problems);
+  assert.equal(picked.key, null);
+  assert.equal(picked.root, null);
+  assert.equal(picked.raw.name, 'Acme');
+  assert.deepEqual(problems, []);
+});
+
+test('each project inherits the shared keys but not the name, colour, icon or root', function () {
+  var raw = {
+    name: 'Acme workspace',
+    color: 'red',
+    implementations: { storybook: { kind: 'storybook', url: 'http://localhost:6006' }, dev: { kind: 'url', base: 'http://localhost:3000' } },
+    sections: [{ name: 'Shared' }],
+    projects: {
+      web: { name: 'Acme Web', color: 'blue', implementations: { dev: { base: 'http://localhost:4000' } } },
+      'design-system': { root: '../ui', icon: 'palette', sections: [{ name: 'Components' }] },
+    },
+  };
+  var problems = [];
+  var web = manifest.selectProject(raw, 'web', problems);
+  assert.equal(web.key, 'web');
+  assert.equal(web.raw.name, 'Acme Web');
+  assert.equal(web.raw.color, 'blue');
+  assert.deepEqual(web.raw.sections, [{ name: 'Shared' }]);
+  assert.deepEqual(web.raw.implementations.dev, { kind: 'url', base: 'http://localhost:4000' });
+  assert.equal(web.raw.implementations.storybook.url, 'http://localhost:6006');
+  assert.equal(web.raw.projects, undefined);
+
+  var ds = manifest.selectProject(raw, 'design-system', problems);
+  assert.equal(ds.root, '../ui');
+  assert.equal(ds.raw.name, 'Design system');
+  assert.equal(ds.raw.color, undefined);
+  assert.equal(ds.raw.icon, 'palette');
+  assert.deepEqual(ds.raw.sections, [{ name: 'Components' }]);
+  assert.equal(ds.raw.root, undefined);
+  assert.deepEqual(problems, []);
+});
+
+test('an unknown project falls back to the first, and malformed projects are named', function () {
+  var problems = [];
+  var raw = { projects: { web: { name: 'Web' }, 'Bad Key': { name: 'x' }, empty: 'nope' } };
+  assert.deepEqual(manifest.projectKeys(raw, problems), ['web']);
+  assert.equal(problems.length, 2);
+
+  var found = [];
+  var picked = manifest.selectProject(raw, 'gone', found);
+  assert.equal(picked.key, 'web');
+  assert.match(found.pop(), /there is no project “gone”/);
+
+  var listed = [];
+  assert.deepEqual(manifest.projectKeys({ projects: ['web'] }, listed), []);
+  assert.match(listed[0], /must be a map of project ids/);
+});
+
+test('a local file merges into one project by key', function () {
+  var merged = manifest.merge(
+    { projects: { web: { name: 'Web', implementations: { dev: { kind: 'url', base: 'http://localhost:3000' } } }, ui: { name: 'UI' } } },
+    { projects: { web: { implementations: { dev: { base: 'http://localhost:4000' } } } } }
+  );
+  assert.equal(merged.projects.web.name, 'Web');
+  assert.deepEqual(merged.projects.web.implementations.dev, { kind: 'url', base: 'http://localhost:4000' });
+  assert.deepEqual(merged.projects.ui, { name: 'UI' });
+});

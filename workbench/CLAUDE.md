@@ -21,6 +21,9 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
 - `workbench/`: the browser canvas: manifest reader, states, lenses,
   navigation, markup. Read `workbench/README.md` before changing it.
 - `docs/`: the user guides, published on the website as they are.
+- `design/`: the Workbench project's design pages, shown in this repository's
+  workbench. They load the shipping `workbench/` code with sample data and
+  aren't packaged.
 - `specs/`: internal product requirements, workflows, decisions, and discoveries;
   these are kept outside the published documentation.
 - `scripts/`: VSIX packaging, including the per-platform Electron runtime.

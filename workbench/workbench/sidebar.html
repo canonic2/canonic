@@ -12,9 +12,16 @@
   <link rel="stylesheet" href="sidebar.css" />
 </head>
 <body>
+  <!-- Which project's screens these are, and the others to switch to. The
+       extension lists the projects in a <meta name="canonic-projects">. -->
+  <div class="wb-projects" id="projects" hidden>
+    <button class="wb-projects-button" type="button" id="projectButton"></button>
+    <div class="wb-projects-menu" id="projectMenu"></div>
+  </div>
+
   <!-- The same list the workbench has, laid out like Sketch's sidebar: the
        sections on top, the chosen one's screens below, the filter at the
-       bottom. The view's own header carries the project's name. -->
+       bottom. -->
   <div class="sb wb-browse">
     <div class="sb-loading" id="loading" role="status" aria-live="polite">
       <span class="sb-loading-spinner" aria-hidden="true"></span>
@@ -44,6 +51,7 @@
   <script src="manifest.js"></script>
   <script src="config.js"></script>
   <script src="nav.js"></script>
+  <script src="project-switcher.js"></script>
   <script src="sidebar.js"></script>
 </body>
 </html>

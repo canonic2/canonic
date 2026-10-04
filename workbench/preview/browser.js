@@ -1,4 +1,34 @@
 // Shared runtime used verbatim in development and portable browser exports.
+
+// The project's environment (from workbench.config.ts) around a preview's
+// own: its providers wrap outside, and its hooks run first and clean up last.
+export function combine(outer, inner) {
+  if (!outer || !Object.keys(outer).length) return inner || {};
+  if (!inner || !Object.keys(inner).length) return outer;
+  const both = [outer, inner];
+  const has = name => both.some(environment => environment[name]);
+  const staged = name => async (...args) => {
+    const stops = [];
+    for (const environment of both) {
+      const stop = await environment[name]?.(...args);
+      if (typeof stop === 'function') stops.push(stop);
+    }
+    if (stops.length) return async () => { for (const stop of stops.reverse()) await stop(); };
+  };
+  // Hooks a custom adapter defines for itself come through as they are, the
+  // preview's ahead of the project's.
+  const combined = { ...outer, ...inner };
+  if (has('setup')) combined.setup = staged('setup');
+  if (has('mount')) combined.mount = staged('mount');
+  if (has('ready')) combined.ready = async context => { for (const environment of both) await environment.ready?.(context); };
+  if (has('configure')) combined.configure = async (app, context) => { for (const environment of both) await environment.configure?.(app, context); };
+  if (has('wrap')) combined.wrap = (tree, context) => {
+    if (inner.wrap) tree = inner.wrap(tree, context);
+    return outer.wrap ? outer.wrap(tree, context) : tree;
+  };
+  return combined;
+}
+
 export async function boot(preview, sources, adapter, environment, options) {
   let cleanup = [];
   let controller;
@@ -23,7 +53,9 @@ export async function boot(preview, sources, adapter, environment, options) {
     stopped = true;
     controller?.abort();
     clearInterval(revisionTimer);
-    listeners.forEach(([name, handler]) => window.removeEventListener(name, handler));
+    listeners.forEach(([name, handler, target = window]) => target.removeEventListener(name, handler, target !== window));
+    if (window.wbPreviewActions?.follow === follow) window.wbPreviewActions.follow = null;
+    window.__workbenchRequests?.deactivate();
     stopping = (async () => {
       await pending.catch(() => {});
       await dispose();
@@ -61,6 +93,49 @@ export async function boot(preview, sources, adapter, environment, options) {
   function report(type, detail) {
     window.dispatchEvent(new CustomEvent('workbench:' + type, { detail }));
     if (parent !== window) parent.postMessage({ type: 'workbench-preview', event: type, id: preview.id, ...detail }, location.origin);
+  }
+  // A preview is a mock of its screen, so it never leaves through the browser.
+  // With actions on, a link or form whose address is a key of `links` opens
+  // that preview on the canvas; anything else — another route, another site, a
+  // download — is logged as an action instead. With actions off, actions.js
+  // has already stopped it.
+  const address = href => {
+    try { const url = new URL(href, document.baseURI); return url.origin + url.pathname + url.search; } catch (_) { return null; }
+  };
+  function linked(href) {
+    const where = address(href);
+    if (!where) return null;
+    for (const [key, to] of Object.entries(preview.links || {})) if (address(key) === where) return to;
+    return null;
+  }
+  function navigate(rendered, to) {
+    if (rendered.signal.aborted || window.wbPreviewActions?.on?.() === false) return;
+    const target = typeof to === 'string' ? { preview: to, state: null } : { preview: to?.preview || preview.id, state: to?.state || null };
+    if (parent === window) rendered.action('navigate', target.preview + (target.state ? '?state=' + target.state : ''));
+    else report('navigate', target);
+  }
+  function follow(href, kind, element) {
+    const rendered = context;
+    if (stopped || !rendered || rendered.signal.aborted) return false;
+    const to = linked(href);
+    if (to) navigate(rendered, to);
+    else if (kind === 'submit') {
+      const fields = Object.fromEntries(Array.from(new FormData(element), ([name, value]) => [name, typeof value === 'string' ? value : value.name]));
+      rendered.action('submit', ...(href ? [href] : []), fields);
+    } else rendered.action('navigate', href);
+    return true;
+  }
+  if (window.wbPreviewActions) window.wbPreviewActions.follow = follow;
+  else {
+    // A portable export has no actions.js and no switch: it behaves as on.
+    const claim = (event, href, kind, element) => { if (follow(href, kind, element)) event.preventDefault(); };
+    const listen = (name, handler) => { document.addEventListener(name, handler, true); listeners.push([name, handler, document]); };
+    listen('click', event => {
+      const link = event.composedPath().find(element => element.tagName === 'A' && element.hasAttribute('href'));
+      const href = link?.getAttribute('href');
+      if (link && !href.startsWith('#')) claim(event, href, 'link', link);
+    });
+    listen('submit', event => { if (event.target.tagName === 'FORM') claim(event, event.target.getAttribute('action') || '', 'submit', event.target); });
   }
   async function dispose() {
     controller?.abort();
@@ -110,8 +185,10 @@ export async function boot(preview, sources, adapter, environment, options) {
         actions = actions.slice(-30);
         report('action', { ...entry, state });
       },
+      navigate: to => navigate(rendered, to),
     };
     window.workbench = context;
+    window.__workbenchRequests?.activate([spec.requests, preview.requests], rendered, rendered.action, rendered.signal);
     document.documentElement.dataset.wbState = state;
     for (const setup of [environment?.setup, preview.setup, spec.setup]) {
       if (setup) {

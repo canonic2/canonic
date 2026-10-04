@@ -2,8 +2,12 @@ import { definePreview } from '@canonic/workbench';
 
 export default definePreview({
   id: 'website/overview',
-  title: 'Website/Pages/Overview',
+  title: 'Pages/Overview',
   adapter: 'astro',
   source: { entry: '../src/pages/index.astro' },
+  links: {
+    '/': 'website/overview',
+    '/workbench/install/': 'website/install',
+  },
   viewports: ['desktop', 'mobile', 'responsive'],
 });

@@ -35,7 +35,14 @@ behave like links.
 ## workbench.yaml
 
 ```yaml
-name: Acme                    # the screen list header, and the tab title
+name: Acme                    # the screen list header, the tab title, and the project switcher
+color: green                  # optional: the project's mark — a named colour or a hex value
+icon: brand/logo.svg          # optional: a Lucide icon name, or a project image (up to 256 KB)
+
+# projects:                   # optional: several projects in this file, keyed by id. Each takes
+#   design-system:            # name, color, icon, sections, previews, implementations, and a root
+#     root: packages/ui       # relative to this file; every other top-level key is shared, and a
+#     sections: [...]         # project's implementations merge over the shared ones by name
 
 previews:                     # optional: TypeScript preview discovery; false turns it off
   include:                    # project-relative globs; default **/*.workbench.ts and **/*.workbench.tsx
@@ -345,7 +352,7 @@ VS Code cannot spawn a local helper.
 | How | Camera | Handoff | Config | Lenses |
 | --- | --- | --- | --- | --- |
 | The Workbench extension | downloads a JPEG | saved image + prompt copied to clipboard | yes | all, and open-in-editor |
-| `node server.js <project>` | downloads a JPEG | no | yes | all but open-in-editor |
+| `node server.js <project>…` | downloads a JPEG | no | yes | all but open-in-editor |
 | `file://…/index.html?root=…` | downloads a JPEG | no | needs `--allow-file-access-from-files` | the frame only: no story lookup |
 
 Keep `.canonic/.handoffs/` in the project's `.gitignore`. Screenshots persisted
@@ -429,6 +436,7 @@ implementation's own address; Workbench never switches to a stream.
 | `zoom.js` | zooms and pans the frame on the canvas, Figma-style, and labels it with its name and size |
 | `nav.js` + `nav.css` | the screen list, laid out like Sketch's sidebar: sections, then the chosen one's folders, screens and states, then the filter |
 | `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
+| `project-switcher.js` | the project switcher over the list and in the breadcrumb, styled in `nav.css` |
 | `markup.js` + `markup.css` | the draw layer, screenshots, and clipboard handoff |
 | `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
 | `capture-sync.js` | coalesces preparation, checks readiness and retries failures |
@@ -440,7 +448,7 @@ implementation's own address; Workbench never switches to a stream.
 | `modern-screenshot.js` | vendored DOM renderer for standalone file use |
 | `simulator.js` | the canvas side of the native window stream, and Simulator input |
 | `keys.js` | forwards editor shortcuts out of the workbench and its previews |
-| `actions.js` | the preview's half of the Actions toggle |
+| `actions.js` | the preview's half of the Actions toggle, and the hook a TypeScript preview uses to claim its links and forms |
 | `states.js` | the preview's half of page states |
 
 `nav.js` is the list and nothing else: it is handed the config's sections and
@@ -570,3 +578,19 @@ a link followed in a live preview.
 
 Embedded, the workbench also drops its own screen list: the list is in the
 sidebar, and two of them would be one too many.
+
+A workbench with several projects runs one server per project, and the canvas
+reads them from `/_workbench/projects`. A project of a file that lists several,
+or whose root isn't the file's folder, is served with
+`<meta name="canonic-config">` (where the file is: `/_workbench/manifest/`
+over http) and `<meta name="canonic-project">` (its id) in the canvas page;
+`config.js` reads the file from there and `manifest.js`'s `selectProject`
+picks the project, the same rule the server uses. The editor's sidebar gets
+the same two metas. With more than one, it puts the
+project at the start of the breadcrumb and, in a browser, a switcher at the
+top of its screen list. Switching is going to the other server's address:
+embedded, the canvas posts `wb-project` with the project's id and the host
+loads that server in its tab; in a browser, it posts the id to
+`/_workbench/projects/open`, which starts that server if it has to and
+answers with its URL. The editor's sidebar draws the same switcher from the
+projects the extension lists in its page.

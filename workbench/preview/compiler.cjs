@@ -59,7 +59,39 @@ function validate(raw, file, root) {
     if (!control || !['text', 'number', 'boolean', 'select', 'json'].includes(control.type)) throw new Error(file + ': invalid control ' + name);
     if (control.type === 'select' && (!Array.isArray(control.options) || !control.options.length)) throw new Error(file + ': select controls need options.');
   }
+  for (const [where, requests] of [['', raw.requests], ...Object.entries(states).map(([id, state]) => ['state ' + id + ' ', state.requests])]) {
+    if (requests === undefined) continue;
+    if (!requests || typeof requests !== 'object' || Array.isArray(requests)) throw new Error(file + ': ' + where + 'requests must be a map.');
+    for (const [key, value] of Object.entries(requests)) {
+      if (!/^(?:[A-Z]+\s+)?(?:\/\S*|[a-z][a-z0-9+.-]*:\/\/\S+)(?:\s+[A-Za-z_]\w*)?$/.test(key.trim())) throw new Error(file + ': ' + where + 'request ' + key + ' must be "[METHOD] /path [Operation]" or a full URL.');
+      if (typeof value !== 'function' && (!value || typeof value !== 'object' || Array.isArray(value))) throw new Error(file + ': ' + where + 'request ' + key + ' must be a response object or a function.');
+    }
+  }
+  if (raw.links !== undefined && (!raw.links || typeof raw.links !== 'object' || Array.isArray(raw.links))) throw new Error(file + ': links must be a map.');
+  for (const [href, to] of Object.entries(raw.links || {})) {
+    const target = typeof to === 'string' ? { preview: to } : to;
+    const valid = target && typeof target === 'object' && !Array.isArray(target) && (target.preview || target.state)
+      && (target.preview === undefined || (typeof target.preview === 'string' && /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(target.preview)))
+      && (target.state === undefined || (typeof target.state === 'string' && /^[a-z0-9-]+$/.test(target.state)));
+    if (!valid) throw new Error(file + ': link ' + href + ' must name a preview ID, or { preview, state }.');
+  }
   return Object.assign({}, raw, { states });
+}
+
+// Astro frontmatter runs here, in Node, so its fetch calls get the same
+// request mocks the browser does. The worker renders one preview at a time,
+// which is what makes swapping globalThis.fetch for the render safe.
+async function mockFetches(definition, state, inputs, render) {
+  const spec = definition.states[state];
+  if (!spec.requests && !definition.requests) return render();
+  const { mockedFetch, requestMocks } = await import(require('node:url').pathToFileURL(path.join(__dirname, 'requests.js')).href);
+  const original = globalThis.fetch;
+  const context = { id: definition.id, state, inputs, fixtures: { ...definition.fixtures, ...spec.fixtures }, globals: { ...definition.globals, ...spec.globals } };
+  // A server render awaits every fetch, so `pending` would hang it; give up
+  // after ten seconds with a rendering error instead.
+  const active = { mocks: requestMocks([spec.requests, definition.requests]), context, base: 'http://localhost/', signal: AbortSignal.timeout(10000) };
+  globalThis.fetch = mockedFetch(original, () => active);
+  try { return await render(); } finally { globalThis.fetch = original; }
 }
 
 class Compiler {
@@ -124,6 +156,8 @@ class Compiler {
           source: slash(path.relative(this.root, path.resolve(path.dirname(file), definition.source.entry))),
           states: Object.entries(definition.states).map(([id, state]) => ({ id, label: state.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
           controls: definition.controls || {}, viewports: definition.viewports, docs: definition.docs || null,
+          links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
+            typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.state ? { state: to.state } : {}) }])),
         });
       } catch (error) { errors.push(slash(path.relative(this.root, file)) + ': ' + error.message); }
     }
@@ -176,7 +210,7 @@ class Compiler {
         }
         const inputs = { ...definition.inputs, ...spec.inputs,
           ...(renderRequest?.state === state ? renderRequest.inputs : {}) };
-        const html = await renderer.render(inputs, source.export);
+        const html = await mockFetches(definition, state, inputs, () => renderer.render(inputs, source.export));
         rendered[state] = { html, inputs, target };
       }
       plugins.push({ name: 'workbench-astro-assets', setup(build) {
@@ -327,7 +361,9 @@ class Compiler {
         loader: { '.svg': 'file', '.png': 'file', '.jpg': 'file', '.jpeg': 'file', '.gif': 'file', '.webp': 'file', '.avif': 'file', '.woff': 'file', '.woff2': 'file', '.ttf': 'file', '.mp4': 'file', '.mp3': 'file' },
         assetNames: 'assets/[name]-[hash]', plugins };
     }
-    const lines = ['import definition from ' + JSON.stringify(file) + ';', 'import * as adapter from ' + JSON.stringify(runtime) + ';', 'import { boot } from ' + JSON.stringify(development ? '/_workbench/preview-runtime.js' : path.join(__dirname, 'browser.js')) + ';'];
+    // Request mocks first: they replace fetch before any project module runs.
+    const lines = ['import ' + JSON.stringify(development ? '/_workbench/preview-requests.js' : path.join(__dirname, 'requests.js')) + ';',
+      'import definition from ' + JSON.stringify(file) + ';', 'import * as adapter from ' + JSON.stringify(runtime) + ';', 'import { boot, combine } from ' + JSON.stringify(development ? '/_workbench/preview-runtime.js' : path.join(__dirname, 'browser.js')) + ';'];
     const sourceMap = [];
     const defaultSource = definition.source;
     const sources = { default: defaultSource };
@@ -344,13 +380,27 @@ class Compiler {
         sourceMap.push(JSON.stringify(state) + ': ' + name + '[' + JSON.stringify(source.export || 'default') + ']');
       }
     }
-    if (definition.environment) lines.push('import * as environment from ' + JSON.stringify(path.resolve(path.dirname(file), definition.environment)) + ';');
+    const environments = [];
+    // One environment for every preview, or one per adapter name, so a
+    // project with React and Vue screens can wrap each in its own providers.
+    const projectEnvironment = typeof config.environment === 'string' ? config.environment
+      : config.environment && typeof config.environment === 'object' ? config.environment[definition.adapter] : undefined;
+    if (projectEnvironment) {
+      const target = path.resolve(this.root, projectEnvironment);
+      if (!inside(this.root, target) || !fs.existsSync(target)) throw new Error('The preview config environment must be a file inside the project: ' + projectEnvironment);
+      lines.push('import * as projectEnvironment from ' + JSON.stringify(target) + ';');
+      environments.push('projectEnvironment');
+    }
+    if (definition.environment) {
+      lines.push('import * as environment from ' + JSON.stringify(path.resolve(path.dirname(file), definition.environment)) + ';');
+      environments.push('environment');
+    }
     for (const style of definition.styles || []) lines.push('import ' + JSON.stringify(path.resolve(path.dirname(file), style)) + ';');
     const slug = definition.id.replace(/\//g, '--') + '-' + digest(definition.id + (renderRequest ? JSON.stringify(renderRequest) : ''));
     const portableNote = Object.keys(rendered).length ? 'Astro input edits require the live Workbench server. This export contains the authored states.' : '';
     const browserDefinition = portableNote && !development ? '{ ...definition, controls: {}, docs: (definition.docs || "") + "\\n" + ' + JSON.stringify(portableNote) + ' }' : 'definition';
-    const entry = lines.join('\n') + '\nexport function mount(options) { return boot(' + browserDefinition + ', {' + sourceMap.join(',') + '}, adapter, ' + (definition.environment ? 'environment' : '{}') + ', options); }\nif (!window.__workbenchHost) mount(window.__workbenchOptions);';
-    const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: entry, loader: 'js', resolveDir: path.dirname(file) }, outdir, entryNames: 'preview', external: development ? ['/_workbench/preview-runtime.js'] : [], sourcemap: development ? 'inline' : false }));
+    const entry = lines.join('\n') + '\nexport function mount(options) { return boot(' + browserDefinition + ', {' + sourceMap.join(',') + '}, adapter, ' + (environments.length === 2 ? 'combine(projectEnvironment, environment)' : environments[0] || '{}') + ', options); }\nif (!window.__workbenchHost) mount(window.__workbenchOptions);';
+    const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: entry, loader: 'js', resolveDir: path.dirname(file) }, outdir, entryNames: 'preview', external: development ? ['/_workbench/preview-runtime.js', '/_workbench/preview-requests.js'] : [], sourcemap: development ? 'inline' : false }));
     for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
     for (const dependency of this.tracked(result.metafile)) dependencies.add(dependency);
     for (const asset of definition.assets || []) {

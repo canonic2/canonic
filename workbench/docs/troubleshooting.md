@@ -69,8 +69,9 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 - `workbench.yaml` must be at the root of an open folder, not in a subfolder.
   Open the folder that contains it, or add that folder to the workspace; see
   [Projects in a subfolder](extension.md#projects-in-a-subfolder).
-- In a multi-root workspace, only the first folder with a `workbench.yaml` is
-  served.
+- In a multi-root workspace, every folder with a `workbench.yaml` is a
+  project, but the view shows one at a time. Use the switcher at the top of the
+  view; see [Several projects](projects.md).
 - The workspace must be trusted. VS Code doesn't run Workbench in Restricted
   Mode.
 - After installing or updating, run **Developer: Reload Window**.
@@ -132,6 +133,35 @@ except for screens imported by a [catalog](configuration.md#catalogs).
 - **The canvas shows an error instead of the component:** the message is the
   compile or render error, such as an unknown adapter or a framework package
   that isn't installed in the project.
+- **`link … names unknown Workbench preview` or `… unknown state`:** an entry
+  in the definition's `links` names a preview ID or state no definition
+  declares. See [Links and navigation](preview-data.md#links-and-navigation).
+- **`request … must be "[METHOD] /path [Operation]" or a full URL`:** a
+  `requests` key isn't in that form. Paths start with `/`.
+- **`The preview config environment must be a file inside the project`:**
+  `environment` in `workbench.config.ts` names a missing file. It's relative to
+  the project root.
+
+## A preview shows the wrong data, or a request fails
+
+- **A request answers `404` with `No Workbench request mock for …`:** the
+  preview has `requests`, and none matches this one. **Actions** in
+  **Preview controls** lists it as `request … — no mock`. Add a key for it, or
+  answer it with `{ passthrough: true }` to let it reach the network.
+- **The preview shows live data:** the preview has no `requests`, so every
+  request reaches the network. Add mocks; once there is one, unmatched requests
+  stop reaching live services.
+- **A mock doesn't apply:** check the method, that the path starts with `/`,
+  and that a GraphQL key's operation name matches the one the client sends. A
+  state's `requests` replace the preview's for the same key only.
+- **A request isn't mocked at all:** request mocks answer `fetch` and
+  XMLHttpRequest. WebSocket, EventSource, `navigator.sendBeacon`, synchronous
+  XMLHttpRequest, and requests from workers reach the network.
+- **An Astro page fails after 10 seconds:** a frontmatter `fetch` answered by a
+  `pending` or long `delay` mock. A server render can't show a loading state;
+  see [Astro](astro.md#preview-a-page).
+
+See [Give a screen its data](preview-data.md#choose-how-to-give-a-screen-its-data).
 
 To check every preview without the canvas, run the extension's checker on the
 project. It builds each preview and lists the failures:
@@ -163,6 +193,11 @@ Actions are off by default, so links don't navigate and forms don't submit.
 Turn on **Actions** in the toolbar. With actions on, a link to an `.html` page
 in the project that isn't listed as a screen still does nothing; add the page
 to `workbench.yaml`. See [Links and actions](pages-and-states.md#links-and-actions).
+
+In a [Workbench preview](preview-data.md#links-and-navigation), a link
+opens another screen only when the definition's `links` maps its address to a
+preview. Every other link and form is recorded under **Actions** in
+**Preview controls**, by design; map the address to make it open a preview.
 
 ## A width button is disabled
 

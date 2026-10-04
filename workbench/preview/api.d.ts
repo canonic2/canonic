@@ -9,14 +9,50 @@ export interface PreviewContext<T extends Record<string, unknown> = Record<strin
   /** Report asynchronous rendering failures to the host and capture service. */
   error(error: unknown): void;
   action(name: string, ...values: unknown[]): void;
+  /** Open another preview, or another state of this one, while actions are on. */
+  navigate(to: PreviewLink): void;
 }
+/** A preview ID, or a preview and state; a state alone stays in this preview. */
+export type PreviewLink = string | { preview: string; state?: string } | { preview?: string; state: string };
 export type Cleanup = void | (() => void | Promise<void>);
+/** A mocked response. `body` objects are sent as JSON. */
+export interface MockResponse {
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  /** Milliseconds to wait before answering. */
+  delay?: number;
+  /** Never answer, to show a loading state. */
+  pending?: boolean;
+  /** Fail as a network error, as when offline. */
+  failed?: boolean;
+  /** Send this request to the network after all. */
+  passthrough?: boolean;
+}
+/** A request as a mock handler receives it, with its body parsed. */
+export interface MockRequest {
+  method: string;
+  url: string;
+  path: string;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+  body: unknown;
+  operationName: string | null;
+  variables: Record<string, unknown> | null;
+}
+export type MockHandler<T extends Record<string, unknown> = Record<string, unknown>> =
+  MockResponse | ((request: MockRequest, context: PreviewContext<T>) => MockResponse | Response | Promise<MockResponse | Response>);
+/** Keys: `'GET /api/items'`, `'/api/items/*'`, `'POST /graphql Operation'`, or a full URL. */
+export type RequestMocks<T extends Record<string, unknown> = Record<string, unknown>> = Record<string, MockHandler<T>>;
 export interface PreviewState<T extends Record<string, unknown>> {
   label?: string;
   inputs?: Partial<T>;
   fixtures?: Record<string, unknown>;
   globals?: Record<string, unknown>;
   source?: { entry: string; export?: string };
+  /** Answers for the page's fetch and XMLHttpRequest calls. */
+  requests?: RequestMocks<T>;
   setup?: (context: PreviewContext<T>) => Cleanup | Promise<Cleanup>;
   play?: (context: PreviewContext<T> & { canvas: HTMLElement }) => void | Promise<void>;
   ready?: (context: PreviewContext<T>) => void | Promise<void>;
@@ -40,6 +76,8 @@ export interface Preview<T extends Record<string, unknown> = Record<string, unkn
   viewports?: Viewport[];
   controls?: Record<string, Control>;
   states?: Record<string, PreviewState<NoInfer<T>>>;
+  /** Addresses the source links or submits to, mapped to the preview each opens. */
+  links?: Record<string, PreviewLink>;
   docs?: string;
 }
 export interface BrowserAdapter {
@@ -53,6 +91,8 @@ export interface Adapter {
 }
 export interface WorkbenchConfig {
   adapters?: Record<string, Adapter>;
+  /** An environment module around every preview, or one per adapter name, relative to the project root. */
+  environment?: string | Record<string, string>;
   /** esbuild plugins run before the built-in loaders. */
   plugins?: unknown[];
   aliases?: Record<string, string>;

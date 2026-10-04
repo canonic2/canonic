@@ -349,3 +349,117 @@ test('resolves every path for this machine and says what it could not', function
     fs.rmSync(product, { recursive: true, force: true });
   }
 });
+
+test('reports a project icon image that isn’t in the project, and resolves the mark', function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-mark-'));
+  try {
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), [
+      'name: Acme',
+      'color: purple',
+      'icon: brand/logo.svg',
+      'sections:',
+      '  - name: Pages',
+      '    items:',
+      '      - label: Home',
+      '        src: index.html',
+    ].join('\n'));
+    var view = config.resolve(root, config.read(root));
+    assert.deepEqual(view.mark, { color: 'purple', icon: null, image: 'brand/logo.svg' });
+    assert.deepEqual(view.problems, ['icon: brand/logo.svg isn’t in the project.']);
+
+    fs.mkdirSync(path.join(root, 'brand'));
+    fs.writeFileSync(path.join(root, 'brand', 'logo.svg'), '<svg/>');
+    assert.deepEqual(config.resolve(root, config.read(root)).problems, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function multiProject(body) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-multi-'));
+  fs.writeFileSync(path.join(dir, 'workbench.yaml'), body);
+  return dir;
+}
+
+var MULTI = [
+  '# Two projects in one file',
+  'implementations:',
+  '  dev:',
+  '    kind: url',
+  '    base: http://localhost:3000',
+  'projects:',
+  '  web:',
+  '    name: Acme Web',
+  '    sections:',
+  '      - name: Pages',
+  '        items:',
+  '          - label: Home',
+  '            src: index.html',
+  '  ui:',
+  '    name: Acme UI',
+  '    root: packages/ui',
+  '    # its own sections come later',
+  '',
+  'previews: false',
+  '',
+].join('\n');
+
+test('lists one project per entry, each with its root', function () {
+  var dir = multiProject(MULTI);
+  try {
+    assert.deepEqual(config.list(dir), [
+      { key: 'web', root: dir },
+      { key: 'ui', root: path.join(dir, 'packages', 'ui') },
+    ]);
+    var single = multiProject('name: Acme\nsections: []\n');
+    assert.deepEqual(config.list(single), [{ key: null, root: single }]);
+    var broken = multiProject('name: Acme\n  sections: []\n');
+    assert.deepEqual(config.list(broken), [{ key: null, root: broken }]);
+    assert.deepEqual(config.list(path.join(dir, 'packages')), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('reads one project of a file, with the shared keys and its own root', function () {
+  var dir = multiProject(MULTI);
+  try {
+    var web = config.read({ dir: dir, key: 'web' });
+    assert.equal(web.name, 'Acme Web');
+    assert.equal(web.key, 'web');
+    assert.equal(web.root, dir);
+    assert.equal(web.sections[0].items[0].src, 'index.html');
+    assert.equal(web.implementations.dev.base, 'http://localhost:3000');
+    assert.equal(web.previews, false);
+
+    var ui = config.read({ dir: dir, key: 'ui' });
+    assert.equal(ui.root, path.join(dir, 'packages', 'ui'));
+    assert.deepEqual(ui.sections, []);
+    /* A folder alone reads the first project. */
+    assert.equal(config.read(dir).key, 'web');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('saving pages for one project rewrites only that project, adding its sections when it has none', function () {
+  var dir = multiProject(MULTI);
+  try {
+    var sections = [{ name: 'Components', items: [{ label: 'Button', src: 'button.html' }] }];
+    var saved = config.updateSections({ dir: dir, key: 'ui' }, sections);
+    assert.deepEqual(saved.sections, sections);
+    var body = fs.readFileSync(path.join(dir, 'workbench.yaml'), 'utf8');
+    assert.match(body, /^# Two projects in one file/);
+    assert.match(body, /    # its own sections come later\n    sections:\n      - name: Components\n/);
+    assert.match(body, /\n\npreviews: false\n$/);
+    assert.equal(config.read({ dir: dir, key: 'web' }).sections[0].items[0].src, 'index.html');
+    assert.equal(config.read({ dir: dir, key: 'ui' }).sections[0].items[0].src, 'button.html');
+
+    config.updateSections({ dir: dir, key: 'web' }, [{ name: 'Pages', items: [{ label: 'About', src: 'about.html' }] }]);
+    assert.equal(config.read({ dir: dir, key: 'web' }).sections[0].items[0].label, 'About');
+    assert.equal(config.read({ dir: dir, key: 'ui' }).sections[0].items[0].label, 'Button');
+    assert.equal(config.read({ dir: dir, key: 'web' }).implementations.dev.base, 'http://localhost:3000');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

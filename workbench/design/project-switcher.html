@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project switcher</title>
+  <link rel="stylesheet" href="../workbench/nav.css" />
+  <link rel="stylesheet" href="../workbench/sidebar.css" />
+  <link rel="stylesheet" href="design.css" />
+</head>
+<body>
+  <!-- The switcher as the top of VS Code's Workbench view draws it.
+       States: default (closed), open (the menu), hover (a removable row
+       showing its remove button), single (one project). -->
+  <div class="wb-projects" id="projects">
+    <button class="wb-projects-button" type="button" id="projectButton"></button>
+    <div class="wb-projects-menu" id="projectMenu"></div>
+  </div>
+
+  <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
+  <script src="../workbench/icons.js"></script>
+  <script src="../workbench/project-switcher.js"></script>
+  <script src="projects.js"></script>
+  <script>
+    var state = new URLSearchParams(location.search).get('state') || 'default';
+    var listed = window.designProjects;
+    var projects = state === 'single' ? listed.projects.slice(0, 1) : listed.projects;
+    var switcher = window.wbProjects.create({
+      button: document.getElementById('projectButton'),
+      menu: document.getElementById('projectMenu'),
+      onPick: function () {},
+      onAdd: function () {},
+      onRemove: function () {},
+    });
+    switcher.set(projects, listed.current);
+    if (state === 'open' || state === 'hover' || state === 'single') switcher.toggle(true);
+    /* The hover state pins the remove button that :hover shows. */
+    if (state === 'hover') {
+      var row = document.querySelectorAll('.wb-projects-row')[1];
+      row.querySelector('.wb-projects-remove').style.opacity = '1';
+      row.querySelector('.wb-projects-check').style.visibility = 'hidden';
+      row.querySelector('.wb-projects-item').style.background = 'var(--wb-hover)';
+    }
+  </script>
+</body>
+</html>
