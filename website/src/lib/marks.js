@@ -2,17 +2,17 @@ import workbench from '../../public/icons/workbench-blue.svg?raw';
 import sandbox from '../../public/icons/sandbox-blue.svg?raw';
 import playground from '../../public/icons/playground-blue.svg?raw';
 import shield from '../../public/icons/shield-blue.svg?raw';
-import lockup from '../../public/logos/canonic-lockup.svg?raw';
+import wordmark from '../../public/logos/canonic-wordmark.svg?raw';
 const productIcons = { workbench, sandbox, playground, shield };
 
-/* The Canonic lockup and the four product marks, as SVG artwork from the
+/* The Canonic wordmark and the four product marks, as SVG artwork from the
    design. Each mark has a base shape and a blue accent; `module` names the
    product's page when it has one. Keep the products in this order. */
 
-// Preserve the lockup's group transforms when adapting its colors to the theme.
+// Preserve the wordmark's group transforms when adapting its colors to the theme.
 export const logo = {
-  viewBox: /viewBox="([^"]+)"/.exec(lockup)[1],
-  body: lockup.replace(/^[\s\S]*?<svg\b[^>]*>/, '').replace(/<\/svg>\s*$/, '')
+  viewBox: /viewBox="([^"]+)"/.exec(wordmark)[1],
+  body: wordmark.replace(/^[\s\S]*?<svg\b[^>]*>/, '').replace(/<\/svg>\s*$/, '')
     .replace(/fill="#141414"/g, 'fill="currentColor"')
     .replace(/fill="#2457FF"/g, 'class="accent"'),
 };

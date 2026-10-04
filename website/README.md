@@ -15,7 +15,7 @@ release downloads and publishes to GitHub Pages.
 | `src/components/DownloadScripts.astro` | the inline script that recommends this computer's download, and the Copy buttons |
 | `src/lib/workbench.js` | what every Workbench page shares: page URLs, the section links (Overview, Docs, Install, Changelog, GitHub), and the release data, fetched once per build |
 | `src/lib/releases.js` | lists complete releases, picks the one to link, reads their notes, and checks their download links |
-| `src/lib/marks.js` | the Canonic lockup and product marks read from the stored SVG exports, in product order |
+| `src/lib/marks.js` | the Canonic wordmark and product marks read from the stored SVG exports, in product order |
 | `src/data/screenshots.json` | the overview's numbered regions and the toolbar strip, written by `screenshots/capture.cjs` |
 | `src/styles/global.css` | light and dark tokens from the website design (warm grays, dark bands, Canonic blue) and every component's styles |
 | `src/content.config.ts` | loads Markdown directly from `../workbench/docs/` |

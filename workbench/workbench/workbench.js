@@ -913,6 +913,7 @@
   /* The lens rides along for whoever wants it; the editor's list only marks
      screens and states, and reads past it. */
   function tellHost(src, state, lens, pending) {
+    if (window.wbAgentContext) window.wbAgentContext.report();
     if (!host) return;
     host.postMessage({ type: 'wb-here', src: src || null, state: state || null,
       lens: lens || null, pending: !!pending }, '*');
