@@ -7,6 +7,11 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## 0.11.1
+
+- Workbench is on the Visual Studio Marketplace as Canonic Workbench. Install it from the Extensions view in VS Code. Existing installs from a VSIX file are the same extension, so the Marketplace updates them from now on.
+- The Extensions view lists the extension as Canonic Workbench. The activity bar, views, and commands still say Workbench. Nothing else changes.
+
 ## 0.11.0
 
 - Preview definitions type-check in your project. Install the types with `npm install --save-dev @canonic2/workbench`, and `tsc` and your editor resolve `import { definePreview } from '@canonic2/workbench'`. Workbench still compiles previews with its own copy, so the installed version affects types only. See Types in TypeScript Workbench previews.

@@ -1,6 +1,6 @@
 {
   "name": "@canonic2/workbench",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Types and define helpers for Canonic Workbench previews",
   "keywords": ["workbench", "preview", "design system", "storybook"],
   "homepage": "https://canonic.sh",
