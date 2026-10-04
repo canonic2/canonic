@@ -1,7 +1,8 @@
 /* Workbench releases for the Install sections and the changelog. A build asks
-   GitHub for the complete releases, newest first, and links the newest one or
-   the one a workbench tag names; the dev server links the Install sections to
-   GitHub's latest release without asking. */
+   GitHub for the releases: the Install sections link the newest complete one
+   (all six files) or the one a workbench tag names, and the changelog lists
+   every published one with whichever files it has. The dev server links the
+   Install sections to GitHub's latest release without asking. */
 
 export const TARGETS = [
   { target: 'darwin-arm64', computer: 'Mac with Apple silicon (M1 and later)', short: 'Mac, Apple silicon' },
@@ -26,14 +27,17 @@ function completeAssets(release) {
   return TARGETS.every(({ target }) => names.has(fileName(target)));
 }
 
-/* Published releases with all six platform files, newest version first. */
-export function completeReleases(releases) {
-  return releases.filter(release =>
-    !release.draft && !release.prerelease && versionParts(release) && completeAssets(release)
-  ).sort((a, b) => {
+/* Published workbench releases, with or without files, newest version first. */
+export function publishedReleases(releases) {
+  return releases.filter(release => !release.draft && !release.prerelease && versionParts(release)).sort((a, b) => {
     const av = versionParts(a), bv = versionParts(b);
     return bv[0] - av[0] || bv[1] - av[1] || bv[2] - av[2];
   });
+}
+
+/* Published releases with all six platform files, newest version first. */
+export function completeReleases(releases) {
+  return publishedReleases(releases).filter(completeAssets);
 }
 
 export function selectRelease(releases) {
@@ -76,8 +80,14 @@ export function latestDownloads(repository) {
 }
 
 export function releaseDownloads(release, repository) {
+  if (!completeAssets(release)) throw new Error('Workbench release is missing its platform files');
+  return releaseDetails(release, repository);
+}
+
+/* A release's version, notes, and links, with whichever platform files it has. */
+export function releaseDetails(release, repository) {
   const parts = versionParts(release);
-  if (!parts || !completeAssets(release)) throw new Error('Workbench release is missing its version or platform files');
+  if (!parts) throw new Error('Workbench release is missing its version');
   const repo = `https://github.com/${repository}`;
   const releases = `${repo}/releases`;
   if (!release.html_url.startsWith(`${releases}/tag/`)) throw new Error('Unexpected workbench release URL');
@@ -91,13 +101,14 @@ export function releaseDownloads(release, repository) {
     // The generated "Full Changelog" link, kept only when it stays on this
     // repository; otherwise the tag's commit history.
     changes: changes && changes.startsWith(`${repo}/`) ? changes : `${repo}/commits/${release.tag_name}`,
-    files: TARGETS.map(({ target, computer, short }) => {
+    files: TARGETS.flatMap(({ target, computer, short }) => {
       const name = fileName(target);
-      const asset = release.assets.find(item => item.name === name);
+      const asset = (release.assets || []).find(item => item.name === name);
+      if (!asset) return [];
       if (!asset.browser_download_url.startsWith(`${releases}/download/`)) {
         throw new Error(`Unexpected download URL for ${name}`);
       }
-      return { target, computer, short, name, url: asset.browser_download_url };
+      return [{ target, computer, short, name, url: asset.browser_download_url }];
     }),
   };
 }
@@ -150,7 +161,7 @@ export async function workbenchDownloads({ repository, tag, token, latest }) {
   return release && releaseDownloads(release, repository);
 }
 
-/* Every complete workbench release, newest first, for the changelog. */
+/* Every published workbench release, newest first, for the changelog. */
 export async function workbenchReleases({ repository, token }) {
-  return completeReleases(await listReleases(repository, token)).map(release => releaseDownloads(release, repository));
+  return publishedReleases(await listReleases(repository, token)).map(release => releaseDetails(release, repository));
 }

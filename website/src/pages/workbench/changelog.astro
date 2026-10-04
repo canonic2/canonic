@@ -1,6 +1,6 @@
 ---
-/* The Changelog page: every complete workbench release, newest first, with
-   its notes from GitHub, its links, and its six builds. */
+/* The Changelog page: every published workbench release, newest first, with
+   its notes from GitHub, its links, and whichever builds it has. */
 import Base from '../../layouts/Base.astro';
 import { download, downloads as loadDownloads, github, releases as loadReleases, workbenchNav } from '../../lib/workbench.js';
 
@@ -13,7 +13,7 @@ const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
 ---
 <Base
   title="Changelog · Canonic Workbench"
-  description="Every release of Canonic Workbench, newest first, with links to its builds and its changes on GitHub."
+  description="Every release of Canonic Workbench, newest first, with its notes, its changes on GitHub, and its builds where available."
   product="Workbench"
   version={latest}
   nav={workbenchNav('Changelog')}
@@ -24,7 +24,7 @@ const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
     <div class="wrap narrower">
       <span class="kicker">Changelog</span>
       <h1>What’s new in Workbench</h1>
-      <p class="lede">Every release of Canonic Workbench, newest first. Each one links to its builds and its full list of changes on GitHub.</p>
+      <p class="lede">Every release of Canonic Workbench, newest first, with its full list of changes on GitHub. Builds are listed for the releases that have them.</p>
     </div>
   </section>
 
@@ -54,17 +54,19 @@ const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
                   <a class="btn btn-sm" href={release.changes} target="_blank" rel="noopener">Full changelog on GitHub</a>
                   <a class="btn btn-sm btn-ghost" href={release.url} target="_blank" rel="noopener">Release page</a>
                 </div>
-                <div class="builds">
-                  <span class="builds-head">Builds</span>
-                  <div class="builds-list">
-                    {release.files.map(file => (
-                      <a class="get" href={file.url} aria-label={`Download v${release.version} for ${file.computer}: ${file.name}`}>
-                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
-                        {file.short}
-                      </a>
-                    ))}
+                {release.files.length > 0 && (
+                  <div class="builds">
+                    <span class="builds-head">Builds</span>
+                    <div class="builds-list">
+                      {release.files.map(file => (
+                        <a class="get" href={file.url} aria-label={`Download v${release.version} for ${file.computer}: ${file.name}`}>
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
+                          {file.short}
+                        </a>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </li>
           ))}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { TARGETS, completeReleases, latestDownloads, releaseDownloads, releaseNotes, selectRelease } from './releases.js';
+import { TARGETS, completeReleases, latestDownloads, publishedReleases, releaseDetails, releaseDownloads, releaseNotes, selectRelease } from './releases.js';
 
 const repository = 'canonic2/canonic';
 const targets = TARGETS.map(({ target }) => target);
@@ -37,10 +37,20 @@ test('the newest complete workbench release wins', () => {
   assert.throws(() => releaseDownloads(release('1.0.3', 'linux-arm64'), repository), /missing/);
 });
 
-test('the changelog lists complete releases, newest version first', () => {
+test('complete releases need all six files, newest version first', () => {
   const draft = { ...release('2.0.0'), draft: true };
   const listed = completeReleases([release('1.2.0'), release('1.10.0'), draft, release('1.11.0', 'win32-x64'), release('0.9.9')]);
   assert.deepEqual(listed.map(item => item.tag_name), ['workbench/v1.10.0', 'workbench/v1.2.0', 'workbench/v0.9.9']);
+});
+
+test('the changelog lists every published release, with the files each one has', () => {
+  const draft = { ...release('2.0.0'), draft: true };
+  const notesOnly = { ...release('1.0.0'), assets: [] };
+  const listed = publishedReleases([release('1.2.0'), notesOnly, draft, release('1.11.0', 'win32-x64')]);
+  assert.deepEqual(listed.map(item => item.tag_name), ['workbench/v1.11.0', 'workbench/v1.2.0', 'workbench/v1.0.0']);
+  assert.equal(releaseDetails(release('1.11.0', 'win32-x64'), repository).files.length, 5);
+  assert.deepEqual(releaseDetails(notesOnly, repository).files, []);
+  assert.throws(() => releaseDownloads(notesOnly, repository), /missing/);
 });
 
 test('generated release notes become text blocks and a changelog link', () => {
