@@ -25,7 +25,7 @@ function slug(value) {
   return String(value || 'canonic').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'canonic';
 }
 
-function screenSlugs(sources) {
+function pageSlugs(sources) {
   var used = {};
   var out = {};
   sources.slice().sort().forEach(function (source) {
@@ -53,36 +53,36 @@ function contentHash(items) {
   return 'sha256:' + hash.digest('hex');
 }
 
-function screenReadme(screen) {
+function pageReadme(page) {
   function link(file) {
-    return path.posix.relative(path.posix.dirname(screen.readme), file) || path.posix.basename(file);
+    return path.posix.relative(path.posix.dirname(page.readme), file) || path.posix.basename(file);
   }
-  var entryLines = screen.entries.length
-    ? screen.entries.map(function (entry) {
+  var entryLines = page.entries.length
+    ? page.entries.map(function (entry) {
         var detail = entry.kind === 'design' ? 'Design' : 'Source (' + entry.implementation + ')';
         return '- ' + detail + ': [`' + entry.path + '`](' + link(entry.path) + ')';
       }).join('\n')
-    : '- No portable design or source entry point was resolved for this screen.';
-  var fileLines = screen.files.length
-    ? screen.files.map(function (file) { return '- [`' + file + '`](' + link(file) + ')'; }).join('\n')
-    : '- No files are included in this screen hash.';
-  var screenshotLines = screen.screenshots.length
-    ? screen.screenshots.map(function (shot) {
+    : '- No portable design or source entry point was resolved for this page.';
+  var fileLines = page.files.length
+    ? page.files.map(function (file) { return '- [`' + file + '`](' + link(file) + ')'; }).join('\n')
+    : '- No files are included in this page hash.';
+  var screenshotLines = page.screenshots.length
+    ? page.screenshots.map(function (shot) {
         var label = shot.label + (shot.viewport ? ' · ' + shot.viewport.charAt(0).toUpperCase() + shot.viewport.slice(1) : '');
-        return '### ' + label + '\n\n![' + screen.label + ' — ' + label + '](' + link(shot.path) + ')\n\n' +
+        return '### ' + label + '\n\n![' + page.label + ' — ' + label + '](' + link(shot.path) + ')\n\n' +
           '`' + shot.width + ' × ' + shot.height + '` · [`' + shot.path + '`](' + link(shot.path) + ')';
       }).join('\n\n')
-    : 'No reference screenshot was captured for this screen.';
-  return '# ' + screen.label + '\n\n' +
-    'This file describes one Workbench screen for AI agents and other importers.\n\n' +
-    '- Screen ID: `' + screen.id + '`\n' +
-    '- Content hash: `' + screen.hash + '`\n' +
+    : 'No reference screenshot was captured for this page.';
+  return '# ' + page.label + '\n\n' +
+    'This file describes one Workbench page for AI agents and other importers.\n\n' +
+    '- Page ID: `' + page.id + '`\n' +
+    '- Content hash: `' + page.hash + '`\n' +
     '- Hash algorithm: SHA-256 over each included file’s archive-relative path and raw bytes, in lexical path order\n\n' +
-    'Compare the complete content hash with an earlier export to tell whether this screen or one of its exported local dependencies changed. Generated READMEs, archive metadata, package configuration added by the exporter, and files outside the list below are not part of the hash.\n\n' +
+    'Compare the complete content hash with an earlier export to tell whether this page or one of its exported local dependencies changed. Generated READMEs, archive metadata, package configuration added by the exporter, and files outside the list below are not part of the hash.\n\n' +
     '## Entry points\n\n' + entryLines + '\n\n' +
     'Start with the entry points, preserve the existing component API and project conventions, and use the included dependencies and assets as supporting context. Do not assume omitted application code, installed packages, secrets, tests, or build output are available.\n\n' +
     '## Reference screenshots\n\n' + screenshotLines + '\n\n' +
-    '## Files in this screen hash\n\n' + fileLines + '\n';
+    '## Files in this page hash\n\n' + fileLines + '\n';
 }
 
 function packageName(specifier) {
@@ -378,12 +378,12 @@ function create(root, view, options) {
   var packageRoots = {};
   var configuredPackages = new Set();
   var spriteDirectories = [];
-  var screenSources = Object.keys((view && view.screens) || {});
-  var screenDirectories = screenSlugs(screenSources);
-  var screenData = {};
-  screenSources.forEach(function (src) {
-    var screen = view.screens[src];
-    screenData[src] = { id: src, label: screen.label, direct: new Set(), entries: [] };
+  var pageSources = Object.keys((view && view.pages) || {});
+  var pageDirectories = pageSlugs(pageSources);
+  var pageData = {};
+  pageSources.forEach(function (src) {
+    var page = view.pages[src];
+    pageData[src] = { id: src, label: page.label, direct: new Set(), entries: [] };
   });
 
   function ownerFor(file, preferred) {
@@ -442,17 +442,17 @@ function create(root, view, options) {
     if (!target) return null;
     return { info: info, target: resolveReference(info.manifest, target, info.root, allowedRoots) };
   }
-  function add(file, preferred, reason, screenSource) {
+  function add(file, preferred, reason, pageSource) {
     file = path.resolve(file);
     var owner = ownerFor(file, preferred);
     if (!owner || OMIT_FILE.test(file.replace(/\\/g, '/'))) return;
     var stat;
     try { stat = fs.statSync(file); } catch (_) { warnings.push('Missing ' + reason + ': ' + file); return; }
-    if (stat.isDirectory()) { walk(file, function (child) { add(child, owner, reason, screenSource); }); return; }
+    if (stat.isDirectory()) { walk(file, function (child) { add(child, owner, reason, pageSource); }); return; }
     if (!stat.isFile()) return;
     var relative = path.relative(owner.root, file).replace(/\\/g, '/');
     if (relative.split('/').some(function (part) { return OMIT_DIRS[part]; })) return;
-    if (screenSource) screenData[screenSource].direct.add(file);
+    if (pageSource) pageData[pageSource].direct.add(file);
     if (files.has(file)) return;
     var destination = destinationFor(file, owner);
     files.set(file, { source: file, destination: destination, owner: owner });
@@ -468,24 +468,24 @@ function create(root, view, options) {
     linked.forEach(function (file) { dependencies.get(from).add(file); });
   }
 
-  /* A project of a file that lists several, or whose root is elsewhere,
+  /* A space of a file that lists several, or whose root is elsewhere,
      names its file; one outside the project isn't exported. */
   add(options.manifest || path.join(root, 'workbench.yaml'), owners[0], 'workbench manifest');
-  Object.keys((view && view.screens) || {}).forEach(function (src) {
-    var screen = view.screens[src];
-    if (screen.design) {
-      add(screen.design, owners[0], 'design: ' + screen.label, src);
-      if (files.has(path.resolve(screen.design))) screenData[src].entries.push({ kind: 'design', path: destinationFor(path.resolve(screen.design), owners[0]) });
+  Object.keys((view && view.pages) || {}).forEach(function (src) {
+    var page = view.pages[src];
+    if (page.design) {
+      add(page.design, owners[0], 'design: ' + page.label, src);
+      if (files.has(path.resolve(page.design))) pageData[src].entries.push({ kind: 'design', path: destinationFor(path.resolve(page.design), owners[0]) });
     }
-    (screen.code || []).forEach(function (entry) {
+    (page.code || []).forEach(function (entry) {
       if (!entry.path || !entry.exists) return;
       var owner = owners.find(function (candidate) { return candidate.key === entry.implementation; }) || ownerFor(entry.path);
-      add(entry.path, owner, 'source: ' + screen.label, src);
-      if (owner) screenData[src].entries.push({ kind: 'source', implementation: entry.implementation, path: destinationFor(path.resolve(entry.path), owner) });
+      add(entry.path, owner, 'source: ' + page.label, src);
+      if (owner) pageData[src].entries.push({ kind: 'source', implementation: entry.implementation, path: destinationFor(path.resolve(entry.path), owner) });
     });
   });
   (options.portable && options.portable.previews || []).forEach(function (preview) {
-    if (!screenData[preview.file]) return;
+    if (!pageData[preview.file]) return;
     preview.files.forEach(function (file) { add(file, ownerFor(file), 'Workbench preview dependency', preview.file); });
   });
   owners.forEach(function (owner) {
@@ -502,11 +502,11 @@ function create(root, view, options) {
     if (!implementation || implementation.kind !== 'storybook' || !implementation.root) return;
     var implementationRoot = path.resolve(implementation.root);
     var owner = ownerFor(implementationRoot);
-    var screens = screenSources.filter(function (src) {
-      return (view.screens[src].code || []).some(function (entry) { return entry.implementation === key; });
+    var pages = pageSources.filter(function (src) {
+      return (view.pages[src].code || []).some(function (entry) { return entry.implementation === key; });
     });
     storybookConfigDirectories(implementationRoot).forEach(function (directory) {
-      if (screens.length) screens.forEach(function (src) { add(directory, owner, 'Storybook configuration', src); });
+      if (pages.length) pages.forEach(function (src) { add(directory, owner, 'Storybook configuration', src); });
       else add(directory, owner, 'Storybook configuration');
     });
   });
@@ -601,8 +601,8 @@ function create(root, view, options) {
     } catch (_) { warnings.push('Could not read package manifest: ' + manifest); }
   });
 
-  var screenReports = screenSources.slice().sort().map(function (src) {
-    var data = screenData[src];
+  var pageReports = pageSources.slice().sort().map(function (src) {
+    var data = pageData[src];
     var included = new Set();
     var pending = Array.from(data.direct);
     while (pending.length) {
@@ -612,7 +612,7 @@ function create(root, view, options) {
       Array.from(dependencies.get(current) || []).forEach(function (dependency) { pending.push(dependency); });
     }
     var items = Array.from(included).map(function (file) { return files.get(file); });
-    var screen = {
+    var page = {
       id: data.id,
       label: data.label,
       hash: contentHash(items),
@@ -621,15 +621,15 @@ function create(root, view, options) {
       files: items.map(function (item) { return item.destination; }).sort(),
       screenshots: [],
     };
-    return screen;
+    return page;
   });
-  var screenParents = {};
+  var pageParents = {};
   var artifactParents = {};
-  screenReports.forEach(function (screen) {
-    var primary = screen.entries.find(function (entry) { return entry.kind === 'design'; }) || screen.entries[0];
-    var parent = primary ? path.posix.dirname(primary.path) : 'screens/' + screenDirectories[screen.id];
+  pageReports.forEach(function (page) {
+    var primary = page.entries.find(function (entry) { return entry.kind === 'design'; }) || page.entries[0];
+    var parent = primary ? path.posix.dirname(primary.path) : 'workbench-pages/' + pageDirectories[page.id];
     if (parent === '.') parent = '';
-    screenParents[screen.id] = parent;
+    pageParents[page.id] = parent;
     artifactParents[parent] = (artifactParents[parent] || 0) + 1;
   });
   var reserved = new Set(Array.from(files.values()).map(function (item) { return item.destination; }));
@@ -637,28 +637,28 @@ function create(root, view, options) {
   reserved.add('canonic-export.json');
   var screenshotDirectories = {};
   var artifactNames = {};
-  screenReports.forEach(function (screen) {
-    var parent = screenParents[screen.id];
+  pageReports.forEach(function (page) {
+    var parent = pageParents[page.id];
     var shared = artifactParents[parent] > 1;
     if (!artifactNames[parent]) artifactNames[parent] = {};
-    var base = slug(screen.label);
-    if (artifactNames[parent][base]) base += '-' + crypto.createHash('sha256').update(screen.id).digest('hex').slice(0, 8);
+    var base = slug(page.label);
+    if (artifactNames[parent][base]) base += '-' + crypto.createHash('sha256').update(page.id).digest('hex').slice(0, 8);
     artifactNames[parent][base] = true;
     var readme = path.posix.join(parent, shared ? base + '.README.md' : 'README.md');
     if (reserved.has(readme)) readme = path.posix.join(parent, base + '.README.md');
-    screen.readme = readme;
+    page.readme = readme;
     reserved.add(readme);
-    screenshotDirectories[screen.id] = path.posix.join(parent, 'screenshots', shared ? base : '');
+    screenshotDirectories[page.id] = path.posix.join(parent, 'screenshots', shared ? base : '');
   });
-  var reportByScreen = {};
-  screenReports.forEach(function (screen) { reportByScreen[screen.id] = screen; });
+  var reportByPage = {};
+  pageReports.forEach(function (page) { reportByPage[page.id] = page; });
   var screenshotEntries = [];
   var screenshotNames = {};
   (options.screenshots || []).forEach(function (shot) {
-    var screen = reportByScreen[shot.screen];
-    if (!screen || !shot.body) return;
+    var page = reportByPage[shot.page];
+    if (!page || !shot.body) return;
     var base = slug(shot.variant || shot.label || 'default');
-    var key = screen.id + '\0' + base;
+    var key = page.id + '\0' + base;
     var count = (screenshotNames[key] || 0) + 1;
     screenshotNames[key] = count;
     var name = base + (count > 1 ? '-' + count : '') + '.jpg';
@@ -666,11 +666,11 @@ function create(root, view, options) {
       state: shot.state || null,
       label: shot.label || 'Default',
       viewport: shot.viewport || 'fit',
-      path: path.posix.join(screenshotDirectories[screen.id], name),
+      path: path.posix.join(screenshotDirectories[page.id], name),
       width: shot.width,
       height: shot.height,
     };
-    screen.screenshots.push(screenshot);
+    page.screenshots.push(screenshot);
     screenshotEntries.push({ name: prefix + '/' + screenshot.path, body: shot.body });
   });
   var report = {
@@ -678,7 +678,7 @@ function create(root, view, options) {
     generatedAt: new Date().toISOString(),
     selection: 'Workbench design/source/story entry points plus transitive local imports, assets, and captured visual references.',
     files: Array.from(files.values()).map(function (item) { return item.destination; }).sort(),
-    screens: screenReports,
+    pages: pageReports,
     dependencies: Object.keys(packages).sort().map(function (name) { return { name: name, version: dependencyVersions[name] || null }; }),
     warnings: Array.from(new Set(warnings)).sort(),
     captureWarnings: Array.from(new Set(options.captureWarnings || [])).sort(),
@@ -688,16 +688,16 @@ function create(root, view, options) {
   };
   var readme = '# ' + (view && view.name || 'Workbench') + ' design-system export\n\n' +
     'This archive was generated from Workbench. Workspace files keep their original project-relative paths at this archive’s root; sources outside the workspace are under `implementations/`.\n\n' +
-    'The export starts with every design, component, page, and story source declared or discovered by the workbench, then includes their transitive local imports and referenced assets. Each generated screen guide embeds reference screenshots for its declared states or Storybook stories at the configured viewports: desktop, mobile, both for responsive, or the standard fit frame. Duplicate capture sizes are removed. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n' +
-    'See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each screen’s content hash. Each generated screen guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n' +
+    'The export starts with every design, component, page, and story source declared or discovered by the workbench, then includes their transitive local imports and referenced assets. Each generated page guide embeds reference screenshots for its declared states or Storybook stories at the configured viewports: desktop, mobile, both for responsive, or the standard fit frame. Duplicate capture sizes are removed. A docs page instead embeds, for each lens, the whole page at its 960-pixel layout and each example the lens renders, cropped to its panel. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n' +
+    'See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each page’s content hash. Each generated page guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n' +
     (options.portable ? '\n## Portable browser previews\n\nServe this extracted directory with any static HTTP server and open `browser/index.html`. The viewer includes searchable previews, state and viewport selection, editable controls, reset, actions, and documentation. Copy its address to share a selection. These compiled Workbench previews need no Electron, Workbench, package installation, or build step. Direct preview pages accept `?state=<id>`. Original editable sources remain in their project-relative locations. Check `browser.warnings` in the export report for previews that could not be built.\n' : '');
   var generatedPackage = { private: true, name: slug(view && view.name) + '-design-system', version: '0.0.0', dependencies: {} };
   report.dependencies.forEach(function (dependency) { generatedPackage.dependencies[dependency.name] = dependency.version || '*'; });
   var entries = Array.from(files.values()).map(function (item) {
     return { name: prefix + '/' + item.destination, body: fs.readFileSync(item.source) };
   }).sort(function (a, b) { return a.name.localeCompare(b.name); });
-  screenReports.forEach(function (screen) {
-    entries.push({ name: prefix + '/' + screen.readme, body: screenReadme(screen) });
+  pageReports.forEach(function (page) {
+    entries.push({ name: prefix + '/' + page.readme, body: pageReadme(page) });
   });
   screenshotEntries.forEach(function (entry) { entries.push(entry); });
   (options.portable && options.portable.files || []).forEach(function (file) {
@@ -706,7 +706,7 @@ function create(root, view, options) {
   });
   if (options.portable && !files.has(path.join(root, 'workbench-env.d.ts'))) {
     var types = fs.readFileSync(path.join(__dirname, 'preview', 'api.d.ts'), 'utf8');
-    entries.push({ name: prefix + '/workbench-env.d.ts', body: 'declare module "@canonic2/workbench" {\n' + types + '\n}\n' });
+    entries.push({ name: prefix + '/workbench-env.d.ts', body: '// Canonic types: see browser/CANONIC-LICENSE.txt.\n' + 'declare module "@canonic2/workbench" {\n' + types + '\n}\n' });
   }
   if (!files.has(path.join(root, 'package.json'))) {
     entries.push({ name: prefix + '/package.json', body: JSON.stringify(generatedPackage, null, 2) + '\n' });

@@ -4,7 +4,7 @@ This spec covers the camera download and the screenshot-backed handoff from
 the current canvas, and the bundled Electron runtime that renders them. The
 [design-system export](export.md) uses the same capture service on its own
 schedule. [TypeScript previews](previews.md) run their compiler and server
-from the same runtime. See [markup.js](../workbench/markup.js),
+from the same runtime. See [annotations.js](../workbench/annotations.js),
 [dom-mirror.js](../workbench/dom-mirror.js),
 [capture-sync.js](../workbench/capture-sync.js),
 [capture-page.js](../workbench/capture-page.js),
@@ -12,13 +12,13 @@ from the same runtime. See [markup.js](../workbench/markup.js),
 [electron-runtime.js](../electron-runtime.js),
 [capture-helper/main.cjs](../capture-helper/main.cjs), and the page scripts
 in [capture-scripts.js](../capture-scripts.js). The user-facing description is
-[Markup and handoff](../docs/markup-and-handoff.md#screenshots).
+[Annotations and handoff](../docs/annotations-and-handoff.md#screenshots).
 
 ## Why a helper exists
 
 The VS Code extension host can run Node code but does not own the compositor
 pixels of a webview. The embedded webview also cannot rely on browser display
-capture to read its own frame or a foreign-origin iframe. The extension ships
+capture to read its own view or a foreign-origin iframe. The extension ships
 a private Electron application that renders the requested view in a hidden
 `BrowserWindow` and reads its pixels with `webContents.capturePage`. This is
 web-page capture, not an operating-system screenshot of VS Code.
@@ -77,11 +77,24 @@ web-page capture, not an operating-system screenshot of VS Code.
 
 ## What is captured
 
+The [multiple-artboard support API](multiple-artboards.md) captures every supplied artboard,
+including off-camera views and mixed spaces/content. `src/canvas/review.ts`
+composes one labelled JPEG with local annotation coordinates mapped to
+regions. Limits are 32 megapixels and 32767px per edge. Loading/error views
+have explicit placeholders; a ready-view capture failure stops the operation.
+The controller locks ready instances and verifies identity before/after
+sequential acquisition. Only captured annotations are cleared, after handoff
+success.
+
+These APIs are verified through a temporary harness; existing screenshot and
+handoff controls keep their single-view behavior. The acquisition paths below
+can run independently within each isolated renderer.
+
 - **Local authored pages and TypeScript previews.** Both are served on the
   workbench origin; a TypeScript preview renders in the workbench's preview
   host page. The browser continuously mirrors the active, live document into
   the helper's inert `/_workbench/capture.html` surface, inside a sandboxed
-  frame that cannot run scripts. The first update is complete; later updates
+  iframe that cannot run scripts. The first update is complete; later updates
   are revisioned patches. Open shadow roots, inline and adopted stylesheets,
   form and scroll state, focus, open dialogs and popovers, canvas pixels,
   readable video frames, animation state, pointer position, and annotations
@@ -89,12 +102,12 @@ web-page capture, not an operating-system screenshot of VS Code.
   hover states appear in the screenshot. Application scripts run in the
   visible preview, not in the capture document. The server rejects mirror
   records that carry executable nodes.
-- **Synchronization.** Mutations, inputs, frame resizes, and markup changes
-  schedule preparation; a 250 ms heartbeat catches changes that do not emit
-  those events. The helper retains unchanged nodes and decoded assets. Before
-  a click capture, the workbench flushes the current state and pauses
-  speculative updates. A lost mirror base triggers a full snapshot retry of
-  that requested state. Preparation resumes after capture, including after
+- **Synchronization.** Mutations, inputs, preview frame resizes, and
+  annotation changes schedule preparation; a 250 ms heartbeat catches changes
+  that do not emit those events. The helper retains unchanged nodes and
+  decoded assets. Before a click capture, the workbench flushes the current state and
+  pauses speculative updates. A lost mirror base triggers a full snapshot
+  retry of that requested state. Preparation resumes after capture, including after
   failure.
 - **URL and Storybook lenses.** These are cross-origin, loaded through the
   [implementation proxy](implementation-proxy.md), which adds the
@@ -102,11 +115,11 @@ web-page capture, not an operating-system screenshot of VS Code.
   page. The visible iframe sends full live snapshots, which the helper renders
   on the same inert capture surface. Until the bridge has sent its first
   snapshot, the helper navigates to the URL in its own browser session,
-  restores scroll, waits for fonts and visible images, and overlays marks. An
-  iframe login does not sign in the helper, and interaction in the iframe is
-  not reflected in that fallback.
+  restores scroll, waits for fonts and visible images, and overlays
+  annotations. An iframe login does not sign in the helper, and interaction in
+  the iframe is not reflected in that fallback.
 - **iOS Simulator and window lenses.** These show a native window stream.
-  Their camera and handoff use the canvas DOM renderer on the visible frame,
+  Their camera and handoff use the canvas DOM renderer on the visible artboard,
   not the Electron helper. Screen Recording permission belongs to the
   editor's macOS identity.
 
@@ -124,14 +137,14 @@ local routes accept only the workbench origin. Capture dimensions match the
 preview's CSS pixels, including on Retina displays. The UI requests JPEG at
 quality 90. API callers may request PNG; without a format, PNG is the
 endpoint default. JPEG is lossy and has no transparency. Filenames follow the
-screen's file, state or story, and lens, and repeated handoffs of one view get
+page's file, state or story, and lens, and repeated handoffs of one view get
 numbered suffixes.
 
-A handoff prompt names the screen, state, width, saved screenshot, each mark
-with its position and the element under it, the lens's implementation and
-URL, and any code pointers or TypeScript preview source. The element under a
-mark comes from the visible document for local pages, from the mirrored copy
-on the capture surface for bridged lenses
+A handoff prompt names the page, state, width, saved screenshot, each
+annotation with its position and the element under it, the lens's
+implementation and URL, and any code pointers or TypeScript preview source.
+The element under an annotation comes from the visible document for local
+pages, from the mirrored copy on the capture surface for bridged lenses
 ([capture-page.js](../workbench/capture-page.js)), and from the helper's page
 for the URL fallback. The prompt says when elements could not be read.
 See [handoff.js](../handoff.js).
@@ -174,8 +187,8 @@ See [handoff.js](../handoff.js).
 
 ### Verified behavior
 
-The requirements above match the code as of 2026-10-03, except for the gaps
-below. Not covered by automated tests: the macOS < 13 and display-less Linux
+The acquisition requirements below run within each artboard; full-canvas
+composition and real-browser support-harness handoffs are verified (2026-10-04). Not covered by automated tests: the macOS < 13 and display-less Linux
 cases, and embedded documents or tainted pixels.
 
 ### Implementation gaps
@@ -202,7 +215,7 @@ cases, and embedded documents or tainted pixels.
   restoration for unbridged pages.
 - [capture-scripts.test.js](../capture-scripts.test.js) covers overlay
   scrolling, export settling, and the Storybook switch script.
-- [markup-capture.test.js](../workbench/markup-capture.test.js),
+- [annotations-capture.test.js](../workbench/annotations-capture.test.js),
   [capture-sync.test.js](../workbench/capture-sync.test.js),
   [capture-page.test.js](../workbench/capture-page.test.js), and
   [dom-mirror.test.js](../workbench/dom-mirror.test.js) cover the browser

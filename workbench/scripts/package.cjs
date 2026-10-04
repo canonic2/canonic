@@ -7,7 +7,7 @@ if (at < 0) args.push('--target', target);
 require('./bundle-compiler.cjs').bundle(target).then(function () {
   return require('./bundle-runtime.cjs').bundle(target);
 }).then(function () {
-  var vsce = require.resolve('@vscode/vsce/vsce');
+  var vsce = path.join(__dirname, 'vsce.cjs');
   var child = cp.spawn(process.execPath, [vsce, 'package', '--allow-missing-repository', '--no-rewrite-relative-links'].concat(args), {
     cwd: path.resolve(__dirname, '..'), stdio: 'inherit',
   });

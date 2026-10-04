@@ -16,22 +16,23 @@ curl -s http://127.0.0.1:3579/_workbench/config
 
 Use **Workbench: Copy Canvas URL** for the actual port. The answer includes:
 
-- `problems`: every line Workbench couldn't use, named by section and screen,
+- `problems`: every line Workbench couldn't use, named by collection and page,
   such as `Pages › Sign in: implementation “dev” isn’t declared under implementations.`
-- `screens`: each screen's `design` file as an absolute path, and its `code`
+- `pages`: each page's `design` file as an absolute path, and its `code`
   pointers resolved against their implementation's `root`, each with `exists`
-  saying whether it is on disk,
+  saying whether it is on disk. For a docs page, `design` is its Markdown file
+  and `code` includes each lens's example source,
 - `implementations`: each implementation's resolved address, `root`, and start
   command, including values from `workbench.local.yaml`,
 - `files`: whether `workbench.yaml` (`main`) and `workbench.local.yaml`
   (`local`) were read.
 
-Read `problems` first whenever a lens, story, preview, catalog screen, or
-source link is missing. A hand-written screen dropped for a bad `src`, label,
-state id, or folder isn't listed there; see
-[A screen is missing from the list](#a-screen-is-missing-from-the-list).
+Read `problems` first whenever a lens, story, preview, catalog page, docs
+example, or source link is missing. A hand-written page dropped for a bad
+`src`, label, state id, or group isn't listed there; see
+[A page is missing from the list](#a-page-is-missing-from-the-list).
 
-In VS Code, the screen list shows the same problems above the screens when
+In VS Code, the problems list in the sidebar shows the same problems when
 TypeScript previews or a catalog are on. A standalone browser doesn't list
 them, so read the config route there.
 
@@ -69,9 +70,9 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 - `workbench.yaml` must be at the root of an open folder, not in a subfolder.
   Open the folder that contains it, or add that folder to the workspace; see
   [Projects in a subfolder](extension.md#projects-in-a-subfolder).
-- In a multi-root workspace, every folder with a `workbench.yaml` is a
-  project, but the view shows one at a time. Use the switcher at the top of the
-  view; see [Several projects](projects.md).
+- In a multi-root workspace, every folder with a `workbench.yaml` adds its
+  spaces, but the view shows one at a time. Use the switcher at the top of the
+  view; see [Several spaces](spaces.md).
 - The workspace must be trusted. VS Code doesn't run Workbench in Restricted
   Mode.
 - After installing or updating, run **Developer: Reload Window**.
@@ -86,30 +87,31 @@ causes:
 | A tab character | Indent with spaces. |
 | `{a: b}` or `[a, b]` | Write the map or list in block style. Flow collections aren't supported. |
 | A value cut short at `#` | A space followed by `#` starts a comment. Quote the value. |
-| *nothing to show* | No section has a usable screen. Read `problems` for why each was dropped. |
+| *nothing to show* | No collection has a usable page. Read `problems` for why each was dropped. |
 
 See [YAML that the reader accepts](configuration.md#yaml-that-the-reader-accepts).
 
-## A screen is missing from the list
+## A page is missing from the list
 
-A screen, folder, or section that can't be used is dropped, and the rest of
+A page, group, or collection that can't be used is dropped, and the rest of
 the list still builds. These problems are written to the canvas's console,
 not to the config route: in VS Code, run
 **Developer: Open Webview Developer Tools** and read the console. The usual
 reasons:
 
 - It has no `label` or no `src`.
-- Its `src` starts with `/`, contains `..`, or contains `:` or `~`.
-- It is inside a folder inside a folder. Folders don't nest.
-- Its section has no `name`.
+- Its `src` starts with `/`, contains `..`, or contains `:`, `!`, or `~`.
+- It is in a group inside another group. Groups don't nest.
+- Its collection (its `collections` entry) has no `name`.
 
-Nothing is scanned. A page that isn't listed in `workbench.yaml` isn't shown,
-except for screens imported by a [catalog](configuration.md#catalogs).
+HTML pages aren't scanned for. A page that isn't listed in `workbench.yaml`
+isn't shown, except for pages imported by a [catalog](configuration.md#catalogs)
+and the previews and docs pages that `*.workbench.ts` files define.
 
-## A screen is blank or shows a 404
+## A page is blank or shows a 404
 
 - The `src` path is relative to the project root, not to `workbench.yaml`'s
-  folder or the page's folder. Check the screen's `design` path in the config
+  folder or the page's folder. Check the page's `design` path in the config
   route.
 - Assets with root-relative paths (`/styles/app.css`) resolve from the project
   root. If your pages expect another root, use relative paths.
@@ -124,11 +126,11 @@ except for screens imported by a [catalog](configuration.md#catalogs).
   `.workbench.tsx`, match `previews.include` when you set it, and sit outside
   hidden folders, `node_modules`, and build output such as `dist` and `build`.
   `previews: false` turns discovery off.
-- **Added or removed a file:** run **Workbench: Refresh Screens**. Only changes
+- **Added or removed a file:** run **Workbench: Refresh Pages**. Only changes
   to the YAML files refresh the list on their own.
 - **`Workbench previews: …`** The worker or `workbench.config.ts` failed. The
   log's `preview.worker` entries hold the worker's error output.
-- **`unknown Workbench preview “…”`** A screen's `kind: workbench` lens names an
+- **`unknown Workbench preview “…”`** A page's `kind: workbench` lens names an
   id that no definition declares.
 - **The canvas shows an error instead of the component:** the message is the
   compile or render error, such as an unknown adapter or a framework package
@@ -141,6 +143,23 @@ except for screens imported by a [catalog](configuration.md#catalogs).
 - **`The preview config environment must be a file inside the project`:**
   `environment` in `workbench.config.ts` names a missing file. It's relative to
   the project root.
+
+## A docs page's examples don't render
+
+The Markdown of a [docs page](docs-pages.md) renders even when its examples
+can't, and each example's panel says why it is empty.
+
+- **Examples run your project's code.** They render only in a trusted
+  workspace, and not when `workbench.yaml` sets `previews: false`.
+- **Read the problems list,** or `problems` in the config route. It names the
+  page for a missing Markdown file, an example block with an unknown key or a
+  duplicate ID (with its line), an example a lens has that the page never
+  places, example file names that aren't kebab-case, and a lens that fails to
+  build.
+- **A panel says *Not available in …*:** the lens showing has no example with
+  that ID. Switch lenses, or add the example to that lens's source.
+
+See [Requirements and problems](docs-pages.md#requirements-and-problems).
 
 ## A preview shows the wrong data, or a request fails
 
@@ -161,7 +180,7 @@ except for screens imported by a [catalog](configuration.md#catalogs).
   `pending` or long `delay` mock. A server render can't show a loading state;
   see [Astro](astro.md#preview-a-page).
 
-See [Give a screen its data](preview-data.md#choose-how-to-give-a-screen-its-data).
+See [Give a page its data](preview-data.md#choose-how-to-give-a-page-its-data).
 
 To check every preview without the canvas, run the extension's checker on the
 project. It builds each preview and lists the failures:
@@ -174,9 +193,9 @@ See [TypeScript Workbench previews](workbench-previews.md).
 
 ## States don't show or don't change anything
 
-- **No state rows:** a screen needs at least two valid states. Each needs an
-  `id` and a `label`, and ids must be kebab-case.
-- **The row is there, but the page doesn't change:** the page has to answer to
+- **No states in the page list:** a page needs at least two valid states.
+  Each needs an `id` and a `label`, and ids must be kebab-case.
+- **The state is listed, but the page doesn't change:** the page has to answer to
   the id. Check the spelling matches, and that you used one of the
   [three hooks](pages-and-states.md#states).
 - **The first state doesn't match:** the first state always appears in the page
@@ -190,24 +209,28 @@ See [TypeScript Workbench previews](workbench-previews.md).
 ## Links don't work in a page
 
 Actions are off by default, so links don't navigate and forms don't submit.
-Turn on **Actions** in the toolbar. With actions on, a link to an `.html` page
-in the project that isn't listed as a screen still does nothing; add the page
-to `workbench.yaml`. See [Links and actions](pages-and-states.md#links-and-actions).
+Turn on **Actions** in the top bar. With actions on, a link to an `.html` page
+in the project that isn't listed in `workbench.yaml` still does nothing; add
+the page there. See [Links and actions](pages-and-states.md#links-and-actions).
 
 In a [Workbench preview](preview-data.md#links-and-navigation), a link
-opens another screen only when the definition's `links` maps its address to a
+opens another page only when the definition's `links` maps its address to a
 preview. Every other link and form is recorded under **Actions** in
 **Preview controls**, by design; map the address to make it open a preview.
 
-## A width button is disabled
+## A size is disabled
 
-The screen's `viewports` doesn't list it. Hover over the button to see why. See
-[Viewports](pages-and-states.md#viewports).
+The page's `viewports` doesn't list it. On a docs page, every size in the size
+switcher is disabled, because the docs canvas mode has no artboard. Hover
+over the button to see why. See [Viewports](pages-and-states.md#viewports).
 
 ## A lens is missing
 
-- The screen must list the implementation under its own `implementations`,
+- The lens switcher shows only when the page has two or more lenses.
+- The page must list the implementation under its own `implementations`,
   and the implementation must be declared at the top level. Read `problems`.
+- A docs page's lenses are `examples` implementations, and it has no
+  **Design** button. See [Lenses](docs-pages.md#lenses).
 - For `url`, every path must start with `/`, and a state map needs a path for
   the default state.
 - For `storybook`, the title must match exactly. [Check the title](#check-a-storybook-title).
@@ -258,7 +281,7 @@ See [iOS Simulator troubleshooting](ios-simulator.md#troubleshooting) and
 | A font or image is missing in the first screenshot after loading | The helper's copy was still loading assets. Take it again. |
 | Screenshots fail with an error | Read **Workbench: Show Log**. The screenshot helper needs macOS 13 or later, Windows, or Linux with a display; see [The screenshot helper](extension.md#the-screenshot-helper). |
 
-See [What screenshots can and can't include](markup-and-handoff.md#what-screenshots-can-and-cant-include).
+See [What screenshots can and can't include](annotations-and-handoff.md#what-screenshots-can-and-cant-include).
 
 ## Copy handoff is missing
 
@@ -271,7 +294,7 @@ you started yourself with `node server.js`. Use the camera there instead.
 The prompt's `Screenshot:` path is relative to the folder that holds
 `workbench.yaml`. Run the agent in that folder, or give it the file from
 `.canonic/.handoffs/` yourself. See
-[Pasting into an agent](markup-and-handoff.md#pasting-into-an-agent).
+[Pasting into an agent](annotations-and-handoff.md#pasting-into-an-agent).
 
 ## Source links don't open
 

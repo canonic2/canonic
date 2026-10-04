@@ -15,11 +15,11 @@ app's dev server, a staging site. Screenshots and handoffs must show that page
 **as the reviewer sees it**: an opened modal or menu, typed text, a scroll
 position, a signed-in state.
 
-Workbench captures what is on screen by streaming the live DOM into the
+Workbench captures what the reviewer sees by streaming the live DOM into the
 screenshot helper ([capture.md](capture.md)). For pages on the workbench's own
 origin, the workbench reads the iframe's document directly. A page on another
 origin can't be read: the browser blocks scripts from reaching into a
-cross-origin frame. Only a script running **inside** that page, the preview
+cross-origin iframe. Only a script running **inside** that page, the preview
 bridge (`/_workbench/preview-bridge.js`), can send its DOM out.
 
 Before the proxy, the lens iframe loaded the implementation's own address, so
@@ -35,15 +35,15 @@ acceptable. The proxy lets Workbench add the bridge itself.
 
 ## Why a proxy
 
-The script has to get into a page whose HTML another server sends, inside a
-frame Workbench doesn't control. These were considered and rejected:
+The script has to get into a page whose HTML another server sends, inside an
+iframe Workbench doesn't control. These were considered and rejected:
 
 | Approach | Why it doesn't work |
 | --- | --- |
 | Teams load the bridge from `.storybook/preview` or their app | Product requirement: projects install nothing for Workbench. |
 | VS Code injects the script | Extensions can only `postMessage` to the top document of their webview. There is no API to run script in a nested frame, and no access to the webview's Electron `webContents` or DevTools protocol. |
 | The Electron capture helper injects the script | The helper renders a separate, hidden copy for screenshots. The page the reviewer interacts with lives in VS Code's webview, which the helper never touches. |
-| The workbench page reads the iframe | Same-origin policy forbids reading a cross-origin frame. |
+| The workbench page reads the iframe | Same-origin policy forbids reading a cross-origin iframe. |
 | Serve the implementation under a path on the workbench's own origin | Dev servers request absolute paths (`/@vite/client`, `/sb-addons/…`, `/index.json`, `/storybook-server-channel`) that collide with project files and `/_workbench/` routes, and a second implementation makes them ambiguous. |
 | Reload the URL in the helper and replay state | Interaction state lives in the page's memory; a fresh load can't reproduce it, and the helper has its own session. |
 
@@ -74,7 +74,7 @@ extends that model to pages it doesn't own.
 - **Only the bridge.** The compatibility bundle (`preview-compat.js`) is for
   pages Workbench serves; its form and navigation handling would change how an
   external app behaves.
-- **Keep the page in the frame.** Drop `X-Frame-Options`,
+- **Keep the page in the preview frame.** Drop `X-Frame-Options`,
   `Content-Security-Policy` (and its report-only form), and the cross-origin
   opener, embedder, and resource policies. Remove `Domain`, `Secure`, and
   `SameSite` from cookies so they belong to the proxy origin. Rewrite redirect
@@ -85,8 +85,8 @@ extends that model to pages it doesn't own.
 - **The server talks to implementations directly.** Storybook index reads,
   catalog imports, start checks, and export reference captures use the
   configured address, not the proxy.
-- **A stopped implementation answers 502** in the frame, naming the address
-  that isn't answering.
+- **A stopped implementation answers 502** in the preview frame, naming the
+  address that isn't answering.
 - **Capture accepts the proxy origins** alongside the configured ones
   (`origins()` in [server.js](../server.js)).
 
@@ -113,8 +113,8 @@ Verified 2026-10-03:
 
 - Against a Vite-based Storybook on `localhost:6006`, with no Storybook
   changes: the bridge connected, a modal opened by a real click appeared in the
-  screenshot, and a handoff named the element under its mark from the mirrored
-  copy. Storybook's channel WebSocket ran through the proxy. Vite's HMR socket
+  screenshot, and a handoff named the element under its annotation from the
+  mirrored copy. Storybook's channel WebSocket ran through the proxy. Vite's HMR socket
   connected to port 6006 directly, which works because Vite names its own port.
   No page exceptions.
 - With a fixture that sends `X-Frame-Options: DENY`, the page loaded and an
@@ -149,6 +149,6 @@ Verified 2026-10-03:
   to `upstream`.
 - [capture-page.test.js](../workbench/capture-page.test.js): element names from
   the mirrored copy.
-- Manual: [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) for frames and
-  sessions through the proxy, and a running Storybook for an interaction-only
+- Manual: [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) for lens iframes
+  and sessions through the proxy, and a running Storybook for an interaction-only
   state (such as an opened modal) appearing in a screenshot.

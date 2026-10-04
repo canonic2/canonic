@@ -43,9 +43,10 @@ export const searchIndex = docGroups.flatMap(group => group.entries).map(entry =
   text: entry.body.replace(/^#\s+/, '').toLowerCase(),
 }));
 
-// Base.astro marks <html> with `js` before the page renders, and the site's
-// CSS shows Copy buttons and captions only then. A component preview has no
-// Base, so each one marks the frame the same way.
-export const withScripts = () => { document.documentElement.classList.add('js'); };
-
 export const styles = ['../../src/styles/global.css'];
+
+// A component's docs page has one lens: its folder of .astro examples, with
+// the site's styles and environment.ts around them.
+export const lens = (examples: string, extra: string[] = []) => ({
+  astro: { label: 'Astro', adapter: 'astro', examples, styles: [...styles, ...extra], environment: './environment.ts' },
+});

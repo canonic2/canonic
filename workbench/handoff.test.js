@@ -2,14 +2,14 @@ var assert = require('node:assert/strict');
 var test = require('node:test');
 var handoff = require('./handoff');
 
-test('serializes every markup type with its geometry and target', function () {
+test('serializes every annotation type with its geometry and target', function () {
   var text = handoff.prompt({
     label: 'Example',
     src: 'preview/example.html',
     width: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/example.png',
-    marks: [
+    annotations: [
       { type: 'arrow', from: { x: 1, y: 2 }, to: { x: 3, y: 4 }, target: 'button.primary' },
       { type: 'line', from: { x: 5, y: 6 }, to: { x: 7, y: 8 }, target: 'div.rule' },
       { type: 'rect', box: { x: 9, y: 10, w: 11, h: 12 }, target: 'section.card' },
@@ -36,7 +36,7 @@ test('includes both freeform notes and comments in the written request summary',
     width: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/example.png',
-    marks: [
+    annotations: [
       { type: 'text', box: { x: 10, y: 20, w: 100, h: 30 }, text: 'Freeform note' },
       { type: 'comment', box: { x: 30, y: 40, w: 200, h: 80 }, text: 'Written comment', target: null },
     ],
@@ -58,23 +58,23 @@ test('reads exactly as it did for a design without code pointers', function () {
     width: 'Mobile · iPhone 15 Pro, 393 × 852',
     frame: { w: 393, h: 852 },
     file: '.canonic/.handoffs/sign-in-error.png',
-    marks: [
+    annotations: [
       { type: 'rect', box: { x: 9, y: 10, w: 11, h: 12 }, target: 'section.card' },
       { type: 'comment', box: { x: 25, y: 26, w: 27, h: 28 }, text: 'Tighter', target: null },
     ],
   });
 
   assert.equal(text, [
-    'Here is a screen from Workbench.',
+    'Here is a page from Workbench.',
     '',
-    '- Screen: Sign in — `pages/sign-in.html`',
+    '- Page: Sign in — `pages/sign-in.html`',
     '- State: Wrong password',
-    '- Width: Mobile · iPhone 15 Pro, 393 × 852 (frame is 393 × 852 CSS px)',
+    '- Width: Mobile · iPhone 15 Pro, 393 × 852 (artboard is 393 × 852 CSS px)',
     '- Screenshot: `.canonic/.handoffs/sign-in-error.png`',
     '',
-    'The screenshot has 2 marks drawn over it. **Everything red in the image is annotation, not design** — arrows, boxes, circles, scribbles and the red text are notes about the screen, drawn on top of it. Nothing red is something to build.',
+    'The screenshot has 2 annotations drawn over it. **Everything red in the image is an annotation, not the design** — arrows, boxes, circles, scribbles and the red text are notes about the page, drawn on top of it. Nothing red is something to build.',
     '',
-    'Rather than reading them off the picture, here they are. Coordinates are CSS pixels from the top-left of the frame at the width above, and the element named on each line is the one under that mark in the live DOM:',
+    'Rather than reading them off the picture, here they are. Coordinates are CSS pixels from the top-left of the artboard at the width above, and the element named on each line is the one under that annotation in the live DOM:',
     '',
     '1. Rectangle at (9, 10), 11 × 12 — on section.card',
     '2. Comment at (25, 26), 27 × 28: “Tighter”',
@@ -98,7 +98,7 @@ test('says which implementation, story and source a lens shot is of', function (
     width: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/components-button-icon-only-storybook.png',
-    marks: [{ type: 'rect', box: { x: 9, y: 10, w: 11, h: 12 }, target: null }],
+    annotations: [{ type: 'rect', box: { x: 9, y: 10, w: 11, h: 12 }, target: null }],
   });
 
   assert.match(text, /^- State: Icon Only$/m);
@@ -106,7 +106,7 @@ test('says which implementation, story and source a lens shot is of', function (
   assert.match(text, /^- Implementation: Storybook — `http:\/\/localhost:6006\/iframe\.html\?id=components-button--icon-only&viewMode=story`$/m);
   assert.match(text, /^- Source: `\/repo\/packages\/ui\/src\/button\.tsx`, `\/repo\/packages\/ui\/src\/button\.stories\.tsx`$/m);
   assert.match(text, /The screenshot is the implementation at that address, seen through the workbench — the design it should match is `preview\/components-button\.html`\./);
-  assert.match(text, /\(The elements under the marks couldn’t be read — the page is served from elsewhere — so go by the coordinates and the screenshot\.\)/);
+  assert.match(text, /\(The elements under the annotations couldn’t be read — the page is served from elsewhere — so go by the coordinates and the screenshot\.\)/);
   assert.doesNotMatch(text, /over empty space/);
 });
 
@@ -118,15 +118,15 @@ test('names the source on a design that has one, and nothing else new', function
     width: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/sign-in.png',
-    marks: [],
+    annotations: [],
   });
 
   assert.match(text, /^- Source: `\/repo\/src\/pages\/login`$/m);
   assert.doesNotMatch(text, /Implementation:/);
-  assert.match(text, /Nothing is marked up — the screenshot is the design as it stands\./);
+  assert.match(text, /Nothing is annotated — the screenshot is the design as it stands\./);
 });
 
-test('an unmarked lens shot is the implementation as it stands', function () {
+test('an unannotated lens shot is the implementation as it stands', function () {
   var text = handoff.prompt({
     label: 'Sign in',
     src: 'pages/sign-in.html',
@@ -134,8 +134,26 @@ test('an unmarked lens shot is the implementation as it stands', function () {
     width: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/sign-in-dev.png',
-    marks: [],
+    annotations: [],
   });
   assert.match(text, /^- Implementation: Dev — `http:\/\/localhost:3710\/`$/m);
-  assert.match(text, /Nothing is marked up — the screenshot is the implementation as it stands\./);
+  assert.match(text, /Nothing is annotated — the screenshot is the implementation as it stands\./);
+});
+
+test('a handoff from a docs page names its Markdown, lens, and the examples in view with their code', function () {
+  var text = handoff.prompt({
+    file: '.canonic/.handoffs/card.jpg', src: 'docs/card.md', label: 'Card', state: null, width: 'Docs page',
+    frame: { w: 1200, h: 800 }, annotations: [],
+    lens: { key: 'dark', label: 'Dark', kind: 'examples', url: 'http://127.0.0.1:3579/docs/card.md?lens=dark' },
+    docs: { lens: 'dark', markdown: 'docs/card.md', lensLabel: 'Dark', examples: [
+      { id: 'basic', status: 'ready', file: 'docs/card.examples.ts (basic)' },
+      { id: 'nested', status: 'missing' },
+    ] },
+  });
+  assert.match(text, /- Docs page: `docs\/card.md`, examples rendered by Dark/);
+  assert.match(text, /- Examples in view: basic — `docs\/card.examples.ts \(basic\)`; nested \(missing\)/);
+  assert.doesNotMatch(text, /Implementation:|the design it should match/);
+  assert.match(text, /- View: the docs page fills the canvas; the part in view is 1200 × 800 CSS px/);
+  assert.doesNotMatch(text, /artboard is/);
+  assert.match(text, /the screenshot is the docs page as it stands/);
 });

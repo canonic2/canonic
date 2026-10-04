@@ -112,7 +112,7 @@
   }
 
   /* Where to ask for the stream: the Simulator by device, a window by the
-     screen that names it. The server looks up the rest in the config. */
+     page that names it. The server looks up the rest in the config. */
   function streamRequest(selected, codec) {
     if (selected.kind === 'window') {
       return ['/_workbench/window/stream', { implementation: selected.implementation, src: selected.src, codec: codec }];
@@ -138,7 +138,8 @@
     }
     /* VS Code does not promise the proprietary H.264 decoder exposed by a
        full browser. JPEG uses the webview's ordinary image decoder. */
-    var request = streamRequest(selected, window.parent === window && 'VideoDecoder' in window ? 'h264' : 'jpeg');
+    var browserHost = window.parent === window || (window.location && String(window.location.search || '').indexOf('canvas-host=browser') !== -1);
+    var request = streamRequest(selected, browserHost && 'VideoDecoder' in window ? 'h264' : 'jpeg');
     post(request[0], request[1]).then(function (answer) {
       if (!active || active.id !== selected.id) return;
       function painted(width, height) {
@@ -340,6 +341,7 @@
   /* `options`: { kind: 'ios-simulator', implementation, udid, label } or
      { kind: 'window', implementation, src, label }. */
   window.wbSimulator = {
+    ready: function () { return !!active && streamId === active.id; },
     show: function (options) {
       active = Object.assign({}, options, {
         id: options.kind === 'window' ? options.implementation + '\n' + options.src : options.udid,

@@ -1,6 +1,6 @@
 /* Page states — the preview's half
    --------------------------------
-   A screen is rarely one picture. Sign in has the empty form you land on and
+   A page is rarely one picture. Sign in has the empty form you land on and
    the one that comes back saying the password was wrong; a list has rows and
    has nothing yet. Those are states of the same page, and the workbench lists
    them under it the way Storybook lists stories under a component.

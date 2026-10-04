@@ -161,8 +161,8 @@ export function wrap(element: ReactElement<Record<string, unknown>>, context: Pr
 }
 ```
 
-Run **Workbench: Refresh Screens**. **Profile Card** appears in a
-**Components** section with the states **Offline** and **Online**, and
+Run **Workbench: Refresh Pages**. **Profile Card** appears in a
+**Components** collection with the states **Offline** and **Online**, and
 `Platform.OS` is `web`.
 
 Keep the definition free of component imports: Workbench runs it in Node to
@@ -186,7 +186,7 @@ list previews. Import only types from component files.
 ## Data and providers
 
 Providers, inputs, and data work as they do for [React](react.md#add-providers-and-context).
-A screen that loads its data over the network keeps doing so: answer its
+A component that loads its data over the network keeps doing so: answer its
 `fetch` and XMLHttpRequest calls per state with
 [`requests`](preview-data.md#request-mocks), or wrap it in a provider
 holding fixture data from an environment.
@@ -226,7 +226,7 @@ is at least as tall as the frame but isn't a flex container. A root view with
 add the `#workbench-preview` rule above in a stylesheet listed in `styles`, as
 in the example, or give the root view a height.
 
-Choose the frame sizes with `viewports`; `mobile` suits most screens. See
+Choose the artboard sizes with `viewports`; `mobile` suits most app screens. See
 [Viewports](pages-and-states.md#viewports).
 
 ## Images and fonts
@@ -279,6 +279,64 @@ export default defineConfig({
 
 Compiler plugins use [esbuild's plugin interface](https://esbuild.github.io/plugins/).
 See [the configuration file](custom-adapters.md#configuration-file).
+
+## Document components with a docs page
+
+A [docs page](docs-pages.md) can show React Native components as live
+examples. Give it an `examples` lens with `adapter: react-native-web`. Each
+example exports a component: the default export of each file in a folder, or
+each named export of one file. Imports resolve as they do for previews, with
+`react-native` loading `react-native-web` and `.web.*` files preferred. Example
+file names must be kebab-case, so `online.web.tsx` isn't an example; put the
+`.web.*` file next to the module the example imports instead.
+
+When the component also has a React DOM implementation for the web, give the
+page a lens for each. Both show the same Markdown, and the lens switcher in
+the top bar changes what renders the examples:
+
+```yaml
+implementations:
+  web:
+    kind: examples
+    label: Web
+    adapter: react
+  native:
+    kind: examples
+    label: React Native Web
+    adapter: react-native-web
+    environment: src/preview/environment.tsx
+    styles:
+      - src/preview/canvas.css
+
+collections:
+  - name: Components
+    items:
+      - label: Profile Card
+        src: docs/profile-card.md
+        lens: native
+        implementations:
+          web: web/src/profile-card/examples/
+          native: src/components/profile-card-examples/
+```
+
+`src/components/profile-card-examples/online.tsx`:
+
+```tsx
+import { ProfileCard } from '../ProfileCard';
+
+export default function Online() {
+  return <ProfileCard name="Avery Example" role="Designer" online />;
+}
+```
+
+The web lens's folder has its own `online.tsx` that renders the web
+component. An example one lens has and the other doesn't shows
+*Not available in* and the lens's label.
+
+Examples get no inputs or controls, so set the props in each example. The
+lens's `environment` wraps each example as it wraps a preview, and its
+`styles` load with the examples, here for the `@font-face` rule. The
+`#workbench-preview` rule doesn't apply: each example mounts in its own panel.
 
 ## Errors and fixes
 

@@ -1,7 +1,7 @@
 # Workbench website
 
 A static site, built with [Astro](https://astro.build), that documents the
-extension's UI: the workbench layout, each toolbar button, page states, markup
+extension's UI: the workbench layout, each control, page states, annotations
 and handoff, lenses, and how to install a platform build. The build fills in
 release downloads and publishes to GitHub Pages.
 
@@ -16,7 +16,7 @@ release downloads and publishes to GitHub Pages.
 | `src/lib/workbench.js` | what every Workbench page shares: page URLs, the section links (Overview, Docs, Install, Changelog, GitHub), and the release data, fetched once per build |
 | `src/lib/releases.js` | lists releases, picks the complete one to link, reads their notes, and checks their download links |
 | `src/lib/marks.js` | the Canonic wordmark and product marks read from the stored SVG exports, in product order |
-| `src/data/screenshots.json` | the overview's numbered regions and the toolbar strip, written by `screenshots/capture.cjs` |
+| `src/data/screenshots.json` | the overview's numbered regions and the controls strip, written by `screenshots/capture.cjs` |
 | `src/styles/global.css` | light and dark tokens from the website design (warm grays, dark bands, Canonic blue) and every component's styles |
 | `src/content.config.ts` | loads Markdown directly from `../workbench/docs/` |
 | `src/pages/workbench/docs/[...slug].astro` | generated docs with guide navigation, section links, and previous/next links |
@@ -45,7 +45,7 @@ JavaScript.
 | `DownloadCards` | `<canonic-downloads>` | a card per platform's `.vsix`, marking this computer's |
 | `PlatformTable` | `<canonic-downloads>` | every platform's `.vsix` in a table, marking this computer's |
 | `RecommendedDownload` | `<canonic-recommended-download>` | the Install page's panel for this computer's `.vsix` |
-| `ControlStrip` | `<canonic-control-strip>` | the toolbar screenshots, captioning each control from the control list in its slot |
+| `ControlStrip` | `<canonic-control-strip>` | the control screenshots, captioning each control from the control list in its slot |
 | `DocsSidebar` | `<canonic-docs-sidebar>` | the docs navigation and search |
 | `SectionHead`, `PageHero`, `Feature`, `ReleaseEntry` | none | static markup the pages repeat |
 
@@ -54,17 +54,19 @@ Custom elements are named `canonic-*` and share browser code from
 apply. A component's `<script>` must not be `is:inline`, so it is bundled
 and runs once per page. `global.css` gives the elements a `display`.
 
-Each component has a Workbench preview in `previews/components/`. A component
-that takes slots is previewed through a small example component beside its
-definition.
+Each component has a Workbench docs page in `previews/components/`: a
+`defineDocs` definition, its Markdown, and a folder of `.astro` examples, one
+file per example. `fixtures.ts` holds the sample release and guide data, and
+`environment.ts` marks the page with `js`, as `Base.astro` does, and answers
+the docs sidebar's search index request.
 
 ## Developing
 
 Every page and the page shell have Astro `.workbench.ts` definitions in
 `previews/`: Overview, Install, Changelog, and Docs, which has a state per
-guide in the docs sidebar. They are the **Website** project of the repository's
+guide in the docs sidebar. They are the **Website** space of the repository's
 `workbench.yaml`, served from this folder: pick **Website** in the Workbench
-view's project switcher, or run `node packages/workbench/server.js .` from the
+view's space switcher, or run `node packages/workbench/server.js .` from the
 repository root and open the address printed beside *Website*. The shell exposes
 editable props and a versioned state. These previews use the project's installed
 Astro compiler; they do not start the Astro application server.
@@ -188,24 +190,25 @@ headless Chrome through `packages/workbench/scripts/chrome.cjs`, and overwrites 
 in `public/images/`. Set `CHROME_PATH` to choose a browser.
 
 - The overview is a 1440 × 860 window. The script also measures the workbench's
-  screen list, top bar, canvas, and markup bar there, and writes them to
+  page list, top bar, canvas, and toolbar there, and writes them to
   `regions` in `src/data/screenshots.json`, where the page draws the numbered
   outlines. Don't edit that file by hand.
-- The toolbar section's strip is four crops (`public/images/toolbar-*.png`)
-  from the same window rendered at 4×, one per group: Actions, frame and
-  screen controls, markup tools, and zoom. The script writes them to `toolbar`
+- The controls section's strip is four crops (`public/images/controls-*.png`)
+  from the same window rendered at 4×, one per group: the Actions switch, the
+  size switcher and page actions, the annotation tools, and the view controls.
+  The script writes them to `controls`
   in `src/data/screenshots.json`, with a hotspot over every control, and the
   page lays them side by side with an invisible button over each hotspot. A
   small script at the end of `index.astro` captions the hotspot you point at,
   tap, or tab to, using the matching entry in the "All controls" list, so each
   description is written once.
 - Before writing the strip, the script checks that each "All controls" list's
-  `data-label` attributes in `index.astro` match the toolbar's control labels
+  `data-label` attributes in `index.astro` match the workbench's control labels
   in order, and stops with both lists if they don't. When a control is added,
   removed, or renamed, update the list, then rerun.
-- The States and Markup shots are 1120 × 860. The canvas zooms the mobile
-  frame to fit, and the script scales page coordinates to that zoom when it
-  draws the marks.
+- The States and Annotations shots are 1120 × 860. The canvas zooms the
+  mobile artboard to fit, and the script scales page coordinates to that zoom
+  when it draws the annotations.
 
 Keep the fixture on Acme and example.com placeholders.
 

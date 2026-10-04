@@ -1,6 +1,6 @@
-/* A reference to the current screen, without capturing or handing it off.
+/* A reference to the current page, without capturing or handing it off.
    Read the resolved view at click time: the address may still name a story
-   that fell back to another, or a lens this screen doesn't have. */
+   that fell back to another, or a lens this page doesn't have. */
 (function () {
   function named(label, id) {
     return label + ' — `' + id + '`';
@@ -11,7 +11,7 @@
     var item = view.item;
     var lens = view.lens;
     if (lens && lens.kind === 'storybook' && !view.story) return null;
-    var lines = ['- Screen: ' + named(item.label, view.src)];
+    var lines = ['- Page: ' + named(item.label, view.src)];
     if (view.story) {
       lines.push('- Story: ' + named(view.story.name, view.story.id));
     } else {
@@ -61,7 +61,7 @@
     var view = window.wbView();
     var value = text(view);
     if (!value) {
-      say(view ? 'Wait for the screen reference to load.' : 'Pick a page or a component first.');
+      say(view ? 'Wait for the page reference to load.' : 'Pick a page or a component first.');
       return;
     }
     copy(value).then(function () {

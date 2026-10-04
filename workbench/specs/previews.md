@@ -1,6 +1,6 @@
 # TypeScript Workbench previews
 
-A Workbench preview renders a component or screen from a project's own source,
+A Workbench preview renders a component or page from a project's own source,
 in named states, from a `.workbench.ts` or `.workbench.tsx` definition. The
 user guide is [Workbench previews](../docs/workbench-previews.md); this spec
 records the contract, how it is built, and what is still open. See
@@ -21,9 +21,9 @@ project-registered adapters. They do not run a project's application server,
 `astro.config.*`, or middleware; a whole application stays a
 [URL lens](implementations.md#url-implementations).
 
-- **Requirement (decided 2026-10-03):** a preview is a mock of its screen, in
+- **Requirement (decided 2026-10-03):** a preview is a mock of its page, in
   the way a Storybook story is, not a running copy of the application.
-  Workbench owns everything that would take it off the screen: links and forms
+  Workbench owns everything that would navigate away from it: links and forms
   open other previews through the canvas or are recorded as actions, and the
   Actions switch governs both. Nothing in a preview navigates the frame or
   starts a download. See [links and navigation](#links-and-navigation).
@@ -31,7 +31,7 @@ project-registered adapters. They do not run a project's application server,
 - Source compiles in a managed worker. Live and portable output share one
   adapter and state lifecycle, and that lifecycle is shared by every built-in
   and custom adapter.
-- Managed previews use the two warm frames of the canvas and become ready only
+- Managed previews use retained iframe sessions and become ready only
   after mounting, fonts, and visible images.
 - The export adds a `browser/` package that opens from a static HTTP server
   without Electron or Workbench; failed builds become warnings while successful
@@ -59,46 +59,76 @@ project-registered adapters. They do not run a project's application server,
 
 ### Sidebar placement
 
-- Each preview becomes a screen whose `src` is the definition file. The title's
-  first segment names the section, the last the screen, and the segments
-  between are joined with ` / ` into one folder. A title without `/` goes in
-  **Previews**; a missing title uses the ID. Screens use the `component` icon.
-- Imported sections merge into authored sections with the same name.
-  Within a section, folders with exactly the same name merge across authored
-  pages, previews, and implementation catalogs. The first folder keeps its
-  position and metadata; later screens append in source order. Matching names
-  in different sections remain separate, as do names with different casing.
-- An authored screen whose `src` is a definition file keeps its place and
-  label and takes the definition's states; the imported duplicate is dropped.
+- Each preview becomes a page whose `src` is the definition file. The title's
+  first segment names the collection, the last the page, and the segments
+  between are joined with ` / ` into one group. A title without `/` goes in
+  **Previews**; a missing title uses the ID. Page icon precedence is definition
+  `icon`, longest `previews.icons` title prefix, configured `previews.icon`,
+  then `component`. Prefixes match complete `/` segments, including an exact
+  title. Definition icons do not set collection icons. Invalid definition icon
+  syntax isolates that definition; invalid configuration icon values are
+  reported and ignored. Validation checks kebab-case syntax, not Lucide membership.
+- Collection icons resolve independently against the collection name. Highest
+  priority first: explicit authored icon, preview prefix mapping, catalog
+  prefix mapping, configured preview fallback, configured catalog fallback,
+  built-in default. Shared preview/Storybook collections default to
+  `component`. Conflicting catalogs at equal priority use lexical icon-name
+  order; import order cannot change the selected icon. The shared manifest
+  owns prefix matching and collection icon merging, including provenance
+  priorities. An authored collection with no explicit icon retains its
+  `file-text` default against imported built-in defaults; mappings and
+  configured fallbacks win.
+- Authored collections with only `name` and `icon` survive both config
+  readers and configuration-editor saves. They style imported pages in that
+  collection and remain hidden if imports leave them empty, including failed
+  catalogs.
+- Imported collections merge into authored collections with the same name.
+  Within a collection, groups with exactly the same name merge across authored
+  pages, previews, and implementation catalogs. The first group keeps its
+  position and metadata; later pages append in source order. Matching names
+  in different collections remain separate, as do names with different casing.
+- An authored page whose `src` is a definition file keeps its place and
+  label and takes the definition's states and icon unless it has an explicit
+  authored icon; the imported duplicate is dropped.
   The file must still match discovery. Viewports: see
   [open question 2](#open-questions).
 - **Requirement (decided 2026-10-03):** the sidebar and canvas update when a
   definition file matching discovery is added, removed, renamed, or changes
-  its title, states, or viewports, without **Workbench: Refresh Screens**; see
+  its title, states, or viewports, without **Workbench: Refresh Pages**; see
   [the extension's refresh contract](vscode-extension.md#refresh).
   **Gap:** only `workbench.yaml` and `workbench.local.yaml` are watched today,
-  so definition changes need **Refresh Screens** or a YAML change.
+  so definition changes need **Refresh Pages** or a YAML change.
 
 ### Open, states, controls, and actions
 
-- A discovered screen's design lens is the preview itself, labelled
+For the [multiple-artboard support system](multiple-artboards.md), each instance
+owns its renderer, requested/settled view, controls, action log, and pending-load
+generation. Two copies of the same preview must coexist without sharing a
+mutable iframe; content navigation updates its originating instance. Shared
+origin storage/backend state remains external state. The
+[code plan](multiple-artboards-code-plan.md) reuses compiler and framework mount
+contracts through explicit runtime adapters. The renderer behavior below
+applies independently within each isolated artboard.
+
+- A discovered page's design lens is the preview itself, labelled
   **Workbench**. Its address is the definition path; `?state=<id>` selects a
   state and the first state is the default. An unknown state renders an error.
 - Same-origin `.workbench.ts(x)` addresses load into a warm preview host
   rather than navigating the iframe. A newer load supersedes a queued one, and
-  page-level listeners, timers, and animation frames from the outgoing preview
-  are released while the compatibility bridge stays installed.
+  page-level listeners, timers, and animation frames remain owned by that
+  session until it is evicted or reset. The canvas retains up to three inactive
+  sessions for 15 minutes; return checks the compiled revision before reuse.
 - Body nodes created during a preview module's import, such as SVG symbol
   sprites, are retained by compiled module URL and restored before its next
   mount. They are detached while another module is active or the host is reset.
-  Nodes created during mounting, including portals, are cleared on departure.
+  Nodes created during mounting, including portals, are cleared on reset or eviction.
   Imports that finish after being superseded still retain their nodes for a
   later return; a failed mount does not discard import-time nodes.
 - When ready, the preview reports its inputs, controls, docs, and last 30
   actions to the canvas, which shows **Preview controls**: one field per
   control (`text`, `number`, `boolean`, `select`, `json`), **Reset state**,
   **Actions**, and **Documentation**. Edits re-render the current state with
-  input overrides and last until reset, state change, or leaving the screen;
+  input overrides and last until reset, reload, source revision change, or session eviction;
   they never write files or affect references or exports.
 - Saving the definition or any file in its dependency graph reloads the open
   preview: in development the page polls a revision URL every second and
@@ -120,9 +150,9 @@ project-registered adapters. They do not run a project's application server,
   the key, both resolved against `document.baseURI`, have the same origin,
   path, and query; the fragment is ignored.
 - A match posts `{ type: 'workbench-preview', event: 'navigate', id, preview,
-  state }` to the parent. The canvas finds the screen whose resolved preview
+  state }` to the parent. The canvas finds the page whose resolved preview
   has that ID, reveals it, and routes to it with the state (unknown states fall
-  back to the default); an ID with no screen is ignored. The portable viewer
+  back to the default); an ID with no page is ignored. The portable viewer
   selects the preview from its catalog.
 - No match: the click or submit is prevented and logged through the context's
   `action`: `navigate` with the raw `href`, or `submit` with the raw `action`
@@ -137,9 +167,9 @@ project-registered adapters. They do not run a project's application server,
 ### Data: request mocks and the project environment
 
 - **Requirement (decided 2026-10-03):** a preview supplies the data its real
-  screen loads, in whatever way that screen loads it, for every adapter:
+  page loads, in whatever way that page loads it, for every adapter:
   `inputs` for props, an environment for providers and stores, `requests` for
-  the screen's own network calls, and `aliases` for modules. Projects can run
+  the page's own network calls, and `aliases` for modules. Projects can run
   any code in environments and hooks; `requests` is the built-in tool for the
   common case.
 - `requests` (preview and state) maps keys `[METHOD] /path [Operation]` or a
@@ -175,10 +205,10 @@ project-registered adapters. They do not run a project's application server,
 ### Compare a design via a `workbench` lens
 
 - An implementation with `kind: workbench` has no `base` or `url`; `start`,
-  `catalog`, and a `root` other than `.` are reported. A screen maps it to a preview
+  `catalog`, and a `root` other than `.` are reported. A page maps it to a preview
   ID. The lens loads the definition path, and a design state loads the preview
   state with the same ID; other states show the preview's first state. The
-  preview's source is added to the screen's code pointers for **Open the
+  preview's source is added to the page's code pointers for **Open the
   source** and handoffs.
 - An unknown ID is reported as `<label>: unknown Workbench preview “<id>”`.
   What the lens then loads is [open question 1](#open-questions).
@@ -192,7 +222,7 @@ after 8 seconds.
 ### Export
 
 The [design-system export](export.md) plans one reference per preview state at
-the screen's viewports, loading the definition URL with `?state=`. After
+the page's viewports, loading the definition URL with `?state=`. After
 references, it asks the worker for the portable build and adds the `browser/`
 package and catalog. A preview that fails to build is a warning. **Requirement
 (decided 2026-10-03):** a portable build that fails entirely, including a
@@ -278,8 +308,14 @@ reached through `node_modules` are listed by name and version.
 - Its error output is logged as `preview.worker` (each chunk truncated), and
   per-request timing as `preview.request.completed`.
 - Compiled output is cached against the size and modification time of every
-  file it read; config changes clear the cache. Input-edit renders are not
-  cached. Only discovered definitions inside the project compile.
+  file it read; config changes clear the memory cache. Authored builds also
+  persist in the host's temporary directory across worker restarts, scoped to
+  the project root, discovery options, compiler implementation, evaluated
+  config and runtime version. Stale or unreadable artifacts rebuild from source;
+  a disk-cache failure does not prevent compilation. Input-edit renders are not
+  cached. Only discovered definitions inside the project compile. A request
+  for one definition checks discovery rules directly without scanning every
+  project file. Live source maps are separate files, fetched by developer tools.
 - In an untrusted server (`isTrusted: false`), no definition runs, discovered
   files produce `Workbench previews require a trusted workspace.`, and preview
   routes answer 404. When trust applies is part of the
@@ -290,7 +326,10 @@ reached through `node_modules` are listed by name and version.
 The worker runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
 in Node mode when that runtime is used on the host, and otherwise on the
 current process's executable (Node for the standalone server). `NODE_OPTIONS`
-is removed from its environment. Compilation uses `esbuild-wasm`.
+is removed from its environment. Compilation uses native `esbuild`. Each
+platform VSIX bundles the matching pinned binary at build time; source
+checkouts use the package's installed compiler. Projects install no compiler,
+and the installed extension downloads none.
 
 ### Readiness and errors
 
@@ -312,7 +351,7 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
   custom adapters and plugins on the shared path; project escape and excluded
   definitions; server catalog, compiled pages, runnable export, and worker
   close; untrusted and disabled workspaces never executing definitions; manual
-  placement (via `mergeSections`); `workbench` lens state mapping; source
+  placement (via `mergeCollections`); `workbench` lens state mapping; source
   closure hashing; authoring type checks; portable viewer and partial
   success; CLI `build` refusing nonempty output.
 - [preview-runtime.test.js](../preview-runtime.test.js): renderer disposal,
@@ -359,9 +398,15 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
 
 ## Decisions and discoveries
 
-- **WASM compiler.** `esbuild-wasm` keeps the installed extension independent
-  of the host CPU without downloading native tools (rationale in
-  [compiler.cjs](../preview/compiler.cjs)).
+- **Native compiler and persistent builds (2026-10-04).** An observed React
+  page's initial descriptor request took 20.2 seconds in VS Code, followed by
+  a 24 ms React mount. A source-checkout reproduction on macOS x64 measured
+  21.4 seconds for WASM compilation and 2.2 seconds with native esbuild.
+  Platform packaging supplies native binaries without runtime downloads.
+  Separate source maps reduced that preview's served JavaScript from 19.5 MB
+  to 5.1 MB. Cached artifacts avoid bundling again after a worker restart;
+  source, config, compiler and runtime changes invalidate them. These are
+  observations of one large project, not latency guarantees for every preview.
 - **Project code stays out of the extension host and capture renderer**; Astro
   frontmatter stays in the worker and only rendered HTML and client assets reach
   the browser ([worker.cjs](../preview/worker.cjs), [astro.cjs](../preview/astro.cjs),
@@ -374,8 +419,8 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
   and settings ([server.js](../server.js)).
 - **2026-10-03, reproduction** with the standalone server on a scratch Acme
   fixture: an unknown lens ID produced the documented problem while the
-  screen kept `implementations.built = { preview: "components/missing" }` with
-  no `path`; a manual screen placing a definition that declares
+  page kept `implementations.built = { preview: "components/missing" }` with
+  no `path`; a manual page placing a definition that declares
   `viewports: [mobile]` resolved and merged with all four viewports.
 - **2026-10-03, manual CLI check**: an installed local build at
   `~/.vscode/extensions/canonic.canonic-workbench-0.6.0` (from an earlier
@@ -442,15 +487,15 @@ is removed from its environment. Compilation uses `esbuild-wasm`.
 ## Open questions
 
 1. **Unknown lens ID.** The problem is reported, but the lens stays on the
-   screen without a `path`, and the canvas builds the URL as base plus
+   page without a `path`, and the canvas builds the URL as base plus
    `undefined`, so it appears to load `<root>/undefined`. The same happens with
    no problem at all when previews are disabled, untrusted, or none are
    discovered, because mapping is skipped. Should the lens be dropped, or show
    a named error?
 2. **Manual-placement viewports.** The merge adopts a preview's viewports only
-   when the authored screen has none, but both config readers always fill all
+   when the authored page has none, but both config readers always fill all
    four, so the definition's `viewports` never apply to a manually placed
-   screen, on the canvas or in export. [Core](core.md#canvas-and-frame) says
+   page, on the canvas or in export. [Core](core.md#canvas-and-artboard) says
    omission enables all four; which rule wins for a placed preview?
 3. **CLI from an installed extension.** No automated test runs the CLI from a
    packaged or installed VSIX, on other platforms, or with React, Vue, or Astro

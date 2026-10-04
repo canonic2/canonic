@@ -1,12 +1,12 @@
 # TypeScript Workbench previews
 
-A Workbench preview renders a component or screen from your own source code,
+A Workbench preview renders a component or page from your own source code,
 in named states, next to your design pages. You define it in a
 `.workbench.ts` or `.workbench.tsx` file, with an adapter for HTML, React, Vue,
 Astro, React Native Web, or a technology you register yourself.
 
 Like a story in Storybook, a preview renders your real component or page, but
-not a running copy of your app. Each state supplies the data the screen would
+not a running copy of your app. Each state supplies the data the page would
 load, through props, providers, or [mocked requests](preview-data.md#request-mocks),
 and Workbench keeps it on the canvas: its links open other previews, and
 everything else it would do on a real site, such as following a route,
@@ -29,7 +29,7 @@ has its own guide:
 You need:
 
 - `workbench.yaml` at the project root. `name: Acme` alone is enough when
-  previews supply every screen.
+  previews supply every page.
 - A [trusted workspace](extension.md#workspace-trust), since previews run
   project code.
 - The framework you render with, installed in your project. Workbench compiles
@@ -66,9 +66,9 @@ You need:
    This example renders a React component; each framework guide has a complete
    example of its own.
 
-2. Run **Workbench: Refresh Screens**, or save `workbench.yaml`. The preview
-   appears in the sidebar with its states, and opens on the canvas like any
-   other screen.
+2. Run **Workbench: Refresh Pages**, or save `workbench.yaml`. The preview
+   appears in the page list with its states, and opens on the canvas like any
+   other page.
 
 Workbench finds every `*.workbench.ts` and `*.workbench.tsx` file in the
 project. It skips hidden folders and `node_modules`, `dist`, `build`, and
@@ -76,30 +76,47 @@ project. It skips hidden folders and `node_modules`, `dist`, `build`, and
 [Previews in the configuration reference](configuration.md#previews).
 
 The `title` places the preview in the sidebar. Its first segment names the
-section, its last the screen, and any segments between them a folder:
-`Components/Forms/Button` is **Button**, in a **Forms** folder, in the
-**Components** section. A title without `/` goes in a **Previews** section.
+collection, its last the page, and any segments between them a group:
+`Components/Forms/Button` is **Button**, in a **Forms** group, in the
+**Components** collection. A title without `/` goes in a **Previews**
+collection.
 Without a `title`, the `id` is used.
 
-Sections and folders with exactly matching names are shared with your
-hand-written screens and imported Storybook catalogs. For example, a preview
+Set `icon: 'monitor'` on `definePreview` for a page preview, or use
+`previews.icons` in `workbench.yaml` to assign icons by title prefix. A
+definition's icon wins over the longest matching prefix, then `previews.icon`,
+then the default `component`. Collection icons are configured separately; an
+icon-only handwritten collection can style a collection shared with Storybook.
+See [preview icon settings](configuration.md#previews) and
+[collection precedence](configuration.md#collections).
+
+Collections and groups with exactly matching names are shared with your
+hand-written pages and imported Storybook catalogs. For example, a preview
 titled `Web App/Pages/Jobs` and a story titled `Web App/Pages/Account` appear
-in one **Pages** folder under **Web App**.
+in one **Pages** group under **Web App**.
 
 A file that fails to load or has an invalid definition is reported with the
 other [configuration problems](troubleshooting.md#read-the-resolved-config).
 The remaining previews still load.
 
-To place a preview yourself, give a screen in `workbench.yaml` the definition
-as its `src`, such as `src: src/Button.workbench.ts`. The screen keeps its place
+To place a preview yourself, give a page in `workbench.yaml` the definition
+as its `src`, such as `src: src/Button.workbench.ts`. The page keeps its place
 and label, and takes its states from the definition. The file must still match
 the discovery patterns.
+
+A `.workbench.ts` or `.workbench.tsx` file can also default-export
+`defineDocs({...})` from `@canonic2/workbench` instead of `definePreview`, to
+declare a [docs page](docs-pages.md#declare-a-docs-page-in-a-definition):
+Markdown with live examples and the lenses that render them. It is
+discovered with the previews and placed by its `title` the same way, except
+that a title without `/` goes in a **Docs** collection. If `workbench.yaml` also lists its Markdown
+file, the listed page is used instead. See [Docs pages](docs-pages.md).
 
 ## Define a preview
 
 | Key | Description |
 | --- | --- |
-| `id` | Required. Kebab-case segments separated by `/`, such as `components/button`. Unique in the project. |
+| `id` | Required. Kebab-case segments separated by `/`, such as `components/button`. Unique in the project, across previews and docs pages. |
 | `title` | Where the preview appears in the sidebar. Defaults to `id`. |
 | `adapter` | Required. `html`, `react`, `vue`, `astro`, `react-native-web`, or a [registered](#register-other-technologies) name. |
 | `source` | Required. `entry` is the file to render, relative to the definition and inside the project. `export` names its export and defaults to `default`. |
@@ -108,7 +125,7 @@ the discovery patterns.
 | `states` | A map of kebab-case state IDs to [states](#states). |
 | `links` | The addresses the source links or submits to, each mapped to the preview it opens. See [Links and navigation](preview-data.md#links-and-navigation). |
 | `requests` | Answers to the page's `fetch` and `XMLHttpRequest` calls. See [Request mocks](preview-data.md#request-mocks). |
-| `viewports` | The frame sizes the preview supports: any of `fit`, `desktop`, `mobile`, and `responsive`. See [Viewports](pages-and-states.md#viewports). |
+| `viewports` | The artboard sizes the preview supports: any of `fit`, `desktop`, `mobile`, and `responsive`. See [Viewports](pages-and-states.md#viewports). |
 | `docs` | Text shown under **Documentation** in **Preview controls**. |
 | `fixtures`, `globals` | Data and settings that environments, hooks, and request handlers read from the context. See [Fixtures and globals](preview-data.md#fixtures-and-globals). |
 | `styles` | Stylesheets to load with the preview, relative to the definition. |
@@ -138,6 +155,12 @@ A preview without `states` has one state, `default`.
 SVG icon sprites registered when your preview module loads remain available
 when you switch states or return to that preview.
 
+Returning to a preview preserves form edits, filters, scroll, open menus, and
+live application state. The canvas keeps up to three inactive sessions for
+15 minutes after leaving them. **Reload** starts the current session again;
+**Reset state** restores its declared inputs. A source change rebuilds the
+preview. Closing the canvas releases its sessions.
+
 The `<html>` element carries `data-wb-state` with the current state ID, so CSS
 keyed off it works as it does in [design pages](pages-and-states.md#1-css-keyed-off-the-root).
 
@@ -150,7 +173,7 @@ this page for each one's guide. Any other name must be
 
 ## Data, controls, and actions
 
-A preview gets the data its real screen would load, and you can change it per
+A preview gets the data its real page would load, and you can change it per
 state and while you review. [Preview data, mocks, and actions](preview-data.md)
 covers all of it:
 
@@ -162,16 +185,17 @@ covers all of it:
   from `workbench.config.ts`, for the whole project.
 - **Request mocks:** answers to the page's own `fetch` and XMLHttpRequest
   calls, with empty, loading, error, and offline states.
-- **Actions:** what the screen tried to do, listed under **Actions** in
+- **Actions:** what the page tried to do, listed under **Actions** in
   **Preview controls**.
 - **Links and navigation:** links that open other previews, with the
-  toolbar's **Actions** switch on.
+  top bar's **Actions** switch on.
 
 ## Lifecycle hooks
 
 Hooks and sources receive a context with `id`, `state`, `inputs`, `fixtures`,
 `globals`, an abort `signal`, `action(name, ...values)`, `navigate(to)`, and
-`error(error)`.
+`error(error)`. Examples on a [docs page](docs-pages.md#examples) get the same
+context, with empty `inputs`, `fixtures`, and `globals`.
 
 - `setup(context)` runs before the source mounts and may return a cleanup
   function. It runs from the project's [environment](preview-data.md#environments),
@@ -202,7 +226,13 @@ passes to `context.error(error)`.
 Saving the definition or any file it uses reloads the open preview within a
 second or so. This is a full reload, not hot module replacement. If you add or
 remove a definition, or change its `title` or states, run
-**Workbench: Refresh Screens** to update the sidebar.
+**Workbench: Refresh Pages** to update the sidebar.
+
+Workbench compiles previews with its bundled native compiler. The first build
+depends on the size of the source and its imports; unchanged builds are cached
+across worker restarts. Source and configuration changes trigger a fresh build.
+Your project does not need to install a compiler. Live source maps remain
+available to developer tools without adding their size to the preview script.
 
 ## Register other technologies
 
@@ -214,7 +244,7 @@ registered fails with `Unknown adapter`. See [Custom adapters](custom-adapters.m
 
 ## Compare a design with a preview
 
-A screen can show a preview as a lens next to its design, with a `workbench`
+A page can show a preview as a lens next to its design, with a `workbench`
 implementation. See
 [Compare a design with a Workbench preview](lenses.md#compare-a-design-with-a-workbench-preview).
 
@@ -238,7 +268,7 @@ a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
 ## Command-line tools
 
 The extension includes a command-line tool at `preview/cli.cjs` in its install
-folder. Run it with Node 18 or later:
+folder. Run it with Node 24 or later:
 
 ```sh
 node ~/.vscode/extensions/canonic.canonic-workbench-<version>/preview/cli.cjs check .
@@ -266,8 +296,8 @@ The viewer has:
   **Resizable**,
 - **Reload**, and **Preview controls** with the same inputs, reset, actions,
   and documentation as the canvas,
-- **Open preview**, which opens the component or screen on its own page. That
-  page also accepts `?state=<id>`.
+- **Open preview**, which opens the preview on its own page. That page also
+  accepts `?state=<id>`.
 
 The viewer's address keeps the preview, state, viewport, and resizable size, so
 you can copy it to share a selection.

@@ -1,17 +1,19 @@
 # Pages and states
 
-A Workbench screen is an HTML file in your repository. This guide covers how
+A design page is an HTML file in your repository. This guide covers how
 those pages are served, how one page shows several states, how links behave,
-and how to choose the frame sizes a screen supports. To render components from
-your codebase instead, see [TypeScript previews](workbench-previews.md).
+and how to choose the artboard sizes a page supports. To render components
+from your codebase instead, see [TypeScript previews](workbench-previews.md).
+To document components in Markdown with live examples, see
+[Docs pages](docs-pages.md).
 
 ## Design pages
 
-Any HTML file in the project can be a screen: a hand-written page, a design
+Any HTML file in the project can be a page: a hand-written page, a design
 system's component preview, or a static export. List it in `workbench.yaml`:
 
 ```yaml
-sections:
+collections:
   - name: Pages
     items:
       - label: Dashboard
@@ -37,8 +39,8 @@ consequences for how you write pages:
   authored, and its links behave like ordinary links.
 
 Because the canvas and your page share an origin, the workbench can read the
-live page. That is what lets it name the element under each mark and take a
-screenshot of exactly what you see.
+live page. That is what lets it name the element under each annotation and take
+a screenshot of exactly what you see.
 
 ### What works in a page
 
@@ -47,18 +49,18 @@ shadow DOM, web fonts, canvas, video, dialogs, and forms all work. The
 screenshot path copies the live document, so closed shadow roots don't appear
 in screenshots, and a page containing an `iframe`, `object`, or `embed`, or a
 canvas or video loaded from another origin without CORS, can't be captured.
-See [Screenshot limits](markup-and-handoff.md#what-screenshots-can-and-cant-include).
+See [Screenshot limits](annotations-and-handoff.md#what-screenshots-can-and-cant-include).
 
 ## States
 
 A state is a variation of the same page: the empty form and the form that came
-back with an error, a list with rows and the same list with none. The workbench
-lists a screen's states under it, the way Storybook lists stories under a
+back with an error, a list with rows and the same list with none. The page
+list shows a page's states under it, the way Storybook lists stories under a
 component.
 
 A state is declared twice, and the ids must match:
 
-1. In `workbench.yaml`, which adds the row to the sidebar.
+1. In `workbench.yaml`, which adds the state to the page list.
 2. In the page, which decides what the state looks like.
 
 ```yaml
@@ -137,31 +139,33 @@ if (document.documentElement.dataset.wbState === 'empty') renderEmptyState();
 
 - Keep ids short and descriptive. They appear in links and screenshot names:
   `sign-in-error.jpg`.
-- A screen needs at least two states to show any rows. One state is the same
-  as none.
+- A page needs at least two states to show any in the page list. One state
+  is the same as none.
 - When a state needs data the page doesn't have, render it from a small inline
   fixture keyed by `dataset.wbState`, rather than making a second page.
 - State ids also map to implementation paths, so the same state can be shown
   on your dev server. See [Map states to paths](lenses.md#3-map-states-to-paths).
+- A [docs page](docs-pages.md#states) applies its state to every example on
+  it, and its states aren't listed in the page list.
 
 ## Links and actions
 
-The toolbar's **Actions** switch decides whether a page's links and forms work.
+The top bar's **Actions** switch decides whether a page's links and forms work.
 
 - **Off** (the default): links don't navigate and forms don't submit. Hover,
   focus, pressed states, disclosure widgets, pickers, and anything else that
-  only changes the page in place still work. You can click around a screen
+  only changes the page in place still work. You can click around a page
   you're reviewing without leaving it.
 - **On**: the page behaves normally, so you can walk through a real flow.
 
-With actions on, a link to another screen's page switches the workbench to that
-screen, and the sidebar follows. A `?state=<id>` on the link picks that state,
-as in `<a href="sign-in.html?state=error">`. A form whose `action` names a
-screen's page does the same when it is submitted, so a flow can move from one
-screen to the next.
+With actions on, a link to another page listed in `workbench.yaml` switches
+the workbench to that page, and the sidebar follows. A `?state=<id>` on the
+link picks that state, as in `<a href="sign-in.html?state=error">`. A form
+whose `action` names a listed page does the same when it is submitted, so a
+flow can move from one page to the next.
 
-A link or form to an `.html` page in the project that isn't a screen does
-nothing. List the page in `workbench.yaml` to make it reachable. Links to other
+A link or form to an `.html` file in the project that isn't listed as a page
+does nothing. List the page in `workbench.yaml` to make it reachable. Links to other
 sites, to project paths that don't end in `.html`, `mailto:` links, and
 downloads behave as usual.
 
@@ -184,8 +188,8 @@ need to know.
 
 ## Viewports
 
-`viewports` lists the frame sizes a screen is designed for. Width buttons for
-other sizes are disabled while it is showing, and
+`viewports` lists the artboard sizes a page is designed for. The size
+switcher's other sizes are disabled while it is showing, and
 [exports](design-system-export.md) capture one reference image per viewport.
 
 ```yaml
@@ -196,16 +200,17 @@ other sizes are disabled while it is showing, and
     - responsive
 ```
 
-| Viewport | Frame | Use it for |
+| Viewport | Artboard | Use it for |
 | --- | --- | --- |
 | `desktop` | 1512 × 982, a 14-inch MacBook Pro | Desktop layouts |
 | `mobile` | 393 × 852, an iPhone 15 Pro | Phone layouts |
-| `responsive` | A frame you resize by dragging its edges or corners | Layouts that should work at any width. Exports both desktop and mobile references. |
+| `responsive` | An artboard you resize by dragging its edges or corners | Layouts that should work at any width. Exports both desktop and mobile references. |
 | `fit` | Fills the canvas | Components and pages without a fixed device size. Exports at 1440 × 900. |
 
-Omit `viewports` to allow all four. The page always lays out at the frame's
-real size; when the frame is larger than the canvas, the canvas zooms out
-rather than squeezing the page. See [Frame widths and zoom](canvas.md#frame-widths).
+Omit `viewports` to allow all four. The page always lays out at the artboard's
+real size; when the artboard is larger than the canvas, the canvas zooms out
+rather than squeezing the page. See [Artboard sizes and zoom](canvas.md#artboard-sizes).
+A docs page has no artboard and takes no `viewports`; it fills the canvas.
 
 ## Component previews
 
@@ -237,6 +242,7 @@ its variants as states:
 ```
 
 To render the real components from your codebase instead of HTML copies, write
-[TypeScript previews](workbench-previews.md). If your components already have
-Storybook stories, consider
-[importing them](storybook.md#import-the-whole-catalog).
+[TypeScript previews](workbench-previews.md). To document each component on
+one page, with its examples, their code, and props tables, write
+[docs pages](docs-pages.md). If your components already have Storybook
+stories, consider [importing them](storybook.md#import-the-whole-catalog).

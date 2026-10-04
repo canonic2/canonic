@@ -4,6 +4,8 @@
 .vscode/**
 .gitignore
 **/*.test.js
+**/*.test.ts
+tsconfig.json
 **/.DS_Store
 icon-source.svg
 scripts/**

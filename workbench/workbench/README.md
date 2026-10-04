@@ -1,15 +1,16 @@
 # Workbench
 
-A browser for the screens a project is designing: pick one in the sidebar, see
+A browser for the pages a project is designing: pick one in the sidebar, see
 it at a real device width, draw on it, and hand the picture to an agent.
 
 Nothing in this folder knows which project it is in. `workbench.yaml` configures
-the project; screens come from declared pages, discovered TypeScript preview
+its spaces; pages come from declared pages, discovered TypeScript preview
 definitions, and configured implementation catalogs.
 
 This folder ships inside the Workbench extension and is served from there, so no
-project holds a copy and no page in one points at it. It is still only HTML and
-script files: no build step and no runtime network. Lucide ships with the
+project holds a copy and no page in one points at it. Its browser entry points are HTML and script files, with TypeScript modules
+stripped and served by the local server. No maintained compiled copy or
+runtime CDN is required. Lucide ships with the
 extension as a pinned dependency.
 
 The [user documentation](../docs/README.md) is the guide for people setting
@@ -18,6 +19,18 @@ observable contracts for shared behavior, TypeScript previews, Storybook, and
 other implementations.
 
 ---
+
+## Multiple-artboard support
+
+The default `/_workbench/` route continues to serve `index.html` with its
+existing controls and layout. TypeScript modules under `../src/canvas/` supply
+serializable multi-artboard state, geometry, a controller with injected runtime
+ports, authenticated iframe transport, full-canvas review, and context publication.
+They do not install a replacement canvas UI. Shell and annotation ports expose the
+existing renderer to a future host; native producers are pooled by source/codec.
+
+See [the support-system record](../specs/multiple-artboards.md) and
+[the module plan](../specs/multiple-artboards-code-plan.md) for APIs and limits.
 
 ## Putting it in a project
 
@@ -35,32 +48,42 @@ behave like links.
 ## workbench.yaml
 
 ```yaml
-name: Acme                    # the screen list header, the tab title, and the project switcher
-color: green                  # optional: the project's mark — a named colour or a hex value
+name: Acme                    # the sidebar header, the tab title, and the space switcher
+color: green                  # optional: the space's mark — a named colour or a hex value
 icon: brand/logo.svg          # optional: a Lucide icon name, or a project image (up to 256 KB)
 
-# projects:                   # optional: several projects in this file, keyed by id. Each takes
-#   design-system:            # name, color, icon, sections, previews, implementations, and a root
+# spaces:                     # optional: several spaces in this file, keyed by id. Each takes
+#   design-system:            # name, color, icon, collections, previews, implementations, and a root
 #     root: packages/ui       # relative to this file; every other top-level key is shared, and a
-#     sections: [...]         # project's implementations merge over the shared ones by name
+#     collections: [...]      # space's implementations merge over the shared ones by name
 
 previews:                     # optional: TypeScript preview discovery; false turns it off
+  icon: component             # fallback for preview pages and collections
+  icons:                      # longest matching title prefix wins
+    Pages: monitor
   include:                    # project-relative globs; default **/*.workbench.ts and **/*.workbench.tsx
     - src/**/*.workbench.ts
   config: workbench.config.ts # project-relative adapter and compiler config; this is the default
 
-sections:                     # one entry in the screen list's Sections, in this order
+implementations:              # optional: lenses, declared once and named by pages
+  web:
+    kind: examples            # renders docs page examples; also url, storybook, workbench, ios-simulator, window
+    adapter: react            # html, react, vue, react-native-web, or one from workbench.config.ts
+    styles:                   # optional, project-relative
+      - src/theme.css
+
+collections:                  # one entry in the collection list, in this order
   - name: Pages
     icon: file-text           # any kebab-case Lucide icon name
     items:
-      - folder: Auth          # optional grouping; folders don't nest
+      - group: Auth           # optional; groups don't nest
         items:
           - label: Sign in
             src: pages/sign-in.html    # relative to the project root
-            viewports:                # one or more supported frame modes
+            viewports:                # one or more supported artboard sizes
               - desktop
               - mobile
-              - responsive            # resizable frame; exports desktop + mobile
+              - responsive            # resizable artboard; exports desktop + mobile
             states:                    # optional; the first is the page as authored
               - id: default
                 label: Default
@@ -72,15 +95,20 @@ sections:                     # one entry in the screen list's Sections, in this
     items:
       - label: Button
         src: components/button.html
+      - label: Card            # a docs page: Markdown with live examples, filling the canvas
+        src: docs/card.md
+        lens: web             # optional: the lens it opens with; the first otherwise
+        implementations:
+          web: src/card/examples/     # a folder (one example per file) or a file (one per named export)
 ```
 
 TypeScript previews in `.workbench.ts` and `.workbench.tsx` files are
 discovered without being listed. Each definition's title places it: the first
-segment is a section (`Previews` when there is only one segment), middle
-segments one folder, and the last the screen's label; its states come from the
+segment is a collection (`Previews` when there is only one segment), middle
+segments one group, and the last the page's label; its states come from the
 definition. `previews: false` turns discovery and execution off. Definitions
-run project code, so they need a trusted workspace. A handwritten screen may
-name a definition as its `src`; it keeps its place in `sections` and takes its
+run project code, so they need a trusted workspace. A handwritten page may
+name a definition as its `src`; it keeps its place in `collections` and takes its
 states from the definition. See [TypeScript previews](../docs/workbench-previews.md)
 for definitions, the HTML, React, Vue, Astro and React Native Web adapters,
 controls, plugins, and portable exports. `preview/compiler.cjs` discovers and
@@ -88,27 +116,33 @@ compiles them in a worker started by `preview-service.js`.
 
 State ids are kebab-case — they travel in a URL and in a screenshot's filename.
 Declaring one here is half of it: the page has to answer to the id, which
-`states.js` explains and does. A `src` can't hold `:` or `~`, which mark the
-state and the lens in the address.
+`states.js` explains and does. A `src` can't hold `:`, `!`, or `~`, which mark the
+state, a docs page's example, and the lens in the address.
 
-`viewports` controls both the frame buttons available for a screen and its
+A `src` ending in `.md` is a docs page: its Markdown places examples with
+fenced `example <id>` blocks, its `examples` lenses render them, and it fills the
+canvas instead of an artboard. A `.workbench.ts` file can declare one with
+`defineDocs`. See [Docs pages](../docs/docs-pages.md); the server and page code
+are in `src/docs/`.
+
+`viewports` controls both the sizes the size switcher offers for a page and its
 reference images in a design-system export. It accepts any combination of
-`desktop`, `mobile`, `responsive`, and `fit`; unsupported frame buttons are
+`desktop`, `mobile`, `responsive`, and `fit`; unsupported sizes are
 disabled. `desktop` captures 1512 × 982, `mobile` captures 393 × 852,
-`responsive` enables the resizable frame and captures both desktop and mobile,
-and `fit` captures the standard 1440 × 900 frame. When `viewports` is omitted,
+`responsive` enables the resizable artboard and captures both desktop and mobile,
+and `fit` captures the standard 1440 × 900 artboard. When `viewports` is omitted,
 all four modes are enabled. The configuration GUI omits the property when all
 four are selected.
 
-Use **Configure pages** in the workbench toolbar’s More menu to add or remove sections and
+Use **Configure pages** in the top bar’s More menu to add or remove collections and
 pages, edit labels and source paths, and select supported viewports. Saving
-rewrites only the `sections` block in `workbench.yaml`; implementations and
+rewrites only the `collections` block in `workbench.yaml`; implementations and
 comments outside that block are preserved. Advanced state, implementation, and
 code mappings remain in the YAML and survive form edits.
 
 ### Implementations
 
-A screen can also be seen through lenses onto its implementation. They are
+A page can also be seen through lenses onto its implementation. They are
 declared once at the top and referred to by name:
 
 ```yaml
@@ -132,7 +166,7 @@ implementations:
     catalog: true
   emulator:
     kind: window              # a live stream of one macOS app's window
-    app: com.example.emulator # bundle ID, or part of it; a screen names the window title
+    app: com.example.emulator # bundle ID, or part of it; a page names the window title
   staging:
     kind: url
     base: https://staging.example.com
@@ -140,14 +174,14 @@ implementations:
     kind: workbench           # this project's TypeScript previews: no url, start, or other root
     label: Implementation
 
-sections:
+collections:
   - name: Pages
     items:
       - label: Sign in
         src: pages/sign-in.html
         implementations:
           staging: /          # url kind: one path for every state…
-          dev:                # …or a map of this screen's state ids to paths
+          dev:                # …or a map of this page's state ids to paths
             default: /
             error: /?error=1
         code:                 # implementation -> path or list of paths, relative to its root
@@ -160,8 +194,8 @@ sections:
 ```
 
 A `workbench` implementation's `root` can only be the project itself, and the
-preview's definition file is added to the screen's code pointers. An unknown
-preview ID is reported against the screen.
+preview's definition file is added to the page's code pointers. An unknown
+preview ID is reported against the page.
 
 `workbench.local.yaml` beside it is merged over: each implementation by
 name, every other top-level key whole. A missing one is the usual case; a
@@ -169,15 +203,15 @@ broken one is reported by its own name. Ports and folder paths go there, and
 it goes in `.gitignore`.
 
 `manifest.js` holds these rules, and the server reads the same file with
-them, so the two never disagree about which lens a screen has.
+them, so the two never disagree about which lens a page has.
 
 With `catalog: true`, a Storybook implementation can be the whole workbench;
-`sections` may be omitted. Workbench reads Storybook's live `/index.json`, turns
-each title into a screen and each story under that title into a workbench state.
-The first title segment becomes a section, any middle segments become one
-folder, and the last segment labels the screen. Generated screens open directly
+`collections` may be omitted. Workbench reads Storybook's live `/index.json`, turns
+each title into a page and each story under that title into a workbench state.
+The first title segment becomes a collection, any middle segments become one
+group, and the last segment labels the page. Generated pages open directly
 through Storybook and use its component and story paths as source pointers when
-`root` is configured. Manual sections can coexist with imported catalogs and are
+`root` is configured. Handwritten collections can coexist with imported catalogs and are
 left unchanged. Without `catalog: true`, no Storybook content is imported.
 
 `catalog` may instead be a map. `icon` is the fallback Lucide icon, and
@@ -195,8 +229,25 @@ exact title can override its category:
         Auth: shield-check
 ```
 
-Handwritten screens may likewise set `icon: panel-top`; otherwise they use
-their section's icon.
+Handwritten pages may likewise set `icon: panel-top`; otherwise they use
+their collection's icon.
+
+Preview definitions may set `icon`; it overrides the longest `previews.icons`
+title prefix, then `previews.icon`, then `component`. Prefixes match complete
+segments separated by `/`. Collection lookup uses the collection name, independently
+of a page's own icon. Icon settings validate kebab-case syntax, not Lucide
+registry membership.
+
+An authored collection may contain only `name` and `icon` to style imported
+pages; the configuration editor preserves it, and it is hidden until filled.
+Collection icon precedence is: explicit handwritten icon, preview prefix mapping,
+catalog prefix mapping, configured preview fallback, configured catalog
+fallback, built-in default. Shared preview/Storybook collections default to
+`component`. Equal catalog priorities choose the alphabetically first icon
+name, so import order never selects the icon. See the
+[configuration reference](../docs/configuration.md#collections).
+Authored collections without explicit icons keep `file-text` against imported
+built-in defaults; mappings and configured fallbacks override it.
 
 `start` is available for Storybook and URL implementations. On extension
 activation, Workbench first checks the configured TCP port or HTTP(S) URL. If it
@@ -216,7 +267,7 @@ reports it and the editor sidebar shows the diagnostic. It only starts the
 project's Storybook process when `start` is configured.
 
 An `ios-simulator` implementation with `catalog: true` adds its matching booted
-Simulator devices as implementation-only screens. In the extension, a small
+Simulator devices as implementation-only pages. In the extension, a small
 ad-hoc-signed ScreenCaptureKit helper finds the matching Simulator window and
 hardware-encodes a 30 FPS H.264 stream for the canvas. This avoids VS Code's
 webview `display-capture` restriction. WDA forwards taps and drags from the canvas. Install WDA once in the project with
@@ -224,15 +275,15 @@ webview `display-capture` restriction. WDA forwards taps and drags from the canv
 booted` imports every booted device; an exact device name or UDID narrows it.
 
 A `window` implementation uses the same helper for any macOS app: `app` is
-part of its bundle ID, and each screen maps it to part of a window title. The
-canvas posts only the implementation and screen to `/_workbench/window/stream`;
+part of its bundle ID, and each page maps it to part of a window title. The
+canvas posts only the implementation and page to `/_workbench/window/stream`;
 the server reads the app and title from the config, so a page can't open any
 other window. Window lenses take no input, have no catalog or `start`, and
 share the one native stream with the Simulator.
 
 Whatever the config gets wrong is reported rather than guessed at. A bad line
-names its line number; a screen missing a `src` is dropped and logged with the
-section it was in, and the rest of the sidebar still builds.
+names its line number; a page missing a `src` is dropped and logged with the
+collection it was in, and the rest of the sidebar still builds.
 
 ## Serving
 
@@ -245,12 +296,16 @@ is fetched too, which a `file://` page isn't allowed to do at all.
 TypeScript previews are compiled by a worker process that `preview-service.js`
 starts on the bundled Electron runtime's Node (plain Node from a source
 checkout); the server proxies `/_workbench/previews/` and the definition files'
-own paths to it. Managed previews share two reusable `preview-host.html`
+own paths to it. Managed previews use retained `preview-host.html`
 documents. Each loads the compatibility bundle and `/_workbench/preview-runtime.js`
 (`preview/browser.js`) once. `preview-host.js` fetches a compiled descriptor and
 calls the module's adapter-neutral `mount` entry point; `browser.js` owns
 cleanup of the adapter, canvas, event listeners, and revision timer. On
-promotion the outgoing host is cleared for its next selection. Library-owned
+promotion the outgoing host remains attached and inert. `preview-sessions.js`
+owns one active session and up to three inactive sessions, retained for 15
+minutes after departure. Return preserves interactions and checks managed
+source revisions; eviction disposes the host. Reload replaces the selected
+session, and configuration refresh clears retained sessions. Library-owned
 CSSOM sheets stay connected and are enabled only for the module using them.
 Ordinary HTML and external lenses keep native document navigation. Portable
 exports are self-contained.
@@ -367,8 +422,8 @@ HTML, and handoff prompts.
 
 Through a lens the page is another origin's, so the frame can't be read into.
 A screenshot of it is taken by the screenshot helper going there itself
-(`/_workbench/capture/page`), with the marks laid over. The helper names what
-is under each mark with `describe.js`. URL and Storybook lenses use the
+(`/_workbench/capture/page`), with the annotations laid over. The helper names what
+is under each annotation with `describe.js`. URL and Storybook lenses use the
 workbench's iframes. An explicitly configured `ios-simulator` lens instead uses
 the native ScreenCaptureKit stream and WDA input path described above, and a
 `window` lens uses the same stream without input.
@@ -383,14 +438,14 @@ appear only in the first two rows. Where something can't work, the workbench
 says so instead of coming up empty.
 
 Use **Select** (or Escape to leave a drawing tool) to interact with the preview.
-Selected annotations intercept input only on their marks and handles; clicks
+Selected annotations intercept input only on themselves and their handles; clicks
 and text selection elsewhere reach the page immediately. In the editor, served
 design pages copy and cut in their own document and forward right-click menus
 with their selected text to VS Code. Editor shortcuts and chord continuations
 are relayed; normal text editing and caret movement stay in the preview.
 Standalone browser previews keep their browser shortcuts and menus. The chrome
 itself is not selectable: select-all works in a field, a note, or the preview
-page, and does nothing over the toolbar or the editor's wrapper around the frame.
+page, and does nothing over the top bar, the toolbar, or the editor's wrapper around the artboard.
 
 External iframe implementations remain subject to the browser's origin boundary.
 The workbench grants clipboard access and uses Storybook's own key-event channel
@@ -420,24 +475,24 @@ implementation's own address; Workbench never switches to a stream.
 
 | File | Job |
 | --- | --- |
-| `index.html` | the shell: top bar, sidebar, canvas, and the markup and zoom bars floating over it |
+| `index.html` | the shell: top bar, sidebar, canvas, and the toolbar and view controls floating over it |
 | `config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |
-| `config-editor.js` | edits sections, pages, paths, and supported viewports through the local server |
+| `config-editor.js` | edits collections, pages, paths, and supported viewports through the local server |
 | `yaml.js` | the part of YAML a config is written in |
 | `manifest.js` | the rules for implementations, lenses and code pointers — shared with the server |
 | `address.js` | reads and writes the hash: src, state, width, lens |
 | `lenses.js` | where a lens points: a url implementation's page, a single story |
 | `describe.js` | names the element under a point — here, and inside pages the server's browser opens |
 | `workbench.js` | routing, frame loading, resizing, the lens switcher, stories, the source menu |
-| `reference.js` | copies the current screen, state or story, and lens as a text reference |
-| `toolbar.js` | builds the top bar’s More menu, and folds secondary actions into it before the bar’s regions collide |
+| `reference.js` | copies the current page, state or story, and lens as a text reference |
+| `top-bar.js` | builds the top bar’s More menu, and folds secondary actions into it before the bar’s regions collide |
 | `preview-host.html` + `preview-host.js` | the reusable document a TypeScript preview mounts into |
 | `preview-controls.js` + `preview-controls.css` | shared input controls, reset, actions and docs, also included in portable browser exports |
-| `zoom.js` | zooms and pans the frame on the canvas, Figma-style, and labels it with its name and size |
-| `nav.js` + `nav.css` | the screen list, laid out like Sketch's sidebar: sections, then the chosen one's folders, screens and states, then the filter |
+| `zoom.js` | zooms and pans the artboard on the canvas, Figma-style, and labels it with its name and size |
+| `page-list.js` + `page-list.css` | the collection list and page list, laid out like Sketch's sidebar: collections, then the chosen one's groups, pages, and states, then search |
 | `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
-| `project-switcher.js` | the project switcher over the list and in the breadcrumb, styled in `nav.css` |
-| `markup.js` + `markup.css` | the draw layer, screenshots, and clipboard handoff |
+| `space-switcher.js` | the space switcher over the list and in the breadcrumb, styled in `page-list.css` |
+| `annotations.js` + `annotations.css` | the draw layer, screenshots, and clipboard handoff |
 | `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
 | `capture-sync.js` | coalesces preparation, checks readiness and retries failures |
 | `dom-mirror.js` | caches node records, sends revisioned patches and applies them to the inert capture document |
@@ -451,10 +506,10 @@ implementation's own address; Workbench never switches to a stream.
 | `actions.js` | the preview's half of the Actions toggle, and the hook a TypeScript preview uses to claim its links and forms |
 | `states.js` | the preview's half of page states |
 
-`nav.js` is the list and nothing else: it is handed the config's sections and
-answers with a section list and a screen list that call back with the screen you picked. Two
+`page-list.js` is the list and nothing else: it is handed the config's collections and
+answers with a collection list and a page list that call back with the page you picked. Two
 places build one — the workbench, where it is the left edge of the window, and
-the Workbench sidebar in VS Code, where it stands in for a file tree. `nav.css`
+the Workbench sidebar in VS Code, where it stands in for a file tree. `page-list.css`
 draws it in either place; it names no colours of its own, so `workbench.css`
 dresses it in the tool's grays and `sidebar.css` in the editor's theme.
 
@@ -470,22 +525,22 @@ form and navigation handling would change how those apps behave.
 
 ## The address bar
 
-**Copy reference** in the toolbar copies a short text reference for pasting into
-a conversation: the screen's label and design file, its state (including the
+**Copy reference** in the top bar copies a short text reference for pasting into
+a conversation: the page's label and design file, its state (including the
 default) or Storybook story, and the active lens with its implementation URL.
 It uses the resolved selection and works in both the editor and the standalone
-browser. Copying does not capture a screenshot, include markup, or send a handoff.
+browser. Copying does not capture a screenshot, include annotations, or send a handoff.
 
 **Download design-system ZIP** exports the whole workbench rather than only the
-current screen. It starts from every design file and resolved component, page,
+current page. It starts from every design file and resolved component, page,
 and Storybook source pointer, follows local imports and referenced assets, and
 preserves project-relative paths. The archive includes Storybook and package
 configuration plus a manifest of files, external packages, unresolved
-references, and one content record per screen. Each record has a SHA-256 hash
-over that screen's sorted archive-relative paths and raw file contents. A
+references, and one content record per page. Each record has a SHA-256 hash
+over that page's sorted archive-relative paths and raw file contents. A
 matching hash means the exported design/source entry points and their local
 dependency closure are unchanged. Workspace files retain their project-relative
-paths directly at the archive root, without a `project/` wrapper. Each screen
+paths directly at the archive root, without a `project/` wrapper. Each page
 also gets an agent-oriented README beside its primary component or page entry,
 with its hash, entry points, included files, and usage guidance. Generated metadata and exporter-added package configuration are
 outside the hash. The export excludes installed dependencies, build output,
@@ -493,12 +548,12 @@ secrets, tests, and source that is not reachable from the workbench. The button
 requires the local workbench server.
 
 The export also captures JPEGs for every declared design state and every
-imported Storybook story at each screen's configured `viewports`. A responsive
-screen produces both desktop and mobile references, with duplicate sizes
+imported Storybook story at each page's configured `viewports`. A responsive
+page produces both desktop and mobile references, with duplicate sizes
 removed when desktop or mobile is also declared. References live in a
-`screenshots/` directory beside that screen's primary component or page entry
-and are embedded in its README. When multiple screens share a source directory,
-their README and screenshot paths include the screen name to avoid collisions. They
+`screenshots/` directory beside that page's primary component or page entry
+and are embedded in its README. When multiple pages share a source directory,
+their README and screenshot paths include the page name to avoid collisions. They
 are generated context rather than hash input. Capture runs as a background
 export job; the workbench puts a modal progress bar in front of the canvas and
 keeps the visible selection unchanged. A failed or unsupported reference does
@@ -527,18 +582,18 @@ of being treated as installed dependencies. A static
 `new URL("./assets/", import.meta.url)` directory reference includes the files
 under that directory; this covers build plugins that assemble sprites, fonts,
 or other generated resources from an asset folder rather than importing each
-asset individually. Those files also participate in the hashes of screens that
+asset individually. Those files also participate in the hashes of pages that
 use that Storybook configuration.
 
 Reachable package configuration is included too. When a Vite config names an
 SVG sprite `iconDirs` directory through `path.resolve(process.cwd(), "…")`,
-the export includes its source SVGs and counts them in the hashes of screens
+the export includes its source SVGs and counts them in the hashes of pages
 whose components use `#icon-` symbols. The sprite itself is generated by Vite
 at runtime. TypeScript source imports written with `.js` output extensions
 resolve to their `.ts` or `.tsx` files when the JavaScript file is absent.
 
 The selection lives in the hash, so a reload or a copied link lands on the same
-screen, in the same state, at the same width, through the same lens:
+page, in the same state, at the same width, through the same lens:
 
 ```text
 #pages/sign-in.html:error@1512~staging
@@ -548,51 +603,51 @@ screen, in the same state, at the same width, through the same lens:
 
 The default state and the design lens are addressed by leaving them out. Under
 a Storybook lens the state slot carries the story. The lens is the canvas's to
-keep, like the width: a pick that names none keeps the one the toolbar is on,
-and a screen without it shows its design. Once the canvas has settled, the
+keep, like the width: a pick that names none keeps the one the lens switcher is on,
+and a page without it shows its design. Once the canvas has settled, the
 address is rewritten to say exactly what's showing.
 
 **Fit** alone follows the available workbench space. Device presets keep their
 declared width and height; **Resizable** likewise keeps its last manually
 chosen dimensions. The page always lays out at that real size. What changes
-with the window is the canvas zoom, as in a design tool: a new frame size, or
-a resized editor, zooms the frame to fit (never past 100%) until you zoom or
+with the window is the canvas zoom, as in a design tool: a new artboard size, or
+a resized editor, zooms the artboard to fit (never past 100%) until you zoom or
 pan by hand. `zoom.js` owns this, with Figma's controls — ⌘/Ctrl with the
 wheel or a pinch zooms at the pointer, the wheel pans, Space-drag or the middle
 button pans, ⌘= and ⌘- step by powers of two, ⌘0 and ⇧0 go to 100%, and ⇧1
-fits. **Recenter view**, beside the zoom controls, centers the frame without
+fits. **Recenter view**, in the view controls, centers the artboard without
 changing its zoom or the page's scroll position. Those chords stay with the
 workbench rather than reaching the editor.
 They are read inside previews the workbench serves, and through Storybook's
 key channel for a Storybook lens; another origin's iframe keeps its own wheel.
-Screenshots and handoffs are always taken at the frame's real size, whatever
+Screenshots and handoffs are always taken at the artboard's real size, whatever
 the zoom.
 
 It is also how the workbench is driven from outside. Embedded in an editor —
-the Workbench extension puts it in a tab with the screen list in the sidebar —
-a picked screen arrives as a `wb-go` message carrying that same hash, from the
+the Workbench extension puts it in a tab with the page list in the sidebar —
+a picked page arrives as a `wb-go` message carrying that same hash, from the
 host and only the host, and the workbench answers every routing with a
-`wb-here` saying which screen and state it settled on — and which lens, which
+`wb-here` saying which page and state it settled on — and which lens, which
 the editor's list reads past. An editor pick and a copied link are the same
 instruction, which is why there is only one of them to maintain, and
-`wb-here` is what keeps the sidebar marked when the canvas moves on its own —
+`wb-here` is what keeps the sidebar's selection current when the canvas moves on its own —
 a link followed in a live preview.
 
-Embedded, the workbench also drops its own screen list: the list is in the
+Embedded, the workbench also drops its own page list: the list is in the
 sidebar, and two of them would be one too many.
 
-A workbench with several projects runs one server per project, and the canvas
-reads them from `/_workbench/projects`. A project of a file that lists several,
+A workbench with several spaces runs one server per space, and the canvas
+reads them from `/_workbench/spaces`. A space of a file that lists several,
 or whose root isn't the file's folder, is served with
 `<meta name="canonic-config">` (where the file is: `/_workbench/manifest/`
-over http) and `<meta name="canonic-project">` (its id) in the canvas page;
-`config.js` reads the file from there and `manifest.js`'s `selectProject`
-picks the project, the same rule the server uses. The editor's sidebar gets
+over http) and `<meta name="canonic-space">` (its id) in the canvas page;
+`config.js` reads the file from there and `manifest.js`'s `selectSpace`
+picks the space, the same rule the server uses. The editor's sidebar gets
 the same two metas. With more than one, it puts the
-project at the start of the breadcrumb and, in a browser, a switcher at the
-top of its screen list. Switching is going to the other server's address:
-embedded, the canvas posts `wb-project` with the project's id and the host
+space at the start of the breadcrumb and, in a browser, a switcher at the
+top of its sidebar. Switching is going to the other server's address:
+embedded, the canvas posts `wb-space` with the space's id and the host
 loads that server in its tab; in a browser, it posts the id to
-`/_workbench/projects/open`, which starts that server if it has to and
+`/_workbench/spaces/open`, which starts that server if it has to and
 answers with its URL. The editor's sidebar draws the same switcher from the
-projects the extension lists in its page.
+spaces the extension lists in its page.

@@ -6,18 +6,58 @@ var test = require('node:test');
 var yaml = require('./yaml');
 var config = require('./config');
 
+test('browser reader preserves icon-only declarations and hides them after failed imports', async function () {
+  var vm = require('node:vm');
+  var manifest = require('./workbench/manifest');
+  var warnings = [];
+  var body = 'name: Acme\ncollections:\n  - name: Web App\n    icon: app-window\n';
+  var window = { wbManifest: manifest, wbYaml: yaml.parse };
+  function Request() {}
+  Request.prototype.open = function (_, url) { this.url = url; };
+  Request.prototype.send = function () {
+    this.status = this.url.endsWith('workbench.local.yaml') ? 404 : 200;
+    this.responseText = body;
+    this.onload();
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'workbench/config.js'), 'utf8'), {
+    window: window, URL: URL, URLSearchParams: URLSearchParams,
+    location: { protocol: 'http:', search: '' },
+    document: { baseURI: 'http://127.0.0.1/', querySelector: () => null },
+    XMLHttpRequest: Request, console: { warn: message => warnings.push(message) },
+  });
+  var loaded = await new Promise((resolve, reject) => window.wbConfig.load(resolve, reject));
+  assert.equal(loaded.collections[0].icon, 'app-window');
+  assert.equal(warnings.length, 0);
+  assert.equal(manifest.mergeCollections(loaded.collections, []).length, 0);
+  assert.equal(manifest.mergeCollections(loaded.collections, [{ name: 'Web App', icon: 'component', iconPriority: 1, items: [{ src: 'jobs.workbench.ts' }] }])[0].icon, 'app-window');
+  body += 'previews: false\n';
+  await assert.rejects(new Promise((resolve, reject) => window.wbConfig.load(resolve, reject)), /nothing to show/);
+});
+
+test('icon-only collections survive reading and editor saves', function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-collection-icon-'));
+  try {
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\ncollections:\n  - name: Web App\n    icon: app-window\n');
+    assert.deepEqual(config.read(root).collections, [{ name: 'Web App', icon: 'app-window', items: [] }]);
+    var authored = config.source(root).collections;
+    config.updateCollections(root, authored);
+    assert.deepEqual(config.source(root).collections, authored);
+    assert.equal(config.read(root).collections[0].icon, 'app-window');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 /* The shapes a workbench.yaml is actually written in. The tree in the sidebar
    is only ever as right as this is. */
 
-test('reads sections, folders, screens and states', function () {
+test('reads collections, groups, pages and states', function () {
   var doc = yaml.parse([
     'name: Acme',
     '',
-    'sections:',
+    'collections:',
     '  - name: Pages    # the rail button',
     '    icon: file-text',
     '    items:',
-    '      - folder: Auth',
+    '      - group: Auth',
     '        items:',
     '          - label: Sign in',
     '            src: pages/sign-in.html',
@@ -26,25 +66,25 @@ test('reads sections, folders, screens and states', function () {
     '                label: Default',
     '              - id: error',
     '                label: Wrong password',
-      '      - label: Loose screen',
+      '      - label: Loose page',
       '        src: pages/loose.html',
       '        icon: panel-top',
   ].join('\n'));
 
   assert.equal(doc.name, 'Acme');
-  assert.equal(doc.sections.length, 1);
+  assert.equal(doc.collections.length, 1);
 
-  var section = doc.sections[0];
-  assert.equal(section.name, 'Pages');
-  assert.equal(section.icon, 'file-text');
+  var collection = doc.collections[0];
+  assert.equal(collection.name, 'Pages');
+  assert.equal(collection.icon, 'file-text');
 
-  var folder = section.items[0];
-  assert.equal(folder.folder, 'Auth');
-  assert.equal(folder.items[0].label, 'Sign in');
-  assert.deepEqual(folder.items[0].states[1], { id: 'error', label: 'Wrong password' });
+  var group = collection.items[0];
+  assert.equal(group.group, 'Auth');
+  assert.equal(group.items[0].label, 'Sign in');
+  assert.deepEqual(group.items[0].states[1], { id: 'error', label: 'Wrong password' });
 
-  assert.equal(section.items[1].src, 'pages/loose.html');
-  assert.equal(section.items[1].icon, 'panel-top');
+  assert.equal(collection.items[1].src, 'pages/loose.html');
+  assert.equal(collection.items[1].icon, 'panel-top');
 });
 
 test('keeps a # that is part of a value', function () {
@@ -61,7 +101,7 @@ test('reads quoted strings, numbers and booleans', function () {
 test('points at the line it choked on', function () {
   assert.throws(
     function () {
-      yaml.parse(['name: Acme', 'sections:', '  - name: Pages', '  no colon here'].join('\n'));
+      yaml.parse(['name: Acme', 'collections:', '  - name: Pages', '  no colon here'].join('\n'));
     },
     /line 4/
   );
@@ -69,7 +109,7 @@ test('points at the line it choked on', function () {
 
 test('refuses a tab where an indent belongs', function () {
   assert.throws(function () {
-    yaml.parse(['sections:', '\t- name: Pages'].join('\n'));
+    yaml.parse(['collections:', '\t- name: Pages'].join('\n'));
   }, /tab/);
 });
 
@@ -89,7 +129,7 @@ var MAIN = [
   '  staging:',
   '    kind: url',
   '    base: https://staging.example.com',
-  'sections:',
+  'collections:',
   '  - name: Pages',
   '    items:',
   '      - label: Sign in',
@@ -141,7 +181,7 @@ test('reads implementations, lenses and code pointers', function () {
     assert.deepEqual(Object.keys(read.implementations), ['storybook', 'dev', 'staging']);
     assert.deepEqual(read.files, { main: true, local: false });
 
-    var signIn = read.sections[0].items[0];
+    var signIn = read.collections[0].items[0];
     assert.deepEqual(signIn.viewports, ['desktop', 'mobile']);
     assert.deepEqual(signIn.implementations, {
       dev: { path: '/', states: { error: '/?error=1' } },
@@ -152,7 +192,7 @@ test('reads implementations, lenses and code pointers', function () {
       { implementation: 'staging', path: 'src/pages/login' },
     ]);
 
-    var button = read.sections[1].items[0];
+    var button = read.collections[1].items[0];
     assert.deepEqual(button.viewports, ['fit', 'desktop', 'mobile', 'responsive']);
     assert.equal(button.icon, 'square-mouse-pointer');
     assert.deepEqual(button.implementations, { storybook: { title: 'Components/Button' } });
@@ -162,14 +202,14 @@ test('reads implementations, lenses and code pointers', function () {
   }
 });
 
-test('updates the sections block without rewriting the rest of the YAML file', function () {
+test('updates the collections block without rewriting the rest of the YAML file', function () {
   var original = [
     'name: Acme # keep this comment',
     'implementations:',
     '  dev:',
     '    kind: url',
     '    base: http://localhost:3000',
-    'sections:',
+    'collections:',
     '  - name: Old',
     '    items:',
     '      - label: Old page',
@@ -178,14 +218,14 @@ test('updates the sections block without rewriting the rest of the YAML file', f
   ].join('\n');
   var root = project({ 'workbench.yaml': original });
   try {
-    config.updateSections(root, [{ name: 'Pages', icon: 'file-text', items: [{
+    config.updateCollections(root, [{ name: 'Pages', icon: 'file-text', items: [{
       label: 'Sign in', src: 'pages/sign-in.html', viewports: ['desktop', 'mobile'],
     }] }]);
     var body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
     assert.match(body, /name: Acme # keep this comment/);
     assert.match(body, /base: http:\/\/localhost:3000/);
     assert.match(body, /viewports:\n\s+- desktop\n\s+- mobile/);
-    assert.deepEqual(config.read(root).sections[0].items[0].viewports, ['desktop', 'mobile']);
+    assert.deepEqual(config.read(root).collections[0].items[0].viewports, ['desktop', 'mobile']);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -201,7 +241,7 @@ test('answers null for a project without a workbench.yaml', function () {
   }
 });
 
-test('accepts a Storybook catalog without handwritten sections', function () {
+test('accepts a Storybook catalog without handwritten collections', function () {
   var root = project({
     'workbench.yaml': [
       'name: Acme stories',
@@ -217,7 +257,7 @@ test('accepts a Storybook catalog without handwritten sections', function () {
     assert.equal(read.implementations.storybook.catalog, true);
     assert.equal(read.implementations.storybook.catalogIcon, 'book-open');
     assert.deepEqual(read.implementations.storybook.catalogIcons, {});
-    assert.deepEqual(read.sections, []);
+    assert.deepEqual(read.collections, []);
     assert.deepEqual(read.problems, []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -254,7 +294,7 @@ test('reads a configurable implementation command and readiness check', function
   }
 });
 
-test('accepts automatic Storybook and Simulator catalogs without handwritten sections', function () {
+test('accepts automatic Storybook and Simulator catalogs without handwritten collections', function () {
   var root = project({
     'workbench.yaml': [
       'implementations:',
@@ -273,7 +313,7 @@ test('accepts automatic Storybook and Simulator catalogs without handwritten sec
     assert.equal(read.implementations.storybook.auto, true);
     assert.equal(read.implementations.simulator.device, 'booted');
     assert.equal(read.implementations.simulator.catalogIcon, 'smartphone');
-    assert.deepEqual(read.sections, []);
+    assert.deepEqual(read.collections, []);
     assert.deepEqual(read.problems, []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -327,7 +367,7 @@ test('resolves every path for this machine and says what it could not', function
     assert.equal(view.implementations.storybook.root, path.join(product, 'packages/ui'));
     assert.equal(view.implementations.staging.root, null);
 
-    var signIn = view.screens['pages/sign-in.html'];
+    var signIn = view.pages['pages/sign-in.html'];
     assert.equal(signIn.label, 'Sign in');
     assert.equal(signIn.design, path.join(root, 'pages/sign-in.html'));
     assert.deepEqual(signIn.code, [
@@ -335,7 +375,7 @@ test('resolves every path for this machine and says what it could not', function
       { implementation: 'staging', path: null, relative: 'src/pages/login', exists: false },
     ]);
 
-    var button = view.screens['preview/components-button.html'];
+    var button = view.pages['preview/components-button.html'];
     assert.deepEqual(button.code, [
       { implementation: 'storybook', path: path.join(product, 'packages/ui/src/button.tsx'), relative: 'src/button.tsx', exists: true },
       { implementation: 'storybook', path: path.join(product, 'packages/ui/src/missing.tsx'), relative: 'src/missing.tsx', exists: false },
@@ -350,14 +390,14 @@ test('resolves every path for this machine and says what it could not', function
   }
 });
 
-test('reports a project icon image that isn’t in the project, and resolves the mark', function () {
+test('reports a space icon image that isn’t in the project, and resolves the mark', function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-mark-'));
   try {
     fs.writeFileSync(path.join(root, 'workbench.yaml'), [
       'name: Acme',
       'color: purple',
       'icon: brand/logo.svg',
-      'sections:',
+      'collections:',
       '  - name: Pages',
       '    items:',
       '      - label: Home',
@@ -375,22 +415,22 @@ test('reports a project icon image that isn’t in the project, and resolves the
   }
 });
 
-function multiProject(body) {
+function multiSpace(body) {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-multi-'));
   fs.writeFileSync(path.join(dir, 'workbench.yaml'), body);
   return dir;
 }
 
 var MULTI = [
-  '# Two projects in one file',
+  '# Two spaces in one file',
   'implementations:',
   '  dev:',
   '    kind: url',
   '    base: http://localhost:3000',
-  'projects:',
+  'spaces:',
   '  web:',
   '    name: Acme Web',
-  '    sections:',
+  '    collections:',
   '      - name: Pages',
   '        items:',
   '          - label: Home',
@@ -398,22 +438,22 @@ var MULTI = [
   '  ui:',
   '    name: Acme UI',
   '    root: packages/ui',
-  '    # its own sections come later',
+  '    # its own collections come later',
   '',
   'previews: false',
   '',
 ].join('\n');
 
-test('lists one project per entry, each with its root', function () {
-  var dir = multiProject(MULTI);
+test('lists one space per entry, each with its root', function () {
+  var dir = multiSpace(MULTI);
   try {
     assert.deepEqual(config.list(dir), [
       { key: 'web', root: dir },
       { key: 'ui', root: path.join(dir, 'packages', 'ui') },
     ]);
-    var single = multiProject('name: Acme\nsections: []\n');
+    var single = multiSpace('name: Acme\ncollections: []\n');
     assert.deepEqual(config.list(single), [{ key: null, root: single }]);
-    var broken = multiProject('name: Acme\n  sections: []\n');
+    var broken = multiSpace('name: Acme\n  collections: []\n');
     assert.deepEqual(config.list(broken), [{ key: null, root: broken }]);
     assert.deepEqual(config.list(path.join(dir, 'packages')), []);
   } finally {
@@ -421,45 +461,86 @@ test('lists one project per entry, each with its root', function () {
   }
 });
 
-test('reads one project of a file, with the shared keys and its own root', function () {
-  var dir = multiProject(MULTI);
+test('reads one space of a file, with the shared keys and its own root', function () {
+  var dir = multiSpace(MULTI);
   try {
     var web = config.read({ dir: dir, key: 'web' });
     assert.equal(web.name, 'Acme Web');
     assert.equal(web.key, 'web');
     assert.equal(web.root, dir);
-    assert.equal(web.sections[0].items[0].src, 'index.html');
+    assert.equal(web.collections[0].items[0].src, 'index.html');
     assert.equal(web.implementations.dev.base, 'http://localhost:3000');
     assert.equal(web.previews, false);
 
     var ui = config.read({ dir: dir, key: 'ui' });
     assert.equal(ui.root, path.join(dir, 'packages', 'ui'));
-    assert.deepEqual(ui.sections, []);
-    /* A folder alone reads the first project. */
+    assert.deepEqual(ui.collections, []);
+    /* A folder alone reads the first space. */
     assert.equal(config.read(dir).key, 'web');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('saving pages for one project rewrites only that project, adding its sections when it has none', function () {
-  var dir = multiProject(MULTI);
+test('saving pages for one space rewrites only that space, adding its collections when it has none', function () {
+  var dir = multiSpace(MULTI);
   try {
-    var sections = [{ name: 'Components', items: [{ label: 'Button', src: 'button.html' }] }];
-    var saved = config.updateSections({ dir: dir, key: 'ui' }, sections);
-    assert.deepEqual(saved.sections, sections);
+    var collections = [{ name: 'Components', items: [{ label: 'Button', src: 'button.html' }] }];
+    var saved = config.updateCollections({ dir: dir, key: 'ui' }, collections);
+    assert.deepEqual(saved.collections, collections);
     var body = fs.readFileSync(path.join(dir, 'workbench.yaml'), 'utf8');
-    assert.match(body, /^# Two projects in one file/);
-    assert.match(body, /    # its own sections come later\n    sections:\n      - name: Components\n/);
+    assert.match(body, /^# Two spaces in one file/);
+    assert.match(body, /    # its own collections come later\n    collections:\n      - name: Components\n/);
     assert.match(body, /\n\npreviews: false\n$/);
-    assert.equal(config.read({ dir: dir, key: 'web' }).sections[0].items[0].src, 'index.html');
-    assert.equal(config.read({ dir: dir, key: 'ui' }).sections[0].items[0].src, 'button.html');
+    assert.equal(config.read({ dir: dir, key: 'web' }).collections[0].items[0].src, 'index.html');
+    assert.equal(config.read({ dir: dir, key: 'ui' }).collections[0].items[0].src, 'button.html');
 
-    config.updateSections({ dir: dir, key: 'web' }, [{ name: 'Pages', items: [{ label: 'About', src: 'about.html' }] }]);
-    assert.equal(config.read({ dir: dir, key: 'web' }).sections[0].items[0].label, 'About');
-    assert.equal(config.read({ dir: dir, key: 'ui' }).sections[0].items[0].label, 'Button');
+    config.updateCollections({ dir: dir, key: 'web' }, [{ name: 'Pages', items: [{ label: 'About', src: 'about.html' }] }]);
+    assert.equal(config.read({ dir: dir, key: 'web' }).collections[0].items[0].label, 'About');
+    assert.equal(config.read({ dir: dir, key: 'ui' }).collections[0].items[0].label, 'Button');
     assert.equal(config.read({ dir: dir, key: 'web' }).implementations.dev.base, 'http://localhost:3000');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('reads docs pages, their examples lenses, and the lens they open with', function () {
+  var root = project({ 'workbench.yaml': [
+    'implementations:',
+    '  web:',
+    '    kind: examples',
+    '    adapter: html',
+    '    styles:',
+    '      - demo/demo.css',
+    '  native:',
+    '    kind: examples',
+    '    adapter: html',
+    'collections:',
+    '  - name: Design system',
+    '    items:',
+    '      - label: Card',
+    '        src: docs/card.md',
+    '        lens: native',
+    '        implementations:',
+    '          web: docs/card/',
+    '          native: docs/card.examples.ts',
+    '      - label: Colors',
+    '        src: docs/colors.md',
+    '      - label: Marked',
+    '        src: docs/bad!name.md',
+  ].join('\n') });
+  try {
+    var read = config.read(root);
+    var items = read.collections[0].items;
+    assert.deepEqual(items.map(function (item) { return item.label; }), ['Card', 'Colors']);
+    assert.deepEqual(items[0].implementations, { web: { examples: 'docs/card/' }, native: { examples: 'docs/card.examples.ts' } });
+    assert.equal(items[0].docs, true);
+    assert.equal(items[0].lens, 'native');
+    assert.equal(items[1].docs, true);
+    assert.equal(items[1].lens, undefined);
+    assert.deepEqual(read.implementations.web.styles, ['demo/demo.css']);
+    assert.deepEqual(read.problems, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

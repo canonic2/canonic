@@ -145,7 +145,7 @@ export default definePreview({
 });
 ```
 
-Run **Workbench: Refresh Screens**. **Pricing** appears in a **Pages** section
+Run **Workbench: Refresh Pages**. **Pricing** appears in a **Pages** collection
 with the states **Monthly** and **Annual**. **Annual** shows $10.00 and the
 "Billed yearly" note, choosing a plan in **Preview controls** renders the page
 again with that plan, and clicking **Choose plan** records `choose-plan` under
@@ -215,9 +215,10 @@ These aren't rewritten, so a relative path in them doesn't load:
 
 A relative link resolves against the compiled preview's folder, not your HTML
 file's folder, so it doesn't reach the page next to your file. A link that
-starts with `/` resolves from the project root. Links don't add screens: write
-a preview for each page you want, and map the addresses your page links to in
-the definition's `links`. With the toolbar's **Actions** switch on, a mapped
+starts with `/` resolves from the project root. Links don't add pages to
+Workbench: write a preview for each page you want, and map the addresses your
+page links to in the definition's `links`. With the top bar's **Actions**
+switch on, a mapped
 link opens its preview, and any other link, such as **Compare plans** without a
 `pages/compare` preview, is recorded under **Actions** as `navigate`. See
 [Links and navigation](preview-data.md#links-and-navigation).
@@ -357,6 +358,69 @@ Add it to the definition, with a path relative to the definition:
 
 With a `pages/checkout` preview in the project and **Actions** on, clicking
 **Choose plan** opens it. `pricing.ts` still records `choose-plan` first.
+
+## Document components with a docs page
+
+A [docs page](docs-pages.md) can show HTML components as live examples. Give
+it an `examples` lens with `adapter: html`. Each example is a function
+`(canvas, context)` that draws into `canvas`, like a
+[function source](#render-from-a-function), and may return a cleanup function.
+HTML files aren't examples.
+
+```yaml
+implementations:
+  web:
+    kind: examples
+    label: Web
+    adapter: html
+    styles:
+      - site/components/banner.css
+
+collections:
+  - name: Components
+    items:
+      - label: Banner
+        src: docs/banner.md
+        implementations:
+          web: site/components/banner.examples.ts
+```
+
+`site/components/banner.examples.ts` holds two examples, `info` and `warning`:
+
+```ts
+import type { PreviewContext } from '@canonic2/workbench';
+
+function banner(canvas: HTMLElement, tone: string, message: string) {
+  const element = document.createElement('div');
+  element.className = 'banner ' + tone;
+  element.textContent = message;
+  canvas.append(element);
+  return element;
+}
+
+export function info(canvas: HTMLElement) {
+  banner(canvas, 'info', 'Your trial ends in 3 days.');
+}
+
+export function warning(canvas: HTMLElement, context: PreviewContext) {
+  const element = banner(canvas, 'warning', 'Payment failed.');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = 'Dismiss';
+  close.addEventListener('click', () => context.action('dismiss'), { signal: context.signal });
+  element.append(close);
+}
+```
+
+`docs/banner.md` places each one with a fenced block, such as
+```` ```example warning ````; see
+[Docs pages](docs-pages.md#write-the-markdown). A folder works too, with one
+`.ts` or `.js` file per example and the function as its default export.
+
+Examples get no inputs or controls, so set what each one shows in its code.
+The lens's `styles` load with the examples, and an `environment`'s `setup` and
+`ready` run once for the page. Its `mount` isn't called, as for a function
+source.
 
 ## Errors and fixes
 

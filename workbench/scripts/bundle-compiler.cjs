@@ -8,13 +8,24 @@ const tar = require('tar');
 const ROOT = path.resolve(__dirname, '..');
 const targets = require('./bundle-runtime.cjs').targets;
 
-function specification(target) {
+/* pnpm-lock.yaml records every platform's esbuild package with its integrity,
+   even those this host didn't install; the tarball sits at the registry's
+   conventional address for that name and version. */
+function lockedPackage(lockfile, name, version) {
+  const key = "\n  '" + name + '@' + version + "':\n";
+  const at = lockfile.indexOf(key);
+  if (at < 0) return null;
+  const integrity = /^\s+resolution: \{integrity: ([^,}\s]+)/m.exec(lockfile.slice(at + key.length, lockfile.indexOf('\n\n', at + key.length)));
+  if (!integrity) return null;
+  const base = name.slice(name.indexOf('/') + 1);
+  return { version, integrity: integrity[1], resolved: 'https://registry.npmjs.org/' + name + '/-/' + base + '-' + version + '.tgz' };
+}
+
+function specification(target, lockfile) {
   if (!targets.includes(target)) throw new Error('Unsupported compiler target: ' + target);
   const version = require('../package.json').dependencies.esbuild;
-  const entry = require('../package-lock.json').packages['node_modules/@esbuild/' + target];
-  if (!entry || entry.version !== version || !entry.integrity || !entry.resolved.startsWith('https://registry.npmjs.org/')) {
-    throw new Error('Missing locked esbuild binary for ' + target);
-  }
+  const entry = lockedPackage(lockfile || fs.readFileSync(path.join(ROOT, 'pnpm-lock.yaml'), 'utf8'), '@esbuild/' + target, version);
+  if (!entry) throw new Error('Missing locked esbuild binary for ' + target);
   return { target, version, entry, member: target.startsWith('win32-') ? 'esbuild.exe' : 'bin/esbuild' };
 }
 function verify(body, integrity) {

@@ -65,7 +65,7 @@ async function startOne(root, impl, options) {
   report(impl.key + ': did not become ready within ' + start.timeout + ' seconds');
 }
 
-/* `where` is the project's folder, or { dir, key } for one project of a
+/* `where` is the space's folder, or { dir, key } for one space of a
    workbench.yaml that lists several; see config.read. */
 function run(where, options) {
   options = options || {};

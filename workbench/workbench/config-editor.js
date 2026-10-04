@@ -1,4 +1,4 @@
-/* A focused, master-detail editor for the handwritten sections in
+/* A focused, master-detail editor for the handwritten collections in
    workbench.yaml. The local server owns persistence; this surface keeps the
    raw objects intact so states, implementation mappings, and code pointers
    survive edits even when they are not exposed as form controls here. */
@@ -48,17 +48,17 @@
     return wrapper;
   }
 
-  function screenViewports(screen) {
-    return window.wbManifest.screenViewports(screen.viewports, screen.label || 'Screen', []);
+  function pageViewports(page) {
+    return window.wbManifest.pageViewports(page.viewports, page.label || 'Page', []);
   }
 
   function canonicalize(entries) {
     (entries || []).forEach(function (entry) {
-      if (entry.folder) {
+      if (entry.group) {
         canonicalize(entry.items);
         return;
       }
-      var selected = screenViewports(entry);
+      var selected = pageViewports(entry);
       if (selected.length === VIEWPORTS.length) delete entry.viewports;
       else entry.viewports = selected;
     });
@@ -68,7 +68,7 @@
     var dialog = options.dialog;
     var body = options.body;
     var status = options.status;
-    var sections = [];
+    var collections = [];
     var selection = null;
     var navPane = null;
     var inspector = null;
@@ -80,16 +80,16 @@
 
     function pageCount(entries) {
       return (entries || []).reduce(function (count, entry) {
-        return count + (entry.folder ? pageCount(entry.items) : 1);
+        return count + (entry.group ? pageCount(entry.items) : 1);
       }, 0);
     }
 
     function totalPages() {
-      return sections.reduce(function (count, section) { return count + pageCount(section.items); }, 0);
+      return collections.reduce(function (count, collection) { return count + pageCount(collection.items); }, 0);
     }
 
-    function select(kind, value, owner, section) {
-      selection = { kind: kind, value: value, owner: owner, section: section || value };
+    function select(kind, value, owner, collection) {
+      selection = { kind: kind, value: value, owner: owner, collection: collection || value };
       renderNavigation();
       renderInspector();
     }
@@ -98,10 +98,10 @@
       return !!selection && selection.value === value;
     }
 
-    function addPage(owner, section) {
+    function addPage(owner, collection) {
       var page = { label: 'Untitled page', src: 'pages/untitled.html' };
       owner.push(page);
-      select('page', page, owner, section);
+      select('page', page, owner, collection);
     }
 
     function removeSelected(message) {
@@ -109,14 +109,14 @@
       var owner = selection.owner;
       var at = owner.indexOf(selection.value);
       if (at !== -1) owner.splice(at, 1);
-      var section = selection.section;
-      selection = section && sections.indexOf(section) !== -1
-        ? { kind: 'section', value: section, owner: sections, section: section }
-        : sections.length ? { kind: 'section', value: sections[0], owner: sections, section: sections[0] } : null;
+      var collection = selection.collection;
+      selection = collection && collections.indexOf(collection) !== -1
+        ? { kind: 'collection', value: collection, owner: collections, collection: collection }
+        : collections.length ? { kind: 'collection', value: collections[0], owner: collections, collection: collections[0] } : null;
       render();
     }
 
-    function navPage(page, owner, section, nested) {
+    function navPage(page, owner, collection, nested) {
       var row = element('button', 'wb-config-nav-page' + (nested ? ' is-nested' : ''));
       row.type = 'button';
       row.setAttribute('aria-current', String(selected(page)));
@@ -125,46 +125,46 @@
       copy.appendChild(element('strong', '', page.label || 'Untitled page'));
       copy.appendChild(element('small', '', page.src || 'No source path'));
       row.appendChild(copy);
-      row.addEventListener('click', function () { select('page', page, owner, section); });
+      row.addEventListener('click', function () { select('page', page, owner, collection); });
       return row;
     }
 
-    function navFolder(folder, owner, section) {
-      var group = element('div', 'wb-config-nav-folder');
-      var head = element('button', 'wb-config-nav-folder-head');
+    function navGroup(group, owner, collection) {
+      var block = element('div', 'wb-config-nav-group');
+      var head = element('button', 'wb-config-nav-group-head');
       head.type = 'button';
-      head.setAttribute('aria-current', String(selected(folder)));
+      head.setAttribute('aria-current', String(selected(group)));
       head.appendChild(icon('folder', 15));
-      head.appendChild(element('strong', '', folder.folder || 'Untitled folder'));
-      head.appendChild(element('small', '', String(pageCount(folder.items))));
-      head.addEventListener('click', function () { select('folder', folder, owner, section); });
-      group.appendChild(head);
-      (folder.items || []).forEach(function (page) {
-        group.appendChild(navPage(page, folder.items, section, true));
+      head.appendChild(element('strong', '', group.group || 'Untitled group'));
+      head.appendChild(element('small', '', String(pageCount(group.items))));
+      head.addEventListener('click', function () { select('group', group, owner, collection); });
+      block.appendChild(head);
+      (group.items || []).forEach(function (page) {
+        block.appendChild(navPage(page, group.items, collection, true));
       });
-      return group;
+      return block;
     }
 
-    function navSection(section) {
-      var group = element('section', 'wb-config-nav-section');
-      var head = element('div', 'wb-config-nav-section-head');
-      var pick = element('button', 'wb-config-nav-section-pick');
+    function navCollection(collection) {
+      var block = element('section', 'wb-config-nav-collection');
+      var head = element('div', 'wb-config-nav-collection-head');
+      var pick = element('button', 'wb-config-nav-collection-pick');
       pick.type = 'button';
-      pick.setAttribute('aria-current', String(selected(section)));
-      pick.appendChild(element('span', '', section.name || 'Untitled section'));
-      pick.appendChild(element('small', '', String(pageCount(section.items))));
-      pick.addEventListener('click', function () { select('section', section, sections, section); });
+      pick.setAttribute('aria-current', String(selected(collection)));
+      pick.appendChild(element('span', '', collection.name || 'Untitled collection'));
+      pick.appendChild(element('small', '', String(pageCount(collection.items))));
+      pick.addEventListener('click', function () { select('collection', collection, collections, collection); });
       head.appendChild(pick);
-      head.appendChild(iconButton('Add page to ' + (section.name || 'section'), 'plus', function () {
-        addPage(section.items || (section.items = []), section);
+      head.appendChild(iconButton('Add page to ' + (collection.name || 'collection'), 'plus', function () {
+        addPage(collection.items || (collection.items = []), collection);
       }, 'wb-config-nav-add'));
-      group.appendChild(head);
-      (section.items || []).forEach(function (entry) {
-        group.appendChild(entry.folder
-          ? navFolder(entry, section.items, section)
-          : navPage(entry, section.items, section, false));
+      block.appendChild(head);
+      (collection.items || []).forEach(function (entry) {
+        block.appendChild(entry.group
+          ? navGroup(entry, collection.items, collection)
+          : navPage(entry, collection.items, collection, false));
       });
-      return group;
+      return block;
     }
 
     function renderNavigation() {
@@ -177,8 +177,8 @@
       navPane.appendChild(head);
       var list = element('nav', 'wb-config-nav-list');
       list.setAttribute('aria-label', 'Workbench pages');
-      if (!sections.length) list.appendChild(element('p', 'wb-config-nav-empty', 'No handwritten sections yet.'));
-      else sections.forEach(function (section) { list.appendChild(navSection(section)); });
+      if (!collections.length) list.appendChild(element('p', 'wb-config-nav-empty', 'No handwritten collections yet.'));
+      else collections.forEach(function (collection) { list.appendChild(navCollection(collection)); });
       navPane.appendChild(list);
     }
 
@@ -224,7 +224,7 @@
       viewportSection.appendChild(element('h4', '', 'Supported viewports'));
       viewportSection.appendChild(element('p', '', 'Only selected modes are available in the workbench. Responsive exports desktop and mobile references.'));
       var grid = element('div', 'wb-config-viewport-grid');
-      var active = screenViewports(page);
+      var active = pageViewports(page);
       VIEWPORTS.forEach(function (viewport) {
         var card = element('button', 'wb-config-viewport-card');
         card.type = 'button';
@@ -264,44 +264,44 @@
       }));
     }
 
-    function renderSection(section) {
-      inspector.appendChild(inspectorHeader('Section', section.name || 'Untitled section', pageCount(section.items) + ' pages', section.icon || 'layers-3'));
+    function renderCollection(collection) {
+      inspector.appendChild(inspectorHeader('Collection', collection.name || 'Untitled collection', pageCount(collection.items) + ' pages', collection.icon || 'layers-3'));
       var form = element('div', 'wb-config-inspector-form');
-      form.appendChild(field('Section name', section.name, function (value) {
-        section.name = value;
+      form.appendChild(field('Collection name', collection.name, function (value) {
+        collection.name = value;
         renderNavigation();
       }, { placeholder: 'Pages' }));
-      form.appendChild(field('Lucide icon', section.icon, function (value) { section.icon = value; }, {
+      form.appendChild(field('Lucide icon', collection.icon, function (value) { collection.icon = value; }, {
         placeholder: 'file-text', help: 'A kebab-case Lucide icon name.',
       }));
       inspector.appendChild(form);
       var primary = element('button', 'wb-config-inspector-action');
       primary.type = 'button';
       primary.appendChild(icon('plus', 15));
-      primary.appendChild(document.createTextNode('Add page to this section'));
-      primary.addEventListener('click', function () { addPage(section.items || (section.items = []), section); });
+      primary.appendChild(document.createTextNode('Add page to this collection'));
+      primary.addEventListener('click', function () { addPage(collection.items || (collection.items = []), collection); });
       inspector.appendChild(primary);
-      inspector.appendChild(danger('Remove section', function () {
-        removeSelected('Remove “' + (section.name || 'this section') + '” and all of its pages?');
+      inspector.appendChild(danger('Remove collection', function () {
+        removeSelected('Remove “' + (collection.name || 'this collection') + '” and all of its pages?');
       }));
     }
 
-    function renderFolder(folder) {
-      inspector.appendChild(inspectorHeader('Folder', folder.folder || 'Untitled folder', pageCount(folder.items) + ' pages', 'folder'));
+    function renderGroup(group) {
+      inspector.appendChild(inspectorHeader('Group', group.group || 'Untitled group', pageCount(group.items) + ' pages', 'folder'));
       var form = element('div', 'wb-config-inspector-form');
-      form.appendChild(field('Folder name', folder.folder, function (value) {
-        folder.folder = value;
+      form.appendChild(field('Group name', group.group, function (value) {
+        group.group = value;
         renderNavigation();
       }, { placeholder: 'Authentication' }));
       inspector.appendChild(form);
       var primary = element('button', 'wb-config-inspector-action');
       primary.type = 'button';
       primary.appendChild(icon('plus', 15));
-      primary.appendChild(document.createTextNode('Add page to this folder'));
-      primary.addEventListener('click', function () { addPage(folder.items || (folder.items = []), selection.section); });
+      primary.appendChild(document.createTextNode('Add page to this group'));
+      primary.addEventListener('click', function () { addPage(group.items || (group.items = []), selection.collection); });
       inspector.appendChild(primary);
-      inspector.appendChild(danger('Remove folder', function () {
-        removeSelected('Remove “' + (folder.folder || 'this folder') + '” and all of its pages?');
+      inspector.appendChild(danger('Remove group', function () {
+        removeSelected('Remove “' + (group.group || 'this group') + '” and all of its pages?');
       }));
     }
 
@@ -317,8 +317,8 @@
         return;
       }
       if (selection.kind === 'page') renderPage(selection.value);
-      else if (selection.kind === 'folder') renderFolder(selection.value);
-      else renderSection(selection.value);
+      else if (selection.kind === 'group') renderGroup(selection.value);
+      else renderCollection(selection.value);
     }
 
     function render() {
@@ -342,8 +342,8 @@
           return result;
         });
       }).then(function (result) {
-        sections = result.sections || [];
-        selection = sections.length ? { kind: 'section', value: sections[0], owner: sections, section: sections[0] } : null;
+        collections = result.collections || [];
+        selection = collections.length ? { kind: 'collection', value: collections[0], owner: collections, collection: collections[0] } : null;
         setStatus('');
         render();
       }).catch(function (error) { setStatus(String(error.message || error), true); });
@@ -351,11 +351,11 @@
 
     function validate() {
       var problem = null;
-      sections.some(function (section, index) {
-        if (!String(section.name || '').trim()) { problem = 'Section ' + (index + 1) + ' needs a name.'; return true; }
+      collections.some(function (collection, index) {
+        if (!String(collection.name || '').trim()) { problem = 'Collection ' + (index + 1) + ' needs a name.'; return true; }
         function visit(entries) {
           return (entries || []).some(function (entry) {
-            if (entry.folder) return visit(entry.items);
+            if (entry.group) return visit(entry.items);
             if (!String(entry.label || '').trim() || !String(entry.src || '').trim()) {
               problem = 'Every page needs a label and source path.';
               return true;
@@ -363,7 +363,7 @@
             return false;
           });
         }
-        return visit(section.items);
+        return visit(collection.items);
       });
       return problem;
     }
@@ -371,13 +371,13 @@
     function save() {
       var problem = validate();
       if (problem) { setStatus(problem, true); return; }
-      sections.forEach(function (section) { canonicalize(section.items); });
+      collections.forEach(function (collection) { canonicalize(collection.items); });
       options.save.disabled = true;
       setStatus('Saving…');
       fetch('/_workbench/config-file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: sections }),
+        body: JSON.stringify({ collections: collections }),
       }).then(function (response) {
         return response.json().then(function (result) {
           if (!response.ok || !result.ok) throw new Error(result.error || 'Could not save workbench.yaml.');
@@ -393,10 +393,10 @@
 
     options.button.addEventListener('click', open);
     options.close.addEventListener('click', function () { dialog.close(); });
-    options.addSection.addEventListener('click', function () {
-      var section = { name: 'New section', icon: 'file-text', items: [] };
-      sections.push(section);
-      select('section', section, sections, section);
+    options.addCollection.addEventListener('click', function () {
+      var collection = { name: 'New collection', icon: 'file-text', items: [] };
+      collections.push(collection);
+      select('collection', collection, collections, collection);
     });
     options.save.addEventListener('click', save);
     dialog.addEventListener('click', function (event) {
@@ -405,5 +405,5 @@
     return { open: open };
   }
 
-  window.wbConfigEditor = { create: create, screenViewports: screenViewports };
+  window.wbConfigEditor = { create: create, pageViewports: pageViewports };
 })();

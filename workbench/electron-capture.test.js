@@ -59,10 +59,10 @@ test('reuses a warm process, captures the requested view, and cleans up its prof
   t.after(function () { return helper.close(); });
   await helper.warm('http://127.0.0.1:3579');
   await helper.prepare('http://127.0.0.1:3579', { url: '/one', width: 393 });
-  assert.equal((await helper.capture('http://127.0.0.1:3579', { url: '/two', width: 960, markup: 'new mark' })).toString(), 'png');
+  assert.equal((await helper.capture('http://127.0.0.1:3579', { url: '/two', width: 960, annotations: 'new annotation' })).toString(), 'png');
   assert.equal(runtime.children.length, 1);
   assert.deepEqual(runtime.commands.map(function (x) { return x.method; }), ['warm', 'prepare', 'capture']);
-  assert.equal(runtime.commands[2].payload.markup, 'new mark');
+  assert.equal(runtime.commands[2].payload.annotations, 'new annotation');
   var profile = runtime.children[0].profile;
   await helper.close();
   assert.equal(fs.existsSync(profile), false);

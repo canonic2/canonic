@@ -157,3 +157,27 @@ test('Astro frontmatter honors Workbench aliases and environment defines', async
   assert.match(built.rendered.default.html, /<p>Acme https:\/\/example.com\/acme\/<\/p>/);
   assert.ok(built.localFiles.includes(path.join(root, 'fixtures/message.ts')));
 });
+
+test('docs examples render Astro components from a folder, with their assets made absolute', async t => {
+  const root = fixture(t, {
+    'examples/primary.astro': "---\nimport Frame from '../nested/Frame.astro';\nimport { secret } from '../server.ts';\n---\n<Frame><button data-secret-length={secret.length}>Continue</button></Frame>\n<style>button { color: purple; }</style>",
+    'examples/plain.astro': '<p>Plain</p>',
+    'one.astro': '<p>One</p>',
+  });
+  const compiler = new Compiler(root);
+  const compiled = await compiler.compileDocs({ adapter: 'astro', examples: 'examples/' });
+  assert.deepEqual(compiled.examples.map(example => example.id), ['plain', 'primary']);
+  const bundle = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-astro-docs-')), 'examples.mjs');
+  t.after(() => fs.rmSync(path.dirname(bundle), { recursive: true, force: true }));
+  fs.writeFileSync(bundle, compiled.outputs.get('examples.js'));
+  const loaded = await import(require('node:url').pathToFileURL(bundle).href);
+  const primary = loaded.examples.primary;
+  assert.deepEqual(primary.inputs, {});
+  assert.match(primary.html, /<article[^>]*><button data-secret-length="20"[^>]*>Continue<\/button><\/article>/);
+  assert.doesNotMatch(primary.html, /SERVER_ONLY_SENTINEL/, 'frontmatter stays in Node');
+  const assetRef = /(?:src|href)="([^"]*assets\/[^"]+)"/.exec(primary.html);
+  assert.ok(assetRef, 'the rendered page references a packaged asset');
+  assert.ok(assetRef[1].startsWith(require('node:url').pathToFileURL(fs.realpathSync(path.dirname(bundle))).href + '/assets/'), assetRef[1]);
+  assert.ok(Array.from(compiled.outputs.keys()).some(name => name.startsWith('assets/') && name.endsWith('.svg')));
+  await assert.rejects(compiler.compileDocs({ adapter: 'astro', examples: 'one.astro' }), /point the lens at a folder of \.astro files/);
+});

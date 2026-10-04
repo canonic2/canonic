@@ -74,6 +74,7 @@
     if (data.event === 'ready') {
       if (!selected || selected.id !== data.id || selected.state !== data.state) { overrides = {}; log = []; }
       selected = data;
+      overrides = Object.assign({}, data.inputs);
       log = data.actions || [];
       button.hidden = false;
       draw();

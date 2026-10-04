@@ -174,4 +174,15 @@ function load(address) {
   return pending;
 }
 
-window.wbPreviewHost = { load, reset };
+async function resume(address) {
+  const ticket = generation;
+  const url = new URL(address, location.href);
+  const response = await fetch('/_workbench/previews/descriptor?file=' + encodeURIComponent(decodeURIComponent(url.pathname.slice(1))));
+  const descriptor = await response.json();
+  if (ticket !== generation) return;
+  if (!response.ok || descriptor.options.revision !== window.__workbenchOptions?.revision || !window.__workbenchReady) {
+    await load(address);
+  }
+}
+
+window.wbPreviewHost = { load, reset, resume };

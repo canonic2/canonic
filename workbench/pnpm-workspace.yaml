@@ -1,0 +1,14 @@
+packages:
+  - '.'
+
+# A flat node_modules, as npm lays it out: vsce collects the extension's
+# production dependencies with `npm list`, and .vscodeignore names paths in it.
+nodeLinker: hoisted
+
+# No dependency needs its install script: esbuild's and vsce-sign's platform
+# binaries arrive as optional dependencies, keytar is only for vsce's own
+# credential store, and packaging fetches Electron itself.
+ignoredBuiltDependencies:
+  - '@vscode/vsce-sign'
+  - esbuild
+  - keytar

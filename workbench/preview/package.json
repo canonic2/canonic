@@ -10,6 +10,6 @@
   "types": "./api.d.ts",
   "exports": { ".": { "types": "./api.d.ts", "default": "./api.js" } },
   "sideEffects": false,
-  "files": ["api.js", "api.d.ts"],
-  "license": "MIT"
+  "files": ["api.js", "api.d.ts", "LICENSE"],
+  "license": "SEE LICENSE IN LICENSE"
 }

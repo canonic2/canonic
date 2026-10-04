@@ -210,7 +210,7 @@ export default definePreview({
 });
 ```
 
-Run **Workbench: Refresh Screens**. **Button** appears under **Components**
+Run **Workbench: Refresh Pages**. **Button** appears under **Components**
 with **Default** and **Disabled** states. Editing **label** in
 **Preview controls** mounts the element again with the new value, and pressing
 the button logs `acme-press` in **Actions**. The
@@ -256,6 +256,37 @@ module.
 Previews with custom adapters export to the
 [portable viewer](workbench-previews.md#portable-exports) like any other, with
 their controls.
+
+## Docs page examples
+
+A registered adapter also renders a [docs page](docs-pages.md)'s examples.
+Name it as the `adapter` of an `examples` lens:
+
+```yaml
+implementations:
+  web:
+    kind: examples
+    label: Web components
+    adapter: web-components
+```
+
+Workbench bundles the lens's example source with the runtime and the adapter's
+`plugins`, and calls `mount(canvas, source, context, environment)` once per
+example:
+
+- `canvas` is the example's panel, and `source` is the example: a file's
+  default export, for a folder source, or one named export, for a file source.
+- `context.id` is the example's ID. `inputs`, `fixtures`, and `globals` are
+  empty, since examples have no inputs or controls.
+- `environment` combines the project's environment for the adapter and the
+  lens's `environment`, as for a preview. Its `setup` runs once before the
+  examples mount, and `ready` once after.
+- In a folder source, only files ending in `.ts`, `.tsx`, `.js`, `.jsx`, or
+  `.mjs` are examples. For components in other file types, such as `.svelte`,
+  write one script file per example that exports the component, or export
+  them by name from one file.
+
+A built-in adapter replaced in `adapters` is replaced for docs examples too.
 
 ## Configuration file
 

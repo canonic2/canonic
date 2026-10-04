@@ -53,12 +53,12 @@ test('exports workbench entries and transitive UI dependencies without unrelated
     fs.writeFileSync(path.join(root, 'pages', 'home.css'), 'main { color: rebeccapurple }\n');
     var view = {
       name: 'Acme UI', implementations: { storybook: { root: root } },
-      screens: { home: { label: 'Home', design: path.join(root, 'pages', 'home.html'), code: [] }, button: { label: 'Button', design: null, code: [
+      pages: { home: { label: 'Home', design: path.join(root, 'pages', 'home.html'), code: [] }, button: { label: 'Button', design: null, code: [
         { implementation: 'storybook', path: path.join(root, 'src', 'button', 'button.stories.tsx'), exists: true },
       ] } },
     };
     var result = designExport.create(root, view, { screenshots: [{
-      screen: 'button', state: 'default', variant: 'default-desktop', label: 'Default', viewport: 'desktop',
+      page: 'button', state: 'default', variant: 'default-desktop', label: 'Default', viewport: 'desktop',
       width: 1512, height: 982, body: Buffer.from('reference jpeg'),
     }] });
     var files = result.report.files;
@@ -74,9 +74,9 @@ test('exports workbench entries and transitive UI dependencies without unrelated
     assert.ok(names(result.body).includes('acme-ui-design-system/canonic-export.json'));
     assert.ok(names(result.body).includes('acme-ui-design-system/pages/README.md'));
     assert.ok(names(result.body).includes('acme-ui-design-system/src/button/README.md'));
-    assert.deepStrictEqual(result.report.screens.map(function (screen) { return screen.id; }), ['button', 'home']);
-    var button = result.report.screens[0];
-    var home = result.report.screens[1];
+    assert.deepStrictEqual(result.report.pages.map(function (page) { return page.id; }), ['button', 'home']);
+    var button = result.report.pages[0];
+    var home = result.report.pages[1];
     assert.match(button.hash, /^sha256:[a-f0-9]{64}$/);
     assert.ok(button.files.includes('src/button/button.tsx'));
     assert.ok(button.files.includes('src/shared/dot.svg'));
@@ -97,11 +97,11 @@ test('exports workbench entries and transitive UI dependencies without unrelated
 
     fs.writeFileSync(path.join(root, 'src', 'billing', 'charge.ts'), 'unrelated change\n');
     var unrelated = designExport.create(root, view);
-    assert.strictEqual(unrelated.report.screens[0].hash, button.hash);
+    assert.strictEqual(unrelated.report.pages[0].hash, button.hash);
     fs.writeFileSync(path.join(root, 'src', 'shared', 'dot.svg'), '<svg>changed</svg>');
     var changed = designExport.create(root, view);
-    assert.notStrictEqual(changed.report.screens[0].hash, button.hash);
-    assert.notStrictEqual(changed.report.screens[1].hash, home.hash);
+    assert.notStrictEqual(changed.report.pages[0].hash, button.hash);
+    assert.notStrictEqual(changed.report.pages[1].hash, home.hash);
     assert.strictEqual(result.body.readUInt32LE(0), 0x04034b50);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -115,12 +115,12 @@ test('keeps generated guides and screenshots distinct when pages share a folder'
     fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Pages\n');
     fs.writeFileSync(path.join(root, 'pages', 'sign-in.html'), '<main>Sign in</main>');
     fs.writeFileSync(path.join(root, 'pages', 'account.html'), '<main>Account</main>');
-    var result = designExport.create(root, { name: 'Pages', implementations: {}, screens: {
+    var result = designExport.create(root, { name: 'Pages', implementations: {}, pages: {
       signin: { label: 'Sign in', design: path.join(root, 'pages', 'sign-in.html'), code: [] },
       account: { label: 'Account', design: path.join(root, 'pages', 'account.html'), code: [] },
     } }, { screenshots: [
-      { screen: 'signin', variant: 'default-mobile', label: 'Default', viewport: 'mobile', width: 393, height: 852, body: Buffer.from('signin') },
-      { screen: 'account', variant: 'default-mobile', label: 'Default', viewport: 'mobile', width: 393, height: 852, body: Buffer.from('account') },
+      { page: 'signin', variant: 'default-mobile', label: 'Default', viewport: 'mobile', width: 393, height: 852, body: Buffer.from('signin') },
+      { page: 'account', variant: 'default-mobile', label: 'Default', viewport: 'mobile', width: 393, height: 852, body: Buffer.from('account') },
     ] });
     var archived = names(result.body);
     assert.ok(archived.includes('pages-design-system/pages/sign-in.README.md'));
@@ -139,10 +139,10 @@ test('downloads one ZIP containing attachment-sized ZIP parts', function () {
     fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Split\n');
     fs.writeFileSync(path.join(root, 'pages', 'home.html'), '<main>Home</main>');
     var screenshots = Array.from({ length: 4 }, function (_, index) {
-      return { screen: 'home', variant: 'state-' + index + '-desktop', label: 'State ' + index,
+      return { page: 'home', variant: 'state-' + index + '-desktop', label: 'State ' + index,
         viewport: 'desktop', width: 1512, height: 982, body: Buffer.alloc(25000, index) };
     });
-    var result = designExport.create(root, { name: 'Split', implementations: {}, screens: {
+    var result = designExport.create(root, { name: 'Split', implementations: {}, pages: {
       home: { label: 'Home', design: path.join(root, 'pages', 'home.html'), code: [] },
     } }, { screenshots: screenshots, maxArchiveBytes: 70000 });
     assert.equal(result.body, null);
@@ -207,7 +207,7 @@ test('resolves a local package theme imported from CSS through package exports',
     fs.writeFileSync(iconComponent, 'export const Icon = () => <use href="#icon-plus" />;\n');
     fs.writeFileSync(progress, 'import type { Props } from "./types/progress-bar-props.js";\n');
     fs.writeFileSync(progressProps, 'export type Props = { current: number };\n');
-    var view = { name: 'Theme', implementations: { storybook: { root: ui } }, screens: {
+    var view = { name: 'Theme', implementations: { storybook: { root: ui } }, pages: {
       button: { label: 'Button', design: globals, code: [
         { implementation: 'storybook', path: story, exists: true },
       ] },
@@ -216,14 +216,14 @@ test('resolves a local package theme imported from CSS through package exports',
     assert.ok(result.report.files.includes('packages/ui/src/styles/theme.css'));
     assert.ok(result.report.files.includes('packages/ui/src/components/icons-next/assets/plus.svg'));
     assert.ok(result.report.files.includes('packages/ui/src/components/progress-bar/types/progress-bar-props.ts'));
-    assert.ok(result.report.screens[0].files.includes('packages/ui/src/styles/theme.css'));
-    assert.ok(result.report.screens[0].files.includes('packages/ui/src/components/icons-next/assets/plus.svg'));
-    assert.ok(result.report.screens[0].files.includes('packages/ui/src/components/progress-bar/types/progress-bar-props.ts'));
+    assert.ok(result.report.pages[0].files.includes('packages/ui/src/styles/theme.css'));
+    assert.ok(result.report.pages[0].files.includes('packages/ui/src/components/icons-next/assets/plus.svg'));
+    assert.ok(result.report.pages[0].files.includes('packages/ui/src/components/progress-bar/types/progress-bar-props.ts'));
     assert.ok(!result.report.warnings.some(function (warning) { return warning.includes('@acme/ui/theme.css'); }));
     assert.ok(!result.report.warnings.some(function (warning) { return warning.includes('progress-bar-props.js'); }));
-    var before = result.report.screens[0].hash;
+    var before = result.report.pages[0].hash;
     fs.writeFileSync(theme, ':root { --color-primary: red; }\n');
-    assert.notStrictEqual(designExport.create(root, view).report.screens[0].hash, before);
+    assert.notStrictEqual(designExport.create(root, view).report.pages[0].hash, before);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -260,7 +260,7 @@ test('exports custom Storybook config and assets discovered through a linked pac
     var view = {
       name: 'Sprite',
       implementations: { storybook: { kind: 'storybook', root: storybook } },
-      screens: { button: { label: 'Button', design: null, code: [
+      pages: { button: { label: 'Button', design: null, code: [
         { implementation: 'storybook', path: story, exists: true },
       ] } },
     };
@@ -272,13 +272,13 @@ test('exports custom Storybook config and assets discovered through a linked pac
     assert.ok(result.report.files.includes('libs/ui/vite/index.mjs'));
     assert.ok(result.report.files.includes('libs/ui/src/icons/assets/play.svg'));
     assert.ok(result.report.files.includes('libs/ui/src/icons/assets/skip.svg'));
-    assert.ok(result.report.screens[0].files.includes('libs/ui/src/icons/assets/play.svg'));
+    assert.ok(result.report.pages[0].files.includes('libs/ui/src/icons/assets/play.svg'));
     assert.ok(!result.report.dependencies.some(function (dependency) {
       return dependency.name === '@acme/ui' || dependency.name === 'virtual:svg-icons-register';
     }));
-    var before = result.report.screens[0].hash;
+    var before = result.report.pages[0].hash;
     fs.writeFileSync(path.join(assets, 'play.svg'), '<svg id="play-changed"/>');
-    assert.notStrictEqual(designExport.create(root, view).report.screens[0].hash, before);
+    assert.notStrictEqual(designExport.create(root, view).report.pages[0].hash, before);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

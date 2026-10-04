@@ -14,12 +14,12 @@
    explicitly rather than relying on the absent case.
 
    Off means off, silently. A blocked click does nothing and says nothing —
-   the toolbar already shows why.
+   the top bar already shows why.
 
    What this does not touch: hover, press, and focus styling, pickers, code
    boxes, disclosure, links to a spot on the same page — everything that only
    changes how the page looks or what it holds. That is the design. Only the
-   things that would take you off the screen are stopped.
+   things that would take you off the page are stopped.
 
    A TypeScript preview is a mock, not a site: on, its links and forms still
    never reach the browser. The preview runtime claims them through `follow`
@@ -48,7 +48,7 @@
     follow: null,
   };
 
-  /* A link to a spot on this page — "#tour" — moves within the screen, so
+  /* A link to a spot on this page — "#tour" — moves within the page, so
      neither switch position stops it. It is scrolled to by hand: a preview
      host page carries a <base>, against which "#tour" would resolve to a
      different document altogether. A bare "#" is the placeholder link of a
@@ -77,7 +77,7 @@
      them to the parent so it can load them in its spare iframe and avoid the
      unstyled flash of native iframe navigation.
 
-     This page has no idea where the project root is, which screens are in the
+     This page has no idea where the project root is, which pages are in the
      sidebar, or what any of them are called — and shouldn't: that is the
      config's business, and this file is copied into projects that arrange
      themselves however they like. So the test here is only "could this be one
@@ -119,7 +119,7 @@
   }
 
   /* These pages are design, not a product: nothing here validates input, and
-     nothing should stand between a click and the next screen. Constraint
+     nothing should stand between a click and the next page. Constraint
      validation would do exactly that — it runs before the submit event, so a
      single `required` on a field is enough to stop a flow dead, with a native
      browser bubble as the only clue. novalidate turns it off at the source,

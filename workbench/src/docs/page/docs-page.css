@@ -1,0 +1,195 @@
+/* A docs page: a plain documentation page on white, 960px at most, centered.
+   The prose is styled here; examples are not. Every rule below stays out of
+   example panels (`:not(.wb-docs-example *)`), so an example inherits the
+   project's own body styles and looks as it does on a blank page. */
+
+:root {
+  --wb-docs-text: #1f2328;
+  --wb-docs-muted: #59636e;
+  --wb-docs-line: #d1d9e0;
+  --wb-docs-tint: #f6f8fa;
+  --wb-docs-accent: #0969da;
+  --wb-docs-code: #eff2f5;
+  --wb-docs-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --wb-docs-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  background: #ffffff;
+}
+
+body.wb-docs-body {
+  margin: 0;
+  background: #ffffff;
+}
+
+.wb-docs {
+  box-sizing: border-box;
+  max-width: calc(960px + 2 * 48px);
+  margin: 0 auto;
+  padding: 48px 48px 96px;
+}
+
+@media (max-width: 640px) {
+  .wb-docs { padding: 24px 16px 64px; }
+}
+
+.wb-docs :is(h1, h2, h3, h4, h5, h6, p, li, td, th, blockquote, dt, dd, figcaption):not(.wb-docs-example *, .wb-docs-caption) {
+  color: var(--wb-docs-text);
+  font-family: var(--wb-docs-font);
+}
+
+.wb-docs :is(h1, h2, h3, h4, h5, h6):not(.wb-docs-example *) {
+  margin: 1.6em 0 0.6em;
+  font-weight: 600;
+  line-height: 1.25;
+  scroll-margin-top: 24px;
+}
+
+.wb-docs h1:not(.wb-docs-example *) { margin-top: 0; font-size: 2.25rem; letter-spacing: -0.01em; }
+.wb-docs h2:not(.wb-docs-example *) { font-size: 1.6rem; }
+.wb-docs h3:not(.wb-docs-example *) { font-size: 1.25rem; }
+.wb-docs h4:not(.wb-docs-example *) { font-size: 1rem; }
+
+.wb-docs :is(p, li, td, th, blockquote, dd):not(.wb-docs-example *, .wb-docs-caption) {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.wb-docs p:not(.wb-docs-example *, .wb-docs-caption) { margin: 0 0 1em; }
+.wb-docs :is(ul, ol):not(.wb-docs-example *) { margin: 0 0 1em; padding-left: 1.5em; }
+.wb-docs a:not(.wb-docs-example *) { color: var(--wb-docs-accent); text-decoration: underline; text-underline-offset: 0.15em; }
+.wb-docs img:not(.wb-docs-example *) { max-width: 100%; }
+.wb-docs hr:not(.wb-docs-example *) { border: 0; border-top: 1px solid var(--wb-docs-line); margin: 2em 0; }
+
+.wb-docs blockquote:not(.wb-docs-example *) {
+  margin: 0 0 1em;
+  padding: 0 1em;
+  border-left: 3px solid var(--wb-docs-line);
+  color: var(--wb-docs-muted);
+}
+
+.wb-docs code:not(.wb-docs-example *, pre code) {
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+  background: var(--wb-docs-code);
+  font-family: var(--wb-docs-mono);
+  font-size: 0.875em;
+}
+
+.wb-docs table:not(.wb-docs-example *) {
+  width: 100%;
+  margin: 0 0 1.5em;
+  border-collapse: collapse;
+  font-family: var(--wb-docs-font);
+}
+
+.wb-docs :is(th, td):not(.wb-docs-example *) {
+  padding: 8px 12px;
+  border: 1px solid var(--wb-docs-line);
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.875rem;
+}
+
+.wb-docs th:not(.wb-docs-example *) { background: var(--wb-docs-tint); font-weight: 600; }
+
+/* Fenced code in the prose, and an example's code under its panel. */
+.wb-docs-code,
+.wb-docs-example-code pre {
+  margin: 0 0 1.5em;
+  padding: 16px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--wb-docs-tint);
+  color: var(--wb-docs-text);
+  font-family: var(--wb-docs-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.wb-docs-code code,
+.wb-docs-example-code code { font: inherit; }
+
+/* An example: a framed panel, its tools below it, its code below them. The
+   panel contains its fixed-position content, so a modal opens inside it. */
+.wb-docs-example {
+  scroll-margin-top: 24px;
+  margin: 0 0 8px;
+  border: 1px solid var(--wb-docs-line);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.wb-docs-example-stage {
+  position: relative;
+  min-height: 48px;
+  padding: 32px;
+  background: #fdfdfd;
+  transform: translateZ(0);
+}
+
+.wb-docs-example-note,
+.wb-docs-example-error {
+  margin: 0;
+  padding: 24px 32px;
+  background: var(--wb-docs-tint);
+  color: var(--wb-docs-muted);
+  font-family: var(--wb-docs-font);
+  font-size: 0.875rem;
+}
+
+.wb-docs-example-error {
+  color: #a40e26;
+  font-family: var(--wb-docs-mono);
+  white-space: pre-wrap;
+}
+
+.wb-docs-example-tools {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  border-top: 1px dashed var(--wb-docs-line);
+}
+
+.wb-docs-tool {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wb-docs-muted);
+  cursor: pointer;
+}
+
+.wb-docs-tool:hover,
+.wb-docs-tool[aria-expanded="true"] { background: var(--wb-docs-tint); color: var(--wb-docs-text); }
+.wb-docs-tool:focus-visible { outline: 2px solid var(--wb-docs-accent); outline-offset: 1px; }
+.wb-docs-tool.is-done { color: #1a7f37; }
+
+.wb-docs-example-code { border-top: 1px dashed var(--wb-docs-line); }
+.wb-docs-example-code[hidden] { display: none; }
+.wb-docs-example-code pre { margin: 0; border-radius: 0; }
+
+.wb-docs-caption {
+  margin: 0 0 1em;
+  color: var(--wb-docs-muted);
+  font-family: var(--wb-docs-mono);
+  font-size: 0.8125rem;
+}
+
+/* highlight.js tokens, in GitHub's light colors. */
+.hljs-comment, .hljs-quote { color: #59636e; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #cf222e; }
+.hljs-string, .hljs-regexp, .hljs-addition { color: #0a3069; }
+.hljs-number, .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable { color: #0550ae; }
+.hljs-title, .hljs-title.function_, .hljs-section { color: #6639ba; }
+.hljs-name, .hljs-tag, .hljs-built_in, .hljs-selector-class, .hljs-selector-id { color: #116329; }
+.hljs-deletion { color: #82071e; }
+.hljs-meta { color: #0550ae; }

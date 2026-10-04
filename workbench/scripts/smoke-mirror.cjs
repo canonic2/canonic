@@ -36,7 +36,7 @@ async function main() {
     fs.readdirSync(selected).filter(function (name) { return !['workbench.yaml', 'workbench.local.yaml', '.git', '.canonic'].includes(name); }).forEach(function (name) {
       fs.symlinkSync(path.join(selected, name), path.join(root, name));
     });
-    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Mirror test\nsections:\n  - name: Pages\n    items:\n      - label: Live page\n        src: ' + page + '\n');
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Mirror test\ncollections:\n  - name: Pages\n    items:\n      - label: Live page\n        src: ' + page + '\n');
   }
   var binary = await runtime.prepare(path.join(work, 'runtime'));
   var appDir = process.platform === 'darwin' ? path.resolve(binary, '../../Resources/app') : path.join(path.dirname(binary), 'resources/app');
@@ -130,7 +130,7 @@ async function main() {
       return;
     }
     var payload = { url: new URL(page, base + '/').href, width: 1440, height: 1000,
-      revision: 'live-test', format: 'jpeg', scroll: { x: 0, y: 0 }, markup: '' };
+      revision: 'live-test', format: 'jpeg', scroll: { x: 0, y: 0 }, annotations: '' };
     await source.preparePage(payload);
     await evaluate(source, fs.readFileSync(path.join(__dirname, '../workbench/dom-mirror.js'), 'utf8') + '\nwindow.mirror = wbDOMMirror.create(document); true');
     await target.warm(base);

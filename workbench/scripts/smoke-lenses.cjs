@@ -42,7 +42,8 @@ async function main() {
       'var i=document.querySelector("input").getBoundingClientRect();' +
       'parent.postMessage({type:"fixture-ready",path:location.pathname,signedIn:' + signedIn +
       ',width:innerWidth,input:{x:i.x+i.width/2,y:i.y+i.height/2},button:{x:b.x+b.width/2,y:b.y+b.height/2}},"*");}' +
-      'addEventListener("load",report);addEventListener("resize",report);</script></body></html>');
+      'addEventListener("load",report);addEventListener("resize",report);' +
+      'addEventListener("message",function(e){if(e.data==="fixture-report")report();});</script></body></html>');
   });
   await new Promise(function (resolve) { app.listen(0, '127.0.0.1', resolve); });
   var origin = 'http://127.0.0.1:' + app.address().port;
@@ -50,7 +51,7 @@ async function main() {
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Iframe smoke\nimplementations:\n' +
     '  dev:\n    kind: url\n    base: ' + origin + '\n' +
     '  storybook:\n    kind: storybook\n    url: ' + origin + '\n' +
-    'sections:\n  - name: Screens\n    items:\n      - label: Fixture\n        src: fixture.html\n' +
+    'collections:\n  - name: Pages\n    items:\n      - label: Fixture\n        src: fixture.html\n' +
     '        implementations:\n          dev: /app\n          storybook: Fixture\n');
   try {
     // Native captures are exercised separately by smoke-capture.cjs.
@@ -84,17 +85,23 @@ async function main() {
     }
     async function pick(hash, pathname) {
       await target.evaluate('window.fixtureMessages=[];location.hash=' + JSON.stringify(hash));
+      await until('!document.getElementById("artboard").hidden && document.querySelector("iframe.is-active").src.includes(' + JSON.stringify(pathname) + ')');
+      // A retained frame need not load again when its lens becomes active.
+      await target.evaluate('document.querySelector("iframe.is-active").contentWindow.postMessage("fixture-report","*")');
       await until('window.fixtureMessages.some(function(m){return m.path===' + JSON.stringify(pathname) + ';})');
-      await until('!document.getElementById("frameShell").hidden && document.querySelector("iframe.is-active").src.includes(' + JSON.stringify(pathname) + ')');
     }
-    await target.navigate(running.url + '#fixture.html@393~dev');
-    await until('window.fixtureMessages.length && !document.getElementById("frameShell").hidden');
+    // Exercise the isolated artboard renderer; smoke-canvas covers its parent.
+    await target.navigate(running.url + 'index.html#fixture.html@393~dev');
+    await until('window.fixtureMessages.length && !document.getElementById("artboard").hidden');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).width'), 393);
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).signedIn'), false);
+    await target.evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{key:"0",code:"Digit0",ctrlKey:true,bubbles:true}))');
+    await until('window.wbZoom.scale() === 1');
     // Click the actual iframe form: no input forwarding or fake login API.
     async function click(field) {
       var point = await target.evaluate('(function(){var f=document.querySelector("iframe.is-active").getBoundingClientRect();' +
-        'var b=window.fixtureMessages.at(-1)[' + JSON.stringify(field) + '];return {x:f.x+b.x,y:f.y+b.y};})()');
+        'var m=window.fixtureMessages.at(-1);var b=m[' + JSON.stringify(field) + '];' +
+        'var scale=f.width/m.width;return {x:f.x+b.x*scale,y:f.y+b.y*scale};})()');
       await target.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
       await target.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
     }

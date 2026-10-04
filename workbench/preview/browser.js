@@ -94,7 +94,7 @@ export async function boot(preview, sources, adapter, environment, options) {
     window.dispatchEvent(new CustomEvent('workbench:' + type, { detail }));
     if (parent !== window) parent.postMessage({ type: 'workbench-preview', event: type, id: preview.id, ...detail }, location.origin);
   }
-  // A preview is a mock of its screen, so it never leaves through the browser.
+  // A preview is a mock of its page, so it never leaves through the browser.
   // With actions on, a link or form whose address is a key of `links` opens
   // that preview on the canvas; anything else — another route, another site, a
   // download — is logged as an action instead. With actions off, actions.js

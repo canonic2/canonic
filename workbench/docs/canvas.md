@@ -1,56 +1,66 @@
 # Using the canvas
 
-The canvas shows one screen at a time, in a frame at a real device size, on a
-surface you can zoom and pan like a design tool. This page covers each part of
-it.
+The canvas shows one page at a time, on an artboard at a real device size, on
+a surface you can zoom and pan like a design tool. A
+[docs page](docs-pages.md) fills the canvas instead; see
+[Docs pages on the canvas](#docs-pages-on-the-canvas). This page covers each
+part of it.
 
 ## Layout
 
 | Part | Where | Does |
 | --- | --- | --- |
-| Project switcher | Top of the screen list | The project showing, and the others to switch to. In VS Code it's always there, for **Add a project…**; in a browser, only with more than one project. See [Several projects](projects.md). |
-| Screen list | The **Workbench** view in VS Code's activity bar, or the left edge of a standalone browser window | Sections, then the chosen section's folders, screens, and states, with a filter |
-| Toolbar | Top of the canvas | Screen and state, actions, lens, width, reload, source, reference, and more |
-| Frame | Middle | The screen, labeled with its name and size |
-| Markup dock | Floating at the bottom | Drawing tools, undo, clear, screenshot, and handoff |
-| Zoom control | Floating at the bottom | Zoom level and zoom menu |
+| Sidebar | The **Workbench** view in VS Code's activity bar, or the left edge of a standalone browser window | The space switcher, the collection list, the page list, and search |
+| Space switcher | Top of the sidebar | The space showing, and the others to switch to. In VS Code it's always there, for **Add a space…**; in a browser, only with more than one space. See [Several spaces](spaces.md). |
+| Collection list | Sidebar, under the heading **Collections** | The space's collections |
+| Page list | Sidebar | The chosen collection's groups, pages, and states |
+| Search | Bottom of the sidebar | Filters every collection's pages, groups, and states |
+| Top bar | Top of the canvas | The breadcrumb with the state switcher, actions, lenses, size, reload, source, reference, and more |
+| Artboard | Middle | The page, labeled with its name and size by the artboard label |
+| Toolbar | Floating at the bottom | Annotation tools, undo, clear, screenshot, and handoff |
+| View controls | Floating at the bottom right | Recenter view, zoom out, the zoom level and its menu, and zoom in |
 
-Inside VS Code, the screen list is in the sidebar where a file tree usually
-goes, in your editor's theme, and the canvas tab doesn't repeat it.
+Inside VS Code, the sidebar is where a file tree usually goes, in your
+editor's theme, and the canvas tab doesn't repeat it.
 
-## The screen list
+## The sidebar
 
-- **Sections** are listed at the top. Pick one to show its screens.
-- **Folders** group screens. Select a folder to expand or collapse it.
-- **Screens** with two or more states expand to show them. Pick a state to show
-  it; the first is the page as authored. Selecting the screen's own row shows
-  its first state, and selecting it again while it is showing collapses it.
-- **The filter** at the bottom searches every section's screens, folders, and
-  states as you type, and groups the results by section.
-- [TypeScript previews](workbench-previews.md) appear in the sections their
-  titles name, beside the screens listed in `workbench.yaml`.
+- **The collection list**, headed **Collections**, is at the top. Pick a
+  collection to show its pages in the page list.
+- **Groups** in the page list hold related pages. Select a group to expand or
+  collapse it.
+- **Pages** with two or more states expand to show them. Pick a state to show
+  it; the first is the page as authored. Selecting the page itself shows its
+  first state, and selecting it again while it is showing collapses it. A
+  [docs page](docs-pages.md) has nothing listed under it.
+- **Search**, the field at the bottom (*Search pages…*), filters every
+  collection's pages, groups, and states as you type, and groups the results
+  by collection.
+- [TypeScript previews](workbench-previews.md) and docs pages defined in
+  `*.workbench.ts` files appear in the collections their titles name, beside the
+  pages listed in `workbench.yaml`.
 
-In VS Code, the list is one stop in the tab order. **Up** and **Down** move
-through the rows, **Right** expands a folder or screen, **Left** collapses it,
-**Home** and **End** jump to the first and last rows, and **Enter** or
-**Space** shows the focused row. Problems importing a catalog or TypeScript
-previews are listed above the screens.
+In VS Code, the page list is one stop in the tab order. **Up** and **Down**
+move through its groups, pages, and states, **Right** expands a group or page,
+**Left** collapses it, **Home** and **End** jump to the first and last, and
+**Enter** or **Space** shows the focused page or state. The problems list,
+above the page list, shows problems importing a catalog or TypeScript previews.
 
-In a standalone browser, ⌘K or Ctrl+K jumps to the filter. Drag the list's edge
+In a standalone browser, ⌘K or Ctrl+K jumps to search. Drag the sidebar's edge
 to resize it, focus the edge and use the arrow keys, or double-click it to
 reset the width. The width is remembered.
 
-## The toolbar
+## The top bar
 
 | Control | Does |
 | --- | --- |
-| **Project** | The project's mark and name, before the screen. Select it to switch to another [project](projects.md). Shown when there is more than one project. |
-| **Screen / state** | The screen's name, then the state showing. Select the state to pick another. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
+| **Breadcrumb: space** | The space's mark and name, before the page. Select it to switch to another [space](spaces.md). Shown when there is more than one space. |
+| **Breadcrumb: page and state** | The page's name, then the state showing. The state is the state switcher: select it to pick another state. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
 | **Actions** | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
-| **Lens** | Switches between **Design** and each [implementation](lenses.md) the screen has. Shown when there are at least two to choose from. A TypeScript preview's own lens is labeled **Workbench**. |
-| **Widths** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Frame widths](#frame-widths). |
+| **Lens switcher** | Switches between **Design** and each [implementation](lenses.md) the page has. Shown when the page has two or more lenses. A TypeScript preview's own lens is labeled **Workbench**. On a docs page, it switches what renders the examples. |
+| **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Artboard sizes](#artboard-sizes). Disabled on a docs page. |
 | **Reload** | Reloads the current page. |
-| **Open the source** (`</>`) | Lists the design file and the screen's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file. A path that isn't on this machine is listed but can't be opened. |
+| **Open the source** (`</>`) | Lists the design file and the page's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file; for a docs page, the Markdown file and each lens's example source. A path that isn't on this machine is listed but can't be opened. |
 | **Copy reference** | Copies a short text reference to the current view. See [Copy a reference](#copy-a-reference). |
 | **Open on its own** | Opens the current page in your browser, outside the workbench. |
 | **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Preview data, mocks, and actions](preview-data.md). |
@@ -60,26 +70,28 @@ When the canvas is narrow, **Reload**, **Open the source**, **Copy reference**,
 **Open on its own**, and **Preview controls** fold into **More** rather than
 overlapping.
 
-Your choices of lens, width, and actions are remembered across screens and
-sessions. A screen that doesn't support a remembered choice uses its own
-default: the Design lens, or the first width it supports.
+Your choices of lens, size, and actions are remembered across pages and
+sessions. A page that doesn't support a remembered choice uses its own
+default: the Design lens, or the first size it supports.
 
-## Frame widths
+## Artboard sizes
+
+The size switcher sets the artboard's size:
 
 | Button | Size | Notes |
 | --- | --- | --- |
 | **Fit** | The available canvas | Follows the canvas as you resize the editor. |
 | **Laptop** | 1512 × 982 | A 14-inch MacBook Pro. |
 | **Mobile** | 393 × 852 | An iPhone 15 Pro. |
-| **Resizable** | 1024 × 768 to start, at least 320 × 320 | Drag the frame's left, right, or bottom edge, or a bottom corner. The last size is kept. |
+| **Resizable** | 1024 × 768 to start, at least 320 × 320 | Drag the artboard's left, right, or bottom edge, or a bottom corner. The last size is kept. |
 
-The page always lays out at the frame's real size. A frame larger than the
-canvas is zoomed out to fit, never squeezed, so a 1512-pixel layout is still
-1512 pixels wide to the page. Screenshots are always taken at the frame's real
-size, whatever the zoom.
+The page always lays out at the artboard's real size. An artboard larger than
+the canvas is zoomed out to fit, never squeezed, so a 1512-pixel layout is
+still 1512 pixels wide to the page. Screenshots are always taken at the
+artboard's real size, whatever the zoom.
 
-A screen's [`viewports`](pages-and-states.md#viewports) decide which buttons
-are enabled.
+A page's [`viewports`](pages-and-states.md#viewports) decide which sizes are
+enabled.
 
 ## Zoom and pan
 
@@ -88,25 +100,36 @@ The canvas behaves like Figma's:
 | Input | Does |
 | --- | --- |
 | ⌘ or Ctrl + scroll wheel, or pinch | Zoom at the pointer |
-| Scroll wheel on the canvas around the frame, or Shift + wheel there | Pan. Over the page, the wheel scrolls the page. |
+| Scroll wheel on the canvas around the artboard, or Shift + wheel there | Pan. Over the page, the wheel scrolls the page. |
 | Space + drag, or middle-button drag | Pan, anywhere on the canvas |
 | ⌘ or Ctrl + `=` (or `+`), and ⌘ or Ctrl + `−` | Zoom in and out, in powers of two |
 | ⌘ or Ctrl + 0, or Shift 0 | Zoom to 100% |
 | Shift 1 | Zoom to fit |
 
-The zoom control has **Zoom out** and **Zoom in** buttons on either side of the
-current level. Select the level for a menu with the same commands plus 50% and
-200%. **Recenter view**, beside the zoom buttons, brings the frame back to
-the middle of the canvas without changing the zoom level or the page's scroll
-position.
+The view controls have **Zoom out** and **Zoom in** buttons on either side of
+the current level. Select the level for a menu with the same commands plus 50%
+and 200%. **Recenter view**, beside the zoom buttons, brings the artboard back
+to the middle of the canvas without changing the zoom level or the page's
+scroll position.
 
-Until you zoom or pan by hand, the frame stays fitted: changing width or
+Until you zoom or pan by hand, the artboard stays fitted: changing size or
 resizing the editor fits it again. Fitting never magnifies past 100%.
 
 These shortcuts work while a page has focus, because the workbench reads them
 inside the pages it serves, and through Storybook's key channel for a Storybook
 lens. A page from another origin, such as a URL lens, keeps its own scroll
 wheel.
+
+## Docs pages on the canvas
+
+The canvas has two modes. In the default canvas mode, the page is on an
+artboard. A [docs page](docs-pages.md) is shown in the docs canvas mode: it
+has no artboard, it fills the canvas, at most 960 pixels wide and centered,
+and the wheel scrolls it like a page in a browser.
+The size switcher stays visible but is disabled, and the lens switcher, shown
+when the page has two or more lenses, switches what renders its examples.
+Zoom, annotations, screenshots, and handoffs work on it too; see
+[On the canvas](docs-pages.md#on-the-canvas).
 
 ## Keyboard and clipboard in the editor
 
@@ -118,7 +141,8 @@ Inside VS Code, pages behave like pages:
   VS Code, including multi-key chords.
 - Right-clicking a design page opens VS Code's context menu with the page's
   selected text.
-- Select all works in a field, a note, or the page, but not over the toolbar.
+- Select all works in a field, a note, or the page, but not over the top bar
+  or the toolbar.
 
 Pages from another origin, such as a URL lens, can't receive the editor's
 menu or clipboard integration. Storybook doesn't forward keys while an input in
@@ -128,7 +152,7 @@ behavior.
 ## Keyboard shortcuts
 
 Workbench adds no VS Code keybindings; these keys work inside the canvas and
-the screen list. Use Ctrl where a shortcut shows ⌘ on Windows and Linux.
+the sidebar. Use Ctrl where a shortcut shows ⌘ on Windows and Linux.
 
 ### Canvas keys
 
@@ -143,34 +167,34 @@ the screen list. Use Ctrl where a shortcut shows ⌘ on Windows and Linux.
 
 Shift 0 and Shift 1 don't apply while you type in a field or a note.
 
-### Markup keys
+### Annotation keys
 
 | Keys | Does |
 | --- | --- |
-| Escape | Leave the drawing tool for **Select**; with **Select**, deselect the mark; while typing a note, finish it |
-| ⌘ Z | Undo the last mark, unless a field, a note, or the page has focus |
-| Delete or Backspace | Remove the selected mark |
-| Arrow keys, Shift + arrow keys | Nudge the selected mark 1 or 8 pixels |
+| Escape | Leave the drawing tool for **Select**; with **Select**, deselect the annotation; while typing a note, finish it |
+| ⌘ Z | Undo the last annotation, unless a field, a note, or the page has focus |
+| Delete or Backspace | Remove the selected annotation |
+| Arrow keys, Shift + arrow keys | Nudge the selected annotation 1 or 8 pixels |
 | Shift while drawing | Keep arrows and lines at 45° steps, and rectangles and circles square |
 | Shift while dragging a corner handle | Keep a rectangle or circle square |
 | Double-click a note or comment | Edit its text, with **Select** |
 
-### Screen list keys
+### Sidebar keys
 
 | Keys | Where | Does |
 | --- | --- | --- |
-| ⌘ K | Standalone browser | Jump to the filter |
-| Escape | In the filter | Clear it |
-| Down | In the filter, in VS Code | Move to the first row |
-| Up, Down, Home, End | In the list, in VS Code | Move between rows |
-| Right, Left | In the list, in VS Code | Expand or collapse a folder or screen; Left on a row inside one moves to it |
-| Enter or Space | On a row | Show it |
-| Left, Right, Shift + Left or Right | On the list's edge, in a standalone browser | Resize the list by 8 or 32 pixels |
+| ⌘ K | Standalone browser | Jump to search |
+| Escape | In search | Clear it |
+| Down | In search, in VS Code | Move to the first result in the page list |
+| Up, Down, Home, End | In the page list, in VS Code | Move between groups, pages, and states |
+| Right, Left | In the page list, in VS Code | Expand or collapse a group or page; Left on a page or state inside one moves to it |
+| Enter or Space | On a page or state | Show it |
+| Left, Right, Shift + Left or Right | On the sidebar's edge, in a standalone browser | Resize the sidebar by 8 or 32 pixels |
 
 ## Links and the address
 
 The current view is recorded in the address's hash, so reloading or opening a
-copied link lands on the same screen, state, width, and lens:
+copied link lands on the same page, state, size, and lens:
 
 ```text
 #pages/sign-in.html:error@1512~staging
@@ -179,12 +203,16 @@ copied link lands on the same screen, state, width, and lens:
 
 | Part | Values | Left out when |
 | --- | --- | --- |
-| src | The screen's `src` | Never |
-| `:state` | A state id, or on a Storybook lens the part of the story's id after `--` | The first state is showing, or the screen has no states |
-| `@width` | `fit`, `1512`, `393`, or `resizable` | Never; the workbench always writes it, though a link you type may omit it |
-| `~lens` | An implementation name | The Design lens is showing |
+| src | The page's `src` | Never |
+| `:state` | A state id, or on a Storybook lens the part of the story's id after `--` | The first state is showing, or the page has no states |
+| `!example` | On a docs page, an example's ID; the page opens scrolled to that example | No example is named |
+| `@width` | `fit`, `1512`, `393`, or `resizable` | On a docs page, which has no width. Elsewhere the workbench always writes it, though a link you type may omit it |
+| `~lens` | An implementation name | The Design lens is showing, or on a docs page, the lens the page opens with |
 
-After a screen loads, the address is rewritten to describe exactly what is
+See [Addresses](docs-pages.md#addresses) for an example of a docs page's
+address.
+
+After a page loads, the address is rewritten to describe exactly what is
 showing.
 
 To get a link:
@@ -195,20 +223,20 @@ To get a link:
 
 The workbench only listens on `127.0.0.1`, so a link works on your machine
 while the workbench is running. The port is the first free one from 3579, so
-with several project windows open, a saved link may point at another project
+with several windows or spaces open, a saved link may point at another space
 after a restart; the hash part stays valid. Share a
 [reference](#copy-a-reference) or a screenshot with other people instead.
 
 ## Copy a reference
 
 **Copy reference** copies a few lines of text that identify the current view:
-the screen's label and design file, its state or story, and the lens with its
+the page's label and design file, its state or story, and the lens with its
 implementation URL. Paste it into a conversation to point an agent or a
-colleague at a screen. It doesn't take a screenshot or include markup. For
-those, use a [handoff](markup-and-handoff.md#hand-off-to-an-agent).
+colleague at a page. It doesn't take a screenshot or include annotations. For
+those, use a [handoff](annotations-and-handoff.md#hand-off-to-an-agent).
 
 Agents can also read the same reference without a paste. Every open canvas
-tells the Workbench server which screen it shows, and
+tells the Workbench server which page it shows, and
 `GET /_workbench/view` on the server returns the reference from the canvas
 you changed most recently. Projects configured with Canonic's Shield can give
 it to Claude Code and Codex with every prompt, and to MCP clients through a
@@ -218,18 +246,19 @@ address in `.canonic/.workbench/server.json`; add that folder to
 
 ## Configure pages
 
-**More** › **Configure pages** edits the screen list in a form:
+**More** › **Configure pages** edits the collections and their pages in a
+form:
 
-- Add, remove, and rename sections, and set their icons.
-- Rename and remove folders, and add screens to them.
-- Add and remove screens, and edit their labels and source paths.
-- Choose each screen's supported viewports.
+- Add, remove, and rename collections, and set their icons.
+- Rename and remove groups, and add pages to them.
+- Add and remove pages, and edit their labels and source paths.
+- Choose each page's supported viewports.
 
-Saving rewrites only the `sections` block of `workbench.yaml`, and the screen
-list refreshes. States, implementation mappings, and code pointers in that
+Saving rewrites only the `collections` block of `workbench.yaml`, and the
+sidebar refreshes. States, implementation mappings, and code pointers in that
 block are preserved. Everything outside it, including comments, is left alone;
 comments inside it are removed. The form edits `workbench.yaml` only, so
-sections that `workbench.local.yaml` overrides on your machine keep showing
+collections that `workbench.local.yaml` overrides on your machine keep showing
 the local version. Editing the YAML directly always works too; see the
 [reference](configuration.md).
 
@@ -244,7 +273,6 @@ The canvas also works in a regular browser:
   works except handoffs, opening files in the editor, and
   [start commands](configuration.md#start-commands).
 
-In a browser, the screen list is on the left of the page, browser shortcuts
-and menus work normally, and the camera downloads screenshots. Problems
-importing a catalog or TypeScript previews are listed only in VS Code's
-screen list.
+In a browser, the sidebar is on the left of the page, browser shortcuts and
+menus work normally, and the camera downloads screenshots. Problems importing
+a catalog or TypeScript previews are listed only in VS Code's sidebar.

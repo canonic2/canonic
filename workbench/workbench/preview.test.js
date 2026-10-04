@@ -13,15 +13,21 @@ function preview() {
       getAttribute: function (name) { return attrs[name]; },
       setAttribute: function (name, value) { attrs[name] = value; },
       removeAttribute: function (name) { delete attrs[name]; },
+      remove: function () { this.removed = true; },
+      addEventListener: function () {},
+      appendChild: function () {},
       set src(value) { attrs.src = value; },
     };
   }
   var paints = []; var events = [];
-  var state = { frame: node(), frameBuffer: node(), pendingFrame: null, frameWrap: node(), frameShell: { hidden: true },
-    reportRenderedStory: function () {},
+  var state = { frame: node(), frameBuffer: node(), pendingFrame: null, artboardContent: node(), artboard: { hidden: true },
+    reportRenderedStory: function () {}, revealExample: function () {}, view: null,
+    document: { createElement: node },
     window: { requestAnimationFrame: function (fn) { paints.push(fn); }, dispatchEvent: function (event) {
-      events.push({ frame: event.detail.frame, hidden: state.frameShell.hidden });
-    } }, CustomEvent: function (_name, options) { this.detail = options.detail; },
+      events.push({ frame: event.detail.frame, hidden: state.artboard.hidden });
+    }, wbPreviewSessions: { create: function (options) {
+      return require('./preview-sessions').create(Object.assign({}, options, { setTimeout: function () {}, clearTimeout: function () {} }));
+    } } }, CustomEvent: function (_name, options) { this.detail = options.detail; },
   };
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
   state.URL = URL;
@@ -33,20 +39,20 @@ function preview() {
 
 function widthChoice(current) {
   var calls = [];
-  var widthButtons = [
+  var sizeButtons = [
     { dataset: { width: '1512' }, disabled: false },
     { dataset: { width: '393' }, disabled: false },
   ];
   var state = {
     current: current,
-    widthButtons: widthButtons,
+    sizeButtons: sizeButtons,
     setWidth: function (mode) { calls.push(['width', mode]); },
     syncHash: function () { calls.push(['sync']); },
   };
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
   var handler = source.slice(source.indexOf('  function chooseWidth('), source.indexOf('  /* ----------------------------------------------------- sidebar resize */'));
   vm.runInNewContext(handler, state);
-  return { choose: state.chooseWidth, calls: calls, buttons: widthButtons };
+  return { choose: state.chooseWidth, calls: calls, buttons: sizeButtons };
 }
 
 function widthAvailability(mode, viewports) {
@@ -56,16 +62,16 @@ function widthAvailability(mode, viewports) {
   var selected = [];
   var state = {
     widths: buttons.map(function (button) { return button.dataset.width; }),
-    widthButtons: buttons,
-    stage: { dataset: { width: mode } },
-    setWidth: function (width) { selected.push(width); state.stage.dataset.width = width; },
+    sizeButtons: buttons,
+    canvas: { dataset: { width: mode } },
+    setWidth: function (width) { selected.push(width); state.canvas.dataset.width = width; },
     window: { wbManifest: { viewportWidths: function () {
       var map = { fit: 'fit', desktop: '1512', mobile: '393', responsive: 'resizable' };
       return viewports.map(function (viewport) { return map[viewport]; });
     } } },
   };
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
-  var handler = source.slice(source.indexOf('  function updateWidthAvailability('), source.indexOf('  /* A toolbar width change'));
+  var handler = source.slice(source.indexOf('  function updateWidthAvailability('), source.indexOf('  /* A size switcher change'));
   vm.runInNewContext(handler, state);
   state.updateWidthAvailability({ viewports: viewports });
   return { buttons: buttons, selected: selected };
@@ -84,7 +90,10 @@ function storyNavigation() {
   var state = {
     current: 'button', currentState: null, showSeq: 1, frameReady: true,
     pendingFrame: null, frame: frame, frameBuffer: frameBuffer,
-    view: { lens: lens }, nav: null, openLink: {},
+    view: { lens: lens }, pageList: null, openLink: {},
+    sessionKey: function () { return 'storybook'; },
+    sessions: require('./preview-sessions').create({ dispose: function () {}, setTimeout: function () {}, clearTimeout: function () {} }),
+    cancelPendingFrame: function () {}, frameLoaded: function () {}, blank: {},
     window: { wbLenses: {
       pick: function (list, picked) { return list.find(function (story) { return story.state === picked; }); },
       storyUrl: function (_lens, id) { return lens.url + '/iframe.html?id=' + id + '&viewMode=story'; },
@@ -99,7 +108,7 @@ function storyNavigation() {
         if (message.source !== target.contentWindow || message.origin !== implementation.url) return null;
         return message.data;
       },
-    }, dispatchEvent: function (event) { events.push(event); } },
+    }, wbSimulator: { hide: function () {} }, dispatchEvent: function (event) { events.push(event); } },
     CustomEvent: function (type, options) { this.type = type; this.detail = options.detail; },
     stories: function () { return Promise.resolve([
       { id: 'components-button--default', state: 'default', name: 'Default' },
@@ -108,6 +117,7 @@ function storyNavigation() {
     setTimeout: function (fn) { var timer = { fn: fn, cleared: false }; timers.push(timer); return timer; },
     clearTimeout: function (timer) { timer.cleared = true; },
     showFrame: function (url) { loaded.push(url); },
+    loadPreview: function (url) { loaded.push(url); },
     tellHost: function (_src, story) { reported.push(story); },
     codeFor: function () { return []; }, drawStories: function () {},
     setTitle: function () {}, syncHash: function () {}, say: function () {},
@@ -135,7 +145,7 @@ test('a spare iframe that wins the initial load reveals the preview before captu
   state.frameLoaded({ currentTarget: winner });
   p.paint();
   assert.equal(state.frame, winner);
-  assert.equal(state.frameShell.hidden, false);
+  assert.equal(state.artboard.hidden, false);
   assert.equal(p.events[0].frame, winner);
   assert.equal(p.events[0].hidden, false);
 });
@@ -150,13 +160,19 @@ test('a superseded pending frame cannot replace the active preview during paint'
   assert.equal(state.frame, initial); assert.equal(p.events.length, 0);
 });
 
-test('managed previews mount into the warm spare and reset the outgoing renderer without navigating it', async function () {
+test('managed previews retain the outgoing mounted session and resume it without mounting again', async function () {
   var p = preview(); var state = p.state;
   var loaded = []; var resets = 0;
   state.frameReady = true;
   state.frame.setAttribute('src', '/_workbench/preview-host.html');
   state.frame.wbWarmHost = true;
-  state.frame.contentWindow = { wbPreviewHost: { reset: function () { resets++; return Promise.resolve(); } } };
+  var resumed = [];
+  var oldUrl = 'http://127.0.0.1/first.workbench.ts';
+  state.frame.contentWindow = { wbPreviewHost: { reset: function () { resets++; return Promise.resolve(); },
+    resume: function (url) { resumed.push(url); return Promise.resolve(); } } };
+  state.frame.wbSessionKey = state.sessionKey(oldUrl);
+  state.sessions.add(state.frame.wbSessionKey, state.frame);
+  state.sessions.activate(state.frame);
   state.frameBuffer.setAttribute('src', '/_workbench/preview-host.html');
   state.frameBuffer.wbWarmHost = true;
   state.frameBuffer.contentWindow = { wbPreviewHost: { load: function (url) { loaded.push(url); return Promise.resolve(); } } };
@@ -167,7 +183,13 @@ test('managed previews mount into the warm spare and reset the outgoing renderer
   assert.deepEqual(loaded, ['http://127.0.0.1/button.workbench.ts']);
   assert.equal(state.frameBuffer, previous);
   assert.equal(state.frameBuffer.getAttribute('src'), '/_workbench/preview-host.html');
-  assert.equal(resets, 1);
+  assert.equal(resets, 0);
+  state.loadPreview(oldUrl);
+  await new Promise(setImmediate);
+  p.paint();
+  assert.equal(state.frame, previous);
+  assert.deepEqual(resumed, [oldUrl]);
+  assert.equal(resets, 0);
 });
 
 test('changing width resizes the current iframe without routing or reloading it', function () {
@@ -176,20 +198,35 @@ test('changing width resizes the current iframe without routing or reloading it'
   assert.deepEqual(choice.calls, [['width', '1512'], ['sync']]);
 });
 
-test('changing width before a screen is selected does not write an address', function () {
+test('URL sessions retain their iframe across other pages, while Reload replaces the document', async function () {
+  var p = preview(); var state = p.state;
+  state.loadPreview('/page-a'); state.frameLoaded({ currentTarget: state.frame }); p.paint();
+  var a = state.frame; a.contentWindow = { edited: 'kept' };
+  state.loadPreview('/page-b'); state.frameLoaded({ currentTarget: state.pendingFrame }); p.paint();
+  assert.equal(a.getAttribute('src'), '/page-a');
+  state.loadPreview('/page-a'); await new Promise(setImmediate); p.paint();
+  assert.equal(state.frame, a); assert.equal(state.frame.contentWindow.edited, 'kept');
+  state.loadPreview('/page-a', true);
+  assert.notEqual(state.pendingFrame, a);
+  assert.equal(a.removed, undefined, 'the old document stays visible while Reload prepares its replacement');
+  state.frameLoaded({ currentTarget: state.pendingFrame }); p.paint();
+  assert.equal(a.removed, true);
+});
+
+test('changing width before a page is selected does not write an address', function () {
   var choice = widthChoice(null);
   choice.choose('393');
   assert.deepEqual(choice.calls, [['width', '393']]);
 });
 
-test('an unsupported width cannot resize the current screen', function () {
+test('an unsupported width cannot resize the current page', function () {
   var choice = widthChoice('preview/components-button.html');
   choice.buttons[0].disabled = true;
   choice.choose('1512');
   assert.deepEqual(choice.calls, []);
 });
 
-test('a screen disables unsupported frame modes and falls back to its first supported one', function () {
+test('a page disables unsupported sizes and falls back to its first supported one', function () {
   var result = widthAvailability('fit', ['desktop', 'responsive']);
   assert.deepEqual(result.buttons.map(function (button) { return button.disabled; }), [true, false, true, false]);
   assert.deepEqual(result.selected, ['1512']);
@@ -263,7 +300,7 @@ function lensSwitcher(item) {
   return { hidden: box.hidden, labels: box.children.map(function (b) { return b.textContent; }) };
 }
 
-test('opening on no screen still tells the host it is ready', function () {
+test('opening on no page still tells the host it is ready', function () {
   /* The editor holds sidebar picks until the first wb-here. A throw on the
      empty route meant it never came, and no page could be picked. */
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
@@ -274,14 +311,15 @@ test('opening on no screen still tells the host it is ready', function () {
   var el = function () { return { hidden: false, textContent: '', removeAttribute: noop }; };
   var context = {
     index: {}, showSeq: 0, view: null, current: 'old.html', currentState: null, renderedStory: null,
-    nav: { setCurrent: noop },
+    pageList: { setCurrent: noop },
     cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
+    cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop,
     updateWidthAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
     drawSources: noop, setActionsAvailability: noop,
     tellHost: function (src, state, lens) { told.push([src, state, lens]); },
     window: { wbSimulator: { hide: noop } },
-    crumb: el(), crumbScreen: el(), frameShell: el(), frame: el(), frameBuffer: el(),
-    blank: el(), openLink: el(), frameName: el(), document: {}, config: { name: 'Acme' },
+    crumb: el(), crumbPage: el(), artboard: el(), frame: el(), frameBuffer: el(),
+    blank: el(), openLink: el(), artboardName: el(), document: {}, config: { name: 'Acme' },
     BLANK_TEXT: '',
   };
   vm.runInNewContext(source.slice(start, end) + '\nshow(null, null);', context);

@@ -49,7 +49,7 @@ async function main() {
     cases = [{ page: process.argv[3], width: Number(process.argv[4]) || 1440, height: Number(process.argv[5]) || 1000 }];
   } else {
     fs.mkdirSync(project);
-    fs.writeFileSync(path.join(project, 'workbench.yaml'), 'name: Capture benchmark\nsections: []\n');
+    fs.writeFileSync(path.join(project, 'workbench.yaml'), 'name: Capture benchmark\ncollections: []\n');
     cases = [];
     ['none', 'filter', 'backdrop'].forEach(function (effect) {
       fs.writeFileSync(path.join(project, effect + '.html'), fixture(effect));
@@ -125,7 +125,7 @@ async function main() {
     report.info = await helper.send({ method: 'info' });
     for (var item of cases) {
       var payload = { url: new URL(item.page, base + '/').href, width: item.width, height: item.height,
-        revision: 'benchmark-' + report.cases.length, scroll: { x: 0, y: 0 }, markup: '', format: format };
+        revision: 'benchmark-' + report.cases.length, scroll: { x: 0, y: 0 }, annotations: '', format: format };
       var entry = Object.assign({ captures: [] }, item);
       report.cases.push(entry);
       var start = performance.now();

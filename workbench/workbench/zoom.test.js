@@ -11,7 +11,7 @@ function rules() {
   return context.wbZoomRules;
 }
 
-function canvas() {
+function canvas(globals) {
   var elements = new Map();
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
@@ -23,8 +23,8 @@ function canvas() {
     });
     return elements.get(id);
   }
-  var stage = element('stage'); stage.clientWidth = 1200; stage.clientHeight = 900;
-  var frame = element('frameShell'); frame.offsetWidth = 800; frame.offsetHeight = 600;
+  var canvas = element('canvas'); canvas.clientWidth = 1200; canvas.clientHeight = 900;
+  var frame = element('artboard'); frame.offsetWidth = 800; frame.offsetHeight = 600;
   var resize;
   var context = {
     document: {
@@ -35,8 +35,9 @@ function canvas() {
     ResizeObserver: function (callback) { resize = callback; this.observe = function () {}; },
     MutationObserver: function () { this.observe = function () {}; },
   };
+  Object.assign(context, globals);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'zoom.js'), 'utf8'), context);
-  return { zoom: context.wbZoom, stage: stage, frame: frame, element: element, resize: function () { resize(); } };
+  return { zoom: context.wbZoom, canvas: canvas, frame: frame, element: element, resize: function () { resize(); } };
 }
 
 test('recenter restores a panned frame at the current zoom without changing its layout size', function () {
@@ -53,7 +54,7 @@ test('recenter restores a panned frame at the current zoom without changing its 
     assert.equal(c.frame.offsetHeight, 600);
     assert.equal(c.element('zoomValue').textContent, Math.round(scale * 100) + '%');
   }
-  c.stage.clientWidth = 1000; c.resize();
+  c.canvas.clientWidth = 1000; c.resize();
   assert.equal(c.zoom.scale(), 2);
 });
 
@@ -62,7 +63,7 @@ test('zoom to fit still follows canvas resizes after centering', function () {
   c.element('zoomIn').click();
   c.element('zoomCenter').click();
   c.zoom.fit();
-  c.stage.clientWidth = 500; c.resize();
+  c.canvas.clientWidth = 500; c.resize();
   assert.equal(c.zoom.scale(), (500 - 64) / 800);
   assert.ok(Math.abs(c.zoom.pan().x - 32) < 1e-9);
 });
@@ -104,4 +105,28 @@ test('a mouse notch zooms by a step while a pinch stays fine-grained', function 
   assert.ok(notch > 1.2 && notch < 1.35);
   assert.ok(pinch > 1 && pinch < 1.03);
   assert.ok(r.wheelFactor({ deltaY: 100, deltaMode: 0 }) < 1);
+});
+
+test('a docs page fills the canvas at 100%, keeps its layout width when zoomed, and scrolls instead of panning', function () {
+  var c = canvas({ wbDocsLayout: require('../src/docs/canvas/docs-layout.ts') });
+  var page = { scrollY: 1000, scrollTo: function (x, y) { this.scrollY = y; }, scrollBy: function (x, y) { this.scrollY += y; } };
+  c.frame.querySelector = function () { return { contentWindow: page }; };
+  c.zoom.panTo(-50, -50);
+  c.zoom.mode('docs');
+  assert.equal(c.zoom.scale(), 1);
+  assert.deepEqual([c.frame.style.width, c.frame.style.height, c.frame.style.transform], ['1200px', '900px', 'translate(0px, 0px) scale(1)']);
+
+  c.element('zoomOut').click();
+  assert.equal(c.zoom.scale(), 0.5);
+  assert.deepEqual([c.frame.style.width, c.frame.style.height], ['1200px', '1800px'], 'zooming out shows more page without reflowing it');
+  assert.equal(c.zoom.pan().x, 300, 'a page narrower than the canvas is centered');
+  assert.equal(page.scrollY, 550, 'the content at the canvas middle stays there');
+
+  c.zoom.panTo(300, 0);
+  page.scrollY = 0;
+  c.zoom.fit();
+  assert.equal(c.zoom.scale(), 1, 'zoom to fit returns a docs page to 100%');
+
+  c.zoom.mode('default');
+  assert.equal(c.frame.style.width, '', 'an artboard page gets its own size back');
 });

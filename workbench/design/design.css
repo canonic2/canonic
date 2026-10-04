@@ -1,8 +1,8 @@
 /* The Workbench design pages
    --------------------------
    The frame around each design: a panel the size of VS Code's sidebar, or a
-   board of variants. Everything inside is the shipping code — nav.css,
-   sidebar.css, project-switcher.js, nav.js — so these pages show the
+   board of variants. Everything inside is the shipping code — page-list.css,
+   sidebar.css, space-switcher.js, page-list.js — so these pages show the
    Workbench as it is built, and a change to the product shows here first. */
 
 html,
@@ -47,7 +47,7 @@ body.board {
   border-radius: 8px;
 }
 
-.board-cell .wb-project-mark {
+.board-cell .wb-space-mark {
   width: 32px;
   height: 32px;
   border-radius: 8px;

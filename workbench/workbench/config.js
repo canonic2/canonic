@@ -1,16 +1,16 @@
-/* The project's half of the workbench
-   -----------------------------------
-   Everything about the workbench that belongs to the project it is showing —
+/* The space's half of the workbench
+   ---------------------------------
+   Everything about the workbench that belongs to the space it is showing —
    its name and everything in its sidebar — is one file at the project root:
 
      workbench.yaml
 
-   Nothing else in the workbench knows which project it is showing. Point it at
+   Nothing else in the workbench knows which space it is showing. Point it at
    another one and that file is the only thing that differs.
 
    Two things this file settles.
 
-   WHERE THE PROJECT IS. The workbench ships inside the Canonic extension, so
+   WHERE THE ROOT IS. The workbench ships inside the Canonic extension, so
    it is not in the project it shows and cannot find it by walking up from its
    own address. It is told, in this order:
 
@@ -80,12 +80,12 @@
 
   var root = projectRoot();
 
-  /* WHICH CONFIG. A workbench.yaml can list several projects, each with a
+  /* WHICH CONFIG. A workbench.yaml can list several spaces, each with a
      root of its own, so the file isn't always at the root and isn't always
-     all one project. Whoever serves a project like that says so: <meta
+     all one space. Whoever serves a space like that says so: <meta
      name="canonic-config"> is the folder holding the file, and <meta
-     name="canonic-project"> is the project's key in it. Without them the file
-     is at the root, and a file that lists projects shows its first. */
+     name="canonic-space"> is the space's key in it. Without them the file
+     is at the root, and a file that lists spaces shows its first. */
   function meta(name) {
     var tag = document.querySelector('meta[name="' + name + '"]');
     return tag && tag.content ? tag.content : '';
@@ -100,7 +100,7 @@
       return root;
     }
   })();
-  var projectKey = meta('canonic-project') || null;
+  var spaceKey = meta('canonic-space') || null;
 
   function get(url, ok, fail) {
     var request = new XMLHttpRequest();
@@ -157,7 +157,7 @@
     return Object.prototype.toString.call(value) === '[object Array]' ? value : [];
   }
 
-  /* A screen with fewer than two states has no choice to offer, so it stays a
+  /* A page with fewer than two states has no choice to offer, so it stays a
      single row and its states are dropped. The first state is the page as
      authored, whatever it calls itself. */
   function states(raw, where, problems) {
@@ -178,91 +178,93 @@
     return out.length > 1 ? out : null;
   }
 
-  function screen(raw, where, impls, problems) {
+  function page(raw, where, impls, problems) {
     var label = text(raw && raw.label);
     var src = text(raw && raw.src);
     if (!label || !src) {
-      problems.push(where + ': every screen needs a label and a src.');
+      problems.push(where + ': every page needs a label and a src.');
       return null;
     }
     if (src.charAt(0) === '/' || src.indexOf('..') > -1) {
       problems.push(where + ': “' + src + '” must be relative to the project root.');
       return null;
     }
-    /* Both mark something in the address — see address.js. */
-    if (src.indexOf(':') > -1 || src.indexOf('~') > -1) {
-      problems.push(where + ': src “' + src + '” can’t contain “:” or “~” — they mark the state and the lens in the address.');
+    /* They mark something in the address — see address.js. */
+    var reserved = window.wbManifest.srcProblem(src);
+    if (reserved) {
+      problems.push(where + ': ' + reserved);
       return null;
     }
     var item = { label: label, src: src };
-    item.viewports = window.wbManifest.screenViewports(raw.viewports, where + ' › ' + label, problems);
+    item.viewports = window.wbManifest.pageViewports(raw.viewports, where + ' › ' + label, problems);
     var icon = text(raw.icon);
     if (icon) item.icon = icon;
     var found = states(raw.states, where + ' › ' + label, problems);
     if (found) item.states = found;
-    var lenses = window.wbManifest.screenLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
+    var lenses = window.wbManifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
     if (lenses) item.implementations = lenses;
-    var code = window.wbManifest.screenCode(raw.code, impls, where + ' › ' + label, problems);
+    window.wbManifest.docsPageEntry(raw, item, where + ' › ' + label, problems);
+    var code = window.wbManifest.pageCode(raw.code, impls, where + ' › ' + label, problems);
     if (code) item.code = code;
     return item;
   }
 
-  /* A section holds screens, folders of screens, or both. Folders don't nest —
+  /* A collection holds pages, groups of pages, or both. Groups don't nest —
      one level is a flow, two is a filing cabinet. */
-  function entries(raw, where, impls, problems, inFolder) {
+  function entries(raw, where, impls, problems, inGroup) {
     var out = [];
     list(raw).forEach(function (entry, i) {
       var at = where + ' › item ' + (i + 1);
-      var folder = text(entry && entry.folder);
+      var group = text(entry && entry.group);
 
-      if (folder) {
-        if (inFolder) {
-          problems.push(at + ': folders don’t nest.');
+      if (group) {
+        if (inGroup) {
+          problems.push(at + ': groups don’t nest.');
           return;
         }
-        var items = entries(entry.items, where + ' › ' + folder, impls, problems, true);
-        if (items.length) out.push({ folder: folder, items: items });
-        else problems.push(at + ': folder “' + folder + '” has nothing in it.');
+        var items = entries(entry.items, where + ' › ' + group, impls, problems, true);
+        if (items.length) out.push({ group: group, items: items });
+        else problems.push(at + ': group “' + group + '” has nothing in it.');
         return;
       }
 
-      var found = screen(entry, at, impls, problems);
+      var found = page(entry, at, impls, problems);
       if (found) out.push(found);
     });
     return out;
   }
 
-  function sections(raw, impls, problems) {
+  function collections(raw, impls, problems) {
     var out = [];
-    list(raw).forEach(function (section, i) {
-      var name = text(section && section.name);
+    list(raw).forEach(function (collection, i) {
+      var name = text(collection && collection.name);
       if (!name) {
-        problems.push('section ' + (i + 1) + ' has no name.');
+        problems.push('collection ' + (i + 1) + ' has no name.');
         return;
       }
-      var items = entries(section && section.items, name, impls, problems, false);
-      if (!items.length) {
-        problems.push('section “' + name + '” has nothing in it.');
+      var items = entries(collection && collection.items, name, impls, problems, false);
+      if (!items.length && !text(collection.icon)) {
+        problems.push('collection “' + name + '” has nothing in it.');
         return;
       }
-      /* Rows wear their section's glyph, so a section without one is a
-         section of unlabelled rows. */
-      out.push({ group: name, icon: text(section.icon) || 'file-text', items: items });
+      /* Rows wear their collection's glyph, so a collection without one is a
+         collection of unlabelled rows. */
+      out.push({ name: name, icon: text(collection.icon) || 'file-text', iconPriority: text(collection.icon) ? 7 : 2, items: items });
     });
     return out;
   }
 
   function normalize(raw, hasLocal) {
     var problems = [];
-    raw = window.wbManifest.selectProject(raw, projectKey, problems).raw;
-    /* Screens refer to implementations by name, so those are read first. */
+    raw = window.wbManifest.selectSpace(raw, spaceKey, problems).raw;
+    /* Pages refer to implementations by name, so those are read first. */
     var impls = window.wbManifest.implementations(raw && raw.implementations, problems);
     var previews = window.wbManifest.previews(raw && raw.previews, problems);
-    var found = sections(raw && raw.sections, impls, problems);
-    var mark = window.wbManifest.projectMark(raw, problems);
+    var found = collections(raw && raw.collections, impls, problems);
+    var mark = window.wbManifest.spaceMark(raw, problems);
     var importsCatalog = previews !== false || Object.keys(impls).some(function (key) { return impls[key].catalog; });
-    if (!found.length && !importsCatalog) {
-      problems.push('nothing to show — a config needs at least one section with one screen in it.');
+    if (!found.some(function (collection) { return collection.items.length; }) && !importsCatalog) {
+      problems.push('nothing to show — a config needs at least one collection with one page in it.');
       throw new Error(problems.join('\n'));
     }
     /* Everything that did parse is still worth showing; what didn't goes to
@@ -270,7 +272,7 @@
     if (problems.length) {
       console.warn('[workbench] ' + FILE + (hasLocal ? ' + ' + LOCAL : '') + ':\n' + problems.join('\n'));
     }
-    return { name: text(raw.name) || 'Workbench', mark: mark, sections: found, implementations: impls, previews: previews, root: root };
+    return { name: text(raw.name) || 'Workbench', mark: mark, collections: found, implementations: impls, previews: previews, root: root };
   }
 
   function trouble(file, error) {
@@ -279,7 +281,7 @@
 
   window.wbConfig = {
     root: root,
-    project: projectKey,
+    space: spaceKey,
     FILE: FILE,
     LOCAL: LOCAL,
 

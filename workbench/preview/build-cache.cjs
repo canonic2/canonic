@@ -28,8 +28,8 @@ class BuildCache {
   write(key, value) {
     const temporary = this.file(key) + '.' + crypto.randomUUID() + '.tmp';
     try {
-      fs.mkdirSync(this.directory, { recursive: true });
-      fs.writeFileSync(temporary, v8.serialize(value));
+      fs.mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(temporary, v8.serialize(value), { mode: 0o600 });
       fs.renameSync(temporary, this.file(key));
     } catch (error) {
       console.warn('Workbench build cache could not be written: ' + error.message);

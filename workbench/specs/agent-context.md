@@ -1,6 +1,6 @@
 # Agent context
 
-This spec covers how AI chats in the editor learn which screen the user has
+This spec covers how AI chats in the editor learn which page the user has
 open in the workbench canvas. It builds on
 [Copy a reference](../docs/canvas.md#copy-a-reference), the
 [VS Code extension contract](vscode-extension.md), and the canvas host
@@ -19,16 +19,29 @@ current canvas view, with the same information **Copy reference** copies, withou
 the user pasting it.
 
 In scope: Claude Code and Codex (extensions and CLIs), GitHub Copilot, and
-Cursor. Other MCP clients get the same tool at no extra cost. Markup and
+Cursor. Other MCP clients get the same tool at no extra cost. Annotations and
 screenshots keep their own path, the
-[handoff](../docs/markup-and-handoff.md#hand-off-to-an-agent).
+[handoff](../docs/annotations-and-handoff.md#hand-off-to-an-agent).
 
 ## The current view
+
+The support API can publish a version-2 record with canvas ID, selected
+artboard ID, complete reference text, and every artboard's space/view/size/status.
+The publisher under `src/canvas/` serializes updates to participating spaces
+and their shared-root siblings. User activity determines the current canvas;
+background readiness and heartbeats only update its report. Oversize reports
+fail explicitly without silently truncating artboards. The server validates
+version 2 and retains the legacy single-view shape for older clients. Shield
+continues to consume `view.text`.
+
+The current canvas UI continues to publish the legacy single-view shape. Its
+reference formatter can contribute each instance's reference to a future host;
+the singleton publisher is disabled only for an explicit isolated runtime.
 
 **Requirement (agreed):** the current view carries what
 [reference.js](../workbench/reference.js) puts in **Copy reference**:
 
-- the screen's label and design file (`src`);
+- the page's label and design file (`src`);
 - its story (label and id) on a Storybook lens, otherwise its state (label and
   id, with the same fallback to the first or `default` state);
 - the lens (label and key) with its upstream implementation address, or
@@ -40,7 +53,7 @@ screenshots keep their own path, the
   `wbReference.text()`, the function behind **Copy reference**, so the two
   can't differ. It adds the ids: `src`, `state` or `story`, and `lens`.
 - Every canvas posts its view to `POST /_workbench/view` under a random
-  client id: when it settles on a screen (each `wb-here`), on `hashchange`
+  client id: when it settles on a page (each `wb-here`), on `hashchange`
   and `wb-frame-change`, and every 30 seconds as a heartbeat. The VS Code tab
   and a browser canvas both report, embedded or not. A `file://` canvas
   doesn't.
@@ -63,7 +76,7 @@ workbench runs its own server.
   it on close if the file is still its own. Projects without `.canonic/` get
   no file.
 - A killed server leaves its file behind. Readers must check that `root` in
-  the response is their project, because another project's server may hold
+  the response is their project, because another space's server may hold
   that port by then.
 - Projects should ignore `.canonic/.workbench/`, as this repository does.
 
@@ -71,10 +84,10 @@ workbench runs its own server.
 
 | Surface | Agents | What the user does | What the agent gets | Status |
 | --- | --- | --- | --- | --- |
-| Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a screen is showing | Implemented |
-| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor Shield configures | Asks about "this screen", or attaches the resource | The current view on request | Implemented |
-| Copilot language model tool, `#screen` | Copilot | Types `#screen`, or nothing in agent mode | The current view on request | Proposed |
-| **Ask agent** button in the canvas toolbar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled | Proposed |
+| Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a page is showing | Implemented |
+| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor Shield configures | Asks about "this page", or attaches the resource | The current view on request | Implemented |
+| Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request | Proposed |
+| **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled | Proposed |
 | Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file | Waiting on VS Code |
 
 ### Shield sets it up
@@ -103,16 +116,16 @@ review and trust of new or changed hook definitions before they can run.
   commands walk up from there to the script. Claude hooks use
   `$CLAUDE_PROJECT_DIR`.
 - The hook prints nothing and exits 0 when Workbench isn't running, no canvas
-  is open, or the screen isn't ready.
+  is open, or the page isn't ready.
 - The hook adds the view while the canvas is open even if its tab isn't
-  visible, with how long ago it changed. People often ask about the screen
+  visible, with how long ago it changed. People often ask about the page
   from a chat beside it.
 
 ### Proposed next
 
-- **Copilot `#screen` tool.** `contributes.languageModelTools` with
+- **Copilot `#page` tool.** `contributes.languageModelTools` with
   `vscode.lm.registerTool` (VS Code 1.95), registered only when the API exists
-  so `engines.vscode` can stay `^1.75.0`.
+  (`engines.vscode` is `^1.123.0`, which already includes it).
 - **Copilot and Cursor without Shield.** The extension could register the same
   MCP server itself, through `registerMcpServerDefinitionProvider` (VS Code
   1.101) or `vscode.cursor.mcp.registerServer`, pointing at its own address,
@@ -127,11 +140,11 @@ review and trust of new or changed hook definitions before they can run.
 
 ## Acceptance criteria
 
-- With the canvas on a screen, the server's view text equals what
+- With the canvas on a page, the server's view text equals what
   **Copy reference** copies. Checked 2026-10-03 in headless Chrome against
   this repository's demo workbench, along with a state change in the same page,
-  a navigation to another screen, and closing the page.
-- Changing screen, state, story, or lens, or following a link in a live page,
+  a navigation to another page, and closing the canvas.
+- Changing page, state, story, or lens, or following a link in a live page,
   changes the next answer.
 - Closing the canvas stops the context: the hook prints nothing and
   `current_view` says no canvas is open.
@@ -151,13 +164,13 @@ review and trust of new or changed hook definitions before they can run.
 ## Decisions
 
 - **Same content as Copy reference (2026-10-03).** Agents and people should be
-  pointed at a screen the same way, and the reference is already the
+  pointed at a page the same way, and the reference is already the
   supported, documented form.
 - **MCP and hooks before Copilot-only APIs (2026-10-03).** They reach every
   agent in scope without proposed APIs.
 - **The most recently changed canvas wins (2026-10-03).** With the tab and a
   browser canvas open, the one the user last moved is the one they mean.
-- **No screenshots (2026-10-03).** `current_view` reports the screen; images
+- **No screenshots (2026-10-03).** `current_view` reports the page; images
   stay in the handoff, which the user starts deliberately.
 - **Shield distributes the configuration (2026-10-03).** Canonic projects
   already generate their agent configuration with Shield; the extension

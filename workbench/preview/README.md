@@ -29,3 +29,5 @@ a preview, it supplies `@canonic2/workbench` itself, so the version installed
 here affects types only.
 
 See [Workbench previews](https://canonic.sh/workbench/docs/workbench-previews/).
+
+Canonic is proprietary; all rights reserved. See [LICENSE](LICENSE).

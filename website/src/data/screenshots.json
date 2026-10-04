@@ -2,7 +2,7 @@
   "regions": [
     {
       "n": 1,
-      "name": "screen list",
+      "name": "page list",
       "box": {
         "left": 0.21,
         "top": 5.47,
@@ -44,7 +44,7 @@
     },
     {
       "n": 4,
-      "name": "markup bar",
+      "name": "toolbar",
       "box": {
         "left": 47.95,
         "top": 93.37,
@@ -57,13 +57,13 @@
       }
     }
   ],
-  "toolbar": [
+  "controls": [
     {
       "name": "actions",
-      "src": "images/toolbar-actions.png",
+      "src": "images/controls-actions.png",
       "width": 165,
       "height": 50,
-      "alt": "The Actions toggle, switched off, enlarged.",
+      "alt": "The Actions switch, switched off, enlarged.",
       "controls": [
         {
           "label": "Actions — let links navigate and forms submit",
@@ -73,11 +73,11 @@
       ]
     },
     {
-      "name": "frame",
-      "src": "images/toolbar-frame.png",
+      "name": "page",
+      "src": "images/controls-page.png",
       "width": 395,
       "height": 50,
-      "alt": "The frame and screen controls, enlarged: four frame sizes, then Reload, Open the source, Copy reference, Open on its own, and More.",
+      "alt": "The size switcher and the page’s actions, enlarged: four sizes, then Reload, Open the source, Copy reference, Open on its own, and More.",
       "controls": [
         {
           "label": "Fit",
@@ -127,11 +127,11 @@
       ]
     },
     {
-      "name": "markup",
-      "src": "images/toolbar-markup.png",
+      "name": "annotations",
+      "src": "images/controls-annotations.png",
       "width": 394,
       "height": 50,
-      "alt": "The markup tools from the bar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear markup, and Save screenshot.",
+      "alt": "The annotation tools from the toolbar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear annotations, and Save screenshot.",
       "controls": [
         {
           "label": "Select",
@@ -164,12 +164,12 @@
           "width": 10.79
         },
         {
-          "label": "Undo last mark",
+          "label": "Undo last annotation",
           "left": 67.94,
           "width": 10.79
         },
         {
-          "label": "Clear markup",
+          "label": "Clear annotations",
           "left": 77.46,
           "width": 10.79
         },
@@ -181,11 +181,11 @@
       ]
     },
     {
-      "name": "zoom",
-      "src": "images/toolbar-zoom.png",
+      "name": "view",
+      "src": "images/controls-view.png",
       "width": 183,
       "height": 40,
-      "alt": "The zoom control, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.",
+      "alt": "The view controls, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.",
       "controls": [
         {
           "label": "Recenter view",

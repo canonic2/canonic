@@ -1,12 +1,12 @@
 ---
-/* The toolbar screenshots with a hotspot over each control. Pointing at,
+/* The control screenshots with a hotspot over each control. Pointing at,
    focusing, or tapping a hotspot captions it from the control's entry in the
    list (the default slot): a [data-label] row with a <dt> and a <dd>, so each
    description is written once. Without JavaScript the list is the reference. */
 import { base } from '../lib/base.js';
 
 interface Props {
-  /** screenshots.json's `toolbar`: each group's image and its controls. */
+  /** screenshots.json's `controls`: each group's image and its controls. */
   groups: {
     name: string; src: string; width: number; height: number; alt: string;
     controls: { label: string; left: number; width: number }[];

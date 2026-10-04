@@ -4,7 +4,7 @@ var path = require('node:path');
 var test = require('node:test');
 var vm = require('node:vm');
 
-function loadSidebar(overrides, projects) {
+function loadSidebar(overrides, spaces) {
   var switcher = null;
   var shell = { hidden: false, dimmed: false, classList: { toggle: function (name, on) { shell.dimmed = on; } } };
   var listeners = {};
@@ -17,22 +17,22 @@ function loadSidebar(overrides, projects) {
     loading: { hidden: false },
     loadingText: { textContent: '' },
     rail: {},
-    nav: {},
-    projects: { hidden: true },
-    projectButton: {},
-    projectMenu: {},
+    pageList: {},
+    spaces: { hidden: true },
+    spaceButton: {},
+    spaceMenu: {},
   };
   var built = null;
   var config = Object.assign({
     name: 'Acme',
-    sections: [],
+    collections: [],
     implementations: { storybook: { catalog: true } },
   }, overrides);
   var window = {
     addEventListener: function (type, listener) { listeners[type] = listener; },
     removeEventListener: function () {},
     wbIcon: function () {},
-    wbProjects: {
+    wbSpaces: {
       create: function (options) {
         switcher = { options: options, set: function (list, current) { switcher.list = list; switcher.current = current; } };
         return switcher;
@@ -40,17 +40,17 @@ function loadSidebar(overrides, projects) {
     },
     wbConfig: { load: function (ok) { ok(config); } },
     wbManifest: {
-      mergeSections: function (base, imported) { return base.concat(imported); },
+      mergeCollections: function (base, imported) { return base.concat(imported); },
     },
-    wbNav: {
+    wbPageList: {
       index: function () { return {}; },
-      create: function (options) { built = options.groups; return {}; },
+      create: function (options) { built = options.collections; return {}; },
     },
   };
   var document = {
     querySelector: function (selector) {
       if (selector === '.sb') return shell;
-      if (selector === 'meta[name="canonic-projects"]') return projects ? { content: projects } : null;
+      if (selector === 'meta[name="canonic-spaces"]') return spaces ? { content: spaces } : null;
       return { hidden: false };
     },
     querySelectorAll: function () { return []; },
@@ -76,16 +76,16 @@ function loadSidebar(overrides, projects) {
     built: function () { return built; },
     switcher: function () { return switcher; },
     shell: shell,
-    projects: elements.projects,
+    spaces: elements.spaces,
   };
 }
 
-test('the sidebar shows the project switcher from the projects the extension lists', function () {
-  var listed = { current: 'a1', projects: [{ id: 'a1', name: 'Acme', removable: false }, { id: 'b2', name: 'Example', removable: true }] };
+test('the sidebar shows the space switcher from the spaces the extension lists', function () {
+  var listed = { current: 'a1', spaces: [{ id: 'a1', name: 'Acme', removable: false }, { id: 'b2', name: 'Example', removable: true }] };
   var sidebar = loadSidebar({ implementations: {}, previews: false }, JSON.stringify(listed));
   var switcher = sidebar.switcher();
 
-  assert.equal(sidebar.projects.hidden, false);
+  assert.equal(sidebar.spaces.hidden, false);
   assert.equal(switcher.current, 'a1');
   assert.equal(switcher.list.map(function (p) { return p.name; }).join(), 'Acme,Example');
 
@@ -93,9 +93,9 @@ test('the sidebar shows the project switcher from the projects the extension lis
   switcher.options.onAdd();
   switcher.options.onRemove('b2');
   assert.deepEqual(JSON.parse(JSON.stringify(sidebar.posted.slice(-3))), [
-    { type: 'canonic-project', id: 'b2' },
-    { type: 'canonic-add-project' },
-    { type: 'canonic-remove-project', id: 'b2' },
+    { type: 'canonic-space', id: 'b2' },
+    { type: 'canonic-add-space' },
+    { type: 'canonic-remove-space', id: 'b2' },
   ]);
 
   switcher.options.onToggle(true);
@@ -104,23 +104,23 @@ test('the sidebar shows the project switcher from the projects the extension lis
   assert.equal(sidebar.shell.dimmed, false);
 });
 
-test('the sidebar has no switcher without a project list', function () {
+test('the sidebar has no switcher without a space list', function () {
   var sidebar = loadSidebar({ implementations: {}, previews: false });
   assert.equal(sidebar.switcher(), null);
-  assert.equal(sidebar.projects.hidden, true);
+  assert.equal(sidebar.spaces.hidden, true);
 });
 
-test('the sidebar shows catalog diagnostics while still building imported screens', function () {
+test('the sidebar shows catalog diagnostics while still building imported pages', function () {
   var sidebar = loadSidebar();
   assert.equal(sidebar.posted[0].type, 'canonic-catalog-request');
   assert.equal(sidebar.loading.hidden, false);
   assert.equal(sidebar.loadingText.textContent, 'Waiting for storybook…');
   assert.equal(sidebar.search.disabled, true);
 
-  var sections = [{ group: 'Components', items: [{ label: 'Button', src: 'button' }] }];
+  var collections = [{ name: 'Components', items: [{ label: 'Button', src: 'button' }] }];
   sidebar.receive({
     type: 'canonic-catalog',
-    sections: sections,
+    collections: collections,
     problems: ['Storybook is not running.', 'No matching Simulator was found.'],
   });
 
@@ -129,14 +129,14 @@ test('the sidebar shows catalog diagnostics while still building imported screen
     sidebar.diagnostics.textContent,
     'Storybook is not running.\nNo matching Simulator was found.'
   );
-  assert.deepEqual(sidebar.built(), sections);
+  assert.deepEqual(sidebar.built(), collections);
   assert.equal(sidebar.loading.hidden, true);
   assert.equal(sidebar.search.disabled, false);
 });
 
 test('the sidebar hides catalog diagnostics when every catalog loads', function () {
   var sidebar = loadSidebar();
-  sidebar.receive({ type: 'canonic-catalog', sections: [], problems: [] });
+  sidebar.receive({ type: 'canonic-catalog', collections: [], problems: [] });
 
   assert.equal(sidebar.diagnostics.hidden, true);
   assert.equal(sidebar.diagnostics.textContent, '');
@@ -146,14 +146,14 @@ test('the sidebar requests discovered previews without an implementation catalog
   var sidebar = loadSidebar({ implementations: {} });
   assert.equal(sidebar.posted[0].type, 'canonic-catalog-request');
 
-  var sections = [{ group: 'Website', items: [{ label: 'Overview', src: 'previews/overview.workbench.ts' }] }];
-  sidebar.receive({ type: 'canonic-catalog', sections: sections, problems: [] });
-  assert.deepEqual(sidebar.built(), sections);
+  var collections = [{ name: 'Website', items: [{ label: 'Overview', src: 'previews/overview.workbench.ts' }] }];
+  sidebar.receive({ type: 'canonic-catalog', collections: collections, problems: [] });
+  assert.deepEqual(sidebar.built(), collections);
 });
 
-test('the sidebar builds manual screens immediately when preview discovery is disabled', function () {
-  var sections = [{ group: 'Pages', items: [{ label: 'Overview', src: 'overview.html' }] }];
-  var sidebar = loadSidebar({ implementations: {}, previews: false, sections: sections });
+test('the sidebar builds manual pages immediately when preview discovery is disabled', function () {
+  var collections = [{ name: 'Pages', items: [{ label: 'Overview', src: 'overview.html' }] }];
+  var sidebar = loadSidebar({ implementations: {}, previews: false, collections: collections });
   assert.equal(sidebar.posted[0].type, 'canonic-ready');
-  assert.deepEqual(sidebar.built(), sections);
+  assert.deepEqual(sidebar.built(), collections);
 });

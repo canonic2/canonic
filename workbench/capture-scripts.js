@@ -1,8 +1,8 @@
-/* Scripts the capture helper runs inside a page: the markup overlay and
-   scroll it is shot with, the element under each mark for a handoff, and the
+/* Scripts the capture helper runs inside a page: the annotation overlay and
+   scroll it is shot with, the element under each annotation for a handoff, and the
    settling gate and in-place Storybook switch used by export references. */
 
-var OVERLAY_ID = '__wb_markup';
+var OVERLAY_ID = '__wb_annotations';
 
 function overlayScript(payload) {
   return '(function () {' +
@@ -17,9 +17,9 @@ function overlayScript(payload) {
     'if (old) old.remove();' +
     'var o = document.createElement("div");' +
     'o.id = ' + JSON.stringify(OVERLAY_ID) + ';' +
-    'o.className = "wb wb-markup-layer";' +
+    'o.className = "wb wb-annotation-layer";' +
     'o.style.cssText = "position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:2147483647";' +
-    'o.innerHTML = ' + JSON.stringify('<style>' + (payload.css || '') + '</style>' + (payload.markup || '')) + ';' +
+    'o.innerHTML = ' + JSON.stringify('<style>' + (payload.css || '') + '</style>' + (payload.annotations || '')) + ';' +
     'document.documentElement.appendChild(o);' +
     'var fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();' +
     'return fonts.catch(function () {}).then(function () {' +
@@ -70,10 +70,12 @@ function settleScript(options) {
       return box.width > 0 && box.height > 0;
     }
     var storybook = location.pathname.replace(/\\/+$/, '').endsWith('/iframe.html') || location.pathname === '/iframe.html';
-    if (/\\.workbench\\.tsx?$/.test(location.pathname) || window.__workbenchOptions) {
+    /* A docs page is ready once its examples have mounted; a failed example
+       shows in its panel, so only a preview's error stops the capture. */
+    if (/\\.workbench\\.tsx?$/.test(location.pathname) || window.__workbenchOptions || window.__workbenchDocs) {
       var previewDeadline = Date.now() + 8000;
       while (!window.__workbenchReady) {
-        if (window.__workbenchError) throw new Error(window.__workbenchError);
+        if (window.__workbenchError && !window.__workbenchDocs) throw new Error(window.__workbenchError);
         if (Date.now() >= previewDeadline) throw new Error('Workbench preview did not finish rendering before capture');
         await sleep(50);
       }

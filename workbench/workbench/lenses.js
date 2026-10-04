@@ -1,11 +1,11 @@
 /* Where a lens points
    -------------------
-   The address the frame loads for a screen seen through an implementation.
+   The address the frame loads for a page seen through an implementation.
    Pure string work, kept apart from the shell so it can be checked without a
    browser.
 
-   url         the implementation's base plus the screen's path there — the
-               path for the current state when the screen mapped one, else the
+   url         the implementation's base plus the page's path there — the
+               path for the current state when the page mapped one, else the
                one path it gave.
    storyUrl    a single story, alone: Storybook's iframe.html with the story's
                id and viewMode=story shows the story and none of Storybook's

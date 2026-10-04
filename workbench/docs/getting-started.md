@@ -34,7 +34,7 @@ file. Forks have the same menu, and their own command-line tool, such as
 `cursor --install-extension`.
 
 Each file bundles the runtime its platform needs for screenshots and
-TypeScript previews, so there is nothing else to install. VS Code 1.75 or later
+TypeScript previews, so there is nothing else to install. VS Code 1.123 or later
 is required. Screenshots need macOS 13 or later, Windows, or Linux with a
 display; see [The screenshot helper](extension.md#the-screenshot-helper).
 
@@ -56,7 +56,7 @@ folder that contains it; see [Projects in a subfolder](extension.md#projects-in-
 ```yaml
 name: Acme
 
-sections:
+collections:
   - name: Pages
     icon: file-text
     items:
@@ -75,18 +75,21 @@ sections:
         src: components/button.html
 ```
 
-- `name` titles the screen list in a standalone browser and names
+- `name` titles the sidebar in a standalone browser and names
   [design-system exports](design-system-export.md).
-- Each **section** becomes a button in the sidebar's section list. `icon` is any
-  [Lucide](https://lucide.dev/icons/) icon name, written in kebab-case.
-- Each **item** is a screen: a `label` and the HTML file to show.
+- Each entry under `collections` is a **collection**, a button in the sidebar's
+  collection list. `icon` is any [Lucide](https://lucide.dev/icons/) icon
+  name, written in kebab-case.
+- Each entry under `items` is a page: a `label` and the HTML file to show. A
+  `src` ending in `.md` is a [docs page](docs-pages.md) instead: Markdown with
+  live examples of your components.
 - `states` lists variations of one page. The first is the page as written.
 
 The [configuration reference](configuration.md) lists every key.
 
 ## 3. Make the page answer to its state
 
-Declaring a state in the YAML adds a row to the sidebar. The page decides what
+Declaring a state in the YAML adds it under its page in the page list. The page decides what
 that state looks like. The simplest way is CSS keyed off an attribute the
 workbench sets on `<html>`:
 
@@ -107,28 +110,31 @@ serves it.
 ## 4. Open the canvas
 
 Open the project folder in VS Code. When a folder contains `workbench.yaml`, the
-**Workbench** icon appears in the activity bar. Its view shows your sections and
-screens where a file tree usually goes.
+**Workbench** icon appears in the activity bar. Its view, the sidebar, shows
+your collections and pages where a file tree usually goes.
 
-Pick a screen, or run **Workbench: Open Canvas** from the Command Palette. The
-canvas opens in an editor tab and shows the screen at a real device width.
+Pick a page, or run **Workbench: Open Canvas** from the Command Palette. The
+canvas opens in an editor tab and shows the page on an artboard at a real
+device width.
 
 Try these:
 
 - Pick **Wrong password** under **Sign in** to switch state.
-- Use the width buttons in the toolbar for **Laptop**, **Mobile**, a
-  **Resizable** frame, or **Fit**.
-- Draw on the screen with the markup tools at the bottom, then select
-  **Copy handoff**. The annotated screenshot is saved and a prompt describing
-  every mark is copied to your clipboard, ready to paste to an agent.
+- Use the size switcher in the top bar for **Laptop**, **Mobile**, a
+  **Resizable** artboard, or **Fit**.
+- Draw on the page with the annotation tools in the toolbar at the bottom,
+  then select **Copy handoff**. The screenshot with your annotations is saved
+  and a prompt describing every annotation is copied to your clipboard, ready to
+  paste to an agent.
 
-Workbench also lists any [TypeScript previews](workbench-previews.md) it
-finds in `*.workbench.ts` and `*.workbench.tsx` files, once you trust the
-workspace. Step 6 adds one.
+Workbench also lists any [TypeScript previews](workbench-previews.md) and
+[docs pages](docs-pages.md#declare-a-docs-page-in-a-definition) defined in
+`*.workbench.ts` and `*.workbench.tsx` files, once you trust the workspace.
+Step 6 adds a preview.
 
-In VS Code, saving `workbench.yaml` or `workbench.local.yaml` rebuilds the screen
-list and refreshes the canvas. **Workbench: Refresh Screens** does the same on
-demand. In a standalone browser, reload the page.
+In VS Code, saving `workbench.yaml` or `workbench.local.yaml` rebuilds the
+sidebar and refreshes the canvas. **Workbench: Refresh Pages** does the same
+on demand. In a standalone browser, reload the page.
 
 ## 5. Ignore the files that belong to one machine
 
@@ -150,7 +156,7 @@ Workbench writes nothing else into the project unless you save
 
 ## 6. Preview a component from your code
 
-Design pages show what a screen should look like. A TypeScript preview renders
+Design pages show what a page should look like. A TypeScript preview renders
 the real component from your source, in named states. Next to a React
 `src/Button.tsx` that exports `Button`, add `src/Button.workbench.ts`:
 
@@ -170,7 +176,7 @@ export default definePreview({
 });
 ```
 
-Run **Workbench: Refresh Screens**. A second **Button** appears under
+Run **Workbench: Refresh Pages**. A second **Button** appears under
 **Components**, with **Default** and **Disabled** states, rendered with your
 project's own React. Workbench supplies `@canonic2/workbench` when it compiles
 the file; to type-check it, run `npm install --save-dev @canonic2/workbench`
@@ -193,9 +199,12 @@ CSS, which are inert without it. To remove the extension itself, see
 - Add controls, hooks, and other frameworks to previews:
   [TypeScript Workbench previews](workbench-previews.md).
 - Learn the canvas's controls and shortcuts: [Using the canvas](canvas.md).
-- Hand a marked-up screen to your agent: [Markup and handoff](markup-and-handoff.md).
+- Hand an annotated page to your agent:
+  [Annotations and handoff](annotations-and-handoff.md).
 - Give pages more states and choose their viewports:
   [Pages and states](pages-and-states.md).
-- Show the same screen as it runs on your dev server:
+- Document components in Markdown with live examples:
+  [Docs pages](docs-pages.md).
+- Show the same page as it runs on your dev server:
   [Lenses and URL implementations](lenses.md).
 - Use your Storybook: [Storybook](storybook.md).

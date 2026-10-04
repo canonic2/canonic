@@ -1,6 +1,6 @@
 /* Workbench chrome
    ----------------
-   The shell around the canvas: sidebar, filter, toolbar, frame.
+   The shell around the canvas: sidebar, filter, top bar, toolbar, artboard.
 
    This is tooling, not product UI — a dark Figma-style shell so the light
    product inside the frame reads as the artifact, not as part of the app.
@@ -12,7 +12,7 @@
    project, and would break in the one that spells its spacing scale another
    way. So the grays are Figma's editor palette, the geometry is the tool's,
    and the type sizes (11/12/13px) are deliberately small in a way product
-   type never is. None of it is valid anywhere but this file and markup.css.
+   type never is. None of it is valid anywhere but this file and annotations.css.
 
    The product's tokens live inside the frame, loaded by the pages themselves,
    which is the only place they belong.
@@ -22,9 +22,9 @@
 */
 
 .wb {
-  --wb-panel: #1e1e1e;    /* sidebar, toolbar */
-  --wb-stage: #161616;    /* canvas behind the frame */
-  --wb-stage-dot: #2a2a2a; /* the canvas grid, so a pan reads as movement */
+  --wb-panel: #1e1e1e;    /* sidebar, top bar */
+  --wb-canvas: #161616;    /* canvas behind the artboard */
+  --wb-canvas-dot: #2a2a2a; /* the canvas grid, so a pan reads as movement */
   --wb-float: #252526;    /* tool bars floating over the canvas */
   --wb-float-line: #3c3c3c;
   --wb-raised: #2c2c2c;   /* inputs and segments on a panel */
@@ -39,10 +39,10 @@
   --wb-accent-strong: #0a7fd4; /* the same blue, dark enough for white text */
   --wb-accent-text: #4cbcff;   /* the same blue as text on the dark panel */
 
-  /* The frame's own backing, behind a page that hasn't painted yet. White
+  /* The artboard's own backing, behind a page that hasn't painted yet. White
      because that is what an unstyled document is, not because any particular
      product is light. */
-  --wb-frame-bg: #ffffff;
+  --wb-artboard-bg: #ffffff;
 
   /* The list panel, which the user can resize. */
   --wb-sidebar-w: 248px;
@@ -192,7 +192,7 @@ textarea,
   gap: var(--wb-space-4);
 }
 
-.wb-topbar-right > .wb-widths {
+.wb-topbar-right > .wb-sizes {
   margin-right: var(--wb-space-8);
 }
 
@@ -214,7 +214,7 @@ textarea,
 
 /* ------------------------------------------------------------ breadcrumb */
 
-/* Screen / State ▾. The screen is plain text — the list picks screens; the
+/* Page / State ▾. The page is plain text — the list picks pages; the
    state is a button, because its siblings are one click away here. */
 .wb-crumb {
   display: flex;
@@ -229,8 +229,8 @@ textarea,
   display: none;
 }
 
-/* The project, ahead of the screen, when there is more than one. */
-.wb-project-crumb {
+/* The space, ahead of the page, when there is more than one. */
+.wb-space-crumb {
   position: relative;
   display: flex;
   align-items: center;
@@ -239,11 +239,11 @@ textarea,
   white-space: nowrap;
 }
 
-.wb-project-crumb[hidden] {
+.wb-space-crumb[hidden] {
   display: none;
 }
 
-.wb-action.wb-project-crumb-button {
+.wb-action.wb-space-crumb-button {
   width: auto;
   max-width: 200px;
   gap: var(--wb-space-8);
@@ -252,22 +252,22 @@ textarea,
   font: inherit;
 }
 
-.wb-project-crumb-button[aria-expanded='true'] {
+.wb-space-crumb-button[aria-expanded='true'] {
   background: var(--wb-hover);
 }
 
-.wb-project-crumb-button .wb-project-mark {
+.wb-space-crumb-button .wb-space-mark {
   width: 18px;
   height: 18px;
   border-radius: 5px;
   font-size: 10px;
 }
 
-.wb-project-crumb-button .wb-projects-caret {
+.wb-space-crumb-button .wb-spaces-caret {
   display: none;
 }
 
-.wb-project-crumb-menu {
+.wb-space-crumb-menu {
   top: calc(100% + var(--wb-space-8));
   left: 0;
   right: auto;
@@ -276,12 +276,12 @@ textarea,
   max-width: min(320px, calc(100vw - 24px));
 }
 
-/* Nothing on the canvas yet: the project stands alone, without a slash. */
-.wb-topbar-left:has(.wb-crumb[hidden]) .wb-project-crumb .wb-crumb-sep {
+/* Nothing on the canvas yet: the space stands alone, without a slash. */
+.wb-topbar-left:has(.wb-crumb[hidden]) .wb-space-crumb .wb-crumb-sep {
   display: none;
 }
 
-.wb-crumb-screen {
+.wb-crumb-page {
   overflow: hidden;
   color: var(--wb-fg-2);
   text-overflow: ellipsis;
@@ -332,17 +332,17 @@ textarea,
   overflow: auto;
 }
 
-.wb-toolbar-overflow {
+.wb-topbar-overflow {
   position: relative;
   display: flex;
 }
 
-.wb-toolbar-overflow[hidden],
+.wb-topbar-overflow[hidden],
 .wb-action.wb-in-menu {
   display: none;
 }
 
-.wb-toolbar-overflow-menu {
+.wb-topbar-overflow-menu {
   right: 0;
   left: auto;
   width: max-content;
@@ -352,7 +352,7 @@ textarea,
   overflow: auto;
 }
 
-.wb-toolbar-overflow-label {
+.wb-topbar-overflow-label {
   padding: var(--wb-space-8) var(--wb-space-8) var(--wb-space-4);
   color: var(--wb-fg-3);
   font-size: 10px;
@@ -361,59 +361,59 @@ textarea,
   text-transform: uppercase;
 }
 
-.wb-toolbar-overflow-label:first-child {
+.wb-topbar-overflow-label:first-child {
   padding-top: var(--wb-space-4);
 }
 
-.wb-menu-row.wb-toolbar-overflow-row {
+.wb-menu-row.wb-topbar-overflow-row {
   display: flex;
   align-items: center;
   gap: var(--wb-space-8);
   min-height: 30px;
 }
 
-.wb-toolbar-overflow-row .wb-icon {
+.wb-topbar-overflow-row .wb-icon {
   width: 14px;
   height: 14px;
   flex: none;
 }
 
-.wb-toolbar-overflow-copy {
+.wb-topbar-overflow-copy {
   min-width: 0;
   overflow: hidden;
 }
 
-.wb-toolbar-overflow-copy > span:first-child {
+.wb-topbar-overflow-copy > span:first-child {
   display: block;
 }
 
 /* When equal side tracks can no longer keep the lens clear of the controls
-   beside it, the measured toolbar script folds the view actions into More.
+   beside it, the measured top bar script folds the view actions into More.
    The viewport switch stays visible because changing the canvas size is the
    most spatially important action in a narrow editor. Tighter still, the
-   screen's name and the switch's word go; the state and the switch stay. */
-.wb-topbar.is-toolbar-compact #reload,
-.wb-topbar.is-toolbar-compact #sourceControl,
-.wb-topbar.is-toolbar-compact #copyReference,
-.wb-topbar.is-toolbar-compact #previewControls,
-.wb-topbar.is-toolbar-compact #open {
+   page's name and the switch's word go; the state and the switch stay. */
+.wb-topbar.is-topbar-compact #reload,
+.wb-topbar.is-topbar-compact #sourceControl,
+.wb-topbar.is-topbar-compact #copyReference,
+.wb-topbar.is-topbar-compact #previewControls,
+.wb-topbar.is-topbar-compact #open {
   display: none;
 }
 
-.wb-topbar.is-toolbar-measuring .wb-topbar-left > *,
-.wb-topbar.is-toolbar-measuring .wb-crumb > *,
-.wb-topbar.is-toolbar-measuring .wb-states-control > * {
+.wb-topbar.is-topbar-measuring .wb-topbar-left > *,
+.wb-topbar.is-topbar-measuring .wb-crumb > *,
+.wb-topbar.is-topbar-measuring .wb-states-control > * {
   flex-shrink: 0;
 }
 
-.wb-topbar.is-toolbar-measuring .wb-action.wb-crumb-state {
+.wb-topbar.is-topbar-measuring .wb-action.wb-crumb-state {
   max-width: none;
 }
 
-.wb-topbar.is-toolbar-tight .wb-project-crumb .wb-projects-name,
-.wb-topbar.is-toolbar-tight .wb-crumb-screen,
-.wb-topbar.is-toolbar-tight .wb-crumb-sep,
-.wb-topbar.is-toolbar-tight .wb-toggle-label {
+.wb-topbar.is-topbar-tight .wb-space-crumb .wb-spaces-name,
+.wb-topbar.is-topbar-tight .wb-crumb-page,
+.wb-topbar.is-topbar-tight .wb-crumb-sep,
+.wb-topbar.is-topbar-tight .wb-toggle-label {
   display: none;
 }
 
@@ -583,8 +583,8 @@ textarea,
 
 /* ---------------------------------------------------------------- sidebar */
 
-/* The list inside it is nav.css — the same one the editor's sidebar builds.
-   What is left here is the project's name above it, where it sits, and how
+/* The list inside it is page-list.css — the same one the editor's sidebar
+   builds. What is left here is the space's name above it, where it sits, and how
    wide it is. */
 
 .wb-sidebar {
@@ -607,7 +607,7 @@ textarea,
   display: none;
 }
 
-.wb-sidebar .wb-projects {
+.wb-sidebar .wb-spaces {
   padding: var(--wb-space-12) var(--wb-space-8) var(--wb-space-4);
 }
 
@@ -616,7 +616,7 @@ textarea,
   display: block;
 }
 
-.wb-project-name {
+.wb-space-name {
   overflow: hidden;
   margin: 0;
   font-size: 13px;
@@ -674,21 +674,22 @@ textarea,
 
 /* ------------------------------------------------------------------ canvas */
 
-.wb-canvas {
+.wb-main {
   position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--wb-stage);
+  background: var(--wb-canvas);
   container-type: inline-size;
 }
 
 /* -------------------------------------------------- floating tool bars */
 
-/* Markup and handoff, floating over the canvas they draw on. */
-.wb-dock,
-.wb-zoom {
+/* The toolbar — annotation tools and the handoff — and the view controls,
+   floating over the canvas. */
+.wb-toolbar,
+.wb-view-controls {
   position: absolute;
   z-index: 5;
   bottom: var(--wb-space-16);
@@ -705,40 +706,40 @@ textarea,
   white-space: nowrap;
 }
 
-.wb-dock {
+.wb-toolbar {
   left: 50%;
   transform: translateX(-50%);
 }
 
-.wb-dock .wb-markup {
+.wb-toolbar .wb-annotation-tools {
   gap: var(--wb-space-2);
 }
 
 /* Menus in a bar at the bottom open upwards. */
-.wb-dock .wb-menu,
-.wb-zoom .wb-menu {
+.wb-toolbar .wb-menu,
+.wb-view-controls .wb-menu {
   top: auto;
   bottom: calc(100% + var(--wb-space-12));
 }
 
-.wb-dock .wb-shape .wb-menu {
+.wb-toolbar .wb-shape .wb-menu {
   right: auto;
   left: 0;
 }
 
-.wb-zoom {
+.wb-view-controls {
   right: var(--wb-space-16);
   gap: 0;
   height: 36px;
   padding: 0 var(--wb-space-4);
 }
 
-.wb-zoom .wb-action {
+.wb-view-controls .wb-action {
   width: 26px;
   height: 26px;
 }
 
-.wb-zoom .wb-action .wb-icon {
+.wb-view-controls .wb-action .wb-icon {
   width: 14px;
   height: 14px;
 }
@@ -792,16 +793,16 @@ textarea,
   background: var(--wb-line);
 }
 
-/* A narrow canvas has no room for both bars on one line: the zoom pill
-   steps up above the tools, and the tools move off the centre line. */
+/* A narrow canvas has no room for both bars on one line: the view controls
+   step up above the toolbar, and the tools move off the centre line. */
 @container (max-width: 640px) {
-  .wb-zoom {
+  .wb-view-controls {
     bottom: calc(var(--wb-space-16) + 44px + var(--wb-space-8));
   }
 }
 
-/* Segmented viewport switch. */
-.wb-widths {
+/* The size switcher. */
+.wb-sizes {
   display: flex;
   gap: var(--wb-space-2);
   padding: var(--wb-space-2);
@@ -809,7 +810,7 @@ textarea,
   border-radius: var(--wb-radius-pill);
 }
 
-.wb-width {
+.wb-size {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -823,38 +824,38 @@ textarea,
   cursor: pointer;
 }
 
-.wb-width:hover {
+.wb-size:hover {
   color: var(--wb-fg);
 }
 
-.wb-width:disabled {
+.wb-size:disabled {
   color: var(--wb-fg-3);
   cursor: not-allowed;
   opacity: 0.38;
 }
 
-.wb-width:disabled:hover {
+.wb-size:disabled:hover {
   color: var(--wb-fg-3);
 }
 
 /* The icons step down with the physical devices; the freeform square is kept
    between them so it reads as a viewport rather than another device. */
-.wb-width[data-width='1512'] .wb-icon {
+.wb-size[data-width='1512'] .wb-icon {
   width: 17px;
   height: 17px;
 }
 
-.wb-width[data-width='resizable'] .wb-icon {
+.wb-size[data-width='resizable'] .wb-icon {
   width: 15px;
   height: 15px;
 }
 
-.wb-width[data-width='393'] .wb-icon {
+.wb-size[data-width='393'] .wb-icon {
   width: 16px;
   height: 16px;
 }
 
-.wb-width[aria-pressed='true'] {
+.wb-size[aria-pressed='true'] {
   background: var(--wb-selected);
   color: var(--wb-fg);
 }
@@ -1044,8 +1045,8 @@ textarea,
 }
 
 .wb-config-nav-title span,
-.wb-config-nav-section-pick small,
-.wb-config-nav-folder-head small {
+.wb-config-nav-collection-pick small,
+.wb-config-nav-group-head small {
   color: var(--wb-fg-3);
   font-size: 12px;
   font-weight: 500;
@@ -1057,11 +1058,11 @@ textarea,
   padding: 0 8px 16px;
 }
 
-.wb-config-nav-section + .wb-config-nav-section {
+.wb-config-nav-collection + .wb-config-nav-collection {
   margin-top: 14px;
 }
 
-.wb-config-nav-section-head {
+.wb-config-nav-collection-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
@@ -1069,10 +1070,10 @@ textarea,
   margin-bottom: 3px;
 }
 
-.wb-config-nav-section-pick,
+.wb-config-nav-collection-pick,
 .wb-config-nav-add,
 .wb-config-nav-page,
-.wb-config-nav-folder-head {
+.wb-config-nav-group-head {
   color: var(--wb-fg-2);
   background: transparent;
   border: 0;
@@ -1081,7 +1082,7 @@ textarea,
   font: inherit;
 }
 
-.wb-config-nav-section-pick {
+.wb-config-nav-collection-pick {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1093,10 +1094,10 @@ textarea,
   text-transform: uppercase;
 }
 
-.wb-config-nav-section-pick[aria-current='true'],
-.wb-config-nav-section-pick:hover,
+.wb-config-nav-collection-pick[aria-current='true'],
+.wb-config-nav-collection-pick:hover,
 .wb-config-nav-add:hover,
-.wb-config-nav-folder-head:hover {
+.wb-config-nav-group-head:hover {
   color: var(--wb-fg);
   background: var(--wb-hover);
 }
@@ -1126,15 +1127,15 @@ textarea,
 
 .wb-config-nav-page:hover,
 .wb-config-nav-page[aria-current='true'],
-.wb-config-nav-folder-head[aria-current='true'] {
+.wb-config-nav-group-head[aria-current='true'] {
   color: var(--wb-fg);
   background: var(--wb-selected);
 }
 
-.wb-config-nav-section-pick:focus-visible,
+.wb-config-nav-collection-pick:focus-visible,
 .wb-config-nav-add:focus-visible,
 .wb-config-nav-page:focus-visible,
-.wb-config-nav-folder-head:focus-visible,
+.wb-config-nav-group-head:focus-visible,
 .wb-config-viewport-card:focus-visible,
 .wb-config-inspector-action:focus-visible,
 .wb-config-danger button:focus-visible {
@@ -1165,11 +1166,11 @@ textarea,
   font-size: 12px;
 }
 
-.wb-config-nav-folder {
+.wb-config-nav-group {
   margin: 3px 0;
 }
 
-.wb-config-nav-folder-head {
+.wb-config-nav-group-head {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 8px;
@@ -1179,7 +1180,7 @@ textarea,
   text-align: left;
 }
 
-.wb-config-nav-folder-head strong {
+.wb-config-nav-group-head strong {
   overflow: hidden;
   font-size: 13px;
   font-weight: 550;
@@ -1519,60 +1520,60 @@ textarea,
   color: var(--wb-fg);
 }
 
-/* The frame sits on the stage like a frame on a Figma canvas: it keeps its
-   real size and zoom.js scales and moves it, so the stage never scrolls. The
+/* The artboard sits on the canvas like a frame on a Figma canvas: it keeps its
+   real size and zoom.js scales and moves it, so the canvas never scrolls. The
    dot grid moves with a pan. */
-.wb-stage {
+.wb-canvas {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;
-  background-color: var(--wb-stage);
-  background-image: radial-gradient(var(--wb-stage-dot) 1px, transparent 1px);
+  background-color: var(--wb-canvas);
+  background-image: radial-gradient(var(--wb-canvas-dot) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
 /* Space held: the canvas is a hand. Nothing under it takes the pointer. */
-.wb-stage.is-space {
+.wb-canvas.is-pan-ready {
   cursor: grab;
 }
 
-.wb-stage.is-panning {
+.wb-canvas.is-panning {
   cursor: grabbing;
 }
 
-.wb-stage.is-space iframe,
-.wb-stage.is-space .wb-markup-layer,
-.wb-stage.is-space .wb-markup-layer *,
-.wb-stage.is-panning iframe {
+.wb-canvas.is-pan-ready iframe,
+.wb-canvas.is-pan-ready .wb-annotation-layer,
+.wb-canvas.is-pan-ready .wb-annotation-layer *,
+.wb-canvas.is-panning iframe {
   pointer-events: none !important;
 }
 
-/* The shell owns viewport geometry; the frame itself stays clipped and clean
+/* The artboard owns viewport geometry; its content box stays clipped and clean
    so screenshots never include editor chrome. Its width and height are set
    from workbench.js (a device, or the freeform size) or zoom.js (Fit). */
-.wb-frame-shell {
+.wb-artboard {
   position: absolute;
   top: 0;
   left: 0;
   transform-origin: 0 0;
 }
 
-/* Square and flat, a frame on a canvas: a hairline and a soft shadow
-   separate it from the stage without reading as a card. */
-.wb-frame {
-  /* The markup layer pins to this box — see markup.css. */
+/* Square and flat, an artboard on a canvas: a hairline and a soft shadow
+   separate it from the canvas without reading as a card. */
+.wb-artboard-content {
+  /* The annotation layer pins to this box — see annotations.css. */
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--wb-frame-bg);
+  background: var(--wb-artboard-bg);
   box-shadow: 0 0 0 1px rgb(255 255 255 / 6%), 0 12px 40px rgb(0 0 0 / 40%);
 }
 
-/* The frame's name and size, just above its top edge at any zoom. */
-.wb-frame-label {
+/* The artboard's name and size, just above its top edge at any zoom. */
+.wb-artboard-label {
   position: absolute;
   top: 0;
   left: 0;
@@ -1589,25 +1590,43 @@ textarea,
   transform-origin: 0 0;
 }
 
-.wb-frame-label[hidden] {
+.wb-artboard-label[hidden] {
   display: none;
 }
 
-.wb-frame-name {
+/* A docs page fills the canvas with no artboard of its own: the canvas is
+   the page's white, with no grid, label, shadow, or rails. The size switcher
+   stays in the top bar, disabled (specs/docs-pages.md). */
+.wb[data-canvas-mode='docs'] .wb-canvas {
+  background-color: #ffffff;
+  background-image: none;
+}
+
+.wb[data-canvas-mode='docs'] .wb-artboard-content {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.wb[data-canvas-mode='docs'] .wb-artboard-label,
+.wb[data-canvas-mode='docs'] .wb-canvas .wb-artboard-resize {
+  display: none;
+}
+
+.wb-artboard-name {
   overflow: hidden;
   color: var(--wb-fg-2);
   text-overflow: ellipsis;
 }
 
-.wb-frame-size {
+.wb-artboard-size {
   flex: none;
   font-variant-numeric: tabular-nums;
 }
 
-/* Five-pixel rails live just outside the frame. They are intentionally quiet
+/* Five-pixel rails live just outside the artboard. They are intentionally quiet
    until hover, then lift one step so the draggable edge is discoverable. */
-.wb-frame-resize {
-  /* Five screen pixels at any zoom: the shell is scaled, so is this. */
+.wb-artboard-resize {
+  /* Five screen pixels at any zoom: the artboard is scaled, so is this. */
   --wb-resize-edge: calc(5px / var(--wb-zoom, 1));
   position: absolute;
   z-index: 3;
@@ -1616,26 +1635,26 @@ textarea,
   touch-action: none;
 }
 
-.wb-stage[data-width='resizable'] .wb-frame-resize {
+.wb-canvas[data-width='resizable'] .wb-artboard-resize {
   display: block;
 }
 
-.wb-frame-resize:hover {
+.wb-artboard-resize:hover {
   background: var(--wb-fg-3);
 }
 
-.wb-frame-resize-left,
-.wb-frame-resize-right {
+.wb-artboard-resize-left,
+.wb-artboard-resize-right {
   top: 0;
   bottom: 0;
   width: var(--wb-resize-edge);
   cursor: ew-resize;
 }
 
-.wb-frame-resize-left { left: calc(-1 * var(--wb-resize-edge)); }
-.wb-frame-resize-right { right: calc(-1 * var(--wb-resize-edge)); }
+.wb-artboard-resize-left { left: calc(-1 * var(--wb-resize-edge)); }
+.wb-artboard-resize-right { right: calc(-1 * var(--wb-resize-edge)); }
 
-.wb-frame-resize-bottom {
+.wb-artboard-resize-bottom {
   right: 0;
   bottom: calc(-1 * var(--wb-resize-edge));
   left: 0;
@@ -1643,21 +1662,21 @@ textarea,
   cursor: ns-resize;
 }
 
-.wb-frame-resize-bottom-left,
-.wb-frame-resize-bottom-right {
+.wb-artboard-resize-bottom-left,
+.wb-artboard-resize-bottom-right {
   bottom: calc(-1 * var(--wb-resize-edge));
   width: var(--wb-resize-edge);
   height: var(--wb-resize-edge);
   cursor: nesw-resize;
 }
 
-.wb-frame-resize-bottom-left { left: calc(-1 * var(--wb-resize-edge)); }
-.wb-frame-resize-bottom-right {
+.wb-artboard-resize-bottom-left { left: calc(-1 * var(--wb-resize-edge)); }
+.wb-artboard-resize-bottom-right {
   right: calc(-1 * var(--wb-resize-edge));
   cursor: nwse-resize;
 }
 
-.wb-frame iframe {
+.wb-artboard-content iframe {
   position: absolute;
   inset: 0;
   display: block;
@@ -1671,16 +1690,16 @@ textarea,
 
 /* Only the promoted buffer is visible. On first load there is no previous
    page to preserve, so its active frame stays hidden until fully loaded. */
-.wb-frame iframe.is-active {
+.wb-artboard-content iframe.is-active {
   visibility: visible;
 }
 
-.wb-frame.is-loading iframe.is-active {
+.wb-artboard-content.is-loading iframe.is-active {
   visibility: hidden;
 }
 
 .wb-preview-loading { display: none; }
-.wb-frame.is-loading .wb-preview-loading {
+.wb-artboard-content.is-loading .wb-preview-loading {
   position: absolute;
   inset: 0;
   display: flex;

@@ -1,21 +1,45 @@
 {
   "name": "canonic-workbench",
   "displayName": "Canonic Workbench",
-  "description": "Renders a project's pages and component previews on one canvas at device widths, with markup and screenshots for coding agents.",
+  "description": "Renders a project's pages and component previews on one canvas at device widths, with annotations and screenshots for coding agents.",
   "version": "0.11.1",
   "publisher": "canonic",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "homepage": "https://canonic.sh/workbench/",
-  "repository": { "type": "git", "url": "https://github.com/canonic2/canonic.git" },
-  "bugs": { "url": "https://github.com/canonic2/canonic/issues" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/canonic2/canonic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/canonic2/canonic/issues"
+  },
   "icon": "icon.png",
-  "engines": { "vscode": "^1.75.0", "node": ">=18" },
-  "categories": ["Visualization", "Other"],
-  "keywords": ["design", "design system", "preview", "screenshot", "storybook", "implementation", "lens"],
-  "activationEvents": ["workspaceContains:workbench.yaml", "onStartupFinished"],
+  "engines": {
+    "vscode": "^1.123.0",
+    "node": ">=24"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "design",
+    "design system",
+    "preview",
+    "screenshot",
+    "storybook",
+    "implementation",
+    "lens"
+  ],
+  "activationEvents": [
+    "workspaceContains:workbench.yaml",
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "test": "node --test",
+    "check": "tsc -p tsconfig.json",
     "serve": "node server.js",
     "package": "node scripts/package.cjs",
     "package:all": "node scripts/package-all.cjs",
@@ -23,6 +47,7 @@
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
+    "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@vscode/vsce": "3.9.2",
     "astro": "7.3.5",
@@ -46,7 +71,7 @@
       "canonic": [
         {
           "type": "webview",
-          "id": "canonic.screens",
+          "id": "canonic.sidebar",
           "name": "Workbench",
           "when": "canonic.hasWorkbench"
         }
@@ -70,8 +95,8 @@
         "category": "Workbench"
       },
       {
-        "command": "canonic.refreshScreens",
-        "title": "Refresh Screens",
+        "command": "canonic.refreshPages",
+        "title": "Refresh Pages",
         "category": "Workbench",
         "icon": "$(refresh)"
       },
@@ -81,36 +106,36 @@
         "category": "Workbench"
       },
       {
-        "command": "canonic.addProject",
-        "title": "Add Project…",
+        "command": "canonic.addSpace",
+        "title": "Add Space…",
         "category": "Workbench"
       },
       {
-        "command": "canonic.switchProject",
-        "title": "Switch Project…",
+        "command": "canonic.switchSpace",
+        "title": "Switch Space…",
         "category": "Workbench"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "canonic.switchProject",
+          "command": "canonic.switchSpace",
           "when": "canonic.hasWorkbench"
         },
         {
-          "command": "canonic.refreshScreens",
+          "command": "canonic.refreshPages",
           "when": "canonic.hasWorkbench"
         }
       ],
       "view/title": [
         {
           "command": "canonic.openWorkbench",
-          "when": "view == canonic.screens",
+          "when": "view == canonic.sidebar",
           "group": "navigation@1"
         },
         {
-          "command": "canonic.refreshScreens",
-          "when": "view == canonic.screens",
+          "command": "canonic.refreshPages",
+          "when": "view == canonic.sidebar",
           "group": "navigation@2"
         }
       ]
@@ -119,7 +144,9 @@
   "dependencies": {
     "@vue/compiler-sfc": "3.5.43",
     "esbuild": "0.28.2",
+    "highlight.js": "11.12.0",
     "lucide": "1.33.0",
+    "marked": "18.0.14",
     "picomatch": "4.0.7",
     "tar": "7.5.22"
   }

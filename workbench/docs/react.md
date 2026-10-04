@@ -4,7 +4,7 @@ The `react` adapter renders one of your React components on the Workbench
 canvas, with the preview's inputs as its props. Each named state is a set of
 props, and you can edit them in **Preview controls** while you review.
 
-Use it for components and screens that render in the browser. To review your
+Use it for components and pages that render in the browser. To review your
 whole application as it runs, use a [URL lens](lenses.md). For Storybook
 stories, see [Storybook](storybook.md).
 
@@ -97,8 +97,8 @@ export default definePreview({
 });
 ```
 
-Run **Workbench: Refresh Screens**. **Button** appears in a **Components**
-section of the sidebar, with the states **Primary**, **Secondary**, and
+Run **Workbench: Refresh Pages**. **Button** appears in a **Components**
+collection of the sidebar, with the states **Primary**, **Secondary**, and
 **Disabled**. To build it without the canvas, run the
 [checker](workbench-previews.md#command-line-tools) on the project; it prints
 `Built components/button`.
@@ -212,7 +212,7 @@ export default definePreview({
   [lifecycle hooks](workbench-previews.md#lifecycle-hooks) of the preview and
   its states.
 - Several definitions can share one environment module. For providers every
-  screen needs, name it once as the
+  preview needs, name it once as the
   [project-wide environment](preview-data.md#environments)
   instead.
 - A data client such as Apollo, React Query, or SWR can stay real: wrap the
@@ -315,6 +315,63 @@ export default defineConfig({
 
 Add any other package that must have a single copy, such as a context-based
 design system.
+
+## Document components with a docs page
+
+A [docs page](docs-pages.md) shows a component's examples in Markdown, each
+in its own panel with its code. Render the examples with React through an
+`examples` lens whose `adapter` is `react`:
+
+```yaml
+implementations:
+  web:
+    kind: examples
+    label: Web
+    adapter: react
+    styles:
+      - src/styles/global.css
+
+collections:
+  - name: Components
+    items:
+      - label: Button
+        src: docs/button.md
+        implementations:
+          web: src/components/button-examples/
+```
+
+Each example is a React component:
+
+- **A folder**, written with a trailing `/`: each file directly inside it is
+  one example, its default export.
+  `src/components/button-examples/secondary.tsx` is the example `secondary`, and **Show code** shows the whole file.
+- **A file**: each named export is one example. `export function WithIcon()`
+  in `src/components/Button.examples.tsx` is the example `with-icon`, and
+  **Show code** shows that export's statement.
+
+`docs/button.md` places each example by its ID, in a fenced block whose info
+string is `example` and the ID, such as `example secondary`; see
+[Write the Markdown](docs-pages.md#write-the-markdown).
+
+`src/components/button-examples/secondary.tsx`:
+
+```tsx
+import { Button } from '../Button';
+
+export default function Secondary() {
+  return <Button label="Cancel" tone="secondary" />;
+}
+```
+
+Examples receive no props and have no controls: write the props in the
+example. The project's environment for `react`, and the lens's `environment`,
+wrap each example with `wrap`, so the providers your previews use apply to the
+examples too; see
+[Examples on docs pages](preview-data.md#examples-on-docs-pages). To render
+the same Markdown with React Native Web, add a second lens with
+`adapter: react-native-web`. A `*.workbench.ts` file can declare the page and
+its lenses with `defineDocs` instead; see
+[Docs pages](docs-pages.md#declare-a-docs-page-in-a-definition).
 
 ## What isn't supported
 

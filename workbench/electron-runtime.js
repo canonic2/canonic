@@ -23,7 +23,7 @@ function unavailable() {
     if (manifest.target !== process.platform + '-' + process.arch) return 'this build is for ' + manifest.target;
     if (!fs.existsSync(path.join(BUNDLE, 'runtime.tar.gz'))) throw new Error('missing archive');
     return null;
-  } catch (_) { return 'this copy has no bundled runtime; run npm run bundle-runtime'; }
+  } catch (_) { return 'this copy has no bundled runtime; run pnpm run bundle-runtime'; }
 }
 
 function available() {

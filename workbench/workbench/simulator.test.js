@@ -82,7 +82,7 @@ function jpegRecord() {
   return record;
 }
 
-test('a window lens streams the screen’s declared window without starting WDA', async function () {
+test('a window lens streams the page’s declared window without starting WDA', async function () {
   var page = surface({ stream: { ok: true, codec: 'jpeg', stream: '/_workbench/window/stream?token=w' } });
   page.window.wbSimulator.show({ kind: 'window', implementation: 'emulator', src: 'pages/sign-in.html', label: 'Sign in' });
   await new Promise(function (resolve) { setImmediate(resolve); });

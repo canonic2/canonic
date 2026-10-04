@@ -242,6 +242,7 @@ Manager.prototype.stop = function () {
 };
 
 Manager.prototype.close = function () { this.stop(); return Promise.resolve(); };
+Manager.prototype.subscribers = function () { return this.clients.size + this.httpClients.size; };
 
 module.exports = {
   create: function (options) { return new Manager(options); },

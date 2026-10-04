@@ -33,8 +33,10 @@ function host(options = {}) {
     history: { replaceState: function () {} },
     fetch: async function (address) {
       fetched.push(address);
+      await options.fetch?.();
       var file = new URL(address, 'http://127.0.0.1').searchParams.get('file');
-      return { ok: true, json: async function () { return { base: '/assets/', module: file, title: file, options: {} }; } };
+      return { ok: true, json: async function () { return { base: '/assets/', module: file, title: file,
+        options: { revision: options.revision ? options.revision() : 'v1' } }; } };
     },
     importModule: function (name) {
       if (!modules.has(name)) modules.set(name, (async function () {
@@ -76,6 +78,35 @@ test('a newer load supersedes a queued preview before it can mount', async funct
   var h = host();
   await Promise.all([h.renderer.load('/old.workbench.ts'), h.renderer.load('/new.workbench.ts')]);
   assert.deepEqual(h.mounted, ['new.workbench.ts']);
+});
+
+test('resuming an unchanged page preserves its mounted DOM, while a changed revision rebuilds it', async function () {
+  var revision = 'v1'; var h = host({ revision: function () { return revision; } });
+  await h.renderer.load('/one.workbench.ts');
+  var input = h.document.createElement('input'); h.document.body.append(input);
+  input.value = 'Edited by the user';
+  await h.renderer.resume('/one.workbench.ts');
+  assert.equal(h.mounted.length, 1);
+  assert.equal(h.cleaned.length, 0);
+  assert.equal(input.parent, h.document.body);
+  assert.equal(input.value, 'Edited by the user');
+  revision = 'v2';
+  await h.renderer.resume('/one.workbench.ts');
+  assert.equal(h.mounted.length, 2);
+  assert.equal(h.cleaned.length, 1);
+  assert.equal(input.parent, null);
+});
+
+test('reset during a revision check prevents a retained host from mounting again', async function () {
+  var release; var waiting = false;
+  var h = host({ fetch: function () { if (waiting) return new Promise(resolve => { release = resolve; }); } });
+  await h.renderer.load('/one.workbench.ts');
+  waiting = true;
+  var resuming = h.renderer.resume('/one.workbench.ts');
+  await h.renderer.reset();
+  release(); await resuming;
+  assert.deepEqual(h.mounted, ['one.workbench.ts']);
+  assert.equal(h.window.__workbenchReady, false);
 });
 
 test('library-owned styles remain connected, isolated and reusable on return', async function () {

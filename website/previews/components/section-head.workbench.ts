@@ -1,17 +1,9 @@
-import { definePreview } from '@canonic2/workbench';
-import { styles } from './fixtures';
+import { defineDocs } from '@canonic2/workbench';
+import { lens } from './fixtures';
 
-export default definePreview({
+export default defineDocs({
   id: 'website/section-head',
   title: 'Components/Section head',
-  adapter: 'astro',
-  source: { entry: './SectionHead.example.astro' },
-  styles,
-  inputs: { kicker: 'Interface', title: 'Layout', lede: true },
-  controls: { kicker: { type: 'text' }, title: { type: 'text' }, lede: { type: 'boolean' } },
-  states: {
-    default: { label: 'With a lede' },
-    'no-lede': { label: 'Without a lede', inputs: { lede: false } },
-  },
-  viewports: ['desktop', 'mobile', 'responsive'],
+  docs: './section-head.md',
+  lenses: lens('./section-head/'),
 });

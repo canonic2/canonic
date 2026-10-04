@@ -1,26 +1,26 @@
 # The VS Code extension
 
-The Workbench extension runs a local server for each project, shows the screen
-list in the sidebar and the canvas in an editor tab, and connects handoffs and
-source links to the editor. This page is the reference for its commands
-and processes.
+The Workbench extension runs a local server for each space, shows the
+sidebar in the Workbench view and the canvas in an editor tab, and connects
+handoffs and source links to the editor. This page is the reference for its
+commands and processes.
 
 ## Activation
 
 The extension serves an open folder that contains `workbench.yaml` at its
-root. The file is one project, or several when it lists
-[`projects`](configuration.md#projects). In a multi-root workspace, every
-folder with a `workbench.yaml` adds its projects, and the first one shows
-unless the window last showed another; see [Several projects](projects.md). A window without one gets no server and no
-Workbench view, unless you have [added projects](projects.md#add-a-project).
+root. The file is one space, or several when it lists
+[`spaces`](configuration.md#spaces). In a multi-root workspace, every
+folder with a `workbench.yaml` adds its spaces, and the first one shows
+unless the window last showed another; see [Several spaces](spaces.md). A window without one gets no server and no
+Workbench view, unless you have [added spaces](spaces.md#add-a-space).
 The commands stay available, and say why they can't run.
 
 Selecting Workbench or running **Workbench: Open Canvas** opens the tab
 immediately. It shows **Opening Workbench** while configured services, such as
 Storybook, start. The sidebar shows which catalogs it is waiting for, or
 **Finding previews…** during preview discovery. Search becomes available when
-the list is ready. The canvas shows **Loading screens…** while reading its
-catalogs, and **Loading preview…** for the first preview. Later screen changes
+the list is ready. The canvas shows **Loading pages…** while reading its
+catalogs, and **Loading preview…** for the first preview. Later page changes
 keep the current preview visible until its replacement is ready.
 
 If the server cannot start, the tab says **Workbench couldn't start** and
@@ -43,12 +43,12 @@ that folder. Implementation code elsewhere in the repository is reached
 through an implementation's [`root`](configuration.md#implementations), such as
 `root: ../../packages/ui`.
 
-### Several projects
+### Several spaces
 
-One window can switch between several projects: those described by the
+One window can switch between several spaces: those described by the
 `workbench.yaml` of the window's folders, which can list several each, and of
-folders you add from elsewhere on disk. Each project has its own server and
-port. See [Several projects](projects.md).
+folders you add from elsewhere on disk. Each space has its own server and
+port. See [Several spaces](spaces.md).
 
 ## Commands
 
@@ -57,21 +57,21 @@ port. See [Several projects](projects.md).
 | **Workbench: Open Canvas** | Opens the canvas in an editor tab. |
 | **Workbench: Open Canvas in Browser** | Opens the same canvas in your default browser. |
 | **Workbench: Copy Canvas URL** | Copies the canvas address, for a bookmark, a script, or an agent. |
-| **Workbench: Refresh Screens** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a preview file. |
-| **Workbench: Switch Project…** | Lists the [projects](projects.md) and shows the one you pick. |
-| **Workbench: Add Project…** | Adds a folder with a `workbench.yaml` to the projects and switches to it. |
+| **Workbench: Refresh Pages** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) and [`defineDocs`](docs-pages.md#declare-a-docs-page-in-a-definition) docs pages again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a `*.workbench.ts` file. |
+| **Workbench: Switch Space…** | Lists the [spaces](spaces.md) and shows the one you pick. |
+| **Workbench: Add Space…** | Adds a folder with a `workbench.yaml` to the spaces and switches to it. |
 | **Workbench: Show Log** | Opens the Workbench output log. |
 
-**Open Canvas in Browser** and **Copy Canvas URL** use the current project.
+**Open Canvas in Browser** and **Copy Canvas URL** use the current space.
 
 ## The server
 
-Each project gets its own server:
+Each space gets its own server:
 
 - It listens on **127.0.0.1 only**. It serves your project folder, so nothing
   outside your machine can reach it.
 - It uses port **3579**, then 3580 to 3583, then any free port the system
-  offers. With several windows or projects running, each project gets the next
+  offers. With several windows or spaces running, each space gets the next
   free port, in the order the servers started.
 - It serves the project at `/` and the workbench at `/_workbench/` on the same
   origin, which is what lets the workbench read and capture the live page.
@@ -83,11 +83,11 @@ Each project gets its own server:
 ## The screenshot helper
 
 Packaged builds include a screenshot helper built on Electron. It starts with
-the first project's server, is shared by every project in the window, and
+the first space's server, is shared by every space in the window, and
 stays running until the extension stops, so screenshots are fast:
 
 - It keeps an inert, scriptless copy of the page you're viewing up to date in
-  the background. See [How screenshots are taken](markup-and-handoff.md#how-screenshots-are-taken).
+  the background. See [How screenshots are taken](annotations-and-handoff.md#how-screenshots-are-taken).
 - On macOS it runs as a background agent, with no Dock icon or window.
 - On first activation the runtime is unpacked into the extension's storage.
   Later activations reuse it, and runtimes from older versions are removed.
@@ -105,16 +105,18 @@ a separate native helper and need Screen Recording permission.
 
 ## The preview worker
 
-When the project has [TypeScript previews](workbench-previews.md), the server
-starts a separate worker process that compiles them and runs their project
-code: definitions, `workbench.config.ts`, compiler plugins, and Astro
-rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
+When the space has [TypeScript previews](workbench-previews.md) or
+[docs pages](docs-pages.md) with examples, the server starts a separate worker
+process that compiles them and runs their project code: definitions, examples,
+`workbench.config.ts`, compiler plugins, and Astro rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
 separate Node installation.
 
 - It starts the first time previews are listed and stops with the server.
 - If it stops, the next preview request starts a new one.
 - Changing the `previews` key in `workbench.yaml` restarts it with the new
-  settings. With `previews: false`, nothing is compiled and no worker runs.
+  settings. With `previews: false`, nothing is compiled and no worker runs:
+  docs pages show their Markdown, and each example panel says why its example
+  is missing.
 
 ## Logs
 
@@ -132,7 +134,8 @@ Workbench doesn't declare support for untrusted workspaces, so VS Code doesn't
 run it in Restricted Mode. Trust the folder to use it. Trusting a folder lets
 Workbench run [start commands](configuration.md#start-commands), which are
 shell commands from `workbench.yaml`, and
-[TypeScript previews](workbench-previews.md), which run project code.
+[TypeScript previews](workbench-previews.md) and
+[docs page](docs-pages.md) examples, which run project code.
 
 ## Files and network access
 
@@ -178,7 +181,7 @@ and install **Canonic Workbench** from the Extensions view.
 Then run **Developer: Reload Window** in each open project window. Installing
 replaces the files on disk, but running windows, servers, screenshot helpers,
 and preview workers keep the old code until their window reloads. Reloading
-the canvas or running **Refresh Screens** isn't enough.
+the canvas or running **Refresh Pages** isn't enough.
 
 ## Uninstalling
 
@@ -195,7 +198,7 @@ files from a project too, see
 
 ## Running without VS Code
 
-The extension's server runs on its own with Node 18 or later. Find the
+The extension's server runs on its own with Node 24 or later. Find the
 installed extension's folder and point the server at a project:
 
 ```sh
@@ -204,8 +207,8 @@ node ~/.vscode/extensions/canonic.canonic-workbench-*/server.js path/to/project
 
 It prints `workbench on http://127.0.0.1:3579/_workbench/` (or the port it
 got). Open that address in a browser. Without a project argument, it serves
-the current folder. Give it several project folders to switch between them in
-the browser; see [Several projects](projects.md#in-a-browser). Stop it with
+the current folder. Give it several folders to switch between their spaces in
+the browser; see [Several spaces](spaces.md#in-a-browser). Stop it with
 Ctrl+C.
 
 The folder name ends in the version and platform, such as
@@ -217,16 +220,17 @@ What works where:
 
 | | VS Code, or **Open Canvas in Browser** | `server.js` in a browser |
 | --- | --- | --- |
-| Screens, states, widths, zoom | Yes | Yes |
+| Pages, states, sizes, zoom | Yes | Yes |
 | Lenses, including Simulator and window streams | Yes | Yes |
 | TypeScript previews | Yes | Yes |
-| Markup and camera | Yes | Yes |
+| Docs pages and their examples | Yes | Yes |
+| Annotations and camera | Yes | Yes |
 | Handoff | Yes | No |
 | Open source files in the editor | Yes | No |
 | Start commands | Yes | No |
 | Design-system export | Yes | Yes |
-| Switch projects | Yes; add and remove in VS Code | Between the folders it was given |
-| Problems listed above the screens | VS Code's screen list only | No; read the [config route](troubleshooting.md#read-the-resolved-config) |
+| Switch spaces | Yes; add and remove in VS Code | Between the folders it was given |
+| Problems list | VS Code's sidebar only | No; read the [config route](troubleshooting.md#read-the-resolved-config) |
 
 ## Platform support
 

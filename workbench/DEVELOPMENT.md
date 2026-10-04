@@ -14,14 +14,14 @@ HTML and script files with no build step; opening
 | --- | --- |
 | `extension.js` | activation, the server's lifecycle, commands, clipboard handoff |
 | `panel.js` | the canvas: one webview holding one iframe |
-| `screens.js` | the Workbench view in the sidebar |
+| `sidebar-view.js` | the Workbench view in the sidebar |
 | `startup.js` | checks configured implementations and starts their `start` commands |
 | `server.js` | the HTTP server, capture, export, preview and lens endpoints, and script injection — plain node |
 | `preview-scripts.js` | the `preview-compat.js` bundle (`keys.js`, `actions.js`, `states.js`) injected into served pages |
 | `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, request mocks, the portable viewer, and the `cli.cjs` command line |
 | `export.js` | the design-system ZIP export |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
-| `capture-scripts.js` | scripts the screenshot helper runs in a page: the markup overlay, element descriptions, and export settling |
+| `capture-scripts.js` | scripts the screenshot helper runs in a page: the annotation overlay, element descriptions, and export settling |
 | `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window, for the iOS Simulator and window lenses |
 | `electron-runtime.js` | verifies and unpacks the bundled Electron runtime, shared by capture and the preview worker, once into extension storage |
 | `remote.js` | fetches the configured Storybook's index |
@@ -33,8 +33,9 @@ HTML and script files with no build step; opening
 never import `vscode`, so they run and are tested without an editor:
 
 ```sh
-npm test                                     # config parsing, prompt wording, routes, previews, the browser driver
-npm run serve -- <folder>                    # the same server the extension runs, on its own
+pnpm test                                    # config parsing, prompt wording, routes, previews, the browser driver
+pnpm run check                               # type-check the TypeScript in src/
+pnpm run serve <folder>                      # the same server the extension runs, on its own
 node handoff.js                              # print the prompt for a sample canvas
 node config.js <folder>                      # what this machine resolves the config to
 node preview/cli.cjs check <folder>          # discover and build every TypeScript preview
@@ -45,7 +46,7 @@ node preview/cli.cjs check <folder>          # discover and build every TypeScri
 
 ## The two halves
 
-The workbench is one tool in two windows of the editor: the screen list in the
+The workbench is one tool in two windows of the editor: the page list in the
 sidebar, the canvas in a tab. Neither talks to the other — both talk to
 `extension.js`, and what travels between them is the hash the workbench's
 address bar would have carried, `pages/sign-in.html:error`:
@@ -55,9 +56,9 @@ sidebar  --canonic-pick-->  extension  --wb-go-->    canvas
 sidebar  <--canonic-here--  extension  <--wb-here--  canvas
 ```
 
-So picking a screen in the sidebar and pasting a workbench URL are the same
-instruction, and following a link inside a live preview leaves the list marked
-on wherever it ended up.
+So picking a page in the sidebar and pasting a workbench URL are the same
+instruction, and following a link inside a live preview leaves the list showing
+wherever it ended up.
 
 The list is `workbench/sidebar.html` loaded into a webview, with a `<base>`
 saying where that folder is and a `<meta>` saying where the project is — a
@@ -75,12 +76,14 @@ activation event.
 ## Installing from source
 
 ```sh
-npm ci --ignore-scripts
-npm run package
+pnpm install --frozen-lockfile
+pnpm run package
 code --install-extension canonic-workbench-<target>-<version>.vsix --force
 ```
 
-`npm run package` writes `canonic-workbench-<target>-<version>.vsix`, such as
+The package uses pnpm with a flat (`hoisted`) `node_modules` and runs no
+dependency install scripts; `pnpm-workspace.yaml` lists the scripts it skips.
+`pnpm run package` writes `canonic-workbench-<target>-<version>.vsix`, such as
 `canonic-workbench-darwin-arm64-0.6.0.vsix`, in this folder. Cursor, Windsurf
 and the other VS Code forks read their own extensions folder —
 `~/.cursor/extensions`, and so on — and their own command line installs the
@@ -89,20 +92,32 @@ same file.
 After installing, run **Developer: Reload Window** from the Command Palette
 in each open VS Code project window. Installing replaces the files on disk;
 already-running extension hosts and capture helpers keep their previous code
-until their window reloads. Reloading the preview or using **Refresh Screens**
+until their window reloads. Reloading the preview or using **Refresh Pages**
 does not restart the extension. This also applies to `scripts/install-workbench.mjs`
 at the repository root.
 
-Building requires Node 22.12 or later; the extension host supports Node
-18 or later. `npm run package` bundles pinned Electron 44.2.0 and produces a
-platform-specific VSIX for the build host. `-- --target darwin-arm64` (or
+Building and running need Node 24 or later: the TypeScript in `src/` loads
+through Node's type stripping, so the extension requires VS Code 1.123 or later,
+the first release on Node 24. `pnpm run package` bundles pinned Electron 44.2.0 and produces a
+platform-specific VSIX for the build host. `--target darwin-arm64` (or
 `darwin-x64`, `win32-x64`, `win32-arm64`, `linux-x64`, `linux-arm64`) selects
-another target. `npm run package:all` builds every target into `dist/`, one
+another target. The VSIX carries the production dependencies that
+`scripts/production-dependencies.cjs` resolves from `package.json`, rather than
+the ones `npm list` reports, which on a pnpm tree include dev-only packages.
+`pnpm run package:all` builds every target into `dist/`, one
 at a time, finishing with the build host's so its runtime stays in place; name
 targets or pass `--out <dir>` to narrow or redirect it.
 Use native builders for release validation and signing.
 The download happens at build time only. `CANONIC_ELECTRON_ZIP_DIR` can point
 to a directory of official Electron ZIPs for an offline build.
+
+Packaging also writes the target's pinned native esbuild binary to `preview/bin/`.
+It copies the matching installed binary, or, when building another target,
+downloads the registry archive and checks it against the integrity recorded in
+`pnpm-lock.yaml`. The installed worker uses this bundled
+binary; source checkouts use the package dependency. Preview build artifacts
+live under `canonic-workbench-previews` in the host's temporary directory and
+survive worker restarts. Live source maps are served separately from scripts.
 
 The macOS runtime adds about 135 MB to the VSIX and hundreds of MB to the
 installed runtime cache. Its tar archive preserves framework links that VSIX
@@ -127,21 +142,31 @@ and refuses a tag without a changelog entry
 (`node scripts/release-notes.cjs <version>` prints the entry, or fails the same
 way). It attaches all six VSIX files to a GitHub Release using stable,
 versionless asset names, with the changelog entry as its notes. It then
-publishes the same files to the Visual Studio Marketplace, publishes
+publishes the same files to the Visual Studio Marketplace and Open VSX, publishes
 `preview/` to npm as `@canonic2/workbench`, and publishes the website. Build
 files are also available as workflow artifacts for 14 days.
+Open VSX publishing uses the `canonic` namespace and requires the `OVSX_PAT`
+Actions repository secret for an account with publishing access. Already-published
+platform versions are skipped when the Open VSX job is rerun. See
+[distribution setup](../../docs/distribution.md#workbench-extension) for account
+and credential requirements.
 These builds are unsigned; validate and sign platform
 releases before treating them as production-ready.
 
 ## Capture benchmarks and smoke checks
 
 For capture profiling, run `node packages/workbench/scripts/benchmark-capture.cjs` from
-the repository root after bundling the runtime with `npm run bundle-runtime`. It runs current helper sources
+the repository root after bundling the runtime with `pnpm run bundle-runtime`. It runs current helper sources
 in an isolated temporary runtime and compares plain, CSS blur, and backdrop-blur
 fixtures at mobile and desktop sizes. It reports preparation, native readback,
 Retina resizing, PNG encoding, and helper round-trip time, with six on-demand
 captures per case, including one after idle. Reports and PNGs remain in the
 printed temporary directory; the temporary runtime is removed.
+
+Run `node scripts/smoke-preview-sessions.cjs` from this package to check retained
+React, Storybook, and URL iframes in Chrome. It verifies form edits, menus,
+scroll, React state, channel reuse, inactive navigation isolation, and Reload.
+Unit tests cover idle expiry, eviction, superseded loads, and source revisions.
 
 Pass `<project> <page> [width height]` to profile a particular local page.
 Set `CANONIC_BENCH_FORMAT=jpeg` to benchmark the workbench's 90%-quality JPEG
@@ -191,13 +216,18 @@ cloning, font embedding, asset embedding, rasterization, and encoding timings.
 `CANONIC_BENCH_DOM_STYLES=resolved` experiments with omitting custom properties
 from the cloned styles; it does not change the workbench's production renderer.
 
-For a native smoke check, run `npm run bundle-runtime`, then
+For a native smoke check, run `pnpm run bundle-runtime`, then
 `node scripts/smoke-capture.cjs`. It uses a temporary fixture and checks warm
 capture reuse, reloads, resizing, implementation handoffs, Dock visibility,
-and crash recovery. Ordinary `npm test` needs no desktop or Electron process.
+and crash recovery. Ordinary `pnpm test` needs no desktop or Electron process.
 
 `node scripts/smoke-lenses.cjs` drives an installed Chrome, through the
 development driver in `scripts/chrome.cjs`, with temporary app and Storybook
 fixtures to check native iframe input, sign-in, session persistence across
 reloads and lens changes, and viewport resizing. Set `CHROME_PATH` to choose
 the browser. The extension itself never uses Chrome.
+
+`node scripts/smoke-canvas.cjs` exercises multi-artboard support through a
+temporary programmatic harness: independent instances, state and size changes,
+cross-space context, and complete screenshot/handoff payloads. It uses the
+same Chrome driver and bundled capture runtime, without adding production UI.

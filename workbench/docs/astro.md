@@ -114,8 +114,8 @@ export default definePreview({
 });
 ```
 
-Run **Workbench: Refresh Screens**. **Plan Card** appears in a **Components**
-section with **Default**, **Featured**, and **Enterprise** states. To check it
+Run **Workbench: Refresh Pages**. **Plan Card** appears in a **Components**
+collection with **Default**, **Featured**, and **Enterprise** states. To check it
 without the canvas, run the
 [checker](workbench-previews.md#command-line-tools) on the project:
 
@@ -378,6 +378,68 @@ adapter entirely, including server rendering. See
 | `import.meta.glob` | `(intermediate value).glob is not a function` | Import the files directly |
 | `astro.config.*`, integrations, middleware, and `.env` files | None: they are not loaded | Use `define`, `aliases`, and `plugins` in `workbench.config.ts` |
 
+## Document components with a docs page
+
+A [docs page](docs-pages.md) can show Astro components as live examples. Give
+it an `examples` lens with `adapter: astro`, and point the page's lens at a
+folder of `.astro` files. Each file is one example, named after the file:
+`featured.astro` is `featured`.
+
+```yaml
+implementations:
+  site:
+    kind: examples
+    label: Astro
+    adapter: astro
+
+collections:
+  - name: Components
+    items:
+      - label: Plan Card
+        src: docs/plan-card.md
+        implementations:
+          site: src/components/plan-card-examples/
+```
+
+`src/components/plan-card-examples/featured.astro`:
+
+```astro
+---
+import PlanCard from '../PlanCard.astro';
+---
+
+<PlanCard name="Business" price="$24 per month" featured>
+  <li>Priority support</li>
+</PlanCard>
+```
+
+`docs/plan-card.md` places it with a fenced block, as described in
+[Docs pages](docs-pages.md#write-the-markdown):
+
+````md
+## Featured
+
+```example featured
+caption: featured
+```
+````
+
+- **Rendering.** Workbench renders each example in Node, as it renders a
+  preview's states, and the page loads the example's styles, `<script>` tags,
+  and assets. What runs where, the supported imports, and the
+  [unsupported features](#not-supported) are the same as for previews. A
+  frontmatter error in any example fails the whole lens.
+- **Props and slots.** Examples get no inputs or controls, so `Astro.props` is
+  `{}`. Pass props and slot content in the example file, as above.
+- **Lens settings.** The lens's `styles` and `environment` apply. The
+  environment's `setup` runs before the examples mount, and its
+  `mount(canvas, context)` is called after each example's HTML is in place.
+- **`window.workbench`** isn't set on a docs page, so a script's
+  `window.workbench?.action(...)` call does nothing there.
+- **A folder only.** An `.astro` file holds one component, so an Astro lens
+  takes a folder. A file fails the lens with `Astro examples are one component
+  per file: point the lens at a folder of .astro files.`
+
 ## Portable exports
 
 `build` and **Download design-system ZIP** render every authored state when
@@ -386,6 +448,9 @@ shows them with no Astro installation or server. The controls are left out,
 since editing inputs needs a live render, and the preview's **Documentation**
 gains the note `Astro input edits require the live Workbench server. This export
 contains the authored states.`
+
+Docs pages with an Astro lens export the same way: the viewer shows each
+example as it was rendered, with its styles and scripts.
 
 ## Errors and fixes
 

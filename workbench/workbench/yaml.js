@@ -7,7 +7,7 @@
    workbench config is written in:
 
      name: Acme
-     sections:
+     collections:
        - name: Pages
          icon: file-text
          items:

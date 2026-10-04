@@ -1,7 +1,7 @@
 # Authored pages and other implementations
 
 This spec covers authored HTML pages and the `url`, `ios-simulator`, and
-`window` implementations. They share the selection, address, and frame
+`window` implementations. They share the selection, address, and artboard
 behavior in [core.md](core.md). Storybook has its own contract in
 [storybook.md](storybook.md). TypeScript previews and the `workbench`
 implementation are in [previews.md](previews.md).
@@ -17,11 +17,11 @@ it, and where the code falls short.
 
 - Pages need nothing added for Workbench: no script tag, import, or build
   step.
-- A state is declared in YAML, which adds the sidebar row, and in the page,
-  which decides what it looks like. Declaring a state in YAML alone does not
-  make the page render it. State IDs are kebab-case because they travel in
-  addresses and screenshot names. A screen needs at least two states to show
-  state rows.
+- A state is declared in YAML, which adds the state to the page list, and in
+  the page, which decides what it looks like. Declaring a state in YAML alone
+  does not make the page render it. State IDs are kebab-case because they
+  travel in addresses and screenshot names. A page needs at least two states
+  to show its states in the page list.
 - The first state is the page as authored. The address omits it, and the page
   sees it as `default` whatever its ID. Any other state travels as
   `?state=<id>`.
@@ -52,7 +52,7 @@ it, and where the code falls short.
   still work. Turning actions on lets the page behave normally. The page's
   `<html>` carries `data-wb-actions="on"` or `"off"`.
 - With actions on, a same-origin link or form action to an `.html` page is
-  handed to the workbench, which switches to that screen when it is configured
+  handed to the workbench, which switches to that page when it is configured
   and reveals it in the sidebar. Other sites, `mailto:`, and downloads keep
   their browser behavior.
 - A link whose `href` is a fragment of the same page (`#tour`, not a bare `#`)
@@ -70,9 +70,9 @@ it, and where the code falls short.
 ## URL implementations
 
 Configuration: [Implementations](../docs/configuration.md#implementations) and
-[A screen's implementations](../docs/configuration.md#a-screens-implementations).
+[A page's implementations](../docs/configuration.md#a-pages-implementations).
 
-- A screen maps the implementation to one path, or to one path per declared
+- A page maps the implementation to one path, or to one path per declared
   state. A state without its own path uses the first state's.
 - With a single path, the lens shows that path for every state and hides the
   state menu. With a state map, the state menu stays and each pick loads its
@@ -80,9 +80,9 @@ Configuration: [Implementations](../docs/configuration.md#implementations) and
 - The URL lens opens the external page in an iframe, through the
   [implementation proxy](implementation-proxy.md). Apps need no embedding
   changes; they manage their own session in that context. When a page fails to
-  load, the failure stays in the frame; Workbench does not switch to another
-  way of showing the page. **Open on its own** opens the implementation's own
-  URL in the browser.
+  load, the failure stays in the preview frame; Workbench does not switch to
+  another way of showing the page. **Open on its own** opens the
+  implementation's own URL in the browser.
 - A URL implementation may use the optional `start` command
   ([vscode-extension.md](vscode-extension.md#implementation-startup)). This is
   a VS Code startup feature, not a requirement to view a hosted
@@ -97,7 +97,7 @@ Configuration: [Implementations](../docs/configuration.md#implementations) and
 
 Configuration: [Code pointers](../docs/configuration.md#code-pointers).
 
-- An implementation's `root` says where its code lives. A screen may list
+- An implementation's `root` says where its code lives. A page may list
   `code` for an implementation without mapping a lens to it.
 - Code pointers require the implementation's `root`, even for absolute paths.
   Without one, the pointer is listed but cannot be opened, and
@@ -110,10 +110,10 @@ Configuration: [Code pointers](../docs/configuration.md#code-pointers).
 Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
 
 - With `catalog: true`, each matching booted, available device becomes an
-  implementation-only screen, labeled with the device name, in a section named
+  implementation-only page, labeled with the device name, in a collection named
   after the implementation. When no matching booted device is found, the
   catalog reports a problem.
-- An authored screen may map a Simulator lens to a device name or UDID instead
+- An authored page may map a Simulator lens to a device name or UDID instead
   of, or as well as, using a catalog. See the gap below.
 - The canvas shows the device through the native window stream described in
   [Native window stream](#native-window-stream). Taps and drags on the canvas
@@ -123,7 +123,7 @@ Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
 - Simulator lenses have no state menu. `start` is reported as a problem;
   `root` and code pointers work as for other implementations.
 - Export reference screenshots are supported for authored design pages,
-  TypeScript preview states, and imported Storybook stories. An implementation-only Simulator screen
+  TypeScript preview states, and imported Storybook stories. An implementation-only Simulator page
   receives an export warning instead of a fabricated reference image.
   See the [export contract](export.md) for its capture plan and archive.
 
@@ -132,18 +132,24 @@ Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
 Configuration: [App windows](../docs/windows.md#configure-it).
 
 - The helper streams the largest on-screen window whose bundle ID contains the
-  implementation's `app` and whose title contains the screen's mapped value,
+  implementation's `app` and whose title contains the page's mapped value,
   ignoring case. When none matches, the error lists up to twelve visible
   windows.
-- The canvas posts the implementation and the screen's `src` to
-  `/_workbench/window/stream`. The server answers only when that screen maps
+- The canvas posts the implementation and the page's `src` to
+  `/_workbench/window/stream`. The server answers only when that page maps
   that `window` implementation, and takes the app and title from the config,
   so a page cannot request any other window.
 - Window lenses are view-only: canvas input doesn't reach the app, and there
   is no state menu. `start` and `catalog` are reported as problems. Export
-  captures the screen's design page, not the window.
+  captures the page's design, not the window.
 
 ## Native window stream
+
+The [multiple-artboard support](multiple-artboards.md) owns native consumers
+per instance. `src/native-streams/pool.ts` creates independent producers by
+source and codec. Closing a consumer preserves subscribed peers; unused
+producers expire. Simulator input stays device-specific; windows are view-only.
+Repeated artboards on one device/window share that external surface.
 
 - Simulator and window lenses use one native helper built from
   [Capture.swift](../window-capture/Capture.swift), which ships as source in
@@ -175,40 +181,23 @@ Configuration: [App windows](../docs/windows.md#configure-it).
 Found on 2026-10-03 by reading the code and, where noted, by a server probe
 with a stubbed Simulator list and stream.
 
-- **Authored Simulator mappings are refused.** The stream, session, and input
-  routes accept only a UDID that belongs to a catalogued screen
-  (`__ios-simulator/<key>/…`). An authored screen's lens sends its mapped value
-  as the UDID ([workbench.js](../workbench/workbench.js) `wbSimulator.show`).
-  The probe returned 403 for a device-name mapping with or without
-  `catalog: true`, and for a UDID mapping without `catalog: true`; only a
-  UDID with `catalog: true` streamed. This violates the requirement that an
-  authored screen may name a device by name or UDID. No test covers an
-  authored Simulator mapping.
-- **Canvases replace each other's stream.** The server runs one native
-  stream at a time, shared by Simulator and window lenses
-  ([window-stream.js](../window-stream.js)). A request for the same source and
-  codec reuses it; any other request stops it and starts a new one, so a VS
-  Code canvas (JPEG) and a browser canvas (H.264) on the same device, or two
-  canvases on different windows, keep interrupting each other.
 - **Mapped devices are not checked.** Without `catalog: true`, a Simulator
   whose device isn't booted produces no entry in `problems`; the failure
   appears only on the canvas, contrary to the shared problems list in
   [core.md](core.md#problem-reporting).
-- **Invalid authored entries are dropped silently.** A screen whose `src`
+- **Invalid authored entries are dropped silently.** A page whose `src`
   starts with `/` or contains `..`, `:`, or `~`, and a state whose ID isn't
   kebab-case, are left out with no problem ([config.js](../config.js)
-  `screen` and `states`), contrary to the reporting requirement in
+  `page` and `states`), contrary to the reporting requirement in
   [core.md](core.md).
 - **Links to unlisted project pages do nothing.** With actions on, the page
   cancels any same-origin `.html` link and hands it to the workbench, which
-  ignores destinations that aren't configured screens. Such a link neither
-  navigates nor switches screens.
+  ignores destinations that aren't configured pages. Such a link neither
+  navigates nor switches pages.
 
 ## Open questions
 
-- Should an authored Simulator lens resolve a device name to a booted UDID
-  without requiring `catalog: true`, or should the mapping accept only UDIDs?
-- Should a link to a project page that isn't a configured screen navigate the
+- Should a link to a project page that isn't a configured page navigate the
   iframe normally, as the user guide implies, or stay blocked?
 
 ## Verification points
@@ -223,11 +212,11 @@ with a stubbed Simulator list and stream.
   and the compat route use the one injection. [server.test.js](../server.test.js)
   checks placement first in `<head>`, the Simulator catalog, stream
   negotiation only for a configured device or declared window, and export
-  warnings for implementation-only screens.
+  warnings for implementation-only pages.
 - [simulator.test.js](../workbench/simulator.test.js) checks that a window lens
   streams without starting WDA, and that an embedded workbench uses JPEG.
-  [window-stream.test.js](../window-stream.test.js) checks the current single
-  native stream (see the gap above),
+  [window-stream.test.js](../window-stream.test.js) checks each native producer's
+  stream protocol, while `src/native-streams/pool.test.ts` covers producer sharing,
   token checks, HTTP framing, and that the packaged extension ships the
   helper source.
 - [lenses.test.js](../workbench/lenses.test.js) checks URL joining.

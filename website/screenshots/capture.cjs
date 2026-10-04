@@ -5,8 +5,8 @@
 
    It also measures the workbench's four regions in the overview and writes
    them to ../src/data/screenshots.json, where the page draws the numbered
-   outlines, so the numbers stay on the screen list, top bar, canvas, and
-   markup bar. For the toolbar section it crops each group of controls at high
+   outlines, so the numbers stay on the page list, top bar, canvas, and
+   toolbar. For the controls section it crops each group of controls at high
    resolution and records the strip there too: each crop, with a hotspot over
    every control. It first checks that the page's control list names the same
    controls in the same order, since the hotspots take their captions from
@@ -24,16 +24,16 @@ var FIXTURE = path.join(__dirname, 'fixture');
 var OUT = path.resolve(__dirname, '../public/images');
 var PAGE = path.resolve(__dirname, '../src/pages/index.astro');
 var DATA = path.resolve(__dirname, '../src/data/screenshots.json');
-// The overview is a full desktop window. The state and markup shots use a
-// narrower window, which the canvas zooms to fit.
+// The overview is a full desktop window. The state and annotations shots use
+// a narrower window, which the canvas zooms to fit.
 var W = 1440, SIDE = 1120, H = 860, SCALE = 2;
-// Toolbar crops render at 4x and are shown at ZOOM times their CSS size.
-var TOOLBAR_SCALE = 4, ZOOM = 1.25;
-var TOOLBAR = [
-  { name: 'actions', selector: '#actionsToggle', alt: 'The Actions toggle, switched off, enlarged.' },
-  { name: 'frame', selector: '.wb-topbar-right', alt: 'The frame and screen controls, enlarged: four frame sizes, then Reload, Open the source, Copy reference, Open on its own, and More.' },
-  { name: 'markup', selector: '.wb-markup', alt: 'The markup tools from the bar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear markup, and Save screenshot.' },
-  { name: 'zoom', selector: '#zoomControl', alt: 'The zoom control, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.' },
+// Control crops render at 4x and are shown at ZOOM times their CSS size.
+var CONTROLS_SCALE = 4, ZOOM = 1.25;
+var CONTROLS = [
+  { name: 'actions', selector: '#actionsToggle', alt: 'The Actions switch, switched off, enlarged.' },
+  { name: 'page', selector: '.wb-topbar-right', alt: 'The size switcher and the page’s actions, enlarged: four sizes, then Reload, Open the source, Copy reference, Open on its own, and More.' },
+  { name: 'annotations', selector: '.wb-annotation-tools', alt: 'The annotation tools from the toolbar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear annotations, and Save screenshot.' },
+  { name: 'view', selector: '#viewControls', alt: 'The view controls, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.' },
 ];
 
 function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -101,24 +101,24 @@ async function main() {
     await shot('overview.jpg');
     writeRegions(await t.evaluate('(' + measureRegions + ')()'));
 
-    await open('#pages/sign-in.html', W, TOOLBAR_SCALE);
+    await open('#pages/sign-in.html', W, CONTROLS_SCALE);
     var page = fs.readFileSync(PAGE, 'utf8'), strip = [];
-    for (var g = 0; g < TOOLBAR.length; g++) {
-      var group = TOOLBAR[g];
-      var m = await t.evaluate('(' + measureToolbar + ')(' + JSON.stringify(group.selector) + ')');
+    for (var g = 0; g < CONTROLS.length; g++) {
+      var group = CONTROLS[g];
+      var m = await t.evaluate('(' + measureControls + ')(' + JSON.stringify(group.selector) + ')');
       checkLegend(page, group.name, m.controls);
       // Crop to the controls themselves: a group's box can include empty
-      // toolbar space where it stretches.
+      // bar space where it stretches.
       var left = Math.min.apply(null, m.controls.map(function (c) { return c.x; }));
       var right = Math.max.apply(null, m.controls.map(function (c) { return c.x + c.w; }));
       var crop = { x: left - 10, y: m.barY + 2, width: right - left + 20, height: m.barH - 4 };
       var png = await t.send('Page.captureScreenshot', { format: 'png', clip: Object.assign({ scale: 1 }, crop) });
-      var file = 'toolbar-' + group.name + '.png';
+      var file = 'controls-' + group.name + '.png';
       fs.writeFileSync(path.join(OUT, file), Buffer.from(png.data, 'base64'));
       console.log('wrote public/images/' + file);
       strip.push(stripGroup(group, file, crop, m.controls));
     }
-    writeData('toolbar', strip);
+    writeData('controls', strip);
 
     await open('#pages/sign-in.html:error@393', SIDE);
     await shot('states.jpg');
@@ -134,12 +134,12 @@ async function main() {
     var wave = [], y = field.y + field.h + 10;
     for (var i = 0; i <= 40; i++) wave.push([field.x + 6 + (field.w - 12) * i / 40, y + Math.sin(i * 0.9) * 4]);
     await stroke(wave);
-    // Leave no mark selected: back to Select, then click the empty stage.
+    // Leave no annotation selected: back to Select, then click the empty stage.
     await tool('[data-tool="pointer"]');
     await mouse('mousePressed', 400, 700);
     await mouse('mouseReleased', 400, 700);
     await wait(300);
-    await shot('markup.jpg');
+    await shot('annotations.jpg');
     await open('#preview/interactive-button.workbench.ts@1512', SIDE);
     await t.evaluate(`(async function () {
       var deadline = Date.now() + 8000;
@@ -164,28 +164,29 @@ function measureRegions() {
   function box(el) { var r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }
   var top = box(document.querySelector('.wb-topbar'));
   var toggle = box(document.getElementById('actionsToggle'));
-  var widths = box(document.querySelector('.wb-widths'));
+  var sizes = box(document.querySelector('.wb-sizes'));
   var side = box(document.querySelector('.wb-sidebar'));
-  var nav = box(document.getElementById('nav').lastElementChild || document.getElementById('nav'));
+  var list = document.getElementById('pageList');
+  var pages = box(list.lastElementChild || list);
   var canvas = box(document.querySelector('.wb-canvas'));
-  var dock = box(document.getElementById('dock'));
+  var toolbar = box(document.getElementById('toolbar'));
   return {
     width: innerWidth, height: innerHeight,
     regions: [
-      { n: 1, name: 'screen list', box: side, at: [side.x + side.w / 2, nav.y + nav.h + 40] },
-      { n: 2, name: 'top bar', box: top, at: [(toggle.x + toggle.w + widths.x) / 2, top.y + top.h / 2] },
+      { n: 1, name: 'page list', box: side, at: [side.x + side.w / 2, pages.y + pages.h + 40] },
+      { n: 2, name: 'top bar', box: top, at: [(toggle.x + toggle.w + sizes.x) / 2, top.y + top.h / 2] },
       { n: 3, name: 'canvas', box: canvas, at: [canvas.x + 40, canvas.y + canvas.h * 0.22] },
-      { n: 4, name: 'markup bar', box: dock, at: [dock.x - 28, dock.y + dock.h / 2] },
+      { n: 4, name: 'toolbar', box: toolbar, at: [toolbar.x - 28, toolbar.y + toolbar.h / 2] },
     ],
   };
 }
 
-/* Runs in the workbench. A toolbar group's box and its visible controls, left
-   to right. The caret beside Rectangle belongs to the shape tool. The crop
-   follows whichever bar the group sits in. */
-function measureToolbar(selector) {
+/* Runs in the workbench. A group of controls: the bar it sits in and its
+   visible controls, left to right. The caret beside Rectangle belongs to the
+   shape tool. The crop follows whichever bar the group sits in. */
+function measureControls(selector) {
   var group = document.querySelector(selector);
-  var bar = group.closest('.wb-topbar, .wb-dock, .wb-zoom').getBoundingClientRect();
+  var bar = group.closest('.wb-topbar, .wb-toolbar, .wb-view-controls').getBoundingClientRect();
   var controls = group.matches('button, a') ? [group] : Array.prototype.filter.call(
     group.querySelectorAll('button, a'),
     function (el) { return el.offsetParent && !el.closest('[hidden]') && !el.closest('.wb-menu') && !el.classList.contains('wb-caret'); });
@@ -202,12 +203,12 @@ function measureToolbar(selector) {
    the measured controls in order, or a hotspot would caption the wrong one. */
 function checkLegend(page, name, controls) {
   var list = new RegExp('<dl class="controls" data-group="' + name + '"[^>]*>([\\s\\S]*?)</dl>').exec(page);
-  if (!list) throw new Error('index.astro has no control list for toolbar group ' + name);
+  if (!list) throw new Error('index.astro has no control list for the group ' + name);
   var labels = [], item = /data-label="([^"]*)"/g, hit;
   while ((hit = item.exec(list[1]))) labels.push(hit[1]);
   var found = controls.map(function (c) { return c.label; });
   if (labels.join('|') !== found.join('|')) {
-    throw new Error('The ' + name + ' control list does not match the toolbar.\n  list:    ' + labels.join(', ') + '\n  toolbar: ' + found.join(', '));
+    throw new Error('The ' + name + ' control list does not match the workbench.\n  list:      ' + labels.join(', ') + '\n  workbench: ' + found.join(', '));
   }
 }
 
@@ -237,7 +238,7 @@ function writeRegions(m) {
   }));
 }
 
-/* The page reads its regions and toolbar strip from this file. */
+/* The page reads its regions and controls strip from this file. */
 function writeData(key, value) {
   var data = JSON.parse(fs.readFileSync(DATA, 'utf8'));
   data[key] = value;

@@ -1,5 +1,5 @@
-/* The screen the canvas is showing, for agents in the editor
-   ----------------------------------------------------------
+/* The page the canvas is showing, for agents in the editor
+   --------------------------------------------------------
    Chats in VS Code take the open text file as context and never a webview,
    so the canvas tells its own server what it shows instead, and agents ask
    the server. Every open canvas reports under its own client id: the VS Code
@@ -16,7 +16,7 @@ var path = require('node:path');
 var VIEW_PATH = '/_workbench/view';
 var ANNOUNCE_FILE = path.join('.canonic', '.workbench', 'server.json');
 var STALE_MS = 3 * 60 * 1000;
-var MAX_TEXT = 4000;
+var cleanView = require('./src/agent-context/report.ts').cleanView;
 var MAX_CLIENTS = 32;
 
 function create(options) {
@@ -28,12 +28,7 @@ function create(options) {
 
   /* Only what Copy reference says, and the ids it says it with. */
   function clean(view) {
-    if (!view || typeof view !== 'object' || typeof view.text !== 'string' || !view.text.trim()) return null;
-    var out = { text: view.text.slice(0, MAX_TEXT) };
-    ['src', 'state', 'story', 'lens'].forEach(function (key) {
-      if (typeof view[key] === 'string' && view[key]) out[key] = view[key].slice(0, 500);
-    });
-    return out;
+    return cleanView(view);
   }
 
   function prune(at) {
@@ -42,7 +37,7 @@ function create(options) {
     });
   }
 
-  /* `view` is null while a screen is loading or nothing is picked. */
+  /* `view` is null while a page is loading or nothing is picked. */
   function report(body) {
     if (!body || typeof body.client !== 'string' || !body.client || body.client.length > 100) {
       throw new Error('A canvas report needs its client id.');
@@ -54,7 +49,8 @@ function create(options) {
     var previous = clients.get(body.client);
     if (!previous && clients.size >= MAX_CLIENTS) throw new Error('Too many open canvases.');
     var changed = !previous || JSON.stringify(previous.view) !== JSON.stringify(view);
-    clients.set(body.client, { view: view, changedAt: changed ? at : previous.changedAt, seenAt: at });
+    var activity = typeof body.activity === 'number' && Number.isFinite(body.activity) ? Math.min(at, body.activity) : null;
+    clients.set(body.client, { view: view, changedAt: activity !== null ? activity : changed ? at : previous.changedAt, seenAt: at });
   }
 
   /* `root` lets a reader that found this address in a leftover file check

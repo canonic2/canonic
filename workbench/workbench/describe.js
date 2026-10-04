@@ -1,7 +1,7 @@
 /* What is under a point
    ---------------------
-   The handoff names the element under each mark, so "make this full width"
-   has a referent that isn't a coordinate. Two places ask: the markup layer,
+   The handoff names the element under each annotation, so "make this full width"
+   has a referent that isn't a coordinate. Two places ask: the annotation layer,
    reading straight into a same-origin preview, and the browser that opens
    an implementation's page, where the server puts this file into the page
    and asks it by DevTools. One file, so both name things the same way.

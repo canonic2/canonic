@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Replaced with the project's name as soon as the config is read. -->
+  <!-- Replaced with the space's name as soon as the config is read. -->
   <title>Workbench</title>
   <!-- The chrome brings its own values. Nothing here loads the project's
        tokens: the workbench is the tool, and it has to look the same in a
        project whose scale is named differently or not at all. The product's
        tokens live inside the frame, loaded by the pages themselves. -->
   <link rel="stylesheet" href="workbench.css" />
-  <link rel="stylesheet" href="nav.css" />
-  <link rel="stylesheet" href="markup.css" />
+  <link rel="stylesheet" href="page-list.css" />
+  <link rel="stylesheet" href="annotations.css" />
   <link rel="stylesheet" href="preview-controls.css" />
 </head>
 <body>
-  <div class="wb">
+  <div class="wb" data-canvas-mode="default">
     <div class="wb-export-progress" id="exportProgress" role="status" aria-live="polite" hidden>
       <div class="wb-export-progress-card">
         <span class="wb-export-progress-icon" data-icon="archive"></span>
@@ -27,24 +27,25 @@
       </div>
     </div>
     <!-- Full-width top bar in three: where you are on the left, the lens
-         centred on the bar, the frame controls on the right. The markup tools
-         float over the canvas instead, beside the thing they draw on. -->
+         centred on the bar, the size switcher and page actions on the right.
+         The annotation tools float over the canvas in the toolbar instead,
+         beside the thing they draw on. -->
     <header class="wb-topbar">
       <div class="wb-topbar-left">
-        <!-- Which project, when the workbench has more than one: its mark and
+        <!-- Which space, when the workbench has more than one: its mark and
              name, with the others one click away. Drawn by
-             project-switcher.js from /_workbench/projects. -->
-        <span class="wb-project-crumb" id="projectCrumb" hidden>
-          <button class="wb-action wb-project-crumb-button" type="button" id="projectCrumbButton"></button>
-          <div class="wb-projects-menu wb-project-crumb-menu" id="projectCrumbMenu"></div>
+             space-switcher.js from /_workbench/spaces. -->
+        <span class="wb-space-crumb" id="spaceCrumb" hidden>
+          <button class="wb-action wb-space-crumb-button" type="button" id="spaceCrumbButton"></button>
+          <div class="wb-spaces-menu wb-space-crumb-menu" id="spaceCrumbMenu"></div>
           <span class="wb-crumb-sep" aria-hidden="true">/</span>
         </span>
 
-        <!-- The screen, then which of its states — or, under a Storybook
+        <!-- The page, then which of its states — or, under a Storybook
              lens, which of its stories — is showing, with the others one
              click away. Rows are built in workbench.js. -->
         <div class="wb-crumb" id="crumb" hidden>
-          <span class="wb-crumb-screen" id="crumbScreen"></span>
+          <span class="wb-crumb-page" id="crumbPage"></span>
           <span class="wb-states-control" id="stateControl" hidden>
             <span class="wb-crumb-sep" aria-hidden="true">/</span>
             <button class="wb-action wb-crumb-state" type="button" id="stateButton"
@@ -56,7 +57,7 @@
           </span>
         </div>
 
-        <!-- Off by default: clicking around a screen you're reviewing
+        <!-- Off by default: clicking around a page you're reviewing
              shouldn't navigate you out of it. Turn it on to walk the real
              flow. Enforced inside the page by actions.js, which the server
              puts there — the shell can't reach into the frame off file://.
@@ -72,8 +73,8 @@
         </button>
       </div>
 
-      <!-- The lens: the design, or one of the screen's implementations in
-           its place. Only there when the screen has one; Design is always
+      <!-- The lens: the design, or one of the page's implementations in
+           its place. Only there when the page has one; Design is always
            first. Rows are built in workbench.js from the config. -->
       <div class="wb-topbar-center">
         <div class="wb-lenses" id="lenses" role="group" aria-label="Lens" hidden></div>
@@ -83,16 +84,16 @@
            control keeps a title and an aria-label so it still says what it
            does. -->
       <div class="wb-topbar-right">
-        <div class="wb-widths" role="group" aria-label="Frame width">
-          <button class="wb-width" type="button" data-width="fit"
+        <div class="wb-sizes" role="group" aria-label="Size">
+          <button class="wb-size" type="button" data-width="fit"
                   data-icon="minimize-2" title="Fit" aria-label="Fit"></button>
-          <button class="wb-width" type="button" data-width="1512" data-height="982"
+          <button class="wb-size" type="button" data-width="1512" data-height="982"
                   data-icon="monitor" title="Laptop · MacBook Pro 14, 1512 × 982"
                   aria-label="Laptop, MacBook Pro 14, 1512 by 982 points"></button>
-          <button class="wb-width" type="button" data-width="393" data-height="852"
+          <button class="wb-size" type="button" data-width="393" data-height="852"
                   data-icon="smartphone" title="Mobile · iPhone 15 Pro, 393 × 852"
                   aria-label="Mobile, iPhone 15 Pro, 393 by 852 points"></button>
-          <button class="wb-width" type="button" data-width="resizable"
+          <button class="wb-size" type="button" data-width="resizable"
                   data-icon="scaling" title="Resizable · drag an outside edge or corner"
                   aria-label="Resizable viewport"></button>
         </div>
@@ -100,7 +101,7 @@
         <button class="wb-action" type="button" id="reload"
                 data-icon="rotate-cw" title="Reload" aria-label="Reload"></button>
 
-        <!-- The screen's source: the design file, and where each of its
+        <!-- The page's source: the design file, and where each of its
              implementations keeps the code, as the extension resolves them
              on this machine. Hidden when nothing is serving that answer. -->
         <span class="wb-sources" id="sourceControl" hidden>
@@ -116,56 +117,56 @@
         <a class="wb-action" id="open" target="_blank" rel="noopener"
            data-icon="external-link" title="Open on its own" aria-label="Open on its own"></a>
 
-        <!-- Project-wide actions, and whatever the bar folds away when the
-             editor is narrow. toolbar.js builds the menu; these two buttons
+        <!-- Space-wide actions, and whatever the bar folds away when the
+             editor is narrow. top-bar.js builds the menu; these two buttons
              are only ever reached through it. -->
         <button class="wb-action" type="button" id="previewControls" hidden
                 data-icon="sliders-horizontal" title="Preview controls" aria-label="Preview controls"
                 aria-expanded="false"></button>
-        <span class="wb-toolbar-overflow" id="toolbarOverflow">
-          <button class="wb-action" type="button" id="toolbarOverflowButton"
+        <span class="wb-topbar-overflow" id="topbarOverflow">
+          <button class="wb-action" type="button" id="topbarOverflowButton"
                   data-icon="ellipsis" title="More" aria-label="More"
                   aria-haspopup="true" aria-expanded="false"></button>
-          <div class="wb-menu wb-menu-column wb-toolbar-overflow-menu" id="toolbarOverflowMenu"
+          <div class="wb-menu wb-menu-column wb-topbar-overflow-menu" id="topbarOverflowMenu"
                role="menu" aria-label="More" hidden></div>
         </span>
 
-        <button class="wb-action wb-in-menu" type="button" id="configureProject" hidden
+        <button class="wb-action wb-in-menu" type="button" id="configureSpace" hidden
                 data-icon="settings-2" title="Configure pages"
                 aria-label="Configure pages"></button>
 
-        <button class="wb-action wb-in-menu" type="button" id="exportProject" hidden
+        <button class="wb-action wb-in-menu" type="button" id="exportSpace" hidden
                 data-icon="archive" title="Download design-system ZIP"
                 aria-label="Download design-system ZIP"></button>
       </div>
     </header>
 
-    <!-- The project's screens, laid out like Sketch's sidebar: the sections
-         on top, the chosen one's screens below, the filter at the bottom.
+    <!-- The space's pages, laid out like Sketch's sidebar: the collections
+         on top, the chosen one's pages below, the filter at the bottom.
          Resizable. -->
     <aside class="wb-sidebar wb-browse">
       <header class="wb-sidebar-head" id="sidebarHead">
         <img class="wb-sidebar-mark" src="canonic.svg" alt="" width="16" height="16" />
-        <h1 class="wb-project-name" id="projectName"></h1>
+        <h1 class="wb-space-name" id="spaceName"></h1>
       </header>
 
-      <!-- In place of the header when there is more than one project. -->
-      <div class="wb-projects" id="projects" hidden>
-        <button class="wb-projects-button" type="button" id="projectButton"></button>
-        <div class="wb-projects-menu" id="projectMenu"></div>
+      <!-- In place of the header when there is more than one space. -->
+      <div class="wb-spaces" id="spaces" hidden>
+        <button class="wb-spaces-button" type="button" id="spaceButton"></button>
+        <div class="wb-spaces-menu" id="spaceMenu"></div>
       </div>
 
-      <section class="wb-browse-block" id="sectionsBlock" hidden>
-        <h2 class="wb-browse-head">Sections</h2>
-        <nav class="wb-sections" id="sections" aria-label="Sections"></nav>
+      <section class="wb-browse-block" id="collectionsBlock" hidden>
+        <h2 class="wb-browse-head">Collections</h2>
+        <nav class="wb-collections" id="collections" aria-label="Collections"></nav>
       </section>
 
-      <h2 class="wb-browse-head" id="sectionName"></h2>
-      <nav class="wb-nav" id="nav" aria-label="Screens"></nav>
+      <h2 class="wb-browse-head" id="collectionName"></h2>
+      <nav class="wb-page-list" id="pageList" aria-label="Pages"></nav>
 
       <div class="wb-search">
         <span class="wb-search-icon" data-icon="search"></span>
-        <input id="search" type="search" placeholder="Search screens…" autocomplete="off" aria-label="Search screens and states" />
+        <input id="search" type="search" placeholder="Search pages…" autocomplete="off" aria-label="Search pages and states" />
       </div>
 
       <!-- Drag to resize, double-click to reset. -->
@@ -173,22 +174,23 @@
            aria-label="Resize sidebar" tabindex="0"></div>
     </aside>
 
-    <main class="wb-canvas">
-      <div class="wb-stage" id="stage">
-        <p class="wb-blank is-loading" id="blank" role="status">Loading screens…</p>
-        <!-- The frame's name and its real size, above it the way a design
+    <main class="wb-main">
+      <div class="wb-canvas" id="canvas">
+        <p class="wb-blank is-loading" id="blank" role="status">Loading pages…</p>
+        <!-- The artboard's name and its real size, above it the way a design
              tool labels a frame. Unscaled: zoom.js places it. -->
-        <div class="wb-frame-label" id="frameLabel" hidden>
-          <span class="wb-frame-name" id="frameName"></span>
-          <span class="wb-frame-size" id="frameSize" aria-live="polite"></span>
+        <div class="wb-artboard-label" id="artboardLabel" hidden>
+          <span class="wb-artboard-name" id="artboardName"></span>
+          <span class="wb-artboard-size" id="artboardSize" aria-live="polite"></span>
         </div>
-        <!-- The shell carries the viewport size and, in Resizable mode, puts
-             5px drag rails outside the preview instead of over its content.
-             zoom.js scales and moves it as one piece. -->
-        <div class="wb-frame-shell" id="frameShell" hidden>
-          <div class="wb-frame" id="frameWrap">
-            <!-- Two frames prevent navigation flashes: the active page stays
-                 visible while the next one finishes loading behind it. -->
+        <!-- The artboard carries the viewport size and, in Resizable mode,
+             puts 5px drag rails outside the preview instead of over its
+             content. Its content box clips the preview frames. zoom.js scales
+             and moves it as one piece. -->
+        <div class="wb-artboard" id="artboard" hidden>
+          <div class="wb-artboard-content" id="artboardContent">
+            <!-- Frames stay attached while retained. Only the selected session
+                 is visible; another frame prepares a new destination. -->
             <iframe class="is-active" id="frame" title="Preview" allow="clipboard-read; clipboard-write"></iframe>
             <iframe id="frameBuffer" title="Preview loading" aria-hidden="true" allow="clipboard-read; clipboard-write"></iframe>
             <div class="wb-preview-loading" role="status"><span>Loading preview…</span></div>
@@ -198,14 +200,14 @@
               <span id="simulatorStatus"></span>
             </div>
           </div>
-          <!-- Marks share the frame's box but live outside its clip, so a
-               note can hang past the edge onto the stage while the page
-               stays clipped — and a focused note can never scroll the frame.
-               Shapes go in the SVG; text boxes are siblings of it.
-               Screenshots render the shell, whose viewport crops to the same
-               box the frame clip used to. -->
-          <div class="wb-markup-layer" id="markupLayer">
-            <svg id="markupSvg" aria-hidden="true">
+          <!-- Annotations share the artboard's box but live outside its content
+               clip, so a note can hang past the edge onto the canvas while the
+               page stays clipped — and a focused note can never scroll the
+               preview frame. Shapes go in the SVG; text boxes are siblings of
+               it. Screenshots render the artboard, whose viewport crops to the
+               same box the content clip uses. -->
+          <div class="wb-annotation-layer" id="annotationLayer">
+            <svg id="annotationSvg" aria-hidden="true">
               <defs>
                 <!-- A plain triangle, 16px in user units rather than stroke
                      multiples: the weight never changes, so the head shouldn't
@@ -219,31 +221,31 @@
               </defs>
             </svg>
           </div>
-          <span class="wb-frame-resize wb-frame-resize-left" data-resize="left"></span>
-          <span class="wb-frame-resize wb-frame-resize-right" data-resize="right"></span>
-          <span class="wb-frame-resize wb-frame-resize-bottom" data-resize="bottom"></span>
-          <span class="wb-frame-resize wb-frame-resize-bottom-left" data-resize="bottom-left"></span>
-          <span class="wb-frame-resize wb-frame-resize-bottom-right" data-resize="bottom-right"></span>
+          <span class="wb-artboard-resize wb-artboard-resize-left" data-resize="left"></span>
+          <span class="wb-artboard-resize wb-artboard-resize-right" data-resize="right"></span>
+          <span class="wb-artboard-resize wb-artboard-resize-bottom" data-resize="bottom"></span>
+          <span class="wb-artboard-resize wb-artboard-resize-bottom-left" data-resize="bottom-left"></span>
+          <span class="wb-artboard-resize wb-artboard-resize-bottom-right" data-resize="bottom-right"></span>
         </div>
       </div>
 
-      <!-- Markup and handoff float over the canvas they draw on. Select is
-           the one way back to using the page itself. -->
-      <div class="wb-dock" id="dock" role="toolbar" aria-label="Markup and handoff">
-        <div class="wb-markup" role="group" aria-label="Markup">
+      <!-- The toolbar: annotation tools and the handoff float over the canvas
+           they draw on. Select is the one way back to using the page itself. -->
+      <div class="wb-toolbar" id="toolbar" role="toolbar" aria-label="Annotations and handoff">
+        <div class="wb-annotation-tools" role="group" aria-label="Annotation tools">
           <button class="wb-action wb-tool" type="button" data-tool="pointer"
                   data-icon="mouse-pointer-2" title="Select · Esc" aria-label="Select"></button>
           <button class="wb-action wb-tool" type="button" data-tool="draw"
                   data-icon="pencil" title="Scribble" aria-label="Scribble"></button>
 
-        <!-- Pointing at something is the most common mark, so the arrow is a
+        <!-- Pointing at something is the most common annotation, so the arrow is a
              tool of its own rather than one of the shapes. -->
           <button class="wb-action wb-tool" type="button" data-tool="arrow"
                   data-icon="move-up-right" title="Arrow" aria-label="Arrow"></button>
 
         <!-- One shape button plus a caret: the button draws the shape it
              shows, the caret swaps which shape that is. The button's icon is
-             set from markup.js, so it carries no data-icon here. -->
+             set from annotations.js, so it carries no data-icon here. -->
           <span class="wb-shape">
             <button class="wb-action wb-tool" type="button" id="shapeTool" data-tool="rect"
                     title="Rectangle" aria-label="Rectangle"></button>
@@ -269,17 +271,17 @@
           <span class="wb-sep"></span>
 
           <button class="wb-action" type="button" id="undo"
-                  data-icon="undo-2" title="Undo · ⌘Z" aria-label="Undo last mark"></button>
-          <button class="wb-action" type="button" id="clearMarkup"
-                  data-icon="trash-2" title="Clear markup" aria-label="Clear markup"></button>
+                  data-icon="undo-2" title="Undo · ⌘Z" aria-label="Undo last annotation"></button>
+          <button class="wb-action" type="button" id="clearAnnotations"
+                  data-icon="trash-2" title="Clear annotations" aria-label="Clear annotations"></button>
           <button class="wb-action" type="button" id="shoot"
                   data-icon="camera" title="Save screenshot" aria-label="Save screenshot"></button>
         </div>
 
-        <!-- How many marks the handoff will carry, then the handoff itself:
+        <!-- How many annotations the handoff will carry, then the handoff itself:
              the annotated screenshot saved, its prompt copied. The extension
              capability probe keeps the button out of standalone views. -->
-        <span class="wb-mark-count" id="markCount" hidden></span>
+        <span class="wb-annotation-count" id="annotationCount" hidden></span>
         <span class="wb-handoff-control" id="handoffControl" hidden>
           <button class="wb-handoff" type="button" id="handoff"
                   title="Copy handoff" aria-label="Copy handoff">
@@ -289,7 +291,7 @@
         </span>
       </div>
 
-      <div class="wb-zoom" id="zoomControl" role="group" aria-label="Zoom">
+      <div class="wb-view-controls" id="viewControls" role="group" aria-label="View controls">
         <button class="wb-action" type="button" id="zoomCenter"
                 data-icon="locate-fixed" title="Recenter view" aria-label="Recenter view"></button>
         <button class="wb-action" type="button" id="zoomOut"
@@ -307,7 +309,7 @@
         <header class="wb-config-header">
           <div>
             <h2 id="configTitle">Configure pages</h2>
-            <p>Edit sections, page paths, and the viewports each page supports.</p>
+            <p>Edit collections, page paths, and the viewports each page supports.</p>
           </div>
           <button class="wb-action" type="button" id="configClose" data-icon="x"
                   title="Close" aria-label="Close configuration"></button>
@@ -315,7 +317,7 @@
         <div class="wb-config-body" id="configBody"></div>
         <footer class="wb-config-footer">
           <span class="wb-config-status" id="configStatus" role="status" aria-live="polite"></span>
-          <button class="wb-config-secondary" type="button" id="configAddSection">Add section</button>
+          <button class="wb-config-secondary" type="button" id="configAddCollection">Add collection</button>
           <button class="wb-config-primary" type="button" id="configSave">Save workbench.yaml</button>
         </footer>
       </div>
@@ -324,7 +326,7 @@
     <p class="wb-toast" id="toast" role="status" aria-live="polite" hidden></p>
   </div>
 
-  <!-- yaml and config before the shell, which asks them for the project it is
+  <!-- yaml and config before the shell, which asks them for the space it is
        showing and builds itself around the answer. -->
   <script src="modern-screenshot.js"></script>
   <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
@@ -332,7 +334,7 @@
   <script src="yaml.js"></script>
   <script src="manifest.js"></script>
   <script src="config.js"></script>
-  <script src="nav.js"></script>
+  <script src="page-list.js"></script>
   <script src="keys.js"></script>
   <script src="address.js"></script>
   <script src="lenses.js"></script>
@@ -340,15 +342,19 @@
   <script src="describe.js"></script>
   <script src="config-editor.js"></script>
   <script src="zoom.js"></script>
-  <script src="project-switcher.js"></script>
+  <script src="space-switcher.js"></script>
+  <script src="preview-sessions.js"></script>
   <script src="workbench.js"></script>
   <script src="capture-sync.js"></script>
   <script src="dom-mirror.js"></script>
   <script src="preview-bridge-client.js"></script>
-  <script src="markup.js"></script>
+  <script src="annotations.js"></script>
   <script src="reference.js"></script>
   <script src="agent-context.js"></script>
-  <script src="toolbar.js"></script>
+  <script src="top-bar.js"></script>
   <script src="preview-controls.js"></script>
+  <!-- Docs pages: their canvas geometry, served from src/ with types stripped. -->
+  <script type="module" src="src/docs/canvas/bootstrap.ts"></script>
+  <script type="module" src="src/canvas/legacy-runtime.ts"></script>
 </body>
 </html>

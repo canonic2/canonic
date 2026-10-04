@@ -64,7 +64,7 @@ test('copies a design reference with an explicit default, without capture or han
   var view = design();
   view.code = ['/example/source.js'];
   assert.equal(load().text(view), [
-    '- Screen: Sign in — `pages/sign-in.html`',
+    '- Page: Sign in — `pages/sign-in.html`',
     '- State: Default — `default`',
     '- Lens: Design',
   ].join('\n'));
@@ -122,10 +122,10 @@ test('reads the selection when clicked and copies only its reference', async fun
   var options = { view: design() };
   var f = load(options);
   options.view = design();
-  options.view.item.label = 'Updated screen';
+  options.view.item.label = 'Updated page';
   await f.click();
   assert.deepEqual(f.copied, [f.text(options.view)]);
-  assert.match(f.copied[0], /Screen: Updated screen/);
+  assert.match(f.copied[0], /Page: Updated page/);
   assert.deepEqual(f.messages, ['Copied reference']);
 });
 

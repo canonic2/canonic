@@ -1,0 +1,8 @@
+---
+/* In the docs layout's 220-pixel column. */
+import DocsSidebar from '../../../src/components/DocsSidebar.astro';
+import { docGroups } from '../fixtures';
+---
+<div style="width: 220px">
+  <DocsSidebar groups={docGroups} current="getting-started" />
+</div>

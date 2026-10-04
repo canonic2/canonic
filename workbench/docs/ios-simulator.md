@@ -1,9 +1,9 @@
 # iOS Simulator
 
 An `ios-simulator` implementation streams a booted iOS Simulator onto the
-canvas. You can tap and drag on it, mark it up, and hand it off like any other
-screen. It is useful for comparing a native app with its design, or for
-reviewing a native app alongside web screens.
+canvas. You can tap and drag on it, annotate it, and hand it off like any
+other page. It is useful for comparing a native app with its design, or for
+reviewing a native app alongside web pages.
 
 ## Requirements
 
@@ -26,9 +26,9 @@ implementations:
     catalog: true
 ```
 
-With `catalog: true`, each matching booted device becomes a screen in a
-section named after the implementation. These screens have no design page.
-They open straight on the stream.
+With `catalog: true`, each matching booted device becomes a page in a
+collection named after the implementation. These pages have no design. They
+open straight on the stream.
 
 `device` chooses which Simulators match:
 
@@ -39,11 +39,11 @@ They open straight on the stream.
 | A UDID | That exact device |
 
 A Simulator config can be the whole `workbench.yaml`, because a catalog
-supplies screens.
+supplies pages.
 
-### Add a Simulator lens to a design screen
+### Add a Simulator lens to a design page
 
-A design screen can also show a booted device in a lens. The lens streams only
+A design page can also show a booted device in a lens. The lens streams only
 a device that the implementation's catalog has imported, so keep
 `catalog: true` on the implementation and name the device by its UDID:
 
@@ -53,8 +53,8 @@ implementations:
     kind: ios-simulator
     catalog: true
 
-sections:
-  - name: Screens
+collections:
+  - name: Mobile
     items:
       - label: Onboarding
         src: design/onboarding.html
@@ -68,8 +68,8 @@ To find a booted device's UDID, run `xcrun simctl list devices booted`. A
 device name in this place is accepted by the reader, but the stream refuses
 it, and the canvas reports that the Simulator isn't declared.
 
-The screen gets a **Simulator** lens next to **Design**. Navigate the app to the
-matching screen on the device, then switch between the two to compare.
+The page gets a **Simulator** lens next to **Design**. Bring the app on the
+device to what the design shows, then switch between the two to compare.
 
 `root` and [code pointers](lenses.md#point-at-the-code) work as for other
 implementations. `start` isn't available for the Simulator.
@@ -81,7 +81,7 @@ implementations. `start` isn't available for the Simulator.
   It's the same helper the [app window](windows.md) lens uses, and one window
   streams at a time. Two canvases streaming at once, such as the editor tab
   and a browser opened with **Open Canvas in Browser**, interrupt each other.
-- In VS Code, JPEG frames reach the canvas over a loopback HTTP stream at about
+- In VS Code, JPEG images reach the canvas over a loopback HTTP stream at about
   20 frames per second, which doesn't depend on the editor's media codecs. A
   standalone browser uses an H.264 stream at about 30 frames per second,
   decoded with WebCodecs.
@@ -98,7 +98,7 @@ opens the right settings pane. Then:
 1. Open **System Settings** › **Privacy & Security** › **Screen & System Audio Recording**.
 2. Turn on **Visual Studio Code**, or the editor named in the error.
 3. Quit and reopen the editor.
-4. Pick the Simulator screen again.
+4. Pick the Simulator page again.
 
 When you run the server without the editor, grant the permission to the
 terminal app that started it.
@@ -119,16 +119,16 @@ a WDA session, so expect a delay before the first tap lands.
 
 ## Screenshots and exports
 
-The camera and handoff capture the current stream frame with your marks. A
-[design-system export](design-system-export.md) doesn't capture Simulator-only
-screens; each one is listed under `captureWarnings` instead of getting a
-reference image.
+The camera and handoff capture the stream's current image with your
+annotations. A [design-system export](design-system-export.md) doesn't
+capture Simulator-only pages; each one is listed under `captureWarnings`
+instead of getting a reference image.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| No Simulator screens | Boot a Simulator. With a `device` name or UDID, check that it matches exactly. The config route's `problems` reports when no booted device matches. |
+| No Simulator pages | Boot a Simulator. With a `device` name or UDID, check that it matches exactly. The config route's `problems` reports when no booted device matches. |
 | Black canvas or a permission error | Grant Screen Recording to the editor, then restart it. |
-| A design screen's Simulator lens says the Simulator isn't declared | Name the device by its UDID, keep `catalog: true` on the implementation, and boot the device. See [Add a Simulator lens to a design screen](#add-a-simulator-lens-to-a-design-screen). |
+| A design page's Simulator lens says the Simulator isn't declared | Name the device by its UDID, keep `catalog: true` on the implementation, and boot the device. See [Add a Simulator lens to a design page](#add-a-simulator-lens-to-a-design-page). |
 | Stream shows but taps do nothing | Install WebDriverAgent. Check the **Workbench** log (**Workbench: Show Log**) for automation errors. |

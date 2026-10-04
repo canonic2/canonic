@@ -1,0 +1,31 @@
+---
+/* The control strip with the overview's control screenshots and a short
+   control list: every hotspot without a row in the list stays hidden. */
+import ControlStrip from '../../../src/components/ControlStrip.astro';
+import screenshots from '../../../src/data/screenshots.json';
+---
+<section class="tour band">
+  <div class="wrap">
+    <div class="controls-block">
+      <ControlStrip groups={screenshots.controls}>
+        <div class="controls-groups">
+          <div class="controls-group">
+            <h3>Annotations</h3>
+            <dl class="controls" data-group="annotations">
+              <div data-label="Select"><dt>Select</dt><dd>Use the page, and pick or move annotations. <kbd>Esc</kbd> returns here from any drawing tool.</dd></div>
+              <div data-label="Scribble"><dt>Scribble</dt><dd>Freehand drawing.</dd></div>
+              <div data-label="Arrow"><dt>Arrow</dt><dd>An arrow.</dd></div>
+            </dl>
+          </div>
+          <div class="controls-group">
+            <h3>Size and page</h3>
+            <dl class="controls" data-group="page">
+              <div data-label="Fit"><dt>Fit</dt><dd>The artboard fills whatever space the workbench has.</dd></div>
+              <div data-label="Reload"><dt>Reload</dt><dd>Reloads the page.</dd></div>
+            </dl>
+          </div>
+        </div>
+      </ControlStrip>
+    </div>
+  </div>
+</section>

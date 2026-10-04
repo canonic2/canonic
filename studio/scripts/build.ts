@@ -10,6 +10,7 @@ execFileSync(process.execPath, [path.join(packageRoot, 'node_modules/typescript/
   stdio: 'inherit',
 });
 await mkdir(path.join(destination, 'app'), { recursive: true });
+await cp(path.join(packageRoot, 'LICENSE'), path.join(destination, 'LICENSE'));
 for (const file of ['studio.css']) {
   await cp(path.join(packageRoot, 'app', file), path.join(destination, 'app', file));
 }

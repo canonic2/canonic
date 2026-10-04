@@ -1,8 +1,8 @@
 /* The list in VS Code's sidebar
    -----------------------------
-   nav.css draws the list the way Sketch draws its sidebar; this only gives it
+   page-list.css draws the list the way Sketch draws its sidebar; this only gives it
    colours. It does not imitate the editor's own trees — square 22px rows and
-   capitalised headings are what an editor needs, not a screen browser.
+   capitalised headings are what an editor needs, not a page browser.
 
    It still sits inside the editor, so it takes the panel's background and
    text colour from the theme, and derives every quieter shade from that text
@@ -70,7 +70,7 @@ body {
   display: none;
 }
 
-/* The list steps back while the project menu is open over it. */
+/* The list steps back while the space menu is open over it. */
 .sb.is-dimmed {
   opacity: 0.4;
   pointer-events: none;
@@ -105,13 +105,13 @@ body {
 
 /* High-contrast themes outline rather than fill, as the editor does. */
 body.vscode-high-contrast .wb-item[aria-current='true'],
-body.vscode-high-contrast .wb-section-row[aria-current='true'] {
+body.vscode-high-contrast .wb-collection-row[aria-current='true'] {
   outline: 1px solid var(--vscode-contrastActiveBorder, #f38518);
   outline-offset: -1px;
 }
 
 /* Catalogs are live dependencies. Keep their failures beside the list they
-   affect, including when handwritten screens are still available below. */
+   affect, including when handwritten pages are still available below. */
 .sb-diagnostics {
   margin: 0 8px 8px;
   padding: 8px;

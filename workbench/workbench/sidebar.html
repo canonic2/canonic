@@ -3,43 +3,43 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Screens</title>
-  <!-- The Workbench extension inserts a <base>, the project root, and a content
+  <title>Pages</title>
+  <!-- The Workbench extension inserts a <base>, the space root, and a content
        policy here: this document is loaded into a webview whose address is the
        editor's, so the base is the only thing that says where this folder
        actually is. Everything below is relative to it. -->
-  <link rel="stylesheet" href="nav.css" />
+  <link rel="stylesheet" href="page-list.css" />
   <link rel="stylesheet" href="sidebar.css" />
 </head>
 <body>
-  <!-- Which project's screens these are, and the others to switch to. The
-       extension lists the projects in a <meta name="canonic-projects">. -->
-  <div class="wb-projects" id="projects" hidden>
-    <button class="wb-projects-button" type="button" id="projectButton"></button>
-    <div class="wb-projects-menu" id="projectMenu"></div>
+  <!-- Which space's pages these are, and the others to switch to. The
+       extension lists the spaces in a <meta name="canonic-spaces">. -->
+  <div class="wb-spaces" id="spaces" hidden>
+    <button class="wb-spaces-button" type="button" id="spaceButton"></button>
+    <div class="wb-spaces-menu" id="spaceMenu"></div>
   </div>
 
   <!-- The same list the workbench has, laid out like Sketch's sidebar: the
-       sections on top, the chosen one's screens below, the filter at the
+       collections on top, the chosen one's pages below, the filter at the
        bottom. -->
   <div class="sb wb-browse">
     <div class="sb-loading" id="loading" role="status" aria-live="polite">
       <span class="sb-loading-spinner" aria-hidden="true"></span>
-      <span id="loadingText">Loading screens…</span>
+      <span id="loadingText">Loading pages…</span>
     </div>
-    <section class="wb-browse-block" id="sectionsBlock" hidden>
-      <h2 class="wb-browse-head">Sections</h2>
-      <nav class="wb-sections" id="sections" aria-label="Sections"></nav>
+    <section class="wb-browse-block" id="collectionsBlock" hidden>
+      <h2 class="wb-browse-head">Collections</h2>
+      <nav class="wb-collections" id="collections" aria-label="Collections"></nav>
     </section>
 
-    <h2 class="wb-browse-head" id="sectionName"></h2>
+    <h2 class="wb-browse-head" id="collectionName"></h2>
     <div class="sb-diagnostics" id="diagnostics" role="status" hidden></div>
-    <nav class="wb-nav" id="nav" aria-label="Screens"></nav>
+    <nav class="wb-page-list" id="pageList" aria-label="Pages"></nav>
 
     <div class="wb-search">
       <span class="wb-search-icon" data-icon="search"></span>
-      <input id="search" type="text" role="searchbox" placeholder="Search screens…" autocomplete="off"
-             aria-label="Search screens and states" />
+      <input id="search" type="text" role="searchbox" placeholder="Search pages…" autocomplete="off"
+             aria-label="Search pages and states" />
     </div>
   </div>
 
@@ -50,8 +50,8 @@
   <script src="yaml.js"></script>
   <script src="manifest.js"></script>
   <script src="config.js"></script>
-  <script src="nav.js"></script>
-  <script src="project-switcher.js"></script>
+  <script src="page-list.js"></script>
+  <script src="space-switcher.js"></script>
   <script src="sidebar.js"></script>
 </body>
 </html>

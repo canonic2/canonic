@@ -9,13 +9,13 @@
 </head>
 <body class="wb">
   <aside class="catalog">
-    <h1 id="projectName">Workbench previews</h1>
+    <h1 id="spaceName">Workbench previews</h1>
     <label class="search">Find a preview<input id="search" type="search" placeholder="Search previews…"></label>
     <nav id="previews" aria-label="Previews"></nav>
     <details id="warnings" hidden><summary>Build warnings</summary><ul></ul></details>
   </aside>
   <main class="viewer">
-    <header class="toolbar">
+    <header class="topbar">
       <span id="previewTitle"></span>
       <label>State<select id="state" disabled></select></label>
       <label>Viewport<select id="viewport" disabled></select></label>
@@ -27,7 +27,7 @@
     </header>
     <p id="status" role="status" aria-live="polite">Loading previews…</p>
     <section id="canvas" aria-label="Preview canvas">
-      <div id="stage"><iframe id="previewFrame" class="is-active" title="Preview"></iframe></div>
+      <div id="artboard"><iframe id="previewFrame" class="is-active" title="Preview"></iframe></div>
     </section>
   </main>
   <script src="./preview-controls.js"></script>

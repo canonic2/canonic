@@ -1,9 +1,10 @@
-/* Tells the server which screen this canvas shows, so agents in the editor
+/* Tells the server which page this canvas shows, so agents in the editor
    can ask for it. It says exactly what Copy reference would copy, read from
    the resolved view the same way, and says nothing while that isn't ready.
    A heartbeat keeps this canvas counted while it stays open; closing it
    says so. See agent-view.js for the server's side. */
 (function () {
+  if (new URLSearchParams(location.search).has('artboard-runtime')) return;
   var PATH = '/_workbench/view';
   var HEARTBEAT_MS = 30 * 1000;
   var client = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
@@ -33,7 +34,7 @@
     } catch (error) { /* a file:// canvas has no server */ }
   }
 
-  /* Several changes land together when a screen settles; send the last. */
+  /* Several changes land together when a page settles; send the last. */
   function report() {
     clearTimeout(timer);
     timer = setTimeout(function () {

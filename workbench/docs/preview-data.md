@@ -13,18 +13,18 @@ how to change it for each state and while you review:
   for one preview or for the whole project.
 - **[Request mocks](#request-mocks)**: answers to the requests your page makes
   itself.
-- **[Actions](#actions)**: a log of what your screen tried to do.
+- **[Actions](#actions)**: a log of what your page tried to do.
 - **[Links and navigation](#links-and-navigation)**: where links and forms go,
   and how one preview leads to another.
 
-[Recipes](#recipes) at the end put them together for common kinds of screens.
+[Recipes](#recipes) at the end put them together for common kinds of pages.
 
-## Choose how to give a screen its data
+## Choose how to give a page its data
 
-Supply data the way your screen already receives it, so the component renders
+Supply data the way your page already receives it, so the component renders
 unchanged. The options combine freely, and each can change per state.
 
-| The screen gets its data from | Give it | With |
+| The page gets its data from | Give it | With |
 | --- | --- | --- |
 | Props, or `Astro.props` | Values for those props | [`inputs`](#inputs-and-controls) |
 | A context, store, or provider | A provider holding fixture data, or a seeded store | An [environment](#environments), reading [`fixtures`](#fixtures-and-globals) |
@@ -102,7 +102,7 @@ objects of those. For functions, elements, and slots, see
 
 ### Controls
 
-`controls` turns inputs into fields under **Preview controls** in the toolbar.
+`controls` turns inputs into fields under **Preview controls** in the top bar.
 Each key names an input:
 
 ```ts
@@ -129,7 +129,7 @@ Every control also takes a `label`, which defaults to the input's name.
 - An edit applies when the field changes, and renders the current state again
   with that input replaced. A `json` edit replaces the whole value.
 - Edits last until you choose **Reset state**, pick another state, or leave
-  the screen. They never change the definition, exports, or the screenshots
+  the page. They never change the definition, exports, or the screenshots
   an export takes of each state.
 - An Astro preview renders each edit on the Workbench server. A
   [portable export](workbench-previews.md#portable-exports) of an Astro
@@ -184,7 +184,7 @@ see them.
 ## Environments
 
 An environment is a module that runs around the component on every render. Use
-it for providers, plugins, stores, and anything else a screen expects the app
+it for providers, plugins, stores, and anything else a page expects the app
 to have set up. There are two kinds, and a preview can use both:
 
 - **A preview's environment:** `environment` in the definition, relative to
@@ -233,7 +233,7 @@ custom adapter defines itself, the preview's environment wins.
 
 An environment runs on every render, so read the current state from
 `context`, never from a value saved when the module loaded. This project
-environment gives every React screen a theme and a signed-in user, both
+environment gives every React preview a theme and a signed-in user, both
 changeable per state:
 
 ```tsx
@@ -255,13 +255,13 @@ export function wrap(element: ReactElement, context: PreviewContext) {
 }
 ```
 
-A state then shows a signed-out screen with `fixtures: { user: null }`, or the
+A state then shows a signed-out page with `fixtures: { user: null }`, or the
 dark theme with `globals: { theme: 'dark' }`.
 
 ### Seed storage and stores
 
 `setup` runs before the component mounts, so it can put things where the
-screen will look for them. Return a cleanup that puts them back, so the next
+page will look for them. Return a cleanup that puts them back, so the next
 state starts clean:
 
 ```ts
@@ -280,10 +280,23 @@ The same pattern seeds a global store: set its state in `setup` from
 as a plugin, create it in `configure` instead; Workbench creates a new app on
 every render.
 
+### Examples on docs pages
+
+The examples on a [docs page](docs-pages.md) render through environments too:
+the project's environment for the lens's adapter, with the lens's own
+[`environment`](docs-pages.md#lenses) inside it. Exports such as `wrap`,
+`configure`, and `mount` run for each example. `setup` runs once for the page
+before the first example mounts, and `ready` once after the last.
+
+An example's context has `state`, `signal`, `action`, and `navigate`, but its
+`inputs`, `fixtures`, and `globals` are empty, so an environment that reads
+them gets its defaults on a docs page. Docs pages have no request mocks or
+controls.
+
 ## Request mocks
 
 `requests` answers your page's own `fetch` and XMLHttpRequest calls, so a
-screen that loads its data renders unchanged, and each state shows the data,
+page that loads its data renders unchanged, and each state shows the data,
 emptiness, delay, or failure you choose:
 
 ```ts
@@ -483,7 +496,7 @@ workers or service workers.
 
 ## Actions
 
-**Actions**, in **Preview controls**, lists the last 30 things your screen
+**Actions**, in **Preview controls**, lists the last 30 things your page
 tried to do, newest last. **Reset state** clears it.
 
 | Entry | Logged when | Values |
@@ -495,6 +508,9 @@ tried to do, newest last. **Reset state** clears it.
 | `request` | A request matches no mock in a preview that has some | The method, path, and operation, followed by `no mock` |
 
 Values are shown as text; objects are shown as JSON.
+
+On a [docs page](docs-pages.md), **Actions** lists the examples'
+`context.action` calls, and the page's links and forms when **Actions** is on.
 
 Log your own events with `context.action`. Components usually report them
 through callback props or events; connect those in an environment or a page
@@ -511,7 +527,7 @@ script:
 ## Links and navigation
 
 A preview never leaves itself through the browser. Workbench decides where its
-links and forms go, and the toolbar's **Actions** switch decides whether they
+links and forms go, and the top bar's **Actions** switch decides whether they
 go anywhere:
 
 | | Actions off (the default) | Actions on |
@@ -555,7 +571,7 @@ export default definePreview({
 
 ### Navigate from code
 
-When your screen navigates from code rather than a link, such as a router call
+When your page navigates from code rather than a link, such as a router call
 in a click handler, call `context.navigate` with the same kinds of targets:
 
 ```ts
@@ -566,7 +582,7 @@ context.navigate({ state: 'monthly' });
 
 It does nothing while **Actions** is off. Page scripts in HTML and Astro
 previews reach it as `window.workbench?.navigate(…)`. To route your app's own
-navigation through it, give the screen a navigation function from an
+navigation through it, give the page a navigation function from an
 environment, in the same provider your app uses to supply it.
 
 ### Portable exports
@@ -634,7 +650,7 @@ export default definePreview({
 
 ### A view that reads a context
 
-Some apps split a screen into a provider that loads data and a view that reads
+Some apps split a page into a provider that loads data and a view that reads
 it from a context. Render the view, and provide the context from an
 environment with each state's fixtures:
 
@@ -721,9 +737,9 @@ export default definePreview({
 });
 ```
 
-### Screens that lead to each other
+### Pages that lead to each other
 
-Give each screen its own preview, map the routes between them in `links`, and
+Give each page its own preview, map the routes between them in `links`, and
 turn on **Actions** to walk the flow:
 
 ```ts

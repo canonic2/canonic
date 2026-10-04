@@ -55,7 +55,7 @@ test('accepts a local native capture payload and normalizes its geometry', funct
     width: 1511.7,
     height: '982',
     scroll: { x: 12, y: 40 },
-    markup: '<svg></svg>',
+    annotations: '<svg></svg>',
     name: 'sign-in.png',
   })), 'http://127.0.0.1:3579/');
 
@@ -63,7 +63,7 @@ test('accepts a local native capture payload and normalizes its geometry', funct
   assert.strictEqual(payload.width, 1512);
   assert.strictEqual(payload.height, 982);
   assert.deepStrictEqual(payload.scroll, { x: 12, y: 40 });
-  assert.strictEqual(payload.markup, '<svg></svg>');
+  assert.strictEqual(payload.annotations, '<svg></svg>');
 });
 
 test('refuses capture URLs outside the workbench origin', function () {
@@ -242,18 +242,18 @@ test('discovers Storybook ports from project package scripts', function () {
   }
 });
 
-test('turns matching booted simulators into implementation-only screens', function () {
+test('turns matching booted simulators into implementation-only pages', function () {
   var imported = server.simulatorCatalog([
     { name: 'iPhone 17', udid: 'SIM-1', runtime: 'iOS 26.2' },
     { name: 'iPad Pro', udid: 'SIM-2', runtime: 'iOS 26.2' },
   ], 'ios', { label: 'Simulator', device: 'iPhone 17', catalogIcon: 'smartphone' });
-  assert.deepStrictEqual(imported.sections, [{
-    group: 'Simulator', icon: 'smartphone', items: [{
+  assert.deepStrictEqual(imported.collections, [{
+    name: 'Simulator', icon: 'smartphone', items: [{
       label: 'iPhone 17', src: '__ios-simulator/ios/SIM-1.html', icon: 'smartphone',
       implementations: { ios: { device: 'SIM-1' } }, implementationOnly: 'ios',
     }],
   }]);
-  assert.strictEqual(imported.screens['__ios-simulator/ios/SIM-1.html'].simulator.udid, 'SIM-1');
+  assert.strictEqual(imported.pages['__ios-simulator/ios/SIM-1.html'].simulator.udid, 'SIM-1');
 });
 
 test('negotiates a native Simulator stream only for a configured device', async function () {
@@ -307,7 +307,7 @@ test('negotiates a native Simulator stream only for a configured device', async 
   }
 });
 
-test('streams only the window a screen names, from its implementation’s app', async function () {
+test('streams only the window a page names, from its implementation’s app', async function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-window-stream-'));
   fs.mkdirSync(path.join(root, 'pages'));
   fs.writeFileSync(path.join(root, 'pages', 'sign-in.html'), '<!doctype html><title>Sign in</title>');
@@ -320,7 +320,7 @@ test('streams only the window a screen names, from its implementation’s app', 
     '  dev:',
     '    kind: url',
     '    base: http://localhost:3000',
-    'sections:',
+    'collections:',
     '  - name: Pages',
     '    items:',
     '      - label: Sign in',
@@ -372,7 +372,7 @@ test('streams only the window a screen names, from its implementation’s app', 
   }
 });
 
-/* A project with two implementations pointed at a stub, and one screen of
+/* A project with two implementations pointed at a stub, and one page of
    each kind. `product` is where the code is. */
 function project(implementationUrl) {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-server-test-'));
@@ -395,7 +395,7 @@ function project(implementationUrl) {
     '    kind: url',
     '    base: ' + implementationUrl,
     '    root: product',
-    'sections:',
+    'collections:',
     '  - name: Pages',
     '    items:',
     '      - label: Sign in',
@@ -427,7 +427,7 @@ test('answers the config as this machine resolves it', async function () {
     assert.notStrictEqual(proxied, 'http://127.0.0.1:' + running.port);
     assert.strictEqual(answer.body.implementations.dev.upstream, 'http://localhost:6006');
     assert.strictEqual(answer.body.implementations.storybook.url, proxied);
-    assert.deepStrictEqual(answer.body.screens['pages/sign-in.html'].code, [
+    assert.deepStrictEqual(answer.body.pages['pages/sign-in.html'].code, [
       { implementation: 'dev', path: path.join(made.product, 'src', 'button'), relative: 'src/button', exists: true },
     ]);
     assert.deepStrictEqual(answer.body.problems, []);
@@ -443,14 +443,14 @@ test('reads and updates page configuration through the local form endpoint', asy
   try {
     var before = await get(running.port, server.CONFIG_FILE_PATH);
     assert.strictEqual(before.status, 200);
-    assert.strictEqual(before.body.sections[0].items[0].label, 'Sign in');
-    var updated = await post(running.port, server.CONFIG_FILE_PATH, { sections: [{
+    assert.strictEqual(before.body.collections[0].items[0].label, 'Sign in');
+    var updated = await post(running.port, server.CONFIG_FILE_PATH, { collections: [{
       name: 'Pages', icon: 'file-text', items: [{
         label: 'Home', src: 'pages/home.html', viewports: ['desktop', 'mobile'],
       }],
     }] });
     assert.strictEqual(updated.status, 200);
-    assert.deepStrictEqual(config.read(made.root).sections[0].items[0].viewports, ['desktop', 'mobile']);
+    assert.deepStrictEqual(config.read(made.root).collections[0].items[0].viewports, ['desktop', 'mobile']);
     assert.match(fs.readFileSync(path.join(made.root, 'workbench.yaml'), 'utf8'), /label: Home/);
   } finally {
     await running.close();
@@ -486,17 +486,17 @@ test('downloads the resolved workbench as a ZIP', async function () {
 test('plans every local state and imported Storybook story for export capture', function () {
   var view = {
     implementations: { storybook: { kind: 'storybook', url: 'http://127.0.0.1:6006' } },
-    sections: [{ items: [{
+    collections: [{ items: [{
       label: 'Sign in', src: 'pages/sign-in.html',
       viewports: ['responsive', 'fit'],
       states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Error' }],
     }] }],
-    catalogSections: [{ items: [{
+    catalogCollections: [{ items: [{
       label: 'Button', src: '__storybook/storybook/button.html', implementationOnly: 'storybook',
       viewports: ['mobile'],
       states: [{ id: 'default', label: 'Default' }, { id: 'icon-only', label: 'Icon Only' }],
     }] }],
-    screens: {
+    pages: {
       '__storybook/storybook/button.html': { stories: [
         { id: 'button--default', state: 'default', label: 'Default' },
         { id: 'button--icon-only', state: 'icon-only', label: 'Icon Only' },
@@ -505,7 +505,7 @@ test('plans every local state and imported Storybook story for export capture', 
   };
   var plan = server.exportCapturePlan(view, 'http://127.0.0.1:3579/');
   assert.deepStrictEqual(plan.captures.map(function (capture) {
-    return [capture.screen, capture.state, capture.viewport, capture.width, capture.height, capture.external];
+    return [capture.page, capture.state, capture.viewport, capture.width, capture.height, capture.external];
   }), [
     ['pages/sign-in.html', 'default', 'desktop', 1512, 982, false],
     ['pages/sign-in.html', 'default', 'mobile', 393, 852, false],
@@ -541,7 +541,7 @@ test('captures export references through four reusable workers', async function 
     return { workers: workers, close: async function () { closed = true; } };
   } };
   var captures = Array.from({ length: 7 }, function (_, index) {
-    return { screen: 'story-' + index, state: 'default', variant: 'default-mobile', label: 'Story ' + index,
+    return { page: 'story-' + index, state: 'default', variant: 'default-mobile', label: 'Story ' + index,
       viewport: 'mobile', viewportLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=story--' + index,
       external: true, width: 393, height: 852 };
   });
@@ -558,7 +558,7 @@ test('keeps successful export captures when pool cleanup fails', async function 
     return { workers: [worker, worker], close: async function () { throw new Error('close failed'); } };
   } };
   var captures = ['button', 'card'].map(function (story) {
-    return { screen: story, state: 'default', variant: 'default-mobile', label: story,
+    return { page: story, state: 'default', variant: 'default-mobile', label: story,
       viewport: 'mobile', viewportLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=' + story,
       external: true, width: 393, height: 852 };
   });
@@ -582,7 +582,7 @@ test('keeps every viewport for a story on one warm capture worker', async functi
   } };
   var captures = ['button', 'card'].flatMap(function (story) {
     return ['mobile', 'desktop', 'fit'].map(function (viewport) {
-      return { screen: story, state: 'default', variant: 'default-' + viewport, label: story,
+      return { page: story, state: 'default', variant: 'default-' + viewport, label: story,
         viewport: viewport, viewportLabel: viewport, url: 'http://localhost:6006/iframe.html?id=' + story,
         external: true, width: viewport === 'mobile' ? 393 : 1512, height: 852 };
     });
@@ -745,7 +745,7 @@ test('bounds retained completed export bundles', async function () {
   }
 });
 
-test('imports an opted-in Storybook catalog as screens and states', async function () {
+test('imports an opted-in Storybook catalog as pages and states', async function () {
   var storybook = await stub(function (req, res) {
     if (req.url !== '/index.json') {
       res.writeHead(404);
@@ -790,11 +790,12 @@ test('imports an opted-in Storybook catalog as screens and states', async functi
   try {
     var answer = await get(running.port, server.CONFIG_PATH);
     assert.strictEqual(answer.status, 200);
-    assert.deepStrictEqual(answer.body.catalogSections, [{
-      group: 'Components',
+    assert.deepStrictEqual(answer.body.catalogCollections, [{
+      name: 'Components',
       icon: 'layout-grid',
+      iconPriority: 5,
       items: [{
-        folder: 'Inputs',
+        group: 'Inputs',
         items: [{
           label: 'Button',
           src: '__storybook/storybook/components-inputs-button.html',
@@ -805,9 +806,9 @@ test('imports an opted-in Storybook catalog as screens and states', async functi
         }],
       }],
     }]);
-    var screen = answer.body.screens['__storybook/storybook/components-inputs-button.html'];
-    assert.strictEqual(screen.design, null);
-    assert.deepStrictEqual(screen.code.map(function (entry) { return [entry.relative, entry.exists]; }), [
+    var page = answer.body.pages['__storybook/storybook/components-inputs-button.html'];
+    assert.strictEqual(page.design, null);
+    assert.deepStrictEqual(page.code.map(function (entry) { return [entry.relative, entry.exists]; }), [
       ['./src/button/button.tsx', true],
       ['./src/button/button.stories.tsx', true],
     ]);
@@ -854,7 +855,7 @@ test('automatically detects a running Storybook from the project script', async 
     assert.strictEqual(answer.status, 200);
     assert.strictEqual(answer.body.implementations.storybook.upstream, storybook.url);
     assert.match(answer.body.implementations.storybook.url, /^http:\/\/127\.0\.0\.1:\d+$/);
-    assert.strictEqual(answer.body.catalogSections[0].items[0].label, 'Button');
+    assert.strictEqual(answer.body.catalogCollections[0].items[0].label, 'Button');
   } finally {
     await running.close();
     await storybook.close();
@@ -910,15 +911,15 @@ test('captures a page only at an implementation’s origin', async function () {
     assert.deepStrictEqual(calls, []);
 
     var taken = await post(running.port, server.CAPTURE_PAGE_PATH, {
-      url: 'http://localhost:6006/login', width: 393, height: 852, markup: '<svg></svg>', name: 'sign-in-dev.png',
+      url: 'http://localhost:6006/login', width: 393, height: 852, annotations: '<svg></svg>', name: 'sign-in-dev.png',
     });
     assert.strictEqual(taken.status, 200);
     assert.strictEqual(taken.body.file, path.join('.canonic', '.handoffs', 'sign-in-dev.png'));
     assert.strictEqual(fs.readFileSync(path.join(made.root, taken.body.file), 'utf8'), 'page png');
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0].url, 'http://localhost:6006/login');
-    assert.strictEqual(calls[0].markup, '<svg></svg>');
-    assert.ok(calls[0].css.indexOf('.wb-markup-layer') > -1);
+    assert.strictEqual(calls[0].annotations, '<svg></svg>');
+    assert.ok(calls[0].css.indexOf('.wb-annotation-layer') > -1);
   } finally {
     await running.close();
     fs.rmSync(made.root, { recursive: true, force: true });
@@ -1116,7 +1117,7 @@ test('serves the canvas view to agents and announces itself to a Canonic project
   t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
 
   assert.equal(JSON.parse(fs.readFileSync(announced, 'utf8')).url, 'http://127.0.0.1:' + running.port + '/');
-  var view = { text: '- Screen: Home — `home.html`\n- State: Default — `default`\n- Lens: Design', src: 'home.html' };
+  var view = { text: '- Page: Home — `home.html`\n- State: Default — `default`\n- Lens: Design', src: 'home.html' };
   var posted = await post(running.port, '/_workbench/view', { client: 'tab', view: view });
   assert.equal(posted.status, 200);
   var read = await (await fetch('http://127.0.0.1:' + running.port + '/_workbench/view')).json();
@@ -1164,6 +1165,11 @@ test('JPEG captures keep their format through saving, readback, upload and hando
   assert.equal(downloadedExternal.status, 200);
   assert.equal(downloadedExternal.headers.get('content-type'), 'image/jpeg');
   assert.deepEqual(Buffer.from(await downloadedExternal.arrayBuffer()), image);
+  var inspectedExternal = await post(running.port, server.CAPTURE_PAGE_IMAGE_PATH + '?review=1', Object.assign({}, payload, { url: 'http://localhost:6006/', anchors: [{ x: 12, y: 20 }] }));
+  assert.equal(inspectedExternal.status, 200);
+  assert.deepEqual(inspectedExternal.body.targets, ['h1']);
+  assert.deepEqual(Buffer.from(inspectedExternal.body.image, 'base64'), image);
+  assert.equal(inspectedExternal.body.type, 'image/jpeg');
   assert.deepEqual(
     fs.readdirSync(path.join(made.root, '.canonic', '.handoffs')).sort(),
     ['page-2.jpg', 'page.jpg']
@@ -1174,7 +1180,7 @@ test('JPEG captures keep their format through saving, readback, upload and hando
   });
   assert.equal((await uploaded.json()).file, path.join('.canonic', '.handoffs', 'upload.jpg'));
   var handed = await post(running.port, '/_workbench/handoff', {
-    file: shot.body.file, src: 'page.html', label: 'Page', width: 393, frame: { w: 393, h: 852 }, marks: [],
+    file: shot.body.file, src: 'page.html', label: 'Page', width: 393, frame: { w: 393, h: 852 }, annotations: [],
   });
   assert.equal(handed.status, 200, JSON.stringify(handed.body));
   assert.match(copiedPrompt, /Screenshot: `\.canonic\/\.handoffs\/page\.jpg`/);
@@ -1251,11 +1257,11 @@ test('bridged implementation captures use the supplied live DOM instead of reloa
   assert.match(calls[0][1], /^http:\/\/127\.0\.0\.1:/);
 });
 
-/* ------------------------------------------------------------- projects */
+/* --------------------------------------------------------------- spaces */
 
-function workbenchProject(name) {
+function workbenchSpace(name) {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-' + name.toLowerCase() + '-'));
-  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: ' + name + '\nsections: []\n');
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: ' + name + '\ncollections: []\n');
   return root;
 }
 
@@ -1277,19 +1283,19 @@ function postFrom(port, pathname, payload, headers) {
   });
 }
 
-test('a server on its own lists its one project as current', async function () {
-  var root = workbenchProject('Acme');
+test('a server on its own lists its one space as current', async function () {
+  var root = workbenchSpace('Acme');
   var running = await server.start({ root: root, capture: { close: function () {} } });
   try {
-    var answer = await get(running.port, server.PROJECTS_PATH);
+    var answer = await get(running.port, server.SPACES_PATH);
     assert.strictEqual(answer.status, 200);
-    assert.strictEqual(answer.body.projects.length, 1);
-    assert.strictEqual(answer.body.projects[0].name, 'Acme');
-    assert.strictEqual(answer.body.current, answer.body.projects[0].id);
+    assert.strictEqual(answer.body.spaces.length, 1);
+    assert.strictEqual(answer.body.spaces[0].name, 'Acme');
+    assert.strictEqual(answer.body.current, answer.body.spaces[0].id);
 
-    var self = await post(running.port, server.PROJECTS_OPEN_PATH, { id: answer.body.current });
+    var self = await post(running.port, server.SPACES_OPEN_PATH, { id: answer.body.current });
     assert.strictEqual(self.body.url, running.url);
-    var other = await post(running.port, server.PROJECTS_OPEN_PATH, { id: '0123456789' });
+    var other = await post(running.port, server.SPACES_OPEN_PATH, { id: '0123456789' });
     assert.strictEqual(other.status, 404);
   } finally {
     await running.close();
@@ -1297,44 +1303,44 @@ test('a server on its own lists its one project as current', async function () {
   }
 });
 
-test('servers sharing a project list switch between each other, starting the other on demand', async function () {
-  var projects = require('./projects');
-  var acme = workbenchProject('Acme');
-  var example = workbenchProject('Example');
+test('servers sharing a space list switch between each other, starting the other on demand', async function () {
+  var spaces = require('./spaces');
+  var acme = workbenchSpace('Acme');
+  var example = workbenchSpace('Example');
   var closed = 0;
   var shared = { close: function () { closed += 1; } };
-  var hub = projects.create({
-    start: function (project) {
+  var hub = spaces.create({
+    start: function (space) {
       return server.start({
-        root: project.root, config: { dir: project.dir, key: project.key },
-        capture: shared, captureShared: true, projects: hub,
+        root: space.root, config: { dir: space.dir, key: space.key },
+        capture: shared, captureShared: true, spaces: hub,
       });
     },
   });
   hub.set([{ dir: acme }, { dir: example }]);
   try {
-    var first = await hub.open(projects.projectId(acme));
-    var listed = await get(first.port, server.PROJECTS_PATH);
-    assert.deepStrictEqual(listed.body.projects.map(function (p) { return p.name; }), ['Acme', 'Example']);
-    assert.strictEqual(listed.body.current, projects.projectId(acme));
-    assert.strictEqual(hub.started(projects.projectId(example)), null);
+    var first = await hub.open(spaces.spaceId(acme));
+    var listed = await get(first.port, server.SPACES_PATH);
+    assert.deepStrictEqual(listed.body.spaces.map(function (p) { return p.name; }), ['Acme', 'Example']);
+    assert.strictEqual(listed.body.current, spaces.spaceId(acme));
+    assert.strictEqual(hub.started(spaces.spaceId(example)), null);
 
-    var opened = await post(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) });
+    var opened = await post(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) });
     assert.strictEqual(opened.status, 200);
-    var second = await hub.started(projects.projectId(example));
+    var second = await hub.started(spaces.spaceId(example));
     assert.strictEqual(opened.body.url, second.url);
     assert.notStrictEqual(second.url, first.url);
-    var fromSecond = await get(second.port, server.PROJECTS_PATH);
-    assert.strictEqual(fromSecond.body.current, projects.projectId(example));
+    var fromSecond = await get(second.port, server.SPACES_PATH);
+    assert.strictEqual(fromSecond.body.current, spaces.spaceId(example));
 
-    /* Another page — another site, or another of these servers — can't start projects. */
-    var foreign = await postFrom(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) },
+    /* Another page — another site, or another of these servers — can't start spaces. */
+    var foreign = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) },
       { Origin: 'http://127.0.0.1:' + second.port });
     assert.strictEqual(foreign.status, 403);
-    var crossSite = await postFrom(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) },
+    var crossSite = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) },
       { 'Sec-Fetch-Site': 'cross-site' });
     assert.strictEqual(crossSite.status, 403);
-    var own = await postFrom(first.port, server.PROJECTS_OPEN_PATH, { id: projects.projectId(example) },
+    var own = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) },
       { Origin: 'http://127.0.0.1:' + first.port, 'Sec-Fetch-Site': 'same-origin' });
     assert.strictEqual(own.status, 200);
   } finally {
@@ -1346,16 +1352,16 @@ test('servers sharing a project list switch between each other, starting the oth
   assert.strictEqual(closed, 0);
 });
 
-test('a project of a file that lists several serves its own root and reads its own config', async function () {
+test('a space of a file that lists several serves its own root and reads its own config', async function () {
   var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-multi-server-'));
   fs.mkdirSync(path.join(dir, 'ui'));
   fs.writeFileSync(path.join(dir, 'ui', 'button.html'), '<!doctype html><html><head></head><body>Button</body></html>');
   fs.writeFileSync(path.join(dir, 'workbench.yaml'), [
     'previews: false',
-    'projects:',
+    'spaces:',
     '  web:',
     '    name: Acme Web',
-    '    sections:',
+    '    collections:',
     '      - name: Pages',
     '        items:',
     '          - label: Home',
@@ -1363,7 +1369,7 @@ test('a project of a file that lists several serves its own root and reads its o
     '  ui:',
     '    name: Acme UI',
     '    root: ui',
-    '    sections:',
+    '    collections:',
     '      - name: Components',
     '        items:',
     '          - label: Button',
@@ -1375,39 +1381,39 @@ test('a project of a file that lists several serves its own root and reads its o
   try {
     var resolved = await get(running.port, server.CONFIG_PATH);
     assert.strictEqual(resolved.body.name, 'Acme UI');
-    assert.deepStrictEqual(Object.keys(resolved.body.screens), ['button.html']);
-    assert.strictEqual(resolved.body.screens['button.html'].design, path.join(dir, 'ui', 'button.html'));
+    assert.deepStrictEqual(Object.keys(resolved.body.pages), ['button.html']);
+    assert.strictEqual(resolved.body.pages['button.html'].design, path.join(dir, 'ui', 'button.html'));
 
     var page = await getRaw(running.port, '/button.html');
     assert.match(page.body.toString(), /Button/);
 
-    /* The canvas is told where the file is and which project it is. */
+    /* The canvas is told where the file is and which space it is. */
     var canvas = await getRaw(running.port, '/_workbench/');
     assert.match(canvas.body.toString(), /<meta name="canonic-config" content="\/_workbench\/manifest\/" \/>/);
-    assert.match(canvas.body.toString(), /<meta name="canonic-project" content="ui" \/>/);
+    assert.match(canvas.body.toString(), /<meta name="canonic-space" content="ui" \/>/);
     var manifestFile = await getRaw(running.port, '/_workbench/manifest/workbench.yaml');
     assert.strictEqual(manifestFile.status, 200);
-    assert.match(manifestFile.body.toString(), /projects:/);
+    assert.match(manifestFile.body.toString(), /spaces:/);
     assert.strictEqual((await getRaw(running.port, '/_workbench/manifest/package.json')).status, 404);
 
     var form = await get(running.port, server.CONFIG_FILE_PATH);
-    assert.strictEqual(form.body.sections[0].name, 'Components');
+    assert.strictEqual(form.body.collections[0].name, 'Components');
 
-    var listed = await get(running.port, server.PROJECTS_PATH);
-    assert.strictEqual(listed.body.projects[0].name, 'Acme UI');
-    assert.strictEqual(listed.body.current, require('./projects').projectId(dir, 'ui'));
+    var listed = await get(running.port, server.SPACES_PATH);
+    assert.strictEqual(listed.body.spaces[0].name, 'Acme UI');
+    assert.strictEqual(listed.body.current, require('./spaces').spaceId(dir, 'ui'));
   } finally {
     await running.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('a single-project canvas is served unchanged', async function () {
-  var root = workbenchProject('Acme');
+test('a single-space canvas is served unchanged', async function () {
+  var root = workbenchSpace('Acme');
   var running = await server.start({ root: root, capture: { close: function () {} } });
   try {
     var canvas = await getRaw(running.port, '/_workbench/');
-    assert.doesNotMatch(canvas.body.toString(), /canonic-config|canonic-project/);
+    assert.doesNotMatch(canvas.body.toString(), /canonic-config|canonic-space/);
   } finally {
     await running.close();
     fs.rmSync(root, { recursive: true, force: true });

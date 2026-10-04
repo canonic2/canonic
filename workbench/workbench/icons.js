@@ -40,7 +40,7 @@ window.WB_ICONS = {
   'mouse-pointer-click':
     '<path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/>',
 
-  /* Markup tools. */
+  /* Annotation tools. */
   'mouse-pointer-2':
     '<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>',
   pencil:
@@ -68,10 +68,10 @@ window.WB_ICONS = {
   sparkles:
     '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>',
 
-  /* Sidebar rows. A row takes its section's glyph — every page the same one,
+  /* Sidebar rows. A row takes its collection's glyph — every page the same one,
      every component the same one — so the column reads as a list rather than
-     as a puzzle. The only two the rows add are for the things a section's
-     glyph can't say: a folder of screens, and one screen's state. */
+     as a puzzle. The only two the rows add are for the things a collection's
+     glyph can't say: a group of pages, and one page's state. */
   folder:
     '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   'circle-dot':

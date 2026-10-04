@@ -171,7 +171,7 @@ test('keeps sidebar navigation ready when wb-here precedes the iframe load event
     { type: 'wb-here', src: 'pages/login.html', state: null },
   ]);
 
-  /* A stale sidebar can name a screen the already-open workbench has not read
+  /* A stale sidebar can name a page the already-open workbench has not read
      yet. Its null acknowledgement rejects the pick; it must not turn into an
      immediate reject/retry loop that starves the whole editor webview. */
   windowMessage({
@@ -485,14 +485,14 @@ test('retries refresh after an invalid manifest without releasing a queued pick'
   f.dispose();
 });
 
-test('switching projects loads the other server in the open tab and drops a slower earlier load', async function () {
+test('switching spaces loads the other server in the open tab and drops a slower earlier load', async function () {
   var f = fixture();
   var finishFirst;
   var first = f.panel.show(f.context, new Promise(function (resolve) { finishFirst = resolve; }), 'pages/login.html');
   var switched = f.panel.retarget(Promise.resolve('http://127.0.0.1:3580/_workbench/'));
   assert.equal(await switched, f.view);
   assert.match(f.view.webview.html, /127\.0\.0\.1:3580\/_workbench\//);
-  /* The old project's screen doesn't follow the tab to the new project. */
+  /* The old space's page doesn't follow the tab to the new space. */
   assert.doesNotMatch(f.view.webview.html, /pages\/login\.html/);
 
   finishFirst('http://127.0.0.1:3579/_workbench/');
@@ -502,19 +502,19 @@ test('switching projects loads the other server in the open tab and drops a slow
   f.dispose();
 });
 
-test('switching projects with the tab closed leaves it closed', async function () {
+test('switching spaces with the tab closed leaves it closed', async function () {
   var f = fixture();
   assert.equal(f.panel.isOpen(), false);
   assert.equal(await f.panel.retarget(Promise.resolve('http://127.0.0.1:3580/_workbench/')), null);
   assert.equal(f.view.webview.html, '');
 });
 
-test('a project picked in the canvas reaches the extension', async function () {
+test('a space picked in the canvas reaches the extension', async function () {
   var f = fixture();
   var picked = [];
-  f.panel.onProject(function (id) { picked.push(id); });
+  f.panel.onSpace(function (id) { picked.push(id); });
   await f.panel.show(f.context, Promise.resolve('http://127.0.0.1:3579/_workbench/'));
-  f.receive({ type: 'wb-project', id: 'b2c3d4e5f6' });
+  f.receive({ type: 'wb-space', id: 'b2c3d4e5f6' });
   assert.deepEqual(picked, ['b2c3d4e5f6']);
   f.dispose();
 });

@@ -6,7 +6,7 @@ var path = require('node:path');
 var test = require('node:test');
 var startup = require('./startup');
 
-function project() {
+function space() {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-startup-'));
   fs.writeFileSync(path.join(root, 'workbench.yaml'), [
     'implementations:',
@@ -26,7 +26,7 @@ function project() {
 }
 
 test('starts the configured command only when its readiness check fails', async function () {
-  var root = project();
+  var root = space();
   var terminals = [];
   var probes = 0;
   try {
@@ -57,7 +57,7 @@ test('starts the configured command only when its readiness check fails', async 
 });
 
 test('never runs a configured command in an untrusted workspace', async function () {
-  var root = project();
+  var root = space();
   try {
     await startup.run(root, {
       isTrusted: false,
@@ -69,7 +69,7 @@ test('never runs a configured command in an untrusted workspace', async function
 });
 
 test('waits for the readiness URL when the port is already open', async function () {
-  var root = project();
+  var root = space();
   var checks = [];
   try {
     await startup.run(root, {

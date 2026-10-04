@@ -25,20 +25,20 @@ function page(extra) {
     setAttribute: function (name, value) { if (name === 'sandbox') sandbox = value; },
     removeAttribute: function () {},
   };
-  var markup = { innerHTML: '' };
+  var annotations = { innerHTML: '' };
   var window = Object.assign({ setTimeout: setTimeout, requestAnimationFrame: paint, wbDOMMirror: { apply: async function (_, snapshot) { mirrors.push(snapshot.revision); } } }, extra);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'capture-page.js'), 'utf8'), {
-    window: window, document: { getElementById: function (id) { return id === 'captureFrame' ? frame : markup; } },
+    window: window, document: { getElementById: function (id) { return id === 'captureFrame' ? frame : annotations; } },
   });
-  return { inner: inner, prepare: window.wbCapture.prepare, loads: loads, mirrors: mirrors, sandbox: function () { return sandbox; }, paints: function () { return paints; }, markup: markup, scrolls: scrolls, behavior: function () { return behavior; } };
+  return { inner: inner, prepare: window.wbCapture.prepare, loads: loads, mirrors: mirrors, sandbox: function () { return sandbox; }, paints: function () { return paints; }, annotations: annotations, scrolls: scrolls, behavior: function () { return behavior; } };
 }
 
 test('an exact prepared view needs no navigation or extra settling before capture', async function () {
-  var p = page(); var request = { url: 'http://localhost/one', revision: '1', width: 960, height: 720, markup: '<svg/>', scroll: { x: 0, y: 100 } };
+  var p = page(); var request = { url: 'http://localhost/one', revision: '1', width: 960, height: 720, annotations: '<svg/>', scroll: { x: 0, y: 100 } };
   var result = await p.prepare(request); var painted = p.paints();
   var reused = await p.prepare(request);
   assert.equal(p.loads.length, 1); assert.equal(p.paints(), painted);
-  assert.equal(p.markup.innerHTML, '<svg/>'); assert.deepEqual(p.scrolls.at(-1), [0, 100, 'auto']);
+  assert.equal(p.annotations.innerHTML, '<svg/>'); assert.deepEqual(p.scrolls.at(-1), [0, 100, 'auto']);
   assert.equal(p.behavior(), 'smooth');
   assert.equal(JSON.stringify(result.scroll), JSON.stringify({ requestedX: 0, requestedY: 100, appliedX: 0, appliedY: 100 }));
   assert.equal(JSON.stringify(reused.scroll), JSON.stringify(result.scroll));
@@ -58,7 +58,7 @@ test('live updates reuse an inert document, exact captures skip apply, and navig
   assert.equal(p.loads.at(-1), request.url);
 });
 
-test('a mirrored capture names the element under each mark from its own copy', async function () {
+test('a mirrored capture names the element under each annotation from its own copy', async function () {
   var asked = [];
   var p = page({ wbDescribe: { at: function (doc, x, y) { asked.push([doc, x, y]); return 'button.create “Create Customer”'; } } });
   var result = await p.prepare({ url: 'http://localhost/one', revision: '1', mirror: { revision: 'snapshot-1' },
@@ -69,10 +69,10 @@ test('a mirrored capture names the element under each mark from its own copy', a
   assert.equal(plain.targets, undefined);
 });
 
-test('a reload revision refreshes even the same URL; geometry and marks settle without reloading', async function () {
+test('a reload revision refreshes even the same URL; geometry and annotations settle without reloading', async function () {
   var p = page(); var request = { url: 'http://localhost/one', revision: '1', width: 960, height: 720 };
-  await p.prepare(request); await p.prepare(Object.assign({}, request, { width: 393, markup: 'new marks' }));
-  assert.equal(p.loads.length, 1); assert.equal(p.markup.innerHTML, 'new marks');
+  await p.prepare(request); await p.prepare(Object.assign({}, request, { width: 393, annotations: 'new annotations' }));
+  assert.equal(p.loads.length, 1); assert.equal(p.annotations.innerHTML, 'new annotations');
   await p.prepare(Object.assign({}, request, { revision: '2' }));
   assert.equal(p.loads.length, 2);
 });

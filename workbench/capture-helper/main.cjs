@@ -144,30 +144,52 @@ async function prepareExportPage(request) {
   })()`);
   var settle = changed ? request.settle : request.settleFast || request.settle;
   if (settle) await win.webContents.executeJavaScript(settle);
+  /* A docs page is captured whole: the window grows to the page's height
+     (up to the capture limit), and the page settles again at that size. */
+  if (request.payload.fullPage) {
+    var full = await win.webContents.executeJavaScript('Math.ceil(Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0))');
+    var grown = Math.max(1, Math.min(8192, Number(full) || height));
+    if (grown !== height) {
+      resize({ width: width, height: grown });
+      await win.webContents.executeJavaScript('new Promise(function (resolve) { requestAnimationFrame(function () { requestAnimationFrame(resolve); }); })');
+      if (request.settleFast || request.settle) await win.webContents.executeJavaScript(request.settleFast || request.settle);
+    }
+  }
   return details;
 }
 
-async function captureBitmap() {
-  var bitmap = await win.webContents.capturePage({ x: 0, y: 0, width: width, height: height }, { stayHidden: true });
+/* The box of the element a reference shows, in window pixels, or null. */
+async function elementRect(selector) {
+  var box = await win.webContents.executeJavaScript('(function () { var el = document.querySelector(' + JSON.stringify(selector) +
+    '); if (!el) return null; var r = el.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; })()');
+  if (!box) return null;
+  var x = Math.max(0, Math.floor(box.x));
+  var y = Math.max(0, Math.floor(box.y));
+  return { x: x, y: y, width: Math.max(1, Math.min(width - x, Math.ceil(box.width))), height: Math.max(1, Math.min(height - y, Math.ceil(box.height))) };
+}
+
+async function captureBitmap(rect) {
+  var bitmap = await win.webContents.capturePage(rect || { x: 0, y: 0, width: width, height: height }, { stayHidden: true });
   if (bitmap.isEmpty()) throw new Error('The capture renderer returned an empty image');
   return bitmap;
 }
 
-async function png(timings, format) {
+async function png(timings, format, rect) {
   var start = performance.now();
-  var bitmap = await captureBitmap();
+  var bitmap = await captureBitmap(rect);
+  var expected = rect || { width: width, height: height };
   if (timings) timings.readbackMs = performance.now() - start;
   start = performance.now();
   var size = bitmap.getSize();
   if (timings) timings.bitmapSize = size;
-  if (size.width !== width || size.height !== height) {
-    bitmap = bitmap.resize({ width: width, height: height, quality: format === 'jpeg' ? 'better' : 'best' });
+  if (size.width !== expected.width || size.height !== expected.height) {
+    bitmap = bitmap.resize({ width: expected.width, height: expected.height, quality: format === 'jpeg' ? 'better' : 'best' });
   }
   if (timings) timings.resizeMs = performance.now() - start;
   start = performance.now();
   var data = format === 'jpeg' ? bitmap.toJPEG(90) : bitmap.toPNG();
   if (timings) { timings.encodeMs = performance.now() - start; timings.bytes = data.length; }
-  if (format !== 'jpeg' && (data.readUInt32BE(16) !== width || data.readUInt32BE(20) !== height)) throw new Error('Incorrect capture dimensions');
+  if (format !== 'jpeg' && (data.readUInt32BE(16) !== expected.width || data.readUInt32BE(20) !== expected.height)) throw new Error('Incorrect capture dimensions');
   start = performance.now();
   var encoded = data.toString('base64');
   if (timings) timings.base64Ms = performance.now() - start;
@@ -183,7 +205,7 @@ async function prime(key) {
 
 function viewKey(request) {
   var p = request.payload;
-  return JSON.stringify([request.method, p.url, p.revision, p.width, p.height, p.scroll, p.markup, p.format, p.mirror && p.mirror.revision]);
+  return JSON.stringify([request.method, p.url, p.revision, p.width, p.height, p.scroll, p.annotations, p.format, p.mirror && p.mirror.revision]);
 }
 
 async function handle(request) {
@@ -215,9 +237,14 @@ async function handle(request) {
       }
     case 'captureExportPage':
       var exportDetails = await prepareExportPage(request);
+      var crop = null;
+      if (request.payload.selector) {
+        crop = await elementRect(request.payload.selector);
+        if (!crop) throw new Error('Nothing on the page matches ' + request.payload.selector);
+      }
       try {
         var exportOverlayDetails = await win.webContents.executeJavaScript(request.overlay);
-        return { data: await png(null, request.payload.format), details: exportOverlayDetails || exportDetails };
+        return { data: await png(null, request.payload.format, crop), details: exportOverlayDetails || exportDetails };
       } finally {
         await win.webContents.executeJavaScript(request.removeOverlay).catch(function () {});
       }

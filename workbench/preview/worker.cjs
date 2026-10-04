@@ -2,13 +2,16 @@
 // Neither the editor extension host nor the screenshot renderer loads projects.
 const http = require('node:http');
 const path = require('node:path');
-const { Compiler } = require('./compiler.cjs');
+const { Compiler, docsRequest } = require('./compiler.cjs');
 const portable = require('./portable.cjs');
 const { withPreviewScripts } = require('../preview-scripts');
 const compiler = new Compiler(process.argv[2], JSON.parse(process.argv[3] || '{}'));
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
 const slugs = new Map();
 const variants = new Map();
+// Docs bundles by slug, to the request that builds them.
+const docs = new Map();
+const docsBase = slug => '/_workbench/previews/docs/' + slug + '/';
 let queue = Promise.resolve();
 const serial = work => { const result = queue.then(work); queue = result.catch(() => {}); return result; };
 const json = (res, value) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(value)); };
@@ -16,7 +19,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   const requested = Date.now();
   let started;
-  const traced = ['/page', '/descriptor', '/render', '/export'].includes(url.pathname);
+  const traced = ['/page', '/descriptor', '/render', '/export', '/docs/bundle'].includes(url.pathname);
   const diagnostic = (event, details) => {
     if (process.connected) process.send({ type: 'diagnostic', event, details });
   };
@@ -63,6 +66,34 @@ const server = http.createServer((req, res) => {
       // The outer URL owns state; the compatibility bundle reads it here.
       res.end(withPreviewScripts(result.outputs.get('index.html').toString()));
       return;
+    }
+    // A docs page lens: what it offers, for problems, or its bundle to mount.
+    if (url.pathname === '/docs/index') {
+      await compiler.settings();
+      const listed = await compiler.docsExamples(docsRequest(JSON.parse(url.searchParams.get('request') || 'null'), compiler.root));
+      json(res, { problems: listed.problems, examples: listed.examples.map(example =>
+        ({ ...example, file: path.relative(compiler.root, example.file).split(path.sep).join('/') })) });
+      return;
+    }
+    if (url.pathname === '/docs/bundle') {
+      const request = JSON.parse(url.searchParams.get('request') || 'null');
+      const result = await compiler.compileDocs(request);
+      docs.set(result.slug, request);
+      const base = docsBase(result.slug);
+      json(res, { base, module: base + 'examples.js?revision=' + result.revision, revision: result.revision,
+        stylesheet: result.stylesheet ? base + 'examples.css?revision=' + result.revision : null,
+        examples: result.examples, problems: result.problems });
+      return;
+    }
+    const docsAsset = /^\/docs\/([^/]+)\/(.+)$/.exec(url.pathname);
+    if (docsAsset && docs.has(docsAsset[1])) {
+      const result = await compiler.compileDocs(docs.get(docsAsset[1]));
+      const body = result.outputs.get(decodeURIComponent(docsAsset[2]));
+      if (body) {
+        res.setHeader('Content-Type', mime[path.extname(docsAsset[2])] || 'application/octet-stream');
+        res.end(body);
+        return;
+      }
     }
     if (url.pathname === '/export') {
       const config = require('../config').read(compiler.root);

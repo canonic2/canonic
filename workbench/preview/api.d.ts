@@ -68,6 +68,7 @@ export interface Control {
 export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewState<T> {
   id: string;
   title?: string;
+  icon?: string;
   adapter: string;
   source: { entry: string; export?: string };
   styles?: string[];
@@ -101,6 +102,28 @@ export interface WorkbenchConfig {
   dedupe?: string[];
   define?: Record<string, string>;
 }
+/** One lens of a docs page: what renders its examples. Paths are relative to the definition file. */
+export interface DocsLens {
+  label?: string;
+  adapter: string;
+  /** A folder with one example per file (each file's default export), or a file with one example per named export. */
+  examples: string;
+  styles?: string[];
+  environment?: string;
+}
+/** A docs page: Markdown that places examples with ```example <id>``` blocks. */
+export interface Docs {
+  id: string;
+  title?: string;
+  /** The Markdown file, relative to the definition file. */
+  docs: string;
+  lenses?: Record<string, DocsLens>;
+  /** The lens the page opens with; the first in `lenses` otherwise. */
+  lens?: string;
+  /** States every example receives as `context.state`. Prefer showing variations side by side. */
+  states?: Record<string, { label?: string }>;
+}
 export function definePreview<T extends Record<string, unknown>>(preview: Preview<T>): Preview<T>;
+export function defineDocs(docs: Docs): Docs & { kind: 'docs' };
 export function defineConfig(config: WorkbenchConfig): WorkbenchConfig;
 export function defineAdapter(adapter: Adapter): Adapter;

@@ -6,6 +6,7 @@ import { packageRoot } from '../src/platform/paths.ts';
 
 const output = path.join(packageRoot, 'dist');
 for (const file of [
+  'LICENSE',
   'app/main.js',
   'app/preload.cjs',
   'app/studio.js',
@@ -14,6 +15,10 @@ for (const file of [
   'src/application/studio.js',
 ])
   await access(path.join(output, file));
+assert.equal(
+  await readFile(path.join(output, 'LICENSE'), 'utf8'),
+  await readFile(path.join(packageRoot, 'LICENSE'), 'utf8'),
+);
 const html = await readFile(path.join(output, 'app/index.html'), 'utf8');
 assert.match(html, /src="studio\.js"/);
 assert.doesNotMatch(html, /src="[^"]*\.ts"/);

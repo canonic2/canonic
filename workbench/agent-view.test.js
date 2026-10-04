@@ -8,9 +8,9 @@ var path = require('node:path');
 
 var agentView = require('./agent-view');
 
-var SIGN_IN = { text: '- Screen: Sign in — `pages/sign-in.html`\n- State: Error — `error`\n- Lens: Design',
+var SIGN_IN = { text: '- Page: Sign in — `pages/sign-in.html`\n- State: Error — `error`\n- Lens: Design',
   src: 'pages/sign-in.html', state: 'error' };
-var HOME = { text: '- Screen: Home — `pages/home.html`\n- State: Default — `default`\n- Lens: Design',
+var HOME = { text: '- Page: Home — `pages/home.html`\n- State: Default — `default`\n- Lens: Design',
   src: 'pages/home.html' };
 
 function clock(start) {

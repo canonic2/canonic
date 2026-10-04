@@ -1,5 +1,5 @@
 /* Opt-in native integration check. Uses the packaged runtime and a temporary
-   fixture; npm test itself requires no browser or desktop session. */
+   fixture; pnpm test itself requires no browser or desktop session. */
 var assert = require('node:assert/strict');
 var fs = require('node:fs');
 var os = require('node:os');
@@ -16,7 +16,7 @@ async function until(check) {
   }
 }
 async function main() {
-  assert.ok(runtime.available(), 'Run npm run bundle-runtime on a desktop first');
+  assert.ok(runtime.available(), 'Run pnpm run bundle-runtime on a desktop first');
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-capture-smoke-'));
   var helper = engine.create({ inject: fs.readFileSync(path.join(__dirname, '../workbench/describe.js'), 'utf8') +
     '\nwindow.__wbDescribeAt = function(x, y) { return window.wbDescribe.at(document, x, y); };' });
@@ -36,7 +36,7 @@ async function main() {
   });
   await new Promise(function (resolve) { external.listen(0, '127.0.0.1', resolve); });
   var externalUrl = 'http://127.0.0.1:' + external.address().port + '/';
-  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Capture test\nimplementations:\n  app:\n    kind: url\n    base: ' + externalUrl + '\nsections:\n  - name: Screens\n    items:\n      - label: Fixture\n        src: fixture.html\n');
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Capture test\nimplementations:\n  app:\n    kind: url\n    base: ' + externalUrl + '\ncollections:\n  - name: Pages\n    items:\n      - label: Fixture\n        src: fixture.html\n');
   function page(color) { return '<html><body style="margin:0;background:' + color + ';font:32px sans-serif"><h1>Warm capture</h1><div style="height:1500px">Scroll fixture</div></body></html>'; }
   fs.writeFileSync(path.join(root, 'fixture.html'), page('#def'));
   var running = await server.start({ root: root, capture: helper, eagerCapture: true });
@@ -44,7 +44,7 @@ async function main() {
   var timings = [];
   try {
     await helper.warm(base);
-    var payload = { url: base + '/fixture.html', width: 960, height: 720, revision: '1', scroll: { x: 0, y: 0 }, markup: '' };
+    var payload = { url: base + '/fixture.html', width: 960, height: 720, revision: '1', scroll: { x: 0, y: 0 }, annotations: '' };
     await helper.prepare(base, payload);
     var child = helper.child;
     for (var i = 0; i < 5; i++) {

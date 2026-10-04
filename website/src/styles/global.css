@@ -43,7 +43,7 @@
   --tip-bg: #ffffff;
   --tip-fg: #141414;
   --tip-shadow: rgba(0, 0, 0, 0.28);
-  /* Overlays on screenshots and the toolbar strip, which are dark in both
+  /* Overlays on screenshots and the controls strip, which are dark in both
      themes: the region pins and the hotspot rings. */
   --pin-fg: #ffffff;
   --pin-ring: rgba(36, 87, 255, 0.35);
@@ -264,9 +264,9 @@ section h2 {
 }
 
 /* Tour: the four areas */
-.tour .wrap, .toolbar-block { display: flex; flex-direction: column; gap: 40px; }
+.tour .wrap, .controls-block { display: flex; flex-direction: column; gap: 40px; }
 .tour .wrap { gap: 88px; }
-.toolbar-block { gap: 28px; }
+.controls-block { gap: 28px; }
 .areas {
   list-style: none; margin: 0; padding: 0; display: grid; border-top: 2px solid var(--fg);
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
@@ -276,7 +276,7 @@ section h2 {
 .areas h3 { margin: 0; font-size: 22px; font-weight: 600; }
 .areas p { margin: 0; font-size: 15px; color: var(--muted); }
 
-/* The toolbar strip: the four group crops side by side on the toolbar's own
+/* The controls strip: the four group crops side by side on the bars' own
    color, with hotspots over each control (positions from
    screenshots/capture.cjs). Hotspots only appear once the script runs. */
 .strip {

@@ -26,7 +26,7 @@ var crypto = require('crypto');
 var electronCapture = require('./electron-capture');
 var handoff = require('./handoff');
 var config = require('./config');
-var projects = require('./projects');
+var spaces = require('./spaces');
 var remote = require('./remote');
 var designExport = require('./export');
 var previewService = require('./preview-service');
@@ -36,6 +36,11 @@ var previewCompiler = require('./preview/compiler.cjs');
 var windowStream = require('./window-stream');
 var agentView = require('./agent-view');
 var manifest = require('./workbench/manifest');
+var docsService = require('./src/docs/docs-service.ts');
+var browserModules = require('./src/server/browser-modules.ts');
+var canvasSpaces = require('./src/spaces/coordinator.ts');
+var nativePool = require('./src/native-streams/pool.ts');
+var docsList = require('./src/docs/pages.ts');
 
 var SHOT_PATH = '/_workbench/shot';
 var CAPTURE_WARM_PATH = '/_workbench/capture/warm';
@@ -51,8 +56,8 @@ var CONFIG_PATH = '/_workbench/config';
 var CONFIG_FILE_PATH = '/_workbench/config-file';
 var OPEN_PATH = '/_workbench/open';
 var STORIES_PATH = '/_workbench/stories';
-var PROJECTS_PATH = '/_workbench/projects';
-var PROJECTS_OPEN_PATH = '/_workbench/projects/open';
+var SPACES_PATH = '/_workbench/spaces';
+var SPACES_OPEN_PATH = '/_workbench/spaces/open';
 var MANIFEST_PATH = '/_workbench/manifest/';
 var EXPORT_PATH = '/_workbench/export';
 var SIMULATOR_PATH = '/_workbench/simulator';
@@ -78,10 +83,10 @@ var WORKBENCH_PATH = WORKBENCH_PREFIX;
 var LUCIDE_PATH = require.resolve('lucide/dist/umd/lucide.min.js');
 var LUCIDE_URL = '/node_modules/lucide/dist/umd/lucide.min.js';
 var MAX_SHOT = 64 * 1024 * 1024; /* comfortably covers a desktop frame PNG */
-var MAX_CAPTURE = 16 * 1024 * 1024; /* live DOM, styles, media state and marks */
-var MAX_HANDOFF = 1024 * 1024; /* a canvas full of marks is a few kB */
+var MAX_CAPTURE = 16 * 1024 * 1024; /* live DOM, styles, media state and annotations */
+var MAX_HANDOFF = 1024 * 1024; /* a canvas full of annotations is a few kB */
 var MAX_LOG = 16 * 1024; /* diagnostics are metadata, never screenshots or prompts */
-var MAX_VIEW = 16 * 1024; /* a screen reference, a few lines of text */
+var MAX_VIEW = 256 * 1024; /* complete canvas context; no silent truncation */
 var MAX_LOG_SESSION = 2 * 1024 * 1024; /* one noisy workbench cannot grow forever */
 var REMOTE_TIMEOUT = 5000; /* a dev server that isn't running says so quickly */
 var EXPORT_CAPTURE_WORKERS = 4;
@@ -91,17 +96,17 @@ var EXPORT_VIEWPORTS = {
   mobile: { id: 'mobile', label: 'Mobile', width: 393, height: 852 },
 };
 
-/* What the marks are dressed in when they're laid over a page the workbench
-   doesn't serve — see capture-scripts.js. The tokens markup.css leans on come from
+/* What the annotations are dressed in when they're laid over a page the workbench
+   doesn't serve — see capture-scripts.js. The tokens annotations.css leans on come from
    the workbench's own stylesheet, scoped to the layer so the page underneath
    never sees them; the hit areas and handles are the canvas's, not the
    picture's. */
 var OVERLAY_CSS = [
-  '#__wb_markup{--wb-font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;',
+  '#__wb_annotations{--wb-font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;',
   '--wb-space-2:2px;--wb-space-4:4px;--wb-space-8:8px;--wb-space-12:12px;--wb-space-16:16px;--wb-space-24:24px;',
   '--wb-radius-sm:4px;--wb-radius-md:8px;--wb-radius-pill:999px;--wb-fg:#fff;--wb-fg-3:#8c8c8c;--wb-accent:#00a1ff}',
-  fs.readFileSync(path.join(__dirname, 'workbench', 'markup.css'), 'utf8'),
-  '#__wb_markup .wb-hit,#__wb_markup .wb-sel{display:none}',
+  fs.readFileSync(path.join(__dirname, 'workbench', 'annotations.css'), 'utf8'),
+  '#__wb_annotations .wb-hit,#__wb_annotations .wb-sel{display:none}',
 ].join('\n');
 
 /* Ports to try in order. A stable one keeps links and bookmarks working
@@ -155,7 +160,7 @@ function safeName(name, format) {
   return (base || 'canonic') + (format === 'jpeg' ? '.jpg' : '.png');
 }
 
-/* Two shots of the same screen are two different notes, so the second one
+/* Two shots of the same page are two different notes, so the second one
    gets a number rather than the first one's place. */
 function freeFile(dir, name) {
   var ext = path.extname(name);
@@ -245,7 +250,7 @@ function capturePayload(body, baseUrl) {
       x: Number(payload.scroll && payload.scroll.x) || 0,
       y: Number(payload.scroll && payload.scroll.y) || 0,
     },
-    markup: typeof payload.markup === 'string' ? payload.markup : '',
+    annotations: typeof payload.annotations === 'string' ? payload.annotations : '',
     name: payload.name,
     format: captureFormat(payload.format),
     mirror: mirrorPayload(payload.mirror),
@@ -285,7 +290,7 @@ function pagePayload(body, origins) {
       x: Number(payload.scroll && payload.scroll.x) || 0,
       y: Number(payload.scroll && payload.scroll.y) || 0,
     },
-    markup: typeof payload.markup === 'string' ? payload.markup : '',
+    annotations: typeof payload.annotations === 'string' ? payload.annotations : '',
     anchors: anchorsOf(payload.anchors),
     css: OVERLAY_CSS,
     name: payload.name,
@@ -295,11 +300,11 @@ function pagePayload(body, origins) {
   };
 }
 
-function screenItems(sections, out) {
+function pageItems(collections, out) {
   out = out || [];
-  (sections || []).forEach(function (section) {
-    (section.items || []).forEach(function visit(entry) {
-      if (entry.folder) (entry.items || []).forEach(visit);
+  (collections || []).forEach(function (collection) {
+    (collection.items || []).forEach(function visit(entry) {
+      if (entry.group) (entry.items || []).forEach(visit);
       else if (entry && entry.src) out.push(entry);
     });
   });
@@ -307,16 +312,17 @@ function screenItems(sections, out) {
 }
 
 /* Stable reference viewports for every declared state or Storybook story.
-   Responsive screens produce both desktop and mobile references. The
+   Responsive pages produce both desktop and mobile references. The
    background renderer loads these directly, so exporting never drives or
    annotates the visible workbench canvas. */
 function exportCapturePlan(view, baseUrl) {
-  var items = screenItems((view && view.sections) || []).concat(screenItems((view && view.catalogSections) || []));
+  var items = pageItems((view && view.collections) || []).concat(pageItems((view && view.catalogCollections) || []));
   var captures = [];
   var warnings = [];
   var seen = new Set();
   items.forEach(function (item) {
-    if (seen.has(item.src)) return;
+    /* Docs pages are planned separately: see docsExportPlan. */
+    if (seen.has(item.src) || item.docs) return;
     seen.add(item.src);
     var implementationKey = item.implementationOnly;
     var implementation = implementationKey && view.implementations[implementationKey];
@@ -331,14 +337,14 @@ function exportCapturePlan(view, baseUrl) {
         if (!viewports.some(function (candidate) { return candidate.id === size.id; })) viewports.push(size);
       });
     });
-    var preview = view.screens[item.src] && view.screens[item.src].preview;
+    var preview = view.pages[item.src] && view.pages[item.src].preview;
     if (preview) {
       variants = preview.states;
       variants.forEach(function (state) {
         viewports.forEach(function (size) {
           var target = new URL(preview.file, baseUrl);
           target.searchParams.set('state', state.id);
-          captures.push({ screen: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
+          captures.push({ page: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
             viewport: size.id, viewportLabel: size.label, url: target.href, external: false, width: size.width, height: size.height });
         });
       });
@@ -350,7 +356,7 @@ function exportCapturePlan(view, baseUrl) {
         return;
       }
       variants.forEach(function (state) {
-        var story = view.screens[item.src] && (view.screens[item.src].stories || []).find(function (candidate) {
+        var story = view.pages[item.src] && (view.pages[item.src].stories || []).find(function (candidate) {
           return candidate.state === state.id;
         });
         if (!story) {
@@ -359,7 +365,7 @@ function exportCapturePlan(view, baseUrl) {
         }
         viewports.forEach(function (size) {
           captures.push({
-            screen: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
+            page: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
             viewport: size.id, viewportLabel: size.label,
             url: implementation.url + '/iframe.html?id=' + encodeURIComponent(story.id) + '&viewMode=story',
             external: true, width: size.width, height: size.height,
@@ -368,8 +374,8 @@ function exportCapturePlan(view, baseUrl) {
       });
       return;
     }
-    var resolvedScreen = view.screens && view.screens[item.src];
-    if (resolvedScreen && resolvedScreen.design && !fs.existsSync(resolvedScreen.design)) {
+    var resolvedPage = view.pages && view.pages[item.src];
+    if (resolvedPage && resolvedPage.design && !fs.existsSync(resolvedPage.design)) {
       warnings.push(item.label + ': the design file is missing, so no reference screenshot was captured.');
       return;
     }
@@ -379,7 +385,7 @@ function exportCapturePlan(view, baseUrl) {
       if (index > 0) target.searchParams.set('state', state.id);
       viewports.forEach(function (size) {
         captures.push({
-          screen: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
+          page: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
           viewport: size.id, viewportLabel: size.label,
           url: target.toString(), external: false, width: size.width, height: size.height,
         });
@@ -422,16 +428,22 @@ function captureExportReferences(capture, plan, baseUrl, progress) {
           var reference = group[i].reference;
           var payload = {
             url: reference.url, width: reference.width, height: reference.height,
-            scroll: { x: 0, y: 0 }, markup: '', anchors: [], format: 'jpeg', revision: '',
+            scroll: { x: 0, y: 0 }, annotations: '', anchors: [], format: 'jpeg', revision: '',
             reuse: reference.external ? 'storybook' : '',
           };
+          /* A docs page loads as a page, whole, cropped to an example when the
+             reference is one. */
+          if (reference.docsPage) {
+            payload.fullPage = true;
+            if (reference.selector) payload.selector = reference.selector;
+          }
           try {
-            var shot = reference.external ? await worker.captureExportPage(payload) : await worker.capture(baseUrl, payload);
+            var shot = reference.external || reference.docsPage ? await worker.captureExportPage(payload) : await worker.capture(baseUrl, payload);
             var body = shot && (shot.image || shot.png) ? (shot.image || shot.png) : shot;
             if (!body || !body.length) throw new Error('the renderer returned an empty image');
             screenshots[index] = Object.assign({}, reference, { body: body });
           } catch (error) {
-            warnings.push(reference.screen + ' — ' + reference.label + ' · ' + reference.viewportLabel + ': ' + String(error.message || error));
+            warnings.push(reference.page + ' — ' + reference.label + ' · ' + reference.viewportLabel + ': ' + String(error.message || error));
           }
           completed += 1;
           progress(completed);
@@ -461,8 +473,8 @@ function bridgedPayload(payload, baseUrl) {
   });
 }
 
-/* The points under the marks, one per mark, null where a mark has no
-   element to name (a freeform note). */
+/* The points under the annotations, one per annotation, null where an
+   annotation has no element to name (a freeform note). */
 function anchorsOf(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.map(function (point) {
@@ -472,7 +484,7 @@ function anchorsOf(raw) {
 }
 
 /* What runs in every page the browsers open: the element-describing helper
-   the markup layer uses, plus one entry point DevTools can call by name. */
+   the annotation layer uses, plus one entry point DevTools can call by name. */
 var DESCRIBE_SOURCE =
   fs.readFileSync(path.join(__dirname, 'workbench', 'describe.js'), 'utf8') +
   '\nwindow.__wbDescribeAt = function (x, y) { return window.wbDescribe.at(document, x, y); };\n';
@@ -533,20 +545,12 @@ function storybookIndex(impl) {
 }
 
 /* Turn Storybook's own hierarchy into the two levels the workbench has: the
-   first title segment is a section, any middle segments are one joined folder,
-   and the leaf is the screen. Each story under that title is one state. The
-   src is deliberately synthetic and stable; imported screens have no design
-   page and always open through their Storybook implementation. */
+   first title segment is a collection, any middle segments are one joined group,
+   and the leaf is the page. Each story under that title is one state. The
+   src is deliberately synthetic and stable; imported pages have no design
+   file and always open through their Storybook implementation. */
 function catalogIcon(impl, title) {
-  var found = impl.catalogIcon || 'book-open';
-  var length = -1;
-  Object.keys(impl.catalogIcons || {}).forEach(function (prefix) {
-    if ((title === prefix || title.indexOf(prefix + '/') === 0) && prefix.length > length) {
-      found = impl.catalogIcons[prefix];
-      length = prefix.length;
-    }
-  });
-  return found;
+  return manifest.titleIcon({ icon: impl.catalogIcon, icons: impl.catalogIcons }, title, 'book-open').icon;
 }
 
 function storybookCatalog(index, key, impl) {
@@ -556,16 +560,16 @@ function storybookCatalog(index, key, impl) {
     byTitle[entry.title].push(entry);
   });
 
-  var sections = [];
-  var bySection = {};
-  var screens = {};
+  var collections = [];
+  var byCollection = {};
+  var pages = {};
 
   Object.keys(byTitle).forEach(function (title) {
     var entries = byTitle[title];
     var parts = title.split('/').filter(Boolean);
-    var sectionName = parts.length > 1 ? parts.shift() : impl.label;
+    var collectionName = parts.length > 1 ? parts.shift() : impl.label;
     var label = parts.length ? parts.pop() : title;
-    var folderName = parts.join(' / ');
+    var groupName = parts.join(' / ');
     var componentId = entries[0].id.split('--')[0];
     if (!/^[a-z0-9-]+$/.test(componentId)) {
       componentId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'stories';
@@ -583,21 +587,22 @@ function storybookCatalog(index, key, impl) {
     };
     item.implementations[key] = { title: title };
 
-    var section = bySection[sectionName];
-    if (!section) {
-      section = { group: sectionName, icon: catalogIcon(impl, sectionName), items: [] };
-      bySection[sectionName] = section;
-      sections.push(section);
+    var collection = byCollection[collectionName];
+    if (!collection) {
+      var selected = manifest.titleIcon({ icon: impl.catalogIcon, icons: impl.catalogIcons }, collectionName, 'book-open');
+      collection = { name: collectionName, icon: selected.icon, iconPriority: selected.mapped ? 5 : impl.catalogIconExplicit ? 3 : 0, items: [] };
+      byCollection[collectionName] = collection;
+      collections.push(collection);
     }
-    if (folderName) {
-      var folder = section.items.find(function (candidate) { return candidate.folder === folderName; });
-      if (!folder) {
-        folder = { folder: folderName, items: [] };
-        section.items.push(folder);
+    if (groupName) {
+      var group = collection.items.find(function (candidate) { return candidate.group === groupName; });
+      if (!group) {
+        group = { group: groupName, items: [] };
+        collection.items.push(group);
       }
-      folder.items.push(item);
+      group.items.push(item);
     } else {
-      section.items.push(item);
+      collection.items.push(item);
     }
 
     var code = [];
@@ -609,13 +614,13 @@ function storybookCatalog(index, key, impl) {
         code.push({ implementation: key, path: absolute, relative: relative, exists: fs.existsSync(absolute) });
       });
     });
-    screens[src] = {
+    pages[src] = {
       label: label, design: null, code: code,
       stories: entries.map(function (entry) { return { id: entry.id, state: manifest.storyState(entry.id), label: entry.name || manifest.storyState(entry.id) }; }),
     };
   });
 
-  return { sections: sections, screens: screens };
+  return { collections: collections, pages: pages };
 }
 
 function storybookPorts(root) {
@@ -690,8 +695,8 @@ function simulatorCatalog(devices, key, impl) {
   var selected = devices.filter(function (device) {
     return wanted === 'booted' || device.udid === wanted || device.name === wanted;
   });
-  var section = { group: impl.label, icon: impl.catalogIcon || 'smartphone', items: [] };
-  var screens = {};
+  var collection = { name: impl.label, icon: impl.catalogIcon || 'smartphone', items: [] };
+  var pages = {};
   selected.forEach(function (device) {
     var src = '__ios-simulator/' + key + '/' + device.udid + '.html';
     var item = {
@@ -702,10 +707,10 @@ function simulatorCatalog(devices, key, impl) {
       implementationOnly: key,
     };
     item.implementations[key] = { device: device.udid };
-    section.items.push(item);
-    screens[src] = { label: device.name, design: null, code: [], simulator: device };
+    collection.items.push(item);
+    pages[src] = { label: device.name, design: null, code: [], simulator: device };
   });
-  return { sections: selected.length ? [section] : [], screens: screens };
+  return { collections: selected.length ? [collection] : [], pages: pages };
 }
 
 /* Which of a Storybook's stories carry the configured title. Exact: a title
@@ -823,12 +828,12 @@ function serveFile(root, pathname, res, options) {
 /* Starts the server. `onShot` is called with the workspace-relative path of
    every screenshot written, so the editor can say so. `onHandoff` is given the
    composed prompt and the canvas it came from so the editor can copy it.
-   `onOpen` is handed an absolute path the config resolves to — a screen's
+   `onOpen` is handed an absolute path the config resolves to — a page's
    design file, or where its implementation's code is — and puts it in front
    of the user. */
 /* The screenshot service a server makes when it isn't given one. Servers for
-   several projects can share one, started with `captureShared` so closing one
-   project leaves the service to whoever made it. */
+   several spaces can share one, started with `captureShared` so closing one
+   space leaves the service to whoever made it. */
 function createCapture(storage) {
   return electronCapture.createService({ inject: DESCRIBE_SOURCE, storage: storage });
 }
@@ -839,6 +844,8 @@ function start(options) {
   var captureReady = Promise.resolve();
   var previews = null;
   var previewSettings = null;
+  /* Docs pages from defineDocs definitions, as the last config resolution found them. */
+  var discoveredDocs = [];
   /* Lenses frame implementations through these, so every page carries the
      preview bridge and its live DOM reaches capture. */
   var proxies = implementationProxy.create({
@@ -846,28 +853,28 @@ function start(options) {
       return 'http://127.0.0.1:' + server.address().port + WORKBENCH_PREFIX + 'preview-bridge.js';
     },
   });
-  var windowVideo = options.windowStream || windowStream.create({
+  var windowVideo = options.windowStream || nativePool.createPool(function () { return windowStream.create({
     storage: path.join(options.captureStorage || path.join(os.tmpdir(), 'canonic-workbench-capture'), 'window-capture'),
     path: WINDOW_STREAM_PATH,
     permissionOwner: options.screenCapturePermissionOwner,
-  });
+  }); });
   /* The other workbenches this one can switch to, from whoever started it:
-     { list(), open(id) } — see projects.js. Without one, the project is the
+     { list(), open(id) } — see spaces.js. Without one, this space is the
      only one there is. */
-  var projectList = options.projects || null;
-  /* Which config is this project's: the workbench.yaml in `config.dir`, and
-     project `config.key` of the ones it lists. By default the file at the
-     root this serves, and its first project. */
+  var spaceList = options.spaces || null;
+  /* Which config is this space's: the workbench.yaml in `config.dir`, and
+     space `config.key` of the ones it lists. By default the file at the
+     root this serves, and its first space. */
   var where = {
     dir: path.resolve((options.config && options.config.dir) || root),
     key: (options.config && options.config.key) || null,
   };
-  var projectSelf = projects.projectId(where.dir, where.key);
-  /* A project whose config isn't at its root, or isn't the whole file, tells
+  var spaceSelf = spaces.spaceId(where.dir, where.key);
+  /* A space whose config isn't at its root, or isn't the whole file, tells
      the canvas so; the canvas then reads the file from MANIFEST_PATH. */
   var canvasHead = where.key || where.dir !== root
     ? '<meta name="canonic-config" content="' + MANIFEST_PATH + '" />\n' +
-      (where.key ? '<meta name="canonic-project" content="' + where.key + '" />\n' : '')
+      (where.key ? '<meta name="canonic-space" content="' + where.key + '" />\n' : '')
     : '';
   var onShot = options.onShot || function () {};
   var onLog = options.onLog || function () {};
@@ -996,19 +1003,19 @@ function start(options) {
   }
 
   /* Catalog imports are the one asynchronous part of configuration: the
-     manifest names the Storybook, then its live index supplies the screens.
-     A stopped catalog leaves manual screens usable and reports one problem. */
+     manifest names the Storybook, then its live index supplies the pages.
+     A stopped catalog leaves manual pages usable and reports one problem. */
   function resolvedWithCatalogs() {
     var view = resolved();
     if (!view) return Promise.resolve(null);
-    var sections = [];
-    var screens = Object.assign({}, view.screens);
+    var collections = [];
+    var pages = Object.assign({}, view.pages);
     var problems = view.problems.slice();
     var implementations = Object.assign({}, view.implementations);
     var autoKeys = Object.keys(implementations).filter(function (key) {
       return implementations[key].kind === 'storybook' && implementations[key].auto;
     });
-    return importPreviews(view, sections, screens, problems, implementations).then(function () {
+    return importPreviews(view, collections, pages, problems, implementations).then(function () {
     return autoKeys.reduce(function (pending, key) {
       return pending.then(function () {
         if (autoStorybookAddresses[key]) {
@@ -1034,12 +1041,12 @@ function start(options) {
         var impl = implementations[key];
         return storybookIndex(impl).then(function (index) {
           var imported = storybookCatalog(index, key, impl);
-          imported.sections.forEach(function (section) {
-            var existing = sections.find(function (candidate) { return candidate.group === section.group; });
-            if (existing) existing.items = existing.items.concat(section.items);
-            else sections.push(section);
+          imported.collections.forEach(function (collection) {
+            var existing = collections.find(function (candidate) { return candidate.name === collection.name; });
+            if (existing) { manifest.mergeCollectionIcon(existing, collection); existing.items = existing.items.concat(collection.items); }
+            else collections.push(collection);
           });
-          Object.assign(screens, imported.screens);
+          Object.assign(pages, imported.pages);
         }).catch(function (error) {
           problems.push('implementations › ' + key + ': couldn’t import its catalog — ' + String(error.message || error));
         });
@@ -1054,9 +1061,9 @@ function start(options) {
       return Promise.resolve(listSimulators()).then(function (devices) {
         simulatorKeys.forEach(function (key) {
           var imported = simulatorCatalog(devices, key, implementations[key]);
-          sections = sections.concat(imported.sections);
-          Object.assign(screens, imported.screens);
-          if (!imported.sections.length) {
+          collections = collections.concat(imported.collections);
+          Object.assign(pages, imported.pages);
+          if (!imported.collections.length) {
             problems.push('implementations › ' + key + ': no matching booted iOS Simulator was found.');
           }
         });
@@ -1064,26 +1071,156 @@ function start(options) {
         problems.push('iOS Simulator: ' + String(error.message || error));
       });
     }).then(function () {
+      return importDocs(view, problems, pages);
+    }).then(function () {
       return Object.assign({}, view, {
         implementations: implementations,
-        catalogSections: sections,
-        screens: screens,
+        catalogCollections: collections,
+        pages: pages,
         problems: problems,
       });
     });
     });
   }
 
-  async function importPreviews(view, sections, screens, problems, implementations) {
+  /* Docs pages: pages written in Markdown, with examples their lenses
+     compile in the preview worker. See src/docs/ and specs/docs-pages.md. */
+  function docsPages(view) {
+    return docsList.docsPages(view, discoveredDocs);
+  }
+
+  /* Why examples can't run here, or null. They run project code, like previews. */
+  function docsBlocked() {
+    var view = resolved();
+    if (options.isTrusted === false) return 'Examples run project code, so they appear in a trusted workspace only.';
+    if (view && view.previews === false) return 'Examples run project code, which previews: false turns off.';
+    return null;
+  }
+
+  var docs = docsService.createDocsService({
+    blocked: docsBlocked,
+    readFile: function (file) {
+      var target = path.resolve(root, file);
+      if (target.indexOf(root + path.sep) !== 0) return Promise.resolve(null);
+      return fs.promises.readFile(target, 'utf8').catch(function (error) {
+        if (error.code === 'ENOENT' || error.code === 'EISDIR') return null;
+        throw error;
+      });
+    },
+    listExamples: function (lens) {
+      if (!previews) return Promise.reject(new Error('The preview worker isn’t running.'));
+      return previews.docs('index', docsService.lensRequest(lens));
+    },
+    bundle: function (lens) {
+      if (!previews) return Promise.reject(new Error('The preview worker isn’t running.'));
+      return previews.docs('bundle', docsService.lensRequest(lens));
+    },
+  });
+
+  /* The config, with the preview worker started when a docs lens needs it:
+     a docs page can be the first thing anyone asks this server for. */
+  var docsResolution = null;
+  function docsReady() {
+    if (previews || docsResolution) return (docsResolution || Promise.resolve()).then(function () { return resolved(); });
+    docsResolution = resolvedWithCatalogs().catch(function (error) { docsResolution = null; throw error; });
+    return docsResolution.then(function () { return resolved(); });
+  }
+
+  var serveBrowserModule = browserModules.createBrowserModules(path.join(__dirname, 'src'), function (code, file) {
+    return require('./preview/engine.cjs').transform(code, {
+      loader: 'ts', format: 'esm', target: 'es2022', sourcefile: file, sourcemap: 'inline',
+    }).then(function (result) { return result.code; });
+  });
+
+  /* A docs page's references, per lens: the whole page at its 960-pixel
+     layout, and each example that lens renders, cropped to its panel. */
+  var DOCS_EXPORT_WIDTH = 960 + 2 * 48;
+  function docsExportPlan(view, baseUrl) {
+    var pages = docsPages(view);
+    var captures = [];
+    var warnings = [];
+    return pages.reduce(function (pending, page) {
+      return pending.then(function () { return docs.outline(page); }).then(function (examples) {
+        if (!examples) { warnings.push(page.label + ': the Markdown file doesn’t exist.'); return; }
+        var lenses = page.lenses.length ? page.lenses : [null];
+        return lenses.reduce(function (next, lens) {
+          return next.then(function () {
+            if (!lens || docsBlocked() || !previews) return [];
+            return previews.docs('index', docsService.lensRequest(lens)).then(function (listed) {
+              return listed.examples.map(function (example) { return example.id; });
+            }, function (error) {
+              warnings.push(page.label + ' — ' + lens.label + ': ' + String(error.message || error));
+              return [];
+            });
+          }).then(function (available) {
+            var url = new URL(page.src, baseUrl);
+            if (lens) url.searchParams.set('lens', lens.key);
+            var base = { page: page.src, state: 'default', viewport: 'docs', viewportLabel: 'Docs page',
+              url: url.href, external: false, docsPage: true, width: DOCS_EXPORT_WIDTH, height: EXPORT_VIEWPORTS.fit.height };
+            var prefix = lens ? lens.key + '-' : '';
+            captures.push(Object.assign({}, base, { variant: prefix + 'page', label: (lens ? lens.label + ' · ' : '') + 'Whole page' }));
+            examples.forEach(function (example) {
+              if (available.indexOf(example.id) === -1) return;
+              captures.push(Object.assign({}, base, { variant: prefix + example.id, label: (lens ? lens.label + ' · ' : '') + example.label,
+                selector: '#example-' + example.id + ' [data-wb-example-stage]' }));
+            });
+          });
+        }, Promise.resolve());
+      });
+    }, Promise.resolve()).then(function () { return { captures: captures, warnings: warnings }; });
+  }
+
+  /* A handoff from a docs page names the Markdown and, for each example in
+     view, where its code is. Examples that can't be listed keep their IDs. */
+  function docsHandoff(canvas) {
+    if (!canvas.docs) return Promise.resolve();
+    var page = docsPages(resolved()).find(function (candidate) { return candidate.src === canvas.src; });
+    if (!page) return Promise.resolve();
+    var lens = docsService.chooseLens(page, canvas.docs.lens);
+    canvas.docs.markdown = page.src;
+    canvas.docs.lensLabel = lens ? lens.label : null;
+    if (!lens || docsBlocked() || !previews) return Promise.resolve();
+    return previews.docs('index', docsService.lensRequest(lens)).then(function (listed) {
+      (canvas.docs.examples || []).forEach(function (example) {
+        var found = listed.examples.find(function (candidate) { return candidate.id === example.id; });
+        if (found) example.file = found.file + (found.export !== 'default' ? ' (' + found.export + ')' : '');
+      });
+    }).catch(function () { /* The prompt still names the examples. */ });
+  }
+
+  /* Docs problems join the config's. */
+  function importDocs(view, problems, resolvedPages) {
+    var pages = docsPages(view);
+    if (!pages.length) return Promise.resolve();
+    /* The source menu: the Markdown is the page's design file; each lens adds
+       its example source. */
+    pages.forEach(function (page) {
+      var entry = resolvedPages[page.src] = Object.assign({}, resolvedPages[page.src]);
+      entry.design = path.join(root, page.src);
+      entry.code = (entry.code || []).concat(page.lenses.map(function (lens) {
+        var target = path.join(root, lens.examples);
+        return { implementation: lens.key, path: target, relative: lens.examples, exists: fs.existsSync(target) };
+      }));
+    });
+    return docs.problems(pages).then(function (found) {
+      problems.push.apply(problems, found);
+    });
+  }
+
+  async function importPreviews(view, collections, pages, problems, implementations) {
+    discoveredDocs = [];
     if (view.previews === false) {
       if (previews) { await previews.close(); previews = null; previewSettings = null; }
       return;
     }
+    var discovered = previewCompiler.discover(root, view.previews && view.previews.include).length > 0;
     if (options.isTrusted === false) {
-      if (previewCompiler.discover(root, view.previews && view.previews.include).length) problems.push('Workbench previews require a trusted workspace.');
+      if (discovered) problems.push('Workbench previews require a trusted workspace.');
       return;
     }
-    if (!previewCompiler.discover(root, view.previews && view.previews.include).length) return;
+    /* Docs page examples compile in the same worker, so a space with docs
+       lenses and no discovered previews starts it too. */
+    if (!discovered && !docsPages(view).some(function (page) { return page.lenses.length; })) return;
     try {
       var settings = JSON.stringify(view.previews || {});
       if (previews && settings !== previewSettings) { await previews.close(); previews = null; }
@@ -1093,26 +1230,59 @@ function start(options) {
           log: function (message) { diagnostic('warn', 'preview.worker', { message: message }); } });
         previewSettings = settings;
       }
+      if (!discovered) return;
       var index = await previews.index();
       problems.push.apply(problems, index.errors);
+      /* Discovered docs pages go where their titles say, like previews. A
+         docs page workbench.yaml declares for the same Markdown file wins. */
+      var authored = new Set(pageItems(view.collections).map(function (item) { return item.src; }));
+      (index.docs || []).forEach(function (page) {
+        if (authored.has(page.src)) return;
+        var parts = page.title.split('/').filter(Boolean);
+        var collectionName = parts.length > 1 ? parts.shift() : 'Docs';
+        var label = parts.pop() || page.id;
+        discoveredDocs.push({ src: page.src, label: label, lens: page.lens, lenses: page.lenses });
+        var item = { src: page.src, label: label, docs: true, icon: 'book-open',
+          docsLenses: page.lenses.map(function (lens) { return { key: lens.key, label: lens.label }; }) };
+        if (page.lens) item.lens = page.lens;
+        if (page.states.length > 1) item.states = page.states;
+        if (page.lenses.length) {
+          item.implementations = {};
+          page.lenses.forEach(function (lens) { item.implementations[lens.key] = { examples: lens.examples }; });
+        }
+        var collection = collections.find(function (candidate) { return candidate.name === collectionName; });
+        if (!collection) { collection = { name: collectionName, icon: 'book-open', items: [] }; collections.push(collection); }
+        var groupName = parts.join(' / ');
+        if (groupName) {
+          var group = collection.items.find(function (candidate) { return candidate.group === groupName; });
+          if (!group) { group = { group: groupName, items: [] }; collection.items.push(group); }
+          group.items.push(item);
+        } else collection.items.push(item);
+        pages[page.src] = Object.assign({}, pages[page.src], { label: label, design: path.join(root, page.src), docs: page });
+      });
       var byId = {};
       index.previews.forEach(function (preview) {
         byId[preview.id] = preview;
         var parts = preview.title.split('/').filter(Boolean);
-        var group = parts.length > 1 ? parts.shift() : 'Previews';
+        var collectionName = parts.length > 1 ? parts.shift() : 'Previews';
         var label = parts.pop() || preview.id;
-        var item = { src: preview.file, label: label, states: preview.states, workbench: true, icon: 'component' };
+        var iconSettings = view.previews || {};
+        var item = { src: preview.file, label: label, states: preview.states, workbench: true, icon: preview.icon || manifest.titleIcon(iconSettings, preview.title, 'component').icon };
         if (preview.viewports) item.viewports = preview.viewports;
-        var section = sections.find(function (section) { return section.group === group; });
-        if (!section) { section = { group: group, icon: 'component', items: [] }; sections.push(section); }
-        var folderName = parts.join(' / ');
-        if (folderName) {
-          var folder = section.items.find(function (item) { return item.folder === folderName; });
-          if (!folder) { folder = { folder: folderName, items: [] }; section.items.push(folder); }
-          folder.items.push(item);
-        } else section.items.push(item);
-        var previous = screens[preview.file];
-        screens[preview.file] = Object.assign({}, previous, { label: previous && previous.label || label,
+        var collection = collections.find(function (candidate) { return candidate.name === collectionName; });
+        if (!collection) {
+          var selected = manifest.titleIcon(iconSettings, collectionName, 'component');
+          collection = { name: collectionName, icon: selected.icon, iconPriority: selected.mapped ? 6 : iconSettings.icon ? 4 : 1, items: [] };
+          collections.push(collection);
+        }
+        var groupName = parts.join(' / ');
+        if (groupName) {
+          var group = collection.items.find(function (item) { return item.group === groupName; });
+          if (!group) { group = { group: groupName, items: [] }; collection.items.push(group); }
+          group.items.push(item);
+        } else collection.items.push(item);
+        var previous = pages[preview.file];
+        pages[preview.file] = Object.assign({}, previous, { label: previous && previous.label || label,
           design: path.join(root, preview.file), preview: preview, code: (previous && previous.code || []).concat([
             { implementation: 'workbench', path: path.join(root, preview.source), relative: preview.source, exists: true },
           ]) });
@@ -1131,7 +1301,7 @@ function start(options) {
         if (implementations[key].kind !== 'workbench') return;
         implementations[key].base = '';
         if (implementations[key].root !== root) problems.push('Workbench implementations use this project root; use previews.config to configure adapters.');
-        screenItems(view.sections).forEach(function (item) {
+        pageItems(view.collections).forEach(function (item) {
           var reference = item.implementations && item.implementations[key];
           if (!reference) return;
           var preview = byId[reference.preview];
@@ -1139,7 +1309,7 @@ function start(options) {
           reference.path = '/' + preview.file;
           reference.states = {};
           preview.states.forEach(function (state) { reference.states[state.id] = '/' + preview.file + '?state=' + encodeURIComponent(state.id); });
-          screens[item.src].code.push({ implementation: key, path: path.join(root, preview.source), relative: preview.source, exists: true });
+          pages[item.src].code.push({ implementation: key, path: path.join(root, preview.source), relative: preview.source, exists: true });
         });
       });
     } catch (error) { problems.push('Workbench previews: ' + String(error.message || error)); }
@@ -1286,6 +1456,11 @@ function start(options) {
     activeExport = job;
     diagnostic('info', 'export.started', { screenshots: job.total });
     job.promise = captureReady.then(function () {
+      return docsExportPlan(view, baseUrl);
+    }).then(function (docsPlan) {
+      plan.captures = plan.captures.concat(docsPlan.captures);
+      plan.warnings = plan.warnings.concat(docsPlan.warnings);
+      job.total = plan.captures.length;
       return captureExportReferences(capture, plan, baseUrl, function (completed) {
         job.completed = completed;
         if (completed === 1 || (completed > 0 && completed % 100 === 0)) {
@@ -1357,6 +1532,46 @@ function start(options) {
       send(res, 200, previewScripts.source, 'text/javascript; charset=utf-8');
       return;
     }
+    if (url.pathname.indexOf(browserModules.PREFIX) === 0) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') { send(res, 405, 'GET a Workbench module here.'); return; }
+      serveBrowserModule(url.pathname).then(function (asset) { send(res, asset.status, asset.body, asset.type); })
+        .catch(function (error) { trouble(res, error, 500); });
+      return;
+    }
+
+    if (url.pathname === docsService.SOURCE_PATH || url.pathname === docsService.REVISION_PATH) {
+      if (req.method !== 'GET') { send(res, 405, 'GET a docs page’s source or revision here.'); return; }
+      docsReady().then(function (view) {
+        var page = docsPages(view).find(function (candidate) { return candidate.src === url.searchParams.get('page'); });
+        if (!page) throw refused(404, 'Not a docs page: ' + url.searchParams.get('page'));
+        var lens = url.searchParams.get('lens');
+        if (url.pathname === docsService.REVISION_PATH) {
+          return docs.revision(page, lens).then(function (revision) { json(res, 200, { revision: revision }); });
+        }
+        return docs.exampleSource(page, lens, url.searchParams.get('example') || '').then(function (code) { json(res, 200, code); });
+      }).catch(function (error) { trouble(res, error, 500); });
+      return;
+    }
+
+    /* A declared docs page is served at its Markdown path as the page; any
+       other Markdown file is served as it is. */
+    if (/\.md$/i.test(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
+      var docsSrc;
+      try { docsSrc = decodeURIComponent(url.pathname.slice(1)); } catch (_) { docsSrc = null; }
+      /* Discovered pages are known once the config has been resolved with
+         the worker; a broken config serves the file as it is. */
+      docsReady().catch(function () { return null; }).then(function (view) {
+        var pages = docsPages(view);
+        var docsPage = pages.find(function (candidate) { return candidate.src === docsSrc; });
+        if (!docsPage) { serveFile(root, url.pathname, res, { inject: true }); return; }
+        return docs.page(docsPage, { lens: url.searchParams.get('lens'), state: url.searchParams.get('state') },
+          new Set(pages.map(function (page) { return page.src; }))).then(function (html) {
+          send(res, 200, withPreviewScripts(html), 'text/html; charset=utf-8');
+        });
+      }).catch(function (error) { trouble(res, error, 500); });
+      return;
+    }
+
     if (url.pathname === WORKBENCH_PREFIX + 'preview-runtime.js') {
       serveFile(path.join(__dirname, 'preview'), '/browser.js', res);
       return;
@@ -1385,7 +1600,7 @@ function start(options) {
         if (!previews || !view || view.previews === false || options.isTrusted === false) throw refused(404, 'Workbench previews are unavailable.');
         if (url.pathname.indexOf('/_workbench/previews/') === 0) return previews.proxy(req, res, url.pathname.slice('/_workbench/previews'.length) + url.search);
         var relative = decodeURIComponent(url.pathname.slice(1));
-        if (!view.screens[relative] || !view.screens[relative].preview) throw refused(404, 'This preview is not in the catalog.');
+        if (!view.pages[relative] || !view.pages[relative].preview) throw refused(404, 'This preview is not in the catalog.');
         return previews.proxy(req, res, '/page?file=' + encodeURIComponent(relative));
       }).catch(function (error) { if (!res.headersSent) trouble(res, error, 500); else res.destroy(); });
       return;
@@ -1406,7 +1621,7 @@ function start(options) {
       return;
     }
 
-    /* Each canvas posts the screen it shows; agents GET the latest one. */
+    /* Each canvas posts the page it shows; agents GET the latest one. */
     if (url.pathname === agentView.VIEW_PATH) {
       if (req.method === 'GET' || req.method === 'HEAD') {
         json(res, 200, Object.assign({ ok: true }, shown.current()));
@@ -1425,56 +1640,72 @@ function start(options) {
       return;
     }
 
-    /* The form editor changes only the committed sections block. The rest of
+    /* The form editor changes only the committed collections block. The rest of
        the file, including implementations and its comments, stays untouched. */
     if (url.pathname === CONFIG_FILE_PATH) {
       if (req.method === 'GET') {
         try {
           var configSource = config.source(where);
           if (!configSource) json(res, 404, { ok: false, error: 'There is no ' + config.FILE + ' at the project root.' });
-          else json(res, 200, { ok: true, sections: configSource.sections });
+          else json(res, 200, { ok: true, collections: configSource.collections });
         } catch (error) { trouble(res, error, 400); }
         return;
       }
-      if (req.method !== 'POST') { send(res, 405, 'GET the page form or POST its sections here.'); return; }
+      if (req.method !== 'POST') { send(res, 405, 'GET the page form or POST its collections here.'); return; }
       readBody(req, MAX_HANDOFF)
         .then(function (body) {
           var ask = JSON.parse(body.toString('utf8'));
-          var saved = config.updateSections(where, ask.sections);
-          json(res, 200, { ok: true, sections: saved.sections });
+          var saved = config.updateCollections(where, ask.collections);
+          json(res, 200, { ok: true, collections: saved.collections });
         })
         .catch(function (error) { trouble(res, error, 400); });
       return;
     }
 
-    /* The projects the canvas can switch between, this one marked current.
+    /* The spaces the canvas can switch between, this one marked current.
        Opening one answers with its workbench URL, starting its server first
        if it isn't running. Only a page this server served may ask: starting a
-       project can run its start commands. */
-    if (url.pathname === PROJECTS_PATH) {
-      if (req.method !== 'GET' && req.method !== 'HEAD') { send(res, 405, 'GET the projects here.'); return; }
+       space can run its start commands. */
+    if (url.pathname === WORKBENCH_PREFIX + 'canvas/space') {
+      if (req.method !== 'POST') { send(res, 405, 'POST a canvas space operation.'); return; }
+      if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'Only this canvas can access space services.' }); return; }
+      readBody(req, MAX_VIEW).then(function (body) {
+        var ask = canvasSpaces.parseSpaceRequest(JSON.parse(body.toString('utf8')));
+        return canvasSpaces.coordinate(ask, async function (id) {
+          if (id === spaceSelf) return { url: baseUrl + WORKBENCH_PATH.slice(1) };
+          if (!spaceList) throw refused(404, 'That space is not in the Workbench list.');
+          var listed = await spaceList.list();
+          if (!listed.some(function (p) { return p.id === id; })) throw refused(404, 'That space is no longer available.');
+          return spaceList.open(id);
+        });
+      }).then(function (answer) { json(res, 200, Object.assign({ ok: true }, answer)); })
+        .catch(function (error) { trouble(res, error, 400); });
+      return;
+    }
+    if (url.pathname === SPACES_PATH) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') { send(res, 405, 'GET the spaces here.'); return; }
       Promise.resolve()
         .then(function () {
-          return projectList ? projectList.list() : [projects.describe({ dir: where.dir, key: where.key, root: root })];
+          return spaceList ? spaceList.list() : [spaces.describe({ dir: where.dir, key: where.key, root: root })];
         })
         .then(function (listed) {
-          json(res, 200, { ok: true, current: projectSelf, projects: listed });
+          json(res, 200, { ok: true, current: spaceSelf, spaces: listed });
         })
         .catch(function (err) { trouble(res, err, 500); });
       return;
     }
 
-    if (url.pathname === PROJECTS_OPEN_PATH) {
-      if (req.method !== 'POST') { send(res, 405, 'POST a project id here.'); return; }
-      if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'Only the workbench can switch projects.' }); return; }
+    if (url.pathname === SPACES_OPEN_PATH) {
+      if (req.method !== 'POST') { send(res, 405, 'POST a space id here.'); return; }
+      if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'Only the workbench can switch spaces.' }); return; }
       readBody(req, MAX_VIEW)
         .then(function (body) {
           var ask = JSON.parse(body.toString('utf8'));
           var id = String((ask && ask.id) || '');
-          if (id === projectSelf) return { url: 'http://127.0.0.1:' + server.address().port + WORKBENCH_PATH };
-          if (!projectList) throw refused(404, 'That project isn’t in the Workbench list.');
-          return Promise.resolve(projectList.open(id)).then(function (opened) {
-            diagnostic('info', 'project.opened', { project: id });
+          if (id === spaceSelf) return { url: 'http://127.0.0.1:' + server.address().port + WORKBENCH_PATH };
+          if (!spaceList) throw refused(404, 'That space isn’t in the Workbench list.');
+          return Promise.resolve(spaceList.open(id)).then(function (opened) {
+            diagnostic('info', 'space.opened', { space: id });
             return { url: opened.url };
           });
         })
@@ -1541,8 +1772,8 @@ function start(options) {
       return;
     }
 
-    /* A window lens: stream the window a screen names from the app its
-       implementation declares. The page only says which screen; the app and
+    /* A window lens: stream the window a page names from the app its
+       implementation declares. The request only says which page; the app and
        title come from the config, so a page can't ask for any other window. */
     if (url.pathname === WINDOW_STREAM_PATH) {
       if (req.method !== 'POST') {
@@ -1556,13 +1787,13 @@ function start(options) {
             var key = String(ask.implementation || '');
             var src = String(ask.src || '');
             var impl = view && view.implementations[key];
-            var screen = view && Object.prototype.hasOwnProperty.call(view.screens, src) ? view.screens[src] : null;
-            var title = screen && screen.windows && screen.windows[key];
+            var page = view && Object.prototype.hasOwnProperty.call(view.pages, src) ? view.pages[src] : null;
+            var title = page && page.windows && page.windows[key];
             if (!impl || impl.kind !== 'window' || !title) {
               throw refused(403, 'that window isn’t declared by this workbench');
             }
             if (ask.stop) {
-              return Promise.resolve(windowVideo.stop()).then(function () {
+              return Promise.resolve(windowVideo.stop(key + '\n' + src)).then(function () {
                 json(res, 200, { ok: true, stopped: true });
               });
             }
@@ -1594,28 +1825,36 @@ function start(options) {
       readBody(req, MAX_HANDOFF)
         .then(function (body) {
           var ask = JSON.parse(body.toString('utf8'));
-          return resolvedWithCatalogs().then(function (view) {
+          return resolvedWithCatalogs().then(async function (view) {
             var key = String(ask.implementation || '');
             var udid = String(ask.udid || '');
             var impl = view && view.implementations[key];
-            var allowed = view && Object.keys(view.screens).some(function (src) {
-              return src.indexOf('__ios-simulator/' + key + '/') === 0
-                && view.screens[src].simulator
-                && view.screens[src].simulator.udid === udid;
+            var devices = impl && impl.kind === 'ios-simulator' ? await Promise.resolve(listSimulators()) : [];
+            var device = devices.find(function (entry) { return entry.udid === udid || entry.name === udid; });
+            var allowed = view && Object.keys(view.pages).some(function (src) {
+              return (src.indexOf('__ios-simulator/' + key + '/') === 0
+                && view.pages[src].simulator
+                && view.pages[src].simulator.udid === udid);
+            });
+            if (!allowed && device) allowed = pageItems(view.collections).some(function (item) {
+              var mapping = item.implementations && item.implementations[key];
+              return mapping && (mapping.device === device.udid || mapping.device === device.name);
             });
             if (!impl || impl.kind !== 'ios-simulator' || !allowed) {
               throw refused(403, 'that Simulator isn’t declared by this workbench');
             }
+            if (device) udid = device.udid;
+            ask.udid = udid;
             if (url.pathname === SIMULATOR_STREAM_PATH) {
               if (ask.stop) {
-                return Promise.resolve(windowVideo.stop()).then(function () {
+                return Promise.resolve(windowVideo.stop(udid)).then(function () {
                   json(res, 200, { ok: true, stopped: true });
                 });
               }
               return Promise.resolve(windowVideo.start({
-                source: view.screens[Object.keys(view.screens).find(function (src) {
+                source: device ? device.name : view.pages[Object.keys(view.pages).find(function (src) {
                   return src.indexOf('__ios-simulator/' + key + '/') === 0
-                    && view.screens[src].simulator && view.screens[src].simulator.udid === udid;
+                    && view.pages[src].simulator && view.pages[src].simulator.udid === udid;
                 })].label,
                 app: 'simulator',
                 id: udid,
@@ -1643,25 +1882,25 @@ function start(options) {
       return;
     }
 
-    /* Open a screen's source in the editor: its design file, or one of the
+    /* Open a page's source in the editor: its design file, or one of the
        places its implementation lives. Only paths the config resolves to —
        a page in the frame could POST here, and it is not getting to name a
        file on this machine. */
     if (url.pathname === OPEN_PATH) {
       if (req.method !== 'POST') {
-        send(res, 405, 'POST the screen here.');
+        send(res, 405, 'POST the page here.');
         return;
       }
       readBody(req, MAX_HANDOFF)
         .then(function (body) {
           var ask = JSON.parse(body.toString('utf8'));
           return resolvedWithCatalogs().then(function (view) {
-            var screen = view && view.screens[String(ask.src || '')];
-            if (!screen) throw refused(404, 'that screen isn’t in the workbench');
+            var page = view && view.pages[String(ask.src || '')];
+            if (!page) throw refused(404, 'that page isn’t in the workbench');
             var file = null;
-            if (!ask.path) file = screen.design;
+            if (!ask.path) file = page.design;
             else {
-              screen.code.forEach(function (entry) {
+              page.code.forEach(function (entry) {
                 if (entry.path && entry.path === ask.path) file = entry.path;
               });
             }
@@ -1702,6 +1941,11 @@ function start(options) {
             var png = shot && (shot.image || shot.png) ? (shot.image || shot.png) : shot;
             if (!png || !png.length) throw new Error('native capture returned an empty image');
             if (url.pathname === CAPTURE_PAGE_IMAGE_PATH) {
+              if (url.searchParams.get('review') === '1') {
+                var inspected = shot && (shot.targets || (shot.captureDetails && shot.captureDetails.targets));
+                json(res, 200, { ok: true, image: png.toString('base64'), type: payload.format === 'jpeg' ? 'image/jpeg' : 'image/png', targets: inspected || null });
+                return;
+              }
               sendImage(res, png, payload.format);
               return;
             }
@@ -1815,6 +2059,16 @@ function start(options) {
       return;
     }
 
+    if (url.pathname === WORKBENCH_PREFIX + 'canvas/review') {
+      if (req.method !== 'POST') { send(res, 405, 'POST an artboard review.'); return; }
+      readBody(req, MAX_HANDOFF).then(function (body) {
+        var payload = JSON.parse(body.toString('utf8'));
+        if (!payload || typeof payload.src !== 'string') throw new Error('Invalid artboard review.');
+        return docsHandoff(payload).then(function () { json(res, 200, { ok: true, payload: payload }); });
+      }).catch(function (error) { trouble(res, error, 400); });
+      return;
+    }
+
     /* The shot is already on disk by the time this arrives — all that's left
        is to say it in words and pass it to the editor. */
     if (url.pathname === HANDOFF_PATH) {
@@ -1831,8 +2085,9 @@ function start(options) {
         .then(function (body) {
           var canvas = JSON.parse(body.toString('utf8'));
           handoffFile = canvas.file || null;
-          var text = handoff.prompt(canvas);
-          return Promise.resolve(onHandoff(text, canvas)).then(function () {
+          return (canvas.version === 2 ? Promise.resolve() : docsHandoff(canvas)).then(function () {
+            return onHandoff(handoff.prompt(canvas), canvas);
+          }).then(function () {
             diagnostic('info', 'handoff.completed', { file: handoffFile, target: 'clipboard' });
             send(res, 200, JSON.stringify({ ok: true }), TYPES['.json']);
           });
@@ -1860,8 +2115,8 @@ function start(options) {
       return;
     }
 
-    /* The project's workbench.yaml and workbench.local.yaml, wherever they
-       are — for a project whose config isn't at the root this serves. Only
+    /* The space's workbench.yaml and workbench.local.yaml, wherever they
+       are — for a space whose config isn't at the root this serves. Only
        those two files. */
     if (url.pathname.indexOf(MANIFEST_PATH) === 0) {
       var manifestName = url.pathname.slice(MANIFEST_PATH.length);
@@ -1873,7 +2128,8 @@ function start(options) {
     /* The tool, out of the extension. Its own paths are relative, so keeping
        the leading slash is what makes /_workbench/ mean the folder's root. */
     if (url.pathname.indexOf(WORKBENCH_PREFIX) === 0) {
-      serveFile(WORKBENCH_DIR, url.pathname.slice(WORKBENCH_PREFIX.length - 1), res, { head: canvasHead });
+      var workbenchFile = url.pathname === WORKBENCH_PREFIX ? '/index.html' : url.pathname.slice(WORKBENCH_PREFIX.length - 1);
+      serveFile(WORKBENCH_DIR, workbenchFile, res, { head: canvasHead });
       return;
     }
 
@@ -1925,7 +2181,7 @@ function start(options) {
       url: 'http://127.0.0.1:' + port + WORKBENCH_PATH,
       config: resolvedWithCatalogs,
 
-      /* Points .canonic/.workbench/server.json at this server again. Projects
+      /* Points .canonic/.workbench/server.json at this server again. Spaces
          that share a root share that file; the one being shown claims it, so
          agents in that folder read the view the user has open. */
       announce: function () {
@@ -1982,8 +2238,8 @@ module.exports = {
   OPEN_PATH: OPEN_PATH,
   SHOT_PATH: SHOT_PATH,
   STORIES_PATH: STORIES_PATH,
-  PROJECTS_PATH: PROJECTS_PATH,
-  PROJECTS_OPEN_PATH: PROJECTS_OPEN_PATH,
+  SPACES_PATH: SPACES_PATH,
+  SPACES_OPEN_PATH: SPACES_OPEN_PATH,
   createCapture: createCapture,
   EXPORT_PATH: EXPORT_PATH,
   SIMULATOR_PATH: SIMULATOR_PATH,
@@ -1997,7 +2253,7 @@ module.exports = {
 
 /* `node server.js [folder...]` — the same server the extension runs, for when
    you want it without the editor. Each folder's workbench.yaml is one
-   project, or one per entry of its `projects`. One project is one workbench,
+   space, or one per entry of its `spaces`. One space is one workbench,
    as in the editor; several are several workbenches the canvas switches
    between, each on its own server, all started here and sharing one
    screenshot service. */
@@ -2013,7 +2269,7 @@ if (require.main === module) {
   };
   var found = [];
   dirs.forEach(function (dir) {
-    config.list(dir).forEach(function (project) { found.push(Object.assign({ dir: path.resolve(dir) }, project)); });
+    config.list(dir).forEach(function (space) { found.push(Object.assign({ dir: path.resolve(dir) }, space)); });
   });
 
   if (found.length <= 1) {
@@ -2022,21 +2278,21 @@ if (require.main === module) {
       console.log('workbench on ' + running.url);
     }, failed);
   } else {
-    var missing = dirs.filter(function (dir) { return !projects.hasWorkbench(dir); });
+    var missing = dirs.filter(function (dir) { return !spaces.hasWorkbench(dir); });
     if (missing.length) failed(new Error('There’s no ' + config.FILE + ' in ' + missing.join(', ') + '.'));
     var shared = createCapture();
-    var hub = projects.create({
-      start: function (project) {
+    var hub = spaces.create({
+      start: function (space) {
         return start({
-          root: project.root, config: { dir: project.dir, key: project.key },
+          root: space.root, config: { dir: space.dir, key: space.key },
           capture: shared, captureShared: true, eagerCapture: true,
-          projects: hub, onShot: onShot,
+          spaces: hub, onShot: onShot,
         });
       },
     });
     hub.set(dirs.map(function (dir) { return { dir: dir }; }));
     var listed = hub.list();
-    Promise.all(listed.map(function (project) { return hub.open(project.id); })).then(function (servers) {
+    Promise.all(listed.map(function (space) { return hub.open(space.id); })).then(function (servers) {
       servers.forEach(function (running, i) {
         console.log('workbench on ' + running.url + '  ' + listed[i].name);
       });

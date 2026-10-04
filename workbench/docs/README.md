@@ -1,15 +1,16 @@
 # Workbench documentation
 
-Workbench is a VS Code extension that renders a project's screens on one
-canvas at device widths. You can draw on a screen, compare it with its
-implementation, and copy an annotated screenshot and a description of the
-marks for a coding agent.
+Workbench is a VS Code extension that renders a project's pages on one
+canvas at device widths. You can draw on a page, compare it with its
+implementation, and copy a screenshot with your annotations and a description
+of them for a coding agent.
 
-A project's configuration is `workbench.yaml` at the project root. Screens can
-come from HTML design pages you list there, from TypeScript previews of your
-own components, or from a Storybook or Simulator catalog. The tool ships inside
-the extension; in your project it writes only handoff screenshots and the page
-list you edit in the canvas. See
+A project's configuration is `workbench.yaml` at the project root. Pages can
+come from HTML design pages you list there, from Markdown docs pages with live
+examples, from TypeScript previews of your own components, or from a
+Storybook or Simulator catalog. The tool ships inside
+the extension; in your project it writes only handoff screenshots and the
+collections you edit with **Configure pages**. See
 [Files and network access](extension.md#files-and-network-access).
 
 ## Start here
@@ -18,16 +19,17 @@ list you edit in the canvas. See
 | --- | --- |
 | [Getting started](getting-started.md) | Install the extension, write a first `workbench.yaml`, and open the canvas |
 | [Pages and states](pages-and-states.md) | Write design pages, give one page several states, and choose its viewports |
-| [Using the canvas](canvas.md) | Find your way around the sidebar, the toolbar, frame widths, zoom, and links |
-| [Markup and handoff](markup-and-handoff.md) | Annotate a screen, save screenshots, and hand the result to an agent |
-| [Several projects](projects.md) | Switch between projects in one window, add projects from elsewhere on disk, and serve several from the command line |
+| [Docs pages](docs-pages.md) | Document components and foundations in Markdown, with live examples, their code, and lenses that render them |
+| [Using the canvas](canvas.md) | Find your way around the sidebar, the top bar, artboard sizes, zoom, and links |
+| [Annotations and handoff](annotations-and-handoff.md) | Annotate a page with the toolbar, save screenshots, and hand the result to an agent |
+| [Several spaces](spaces.md) | Switch between spaces in one window, add spaces from elsewhere on disk, and serve several from the command line |
 
 ## Previews
 
 | Guide | Read it to |
 | --- | --- |
 | [TypeScript Workbench previews](workbench-previews.md) | Define a preview, its states, and its hooks; check previews from the command line and build a portable viewer |
-| [Preview data, mocks, and actions](preview-data.md) | Give a screen its props, providers, and data; mock its requests; log its actions; and link previews into flows |
+| [Preview data, mocks, and actions](preview-data.md) | Give a page its props, providers, and data; mock its requests; log its actions; and link previews into flows |
 | [React](react.md) | Preview React components, with providers, styles, and assets |
 | [React Native Web](react-native-web.md) | Preview React Native components in the browser, with web-only files and mocks for native modules |
 | [Vue](vue.md) | Preview Vue single-file components, with plugins, slots, and events |
@@ -39,8 +41,8 @@ list you edit in the canvas. See
 
 | Guide | Read it to |
 | --- | --- |
-| [Lenses and URL implementations](lenses.md) | Show a screen as it runs on a dev server, staging, or as a preview, point at its code, and start the server automatically |
-| [Storybook](storybook.md) | Map screens to stories, or import a whole Storybook as the workbench |
+| [Lenses and URL implementations](lenses.md) | Show a page as it runs on a dev server, staging, or as a preview, point at its code, and start the server automatically |
+| [Storybook](storybook.md) | Map pages to stories, or import a whole Storybook as the workbench |
 | [iOS Simulator](ios-simulator.md) | Stream and drive a booted Simulator on the canvas |
 | [App windows](windows.md) | Stream a window from any macOS app, such as an Android emulator |
 
@@ -51,4 +53,4 @@ list you edit in the canvas. See
 | [workbench.yaml reference](configuration.md) | Every key, its type, its default, and the rules the reader enforces |
 | [Design-system export](design-system-export.md) | What the ZIP export contains, including portable previews, and how to use it |
 | [The VS Code extension](extension.md) | Commands, projects in subfolders, the server and its ports, the preview worker, screenshots, files and network access, updating, uninstalling, and running without the editor |
-| [Troubleshooting](troubleshooting.md) | How to find out why a screen, lens, story, or screenshot is missing or wrong |
+| [Troubleshooting](troubleshooting.md) | How to find out why a page, lens, story, or screenshot is missing or wrong |

@@ -16,11 +16,20 @@ async function create(compiler, options = {}) {
         packages: result.packages, revision: result.revision });
     } catch (error) { warnings.push(preview.file + ': ' + error.message); }
   }
+  // Docs pages: those workbench.yaml declares and those definitions declare.
+  let config = null;
+  try { config = require('../config').read(compiler.root); } catch (error) { warnings.push('workbench.yaml: ' + error.message); }
+  const discovered = (index.docs || []).map(page => ({ src: page.src, label: page.title.split('/').filter(Boolean).pop() || page.id, lens: page.lens, lenses: page.lenses }));
+  const { docsPages } = require('../src/docs/pages.ts');
+  const { portableDocs } = require('../src/docs/portable.ts');
+  const docs = await portableDocs(compiler, docsPages(config, discovered), add);
+  warnings.push(...docs.warnings);
   for (const file of ['index.html', 'viewer.js', 'viewer.css']) add(file, fs.readFileSync(path.join(__dirname, 'viewer', file)));
   for (const file of ['preview-controls.js', 'preview-controls.css']) add(file, fs.readFileSync(path.join(__dirname, '..', 'workbench', file)));
+  add('CANONIC-LICENSE.txt', fs.readFileSync(path.join(__dirname, '..', 'LICENSE')));
   add('workbench.json', JSON.stringify({ version: 1, name: options.name || path.basename(compiler.root),
-    previews: previews.map(({ files, ...preview }) => preview), warnings }, null, 2));
-  return { files, previews, warnings };
+    previews: previews.map(({ files, ...preview }) => preview), docs: docs.pages, warnings }, null, 2));
+  return { files, previews, docs: docs.pages, warnings };
 }
 
 module.exports = { create };

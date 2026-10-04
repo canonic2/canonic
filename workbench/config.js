@@ -1,14 +1,14 @@
-/* The project's workbench.yaml, read on the machine it's on
-   -------------------------------------------------------
+/* The space's workbench.yaml, read on the machine it's on
+   -----------------------------------------------------
    The workbench reads this file in the browser to build its sidebar. The
    server reads it here, in node, for what only this side can answer: where
-   an implementation's code is on this disk, which origins the screens'
+   an implementation's code is on this disk, which origins the pages'
    implementations live at, which Storybook to ask for stories. The rules
    are the same — workbench/manifest.js holds the ones about implementations,
    and the shape checks below mirror workbench/config.js.
 
    What this deliberately does not do is complain about the handwritten tree. The
-   workbench reports every problem in it with the section and screen it came
+   workbench reports every problem in it with the collection and page it came
    from — having the editor say the same thing again in a different voice
    helps nobody. Here, anything malformed is skipped and the rest is shown.
    Problems with implementations are kept, though: `/_workbench/config`
@@ -35,7 +35,7 @@ function list(value) {
   return Array.isArray(value) ? value : [];
 }
 
-/* Fewer than two states is no choice to make, so the screen stays one row. */
+/* Fewer than two states is no choice to make, so the page stays one row. */
 function states(raw) {
   var out = list(raw)
     .map(function (state) {
@@ -47,43 +47,44 @@ function states(raw) {
   return out.length > 1 ? out : null;
 }
 
-function screen(raw, where, impls, problems) {
+function page(raw, where, impls, problems) {
   var label = text(raw && raw.label);
   var src = text(raw && raw.src);
   if (!label || !src || src.charAt(0) === '/' || src.indexOf('..') > -1) return null;
-  if (src.indexOf(':') > -1 || src.indexOf('~') > -1) return null;
+  if (manifest.srcProblem(src)) return null;
   var item = { label: label, src: src };
-  item.viewports = manifest.screenViewports(raw.viewports, where + ' › ' + label, problems);
+  item.viewports = manifest.pageViewports(raw.viewports, where + ' › ' + label, problems);
   var icon = text(raw.icon);
   if (icon) item.icon = icon;
   var found = states(raw.states);
   if (found) item.states = found;
-  var lenses = manifest.screenLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
+  var lenses = manifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
   if (lenses) item.implementations = lenses;
-  var code = manifest.screenCode(raw.code, impls, where + ' › ' + label, problems);
+  manifest.docsPageEntry(raw, item, where + ' › ' + label, problems);
+  var code = manifest.pageCode(raw.code, impls, where + ' › ' + label, problems);
   if (code) item.code = code;
   return item;
 }
 
-function entries(raw, where, impls, problems, inFolder) {
+function entries(raw, where, impls, problems, inGroup) {
   return list(raw)
     .map(function (entry) {
-      var folder = text(entry && entry.folder);
-      if (!folder) return screen(entry, where, impls, problems);
-      if (inFolder) return null;
-      var items = entries(entry.items, where + ' › ' + folder, impls, problems, true);
-      return items.length ? { folder: folder, items: items } : null;
+      var group = text(entry && entry.group);
+      if (!group) return page(entry, where, impls, problems);
+      if (inGroup) return null;
+      var items = entries(entry.items, where + ' › ' + group, impls, problems, true);
+      return items.length ? { group: group, items: items } : null;
     })
     .filter(Boolean);
 }
 
-function sections(raw, impls, problems) {
+function collections(raw, impls, problems) {
   return list(raw)
-    .map(function (section) {
-      var name = text(section && section.name);
+    .map(function (collection) {
+      var name = text(collection && collection.name);
       if (!name) return null;
-      var items = entries(section && section.items, name, impls, problems, false);
-      return items.length ? { name: name, icon: text(section.icon), items: items } : null;
+      var items = entries(collection && collection.items, name, impls, problems, false);
+      return items.length || text(collection.icon) ? { name: name, icon: text(collection.icon), items: items } : null;
     })
     .filter(Boolean);
 }
@@ -107,9 +108,9 @@ function parseFile(body, name) {
   }
 }
 
-/* Which project's config to read. A folder is the workbench.yaml in it, and
-   the first of its projects when it lists several; { dir, key } is the
-   project `key` of the file in `dir`. */
+/* Which space's config to read. A folder is the workbench.yaml in it, and
+   the first of its spaces when it lists several; { dir, key } is the
+   space `key` of the file in `dir`. */
 function locate(where) {
   if (typeof where === 'string') return { dir: path.resolve(where), key: null };
   return { dir: path.resolve(where.dir), key: where.key || null };
@@ -125,10 +126,10 @@ function readRaw(dir) {
   return { raw: raw, local: local !== null };
 }
 
-/* The projects a workbench.yaml holds, each { key, root }: one with a null
-   key for a file without `projects`, and for a file that doesn't parse, so
+/* The spaces a workbench.yaml holds, each { key, root }: one with a null
+   key for a file without `spaces`, and for a file that doesn't parse, so
    it is still listed and can show its error. Empty without the file. */
-function projectsIn(dir) {
+function spacesIn(dir) {
   dir = path.resolve(dir);
   var found;
   try {
@@ -137,18 +138,18 @@ function projectsIn(dir) {
     return [{ key: null, root: dir }];
   }
   if (!found) return [];
-  var keys = manifest.projectKeys(found.raw, []);
+  var keys = manifest.spaceKeys(found.raw, []);
   if (!keys.length) return [{ key: null, root: dir }];
   return keys.map(function (key) {
-    var picked = manifest.selectProject(found.raw, key, []);
+    var picked = manifest.selectSpace(found.raw, key, []);
     return { key: key, root: picked.root ? path.resolve(dir, picked.root) : dir };
   });
 }
 
-/* The config, or null when the project has no workbench.yaml at all — which
+/* The config, or null when the folder has no workbench.yaml at all — which
    is a project the tree simply has nothing to show for, not an error worth
    raising. A workbench.local.yaml beside it is merged over it when there is
-   one; a missing one is the usual case. `root` is the folder the project
+   one; a missing one is the usual case. `root` is the folder the space
    serves, which every path in it is relative to. */
 function read(where) {
   var at = locate(where);
@@ -156,19 +157,19 @@ function read(where) {
   if (!found) return null;
 
   var problems = [];
-  var picked = manifest.selectProject(found.raw, at.key, problems);
+  var picked = manifest.selectSpace(found.raw, at.key, problems);
   var raw = picked.raw;
   var root = picked.root ? path.resolve(at.dir, picked.root) : at.dir;
   var impls = manifest.implementations(raw && raw.implementations, problems);
 
-  var mark = manifest.projectMark(raw, problems);
+  var mark = manifest.spaceMark(raw, problems);
 
   return {
     name: text(raw && raw.name) || path.basename(root),
     key: picked.key,
     root: root,
     mark: mark,
-    sections: sections(raw && raw.sections, impls, problems),
+    collections: collections(raw && raw.collections, impls, problems),
     implementations: impls,
     previews: manifest.previews(raw && raw.previews, problems),
     problems: problems,
@@ -176,15 +177,15 @@ function read(where) {
   };
 }
 
-/* The committed file, for the page form: its text, and the sections the
-   project shows — its own, or the shared ones it inherits. */
+/* The committed file, for the page form: its text, and the collections the
+   space shows — its own, or the shared ones it inherits. */
 function source(where) {
   var at = locate(where);
   var body = readFile(at.dir, FILE);
   if (body === null) return null;
   var raw = parseFile(body, FILE);
-  var picked = manifest.selectProject(raw, at.key, []);
-  return { body: body, raw: raw, key: picked.key, sections: picked.raw.sections || [] };
+  var picked = manifest.selectSpace(raw, at.key, []);
+  return { body: body, raw: raw, key: picked.key, collections: picked.raw.collections || [] };
 }
 
 function replaceTopLevel(body, key, replacement) {
@@ -240,17 +241,17 @@ function childBlock(lines, from, to, key, fallbackIndent) {
   return { start: -1, end: after, indent: depth === null ? fallbackIndent : depth };
 }
 
-/* `projects.<key>.sections` replaced in place, or added at the end of that
-   project, leaving every other line of the file as it was. */
-function replaceProjectSections(body, key, updated) {
+/* `spaces.<key>.collections` replaced in place, or added at the end of that
+   space, leaving every other line of the file as it was. */
+function replaceSpaceCollections(body, key, updated) {
   var lines = String(body).split(/\r?\n/);
-  var projects = childBlock(lines, 0, lines.length, 'projects', 0);
-  if (projects.start === -1) throw new Error('There is no projects block in ' + FILE + '.');
-  var project = childBlock(lines, projects.start + 1, projects.end, key, projects.indent + 2);
-  if (project.start === -1) throw new Error('There is no project “' + key + '” in ' + FILE + '.');
-  var block = childBlock(lines, project.start + 1, project.end, 'sections', project.indent + 2);
+  var spaces = childBlock(lines, 0, lines.length, 'spaces', 0);
+  if (spaces.start === -1) throw new Error('There is no spaces block in ' + FILE + '.');
+  var space = childBlock(lines, spaces.start + 1, spaces.end, key, spaces.indent + 2);
+  if (space.start === -1) throw new Error('There is no space “' + key + '” in ' + FILE + '.');
+  var block = childBlock(lines, space.start + 1, space.end, 'collections', space.indent + 2);
   var pad = new Array(block.indent + 1).join(' ');
-  var replacement = yaml.stringify({ sections: updated }).trim().split('\n').map(function (line) {
+  var replacement = yaml.stringify({ collections: updated }).trim().split('\n').map(function (line) {
     return line ? pad + line : line;
   });
   if (block.start === -1) lines.splice.apply(lines, [block.end, 0].concat(replacement));
@@ -258,16 +259,16 @@ function replaceProjectSections(body, key, updated) {
   return lines.join('\n').replace(/\n*$/, '\n');
 }
 
-/* The page form's save. A project of a file that lists several gets its own
-   sections, so the others keep theirs, shared or not. */
-function updateSections(where, updated) {
-  if (!Array.isArray(updated)) throw new Error('sections must be a list.');
+/* The page form's save. A space of a file that lists several gets its own
+   collections, so the others keep theirs, shared or not. */
+function updateCollections(where, updated) {
+  if (!Array.isArray(updated)) throw new Error('collections must be a list.');
   var at = locate(where);
   var current = source(at);
   if (!current) throw new Error('There is no ' + FILE + ' at the project root.');
   var next = current.key
-    ? replaceProjectSections(current.body, current.key, updated)
-    : replaceTopLevel(current.body, 'sections', yaml.stringify({ sections: updated }).trim());
+    ? replaceSpaceCollections(current.body, current.key, updated)
+    : replaceTopLevel(current.body, 'collections', yaml.stringify({ collections: updated }).trim());
   parseFile(next, FILE);
   var target = path.join(at.dir, FILE);
   var temporary = target + '.canonic-' + process.pid + '-' + Date.now();
@@ -280,16 +281,16 @@ function updateSections(where, updated) {
   return source(at);
 }
 
-function screensIn(items, out) {
+function pagesIn(items, out) {
   items.forEach(function (entry) {
-    if (entry.folder) screensIn(entry.items, out);
+    if (entry.group) pagesIn(entry.items, out);
     else out.push(entry);
   });
   return out;
 }
 
 /* What the browser can't work out for itself: every path made absolute for
-   this machine. Implementation roots resolve against the project; a screen's
+   this machine. Implementation roots resolve against the project; a page's
    code resolves against its implementation's root — or nowhere, when that
    implementation hasn't said where it lives, which is named as a problem. */
 function resolve(root, config) {
@@ -307,10 +308,10 @@ function resolve(root, config) {
     impls[key] = Object.assign({}, impl, { root: impl.root ? path.resolve(root, impl.root) : null });
   });
 
-  var screens = {};
-  config.sections.forEach(function (section) {
-    screensIn(section.items, []).forEach(function (item) {
-      var where = section.name + ' › ' + item.label;
+  var pages = {};
+  config.collections.forEach(function (collection) {
+    pagesIn(collection.items, []).forEach(function (item) {
+      var where = collection.name + ' › ' + item.label;
       var missing = {};
       var code = [];
       (item.code || []).forEach(function (entry) {
@@ -329,17 +330,17 @@ function resolve(root, config) {
         var file = path.resolve(impl.root, entry.path);
         code.push({ implementation: entry.implementation, path: file, relative: entry.path, exists: fs.existsSync(file) });
       });
-      screens[item.src] = {
+      pages[item.src] = {
         label: item.label,
         design: path.resolve(root, item.src),
         code: code,
       };
-      /* The server opens a window stream only for a window a screen names. */
+      /* The server opens a window stream only for a window a page names. */
       Object.keys(item.implementations || {}).forEach(function (key) {
         var ref = item.implementations[key];
         if (!ref.window) return;
-        screens[item.src].windows = screens[item.src].windows || {};
-        screens[item.src].windows[key] = ref.window;
+        pages[item.src].windows = pages[item.src].windows || {};
+        pages[item.src].windows[key] = ref.window;
       });
     });
   });
@@ -347,9 +348,9 @@ function resolve(root, config) {
   return {
     name: config.name,
     mark: mark,
-    sections: config.sections,
+    collections: config.collections,
     implementations: impls,
-    screens: screens,
+    pages: pages,
     files: config.files,
     problems: problems,
     previews: config.previews,
@@ -358,11 +359,11 @@ function resolve(root, config) {
 
 module.exports = {
   read: read,
-  list: projectsIn,
+  list: spacesIn,
   locate: locate,
   resolve: resolve,
   source: source,
-  updateSections: updateSections,
+  updateCollections: updateCollections,
   FILE: FILE,
   LOCAL: LOCAL,
 };

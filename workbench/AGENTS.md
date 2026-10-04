@@ -1,7 +1,7 @@
 # Workbench — Package Instructions
 
-Workbench is a VS Code extension that puts a project's screens on one canvas
-at real device widths, with markup, screenshots, and a handoff to an agent. A
+Workbench is a VS Code extension that puts a project's pages on one canvas
+at real device widths, with annotations, screenshots, and a handoff to an agent. A
 project's whole setup is its `workbench.yaml`, plus an optional, ignored
 `workbench.local.yaml`.
 
@@ -9,7 +9,7 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
 
 - `extension.js`, `panel.js`, `startup.js`: the extension, its webview, and
   the start of configured implementations.
-- `server.js`, `config.js`, `screens.js`, `yaml.js`: the local HTTP server on
+- `server.js`, `config.js`, `sidebar-view.js`, `yaml.js`: the local HTTP server on
   127.0.0.1 (port 3579 and up) and the config it serves.
 - `capture*.js`, `electron-capture.js`, `capture-helper/`:
   screenshots. `window-stream.js`, `window-capture/`: the native window
@@ -18,10 +18,12 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
   runtime for capture and preview compilation/server processes.
 - `handoff.js`, `export.js`: handoffs and the design-system export.
   `remote.js`: requests to implementations.
+- `src/`: TypeScript modules, grouped by capability (`src/docs/` holds docs
+  pages). New capabilities and code migrated out of the files above live here.
 - `workbench/`: the browser canvas: manifest reader, states, lenses,
-  navigation, markup. Read `workbench/README.md` before changing it.
+  page list, annotations. Read `workbench/README.md` before changing it.
 - `docs/`: the user guides, published on the website as they are.
-- `design/`: the Workbench project's design pages, shown in this repository's
+- `design/`: the Workbench space's design pages, shown in this repository's
   workbench. They load the shipping `workbench/` code with sample data and
   aren't packaged.
 - `specs/`: internal product requirements, workflows, decisions, and discoveries;
@@ -30,14 +32,27 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
 
 ## Architecture direction
 
-Apply the shared module, UI, testing and diagnostics contracts with this
-package's existing plain JavaScript, HTML/CSS and module formats. Browser canvas
+Apply the shared module, UI, testing and diagnostics contracts. Browser canvas
 code, extension/host transport, server I/O and manifest interpretation have
 different responsibilities; keep those boundaries explicit.
 
-The current files are the migration starting point. New capabilities should
-separate pure logic, rendering, orchestration and adapters; local fixes improve
-their affected area without moving unrelated files. Preserve browser/server
+New code is TypeScript under `src/`, run without a build step:
+
+- Node 24 loads `.ts` by stripping types, and the extension requires VS Code
+  1.123 or later for the same reason. Use erasable syntax only (no `enum`,
+  `namespace`, parameter properties, or `import =`), `import type` for types,
+  and explicit `.ts` extensions on relative imports.
+- `src/` is ES modules (`src/package.json` sets `"type": "module"`). The
+  CommonJS host files `require()` them directly.
+- Browser modules in `src/` are served with their types stripped by the local
+  server; the canvas never loads a compiled copy.
+- Keep pure logic (validation, parsing, matching) free of Node, DOM, and
+  transport so it is tested directly; filesystem, HTTP, compiler, and DOM code
+  are adapters around it.
+
+The JavaScript files outside `src/` are the migration starting point. Move code
+into `src/` when a change substantially reworks it, in bounded steps that
+preserve public contracts; local fixes stay in place. Preserve browser/server
 manifest agreement, host compatibility and packaged assets during restructuring.
 Use develop-module, review-module, create-ui-component, write-tests, fix-checks
 and debug-runtime with the commands below. A shared UI package is not required.
@@ -47,8 +62,9 @@ and debug-runtime with the commands below. A shared UI package is not required.
 - The workbench ships inside the extension. Projects supply only
   `workbench.yaml`; never copy the workbench into a project or add its scripts
   to a project's pages.
-- Keep the code project-agnostic, in plain HTML, CSS, and JavaScript, matching
-  the module style of each file. Use Acme and example.com in fixtures.
+- Keep the code project-agnostic. Write new code in TypeScript under `src/`;
+  edit the existing JavaScript, HTML, and CSS in the module style of each file.
+  Use Acme and example.com in fixtures.
 - `workbench/manifest.js` supplies the manifest rules to both the browser and
   the server. Keep the two readers consistent.
 - When the `workbench.yaml` schema changes, update `workbench/README.md` and
@@ -61,15 +77,18 @@ and debug-runtime with the commands below. A shared UI package is not required.
 
 ## Commands
 
-From this folder (or with `npm --prefix packages/workbench` from the
-repository root):
+The package uses pnpm, with its own frozen lockfile, a flat (`hoisted`)
+`node_modules`, and no dependency install scripts. Run commands from this
+folder, or with `pnpm --dir packages/workbench` from the repository root;
+agent shell calls use the repository-root form, which Shield allows.
 
 | Change | Command |
 | --- | --- |
-| Extension or workbench behavior | `npm test` |
+| Extension or workbench behavior | `pnpm test` |
+| Type-check `src/` | `pnpm run check` |
 | Run the server on a project | `node server.js <project>`, then open the reported workbench URL |
-| Packaging | `npm run package` (this host) or `npm run package:all -- <target>`, then inspect `dist/` |
-| Locked dependencies | `npm ci --ignore-scripts` |
+| Packaging | `pnpm run package` (this host) or `pnpm run package:all <target>`, then inspect `dist/` |
+| Locked dependencies | `pnpm install --frozen-lockfile` |
 
 Packaging downloads a pinned Electron build of roughly 120–155 MB per target.
 Builds made for another platform are unsigned and untested there. Keep
@@ -77,7 +96,7 @@ temporary fixtures and captures in a temporary directory.
 
 Releases are cut from a `workbench/v<version>` tag after bumping `version` in
 `package.json` and `preview/package.json` (which the release publishes to npm
-as `@canonic2/workbench`) and both entries at the top of `package-lock.json`, and adding
+as `@canonic2/workbench`), and adding
 the version's entry to `CHANGELOG.md`: it becomes the release's notes on
 GitHub and the website, and the release workflow refuses a tag without one.
 Never push a tag without the user's go-ahead.
@@ -249,7 +268,7 @@ the actual component format, styles, host integration and verification commands.
   Verify generated navigation, previous/next links, fragments, and search.
 - For public guide changes, run `pnpm --dir packages/website test` and
   `pnpm --dir packages/website run build`, then inspect affected pages. For
-  Workbench behavior changes, run `npm --prefix packages/workbench test`.
+  Workbench behavior changes, run `pnpm --dir packages/workbench test`.
   Markdown-only internal specs need link review and `git diff --check`.
 - When visible behavior affects overview copy or screenshots, use
   `website-workbench`. Consuming projects supply configuration, not copies of

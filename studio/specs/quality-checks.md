@@ -66,5 +66,7 @@ contracts. Both commands are suitable for CI invocation; this package does not
 install repository hooks or configure a hosted CI service.
 
 Generated builds, stores, runtime profiles, logs and reports stay ignored.
+The build copies the proprietary package LICENSE into dist/; check:build
+verifies that the distributed notice matches the package source.
 Coverage thresholds and dependency exceptions must reflect a stated testing or
 module contract; lowering a gate to accommodate a regression is not acceptance.

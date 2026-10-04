@@ -1,0 +1,9 @@
+---
+import ReleaseEntry from '../../../src/components/ReleaseEntry.astro';
+import { release } from '../fixtures';
+---
+<div class="wrap narrower">
+  <ol class="releases">
+    <ReleaseEntry release={{ ...release, version: '1.0.0', tag: 'workbench/v1.0.0', notes: [], files: [] }} />
+  </ol>
+</div>

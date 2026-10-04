@@ -6,6 +6,40 @@ var vm = require('node:vm');
 
 var manifest = require('./manifest');
 
+test('preview icon maps validate and match complete title prefixes', function () {
+  var problems = [];
+  var settings = manifest.previews({ icon: 'boxes', icons: { 'Web App/': 'app-window', 'Web App/Pages': 'monitor' } }, problems);
+  assert.deepEqual(problems, []);
+  assert.equal(manifest.titleIcon(settings, 'Web App/Pages/Jobs', 'component').icon, 'monitor');
+  assert.equal(manifest.titleIcon(settings, 'Web App/PagesExtra/Jobs', 'component').icon, 'app-window');
+  assert.equal(manifest.titleIcon(settings, 'Other', 'component').icon, 'boxes');
+  assert.equal(manifest.titleIcon({}, 'Other', 'component').icon, 'component');
+  var invalid = manifest.previews({ icon: 'Bad Icon', icons: { '/': 'monitor', Pages: 'BAD' } }, problems);
+  assert.deepEqual(invalid, { icons: {} });
+  assert.equal(problems.length, 3);
+});
+
+test('shared collection icons use precedence in either import order and retain manual overrides', function () {
+  var collection = function (icon, priority, src) { return { name: 'Web App', icon: icon, iconPriority: priority, items: [{ src: src }] }; };
+  var preview = collection('component', 1, 'jobs.workbench.ts');
+  var catalog = collection('monitor', 5, 'customers.html');
+  for (var pair of [[preview, catalog], [catalog, preview]]) {
+    assert.equal(manifest.mergeCollections([pair[0]], [pair[1]])[0].icon, 'monitor');
+  }
+  assert.equal(manifest.mergeCollections([collection('app-window', 6, 'jobs.workbench.ts')], [catalog])[0].icon, 'app-window');
+  assert.equal(manifest.mergeCollections([preview], [collection('book-open', 0, 'customers.html')])[0].icon, 'component');
+  assert.equal(manifest.mergeCollections([collection('boxes', 4, 'jobs.workbench.ts')], [catalog])[0].icon, 'monitor');
+  assert.equal(manifest.mergeCollections([collection('file-text', 2, 'authored.html')], [preview])[0].icon, 'file-text');
+  assert.equal(manifest.mergeCollections([collection('file-text', 2, 'authored.html')], [catalog])[0].icon, 'monitor');
+  var manual = { name: 'Web App', icon: 'star', items: [] };
+  assert.equal(manifest.mergeCollections([manual], [preview, catalog])[0].icon, 'star');
+  assert.deepEqual(manifest.mergeCollections([manual], []), []);
+  assert.deepEqual(manual.items, []);
+  var first = collection('monitor', 5, 'first.html');
+  var second = collection('app-window', 5, 'second.html');
+  assert.equal(manifest.mergeCollections([first], [second])[0].icon, manifest.mergeCollections([second], [first])[0].icon);
+});
+
 /* The same file runs in the browser, where it has no `module` to export to. */
 test('hands itself to a window when there is no module', function () {
   var window = {};
@@ -19,7 +53,7 @@ test('merges a local file over the committed one, implementations by name', func
   var merged = manifest.merge(
     {
       name: 'Acme',
-      sections: [{ name: 'Pages' }],
+      collections: [{ name: 'Pages' }],
       implementations: {
         dev: { kind: 'url', base: 'http://localhost:3000', root: '../acme' },
         storybook: { kind: 'storybook', url: 'http://localhost:6006' },
@@ -35,7 +69,7 @@ test('merges a local file over the committed one, implementations by name', func
   );
 
   assert.equal(merged.name, 'Acme (mine)');
-  assert.deepEqual(merged.sections, [{ name: 'Pages' }]);
+  assert.deepEqual(merged.collections, [{ name: 'Pages' }]);
   assert.deepEqual(merged.implementations.dev, { kind: 'url', base: 'http://localhost:4000', root: '../acme' });
   assert.deepEqual(merged.implementations.storybook, { kind: 'storybook', url: 'http://localhost:6006' });
   assert.equal(merged.implementations.staging.base, 'https://staging.example.com');
@@ -46,41 +80,41 @@ test('merge copes with a missing side', function () {
   assert.deepEqual(manifest.merge(null, { name: 'Acme' }), { name: 'Acme' });
 });
 
-test('merges imported items into a manual section with the same name', function () {
-  var manual = [{ group: 'Components', icon: 'star', items: [{ src: 'button.html' }] }];
+test('merges imported items into a manual collection with the same name', function () {
+  var manual = [{ name: 'Components', icon: 'star', items: [{ src: 'button.html' }] }];
   var imported = [
-    { group: 'Components', icon: 'component', items: [{ src: '__storybook/card.html' }] },
-    { group: 'Foundations', icon: 'component', items: [{ src: '__storybook/color.html' }] },
+    { name: 'Components', icon: 'component', items: [{ src: '__storybook/card.html' }] },
+    { name: 'Foundations', icon: 'component', items: [{ src: '__storybook/color.html' }] },
   ];
-  assert.deepEqual(manifest.mergeSections(manual, imported), [
-    { group: 'Components', icon: 'star', items: [{ src: 'button.html' }, { src: '__storybook/card.html' }] },
-    { group: 'Foundations', icon: 'component', items: [{ src: '__storybook/color.html' }] },
+  assert.deepEqual(manifest.mergeCollections(manual, imported), [
+    { name: 'Components', icon: 'star', items: [{ src: 'button.html' }, { src: '__storybook/card.html' }] },
+    { name: 'Foundations', icon: 'component', items: [{ src: '__storybook/color.html' }] },
   ]);
   assert.equal(manual[0].items.length, 1);
 });
 
-test('merges preview and Storybook folders by exact name within their section without mutating inputs', function () {
-  var previews = [{ group: 'Web App', icon: 'component', items: [
-    { folder: 'Pages', icon: 'folder', items: [{ label: 'Jobs', src: 'jobs.workbench.ts', workbench: true }] },
+test('merges preview and Storybook groups by exact name within their collection without mutating inputs', function () {
+  var previews = [{ name: 'Web App', icon: 'component', items: [
+    { group: 'Pages', icon: 'folder', items: [{ label: 'Jobs', src: 'jobs.workbench.ts', workbench: true }] },
     { label: 'Welcome', src: 'welcome.html' },
   ] }];
-  var stories = [{ group: 'Web App', icon: 'monitor', items: [
-    { folder: 'Pages', icon: 'book-open', items: [{ label: 'Account', src: '__storybook/account.html' }] },
-    { folder: 'Forms', items: [{ label: 'Contact', src: '__storybook/contact.html' }] },
-    { folder: 'pages', items: [{ label: 'Other', src: '__storybook/other.html' }] },
-  ] }, { group: 'Auth', items: [
-    { folder: 'Pages', items: [{ label: 'Sign in', src: '__storybook/sign-in.html' }] },
+  var stories = [{ name: 'Web App', icon: 'monitor', items: [
+    { group: 'Pages', icon: 'book-open', items: [{ label: 'Account', src: '__storybook/account.html' }] },
+    { group: 'Forms', items: [{ label: 'Contact', src: '__storybook/contact.html' }] },
+    { group: 'pages', items: [{ label: 'Other', src: '__storybook/other.html' }] },
+  ] }, { name: 'Auth', items: [
+    { group: 'Pages', items: [{ label: 'Sign in', src: '__storybook/sign-in.html' }] },
   ] }];
   var before = JSON.stringify([previews, stories]);
-  var merged = manifest.mergeSections(previews, stories);
+  var merged = manifest.mergeCollections(previews, stories);
   assert.equal(merged[0].icon, 'component');
-  assert.deepEqual(merged[0].items.map(function (item) { return item.folder || item.label; }), ['Pages', 'Welcome', 'Forms', 'pages']);
+  assert.deepEqual(merged[0].items.map(function (item) { return item.group || item.label; }), ['Pages', 'Welcome', 'Forms', 'pages']);
   assert.equal(merged[0].items[0].icon, 'folder');
   assert.deepEqual(merged[0].items[0].items.map(function (item) { return item.label; }), ['Jobs', 'Account']);
   assert.equal(merged[1].items[0].items[0].label, 'Sign in');
   assert.equal(JSON.stringify([previews, stories]), before);
-  var again = manifest.mergeSections(merged, [{ group: 'Web App', items: [
-    { folder: 'Forms', items: [{ label: 'Search', src: 'search.workbench.ts', workbench: true }] },
+  var again = manifest.mergeCollections(merged, [{ name: 'Web App', items: [
+    { group: 'Forms', items: [{ label: 'Search', src: 'search.workbench.ts', workbench: true }] },
   ] }]);
   assert.deepEqual(again[0].items[2].items.map(function (item) { return item.label; }), ['Contact', 'Search']);
   assert.equal(merged[0].items[2].items.length, 1);
@@ -132,7 +166,7 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations: “Dev Server” must be kebab-case — it travels in a URL.',
     'implementations › dev: needs a base starting with http:// or https://.',
     'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
-    'implementations › docs: kind must be url, storybook, workbench, ios-simulator, or window.',
+    'implementations › docs: kind must be url, storybook, workbench, examples, ios-simulator, or window.',
     'implementations › bare: needs a kind, and a url or base.',
     'implementations › staging: catalog is only available for Storybook and iOS Simulator implementations.',
     'implementations › staging: render is no longer used; remove it. URL and Storybook implementations use iframes.',
@@ -158,7 +192,7 @@ test('accepts automatic Storybook and catalogued iOS Simulator implementations',
   });
 });
 
-test('accepts a window implementation by application, and screens map it to a window title', function () {
+test('accepts a window implementation by application, and pages map it to a window title', function () {
   var problems = [];
   var implementations = manifest.implementations({
     emulator: { kind: 'window', app: 'com.example.emulator' },
@@ -179,7 +213,7 @@ test('accepts a window implementation by application, and screens map it to a wi
   ]);
 
   problems = [];
-  var lenses = manifest.screenLenses(
+  var lenses = manifest.pageLenses(
     { emulator: 'Example Phone', started: '' },
     { label: 'Sign in', src: 'pages/sign-in.html' },
     implementations,
@@ -220,7 +254,7 @@ test('legacy renderer settings keep implementations usable and report how to mig
   assert.equal(implementations.stories.render, undefined);
   assert.equal(problems.length, 2);
   assert.ok(problems.every(function (problem) { return /remove it.*iframes/.test(problem); }));
-  assert.deepEqual(manifest.screenLenses({ dev: '/login' }, { states: [] }, implementations, 'Login', problems), {
+  assert.deepEqual(manifest.pageLenses({ dev: '/login' }, { states: [] }, implementations, 'Login', problems), {
     dev: { path: '/login' },
   });
 });
@@ -244,11 +278,11 @@ var signIn = {
   states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Wrong password' }],
 };
 
-test('normalizes screen viewports and enables every mode when omitted', function () {
+test('normalizes page viewports and enables every mode when omitted', function () {
   var problems = [];
-  assert.deepEqual(manifest.screenViewports(undefined, 'Pages › Sign in', problems), ['fit', 'desktop', 'mobile', 'responsive']);
-  assert.deepEqual(manifest.screenViewports(['desktop', 'mobile', 'desktop'], 'Pages › Sign in', problems), ['desktop', 'mobile']);
-  assert.deepEqual(manifest.screenViewports(['tablet'], 'Pages › Sign in', problems), ['fit', 'desktop', 'mobile', 'responsive']);
+  assert.deepEqual(manifest.pageViewports(undefined, 'Pages › Sign in', problems), ['fit', 'desktop', 'mobile', 'responsive']);
+  assert.deepEqual(manifest.pageViewports(['desktop', 'mobile', 'desktop'], 'Pages › Sign in', problems), ['desktop', 'mobile']);
+  assert.deepEqual(manifest.pageViewports(['tablet'], 'Pages › Sign in', problems), ['fit', 'desktop', 'mobile', 'responsive']);
   assert.deepEqual(problems, [
     'Pages › Sign in: viewports may only contain desktop, mobile, responsive, or fit.',
   ]);
@@ -260,16 +294,16 @@ test('maps declared viewports to the workbench width controls', function () {
   assert.deepEqual(manifest.viewportWidths(), ['fit', '1512', '393', 'resizable']);
 });
 
-test('reads a screen’s lenses in both forms', function () {
+test('reads a page’s lenses in both forms', function () {
   var problems = [];
-  var lenses = manifest.screenLenses(
+  var lenses = manifest.pageLenses(
     { dev: '/', storybook: 'Components/Button' },
     signIn, impls(), 'Pages › Sign in', problems
   );
   assert.deepEqual(problems, []);
   assert.deepEqual(lenses, { dev: { path: '/' }, storybook: { title: 'Components/Button' } });
 
-  var mapped = manifest.screenLenses(
+  var mapped = manifest.pageLenses(
     { dev: { default: '/', error: '/?error=1' } },
     signIn, impls(), 'Pages › Sign in', problems
   );
@@ -280,14 +314,14 @@ test('reads a screen’s lenses in both forms', function () {
 test('a state map may name the first state by its own id', function () {
   var problems = [];
   var item = { label: 'Library', src: 'library.html', states: [{ id: 'filled', label: 'Filled' }, { id: 'empty', label: 'Empty' }] };
-  var lenses = manifest.screenLenses({ dev: { filled: '/library', empty: '/library?empty' } }, item, impls(), 'App › Library', problems);
+  var lenses = manifest.pageLenses({ dev: { filled: '/library', empty: '/library?empty' } }, item, impls(), 'App › Library', problems);
   assert.deepEqual(problems, []);
   assert.deepEqual(lenses, { dev: { path: '/library', states: { empty: '/library?empty' } } });
 });
 
-test('names every problem with a screen’s lenses', function () {
+test('names every problem with a page’s lenses', function () {
   var problems = [];
-  var lenses = manifest.screenLenses(
+  var lenses = manifest.pageLenses(
     {
       prod: '/',
       dev: 'sign-in',
@@ -303,30 +337,30 @@ test('names every problem with a screen’s lenses', function () {
   ]);
 
   problems = [];
-  lenses = manifest.screenLenses(
+  lenses = manifest.pageLenses(
     { dev: { error: '/?error=1', locked: '/locked' } },
     signIn, impls(), 'Pages › Sign in', problems
   );
   assert.equal(lenses, undefined);
   assert.deepEqual(problems, [
-    'Pages › Sign in: implementation “dev” maps state “locked”, which this screen doesn’t declare.',
+    'Pages › Sign in: implementation “dev” maps state “locked”, which this page doesn’t declare.',
     'Pages › Sign in: implementation “dev” needs a path for the default state (“default”).',
   ]);
 
   problems = [];
-  assert.equal(manifest.screenLenses({ dev: ['/a'] }, signIn, impls(), 'Pages › Sign in', problems), undefined);
+  assert.equal(manifest.pageLenses({ dev: ['/a'] }, signIn, impls(), 'Pages › Sign in', problems), undefined);
   assert.deepEqual(problems, [
-    'Pages › Sign in: implementation “dev” needs a path, or a map of this screen’s state ids to paths.',
+    'Pages › Sign in: implementation “dev” needs a path, or a map of this page’s state ids to paths.',
   ]);
 
   problems = [];
-  assert.equal(manifest.screenLenses('dev', signIn, impls(), 'Pages › Sign in', problems), undefined);
+  assert.equal(manifest.pageLenses('dev', signIn, impls(), 'Pages › Sign in', problems), undefined);
   assert.deepEqual(problems, ['Pages › Sign in: implementations must be a map of implementation names to paths.']);
 });
 
-test('reads a screen’s code pointers', function () {
+test('reads a page’s code pointers', function () {
   var problems = [];
-  var code = manifest.screenCode(
+  var code = manifest.pageCode(
     {
       dev: 'packages/auth/src/pages/login',
       storybook: ['src/button.tsx', 'src/button.stories.tsx'],
@@ -341,9 +375,9 @@ test('reads a screen’s code pointers', function () {
   ]);
 });
 
-test('names every problem with a screen’s code', function () {
+test('names every problem with a page’s code', function () {
   var problems = [];
-  var code = manifest.screenCode({ prod: 'x', dev: '' }, impls(), 'Pages › Sign in', problems);
+  var code = manifest.pageCode({ prod: 'x', dev: '' }, impls(), 'Pages › Sign in', problems);
   assert.equal(code, undefined);
   assert.deepEqual(problems, [
     'Pages › Sign in: code names implementation “prod”, which isn’t declared under implementations.',
@@ -351,7 +385,7 @@ test('names every problem with a screen’s code', function () {
   ]);
 
   problems = [];
-  assert.equal(manifest.screenCode(['x'], impls(), 'Pages › Sign in', problems), undefined);
+  assert.equal(manifest.pageCode(['x'], impls(), 'Pages › Sign in', problems), undefined);
   assert.deepEqual(problems, ['Pages › Sign in: code must be a map of implementation names to paths.']);
 });
 
@@ -361,18 +395,18 @@ test('derives a story’s state from its id', function () {
   assert.equal(manifest.storyState('odd'), 'odd');
 });
 
-test('a project mark takes a named or hex colour, and a Lucide icon or a project image', function () {
+test('a space mark takes a named or hex colour, and a Lucide icon or a project image', function () {
   var problems = [];
-  assert.deepEqual(manifest.projectMark({ color: 'Green', icon: 'rocket' }, problems), { color: 'green', icon: 'rocket', image: null });
-  assert.deepEqual(manifest.projectMark({ color: '#2F7D55', icon: 'assets/logo.svg' }, problems), { color: '#2f7d55', icon: null, image: 'assets/logo.svg' });
-  assert.deepEqual(manifest.projectMark({ color: '#abc' }, problems), { color: '#abc', icon: null, image: null });
-  assert.deepEqual(manifest.projectMark({}, problems), { color: null, icon: null, image: null });
+  assert.deepEqual(manifest.spaceMark({ color: 'Green', icon: 'rocket' }, problems), { color: 'green', icon: 'rocket', image: null });
+  assert.deepEqual(manifest.spaceMark({ color: '#2F7D55', icon: 'assets/logo.svg' }, problems), { color: '#2f7d55', icon: null, image: 'assets/logo.svg' });
+  assert.deepEqual(manifest.spaceMark({ color: '#abc' }, problems), { color: '#abc', icon: null, image: null });
+  assert.deepEqual(manifest.spaceMark({}, problems), { color: null, icon: null, image: null });
   assert.deepEqual(problems, []);
 });
 
-test('an unusable project colour or icon is named and left out', function () {
+test('an unusable space colour or icon is named and left out', function () {
   var problems = [];
-  var mark = manifest.projectMark({ color: 'chartreuse', icon: '../logo.svg' }, problems);
+  var mark = manifest.spaceMark({ color: 'chartreuse', icon: '../logo.svg' }, problems);
   assert.deepEqual(mark, { color: null, icon: null, image: null });
   assert.equal(problems.length, 2);
   assert.match(problems[0], /^color: must be one of blue/);
@@ -380,73 +414,164 @@ test('an unusable project colour or icon is named and left out', function () {
 
   ['/abs/logo.svg', 'https://example.com/logo.png', 'logo.pdf', 'Rocket Ship'].forEach(function (icon) {
     var found = [];
-    assert.equal(manifest.projectMark({ icon: icon }, found).image, null, icon);
+    assert.equal(manifest.spaceMark({ icon: icon }, found).image, null, icon);
     assert.equal(found.length, 1, icon);
   });
 });
 
-test('a file without projects is one project, as it always was', function () {
+test('a file without spaces is one space', function () {
   var problems = [];
-  var picked = manifest.selectProject({ name: 'Acme', sections: [{ name: 'Pages' }] }, null, problems);
+  var picked = manifest.selectSpace({ name: 'Acme', collections: [{ name: 'Pages' }] }, null, problems);
   assert.equal(picked.key, null);
   assert.equal(picked.root, null);
   assert.equal(picked.raw.name, 'Acme');
   assert.deepEqual(problems, []);
 });
 
-test('each project inherits the shared keys but not the name, colour, icon or root', function () {
+test('each space inherits the shared keys but not the name, colour, icon or root', function () {
   var raw = {
     name: 'Acme workspace',
     color: 'red',
     implementations: { storybook: { kind: 'storybook', url: 'http://localhost:6006' }, dev: { kind: 'url', base: 'http://localhost:3000' } },
-    sections: [{ name: 'Shared' }],
-    projects: {
+    collections: [{ name: 'Shared' }],
+    spaces: {
       web: { name: 'Acme Web', color: 'blue', implementations: { dev: { base: 'http://localhost:4000' } } },
-      'design-system': { root: '../ui', icon: 'palette', sections: [{ name: 'Components' }] },
+      'design-system': { root: '../ui', icon: 'palette', collections: [{ name: 'Components' }] },
     },
   };
   var problems = [];
-  var web = manifest.selectProject(raw, 'web', problems);
+  var web = manifest.selectSpace(raw, 'web', problems);
   assert.equal(web.key, 'web');
   assert.equal(web.raw.name, 'Acme Web');
   assert.equal(web.raw.color, 'blue');
-  assert.deepEqual(web.raw.sections, [{ name: 'Shared' }]);
+  assert.deepEqual(web.raw.collections, [{ name: 'Shared' }]);
   assert.deepEqual(web.raw.implementations.dev, { kind: 'url', base: 'http://localhost:4000' });
   assert.equal(web.raw.implementations.storybook.url, 'http://localhost:6006');
-  assert.equal(web.raw.projects, undefined);
+  assert.equal(web.raw.spaces, undefined);
 
-  var ds = manifest.selectProject(raw, 'design-system', problems);
+  var ds = manifest.selectSpace(raw, 'design-system', problems);
   assert.equal(ds.root, '../ui');
   assert.equal(ds.raw.name, 'Design system');
   assert.equal(ds.raw.color, undefined);
   assert.equal(ds.raw.icon, 'palette');
-  assert.deepEqual(ds.raw.sections, [{ name: 'Components' }]);
+  assert.deepEqual(ds.raw.collections, [{ name: 'Components' }]);
   assert.equal(ds.raw.root, undefined);
   assert.deepEqual(problems, []);
 });
 
-test('an unknown project falls back to the first, and malformed projects are named', function () {
+test('an unknown space falls back to the first, and malformed spaces are named', function () {
   var problems = [];
-  var raw = { projects: { web: { name: 'Web' }, 'Bad Key': { name: 'x' }, empty: 'nope' } };
-  assert.deepEqual(manifest.projectKeys(raw, problems), ['web']);
+  var raw = { spaces: { web: { name: 'Web' }, 'Bad Key': { name: 'x' }, empty: 'nope' } };
+  assert.deepEqual(manifest.spaceKeys(raw, problems), ['web']);
   assert.equal(problems.length, 2);
 
   var found = [];
-  var picked = manifest.selectProject(raw, 'gone', found);
+  var picked = manifest.selectSpace(raw, 'gone', found);
   assert.equal(picked.key, 'web');
-  assert.match(found.pop(), /there is no project “gone”/);
+  assert.match(found.pop(), /there is no space “gone”/);
 
   var listed = [];
-  assert.deepEqual(manifest.projectKeys({ projects: ['web'] }, listed), []);
-  assert.match(listed[0], /must be a map of project ids/);
+  assert.deepEqual(manifest.spaceKeys({ spaces: ['web'] }, listed), []);
+  assert.match(listed[0], /must be a map of space ids/);
 });
 
-test('a local file merges into one project by key', function () {
+test('a local file merges into one space by key', function () {
   var merged = manifest.merge(
-    { projects: { web: { name: 'Web', implementations: { dev: { kind: 'url', base: 'http://localhost:3000' } } }, ui: { name: 'UI' } } },
-    { projects: { web: { implementations: { dev: { base: 'http://localhost:4000' } } } } }
+    { spaces: { web: { name: 'Web', implementations: { dev: { kind: 'url', base: 'http://localhost:3000' } } }, ui: { name: 'UI' } } },
+    { spaces: { web: { implementations: { dev: { base: 'http://localhost:4000' } } } } }
   );
-  assert.equal(merged.projects.web.name, 'Web');
-  assert.deepEqual(merged.projects.web.implementations.dev, { kind: 'url', base: 'http://localhost:4000' });
-  assert.deepEqual(merged.projects.ui, { name: 'UI' });
+  assert.equal(merged.spaces.web.name, 'Web');
+  assert.deepEqual(merged.spaces.web.implementations.dev, { kind: 'url', base: 'http://localhost:4000' });
+  assert.deepEqual(merged.spaces.ui, { name: 'UI' });
+});
+
+test('reads examples implementations, which render a docs page’s examples', function () {
+  var problems = [];
+  var impls = manifest.implementations({
+    web: { kind: 'examples', adapter: 'react', styles: ['src/theme.css', 'src/web.css'], environment: 'src/docs/environment.tsx' },
+    native: { kind: 'examples', label: 'React Native Web', adapter: 'react-native-web', styles: 'src/native.css' },
+    bare: { kind: 'examples' },
+    away: { kind: 'examples', adapter: 'html', styles: ['../acme/theme.css', '/etc/theme.css'], environment: 'http://example.com/env.js',
+      base: 'http://localhost:1', root: '../acme', start: { command: 'npm start' } },
+  }, problems);
+  assert.deepEqual(impls.web, {
+    key: 'web', label: 'Web', kind: 'examples', root: '.', adapter: 'react',
+    styles: ['src/theme.css', 'src/web.css'], environment: 'src/docs/environment.tsx',
+  });
+  assert.deepEqual(impls.native.styles, ['src/native.css']);
+  assert.equal(impls.native.label, 'React Native Web');
+  assert.deepEqual(Object.keys(impls), ['web', 'native']);
+  assert.deepEqual(problems, [
+    'implementations › bare: needs an adapter — html, react, vue, react-native-web, or one registered in workbench.config.ts.',
+    'implementations › away: styles must be paths inside the project, relative to its root.',
+    'implementations › away: styles must be paths inside the project, relative to its root.',
+    'implementations › away: environment must be a path inside the project, relative to its root.',
+    'implementations › away: base doesn’t apply to examples, which Workbench compiles itself.',
+    'implementations › away: start is available for URL and Storybook implementations.',
+    'implementations › away: Examples use this project root.',
+  ]);
+});
+
+test('a docs page maps examples lenses to example sources and opens with its lens', function () {
+  var problems = [];
+  var impls = manifest.implementations({
+    light: { kind: 'examples', adapter: 'html' },
+    dark: { kind: 'examples', adapter: 'html' },
+    dev: { kind: 'url', base: 'http://localhost:3000' },
+  }, problems);
+  var raw = { label: 'Card', src: 'docs/card.md', lens: 'dark',
+    implementations: { light: 'src/card/examples/', dark: 'src/card/card.examples.ts', dev: '/card', away: '../x/' } };
+  var item = { label: 'Card', src: raw.src };
+  item.implementations = manifest.pageLenses(raw.implementations, item, impls, 'Docs › Card', problems);
+  manifest.docsPageEntry(raw, item, 'Docs › Card', problems);
+  assert.deepEqual(item.implementations, {
+    light: { examples: 'src/card/examples/' },
+    dark: { examples: 'src/card/card.examples.ts' },
+  });
+  assert.equal(item.docs, true);
+  assert.equal(item.lens, 'dark');
+  assert.deepEqual(problems, [
+    'Docs › Card: docs pages take examples lenses; “dev” is a url implementation.',
+    'Docs › Card: implementation “away” isn’t declared under implementations.',
+  ]);
+
+  problems = [];
+  var unnamed = { label: 'Button', src: 'docs/button.md' };
+  unnamed.implementations = manifest.pageLenses({ dark: '../outside/', light: 'src/button/' }, unnamed, impls, 'Docs › Button', problems);
+  manifest.docsPageEntry({ lens: 'sepia', viewports: ['mobile'] }, unnamed, 'Docs › Button', problems);
+  assert.equal(unnamed.lens, 'light', 'without a valid lens, the first mapped lens opens');
+  assert.deepEqual(problems, [
+    'Docs › Button: examples lens “dark” needs an example folder (ending in /) or file, relative to the project root.',
+    'Docs › Button: viewports don’t apply to a docs page, which uses the whole canvas.',
+    'Docs › Button: lens “sepia” isn’t one of this page’s lenses (light).',
+  ]);
+
+  problems = [];
+  var guide = { label: 'Colors', src: 'docs/colors.MD' };
+  manifest.docsPageEntry({}, guide, 'Docs › Colors', problems);
+  assert.deepEqual(guide, { label: 'Colors', src: 'docs/colors.MD', docs: true }, 'a docs page needs no lenses');
+  assert.deepEqual(problems, []);
+});
+
+test('examples lenses and lens belong to docs pages only', function () {
+  var problems = [];
+  var impls = manifest.implementations({ light: { kind: 'examples', adapter: 'html' } }, problems);
+  var item = { label: 'Sign in', src: 'pages/sign-in.html' };
+  assert.equal(manifest.pageLenses({ light: 'src/examples/' }, item, impls, 'Pages › Sign in', problems), undefined);
+  manifest.docsPageEntry({ lens: 'light' }, item, 'Pages › Sign in', problems);
+  assert.equal(item.docs, undefined);
+  assert.deepEqual(problems, [
+    'Pages › Sign in: implementation “light” renders examples, which only docs pages (a .md src) have.',
+    'Pages › Sign in: lens is only for docs pages (a .md src).',
+  ]);
+});
+
+test('a src may not contain the address marks', function () {
+  assert.equal(manifest.srcProblem('docs/card.md'), null);
+  assert.equal(manifest.srcProblem('docs/card!.md'),
+    'src “docs/card!.md” can’t contain “!” — “:”, “!”, and “~” mark the state, the example, and the lens in the address.');
+  assert.match(manifest.srcProblem('a:b~c.html'), /can’t contain “:” or “~”/);
+  assert.equal(manifest.projectPath('src/card/'), 'src/card/');
+  assert.equal(manifest.projectPath('src/../../etc'), null);
+  assert.equal(manifest.projectPath('C:\\acme\\card.ts'), null);
 });

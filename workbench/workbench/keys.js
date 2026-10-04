@@ -89,7 +89,7 @@
     var lower = key.toLowerCase();
     var command = e.metaKey || e.ctrlKey;
 
-    /* These must keep working in both form fields and markup notes. They are
+    /* These must keep working in both form fields and annotation notes. They are
        deliberately local everywhere: a selection in a preview is still a
        real browser selection even when its target is not itself editable. */
     if (e.getModifierState && e.getModifierState('AltGraph')) return false;

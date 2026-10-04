@@ -1,20 +1,20 @@
 /* The editor's half of the workbench
    ----------------------------------
-   The screen list, running in the Workbench view in VS Code's sidebar. It reads
-   the same workbench.yaml the workbench does, builds the same list nav.js
-   builds, and hands every pick to the extension.
+   The page list, running in the Workbench view in VS Code's sidebar. It reads
+   the same workbench.yaml the workbench does, builds the same list
+   page-list.js builds, and hands every pick to the extension.
 
    It never touches a preview itself. A pick leaves here as the hash the
    address bar would have carried — `pages/sign-in.html:error` — and the
    extension passes it to whichever workbench tab is open, which routes it the
    way a copied link would. That is the whole contract, and it is why picking
-   a screen here and pasting a URL there end up in the same place.
+   a page here and pasting a URL there end up in the same place.
 
-     out  canonic-pick     the screen picked, as a hash
-     out  canonic-ready    the list is built, and what project it read
-     out  canonic-project  another project picked, by id
-     out  canonic-add-project, canonic-remove-project   the list of projects
-     in   canonic-here     the screen the workbench is showing now
+     out  canonic-pick     the page picked, as a hash
+     out  canonic-ready    the list is built, and what space it read
+     out  canonic-space    another space picked, by id
+     out  canonic-add-space, canonic-remove-space   the list of spaces
+     in   canonic-here     the page the workbench is showing now
 
    canonic-here is the return leg: follow a link inside a live preview and the
    workbench says where it ended up, so this list marks the row without the
@@ -42,7 +42,7 @@
   var loadingText = document.getElementById('loadingText');
   search.disabled = true;
 
-  var nav = null;
+  var pageList = null;
   var index = {};
 
   /* Anything marked data-icon gets its Lucide glyph injected once — the same
@@ -55,13 +55,13 @@
     if (host) host.postMessage(message);
   }
 
-  /* The projects come in with the page, from the extension: switching one
-     rebuilds this page against the other project's root, so the list never
-     has to change under a page that is already built. Shown whenever there
-     is a host, even for one project, because it is also where Add a
-     project… lives. A project that fails to load still has the switcher. */
-  function projects() {
-    var meta = document.querySelector('meta[name="canonic-projects"]');
+  /* The spaces come in with the document, from the extension: switching one
+     rebuilds this document against the other space's root, so the list never
+     has to change under a document that is already built. Shown whenever there
+     is a host, even for one space, because it is also where Add a
+     space… lives. A space that fails to load still has the switcher. */
+  function spaces() {
+    var meta = document.querySelector('meta[name="canonic-spaces"]');
     if (!meta || !host) return;
     var listed;
     try {
@@ -69,19 +69,19 @@
     } catch (error) {
       return;
     }
-    var switcher = window.wbProjects.create({
-      button: document.getElementById('projectButton'),
-      menu: document.getElementById('projectMenu'),
-      onPick: function (id) { send({ type: 'canonic-project', id: id }); },
-      onAdd: function () { send({ type: 'canonic-add-project' }); },
-      onRemove: function (id) { send({ type: 'canonic-remove-project', id: id }); },
+    var switcher = window.wbSpaces.create({
+      button: document.getElementById('spaceButton'),
+      menu: document.getElementById('spaceMenu'),
+      onPick: function (id) { send({ type: 'canonic-space', id: id }); },
+      onAdd: function () { send({ type: 'canonic-add-space' }); },
+      onRemove: function (id) { send({ type: 'canonic-remove-space', id: id }); },
       onToggle: function (open) { shell.classList.toggle('is-dimmed', open); },
     });
-    switcher.set(listed.projects, listed.current);
-    document.getElementById('projects').hidden = false;
+    switcher.set(listed.spaces, listed.current);
+    document.getElementById('spaces').hidden = false;
   }
 
-  projects();
+  spaces();
 
   function showProblems(problems) {
     problems = (problems || []).filter(Boolean);
@@ -92,15 +92,15 @@
   function build(config) {
     loading.hidden = true;
     search.disabled = false;
-    index = window.wbNav.index(config.sections);
+    index = window.wbPageList.index(config.collections);
 
-    nav = window.wbNav.create({
+    pageList = window.wbPageList.create({
       search: search,
-      sections: document.getElementById('sections'),
-      sectionsBlock: document.getElementById('sectionsBlock'),
-      title: document.getElementById('sectionName'),
-      list: document.getElementById('nav'),
-      groups: config.sections,
+      collectionList: document.getElementById('collections'),
+      collectionsBlock: document.getElementById('collectionsBlock'),
+      title: document.getElementById('collectionName'),
+      list: document.getElementById('pageList'),
+      collections: config.collections,
       treeKeyboard: true,
 
       /* No width in the hash: how the canvas is framed is the canvas's
@@ -111,7 +111,7 @@
     });
 
     /* The workbench may already be open on something — say so, and it
-       answers with a canonic-here. The project's name goes with it: the view
+       answers with a canonic-here. The space's name goes with it: the view
        header carries it the way a tree carries the folder it is showing. */
     send({ type: 'canonic-ready', name: config.name });
   }
@@ -133,7 +133,7 @@
       if (data.type !== 'canonic-catalog') return;
       window.removeEventListener('message', catalog);
       showProblems(data.problems);
-      config.sections = window.wbManifest.mergeSections(config.sections, data.sections || []);
+      config.collections = window.wbManifest.mergeCollections(config.collections, data.collections || []);
       build(config);
     });
     send({ type: 'canonic-catalog-request' });
@@ -149,10 +149,10 @@
   window.addEventListener('message', function (e) {
     var data = e.data || {};
 
-    if (data.type !== 'canonic-here' || !nav) return;
+    if (data.type !== 'canonic-here' || !pageList) return;
     var item = index[data.src];
-    nav.reveal(data.src);
-    nav.setCurrent(item ? data.src : null, data.state, item && item.group);
+    pageList.reveal(data.src);
+    pageList.setCurrent(item ? data.src : null, data.state, item && item.collection);
   });
 
   window.wbConfig.load(start, refuse);

@@ -3,22 +3,22 @@
    One webview panel holding one iframe holding the workbench. What this buys
    over `simpleBrowser.show`, which is what this replaces: no address bar, no
    back and forward, no reload button, no browser at all — a tab called
-   Workbench with the design in it. The workbench's own toolbar already carries
+   Workbench with the design in it. The workbench's own top bar already carries
    the two browser affordances that were ever wanted here (reload, and open
    this on its own), so the rest was chrome around chrome.
 
    It is a panel rather than a view in the sidebar for the obvious reason: a
    design needs the width. The sidebar has the list.
 
-   One panel per window, reused. Picking a second screen moves the one that's
+   One panel per window, reused. Picking a second page moves the one that's
    open rather than stacking tabs, which is also why navigation goes through a
    message rather than a fresh src: the workbench stays loaded, keeps the
-   toolbar the way you set it, and changes screen in a hash change.
+   top bar the way you set it, and changes page in a hash change.
 
    The webview and the workbench are different origins — vscode-webview:// and
    http://127.0.0.1 — so nothing here can read into the frame. It only ever
    tells it where to go, and the frame says where it went: the workbench posts
-   a `wb-here` after every screen it routes to, whoever asked for it. That is
+   a `wb-here` after every page it routes to, whoever asked for it. That is
    the only way the sidebar can stay marked when the canvas moves on its own,
    which it does whenever a link is followed in a live preview.
 */
@@ -30,13 +30,13 @@ var TITLE = 'Workbench';
 
 var panel = null;   /* the one open panel, or null */
 var current = null; /* the hash the workbench has acknowledged with wb-here */
-var where = { src: null, state: null }; /* the screen it settled on */
+var where = { src: null, state: null }; /* the page it settled on */
 var watchers = [];
 var loaded = false;
 var pendingTarget = '';
 var navigation = 0;
 var generation = 0; /* bumped when the tab is pointed at another server */
-var projectPicked = function () {};
+var spacePicked = function () {};
 
 function loadingHtml(failed) {
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
@@ -50,7 +50,7 @@ function loadingHtml(failed) {
     '@keyframes turn{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}</style>' +
     '</head><body><main role="status" aria-live="polite">' +
     (failed ? '<h1>Workbench couldn’t start</h1><p>Open the Workbench log for details, then reload the window to retry.</p>' :
-      '<span class="spinner" aria-hidden="true"></span><h1>Opening Workbench</h1><p>Waiting for previews to start. Screens will appear as soon as they’re ready.</p>') +
+      '<span class="spinner" aria-hidden="true"></span><h1>Opening Workbench</h1><p>Waiting for previews to start. Pages will appear as soon as they’re ready.</p>') +
     '</main></body></html>';
 }
 
@@ -144,7 +144,7 @@ function html(url, origin) {
     '  function sendPending() {',
     '    if (!ready || refreshing || refreshBlocked || !pending || !frame.contentWindow) return;',
     '    /* A target is an instruction, not a request to poll until the child',
-    '       echoes it. The workbench may reject a stale screen or normalize an',
+    '       echoes it. The workbench may reject a stale page or normalize an',
     '       unknown state; retrying either response creates a message loop that',
     '       can starve the whole webview. Clear before posting so even a',
     '       synchronous test double cannot observe the target as pending. */',
@@ -196,10 +196,10 @@ function html(url, origin) {
     '      relayKey(data);',
     '      return;',
     '    }',
-    '    /* Another project, picked in the canvas. The extension switches the',
+    '    /* Another space, picked in the canvas. The extension switches the',
     '       tab and the sidebar together, by loading another server here. */',
-    '    if (data.type === "wb-project" && e.source === frame.contentWindow) {',
-    '      editor.postMessage({ type: "wb-project", id: String(data.id || "") });',
+    '    if (data.type === "wb-space" && e.source === frame.contentWindow) {',
+    '      editor.postMessage({ type: "wb-space", id: String(data.id || "") });',
     '      return;',
     '    }',
     '    if (data.type === "canonic-go") {',
@@ -260,7 +260,7 @@ function show(context, url, hash, options) {
     }, {
       enableScripts: true,
       /* A design you tabbed away from should be there when you tab back,
-         still at the width you set and still on the screen you were on. */
+         still at the width you set and still on the page you were on. */
       retainContextWhenHidden: true,
       /* Nothing is loaded from disk; everything comes from the local server. */
       localResourceRoots: [],
@@ -272,12 +272,12 @@ function show(context, url, hash, options) {
     pendingTarget = target;
     panel.webview.html = loadingHtml(false);
 
-    /* Every screen the workbench routes to, including the ones nobody here
+    /* Every page the workbench routes to, including the ones nobody here
        asked for. `current` follows it too, so a pick that matches where a
        link already took you isn't dropped as a repeat. */
     panel.webview.onDidReceiveMessage(function (message) {
-      if (message && message.type === 'wb-project') {
-        projectPicked(message.id);
+      if (message && message.type === 'wb-space') {
+        spacePicked(message.id);
         return;
       }
       if (!message || message.type !== 'wb-here') return;
@@ -298,7 +298,7 @@ function show(context, url, hash, options) {
 
 /* Open the tab before awaiting service readiness or remote port forwarding.
    A closed loading tab must stay closed when either finishes, and one that
-   has since been pointed at another project's server must not go back. */
+   has since been pointed at another space's server must not go back. */
 function load(opened, url, request, target) {
   var serving = generation;
   return Promise.resolve(url).then(function (address) {
@@ -321,10 +321,10 @@ function load(opened, url, request, target) {
   });
 }
 
-/* Another project: an open tab loads that project's server in place of the
-   one it shows, through the same loading state as a first open. Each project
+/* Another space: an open tab loads that space's server in place of the
+   one it shows, through the same loading state as a first open. Each space
    is its own origin, so the canvas comes back the way it was last left in
-   that project. A closed tab stays closed; the next show() opens the new
+   that space. A closed tab stays closed; the next show() opens the new
    server, because that is the URL it will be given. */
 function retarget(url) {
   generation += 1;
@@ -342,9 +342,9 @@ function isOpen() {
   return !!panel;
 }
 
-/* Who to tell when a project is picked in the canvas. */
-function onProject(fn) {
-  projectPicked = fn || function () {};
+/* Who to tell when a space is picked in the canvas. */
+function onSpace(fn) {
+  spacePicked = fn || function () {};
 }
 
 /* Who to tell when the canvas moves. Answers with the way to stop listening,
@@ -366,4 +366,4 @@ function refresh() {
   return panel.webview.postMessage({ type: 'canonic-refresh' });
 }
 
-module.exports = { show: show, onHere: onHere, refresh: refresh, retarget: retarget, onProject: onProject, isOpen: isOpen };
+module.exports = { show: show, onHere: onHere, refresh: refresh, retarget: retarget, onSpace: onSpace, isOpen: isOpen };

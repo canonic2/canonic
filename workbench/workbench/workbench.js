@@ -1,13 +1,13 @@
 /* Workbench shell
    ---------------
-   Builds the sidebar from the project's workbench.yaml — read by
+   Builds the sidebar from the space's workbench.yaml — read by
    config.js — and loads the picked file into the canvas iframe.
 
-   Nothing in here is about any one project. What it knows about the project
-   arrives as the config: a name, and sections of screens. Two constraints
+   Nothing in here is about any one space. What it knows about the space
+   arrives as the config: a name, and collections of pages. Two constraints
    shape the rest:
    - the config is the index, except for a Storybook catalog it explicitly
-     imports. A screen in neither isn't in the sidebar;
+     imports. A page in neither isn't in the sidebar;
    - the iframe can be a foreign origin (a workbench opened off file://), so
      nothing here reads into it. Reload re-assigns src instead of calling into
      contentWindow.
@@ -19,7 +19,7 @@
    root-relative everywhere else, including the hash.
 
    The selection lives in the URL hash, so a reload or a copied link lands on
-   the same screen, in the same state, at the same width, through the same
+   the same page, in the same state, at the same width, through the same
    lens: #pages/sign-in.html:error@393~staging — address.js reads and writes
    it. The default state and the design lens are left out, so a page without
    states — or on the version you land on — reads as it always did.
@@ -27,23 +27,23 @@
    States themselves are the page's business, not the shell's: the id travels
    in the frame's URL and states.js applies it inside.
 
-   A lens is an implementation of the screen in the design's place: a story
+   A lens is an implementation of the page in the design's place: a story
    in a Storybook, the page on a dev server, the page on staging. The config
-   declares them (manifest.js), the toolbar switches them, and the choice
-   sticks across screens the way the width does — a screen without that lens
+   declares them (manifest.js), the top bar switches them, and the choice
+   sticks across pages the way the width does — a page without that lens
    shows its design. Through a lens the frame is somebody else's origin, so
    nothing here reads into it; what still works is what the address carries.
 */
 
 (function () {
   var config = null;
-  var groups = [];         /* the config's sections */
+  var collections = [];    /* the config's collections */
   var index = {};          /* src -> item */
   var root = window.wbConfig.root; /* the project root, as a URL */
-  var nav = null;          /* the screen list, built by nav.js once the config is in */
+  var pageList = null;     /* the page list, built by page-list.js once the config is in */
   var resolved = null;     /* the config as the server resolves it on its machine, or null */
 
-  /* The markup layer needs the same lookup for the handoff prompt, and has no
+  /* The annotation layer needs the same lookup for the handoff prompt, and has no
      business re-walking the config to get it. */
   window.wbItem = function (src) {
     return index[src] || null;
@@ -52,57 +52,58 @@
   var shell = document.querySelector('.wb');
   var resizer = document.getElementById('resizer');
   var search = document.getElementById('search');
-  var stage = document.getElementById('stage');
+  var canvas = document.getElementById('canvas');
   var frame = document.getElementById('frame');
   var frameBuffer = document.getElementById('frameBuffer');
   var pendingFrame = null;
   var frameReady = false;
-  var frameShell = document.getElementById('frameShell');
-  var frameWrap = document.getElementById('frameWrap');
-  var frameName = document.getElementById('frameName');
+  var artboard = document.getElementById('artboard');
+  var artboardContent = document.getElementById('artboardContent');
+  var artboardName = document.getElementById('artboardName');
   var blank = document.getElementById('blank');
   var openLink = document.getElementById('open');
   var reload = document.getElementById('reload');
   var actionsToggle = document.getElementById('actionsToggle');
   var lensesBox = document.getElementById('lenses');
   var crumb = document.getElementById('crumb');
-  var crumbScreen = document.getElementById('crumbScreen');
+  var crumbPage = document.getElementById('crumbPage');
   var stateControl = document.getElementById('stateControl');
   var stateButton = document.getElementById('stateButton');
   var stateName = document.getElementById('stateName');
   var stateMenu = document.getElementById('stateMenu');
-  var projectName = document.getElementById('projectName');
+  var spaceName = document.getElementById('spaceName');
   var sourceControl = document.getElementById('sourceControl');
   var sourceButton = document.getElementById('openSource');
   var sourceMenu = document.getElementById('sourceMenu');
-  var configureProject = document.getElementById('configureProject');
-  var exportProject = document.getElementById('exportProject');
+  var configureSpace = document.getElementById('configureSpace');
+  var exportSpace = document.getElementById('exportSpace');
   var exportProgress = document.getElementById('exportProgress');
   var exportProgressBar = document.getElementById('exportProgressBar');
   var exportProgressText = document.getElementById('exportProgressText');
-  var widthButtons = Array.prototype.slice.call(
-    document.querySelectorAll('.wb-width')
+  var sizeButtons = Array.prototype.slice.call(
+    document.querySelectorAll('.wb-size')
   );
 
   var BLANK_TEXT = 'Pick a page or a component to see it here.';
   var ACTIONS_TITLE = actionsToggle.title;
 
-  var current = null;      /* src of the picked screen */
+  var current = null;      /* src of the picked page */
   var currentState = null; /* its state id, or null for the default one */
-  var lensPref = null;     /* the lens the toolbar was left on, or null for the design */
+  var currentExample = null; /* on a docs page, the example the address names */
+  var lensPref = null;     /* the lens the top bar was left on, or null for the design */
   var view = null;         /* what the canvas is showing — see wbView below */
-  var widths = widthButtons.map(function (b) {
+  var widths = sizeButtons.map(function (b) {
     return b.dataset.width;
   });
 
-  /* What the canvas is showing, for the markup layer: it names screenshots
+  /* What the canvas is showing, for the annotation layer: it names screenshots
      and tells the agent what it is looking at, and both want the same
      answers. Null while nothing is picked. */
   window.wbView = function () {
     return view;
   };
 
-  /* The shell has no toast of its own; the markup layer's is the one. */
+  /* The shell has no toast of its own; the annotation layer's is the one. */
   function say(message) {
     window.dispatchEvent(new CustomEvent('wb-say', { detail: { message: message } }));
   }
@@ -161,10 +162,10 @@
       });
   }
 
-  exportProject.addEventListener('click', function () {
-    if (exportProject.disabled) return;
-    exportProject.disabled = true;
-    exportProject.setAttribute('aria-busy', 'true');
+  exportSpace.addEventListener('click', function () {
+    if (exportSpace.disabled) return;
+    exportSpace.disabled = true;
+    exportSpace.setAttribute('aria-busy', 'true');
     exportProgress.hidden = false;
     exportProgressBar.max = 1;
     exportProgressBar.value = 0;
@@ -183,8 +184,8 @@
       .catch(function (error) { say(String(error.message || error)); })
       .then(function () {
         exportProgress.hidden = true;
-        exportProject.disabled = false;
-        exportProject.removeAttribute('aria-busy');
+        exportSpace.disabled = false;
+        exportSpace.removeAttribute('aria-busy');
         window.dispatchEvent(new CustomEvent('wb-export-end'));
       });
   });
@@ -195,12 +196,12 @@
   });
 
   window.wbConfigEditor.create({
-    button: configureProject,
+    button: configureSpace,
     dialog: document.getElementById('configDialog'),
     body: document.getElementById('configBody'),
     status: document.getElementById('configStatus'),
     close: document.getElementById('configClose'),
-    addSection: document.getElementById('configAddSection'),
+    addCollection: document.getElementById('configAddCollection'),
     save: document.getElementById('configSave'),
     onSaved: function () {
       window.wbConfig.load(function (loaded) {
@@ -212,7 +213,7 @@
 
   /* "#pages/sign-in.html:error@393~staging" -> { src, state, width, lens }.
      address.js does the reading; a width that isn't one of the buttons is
-     dropped here, the state and the lens are checked against the screen and
+     dropped here, the state and the lens are checked against the page and
      the config when they're used. */
   function parseHash() {
     var target = window.wbAddress.parse(location.hash);
@@ -221,13 +222,15 @@
   }
 
   /* The default state and the design lens are addressed by leaving them out,
-     so the hash for a screen with states and the hash for one without look
-     the same. A pick that names no lens keeps the one the toolbar is on. */
-  function writeHash(src, state, width, lens) {
-    location.hash = window.wbAddress.write({ src: src, state: state, width: width, lens: lens || null });
+     so the hash for a page with states and the hash for one without look
+     the same. A pick that names no lens keeps the one the top bar is on. */
+  function writeHash(src, state, width, lens, example) {
+    var docs = !!(index[src] && index[src].docs);
+    location.hash = window.wbAddress.write({ src: src, state: state, width: docs ? null : width,
+      lens: lens || null, example: docs ? example || null : null });
   }
 
-  /* Once the canvas has settled on a screen, the address says exactly what's
+  /* Once the canvas has settled on a page, the address says exactly what's
      showing — the lens that took effect, the story that was picked — so a
      copied link means this and not what was typed. Replaced rather than
      assigned: the canvas is already there, and a hashchange would only send
@@ -235,17 +238,23 @@
   function syncHash() {
     var have = window.wbAddress.parse(location.hash);
     var lens = view && view.lens ? view.lens.key : null;
-    if (have.src === current && have.state === currentState && have.width === stage.dataset.width && have.lens === lens) return;
-    var want = window.wbAddress.write({ src: current, state: currentState, width: stage.dataset.width, lens: lens });
+    var docs = !!(view && view.item && view.item.docs);
+    /* A docs page's own lens is left out, as the design lens is elsewhere. */
+    if (docs && lens && lens === defaultDocsLens(view.item)) lens = null;
+    var width = docs ? null : canvas.dataset.width;
+    var example = docs ? currentExample : null;
+    if (have.src === current && have.state === currentState && have.width === width && have.lens === lens &&
+        have.example === example) return;
+    var want = window.wbAddress.write({ src: current, state: currentState, width: width, lens: lens, example: example });
     history.replaceState(null, '', location.pathname + location.search + (want ? '#' + want : ''));
   }
 
   window.wbTarget = parseHash;
 
-  /* A single state is a page with a note attached, not a group — the list
-     only splits a screen open when there is a choice to make. Same rule the
+  /* A single state is a page with a note attached, not a fold — the list
+     only splits a page open when there is a choice to make. Same rule the
      panel folds by, so it comes from the same place. */
-  var statesOf = window.wbNav.states;
+  var statesOf = window.wbPageList.states;
 
   /* An id the item actually declares, or null for its default — which is
      what an unknown one falls back to rather than a blank frame. */
@@ -268,16 +277,43 @@
 
   /* ------------------------------------------------------------ lenses */
 
-  /* Which lenses a screen has, in the order the config declared them. */
+  /* Which lenses a page has, in the order the config declared them. */
   function lensesOf(item) {
+    if (item && item.docs) return docsLenses(item).map(function (lens) { return lens.key; });
     if (!item || !item.implementations) return [];
     return Object.keys(config.implementations).filter(function (key) {
       return !!item.implementations[key];
     });
   }
 
-  /* The lens the toolbar is on, if this screen has it; else the design. */
+  /* The lens the top bar is on, if this page has it; else the design. */
+  /* A docs page's lenses: examples implementations from workbench.yaml, or
+     the ones its defineDocs definition declares. */
+  function docsLenses(item) {
+    if (item.docsLenses) {
+      return item.docsLenses.map(function (lens) { return { key: lens.key, label: lens.label, kind: 'examples' }; });
+    }
+    return Object.keys(config.implementations).filter(function (key) {
+      return !!(item.implementations && item.implementations[key]);
+    }).map(function (key) { return config.implementations[key]; });
+  }
+
+  /* The lens the top bar is on when the page has it, else the page's own,
+     else its first: a docs page always shows one of its lenses. */
+  function defaultDocsLens(item) {
+    var lenses = docsLenses(item);
+    var own = lenses.filter(function (lens) { return lens.key === item.lens; })[0] || lenses[0];
+    return own ? own.key : null;
+  }
+
+  function docsLens(item) {
+    var lenses = docsLenses(item);
+    function find(key) { return lenses.filter(function (lens) { return lens.key === key; })[0] || null; }
+    return find(lensPref) || find(item.lens) || lenses[0] || null;
+  }
+
   function effectiveLens(item) {
+    if (item && item.docs) return docsLens(item);
     if (item && item.implementationOnly) return config.implementations[item.implementationOnly] || null;
     if (!lensPref || !item.implementations || !item.implementations[lensPref]) return null;
     return config.implementations[lensPref] || null;
@@ -292,9 +328,10 @@
     }
   }
 
-  /* The address the frame loads: the design with its flags, or the screen's
+  /* The address the frame loads: the design with its flags, or the page's
      path on the implementation. Stories are asked for first — see loadStory. */
   function viewUrl(item, lens, state) {
+    if (item.docs) return withFlags(item.src, state) + (lens ? '&lens=' + encodeURIComponent(lens.key) : '');
     if (!lens) return withFlags(item.src, state);
     if (lens.kind === 'workbench') {
       var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], state), config.root);
@@ -311,7 +348,7 @@
     /* With no current document, keep the whole canvas out of sight until the
        first styled page is ready. Later navigation leaves it visible while
        the spare iframe loads behind it. */
-    frameShell.hidden = !frame.getAttribute('src');
+    artboard.hidden = !frame.getAttribute('src');
     loadPreview(url);
     /* A lens loads through the workbench's proxy; on its own, the page
        opens at the implementation's own address. */
@@ -325,13 +362,14 @@
   function cancelStorySwitch() {
     if (!pendingStorySwitch) return;
     clearTimeout(pendingStorySwitch.timer);
+    if (pendingStorySwitch.frame !== pendingFrame) sessions.protect(pendingStorySwitch.frame, false);
     pendingStorySwitch = null;
   }
 
   function fallBackStorySwitch(switching) {
     if (pendingStorySwitch !== switching || switching.seq !== showSeq) return;
     pendingStorySwitch = null;
-    showFrame(switching.url);
+    loadPreview(switching.url, true);
   }
 
   function reportRenderedStory() {
@@ -347,10 +385,29 @@
      arrives. Once accepted, wait for its render event before telling capture
      that the new story is ready. */
   function reuseStoryFrame(previous, lens, storyId, seq) {
-    if (!frameReady || pendingFrame || !previous || !previous.lens ||
-        previous.lens.kind !== 'storybook' || previous.lens.url !== lens.url) return false;
-    if (!window.wbLenses.selectStory(frame, lens, storyId)) return false;
-    var switching = { frame: frame, lens: lens, id: storyId, seq: seq,
+    var cached = sessions.get(sessionKey(window.wbLenses.storyUrl(lens, storyId)));
+    var target = cached && cached.ready ? cached.frame :
+      frameReady && !pendingFrame && previous && previous.lens && previous.lens.kind === 'storybook' && previous.lens.url === lens.url ? frame : null;
+    if (!target) return false;
+    window.wbSimulator.hide();
+    blank.hidden = true;
+    target.wbRequestedUrl = window.wbLenses.storyUrl(lens, storyId);
+    if (target !== frame || !frameReady) {
+      cancelPendingFrame();
+      pendingFrame = target;
+      target.wbRestoring = true;
+      target.wbLoadSequence = (target.wbLoadSequence || 0) + 1;
+      sessions.protect(target, true);
+    }
+    if (target.wbStoryId === storyId) {
+      renderedStory = { frame: target, id: storyId, seq: seq };
+      if (pendingFrame === target) frameLoaded({ currentTarget: target });
+      else { reportRenderedStory(); window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } })); }
+      return true;
+    }
+    if (!window.wbLenses.selectStory(target, lens, storyId)) return false;
+    target.wbStoryId = null;
+    var switching = { frame: target, lens: lens, id: storyId, seq: seq,
       url: window.wbLenses.storyUrl(lens, storyId), timer: null };
     switching.timer = setTimeout(function () { fallBackStorySwitch(switching); }, 1500);
     pendingStorySwitch = switching;
@@ -370,6 +427,8 @@
       if (switching && switching.seq === showSeq) cancelStorySwitch();
       var wasReported = reportedStorySeq === showSeq;
       renderedStory = { frame: target, id: event.id, seq: showSeq };
+      target.wbStoryId = event.id;
+      if (target === pendingFrame && target.wbRestoring) frameLoaded({ currentTarget: target });
       reportRenderedStory();
       if (!wasReported && reportedStorySeq === showSeq && target === frame && !pendingFrame) {
         window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } }));
@@ -378,14 +437,14 @@
   }
 
   /* Where the code is, for the handoff: what the story says about itself,
-     then every pointer the config resolved for this screen on this machine. */
+     then every pointer the config resolved for this page on this machine. */
   function codeFor(item, story) {
     var out = [];
     function add(file) {
       if (file && out.indexOf(file) === -1) out.push(file);
     }
     ((story && story.code) || []).forEach(add);
-    var info = resolved && resolved.screens && resolved.screens[item.src];
+    var info = resolved && resolved.pages && resolved.pages[item.src];
     ((info && info.code) || []).forEach(function (entry) {
       if (entry.exists) add(entry.path);
     });
@@ -393,26 +452,28 @@
   }
 
   /* A switcher needs at least two lenses to switch between. A design with no
-     implementation has one (itself); a screen imported from a single
+     implementation has one (itself); a page imported from a single
      implementation, with no design, has one too. Neither shows the control. */
   function drawLenses(item, lens) {
     lensesBox.innerHTML = '';
     var keys = lensesOf(item);
-    var choices = item && item.implementationOnly ? keys : [null].concat(keys);
+    var choices = item && (item.implementationOnly || item.docs) ? keys : [null].concat(keys);
+    var docsLabels = {};
+    if (item && item.docs) docsLenses(item).forEach(function (entry) { docsLabels[entry.key] = entry; });
     lensesBox.hidden = choices.length < 2;
     if (lensesBox.hidden) return;
     choices.forEach(function (key) {
-      var impl = key ? config.implementations[key] : null;
+      var impl = key ? docsLabels[key] || config.implementations[key] : null;
       var button = document.createElement('button');
       button.className = 'wb-lens';
       button.type = 'button';
       button.dataset.lens = key || '';
       button.textContent = impl ? impl.label : (item.workbench ? 'Workbench' : 'Design');
-      button.title = impl ? 'This screen as ' + impl.label + ' has it' : 'This screen as designed';
+      button.title = impl ? 'This page as ' + impl.label + ' has it' : 'This page as designed';
       button.setAttribute('aria-pressed', String((lens ? lens.key : null) === key));
       button.addEventListener('click', function () {
         setLensPref(key);
-        writeHash(current, currentState, stage.dataset.width, key);
+        writeHash(current, currentState, canvas.dataset.width, key, currentExample);
       });
       lensesBox.appendChild(button);
     });
@@ -421,7 +482,7 @@
   /* Through a lens the page is served by somebody else and actions.js isn't
      in it, so the switch has nothing to switch: it shows on and stays put. */
   function setActionsAvailability(lens) {
-    if (lens && lens.kind !== 'workbench') {
+    if (lens && lens.kind !== 'workbench' && lens.kind !== 'examples') {
       actionsToggle.disabled = true;
       actionsToggle.setAttribute('aria-checked', 'true');
       actionsToggle.title = 'Actions — always on here: ' + lens.label +
@@ -473,8 +534,8 @@
     stateButton.setAttribute('aria-expanded', String(open));
   }
 
-  /* The breadcrumb's second half: which version of the screen is showing,
-     and the others to pick from — the screen's states on the design, the
+  /* The breadcrumb's second half: which version of the page is showing,
+     and the others to pick from — the page's states on the design, the
      title's stories under a Storybook lens. rows: [{ label, current, pick }],
      or null when there is nothing to choose between. */
   function drawStateMenu(rows, kind) {
@@ -506,16 +567,16 @@
       return {
         label: story.name,
         current: story.id === picked.id,
-        pick: function () { writeHash(current, story.state, stage.dataset.width, lens.key); },
+        pick: function () { writeHash(current, story.state, canvas.dataset.width, lens.key); },
       };
     }), 'story');
   }
 
   /* A design's states, or a lens that answers to them. An implementation
-     with none of its own shows the screen itself and nothing to pick. */
+     with none of its own shows the page itself and nothing to pick. */
   function drawStates(item, lens) {
     var states = statesOf(item);
-    var mapped = !lens || item.implementationOnly || !!item.implementations[lens.key].states;
+    var mapped = !lens || item.implementationOnly || item.docs || !!item.implementations[lens.key].states;
     if (!states || !mapped || window.wbManifest.streamed(lens)) {
       drawStateMenu(null);
       return;
@@ -525,7 +586,7 @@
         label: state.label,
         current: currentState ? currentState === state.id : i === 0,
         pick: function () {
-          writeHash(current, window.wbNav.statePick(item, state, i), stage.dataset.width);
+          writeHash(current, window.wbPageList.statePick(item, state, i), canvas.dataset.width, lens ? lens.key : null);
         },
       };
     }), 'state');
@@ -533,7 +594,7 @@
 
   /* The story's turn of show(): the title's stories are asked for, the one
      the address names — or the first — goes in the frame. `seq` is show()'s
-     count; an answer for a screen that's no longer up is dropped. */
+     count; an answer for a page that's no longer up is dropped. */
   function loadStory(item, lens, state, seq, previousView) {
     var ref = item.implementations[lens.key];
     var slow = setTimeout(function () {
@@ -546,7 +607,7 @@
         if (seq !== showSeq) return;
         var picked = window.wbLenses.pick(list, state);
         currentState = picked.state;
-        if (item.implementationOnly && nav) nav.setCurrent(current, currentState, item.group);
+        if (item.implementationOnly && pageList) pageList.setCurrent(current, currentState, item.collection);
         view.story = picked;
         view.stateLabel = picked.name;
         view.url = window.wbLenses.storyUrl(lens, picked.id);
@@ -561,10 +622,9 @@
         clearTimeout(slow);
         if (seq !== showSeq) return;
         currentState = null;
-        frameShell.hidden = true;
+        artboard.hidden = true;
         frameReady = false;
-        frame.removeAttribute('src');
-        frameBuffer.removeAttribute('src');
+        parkPreview();
         openLink.removeAttribute('href');
         blank.textContent = String(error.message || error);
         blank.hidden = false;
@@ -577,7 +637,7 @@
 
   /* ------------------------------------------------------------ source */
 
-  /* The screen's source, as the server resolved it on its machine: the
+  /* The page's source, as the server resolved it on its machine: the
      design file, then wherever each implementation keeps the code. A path
      that isn't there is listed but can't be opened, so the config's intent
      still shows. Nothing serving that answer, no control. */
@@ -608,7 +668,7 @@
   }
 
   function drawSources(item) {
-    var info = item && resolved && resolved.screens && resolved.screens[item.src];
+    var info = item && resolved && resolved.pages && resolved.pages[item.src];
     sourceMenu.innerHTML = '';
     openSources(false);
     sourceControl.hidden = !info;
@@ -655,22 +715,67 @@
 
   function setTitle(item, stateLabelText, lens) {
     /* The state and the lens are part of what you're looking at, so they
-       belong in the tab title next to the screen's name. */
+       belong in the tab title next to the page's name. */
     document.title = [item.label, stateLabelText, lens ? lens.label : null, config.name]
       .filter(Boolean)
       .join(' · ');
-    /* Above the frame, a screen with states always names the one showing,
+    /* Above the frame, a page with states always names the one showing,
        its first included — the breadcrumb does the same. */
     var states = statesOf(item);
     var shown = stateLabelText || (states && !lens ? states[0].label : null);
-    frameName.textContent = [item.label, shown].filter(Boolean).join(' / ');
+    artboardName.textContent = [item.label, shown].filter(Boolean).join(' / ');
   }
 
-  function show(src, state) {
+  /* The canvas mode: 'docs' for a docs page, which fills the canvas;
+     'default' for every other page, which sits on an artboard. */
+  function setCanvasMode(mode) {
+    if (shell.dataset.canvasMode === mode) return;
+    shell.dataset.canvasMode = mode;
+    if (window.wbZoom && window.wbZoom.mode) window.wbZoom.mode(mode);
+    if (mode === 'default') setWidth(canvas.dataset.width || 'fit');
+  }
+
+  /* The docs page in the frame, when it has loaded its script. */
+  function docsPage() {
+    try { return frameReady && frame.contentWindow && frame.contentWindow.wbDocsPage || null; } catch (e) { return null; }
+  }
+
+  function scrollToExample(example) {
+    var page = docsPage();
+    if (page && example) page.scrollToExample(example);
+  }
+
+  /* An address that names an example opens the page there, once its frame is
+     showing. A reload after an edit keeps its own scroll position instead. */
+  var exampleToReveal = null;
+
+  function revealExample() {
+    if (!exampleToReveal || !docsPage()) return;
+    scrollToExample(exampleToReveal);
+    exampleToReveal = null;
+  }
+
+  function show(src, state, example) {
     var item = index[src];
+    var docsItem = !!(item && item.docs);
+    var nextState = docsItem ? stateOf(item, state) : null;
+    var nextLens = docsItem ? effectiveLens(item) : null;
+    /* Another example on the page already showing only scrolls it. */
+    if (docsItem && view && view.src === src && view.state === nextState && frameReady &&
+        (view.lens ? view.lens.key : null) === (nextLens ? nextLens.key : null)) {
+      currentExample = example || null;
+      scrollToExample(currentExample);
+      syncHash();
+      return;
+    }
+    currentExample = docsItem ? example || null : null;
+    exampleToReveal = currentExample;
+    setCanvasMode(docsItem ? 'docs' : 'default');
     var seq = ++showSeq;
     var previousView = view;
+    frame.wbViewport = { width: frame.offsetWidth, height: frame.offsetHeight };
     cancelStorySwitch();
+    cancelPendingFrame();
     renderedStory = null;
     current = item ? src : null;
     var lens = item ? effectiveLens(item) : null;
@@ -680,20 +785,20 @@
     currentState = !item ? null : story ? state || null : stateOf(item, state);
     updateWidthAvailability(item);
 
-    /* The list marks the row and follows it into its section, wherever the
+    /* The list marks the row and follows it into its collection, wherever the
        pick came from — its own rows, a link in the preview, or the editor.
-       Through a lens that doesn't answer to the screen's states, the row
-       marked is the screen itself. */
-    var mapped = !item || item.implementationOnly || !lens || (!story && !!item.implementations[lens.key].states);
+       Through a lens that doesn't answer to the page's states, the row
+       marked is the page itself. */
+    var mapped = !item || item.implementationOnly || item.docs || !lens || (!story && !!item.implementations[lens.key].states);
     var reported = mapped ? currentState : null;
-    if (nav) nav.setCurrent(current, reported, item && item.group);
+    if (pageList) pageList.setCurrent(current, reported, item && item.collection);
     tellHost(current, reported, lens ? lens.key : null, story);
 
     view = null;
     if (window.wbPreviewControls) window.wbPreviewControls.reset();
     drawLenses(item, lens);
     crumb.hidden = !item;
-    crumbScreen.textContent = item ? item.label : '';
+    crumbPage.textContent = item ? item.label : '';
     /* A story's turn comes once the title's stories are in. */
     if (item && !story) drawStates(item, lens);
     else drawStateMenu(null);
@@ -702,15 +807,14 @@
 
     if (!item) {
       window.wbSimulator.hide();
-      frameShell.hidden = true;
+      artboard.hidden = true;
       frameReady = false;
-      frame.removeAttribute('src');
-      frameBuffer.removeAttribute('src');
+      parkPreview();
       blank.textContent = BLANK_TEXT;
       blank.hidden = false;
       openLink.removeAttribute('href');
       document.title = config.name;
-      frameName.textContent = '';
+      artboardName.textContent = '';
       return;
     }
 
@@ -735,11 +839,9 @@
       currentState = null;
       view.url = null;
       frameReady = false;
-      pendingFrame = null;
-      frame.removeAttribute('src');
-      frameBuffer.removeAttribute('src');
-      frameWrap.classList.remove('is-loading');
-      frameShell.hidden = false;
+      parkPreview();
+      artboardContent.classList.remove('is-loading');
+      artboard.hidden = false;
       blank.hidden = true;
       openLink.removeAttribute('href');
       window.wbSimulator.show({
@@ -766,17 +868,17 @@
   /* ----------------------------------------------------------- actions */
 
   /* Whether the preview is live. Off means links don't navigate and forms
-     don't submit, so clicking around a screen never takes you off it.
+     don't submit, so clicking around a page never takes you off it.
 
      The shell can't enforce that itself — off file:// the iframe is a foreign
      origin — so the flag travels in the URL and each page applies it through
      actions.js. It goes on the "open on its own" link too, so a page in its
-     own tab behaves the way the toolbar says it should. */
+     own tab behaves the way the top bar says it should. */
   var actionsOn = false;
 
-  /* The address the frame loads: the screen resolved against the project root,
+  /* The address the frame loads: the page resolved against the project root,
      carrying both flags it needs — whether the preview is live, and which
-     state of the screen to render. Same trip, same reason — the shell can't
+     state of the page to render. Same trip, same reason — the shell can't
      reach across the origin, so it hands them over in the URL. */
   function withFlags(src, state) {
     var url = root + src + (src.indexOf('?') > -1 ? '&' : '?') +
@@ -790,6 +892,67 @@
   function warmFrame(target) {
     target.wbWarmHost = true;
     target.src = new URL('preview-host.html?actions=off', location.href).href;
+  }
+
+  var previewFrames = [frame, frameBuffer];
+  var sessions = window.wbPreviewSessions.create({ dispose: disposeFrame });
+
+  function sessionKey(url) {
+    var lens = view && view.lens;
+    return lens && lens.kind === 'storybook' ? 'storybook|' + lens.key + '|' + lens.url :
+      (lens ? lens.key : 'design') + '|' + new URL(url, location.href).href;
+  }
+
+  function disposeFrame(target) {
+    if (target.wbDisposed) return;
+    target.wbDisposed = true;
+    target.wbLoadSequence = (target.wbLoadSequence || 0) + 1;
+    previewFrames = previewFrames.filter(function (candidate) { return candidate !== target; });
+    function remove() { target.removeAttribute('src'); target.remove(); }
+    var renderer;
+    try { renderer = target.wbWarmHost && target.contentWindow && target.contentWindow.wbPreviewHost; } catch (_) {}
+    if (renderer) renderer.reset().then(remove, function (error) { console.warn('[workbench] preview cleanup failed', error); remove(); });
+    else remove();
+  }
+
+  function spareFrame() {
+    var available = previewFrames.find(function (candidate) { return candidate !== frame && candidate !== pendingFrame && !sessions.has(candidate); });
+    if (available) return available;
+    var target = document.createElement('iframe');
+    target.title = 'Preview loading';
+    target.setAttribute('allow', 'clipboard-read; clipboard-write');
+    target.setAttribute('aria-hidden', 'true');
+    target.inert = true;
+    target.addEventListener('load', frameLoaded);
+    artboardContent.appendChild(target);
+    previewFrames.push(target);
+    return target;
+  }
+
+  function cancelPendingFrame() {
+    if (!pendingFrame) return;
+    var previous = pendingFrame;
+    pendingFrame = null;
+    previous.wbLoadSequence = (previous.wbLoadSequence || 0) + 1;
+    if (previous.wbRestoring) sessions.protect(previous, false);
+    else sessions.remove(previous);
+  }
+
+  function parkPreview() {
+    cancelPendingFrame();
+    sessions.park();
+    frame.classList.remove('is-active');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.inert = true;
+    freezeViewport(frame);
+    frameReady = false;
+  }
+
+  function freezeViewport(target) {
+    if (target.style && target.wbViewport && target.wbViewport.width) {
+      target.style.width = target.wbViewport.width + 'px';
+      target.style.height = target.wbViewport.height + 'px';
+    }
   }
 
   function startWarmLoad(target) {
@@ -815,41 +978,81 @@
     }
   }
 
-  function loadPreview(src) {
+  function loadPreview(src, force) {
+    cancelPendingFrame();
+    if (previewFrames.indexOf(frame) === -1) frame = spareFrame();
+    var key = sessionKey(src);
+    var cached = sessions.get(key);
+    if (force && cached) {
+      if (cached.frame === frame) sessions.forget(frame);
+      else sessions.remove(cached.frame);
+      cached = null;
+    }
+    if (cached && cached.ready) {
+      var retained = cached.frame;
+      if (retained.style) { retained.style.width = ''; retained.style.height = ''; }
+      retained.wbRestoring = true;
+      retained.wbRequestedUrl = src;
+      retained.wbLoadSequence = (retained.wbLoadSequence || 0) + 1;
+      sessions.protect(retained, true);
+      pendingFrame = retained;
+      var sequence = retained.wbLoadSequence;
+      var renderer = retained.wbWarmHost && retained.contentWindow && retained.contentWindow.wbPreviewHost;
+      Promise.resolve(renderer ? renderer.resume(src) : null).then(function () {
+        if (pendingFrame === retained && sequence === retained.wbLoadSequence) frameLoaded({ currentTarget: retained, warm: true });
+      }, function (error) {
+        if (pendingFrame !== retained || sequence !== retained.wbLoadSequence) return;
+        console.warn('[workbench] retained preview could not resume', error);
+        loadPreview(src, true);
+      });
+      return;
+    }
     if (!frame.getAttribute('src') || (frame.wbWarmHost && !frame.wbRequestedUrl && !frameReady)) {
-      frameWrap.classList.add('is-loading');
+      artboardContent.classList.add('is-loading');
       frameReady = false;
+      frame.wbSessionKey = key;
+      frame.wbRestoring = false;
+      sessions.add(key, frame);
       prepareFrame(frame, src);
       return;
     }
-    pendingFrame = frameBuffer;
+    pendingFrame = frameBuffer = spareFrame();
+    pendingFrame.wbSessionKey = key;
+    pendingFrame.wbRestoring = false;
+    sessions.add(key, pendingFrame);
     prepareFrame(pendingFrame, src);
   }
 
   function frameLoaded(e) {
     var loaded = e.currentTarget;
+    if (previewFrames.indexOf(loaded) === -1 || (e.sequence !== undefined && e.sequence !== loaded.wbLoadSequence)) return;
+    var sequence = loaded.wbLoadSequence;
     if (loaded.wbWarmHost && !e.warm) {
       startWarmLoad(loaded);
       return;
     }
     try {
       var preview = loaded.contentWindow;
-      if (preview && preview.__workbenchOptions && !preview.__workbenchReady && !preview.__workbenchError) {
+      if (preview && (preview.__workbenchOptions || preview.__workbenchDocs) && !preview.__workbenchReady && !preview.__workbenchError) {
         var attempt = e.previewAttempt || 0;
         if (attempt < 300) {
-          window.setTimeout(function () { frameLoaded({ currentTarget: loaded, previewAttempt: attempt + 1 }); }, 50);
+          window.setTimeout(function () { frameLoaded({ currentTarget: loaded, previewAttempt: attempt + 1, sequence: sequence, warm: true }); }, 50);
           return;
         }
       }
     } catch (_) { /* Foreign-origin previews keep their existing load behavior. */ }
     if (loaded === pendingFrame) {
       window.requestAnimationFrame(function () {
-        if (loaded !== pendingFrame) return;
+        if (loaded !== pendingFrame || sequence !== loaded.wbLoadSequence) return;
         var previous = frame;
         previous.classList.remove('is-active');
         previous.setAttribute('aria-hidden', 'true');
         loaded.classList.add('is-active');
         loaded.removeAttribute('aria-hidden');
+        previous.inert = true;
+        loaded.inert = false;
+        freezeViewport(previous);
+        if (loaded.style) { loaded.style.width = ''; loaded.style.height = ''; }
         loaded.title = 'Preview';
         previous.title = 'Preview loading';
         frame = loaded;
@@ -858,26 +1061,31 @@
         frameReady = true;
         // A resize can start the spare frame before the initial frame has
         // loaded. Whichever wins must reveal the preview and enable prepare.
-        frameWrap.classList.remove('is-loading');
-        frameShell.hidden = false;
-        previous.wbRequestedUrl = null;
-        previous.wbLoadSequence = (previous.wbLoadSequence || 0) + 1;
-        if (previous.wbWarmHost && previous.contentWindow && previous.contentWindow.wbPreviewHost) {
-          previous.contentWindow.wbPreviewHost.reset().catch(function () {});
-        } else {
-          previous.removeAttribute('src');
-        }
+        artboardContent.classList.remove('is-loading');
+        artboard.hidden = false;
+        loaded.wbRestoring = false;
+        var outgoing = previous.wbSessionKey && sessions.get(previous.wbSessionKey);
+        if (previous !== loaded && outgoing && !outgoing.ready) sessions.remove(previous);
+        sessions.activate(loaded);
+        if (previous !== loaded && !sessions.has(previous)) disposeFrame(previous);
         reportRenderedStory();
+        revealExample();
         window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } }));
       });
       return;
     }
-    if (loaded === frame) {
+    if (loaded === frame && !pendingFrame) {
       window.requestAnimationFrame(function () {
+        if (loaded !== frame || pendingFrame || sequence !== loaded.wbLoadSequence) return;
+        sessions.activate(loaded);
+        loaded.inert = false;
+        loaded.classList.add('is-active');
+        loaded.removeAttribute('aria-hidden');
         frameReady = true;
-        frameWrap.classList.remove('is-loading');
-        frameShell.hidden = false;
+        artboardContent.classList.remove('is-loading');
+        artboard.hidden = false;
         reportRenderedStory();
+        revealExample();
         window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } }));
       });
     }
@@ -889,16 +1097,17 @@
     warmFrame(frame);
     warmFrame(frameBuffer);
   }
+  window.addEventListener('pagehide', function () { sessions.close(); });
 
   /* ---------------------------------------------------------------- host */
 
   /* Embedded — in the editor, in a webview of its own — the workbench is half
-     a tool: the screen list stands in the editor's sidebar, where a file tree
+     a tool: the page list stands in the editor's sidebar, where a file tree
      usually is, and this half is the canvas. Two messages hold the two halves
      together, both carrying the same selection the address bar would:
 
-       in   wb-go    the screen to show, as a hash
-       out  wb-here  the screen now showing, after any pick
+       in   wb-go    the page to show, as a hash
+       out  wb-here  the page now showing, after any pick
 
      wb-here is what keeps the editor's list marked when the pick was made
      over here — a link followed in a live preview, or a copied URL. */
@@ -911,7 +1120,7 @@
   }
 
   /* The lens rides along for whoever wants it; the editor's list only marks
-     screens and states, and reads past it. */
+     pages and states, and reads past it. */
   function tellHost(src, state, lens, pending) {
     if (window.wbAgentContext) window.wbAgentContext.report();
     if (!host) return;
@@ -923,78 +1132,78 @@
     if (host) host.postMessage({ type: 'wb-refresh-failed' }, '*');
   }
 
-  /* ------------------------------------------------------------ projects */
+  /* -------------------------------------------------------------- spaces */
 
-  /* A workbench with more than one project names the one showing at the
+  /* A workbench with more than one space names the one showing at the
      start of the breadcrumb, and, in a browser, swaps the sidebar's header
-     for a switcher. Each project is its own server, so switching is going to
+     for a switcher. Each space is its own server, so switching is going to
      another address: the editor does that for its tab, which it is asked to
-     with wb-project; a browser asks this server for the project's address,
-     starting its server if it has to, and goes there. One project shows
-     neither, and a server that doesn't answer is one project. */
-  function switchProject(id) {
+     with wb-space; a browser asks this server for the space's address,
+     starting its server if it has to, and goes there. One space shows
+     neither, and a server that doesn't answer is one space. */
+  function switchSpace(id) {
     if (host) {
-      host.postMessage({ type: 'wb-project', id: id }, '*');
+      host.postMessage({ type: 'wb-space', id: id }, '*');
       return;
     }
-    fetch('/_workbench/projects/open', {
+    fetch('/_workbench/spaces/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: id }),
     })
       .then(function (res) { return res.json(); })
       .then(function (answer) {
-        if (!answer || !answer.ok) throw new Error((answer && answer.error) || 'The project didn’t open.');
+        if (!answer || !answer.ok) throw new Error((answer && answer.error) || 'The space didn’t open.');
         location.href = answer.url;
       })
       .catch(function (error) {
-        window.alert('Couldn’t open that project — ' + String(error.message || error));
+        window.alert('Couldn’t open that space — ' + String(error.message || error));
       });
   }
 
   var crumbSwitcher = null;
   var sideSwitcher = null;
 
-  /* Read on start and again whenever the config is: a project's name,
+  /* Read on start and again whenever the config is: a space's name,
      color and icon come from its workbench.yaml. */
-  function loadProjects() {
+  function loadSpaces() {
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
-    fetch('/_workbench/projects')
+    fetch('/_workbench/spaces')
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (answer) {
-        var several = !!(answer && answer.ok && answer.projects && answer.projects.length > 1);
-        document.getElementById('projectCrumb').hidden = !several;
-        document.getElementById('projects').hidden = !several || !!host;
+        var several = !!(answer && answer.ok && answer.spaces && answer.spaces.length > 1);
+        document.getElementById('spaceCrumb').hidden = !several;
+        document.getElementById('spaces').hidden = !several || !!host;
         document.getElementById('sidebarHead').hidden = several && !host;
         if (!several) return;
         if (!crumbSwitcher) {
-          crumbSwitcher = window.wbProjects.create({
-            button: document.getElementById('projectCrumbButton'),
-            menu: document.getElementById('projectCrumbMenu'),
-            onPick: switchProject,
+          crumbSwitcher = window.wbSpaces.create({
+            button: document.getElementById('spaceCrumbButton'),
+            menu: document.getElementById('spaceCrumbMenu'),
+            onPick: switchSpace,
           });
         }
-        crumbSwitcher.set(answer.projects, answer.current);
+        crumbSwitcher.set(answer.spaces, answer.current);
         if (host) return;
         if (!sideSwitcher) {
-          sideSwitcher = window.wbProjects.create({
-            button: document.getElementById('projectButton'),
-            menu: document.getElementById('projectMenu'),
-            onPick: switchProject,
+          sideSwitcher = window.wbSpaces.create({
+            button: document.getElementById('spaceButton'),
+            menu: document.getElementById('spaceMenu'),
+            onPick: switchSpace,
           });
         }
-        sideSwitcher.set(answer.projects, answer.current);
+        sideSwitcher.set(answer.spaces, answer.current);
       })
-      .catch(function () { /* one project, as far as anyone can tell */ });
+      .catch(function () { /* one space, as far as anyone can tell */ });
   }
 
   /* Links in a live preview ask the shell to navigate so they get the same
      double-buffered transition as sidebar choices.
 
-     The page can't tell one of the project's own screens from anywhere else —
+     The page can't tell one of the space's own pages from anywhere else —
      it doesn't know where the project root is, and shouldn't have to — so it
      hands over the address it was about to visit and this decides. Anything
-     outside the root, or inside it but not in the config, is not a screen of
+     outside the root, or inside it but not in the config, is not a page of
      this workbench and is ignored. */
   window.addEventListener('message', function (e) {
     storySwitchEvent(e);
@@ -1011,9 +1220,9 @@
 
     /* The live preview is another iframe down. Its physical key event cannot
        bubble here, so carry the serialized event through the shell to the
-       editor-tab webview. Accept it only from one of our two preview frames. */
+       editor-tab webview. Accept it only from the active preview frame. */
     if (data.type === 'wb-keyboard') {
-      if (e.source !== frame.contentWindow && e.source !== frameBuffer.contentWindow) return;
+      if (!frameReady || e.source !== frame.contentWindow) return;
       window.wbKeys.forward(data, host);
       return;
     }
@@ -1054,17 +1263,26 @@
     }
 
     /* A TypeScript preview asking for another: a link its definition maps,
-       or context.navigate. It names the preview by ID; the screen is
+       or context.navigate. It names the preview by ID; the page is
        whichever one renders it. */
     if (data.type === 'workbench-preview' && data.event === 'navigate') {
       if (e.source !== frame.contentWindow || e.origin !== location.origin) return;
-      var screens = (resolved && resolved.screens) || {};
-      var target = Object.keys(screens).find(function (src) {
-        return index[src] && screens[src].preview && screens[src].preview.id === data.preview;
+      var pages = (resolved && resolved.pages) || {};
+      var target = Object.keys(pages).find(function (src) {
+        return index[src] && pages[src].preview && pages[src].preview.id === data.preview;
       });
       if (!target) return;
-      if (nav) nav.reveal(target);
-      writeHash(target, stateOf(index[target], data.state), stage.dataset.width);
+      if (pageList) pageList.reveal(target);
+      writeHash(target, stateOf(index[target], data.state), canvas.dataset.width);
+      return;
+    }
+
+    if (data.type === 'workbench-preview' && data.docsPage) {
+      if (e.source !== frame.contentWindow || e.origin !== location.origin || !view || !view.item.docs) return;
+      if (data.event === 'docs-navigate' && index[data.page]) {
+        if (pageList) pageList.reveal(data.page);
+        writeHash(data.page, null, null, null, data.example || null);
+      }
       return;
     }
 
@@ -1078,8 +1296,8 @@
     var src = decodeURIComponent(query === -1 ? rest : rest.slice(0, query));
     if (!index[src]) return;
 
-    if (nav) nav.reveal(src);
-    writeHash(src, stateOf(index[src], data.state), stage.dataset.width);
+    if (pageList) pageList.reveal(src);
+    writeHash(src, stateOf(index[src], data.state), canvas.dataset.width);
   });
 
   function setActions(on) {
@@ -1101,55 +1319,60 @@
     if (window.wbZoom) window.wbZoom.update();
   }
 
-  /* A mode carries its width and, for devices with a real screen size, its
+  /* A mode carries its width and, for devices with a real display size, its
      height too. Resizable restores the last freeform size instead. Fit is
-     sized by zoom.js, which knows how much stage there is. Every change of
+     sized by zoom.js, which knows how much canvas there is. Every change of
      mode fits the new frame to the canvas, the way a fresh frame opens. */
   function setWidth(mode) {
     var button = null;
-    stage.dataset.width = mode;
-    widthButtons.forEach(function (b) {
+    canvas.dataset.width = mode;
+    sizeButtons.forEach(function (b) {
       var on = b.dataset.width === mode;
       if (on) button = b;
       b.setAttribute('aria-pressed', String(on));
     });
     if (mode === 'fit') {
-      frameShell.style.width = '';
-      frameShell.style.height = '';
+      artboard.style.width = '';
+      artboard.style.height = '';
     } else if (mode === 'resizable') {
-      frameShell.style.width = resizableWidth + 'px';
-      frameShell.style.height = resizableHeight + 'px';
+      artboard.style.width = resizableWidth + 'px';
+      artboard.style.height = resizableHeight + 'px';
       showFrameSize();
     } else {
-      frameShell.style.width = mode + 'px';
-      frameShell.style.height = button && button.dataset.height
+      artboard.style.width = mode + 'px';
+      artboard.style.height = button && button.dataset.height
         ? button.dataset.height + 'px'
         : '';
     }
     if (window.wbZoom) window.wbZoom.fit();
     try {
-      localStorage.setItem('canonic-workbench-width', mode);
+      localStorage.setItem('canonic-workbench-size', mode);
     } catch (e) {
-      /* file:// storage can be blocked; the toolbar still works. */
+      /* file:// storage can be blocked; the size switcher still works. */
     }
   }
 
+  /* A docs page takes the canvas's width: every size stays in the size
+     switcher, off and unpressed, and the page after it gets its width back. */
   function updateWidthAvailability(item) {
-    var supported = item ? window.wbManifest.viewportWidths(item.viewports) : widths.slice();
-    widthButtons.forEach(function (button) {
+    var docs = !!(item && item.docs);
+    var supported = docs ? [] : item ? window.wbManifest.viewportWidths(item.viewports) : widths.slice();
+    sizeButtons.forEach(function (button) {
       var enabled = supported.indexOf(button.dataset.width) !== -1;
       button.disabled = !enabled;
       if (!button.dataset.enabledTitle) button.dataset.enabledTitle = button.title;
-      button.title = enabled ? button.dataset.enabledTitle : button.dataset.enabledTitle + ' · not supported by this screen';
+      button.title = enabled ? button.dataset.enabledTitle
+        : button.dataset.enabledTitle + (docs ? ' · a docs page fills the canvas' : ' · not supported by this page');
+      if (docs) button.setAttribute('aria-pressed', 'false');
     });
-    if (item && supported.indexOf(stage.dataset.width) === -1) setWidth(supported[0] || 'fit');
+    if (item && !docs && supported.indexOf(canvas.dataset.width) === -1) setWidth(supported[0] || 'fit');
   }
 
-  /* A toolbar width change only resizes the frame already on the canvas.
-     Keep the address shareable without sending the same screen through the
+  /* A size switcher change only resizes the frame already on the canvas.
+     Keep the address shareable without sending the same page through the
      hash router, which would navigate its iframe and reset live state. */
   function chooseWidth(mode) {
-    var button = widthButtons.find(function (candidate) { return candidate.dataset.width === mode; });
+    var button = sizeButtons.find(function (candidate) { return candidate.dataset.width === mode; });
     if (button && button.disabled) return;
     setWidth(mode);
     if (current) syncHash();
@@ -1220,7 +1443,7 @@
 
   /* ------------------------------------------------------------- wiring */
 
-  widthButtons.forEach(function (b) {
+  sizeButtons.forEach(function (b) {
     b.addEventListener('click', function () {
       chooseWidth(b.dataset.width);
     });
@@ -1230,7 +1453,7 @@
      bottom changes height, and either bottom corner changes both. Pointer
      travel is screen pixels, so it is divided by the zoom; a left-edge drag
      moves the frame over by what it grew, so the right edge stays put. */
-  var frameDrag = null;
+  var artboardDrag = null;
 
   function rememberFrameSize() {
     try {
@@ -1241,16 +1464,16 @@
     }
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll('.wb-frame-resize'), function (handle) {
+  Array.prototype.forEach.call(document.querySelectorAll('.wb-artboard-resize'), function (handle) {
     handle.addEventListener('pointerdown', function (e) {
-      if (stage.dataset.width !== 'resizable') return;
+      if (canvas.dataset.width !== 'resizable') return;
       if (window.wbZoom) window.wbZoom.hold();
-      frameDrag = {
+      artboardDrag = {
         edge: handle.dataset.resize,
         x: e.clientX,
         y: e.clientY,
-        width: frameShell.offsetWidth,
-        height: frameShell.offsetHeight,
+        width: artboard.offsetWidth,
+        height: artboard.offsetHeight,
         scale: window.wbZoom ? window.wbZoom.scale() : 1,
         pan: window.wbZoom ? window.wbZoom.pan() : null,
       };
@@ -1260,26 +1483,26 @@
     });
 
     handle.addEventListener('pointermove', function (e) {
-      if (!frameDrag) return;
-      var left = frameDrag.edge.indexOf('left') > -1;
-      var horizontal = (left ? frameDrag.x - e.clientX : e.clientX - frameDrag.x) / frameDrag.scale;
-      if (frameDrag.edge !== 'bottom') {
-        resizableWidth = Math.max(320, Math.round(frameDrag.width + horizontal));
-        frameShell.style.width = resizableWidth + 'px';
-        if (left && frameDrag.pan) {
-          window.wbZoom.panTo(frameDrag.pan.x - (resizableWidth - frameDrag.width) * frameDrag.scale, frameDrag.pan.y);
+      if (!artboardDrag) return;
+      var left = artboardDrag.edge.indexOf('left') > -1;
+      var horizontal = (left ? artboardDrag.x - e.clientX : e.clientX - artboardDrag.x) / artboardDrag.scale;
+      if (artboardDrag.edge !== 'bottom') {
+        resizableWidth = Math.max(320, Math.round(artboardDrag.width + horizontal));
+        artboard.style.width = resizableWidth + 'px';
+        if (left && artboardDrag.pan) {
+          window.wbZoom.panTo(artboardDrag.pan.x - (resizableWidth - artboardDrag.width) * artboardDrag.scale, artboardDrag.pan.y);
         }
       }
-      if (frameDrag.edge.indexOf('bottom') > -1) {
-        resizableHeight = Math.max(320, Math.round(frameDrag.height + (e.clientY - frameDrag.y) / frameDrag.scale));
-        frameShell.style.height = resizableHeight + 'px';
+      if (artboardDrag.edge.indexOf('bottom') > -1) {
+        resizableHeight = Math.max(320, Math.round(artboardDrag.height + (e.clientY - artboardDrag.y) / artboardDrag.scale));
+        artboard.style.height = resizableHeight + 'px';
       }
       showFrameSize();
     });
 
     function endFrameDrag() {
-      if (!frameDrag) return;
-      frameDrag = null;
+      if (!artboardDrag) return;
+      artboardDrag = null;
       shell.classList.remove('is-frame-resizing');
       rememberFrameSize();
     }
@@ -1305,7 +1528,7 @@
       show(current, currentState);
       return;
     }
-    loadPreview(view && view.url ? view.url : frame.src);
+    loadPreview(view && view.url ? view.url : frame.src, true);
   });
 
   stateButton.addEventListener('click', function () {
@@ -1330,13 +1553,17 @@
   });
 
   function route() {
+    if (window.wbArtboardHeld) { syncHash(); return; }
     var target = parseHash();
-    if (target.width) setWidth(target.width);
+    if (target.width && !(index[target.src] && index[target.src].docs)) setWidth(target.width);
     /* A lens in the address is an instruction — a copied link says which —
        and one that isn't declared here means the design. No lens keeps the
-       one the toolbar is on. */
-    if (target.lens !== null) setLensPref(config.implementations[target.lens] ? target.lens : null);
-    show(target.src, target.state);
+       one the top bar is on. */
+    var item = index[target.src];
+    var known = config.implementations[target.lens] ||
+      (item && item.docs && docsLenses(item).some(function (lens) { return lens.key === target.lens; }));
+    if (target.lens !== null) setLensPref(known ? target.lens : null);
+    show(target.src, target.state, target.example);
   }
 
   window.addEventListener('hashchange', route);
@@ -1362,13 +1589,13 @@
     }
   });
 
-  /* How the toolbar was left. These are the tool's preferences rather than
-     the project's, so they are shared by every project the workbench opens —
+  /* How the top bar was left. These are the tool's preferences rather than
+     the space's, so they are shared by every space the workbench opens —
      the sidebar you sized once stays that size. */
   function restore() {
     var saved = {};
     try {
-      saved.width = localStorage.getItem('canonic-workbench-width');
+      saved.width = localStorage.getItem('canonic-workbench-size');
       saved.sidebar = localStorage.getItem('canonic-workbench-sidebar');
       saved.actions = localStorage.getItem('canonic-workbench-actions');
       saved.resizableWidth = localStorage.getItem('canonic-workbench-resizable-width');
@@ -1378,7 +1605,7 @@
       /* no storage; fall back to the defaults below. */
     }
     /* The lens is checked against the config where it's used, so a name from
-       another project's toolbar just means the design here. */
+       another space's top bar just means the design here. */
     lensPref = saved.lens || null;
     if (saved.resizableWidth) resizableWidth = parseInt(saved.resizableWidth, 10) || RESIZABLE_DEFAULT_WIDTH;
     if (saved.resizableHeight) resizableHeight = parseInt(saved.resizableHeight, 10) || RESIZABLE_DEFAULT_HEIGHT;
@@ -1393,7 +1620,7 @@
 
   /* -------------------------------------------------------------- boot */
 
-  /* Nothing above runs until the project's config is in: the sidebar is the
+  /* Nothing above runs until the space's config is in: the sidebar is the
      config, and there is no useful half-built version of it to show while
      waiting. */
   /* What the server makes of the config on its machine: absolute paths for
@@ -1413,13 +1640,13 @@
       .then(
         function (result) {
           resolved = result && result.ok ? result : null;
-          exportProject.hidden = !resolved;
-          configureProject.hidden = !resolved;
+          exportSpace.hidden = !resolved;
+          configureSpace.hidden = !resolved;
         },
         function () {
           resolved = null;
-          exportProject.hidden = true;
-          configureProject.hidden = true;
+          exportSpace.hidden = true;
+          configureSpace.hidden = true;
         }
       )
       .then(function () { then(resolved); });
@@ -1430,31 +1657,31 @@
       blank.classList.remove('is-loading');
       config = loaded;
       if (resolved && resolved.implementations) config.implementations = resolved.implementations;
-      groups = window.wbManifest.mergeSections(config.sections, (resolved && resolved.catalogSections) || []);
-      index = window.wbNav.index(groups);
+      collections = window.wbManifest.mergeCollections(config.collections, (resolved && resolved.catalogCollections) || []);
+      index = window.wbPageList.index(collections);
       storyCache = {};
 
       document.title = config.name;
-      projectName.textContent = config.name;
-      loadProjects();
+      spaceName.textContent = config.name;
+      loadSpaces();
 
       if (first) restore();
 
       /* The list is built here and picked from there: a row hands back the
-         screen and the state it stands for, and the shell turns that into the
+         page and the state it stands for, and the shell turns that into the
          hash, which is the one place the selection lives. */
-      if (nav) {
-        nav.update(groups);
+      if (pageList) {
+        pageList.update(collections);
       } else {
-        nav = window.wbNav.create({
+        pageList = window.wbPageList.create({
           search: search,
-          sections: document.getElementById('sections'),
-          sectionsBlock: document.getElementById('sectionsBlock'),
-          title: document.getElementById('sectionName'),
-          list: document.getElementById('nav'),
-          groups: groups,
+          collectionList: document.getElementById('collections'),
+          collectionsBlock: document.getElementById('collectionsBlock'),
+          title: document.getElementById('collectionName'),
+          list: document.getElementById('pageList'),
+          collections: collections,
           onPick: function (src, state) {
-            writeHash(src, state, stage.dataset.width);
+            writeHash(src, state, canvas.dataset.width);
           },
         });
       }
@@ -1468,19 +1695,52 @@
   }
 
   function refreshConfig(loaded) {
+    cancelStorySwitch();
+    cancelPendingFrame();
+    sessions.clearInactive();
+    sessions.forget(frame);
     applyConfig(loaded, false);
   }
 
-  /* No config, no workbench — say which file and why, where the screens would
-     have been. The toolbar stays; it just has nothing to act on. */
+  /* No config, no workbench — say which file and why, where the pages would
+     have been. The top bar stays; it just has nothing to act on. */
   function refuse(error) {
     blank.classList.remove('is-loading');
     blank.textContent = String(error.message || error);
     blank.hidden = false;
     console.error('[workbench] ' + String(error.message || error));
-    /* A project whose config is broken can still be switched away from. */
-    loadProjects();
+    /* A space whose config is broken can still be switched away from. */
+    loadSpaces();
   }
 
+  /* Explicit adapter for isolated artboard runtimes. The canvas coordinator
+     never reaches into shell variables or the preview host's private state. */
+  window.wbArtboardShell = {
+    problem: function () { return !blank.hidden && !blank.classList.contains('is-loading') && blank.textContent !== BLANK_TEXT ? blank.textContent : null; },
+    read: function () {
+      if (!view) return null;
+      return { src: current, state: currentState, lens: view.lens ? view.lens.key : null,
+        sizes: view.item && !view.item.docs ? window.wbManifest.viewportWidths(view.item.viewports) : undefined,
+        label: artboardName.textContent || (view.item && view.item.label) || current,
+        hash: location.hash, ready: !!view.lens && window.wbManifest.streamed(view.lens) ? !!(window.wbSimulator && window.wbSimulator.ready()) : (frameReady && !pendingFrame && !pendingStorySwitch),
+        states: Array.from(stateMenu.querySelectorAll('button')).map(function (b, i) { return { id: String(i), label: b.textContent, current: b.getAttribute('aria-current') === 'true' }; }),
+        lenses: Array.from(lensesBox.querySelectorAll('button')).map(function (b) { return { id: b.dataset.lens, label: b.textContent }; }) };
+    },
+    navigate: function (target) {
+      if (!config) throw new Error('The space is still loading.');
+      setLensPref(target.lens || null);
+      var before = location.hash;
+      writeHash(target.src, target.state || null, 'resizable', target.lens || null, target.example || null);
+      if (location.hash === before) route();
+    },
+    size: function (width, height) {
+      resizableWidth = width; resizableHeight = height;
+      setWidth('resizable'); showFrameSize();
+    },
+    pickState: function (id) { var b = stateMenu.querySelectorAll('button')[Number(id)]; if (b) b.click(); },
+    lens: function (key) { setLensPref(key || null); writeHash(current, currentState, 'resizable', key || null, currentExample); },
+    reload: function () { reload.click(); },
+    refresh: function () { window.wbConfig.load(refreshConfig, refuse); },
+  };
   window.wbConfig.load(start, refuse);
 })();

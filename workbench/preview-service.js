@@ -51,6 +51,15 @@ function create(root, options) {
       if (answer.status !== 200) throw new Error(answer.body && answer.body.error || 'Preview index failed');
       return answer.body;
     }); },
+    /* A docs page lens: `index` lists its examples, `bundle` builds them. */
+    docs: function (route, request) {
+      return launch().then(function (base) {
+        return remote.fetchJson(base + '/docs/' + route + '?request=' + encodeURIComponent(JSON.stringify(request)), { timeout: 120000 });
+      }).then(function (answer) {
+        if (answer.status !== 200) throw new Error(answer.body && answer.body.error || 'Docs examples failed');
+        return answer.body;
+      });
+    },
     export: function () { return launch().then(function (base) { return remote.fetchJson(base + '/export', { timeout: 300000 }); }).then(function (answer) {
       if (answer.status !== 200) throw new Error(answer.body && answer.body.error || 'Preview export failed');
       return answer.body;

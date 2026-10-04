@@ -4,7 +4,7 @@
 
 (function () {
   var frame = document.getElementById('captureFrame');
-  var markup = document.getElementById('captureMarkup');
+  var annotations = document.getElementById('captureAnnotations');
   var current = null;
   var revision = null;
   var prepared = null;
@@ -135,7 +135,7 @@
     });
   }
 
-  /* The element under each mark, read from the mirrored document: a lens's
+  /* The element under each annotation, read from the mirrored document: a lens's
      page is another origin the workbench can't read, but its copy here can. */
   function targets(anchors) {
     if (!Array.isArray(anchors) || !anchors.length || !window.wbDescribe) return undefined;
@@ -164,7 +164,7 @@
   window.wbCapture = {
     prepare: function (payload) {
       if (!payload || !payload.url) return Promise.reject(new Error('Capture has no preview URL'));
-      var key = JSON.stringify([payload.url, payload.revision, payload.width, payload.height, payload.scroll, payload.markup, payload.mirror && payload.mirror.revision]);
+      var key = JSON.stringify([payload.url, payload.revision, payload.width, payload.height, payload.scroll, payload.annotations, payload.mirror && payload.mirror.revision]);
       try {
         if (payload.revision && prepared === key &&
             (payload.mirror ? mirrorRevision === payload.mirror.revision : frame.contentWindow.location.href === payload.url) &&
@@ -174,7 +174,7 @@
       } catch (_) {}
       prepared = null;
       return (payload.mirror ? mirrorLoaded(payload.mirror, JSON.stringify([payload.url, payload.revision])) : frameLoaded(payload.url, payload.revision)).then(function () {
-        markup.innerHTML = payload.markup || '';
+        annotations.innerHTML = payload.annotations || '';
         return settle(payload);
       }).then(function () {
         prepared = key;

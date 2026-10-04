@@ -2,6 +2,7 @@
   "name": "@canonic/studio",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "description": "Canonic Studio: projects and concurrent Code OSS workspaces",
   "type": "module",
   "main": "dist/app/main.js",

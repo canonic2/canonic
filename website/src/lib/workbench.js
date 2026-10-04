@@ -30,7 +30,7 @@ export const download = { href: pages.install, label: 'Install' };
 /* The smallest workbench.yaml, shown by the overview and the Install page. */
 export const setupYaml = `name: Acme
 
-sections:
+collections:
   - name: Pages
     icon: file-text
     items:

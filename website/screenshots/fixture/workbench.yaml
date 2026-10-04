@@ -1,10 +1,10 @@
 name: Acme
 
-sections:
+collections:
   - name: Pages
     icon: file-text
     items:
-      - folder: Auth
+      - group: Auth
         items:
           - label: Sign in
             src: pages/sign-in.html

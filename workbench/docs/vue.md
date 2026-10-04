@@ -4,7 +4,7 @@ A Vue preview renders a Vue 3 component from your project on the canvas, with
 the preview's inputs as its props. It is a
 [TypeScript preview](workbench-previews.md) with `adapter: 'vue'`: you write a
 `.workbench.ts` definition next to the component, and each state appears in the
-sidebar like any other screen. Workbench compiles your `.vue` files itself, so
+sidebar like any other page. Workbench compiles your `.vue` files itself, so
 you don't need Vite or a build step.
 
 This guide covers what is specific to Vue. For the definition keys, controls,
@@ -94,8 +94,8 @@ export default definePreview({
 });
 ```
 
-Run **Workbench: Refresh Screens**. **Button** appears in a **Components**
-section with the states **Default**, **Secondary**, and **Disabled**, and
+Run **Workbench: Refresh Pages**. **Button** appears in a **Components**
+collection with the states **Default**, **Secondary**, and **Disabled**, and
 **Preview controls** lets you edit the label, tone, and disabled flag. To check
 the project without the editor, run the
 [command-line checker](workbench-previews.md#command-line-tools); it prints
@@ -245,11 +245,11 @@ section records its `edit` event. The file name is up to you: only
 
 ## App setup: plugins, provide, router, and i18n
 
-Each render creates a new app with Vue's `createApp` and mounts it into the
-canvas. Changing state, editing an input, or resetting unmounts that app and
-creates another. Before each app mounts, Workbench calls the environment's
+Each render creates a new app with Vue's `createApp` and mounts it in the
+preview frame. Changing state, editing an input, or resetting unmounts that
+app and creates another. Before each app mounts, Workbench calls the environment's
 `configure(app, context)` export, which may be async. Install plugins and
-`provide` values there. For plugins every screen needs, name the module once
+`provide` values there. For plugins every preview needs, name the module once
 as the [project-wide environment](preview-data.md#environments).
 A component that loads its own data with `fetch`, axios, or a client built on
 them needs no store setup: answer its requests per state with
@@ -413,6 +413,66 @@ for all the configuration keys.
 
 Vite's import suffixes aren't supported: `?raw` gives the file's URL, not its
 text.
+
+## Document components with a docs page
+
+A [docs page](docs-pages.md) shows a component's examples in Markdown, each
+in its own panel with its code. Render the examples with Vue through an
+`examples` lens whose `adapter` is `vue`:
+
+```yaml
+implementations:
+  web:
+    kind: examples
+    label: Web
+    adapter: vue
+    environment: preview/vue-environment.ts
+    styles:
+      - src/styles/tokens.css
+
+collections:
+  - name: Components
+    items:
+      - label: Button
+        src: docs/button.md
+        implementations:
+          web: src/components/button-examples/
+```
+
+Each example is a Vue component:
+
+- **A folder**, written with a trailing `/`: each `.vue` file, or script
+  module, directly inside it is one example, its default export.
+  `src/components/button-examples/secondary.vue` is the example `secondary`,
+  and **Show code** shows the whole file.
+- **A file**: each named export of a TypeScript or JavaScript module is one
+  example, such as a `defineComponent(...)` export. `export const WithIcon`
+  is the example `with-icon`, and **Show code** shows that export's statement.
+
+`docs/button.md` places each example by its ID, in a fenced block whose info
+string is `example` and the ID, such as `example secondary`; see
+[Write the Markdown](docs-pages.md#write-the-markdown).
+
+`src/components/button-examples/secondary.vue`:
+
+```vue
+<script setup lang="ts">
+import AcmeButton from '../AcmeButton.vue';
+</script>
+
+<template>
+  <AcmeButton label="Cancel" tone="secondary" />
+</template>
+```
+
+Examples receive no props and have no controls: write the props in the
+example's template. Each example mounts as its own app, and the project's
+environment for `vue` and the lens's `environment` apply to each one: `wrap`
+receives the example's vnode, and `configure` installs plugins in its app. See
+[Examples on docs pages](preview-data.md#examples-on-docs-pages). A
+`*.workbench.ts` file can declare the page and its lenses with `defineDocs`
+instead; see
+[Docs pages](docs-pages.md#declare-a-docs-page-in-a-definition).
 
 ## What .vue files can use
 

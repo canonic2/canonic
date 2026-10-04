@@ -1,12 +1,12 @@
 # Storybook
 
 Workbench can show Storybook stories in its canvas without Storybook's own
-interface: one story at a time, at a real device width, with markup and
+interface: one story at a time, at a real device width, with annotations and
 handoffs. There are two ways to use it, and you can combine them:
 
-- **Map design screens to stories.** A design screen gets a Storybook lens, so
+- **Map design pages to stories.** A design page gets a Storybook lens, so
   you can compare the design with the built component.
-- **Import the whole catalog.** Every story title becomes a screen, and each of
+- **Import the whole catalog.** Every story title becomes a page, and each of
   its stories becomes a state. No design pages or hand-written list are needed.
 
 Workbench reads Storybook's live `/index.json`, which Storybook 7 and later
@@ -35,12 +35,12 @@ implementations:
 The implementation name, `storybook` here, is any kebab-case key. Declare
 several if you have several Storybooks, such as `web-ui` and `mobile-ui`.
 
-## Map design screens to stories
+## Map design pages to stories
 
-Give a design screen the story **title** it corresponds to:
+Give a design page the story **title** it corresponds to:
 
 ```yaml
-sections:
+collections:
   - name: Components
     items:
       - label: Button
@@ -56,10 +56,10 @@ shown in Storybook's sidebar with `/` between levels. `Button` doesn't match
 [stories route](troubleshooting.md#check-a-storybook-title) suggests the right
 title.
 
-On that screen, the lens switcher shows **Design** and **Storybook**. Choosing
-Storybook shows the title's first story. The **State** menu, after the screen's
-name in the toolbar, lists the title's stories instead of the design's states.
-Switch between them without leaving the frame.
+On that page, the lens switcher shows **Design** and **Storybook**. Choosing
+Storybook shows the title's first story. The state switcher, after the page's
+name in the top bar's breadcrumb, lists the title's stories instead of the
+design's states. Switch between them without leaving the frame.
 
 The address records the story in the state slot, as the part of its id after
 `--`: the story `components-button--icon-only` is
@@ -76,8 +76,8 @@ implementations:
     catalog: true
 ```
 
-With `catalog: true`, every story title becomes a screen, and you don't need
-`sections`. This can be the whole `workbench.yaml`:
+With `catalog: true`, every story title becomes a page, and you don't need
+`collections`. This can be the whole `workbench.yaml`:
 
 ```yaml
 name: Acme UI
@@ -91,32 +91,33 @@ implementations:
 
 How titles become the sidebar:
 
-| Storybook title | Section | Folder | Screen |
+| Storybook title | Collection | Group | Page |
 | --- | --- | --- | --- |
 | `UI/Components/Button` | UI | Components | Button |
 | `UI/Forms/Inputs/Text field` | UI | Forms / Inputs | Text field |
 | `Auth/Sign in` | Auth | none | Sign in |
 | `Button` | Storybook (the implementation's label) | none | Button |
 
-- The first segment is the section. A one-segment title goes in a section named
-  after the implementation.
-- Middle segments become one folder. Workbench folders don't nest, so deeper
-  levels are joined with ` / `.
-- The last segment labels the screen.
-- Each story under a title is one of the screen's states, labeled with the
-  story's name. A title with one story is a single row.
-- Only stories are imported. Docs entries are skipped.
+- The first segment is the collection. A one-segment title goes in a
+  collection named after the implementation.
+- Middle segments become one group. Groups don't nest, so deeper levels are
+  joined with ` / `.
+- The last segment labels the page.
+- Each story under a title is one of the page's states, labeled with the
+  story's name. A title with one story is a page with no states listed under
+  it.
+- Only stories are imported. Storybook's docs entries are skipped.
 
-Imported screens are Storybook-only: they open straight in the Storybook lens
+Imported pages are Storybook-only: they open straight in the Storybook lens
 and have no Design choice. Their source links come from Storybook's own
 `importPath` and `componentPath`, resolved against `root`.
 
-### Mixing imported and hand-written screens
+### Mixing imported and hand-written pages
 
-`catalog` and `sections` work together. An imported section with the same name
-as a hand-written or preview section is merged into it. Within that section,
-folders with exactly the same name share one folder, with imported screens
-added after the existing screens. You can put design pages and previews next
+`catalog` and `collections` work together. An imported collection with the same
+name as a hand-written or preview collection is merged into it. Within that
+collection, groups with exactly the same name share one group, with imported
+pages added after the existing pages. You can put design pages and previews next
 to their stories:
 
 ```yaml
@@ -126,7 +127,7 @@ implementations:
     url: http://localhost:6006
     catalog: true
 
-sections:
+collections:
   - name: Components          # Storybook's Components/* titles are added here too
     icon: component
     items:
@@ -138,7 +139,7 @@ sections:
 
 ### Catalog icons
 
-By default, imported screens and sections use the `book-open` icon. Make
+By default, imported pages and collections use the `book-open` icon. Make
 `catalog` a map to choose icons by title prefix. The longest matching prefix
 wins, so a specific title can override its category:
 
@@ -200,7 +201,7 @@ before importing the catalog.
   it has finished building, and the index is what the catalog needs.
 - Raise `timeout` for large Storybooks. The maximum is 300 seconds.
 - Pass `--no-open` (or `--ci`) so Storybook doesn't open a browser tab.
-- If startup times out, the canvas still opens with your hand-written screens
+- If startup times out, the canvas still opens with your hand-written pages
   and reports the catalog problem.
 
 Start commands run only in trusted workspaces, and only in VS Code. See
@@ -235,14 +236,14 @@ cookies, storage, credentials, or code.
 A [design-system export](design-system-export.md) includes each story's source
 and local imports, your Storybook configuration from `.storybook` or a
 `--config-dir` named in a package script, and a reference screenshot of every
-imported story at each of the screen's viewports. Set `root` so sources can be
+imported story at each of the page's `viewports`. Set `root` so sources can be
 found.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| No Storybook lens on a screen | The title is exact. Ask the [stories route](troubleshooting.md#check-a-storybook-title), which lists near matches. |
+| No Storybook lens on a page | The title is exact. Ask the [stories route](troubleshooting.md#check-a-storybook-title), which lists near matches. |
 | Catalog is empty | Storybook isn't running, or isn't at `url`. The config route's `problems` says which. Open `<url>/index.json` in a browser. |
 | `url: auto` finds nothing | Storybook isn't on a scripted port or 6006 to 6010. Set `url` explicitly, or in `workbench.local.yaml`. |
 | Lens is blank | Open `<url>/iframe.html` directly, and check the frame's console. |

@@ -14,7 +14,7 @@ function load() {
 var dev = { key: 'dev', kind: 'url', base: 'http://localhost:3710' };
 var storybook = { key: 'storybook', kind: 'storybook', url: 'http://localhost:6006' };
 
-test('joins a url implementation’s base with the screen’s path there', function () {
+test('joins a url implementation’s base with the page’s path there', function () {
   var lenses = load();
   assert.equal(lenses.url(dev, { path: '/' }, null), 'http://localhost:3710/');
   assert.equal(lenses.url(dev, { path: '/' }, 'error'), 'http://localhost:3710/');

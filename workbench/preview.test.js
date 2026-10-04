@@ -23,6 +23,56 @@ const definition = (adapter, entry, extra = '') => `import { definePreview } fro
 export default definePreview({ id: 'components/button', title: 'Components/Button', adapter: '${adapter}', source: { entry: '${entry}' },
 inputs: { label: 'Continue' }, states: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
 
+test('preview icons pass through discovery, override maps, and isolate invalid names', async t => {
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\npreviews:\n  icon: boxes\n  icons:\n    Components: app-window\ncollections:\n  - name: Components\n    icon: star\n',
+    'button.workbench.ts': definition('html', './button.ts', "icon: 'monitor'"),
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Button"; }',
+    'bad.workbench.ts': definition('html', './button.ts', "icon: 'Bad Icon'"),
+  });
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
+  const resolved = await running.config();
+  assert.equal(resolved.catalogCollections[0].icon, 'app-window');
+  assert.equal(resolved.catalogCollections[0].items[0].icon, 'monitor');
+  assert.equal(resolved.pages['button.workbench.ts'].preview.icon, 'monitor');
+  assert.match(resolved.problems.join('\n'), /bad.workbench.ts: .*icon must be a kebab-case Lucide icon name/);
+  const manual = resolved.collections.map(collection => ({ name: collection.name, icon: collection.icon, items: collection.items }));
+  assert.equal(manifest.mergeCollections(manual, resolved.catalogCollections)[0].icon, 'star');
+});
+
+test('preview and live Storybook collection icons respect mappings and configured fallbacks', async t => {
+  const http = require('node:http');
+  const catalog = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ entries: { customers: { id: 'customers', type: 'story', title: 'Web App/Pages/Customers', name: 'Default' } } }));
+  });
+  await new Promise(resolve => catalog.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => catalog.close(resolve)));
+  const root = fixture(t, {
+    'jobs.workbench.ts': definition('html', './jobs.ts').replace('Components/Button', 'Web App/Pages/Jobs'),
+    'jobs.ts': 'export default function() {}',
+  });
+  const cases = [
+    ['', 'true', 'component', 'component'],
+    ['', '\n      icons:\n        Web App: monitor', 'monitor', 'component'],
+    ['previews:\n  icon: boxes\n', '\n      icon: book-open', 'boxes', 'boxes'],
+    ['previews:\n  icon: boxes\n', '\n      icons:\n        Web App: monitor', 'monitor', 'boxes'],
+    ['previews:\n  icons:\n    Web App: app-window\n    Web App/Pages: monitor\n', '\n      icons:\n        Web App: palette', 'app-window', 'monitor'],
+  ];
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
+  for (const [previews, icons, collectionIcon, pageIcon] of cases) {
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n' + previews + 'implementations:\n  storybook:\n    kind: storybook\n    url: http://127.0.0.1:' + catalog.address().port + '\n    catalog: ' + icons + '\n');
+    const resolved = await running.config();
+    assert.deepEqual(resolved.problems, []);
+    assert.equal(resolved.catalogCollections.length, 1);
+    assert.equal(resolved.catalogCollections[0].icon, collectionIcon);
+    assert.equal(resolved.catalogCollections[0].items[0].items[0].icon, pageIcon);
+  }
+});
+
 test('discovers TypeScript previews, validates IDs and states, and isolates invalid definitions', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts'),
@@ -122,6 +172,28 @@ export default defineConfig({ adapters: { acme: { runtime: './adapter.ts', plugi
   assert.ok(built.localFiles.includes(path.join(root, 'workbench.config.ts')));
 });
 
+test('persistent builds respect evaluated configuration and discovery exclusions', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('html', './button.ts'),
+    'button.ts': 'export default function(canvas) { canvas.textContent = CONFIG_LABEL; }',
+    'label.txt': 'ACME_FIRST_CONFIG',
+    'workbench.config.ts': `import fs from 'node:fs'; export default { define: {
+      CONFIG_LABEL: JSON.stringify(fs.readFileSync(__dirname + '/label.txt', 'utf8')) } };`,
+    '.hidden/button.workbench.ts': definition('html', '../button.ts'),
+    'dist/button.workbench.ts': definition('html', '../button.ts'),
+  });
+  const first = await new Compiler(root).compile('button.workbench.ts');
+  fs.writeFileSync(path.join(root, 'label.txt'), 'ACME_CHANGED_CONFIG');
+  const changed = await new Compiler(root).compile('button.workbench.ts');
+  assert.notEqual(changed.revision, first.revision);
+  assert.match(changed.outputs.get('preview.js').toString(), /ACME_CHANGED_CONFIG/);
+  await assert.rejects(new Compiler(root, { include: ['src/**'] }).compile('button.workbench.ts'), /declared/);
+  await assert.rejects(new Compiler(root).compile('.hidden/button.workbench.ts'), /declared/);
+  await assert.rejects(new Compiler(root).compile('dist/button.workbench.ts'), /declared/);
+  fs.symlinkSync(path.join(root, 'button.workbench.ts'), path.join(root, 'linked.workbench.ts'));
+  await assert.rejects(new Compiler(root).compile('linked.workbench.ts'), /declared/);
+});
+
 test('preview sources cannot escape the project or compile excluded definitions', async t => {
   const root = fixture(t, { 'button.workbench.ts': definition('html', '../outside.ts') });
   const compiler = new Compiler(root);
@@ -141,7 +213,7 @@ test('server imports default previews, serves compiled pages, exports runnable o
   const base = `http://127.0.0.1:${running.port}`;
   const config = await (await fetch(base + '/_workbench/config')).json();
   assert.deepEqual(config.problems, []);
-  const preview = config.catalogSections[0].items[0];
+  const preview = config.catalogCollections[0].items[0];
   assert.equal(preview.src, 'button.workbench.ts');
   assert.equal(preview.workbench, true);
   const page = await fetch(base + '/button.workbench.ts?state=disabled');
@@ -176,7 +248,7 @@ test('server imports default previews, serves compiled pages, exports runnable o
   assert.ok((await bundle.arrayBuffer()).byteLength > 1000);
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\npreviews: false\n');
   const disabled = await (await fetch(base + '/_workbench/config')).json();
-  assert.equal(disabled.catalogSections.length, 0);
+  assert.equal(disabled.catalogCollections.length, 0);
   assert.equal((await fetch(base + '/button.workbench.ts')).status, 404);
   assert.equal((await fetch(base + assetBase + 'preview.js')).status, 404);
 });
@@ -191,15 +263,15 @@ test('untrusted and disabled workspaces never execute preview definitions', asyn
     try {
       const config = await running.config();
       assert.equal(fs.existsSync(path.join(root, 'executed')), false);
-      assert.equal(config.catalogSections.length, 0);
+      assert.equal(config.catalogCollections.length, 0);
     } finally { await running.close(); }
   }
 });
 
 test('manual preview placement receives definition states and stays unique', () => {
-  const original = [{ group: 'Authored', items: [{ label: 'My button', src: 'button.workbench.ts', implementations: { storybook: { title: 'Button' } } }] }];
-  const imported = [{ group: 'Components', items: [{ label: 'Button', src: 'button.workbench.ts', workbench: true, states: [{ id: 'default', label: 'Default' }] }] }];
-  const merged = manifest.mergeSections(original, imported);
+  const original = [{ name: 'Authored', items: [{ label: 'My button', src: 'button.workbench.ts', implementations: { storybook: { title: 'Button' } } }] }];
+  const imported = [{ name: 'Components', items: [{ label: 'Button', src: 'button.workbench.ts', workbench: true, states: [{ id: 'default', label: 'Default' }] }] }];
+  const merged = manifest.mergeCollections(original, imported);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].items[0].label, 'My button');
   assert.equal(merged[0].items[0].workbench, true);
@@ -209,7 +281,7 @@ test('manual preview placement receives definition states and stays unique', () 
 
 test('a Workbench implementation maps a design to managed preview states', async t => {
   const root = fixture(t, {
-    'workbench.yaml': 'name: Acme\nimplementations:\n  built:\n    kind: workbench\nsections:\n  - name: Pages\n    items:\n      - label: Design\n        src: design.html\n        implementations:\n          built: components/button\n',
+    'workbench.yaml': 'name: Acme\nimplementations:\n  built:\n    kind: workbench\ncollections:\n  - name: Pages\n    items:\n      - label: Design\n        src: design.html\n        implementations:\n          built: components/button\n',
     'design.html': '<button>Design</button>',
     'button.workbench.ts': definition('html', './button.ts'),
     'button.ts': 'export default function(canvas, ctx) { canvas.textContent = ctx.inputs.label; }',
@@ -218,8 +290,8 @@ test('a Workbench implementation maps a design to managed preview states', async
   try {
     const config = await running.config();
     assert.deepEqual(config.problems, []);
-    assert.equal(config.sections[0].items[0].implementations.built.states.disabled, '/button.workbench.ts?state=disabled');
-    assert.equal(config.screens['design.html'].code[0].relative, 'button.ts');
+    assert.equal(config.collections[0].items[0].implementations.built.states.disabled, '/button.workbench.ts?state=disabled');
+    assert.equal(config.pages['design.html'].code[0].relative, 'button.ts');
     const plan = server.exportCapturePlan(config, `http://127.0.0.1:${running.port}/`);
     assert.ok(plan.captures.some(capture => capture.state === 'default' && capture.url.includes('state=default')));
   } finally { await running.close(); }
@@ -252,7 +324,7 @@ export default definePreview({ id: '${id}', adapter: 'html', source: { entry: '.
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   try {
     const config = await running.config();
-    assert.deepEqual(config.screens['start.workbench.ts'].preview.links['/reset/'], { preview: 'pages/start', state: 'sent' });
+    assert.deepEqual(config.pages['start.workbench.ts'].preview.links['/reset/'], { preview: 'pages/start', state: 'sent' });
     assert.equal(config.problems.length, 3);
     assert.match(config.problems[0], /^broken\.workbench\.ts: .*link \/next\/ must name a preview ID, or \{ preview, state \}\.$/);
     assert.deepEqual(config.problems.slice(1), [
@@ -271,17 +343,17 @@ test('portable compiler source closure is hashed and browser files are included 
   });
   const compiler = new Compiler(root);
   const built = await compiler.compile('button.workbench.ts', false);
-  const view = { name: 'Acme', screens: { 'button.workbench.ts': { label: 'Button', design: path.join(root, 'button.workbench.ts'), code: [] } }, implementations: {} };
+  const view = { name: 'Acme', pages: { 'button.workbench.ts': { label: 'Button', design: path.join(root, 'button.workbench.ts'), code: [] } }, implementations: {} };
   const portable = { previews: [{ id: built.id, file: built.file, files: built.localFiles, packages: built.packages, directory: 'browser/' + built.slug, states: [{ id: 'default' }] }],
     files: Array.from(built.outputs, ([name, body]) => ({ path: 'browser/' + built.slug + '/' + name, data: Buffer.from(body).toString('base64') })), warnings: [] };
   const output = exporter.create(root, view, { portable });
-  assert.ok(output.report.screens[0].files.includes('fixture.ts'));
+  assert.ok(output.report.pages[0].files.includes('fixture.ts'));
   assert.ok(!output.report.dependencies.some(pkg => pkg.name === '@canonic2/workbench'));
   assert.equal(output.report.browser.previews[0].source, 'button.workbench.ts');
   assert.ok(output.body.includes(Buffer.from('browser/' + built.slug + '/index.html')));
-  const first = output.report.screens[0].hash;
+  const first = output.report.pages[0].hash;
   fs.writeFileSync(path.join(root, 'fixture.ts'), 'export const label = "Changed";');
-  assert.notEqual(exporter.create(root, view, { portable }).report.screens[0].hash, first);
+  assert.notEqual(exporter.create(root, view, { portable }).report.pages[0].hash, first);
 });
 
 test('authoring declarations infer input types and reject invalid state inputs', t => {
@@ -343,6 +415,10 @@ test('portable build includes the interactive viewer and shared controls while r
   assert.ok(result.files.some(file => file.path === result.previews[0].directory + '/index.html'));
   assert.deepEqual(contents('preview-controls.js'), fs.readFileSync(path.join(__dirname, 'workbench/preview-controls.js')));
   assert.deepEqual(contents('preview-controls.css'), fs.readFileSync(path.join(__dirname, 'workbench/preview-controls.css')));
+  assert.deepEqual(contents('CANONIC-LICENSE.txt'), fs.readFileSync(path.join(__dirname, 'LICENSE')));
+  const exported = exporter.create(root, { name: 'Acme', pages: {}, implementations: {} }, { portable: result });
+  assert.ok(exported.body.includes(Buffer.from('browser/CANONIC-LICENSE.txt')));
+  assert.ok(exported.body.includes(contents('CANONIC-LICENSE.txt')));
 });
 
 test('CLI builds a static viewer without starting a server and refuses to overwrite existing content', t => {

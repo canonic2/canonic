@@ -1,7 +1,7 @@
 # Design-system export contract
 
 The design-system export packages the whole workbench as one download: the
-source closure of every screen, reference screenshots, a guide per screen,
+source closure of every page, reference screenshots, a guide per page,
 and, when the project has [TypeScript previews](previews.md), a portable
 `browser/` viewer. It is a server-backed operation available from the editor
 or a hosted browser; a `file://` workbench cannot export. See
@@ -11,7 +11,11 @@ description is [Design-system export](../docs/design-system-export.md).
 
 ## Source closure
 
-- Export starts from every screen's entry points: the design page, its code
+Portable browser viewers include `browser/CANONIC-LICENSE.txt` for Canonic-owned
+viewer code and generated authoring types. Project sources and third-party
+components retain their own licensing.
+
+- Export starts from every page's entry points: the design page, its code
   pointers, each imported Storybook story's file and component, and each
   TypeScript preview's definition, source, and the local files its compiler
   resolves (including adapter and environment dependencies). It follows
@@ -47,38 +51,47 @@ description is [Design-system export](../docs/design-system-export.md).
 
 ## Reference capture plan
 
-- The plan covers every declared state of every authored design screen, each
+- The plan covers every declared state of every authored design page, each
   story of every imported Storybook title, and each state of every TypeScript
-  preview, at the screen's viewports. Screens are planned once each, across
-  sections and imported catalogs.
+  preview, at the page's viewports. Pages are planned once each, across
+  collections and imported catalogs.
 - Viewport sizes: `desktop` 1512 × 982, `mobile` 393 × 852, `fit`
-  1440 × 900, and `responsive` both desktop and mobile. A screen without
+  1440 × 900, and `responsive` both desktop and mobile. A page without
   `viewports` uses fit, desktop, and mobile. Duplicate sizes are removed.
-- Design screens load as designed with actions off; the first state loads
-  without a `state` parameter. Lenses on a design screen are not captured.
+- Design pages load as designed with actions off; the first state loads
+  without a `state` parameter. Lenses on a design page are not captured.
 - TypeScript preview states load the preview's page with `?state=<id>`. A
   capture waits up to 8 seconds for the preview to report it has rendered; a
   preview render error fails that reference instead of capturing an error
-  screen.
-- Implementation-only screens other than Storybook (iOS Simulator catalog
-  devices) and screens whose design file is missing produce warnings rather
+  page.
+- Implementation-only pages other than Storybook (iOS Simulator catalog
+  devices) and pages whose design file is missing produce warnings rather
   than invented images.
 
 ## Capture scheduling versus the camera
+
+The [multiple-artboard canvas](multiple-artboards.md) changes interactive
+screenshots and handoffs to include the entire canvas. It does not change this
+catalog-wide design-system export into an export of the current arrangement.
+On a mixed-space canvas, the export action targets the selected artboard's
+owning space; handoff images are stored by the canvas host space. Reuse
+capture services through the boundaries in the
+[code plan](multiple-artboards-code-plan.md), preserving
+this export's own reference plan, scheduling, warnings, and archive contract.
 
 | | Interactive camera and handoff | Design-system export |
 | --- | --- | --- |
 | Target | Current visible selection, scroll, annotations, and live document state | Planned design states, TypeScript preview states, and imported Storybook stories at configured sizes |
 | Preparation | Continuous live mirror into one warm view; flush on click | Direct background loads and settling for each planned reference |
-| Renderer use | Single queued helper | Up to four workers for distinct page/story groups; the existing warm service is one of them |
+| Renderer use | Single queued helper | Up to four workers, each page's or story's references on one; the existing warm service is one of them |
 | Reuse | Reprepare the selected view | Keep all viewport sizes of one URL on its worker; switch Storybook stories in a loaded `iframe.html` runtime when possible |
 | Result | Browser JPEG download or saved handoff screenshot | JPEG references embedded in the archive |
 
 Export calls the same capture service but has its own jobs and scheduling.
 References for one page or story stay on one worker to reuse the loaded
-document across viewport sizes. Other groups run in parallel on extra workers
-that start cold, each with its own helper; they close when
-the export ends. Storybook reuse inside a worker does not navigate the visible
+document across viewport sizes. Other pages and stories run in parallel on
+extra workers that start cold, each with its own helper; they close when the
+export ends. Storybook reuse inside a worker does not navigate the visible
 iframe. Storybook references wait for the story to render (up to 8 seconds),
 then for fonts, visible images, and a short quiet period. A failed capture adds
 a `captureWarnings` entry and the remaining references continue. A failure to
@@ -86,16 +99,16 @@ close an extra worker is also a warning and does not discard captures.
 
 ## Archive contract
 
-- Everything sits under one top-level folder named after the workbench
+- Everything sits under one top-level directory named after the workbench
   (`<name>-design-system/`), with `workbench.yaml` at its root.
-- Each screen gets an agent-oriented README beside its primary entry point and
-  JPEGs in a nearby `screenshots/` directory. Screens that share a directory
-  get `<screen>.README.md` and `screenshots/<screen>/`. A screen with no design
-  or source entry point goes under `screens/`. The README points to its
+- Each page gets an agent-oriented README beside its primary entry point and
+  JPEGs in a nearby `screenshots/` directory. Pages that share a directory
+  get `<page>.README.md` and `screenshots/<page>/`. A page with no design
+  or source entry point goes under `workbench-pages/`. The README points to its
   reference images.
 - `canonic-export.json` lists files, dependencies, unresolved references
-  (`warnings`), screen records, `captureWarnings`, `browser`, and `parts`.
-  Each screen record has a SHA-256 content hash over its sorted exported
+  (`warnings`), page records (`pages`), `captureWarnings`, `browser`, and
+  `parts`. Each page record has a SHA-256 content hash over its sorted exported
   source paths and raw file contents, including a TypeScript preview's
   compiler-resolved files. Generated READMEs and metadata, exporter-added
   package files, reference JPEGs, and compiled `browser/` output do not affect
@@ -113,7 +126,7 @@ close an extra worker is also a warning and does not discard captures.
 ### Portable TypeScript previews
 
 When the project has TypeScript previews, the archive contains a `browser/`
-folder: an interactive viewer at `browser/index.html` over a versioned
+directory: an interactive viewer at `browser/index.html` over a versioned
 catalog, `browser/workbench.json`, with each preview compiled under its own
 directory. Served by any static HTTP server, it opens without Electron,
 Workbench, or the project's packages, and offers search, states, viewports,
@@ -158,7 +171,7 @@ The contract above matches the code as of 2026-10-03, with the gaps below.
   retained bundles, cleanup warnings, job and part downloads, and the direct
   ZIP download.
 - [export.test.js](../export.test.js) checks the source closure, linked
-  packages, Storybook configuration, screen hashes, shared-folder guide and
+  packages, Storybook configuration, page hashes, shared-directory guide and
   screenshot placement, and the split parts bundle.
 - [preview.test.js](../preview.test.js) checks that preview states enter the
   capture plan, that a preview's compiler-resolved sources are hashed and its
@@ -172,8 +185,8 @@ The contract above matches the code as of 2026-10-03, with the gaps below.
   that missing states and render failures block readiness.
 - [electron-capture.test.js](../electron-capture.test.js),
   [capture-helper.test.js](../capture-helper.test.js), and
-  [capture.test.js](../capture.test.js) check the export pool, in-place
+  [capture-scripts.test.js](../capture-scripts.test.js) check the export pool, in-place
   Storybook switching, and settling.
 - Not covered by automated tests: the `409` answer for an incomplete job,
   the missing-design and Simulator warnings, and the exclusion of `browser/`
-  output from screen hashes.
+  output from page hashes.

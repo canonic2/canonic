@@ -13,14 +13,32 @@ label hypotheses and open questions. Update the relevant topic when requirements
 decisions, or findings change, and add new topics to the index below. Use the
 `product-specs` skill to write and maintain these specifications.
 
+## Multiple-artboard update
+
+The [feature contract](multiple-artboards.md) and
+[TypeScript code plan](multiple-artboards-code-plan.md) are the authoritative
+support-system record and target architecture for this update. The current scope
+is infrastructure only: independent instance state/runtimes, mixed-space access,
+full-canvas capture/handoff/context APIs, and native producer ownership. Existing
+controls, styles, layout, and the default entry point are unchanged. A temporary
+programmatic harness verifies the support without adding production UI. Free positioning and row/grid arrangement are phase 2; persistence
+and shared layouts remain open. The feature contract records verification and
+limits, and the code plan distinguishes migrated modules from renderer debt.
+
+## Topics
+
 | Spec | Covers |
 | --- | --- |
-| [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, frames, and failures shared by every screen |
+| [Terminology](terminology.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
+| [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, the canvas and artboards, and failures shared by every page |
+| [Multiple artboards](multiple-artboards.md) | Investigation and proposed comparison canvas, artboard ownership, selection, persistence, implementation phases, and open product decisions |
+| [Artboard code plan](multiple-artboards-code-plan.md) | Planned TypeScript capability boundaries, state and runtime APIs, space transport, capture/context workflows, migration slices, and validation |
 | [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, adapters, controls, the `workbench` lens, and the portable build |
+| [Docs pages](docs-pages.md) | Markdown docs pages with live examples that use the whole canvas, `examples` lenses, `defineDocs`, the docs canvas mode, and docs references in the export |
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
 | [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
-| [Agent context](agent-context.md) | Telling chats in the editor which screen the canvas shows: the view route, the server announcement, Shield's hooks and MCP server, and proposed Copilot surfaces |
+| [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, Shield's hooks and MCP server, and proposed Copilot surfaces |
 | [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
@@ -29,18 +47,19 @@ The workbench is one implementation in `packages/workbench/workbench/`. Projects
 `workbench.yaml` and may override machine-specific values in the ignored
 `workbench.local.yaml`. They do not receive a copy of the workbench code.
 
-## Screen sources
+## Page sources
 
-A screen enters the list from `workbench.yaml`, from an implementation catalog,
+A page enters the page list from `workbench.yaml`, from an implementation catalog,
 or from preview discovery. TypeScript previews (`*.workbench.ts` and
 `*.workbench.tsx`) are discovered unless `previews: false`, compile in a managed
 worker, and render in the Workbench preview host; see
 [TypeScript previews](previews.md) and the [preview API guide](../docs/workbench-previews.md).
 
-| Source | How it enters the list | What appears on the canvas |
+| Source | How it enters the page list | What appears on the canvas |
 | --- | --- | --- |
-| Authored page | A `sections[].items[]` entry with `src` | The project HTML file as designed |
-| TypeScript preview | A discovered definition, placed in the section its title names, or listed by `src` | The compiled component in the preview host, with its states and controls |
+| Authored page | A `collections[].items[]` entry with `src` | The project HTML file as designed |
+| TypeScript preview | A discovered definition, placed in the collection its title names, or listed by `src` | The compiled component in the preview host, with its states and controls |
+| Docs page | A `collections[].items[]` entry whose `src` is a `.md` file, or a discovered `defineDocs` definition | The Markdown on the whole canvas, with examples rendered through its lenses |
 | Workbench mapping | A `kind: workbench` lens on an authored page | A named TypeScript preview's states beside the design |
 | URL implementation | A lens on an authored page | The configured external page in an iframe |
 | Storybook mapping | A lens on an authored page | One story from the mapped Storybook title |

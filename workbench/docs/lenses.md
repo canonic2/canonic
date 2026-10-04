@@ -1,11 +1,11 @@
 # Lenses and URL implementations
 
-A design screen is one picture of something that also exists as code. A
-**lens** shows that code's version in the design's place: the same frame, the
-same width, with your marks over it. Switch between them to compare the
+A design page is one picture of something that also exists as code. A
+**lens** shows that code's version in the design's place: the same artboard, the
+same size, with your annotations over it. Switch between them to compare the
 design with what was built, then hand the difference to an agent.
 
-There are five kinds of implementation:
+There are six kinds of implementation:
 
 | Kind | Shows | Guide |
 | --- | --- | --- |
@@ -14,31 +14,43 @@ There are five kinds of implementation:
 | `storybook` | One Storybook story, without Storybook's own interface | [Storybook](storybook.md) |
 | `ios-simulator` | A live, interactive stream of a booted iOS Simulator | [iOS Simulator](ios-simulator.md) |
 | `window` | A live stream of a window from any macOS app, such as an Android emulator | [App windows](windows.md) |
+| `examples` | A docs page's examples, rendered with an adapter such as React or React Native Web | [Docs pages](docs-pages.md#lenses) |
 
 This page covers how lenses work in general, how to set up a `url`
-implementation, and how to point a design screen at a
+implementation, and how to point a design page at a
 [Workbench preview](#compare-a-design-with-a-workbench-preview).
 
 ## How lenses work
 
-A screen that lists any implementations gets a **lens switcher** in the
-toolbar: **Design**, then one button per implementation the screen has. On a
-screen whose `src` is a `.workbench.ts` or `.workbench.tsx` file, the first
-button reads **Workbench** instead.
+A page that lists any implementations gets a **lens switcher** in the
+top bar: **Design**, then one button per implementation the page has. On a
+page whose `src` is a `.workbench.ts` or `.workbench.tsx` file, the first
+button reads **Workbench** instead. The switcher shows only when there are two
+or more lenses to choose from, so a page imported from a single catalog, with
+no design, has none.
 
-- **The choice sticks** as you move between screens, like the frame width.
-  A screen that doesn't have the chosen lens shows its design.
+- **The choice sticks** as you move between pages, like the artboard size.
+  A page that doesn't have the chosen lens shows its design.
 - **The address includes it.** `#pages/sign-in.html:error@393~staging` is the
-  sign-in screen in its error state, at mobile width, on staging. A copied link
+  sign-in page in its error state, at mobile width, on staging. A copied link
   opens the same view. See [Links and the address](canvas.md#links-and-the-address).
-- **Markup, screenshots, and handoffs work through every lens.** A screenshot
-  taken through a lens is named after it (`sign-in-error-staging.jpg`), and the
-  handoff says which implementation it shows, at what URL, and where that
-  implementation's code is.
+- **Annotations, screenshots, and handoffs work through every lens.** A
+  screenshot taken through a lens is named after it
+  (`sign-in-error-staging.jpg`), and the handoff says which implementation it
+  shows, at what URL, and where that implementation's code is.
 - **Actions** is always on through a `url` or `storybook` lens. Your app
   serves that page, so the workbench can't stop its links and forms.
-- **Open on its own** in the toolbar opens the current page in your browser,
+- **Open on its own** in the top bar opens the current page in your browser,
   outside the workbench, for interaction the iframe can't provide.
+
+### Lenses on a docs page
+
+A [docs page](docs-pages.md) has no design to compare with: its lenses are
+`examples` implementations, and each one renders the page's examples, such as
+with React or with React Native Web. The Markdown is the same in every lens,
+and there is no **Design** button. The switcher shows when the page has two or
+more lenses. A docs page that doesn't have the chosen lens shows its own
+default lens. See [Lenses](docs-pages.md#lenses) in the docs page guide.
 
 ## Set up a URL implementation
 
@@ -65,10 +77,10 @@ implementations:
 - `root` is where the implementation's code is, relative to `workbench.yaml` or
   absolute. It is optional, and only needed for [code pointers](#point-at-the-code).
 
-### 2. Tell each screen where it is
+### 2. Tell each page where it is
 
 ```yaml
-sections:
+collections:
   - name: Pages
     items:
       - label: Sign in
@@ -79,11 +91,11 @@ sections:
 ```
 
 Paths start with `/` and are appended to `base`, so `dev` shows
-`http://127.0.0.1:3000/sign-in`. A screen only gets the lenses it lists.
+`http://127.0.0.1:3000/sign-in`. A page only gets the lenses it lists.
 
 ### 3. Map states to paths
 
-If the implementation can show a state through its URL, give the screen a map
+If the implementation can show a state through its URL, give the page a map
 of state ids to paths instead of a single path:
 
 ```yaml
@@ -233,9 +245,9 @@ which renders it in the screenshot helper.
 
 If the bridge can't connect, for example because the page hasn't finished
 loading, the screenshot helper loads the same URL itself, in its own session,
-and lays your marks over the result. That copy starts fresh: it doesn't
+and lays your annotations over the result. That copy starts fresh: it doesn't
 include what you did in the page, and a page behind sign-in may show its
-sign-in screen.
+sign-in page.
 
 ## Compare a design with a Workbench preview
 
@@ -249,7 +261,7 @@ implementations:
     kind: workbench
     label: Implementation
 
-sections:
+collections:
   - name: Components
     items:
       - label: Button
@@ -269,7 +281,7 @@ sections:
 
 ## Point at the code
 
-`code` tells Workbench where a screen's implementation lives, so the editor can
+`code` tells Workbench where a page's implementation lives, so the editor can
 open it and handoffs can name it:
 
 ```yaml
@@ -279,7 +291,7 @@ implementations:
     base: http://127.0.0.1:3000
     root: ../acme-web
 
-sections:
+collections:
   - name: Pages
     items:
       - label: Sign in
@@ -296,12 +308,12 @@ sections:
   as well as files. The implementation needs a `root` either way; without
   one, its code pointers are listed but can't be opened, and the config route
   reports the problem.
-- **Open the source** (`</>`) in the toolbar lists the design file and each code
+- **Open the source** (`</>`) in the top bar lists the design file and each code
   pointer, and opens the one you pick in the editor. A file opens in a tab; a
   folder is revealed in the Explorer, or in your file browser when it's outside
   the window. Opening files needs the extension.
 - The handoff includes a `Source:` line with the absolute paths, and the
-  screen's design file. An agent reading it knows which code to change and
+  page's design file. An agent reading it knows which code to change and
   which design to match. Code pointers appear in the handoff even on the Design
   lens.
 - Paths are resolved on your machine. A path that doesn't exist is shown
@@ -309,7 +321,7 @@ sections:
   the [config route](troubleshooting.md#read-the-resolved-config) with
   `exists: false`.
 
-Code pointers don't need a lens. A screen can list `code` for an
+Code pointers don't need a lens. A page can list `code` for an
 implementation without listing it under its own `implementations`. It then
 gets source links without a lens button.
 
@@ -331,7 +343,7 @@ implementations:
     kind: url
     base: https://staging.example.com
 
-sections:
+collections:
   - name: Pages
     items:
       - label: Checkout
@@ -359,4 +371,4 @@ implementations:
     base: http://127.0.0.1:8080/admin
 ```
 
-A screen path of `/users` loads `http://127.0.0.1:8080/admin/users`.
+A page path of `/users` loads `http://127.0.0.1:8080/admin/users`.
