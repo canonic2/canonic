@@ -7,7 +7,7 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## 0.12.0
+## 0.12.1
 
 - Action needed: `workbench.yaml` uses new names. Rename `sections` to `collections`, `folder:` to `group:`, and `projects` to `spaces`, in `workbench.yaml` and in `workbench.local.yaml`. A file that still uses the old names shows an empty sidebar and reports no problem. See the workbench.yaml reference.
 - Action needed: Workbench requires VS Code 1.123 or later, and running `server.js` from the command line requires Node 24 or later.
