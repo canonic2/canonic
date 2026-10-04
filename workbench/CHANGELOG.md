@@ -7,7 +7,7 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## Unreleased
+## 0.10.0
 
 - Workbench previews behave like Storybook stories: they stay on the canvas. Map the addresses a preview links to in its definition's new `links`, and with Actions on those links open the mapped preview. Every other link and form, including routes without a preview, other sites, and downloads, is recorded under Actions instead of followed. `context.navigate` opens a preview from a script. See Links and navigation in Preview data, mocks, and actions.
 - Links to a spot on the same page, such as `#features`, scroll to it whether Actions is on or off.
@@ -20,6 +20,7 @@ and leaves out headings.
 - New commands: Workbench: Switch Project… and Workbench: Add Project….
 - `color` and `icon` at the top of `workbench.yaml` mark the project in the switcher, beside its `name`. A color is a named color or a hex value; an icon is a Lucide icon name or an image in the project. Set them in `workbench.local.yaml` to mark a project differently on your machine. See Name, color, and icon in Several projects.
 - `server.js` takes several project folders and serves each on its own port, with the same switcher in the browser.
+- Agents can see the screen you have open without a paste. Every open canvas tells the Workbench server what it shows, and `GET /_workbench/view` returns the reference Copy reference would copy, from the canvas you changed most recently. In a project with a `.canonic` folder, the server writes its address to `.canonic/.workbench/server.json` while it runs; add that folder to `.gitignore`. See Copy a reference in Using the canvas.
 
 ## 0.9.0
 
