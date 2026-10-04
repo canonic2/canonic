@@ -10,8 +10,10 @@ const targets = require('./bundle-runtime.cjs').targets;
 
 /* pnpm-lock.yaml records every platform's esbuild package with its integrity,
    even those this host didn't install; the tarball sits at the registry's
-   conventional address for that name and version. */
+   conventional address for that name and version. A Windows checkout can
+   have CRLF line endings, so they are normalized first. */
 function lockedPackage(lockfile, name, version) {
+  lockfile = lockfile.replace(/\r\n/g, '\n');
   const key = "\n  '" + name + '@' + version + "':\n";
   const at = lockfile.indexOf(key);
   if (at < 0) return null;
