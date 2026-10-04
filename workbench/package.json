@@ -2,7 +2,7 @@
   "name": "canonic-workbench",
   "displayName": "Canonic Workbench",
   "description": "Renders a project's pages and component previews on one canvas at device widths, with annotations and screenshots for coding agents.",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "publisher": "canonic",
   "license": "SEE LICENSE IN LICENSE",
   "homepage": "https://canonic.sh/workbench/",

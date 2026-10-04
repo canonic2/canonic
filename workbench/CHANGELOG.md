@@ -7,6 +7,20 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## 0.12.0
+
+- Action needed: `workbench.yaml` uses new names. Rename `sections` to `collections`, `folder:` to `group:`, and `projects` to `spaces`, in `workbench.yaml` and in `workbench.local.yaml`. A file that still uses the old names shows an empty sidebar and reports no problem. See the workbench.yaml reference.
+- Action needed: Workbench requires VS Code 1.123 or later, and running `server.js` from the command line requires Node 24 or later.
+- Docs pages document a component or part of your design system in Markdown, with live examples rendered by your own components, each example's code, and props tables. A docs page fills the canvas on white and scrolls like a web page. Add one by giving a page a Markdown `src` and an `examples` implementation. See Docs pages.
+- The interface uses the same words as the file. The switcher at the top of the sidebar changes spaces, the sidebar lists collections, groups, pages, and states, and what you draw on a page is an annotation. The commands are Workbench: Switch Space…, Workbench: Add Space…, and Workbench: Refresh Pages; update any keybindings for the old command IDs. Spaces you added from elsewhere on disk with Add a project… aren't carried over: add them again with Add a space…. See Several spaces and Annotations and handoff.
+- Agents and scripts that read `/_workbench/config` or the handoff prompt get the same new words, such as `collections` and `pages`.
+- **Recenter view**, beside the zoom buttons, brings the artboard back to the middle of the canvas without changing the zoom level or the page's scroll position. See Using the canvas.
+- TypeScript previews compile faster: each platform's extension carries a native compiler, and compiled previews are kept on disk between sessions.
+- A preview and a Storybook story whose titles name the same collection and group appear together in that group, with your `workbench.yaml` pages.
+- SVG icon sprites a preview registers when it loads stay available when you switch states or come back to the preview.
+- Workbench is also published on Open VSX, for editors that install extensions from there.
+- Workbench is distributed under the Canonic Proprietary License instead of the MIT license. See `LICENSE` in the extension.
+
 ## 0.11.1
 
 - Workbench is on the Visual Studio Marketplace as Canonic Workbench. Install it from the Extensions view in VS Code. Existing installs from a VSIX file are the same extension, so the Marketplace updates them from now on.
