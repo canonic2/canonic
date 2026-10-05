@@ -126,6 +126,21 @@ test('docs requests stay inside the project and name what is wrong', async t => 
 
 const server = require('./server');
 
+/* fetch() on a fresh connection, answered as a Response. Each test's server
+   takes the first free port, which the previous one just closed, and fetch's
+   pooled keep-alive sockets would send requests to the closed server. */
+function request(url, init = {}) {
+  return new Promise((resolve, reject) => {
+    const sent = require('node:http').request(url, { method: init.method || 'GET', headers: init.headers, agent: false }, answer => {
+      const chunks = [];
+      answer.on('data', chunk => chunks.push(chunk));
+      answer.on('end', () => resolve(new Response(answer.statusCode === 204 || answer.statusCode === 304 ? null : Buffer.concat(chunks),
+        { status: answer.statusCode, headers: Object.entries(answer.headers).flatMap(([name, value]) => [].concat(value).map(item => [name, item])) })));
+    }).on('error', reject);
+    sent.end(init.body);
+  });
+}
+
 const DOCS_YAML = [
   'name: Acme',
   'implementations:',
@@ -166,7 +181,7 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   t.after(() => running.close());
   const base = `http://127.0.0.1:${running.port}`;
 
-  const page = await fetch(base + '/docs/button.md');
+  const page = await request(base + '/docs/button.md');
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /text\/html/);
   const html = await page.text();
@@ -182,31 +197,31 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.equal(options.lensLabel, 'Web');
   assert.equal(options.revision, '', 'a deferred page learns its revision with its bundle');
 
-  const info = await (await fetch(base + options.bundle.info)).json();
+  const info = await (await request(base + options.bundle.info)).json();
   assert.deepEqual(info.examples.sort(), ['ghost', 'primary', 'secondary']);
   assert.equal(info.error, null);
-  const bundle = await fetch(base + info.module);
+  const bundle = await request(base + info.module);
   assert.equal(bundle.status, 200);
   assert.match(await bundle.text(), /Secondary/);
   assert.ok(info.stylesheet, 'the lens’s styles come with the bundle');
-  assert.match(await (await fetch(base + info.stylesheet)).text(), /purple/);
+  assert.match(await (await request(base + info.stylesheet)).text(), /purple/);
 
-  const native = await (await fetch(base + '/docs/button.md?lens=native&state=loading')).text();
+  const native = await (await request(base + '/docs/button.md?lens=native&state=loading')).text();
   const nativeOptions = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(native)[1]);
-  assert.deepEqual((await (await fetch(base + nativeOptions.bundle.info)).json()).examples, ['primary'], 'Native lacks secondary, so its panel says so');
+  assert.deepEqual((await (await request(base + nativeOptions.bundle.info)).json()).examples, ['primary'], 'Native lacks secondary, so its panel says so');
 
-  const code = await (await fetch(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=primary')).json();
+  const code = await (await request(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=primary')).json();
   assert.equal(code.text, 'export const primary = (canvas: HTMLElement) => { canvas.textContent = "Native primary"; };');
   assert.equal(code.file, 'docs/button.examples.ts');
-  const missing = await fetch(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=secondary');
+  const missing = await request(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=secondary');
   assert.equal(missing.status, 404);
 
-  const revision = (await (await fetch(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision;
+  const revision = (await (await request(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision;
   assert.equal(revision, info.revision);
   fs.appendFileSync(path.join(root, 'docs/button.md'), '\nMore notes.\n');
-  assert.notEqual((await (await fetch(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision, revision);
+  assert.notEqual((await (await request(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision, revision);
 
-  const raw = await fetch(base + '/docs/notes.md');
+  const raw = await request(base + '/docs/notes.md');
   assert.match(raw.headers.get('content-type'), /text\/markdown/);
   assert.equal(await raw.text(), '# Not a docs page');
 });
@@ -243,10 +258,10 @@ test('a page with a design has its docs as a lens: served at its Markdown, liste
   assert.deepEqual(page.code.map(entry => [entry.label || entry.implementation, entry.relative]),
     [['Docs', 'docs/button.md'], ['web', 'docs/button/'], ['native', 'docs/button.examples.ts']]);
 
-  const html = await (await fetch(base + '/docs/button.md?lens=native')).text();
+  const html = await (await request(base + '/docs/button.md?lens=native')).text();
   assert.equal(JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]).lens, 'native');
 
-  const review = await fetch(base + '/_workbench/canvas/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const review = await request(base + '/_workbench/canvas/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ src: 'pages/button.html', label: 'Button', docs: { lens: 'native', examples: [{ id: 'primary', status: 'ready' }] } }) });
   const reviewed = await review.json();
   assert.equal(reviewed.payload.docs.markdown, 'docs/button.md');
@@ -258,24 +273,21 @@ test('the page script and stylesheet are served from src/ with types stripped', 
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
   const base = `http://127.0.0.1:${running.port}`;
-  const script = await fetch(base + '/_workbench/src/modules/docs/page/docs-page.ts');
+  const script = await request(base + '/_workbench/src/modules/docs/page/docs-page.ts');
   assert.equal(script.status, 200);
   assert.match(script.headers.get('content-type'), /text\/javascript/);
   const body = await script.text();
   assert.match(body, /import \{ mountExamples \} from "\.\/mount-examples\.ts"/);
   assert.doesNotMatch(body, /interface ExampleSource|: string\)/);
-  assert.equal((await fetch(base + '/_workbench/src/modules/docs/docs-service.ts')).status, 404);
-  assert.equal((await fetch(base + '/_workbench/src/modules/docs/page/docs-page.css')).status, 200);
+  assert.equal((await request(base + '/_workbench/src/modules/docs/docs-service.ts')).status, 404);
+  assert.equal((await request(base + '/_workbench/src/modules/docs/page/docs-page.css')).status, 200);
 });
 
 test('without trust, a docs page renders its Markdown and says why its examples are missing', async t => {
   const root = docsProject(t);
   const running = await server.start({ root, isTrusted: false, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
-  // A fresh connection: earlier tests' servers held this port, and fetch keeps sockets alive.
-  const html = await new Promise((resolve, reject) => require('node:http').get(`http://127.0.0.1:${running.port}/docs/button.md`, { agent: false }, answer => {
-    let body = ''; answer.setEncoding('utf8'); answer.on('data', chunk => { body += chunk; }); answer.on('end', () => resolve(body));
-  }).on('error', reject));
+  const html = await (await request(`http://127.0.0.1:${running.port}/docs/button.md`)).text();
   assert.match(html, /<h2 id="primary">Primary<\/h2>/);
   assert.match(html, /data-status="unavailable"><p class="wb-docs-example-note">Examples run project code, so they appear in a trusted workspace only.<\/p>/);
   assert.deepEqual((await running.config()).problems, ['Docs page examples: Examples run project code, so they appear in a trusted workspace only.']);
@@ -310,13 +322,11 @@ test('defineDocs definitions are discovered, placed by title, and served like de
     docsLenses: [{ key: 'web', label: 'Web' }, { key: 'react-native', label: 'React Native Web' }],
     implementations: { web: { examples: 'docs/colors.examples.ts' }, 'react-native': { examples: 'docs/colors.examples.ts' } },
   }] }]);
-  const html = await new Promise((resolve, reject) => require('node:http').get(`http://127.0.0.1:${running.port}/docs/colors.md`, { agent: false }, answer => {
-    let body = ''; answer.setEncoding('utf8'); answer.on('data', chunk => { body += chunk; }); answer.on('end', () => resolve(body));
-  }).on('error', reject));
+  const html = await (await request(`http://127.0.0.1:${running.port}/docs/colors.md`)).text();
   assert.match(html, /data-wb-example="swatch" data-status="pending"/);
   const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]);
   assert.equal(options.lens, 'react-native');
-  assert.deepEqual((await (await fetch(`http://127.0.0.1:${running.port}` + options.bundle.info)).json()).examples, ['swatch']);
+  assert.deepEqual((await (await request(`http://127.0.0.1:${running.port}` + options.bundle.info)).json()).examples, ['swatch']);
 });
 
 test('a file lens lists examples it re-exports, with export * included', async t => {
@@ -344,10 +354,9 @@ test('the design-system export captures each docs page whole and each example it
   };
   const running = await server.start({ root, capture });
   t.after(() => running.close());
-  const answer = await new Promise((resolve, reject) => require('node:http').get(`http://127.0.0.1:${running.port}/_workbench/export`, { agent: false }, response => {
-    const chunks = []; response.on('data', chunk => chunks.push(chunk)); response.on('end', () => resolve({ status: response.statusCode, body: Buffer.concat(chunks) }));
-  }).on('error', reject));
-  assert.equal(answer.status, 200);
+  const response = await request(`http://127.0.0.1:${running.port}/_workbench/export`);
+  assert.equal(response.status, 200);
+  const archive = Buffer.from(await response.arrayBuffer());
   assert.deepEqual(artboards.filter(url => url.includes('.md')), [], 'a docs page gets no artboard references');
   assert.deepEqual(pages.map(payload => [new URL(payload.url).search, payload.selector || 'whole page', payload.fullPage, payload.width]), [
     ['?lens=web', 'whole page', true, 1056],
@@ -356,7 +365,7 @@ test('the design-system export captures each docs page whole and each example it
     ['?lens=native', 'whole page', true, 1056],
     ['?lens=native', '#example-primary [data-wb-example-stage]', true, 1056],
   ]);
-  for (const name of ['web-page', 'web-primary', 'native-primary']) assert.ok(answer.body.includes(Buffer.from(name)), name);
+  for (const name of ['web-page', 'web-primary', 'native-primary']) assert.ok(archive.includes(Buffer.from(name)), name);
 });
 
 test('the portable export builds each docs page in each lens as a static page with its code', async t => {
