@@ -20,8 +20,9 @@ Use **Workbench: Copy Canvas URL** for the actual port. The answer includes:
   such as `Pages › Sign in: implementation “dev” isn’t declared under implementations.`
 - `pages`: each page's `design` file as an absolute path, and its `code`
   pointers resolved against their implementation's `root`, each with `exists`
-  saying whether it is on disk. For a docs page, `design` is its Markdown file
-  and `code` includes each lens's example source,
+  saying whether it is on disk. For a Markdown page, `design` is its Markdown
+  file. For any other page with docs, `code` includes its Markdown, labeled
+  `Docs`. For both, `code` includes each docs lens's example source,
 - `implementations`: each implementation's resolved address, `root`, and start
   command, including values from `workbench.local.yaml`,
 - `files`: whether `workbench.yaml` (`main`) and `workbench.local.yaml`
@@ -146,18 +147,22 @@ and the previews and docs pages that `*.workbench.ts` files define.
 
 ## A docs page's examples don't render
 
-The Markdown of a [docs page](docs-pages.md) renders even when its examples
+A page's [docs](docs-pages.md) render their Markdown even when the examples
 can't, and each example's panel says why it is empty.
 
 - **Examples run your project's code.** They render only in a trusted
   workspace, and not when `workbench.yaml` sets `previews: false`.
 - **Read the problems list,** or `problems` in the config route. It names the
   page for a missing Markdown file, an example block with an unknown key or a
-  duplicate ID (with its line), an example a lens has that the page never
-  places, example file names that aren't kebab-case, and a lens that fails to
+  duplicate ID (with its line), an example a lens has that the docs never
+  place, example file names that aren't kebab-case, and a lens that fails to
   build.
 - **A panel says *Not available in …*:** the lens showing has no example with
   that ID. Switch lenses, or add the example to that lens's source.
+- **A panel says there is no docs lens rendering examples:** the page is in
+  its built-in **Docs** lens because it maps no `docs` implementation. Declare
+  one and map it to the page's example source. See
+  [Lenses](docs-pages.md#lenses).
 
 See [Requirements and problems](docs-pages.md#requirements-and-problems).
 
@@ -220,17 +225,18 @@ preview. Every other link and form is recorded under **Actions** in
 
 ## A size is disabled
 
-The page's `sizes` doesn't list it. On a docs page, every size in the size
-switcher is disabled, because the docs canvas mode has no artboard. Hover
-over the button to see why. See [Sizes](pages-and-states.md#sizes).
+The page's `sizes` doesn't list it. In a docs lens, every size in the size
+switcher is disabled, because the docs fill the canvas and there is no
+artboard; switch to the design lens to choose a size. Hover over the button to
+see why. See [Sizes](pages-and-states.md#sizes).
 
 ## A lens is missing
 
 - The lens switcher shows only when the page has two or more lenses.
 - The page must list the implementation under its own `implementations`,
   and the implementation must be declared at the top level. Read `problems`.
-- A docs page's lenses are `examples` implementations, and it has no
-  authored design lens. See [Lenses](docs-pages.md#lenses).
+- A docs lens needs the page's Markdown: a `.md` `src`, or `docs` on the
+  page. A Markdown page has no design lens. See [Lenses](docs-pages.md#lenses).
 - For `url`, every path must start with `/`, and a state map needs a path for
   the default state.
 - For `storybook`, the title must match exactly. [Check the title](#check-a-storybook-title).
@@ -249,8 +255,8 @@ over the button to see why. See [Sizes](pages-and-states.md#sizes).
   rather than its lens. `lensLabel` belongs in YAML, not `definePreview`.
 - Blank or non-string `lensLabel` values are reported and ignored. Read
   `problems` in the [resolved config](#read-the-resolved-config).
-- A docs page has no authored lens; rename its `examples` implementation
-  with `label`.
+- A docs lens takes its name from its `docs` implementation's `label`. A
+  Markdown page has no authored lens, so `lensLabel` doesn't apply to it.
 
 See [Customize lens labels](lenses.md#customize-lens-labels) for examples.
 

@@ -73,7 +73,7 @@ previews:                     # optional: TypeScript preview discovery; false tu
 
 implementations:              # optional: lenses, declared once and named by pages
   web:
-    kind: examples            # renders docs page examples; also url, storybook, workbench, ios-simulator, window
+    kind: docs                # a docs lens: renders a page's docs examples; also url, storybook, workbench, ios-simulator, window
     adapter: react            # html, react, vue, react-native-web, or one from workbench.config.ts
     styles:                   # optional, project-relative
       - src/theme.css
@@ -102,11 +102,14 @@ collections:                  # one entry in the collection list, in this order
     items:
       - label: Button
         src: components/button.html
-      - label: Card            # a docs page: Markdown with live examples, filling the canvas
-        src: docs/card.md
-        lens: web             # optional: the lens it opens with; the first otherwise
+        docs: docs/button.md  # optional: the page's Markdown, read through its docs lenses
         implementations:
-          web: src/card/examples/     # a folder (one example per file) or a file (one per named export)
+          web: src/button/examples/   # a folder (one example per file) or a file (one per named export)
+      - label: Card            # a Markdown page: its own docs, no design lens
+        src: docs/card.md
+        lens: web             # optional, Markdown pages only: the docs lens it opens with; the first otherwise
+        implementations:
+          web: src/card/examples/
 ```
 
 TypeScript previews in `.workbench.ts` and `.workbench.tsx` files are
@@ -124,13 +127,19 @@ compiles them in a worker started by `preview-service.js`.
 State ids are kebab-case — they travel in a URL and in a screenshot's filename.
 Declaring one here is half of it: the page has to answer to the id, which
 `states.js` explains and does. A `src` can't hold `:`, `!`, or `~`, which mark the
-state, a docs page's example, and the lens in the address.
+state, an example in the docs, and the lens in the address.
 
-A `src` ending in `.md` is a docs page: its Markdown places examples with
-fenced `example <id>` blocks, its `examples` lenses render them, and it fills the
-canvas instead of an artboard. A `.workbench.ts` file can declare one with
-`defineDocs`. See [Docs pages](../docs/docs-pages.md); the server and page code
-are in `src/docs/`.
+Docs are a lens. A page's Markdown, its `docs` file or a `.md` `src`, places
+examples with fenced `example <id>` blocks, and each `docs` implementation the
+page maps is a docs lens that renders them with its adapter. A page with
+Markdown and no docs lens gets the built-in **Docs** lens, keyed `docs`. The
+canvas mode follows the lens: in a docs lens the docs fill the canvas and the
+size switcher is disabled. A page whose `src` is `.md` is a Markdown page: it
+has no design lens, no `sizes`, and no `lensLabel`, and opens on its `lens` or
+first docs lens. A `.workbench.ts` file can declare one with `defineDocs`. See
+[Docs](../docs/docs-pages.md); the server and page code are in
+`src/modules/docs/`, and `src/modules/docs/canvas/lenses.ts` decides which lens
+a page shows.
 
 `sizes` controls both the sizes the size switcher offers for a page and its
 reference images in a design-system export. A page lists keys from its space's
@@ -217,8 +226,8 @@ use `label`; authored pages use `lensLabel`. For discovered TypeScript previews,
 `previews.lensLabel` supplies the fallback, and an explicit page's `lensLabel`
 takes precedence. Defaults remain **Design** for HTML and **Workbench** for
 TypeScript previews. Renaming the authored lens changes its existing button
-and review label, without adding a lens or changing addresses. Docs pages have
-no authored lens and use their implementations' labels.
+and review label, without adding a lens or changing addresses. Docs lenses use
+their implementations' labels; a Markdown page has no authored lens.
 
 With `catalog: true`, a Storybook implementation can be the whole workbench;
 `collections` may be omitted. Workbench reads Storybook's live `/index.json`, turns

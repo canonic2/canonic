@@ -107,7 +107,7 @@ const docsMarkdown = [
               <div class="controls-group">
                 <h3>Interaction</h3>
                 <dl class="controls" data-group="actions">
-                  <div data-label="Actions — let links navigate and forms submit"><dt>Actions</dt><dd>Off by default: links and form submissions are logged instead of followed. Turn it on to let links navigate and forms submit.</dd></div>
+                  <div data-label="Actions"><dt>Actions</dt><dd>Off by default: links and form submissions are logged instead of followed. Turn it on to let links navigate and forms submit.</dd></div>
                 </dl>
               </div>
               <div class="controls-group">
@@ -146,17 +146,23 @@ const docsMarkdown = [
               </dl>
             </div>
             <div class="controls-group">
-              <h3>Size and page</h3>
-              <dl class="controls" data-group="page">
+              <h3>Size</h3>
+              <dl class="controls" data-group="sizes">
                 <div data-label="Fit"><dt>Fit</dt><dd>The artboard fills whatever space the workbench has.</dd></div>
-                <div data-label="Laptop, MacBook Pro 14, 1512 by 982 points"><dt>Laptop</dt><dd>1512 × 982, a 14-inch MacBook Pro. The canvas zooms out to show all of it; the page still lays out at its full width.</dd></div>
-                <div data-label="Mobile, iPhone 15 Pro, 393 by 852 points"><dt>Mobile</dt><dd>393 × 852, an iPhone 15 Pro.</dd></div>
+                <div data-label="Laptop, 1512 × 982"><dt>Laptop</dt><dd>1512 × 982, a 14-inch MacBook Pro. The canvas zooms out to show all of it; the page still lays out at its full width.</dd></div>
+                <div data-label="Mobile, 393 × 852"><dt>Mobile</dt><dd>393 × 852, an iPhone 15 Pro.</dd></div>
                 <div data-label="Resizable"><dt>Resizable</dt><dd>Drag an outside edge or corner to any size. The artboard keeps that size until you change it.</dd></div>
+                <div data-label="More sizes"><dt>More sizes</dt><dd>Every size the space has, with <b>Custom size…</b> to add one and <b>Edit sizes…</b> to change them. A docs lens fills the canvas, so every size is off there.</dd></div>
+              </dl>
+            </div>
+            <div class="controls-group">
+              <h3>Page</h3>
+              <dl class="controls" data-group="page">
                 <div data-label="Reload"><dt>Reload</dt><dd>Reloads the page.</dd></div>
                 <div data-label="Open the source"><dt>Open the source</dt><dd>Lists the page’s design file and any implementation code, and opens one in the editor.</dd></div>
                 <div data-label="Copy reference"><dt>Copy reference</dt><dd>Copies a short text reference to the page, state, and lens, for pasting into a conversation. It doesn’t include a screenshot or your annotations.</dd></div>
                 <div data-label="Open on its own"><dt>Open on its own</dt><dd>Opens the page directly in a browser tab.</dd></div>
-                <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections and pages, editing labels and paths, and choosing each page’s sizes; it rewrites only the <code>collections</code> part of <code>workbench.yaml</code>. <b>Download design-system ZIP</b>: every page’s files, the sources they depend on, and a reference screenshot at each size, in parts of 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
+                <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections and pages, editing labels and paths, and choosing each page’s sizes; it rewrites only the <code>collections</code> part of <code>workbench.yaml</code>. <b>Export…</b>: choose a page, selected pages, a collection, or the space, then download sources, a PDF, images, or a portable viewer. ZIP parts stay at 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
               </dl>
             </div>
           </div>
@@ -185,7 +191,7 @@ const docsMarkdown = [
       </Feature>
 
       <Feature id="lenses" kicker="Lenses" title="TypeScript previews and lenses">
-          <p>Define components and pages in <code>.workbench.ts</code> files. Built-in adapters render HTML, React, Vue, Astro, and React Native Web, and you can register others. Each preview has named states, editable inputs, and an action log. A page can also show its implementation as a lens: a Storybook story, a dev or staging URL, the iOS Simulator, or a macOS app window.</p>
+          <p>Define components and pages in <code>.workbench.ts</code> files. Built-in adapters render HTML, React, Vue, Astro, and React Native Web, and you can register others. React Native Web screens with a root view using <code>flex: 1</code> fill the frame without extra CSS. Each preview has named states, editable inputs, and an action log. A page can also show its implementation as a lens: a Storybook story, a dev or staging URL, the iOS Simulator, or a macOS app window.</p>
           <p>Each state gives the preview its data: props, providers from a project-wide environment, or mocked responses to the page’s <code>fetch</code> and XMLHttpRequest calls. Links can open other previews; other navigation, such as a download or a route without a preview, is logged as an action. See <a href={`${pages.docs}preview-data/#choose-how-to-give-a-page-its-data`}>Give a page its data</a>.</p>
           <p>The selected lens stays as you change pages and is part of the address, so a copied link opens the same view. You can choose sidebar icons for TypeScript previews individually or by title prefix, and give a shared collection its own icon. SVG icon sprites in TypeScript previews remain available as you switch states or return to a page. For a Storybook or local server, you can configure a start command and a readiness check; in a trusted workspace, Workbench runs the command in a terminal when the check fails. The design-system export includes a static viewer for the previews; Astro previews export their authored states only. If the viewer cannot be built, the export still delivers sources and reference screenshots with a warning.</p>
           <img src={`${base}images/workbench-previews.jpg`} alt="Acme TypeScript preview with its named states and editable input controls" loading="lazy" />
@@ -201,9 +207,10 @@ const docsMarkdown = [
           </table>
         </div>
       </Feature>
-      <Feature id="docs" kicker="Docs pages" title="Component documentation with live examples">
-          <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. A docs page shown on its own fills the canvas, on white, and scrolls like a web page.</p>
-          <p>Lenses render the same examples in different ways, such as React and React Native Web. Annotations, handoffs, and the design-system export work on docs pages too. See <a href={`${pages.docs}docs-pages/`}>Docs pages</a>.</p>
+      <Feature id="docs" kicker="Docs" title="Component documentation with live examples">
+          <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. Docs are a lens: any page can have them beside its design and implementations, and in a docs lens they fill the canvas, on white, and scroll like a web page.</p>
+          <p>Docs lenses render the same examples in different ways, such as React and React Native Web. Annotations, handoffs, and export work in docs lenses too. Export a page, selected pages, a collection, or the whole space as a source ZIP, PDF, image ZIP, or portable browser viewer. PDFs preserve visual page dimensions and paginate documentation on A4 or Letter paper. See <a href={`${pages.docs}docs-pages/`}>Docs</a>.</p>
+          <img src={`${base}images/docs.jpg`} alt="The Acme Button through its HTML docs lens: the Markdown fills the canvas with live Primary and Secondary examples, and the size switcher is off" loading="lazy" />
         <div class="feature-media" slot="media">
           <CodeBlock file="docs/card.md" code={docsMarkdown} copies="the docs page example" />
         </div>

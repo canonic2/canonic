@@ -27,7 +27,7 @@ release downloads and publishes to GitHub Pages.
 | `public/logos/` | original Canonic symbol, wordmark, lockup, and app icon exports |
 | `public/canonic.svg` | the Canonic symbol favicon, with a blue accent and light/dark fills |
 | `public/images/` | screenshots of the workbench showing the Acme example |
-| `screenshots/` | the Acme fixture and the script that regenerates the screenshots |
+| `screenshots/` | the script that regenerates the screenshots from the repository's Acme demo |
 | `astro.config.mjs` | the Pages origin and base path |
 
 ## Components
@@ -185,17 +185,21 @@ When the workbench UI changes, regenerate the images from the repository root:
 node packages/website/screenshots/capture.cjs
 ```
 
-The script starts `packages/workbench/server.js` on `screenshots/fixture`, drives
-headless Chrome through `packages/workbench/scripts/chrome.cjs`, and overwrites the screenshots
-in `public/images/`. Set `CHROME_PATH` to choose a browser.
+The script starts `packages/workbench/server.js` on the repository, whose first
+space is the Acme demo (`demo/` and the root `workbench.yaml`), drives headless
+Chrome through `packages/workbench/scripts/chrome.cjs`, and overwrites the screenshots
+in `public/images/`. Set `CHROME_PATH` to choose a browser. The screenshots show
+the same demo people try in the editor, so a change to the demo can change them.
 
 - The overview is a 1440 × 860 window. The script also measures the workbench's
   page list, top bar, canvas, and toolbar there, and writes them to
   `regions` in `src/data/screenshots.json`, where the page draws the numbered
   outlines. Don't edit that file by hand.
-- The controls section's strip is four crops (`public/images/controls-*.png`)
-  from the same window rendered at 4×, one per group: the Actions switch, the
-  size switcher and page actions, the annotation tools, and the view controls.
+- The controls section's strip is five crops (`public/images/controls-*.png`)
+  from the same window rendered at 4×, one per group: the size switcher, the
+  Actions switch, the page actions, the annotation tools, and the view
+  controls. Controls inside Workbench's Web Components are found in their open
+  shadow roots, by `aria-label`, else `title`.
   The script writes them to `controls`
   in `src/data/screenshots.json`, with a hotspot over every control, and the
   page lays them side by side with an invisible button over each hotspot. A
@@ -209,8 +213,11 @@ in `public/images/`. Set `CHROME_PATH` to choose a browser.
 - The States and Annotations shots are 1120 × 860. The canvas zooms the
   mobile artboard to fit, and the script scales page coordinates to that zoom
   when it draws the annotations.
+- The Workbench previews and Docs shots are 1120 × 860: the demo's Button
+  preview with its controls open, then the same page through its HTML docs
+  lens once every example has rendered.
 
-Keep the fixture on Acme and example.com placeholders.
+Keep the demo on Acme and example.com placeholders.
 
 ## Product icons
 

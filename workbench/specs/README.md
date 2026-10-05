@@ -38,14 +38,14 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 | [Artboard code plan](multiple-artboards-code-plan.md) | Planned TypeScript capability boundaries, state and runtime APIs, space transport, capture/context workflows, migration slices, and validation |
 | [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, adapters, controls, the `workbench` lens, and the portable build |
 | [Artboard sizes](sizes.md) | Proposed sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
-| [Docs pages](docs-pages.md) | Markdown docs pages with live examples that use the whole canvas, `examples` lenses, `defineDocs`, the docs canvas mode, and docs references in the export |
+| [Docs](docs-pages.md) | Docs as a lens of any page: Markdown with live examples on the whole canvas, `docs` lenses one per renderer, Markdown pages, `defineDocs`, the docs canvas mode, and docs references in the export |
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
 | [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
 | [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, Shield's hooks and MCP server, and proposed Copilot surfaces |
 | [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
-| [Design-system export](export.md) | Exporting one whole space, manifest inclusion, background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
+| [Design-system export](export.md) | Page, collection and space scopes, ZIP/PDF/image/browser output, background captures, hashes, and warnings |
 | [Module layout](modules.md) | Capability ownership under `src/modules/`, shared UI and infrastructure locations, and bounded migration requirements |
 
 The workbench is one implementation in `packages/workbench/workbench/`. Projects provide
@@ -64,7 +64,8 @@ worker, and render in the Workbench preview host; see
 | --- | --- | --- |
 | Authored page | A `collections[].items[]` entry with `src` | The project HTML file as designed |
 | TypeScript preview | A discovered definition, placed in the collection its title names, or listed by `src` | The compiled component in the preview host, with its states and controls |
-| Docs page | A `collections[].items[]` entry whose `src` is a `.md` file, or a discovered `defineDocs` definition | The Markdown on the whole canvas, with examples rendered through its lenses |
+| Markdown page | A `collections[].items[]` entry whose `src` is a `.md` file, or a discovered `defineDocs` definition | The Markdown on the whole canvas, with examples rendered through its docs lenses |
+| Docs | `docs` on any `collections[].items[]` entry, with `kind: docs` lenses | The page's Markdown as one of its lenses, beside its design |
 | Workbench mapping | A `kind: workbench` lens on an authored page | A named TypeScript preview's states beside the design |
 | URL implementation | A lens on an authored page | The configured external page in an iframe |
 | Storybook mapping | A lens on an authored page | One story from the mapped Storybook title |

@@ -33,8 +33,8 @@ export interface PageDocumentInput {
   options: DocsPageOptions;
 }
 
-export const PAGE_STYLESHEET = '/_workbench/src/docs/page/docs-page.css';
-export const PAGE_SCRIPT = '/_workbench/src/docs/page/docs-page.ts';
+export const PAGE_STYLESHEET = '/_workbench/src/modules/docs/page/docs-page.css';
+export const PAGE_SCRIPT = '/_workbench/src/modules/docs/page/docs-page.ts';
 
 export function pageDocument(input: PageDocumentInput): string {
   const options = JSON.stringify(input.options).replace(/</g, '\\u003c');

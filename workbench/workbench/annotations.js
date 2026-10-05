@@ -1355,10 +1355,10 @@
   }
 
   /* The size as the space names it — "Sidebar, 340 × fill" tells an agent
-     more than a number does. A docs page has no artboard size: it fills the
+     more than a number does. A docs lens has no artboard size: it fills the
      canvas. */
   function sizeName() {
-    if (docsShowing()) return 'Docs page, filling the canvas';
+    if (docsShowing()) return 'Docs, filling the canvas';
     var size = window.wbSize && window.wbSize();
     if (!size) return canvas.dataset.size || 'Unknown';
     return window.wbSizes ? window.wbSizes.describe(size) : size.label;
@@ -1406,12 +1406,12 @@
         url: window.wbLenses ? window.wbLenses.upstream(view.lens, view.url) : view.url };
       out.inspected = readable || !!targets;
     }
-    if (!view.lens && item && !item.docs) out.lensLabel = window.wbManifest.authoredLensLabel(item);
+    if (!view.lens && item) out.lensLabel = window.wbManifest.authoredLensLabel(item);
     if (view.story) out.story = { id: view.story.id, name: view.story.name };
     if (view.code && view.code.length) out.code = view.code.slice();
-    /* A docs page says which of its examples the shot shows; the server adds
+    /* A docs lens says which of its examples the shot shows; the server adds
        where each one's code is. */
-    if (item && item.docs) {
+    if (item && view.lens && view.lens.kind === 'docs') {
       var docsPage = null;
       try { docsPage = frame.contentWindow && frame.contentWindow.wbDocsPage; } catch (e) { /* another origin */ }
       out.docs = { lens: view.lens ? view.lens.key : null,

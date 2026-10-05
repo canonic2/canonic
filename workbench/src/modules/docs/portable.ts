@@ -57,7 +57,7 @@ function copyImages(html: string, root: string, directory: string, add: Add): st
 }
 
 async function pageScript(): Promise<string> {
-  const esbuild = createRequire(import.meta.url)('../../preview/engine.cjs');
+  const esbuild = createRequire(import.meta.url)('../../../preview/engine.cjs');
   const result = await esbuild.build({ entryPoints: [path.join(HERE, 'page', 'docs-page.ts')], bundle: true, write: false,
     format: 'esm', platform: 'browser', target: 'es2020', logLevel: 'silent' });
   return result.outputFiles[0].text;

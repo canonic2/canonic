@@ -414,7 +414,9 @@ class Compiler {
       extraPlugins, rendered, astro: { resources: astroResources, publicDirs: astroPublicDirs } });
     // Request mocks first: they replace fetch before any project module runs.
     const lines = ['import ' + JSON.stringify(development ? '/_workbench/preview-requests.js' : path.join(__dirname, 'requests.js')) + ';',
-      'import definition from ' + JSON.stringify(file) + ';', 'import * as adapter from ' + JSON.stringify(runtime) + ';', 'import { boot, combine } from ' + JSON.stringify(development ? '/_workbench/preview-runtime.js' : path.join(__dirname, 'browser.js')) + ';'];
+      'import definition from ' + JSON.stringify(file) + ';',
+      (definition.adapter === 'react-native-web' && !addon?.runtime ? 'import ' + JSON.stringify(path.join(__dirname, 'react-native-web.css')) + '; import { mountNative } from ' + JSON.stringify(runtime) + '; const adapter = { mount: mountNative };' : 'import * as adapter from ' + JSON.stringify(runtime) + ';'),
+      'import { boot, combine } from ' + JSON.stringify(development ? '/_workbench/preview-runtime.js' : path.join(__dirname, 'browser.js')) + ';'];
     const sourceMap = [];
     const defaultSource = definition.source;
     const sources = { default: defaultSource };
@@ -514,7 +516,7 @@ class Compiler {
     return listed;
   }
   async listDocsExamples(request, watched) {
-    const { examplesInFolder, exportNameToId } = require('../src/docs/example-ids.ts');
+    const { examplesInFolder, exportNameToId } = require('../src/modules/docs/index.ts');
     const problems = [];
     if (request.adapter === 'astro' && !request.folder && !this.config.adapters?.astro) throw new Error(ASTRO_FOLDER);
     if (request.folder) {
@@ -589,7 +591,9 @@ class Compiler {
     }
     const { outputs, outdir, buildOptions } = createBuild(this, { file: resolveFrom, adapter: request.adapter, addon, development, dependencies,
       extraPlugins, rendered, astro: { resources: astroResources, publicDirs: astroPublicDirs } });
-    const lines = ['import * as adapter from ' + JSON.stringify(runtime) + ';'];
+    const lines = [request.adapter === 'react-native-web' && !addon?.runtime
+      ? 'import ' + JSON.stringify(path.join(__dirname, 'react-native-web.css')) + '; import { mountNative } from ' + JSON.stringify(runtime) + '; const adapter = { mount: mountNative };'
+      : 'import * as adapter from ' + JSON.stringify(runtime) + ';'];
     const environments = [];
     const projectEnvironment = typeof config.environment === 'string' ? config.environment
       : config.environment && typeof config.environment === 'object' ? config.environment[request.adapter] : undefined;

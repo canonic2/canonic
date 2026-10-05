@@ -148,20 +148,20 @@ test('an unannotated lens shot is the implementation as it stands', function () 
   assert.match(text, /Nothing is annotated — the screenshot is the implementation as it stands\./);
 });
 
-test('a handoff from a docs page names its Markdown, lens, and the examples in view with their code', function () {
+test('a handoff through a docs lens names the Markdown, lens, and the examples in view with their code', function () {
   var text = handoff.prompt({
-    file: '.canonic/.handoffs/card.jpg', src: 'docs/card.md', label: 'Card', state: null, size: 'Docs page',
+    file: '.canonic/.handoffs/card.jpg', src: 'pages/card.html', label: 'Card', state: null, size: 'Docs, filling the canvas',
     frame: { w: 1200, h: 800 }, annotations: [],
-    lens: { key: 'dark', label: 'Dark', kind: 'examples', url: 'http://127.0.0.1:3579/docs/card.md?lens=dark' },
+    lens: { key: 'dark', label: 'Dark', kind: 'docs', url: 'http://127.0.0.1:3579/docs/card.md?lens=dark' },
     docs: { lens: 'dark', markdown: 'docs/card.md', lensLabel: 'Dark', examples: [
       { id: 'basic', status: 'ready', file: 'docs/card.examples.ts (basic)' },
       { id: 'nested', status: 'missing' },
     ] },
   });
-  assert.match(text, /- Docs page: `docs\/card.md`, examples rendered by Dark/);
+  assert.match(text, /- Docs: `docs\/card.md`, examples rendered by Dark/);
   assert.match(text, /- Examples in view: basic — `docs\/card.examples.ts \(basic\)`; nested \(missing\)/);
   assert.doesNotMatch(text, /Implementation:|the design it should match/);
-  assert.match(text, /- View: the docs page fills the canvas; the part in view is 1200 × 800 CSS px/);
+  assert.match(text, /- View: the docs fill the canvas; the part in view is 1200 × 800 CSS px/);
   assert.doesNotMatch(text, /artboard is/);
-  assert.match(text, /the screenshot is the docs page as it stands/);
+  assert.match(text, /the screenshot is the docs as they stand/);
 });

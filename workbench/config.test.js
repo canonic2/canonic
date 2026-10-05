@@ -538,16 +538,16 @@ test('saving pages for one space rewrites only that space, adding its collection
   }
 });
 
-test('reads docs pages, their examples lenses, and the lens they open with', function () {
+test('reads Markdown pages, pages with docs, their docs lenses, and the lens a Markdown page opens with', function () {
   var root = project({ 'workbench.yaml': [
     'implementations:',
     '  web:',
-    '    kind: examples',
+    '    kind: docs',
     '    adapter: html',
     '    styles:',
     '      - demo/demo.css',
     '  native:',
-    '    kind: examples',
+    '    kind: docs',
     '    adapter: html',
     'collections:',
     '  - name: Design system',
@@ -562,16 +562,23 @@ test('reads docs pages, their examples lenses, and the lens they open with', fun
     '        src: docs/colors.md',
     '      - label: Marked',
     '        src: docs/bad!name.md',
+    '      - label: Button',
+    '        src: pages/button.html',
+    '        docs: docs/button.md',
+    '        implementations:',
+    '          web: docs/button/',
   ].join('\n') });
   try {
     var read = config.read(root);
     var items = read.collections[0].items;
-    assert.deepEqual(items.map(function (item) { return item.label; }), ['Card', 'Colors']);
+    assert.deepEqual(items.map(function (item) { return item.label; }), ['Card', 'Colors', 'Button']);
     assert.deepEqual(items[0].implementations, { web: { examples: 'docs/card/' }, native: { examples: 'docs/card.examples.ts' } });
-    assert.equal(items[0].docs, true);
+    assert.equal(items[0].markdown, 'docs/card.md');
     assert.equal(items[0].lens, 'native');
-    assert.equal(items[1].docs, true);
+    assert.equal(items[1].markdown, 'docs/colors.md');
     assert.equal(items[1].lens, undefined);
+    assert.equal(items[2].markdown, 'docs/button.md');
+    assert.deepEqual(items[2].implementations, { web: { examples: 'docs/button/' } });
     assert.deepEqual(read.implementations.web.styles, ['demo/demo.css']);
     assert.deepEqual(read.problems, []);
   } finally {
@@ -628,7 +635,7 @@ test('reads a space’s sizes and each page’s, with what the local file sets m
     assert.equal(items[3].sizes, undefined, 'a page without sizes supports every size of the space');
     assert.deepEqual(read.problems, [
       'Interface › Sidebar: size “laptop” isn’t one of the space’s sizes.',
-      'Interface › Card: sizes don’t apply to a docs page, which uses the whole canvas.',
+      'Interface › Card: sizes don’t apply to a Markdown page, which uses the whole canvas.',
     ]);
     var resolved = config.resolve(root, read);
     assert.equal(resolved.sizes, read.sizes);

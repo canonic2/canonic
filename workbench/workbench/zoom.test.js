@@ -108,7 +108,7 @@ test('a mouse notch zooms by a step while a pinch stays fine-grained', function 
 });
 
 test('a docs page fills the canvas at 100%, keeps its layout width when zoomed, and scrolls instead of panning', function () {
-  var c = canvas({ wbDocsLayout: require('../src/docs/canvas/docs-layout.ts') });
+  var c = canvas({ wbDocsLayout: require('../src/modules/docs/canvas/docs-layout.ts') });
   var page = { scrollY: 1000, scrollTo: function (x, y) { this.scrollY = y; }, scrollBy: function (x, y) { this.scrollY += y; } };
   c.frame.querySelector = function () { return { contentWindow: page }; };
   c.zoom.panTo(-50, -50);

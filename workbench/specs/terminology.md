@@ -14,13 +14,14 @@ something listed here, it uses this word and no synonym.
 | **Space** | Collections of pages served together, with their own root and server: one `workbench.yaml`, or one entry in its `spaces`. The space switcher changes the space showing. |
 | **Collection** | A set of pages within a space, listed in the collection list. Pages discovered from previews, docs definitions, or catalogs join the collection their title names. `collections` in `workbench.yaml`. |
 | **Group** | A named set of pages within a collection. Groups don't nest. `group:` in `workbench.yaml`. |
-| **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a docs page, a Storybook story's title, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
+| **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a Markdown page, a Storybook story's title, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
 | **State** | One variation of a page, such as *Empty* or *Wrong password*. A page has one or more states; the first is the page as authored. |
-| **Docs page** | A page written in Markdown, shown in the docs canvas mode; see [docs pages](docs-pages.md). |
-| **Example** | A live render placed in a docs page, shown in its own panel with **Show code** and **Copy code**. |
+| **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
+| **Markdown page** | A page whose `src` is its Markdown: its docs, with no design lens. A `defineDocs` definition declares one. |
+| **Example** | A live render placed in docs, shown in its own panel with **Show code** and **Copy code**. |
 
 An address names a page and, when they aren't the defaults, its state, size,
-lens, and on a docs page an example; see the [core contract](core.md).
+lens, and in a docs lens an example; see the [core contract](core.md).
 
 ### Lenses
 
@@ -31,10 +32,10 @@ one.
 | Term | Meaning |
 | --- | --- |
 | **Lens** | One way of rendering a page: its design lens or one of its implementations. A page has one or more lenses; the lens switcher shows when it has two or more. |
-| **Design lens** | The page as authored in the space: the HTML file, or the TypeScript preview. Its customizable label defaults to **Design**, or **Workbench** for a TypeScript preview; see the [lens contract](lenses.md). A page imported from a catalog and a docs page have none. |
+| **Design lens** | The page as authored in the space: the HTML file, or the TypeScript preview. Its customizable label defaults to **Design**, or **Workbench** for a TypeScript preview; see the [lens contract](lenses.md). A page imported from a catalog and a Markdown page have none. |
 | **Implementation** | Somewhere a page is built, declared once under `implementations` in `workbench.yaml` and named by its key, such as `dev` or `storybook`. A page maps to it with a value that says where the page is in it, such as a path, a story title, a preview ID, or an example source, and the implementation becomes one of that page's lenses, labeled with its `label`. |
-| **Kind** | What an implementation is and how its lens renders: `url` (a running app), `storybook` (a Storybook story), `workbench` (a TypeScript preview of a design page), `ios-simulator` and `window` (a live stream of a device or a macOS window), and `examples` (a docs page's examples). |
-| **Examples lens** | An implementation of kind `examples`. It renders a docs page's examples with an adapter, and only a docs page has one. A docs page with examples lenses always shows one of them. |
+| **Kind** | What an implementation is and how its lens renders: `url` (a running app), `storybook` (a Storybook story), `workbench` (a TypeScript preview of a design page), `ios-simulator` and `window` (a live stream of a device or a macOS window), and `docs` (a page's docs, its examples rendered with an adapter). |
+| **Docs lens** | A page's docs seen through one renderer of its examples: an implementation of kind `docs`, or the built-in **Docs** lens of a page with Markdown and no docs implementation. Only a page with Markdown has one. A Markdown page always shows one of its lenses, its own docs lens by default. |
 | **Catalog** | An implementation that lists pages of its own instead of lensing pages in `workbench.yaml`: `catalog: true` on a `storybook` or `ios-simulator` implementation. Its pages join the space with that implementation as their only lens. |
 
 Under a Storybook lens, the state switcher lists the title's stories instead
@@ -103,7 +104,7 @@ The bar across the top of the canvas, with controls for the page showing.
 | Term | Meaning |
 | --- | --- |
 | **Canvas** | The large area that shows the page, gray and dotted, which zooms and pans. Artboards are drawn on it. `#canvas`, inside the `.wb-main` region, which also holds the toolbar and view controls. |
-| **Canvas mode** | How the canvas shows the page. **Default**: the page is in an artboard on the canvas. **Docs**: a docs page shown on its own has no artboard; it fills the canvas, on white, and scrolls. A docs page beside other artboards is in an artboard like any page. |
+| **Canvas mode** | How the canvas shows the page. **Default**: the page is in an artboard on the canvas. **Docs**: a page in a docs lens, shown on its own, has no artboard; its docs fill the canvas, on white, and scroll. The mode follows the lens. Docs beside other artboards are in an artboard like any page. |
 | **Artboard** | The box on the canvas that shows content at a size, labeled with its page's name and size by the **artboard label**. A canvas can hold more than one; see [multiple artboards](multiple-artboards.md). `#artboard`; its clipped `#artboardContent` holds the preview frames. |
 | **Preview frame** | The iframe inside an artboard that loads the page. "Frame" means only this. |
 | **Toolbar** | The floating bar at the bottom of the canvas: the annotation tools (Select, Scribble, Arrow, shapes, Text, Comment), Undo, Clear, the screenshot, and **Copy handoff**. |
@@ -114,12 +115,12 @@ The bar across the top of the canvas, with controls for the page showing.
 "Page" keeps its ordinary meaning inside a page's own content, such as a
 link to another page of the product being designed. "Screenshot" is an image
 of the canvas or of a page. "Section" keeps its ordinary meaning for part of a
-document, such as a heading's section in a docs page or a guide.
+document, such as a heading's section in docs or a guide.
 
 ## Decisions
 
 - **2026-10-04: page is what the canvas shows, whatever renders it.** One
-  word covers authored pages, previews, docs pages, and catalog entries, as the
+  word covers authored pages, previews, Markdown pages, and catalog entries, as the
   **Configure pages** command does.
 - **2026-10-04: space and collection.** A space is what the switcher changes
   between, and a collection is a set of pages within it. "Project" keeps its

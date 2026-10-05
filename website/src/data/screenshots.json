@@ -11,7 +11,7 @@
       },
       "pin": {
         "left": 8.61,
-        "top": 50.58
+        "top": 62.56
       }
     },
     {
@@ -24,7 +24,7 @@
         "height": 4.42
       },
       "pin": {
-        "left": 48.3,
+        "left": 27.52,
         "top": 2.56
       }
     },
@@ -59,70 +59,84 @@
   ],
   "controls": [
     {
+      "name": "sizes",
+      "src": "images/controls-sizes.png",
+      "width": 244,
+      "height": 50,
+      "alt": "The size switcher, enlarged: Fit, Laptop, Mobile, and Resizable, then the menu of every size.",
+      "controls": [
+        {
+          "label": "Fit",
+          "left": 3.59,
+          "width": 19.49
+        },
+        {
+          "label": "Laptop, 1512 × 982",
+          "left": 21.03,
+          "width": 19.49
+        },
+        {
+          "label": "Mobile, 393 × 852",
+          "left": 38.46,
+          "width": 19.49
+        },
+        {
+          "label": "Resizable",
+          "left": 55.9,
+          "width": 19.49
+        },
+        {
+          "label": "More sizes",
+          "left": 76.92,
+          "width": 19.49
+        }
+      ]
+    },
+    {
       "name": "actions",
       "src": "images/controls-actions.png",
-      "width": 165,
+      "width": 115,
       "height": 50,
       "alt": "The Actions switch, switched off, enlarged.",
       "controls": [
         {
-          "label": "Actions — let links navigate and forms submit",
-          "left": 5.29,
-          "width": 89.42
+          "label": "Actions",
+          "left": 7.61,
+          "width": 84.78
         }
       ]
     },
     {
       "name": "page",
       "src": "images/controls-page.png",
-      "width": 395,
+      "width": 220,
       "height": 50,
-      "alt": "The size switcher and the page’s actions, enlarged: four sizes, then Reload, Open the source, Copy reference, Open on its own, and More.",
+      "alt": "The page’s actions, enlarged: Reload, Open the source, Copy reference, Open on its own, and More.",
       "controls": [
         {
-          "label": "Fit",
-          "left": 2.22,
-          "width": 11.39
-        },
-        {
-          "label": "Laptop, MacBook Pro 14, 1512 by 982 points",
-          "left": 12.34,
-          "width": 11.39
-        },
-        {
-          "label": "Mobile, iPhone 15 Pro, 393 by 852 points",
-          "left": 22.47,
-          "width": 11.39
-        },
-        {
-          "label": "Resizable",
-          "left": 32.59,
-          "width": 11.39
-        },
-        {
           "label": "Reload",
-          "left": 46.52,
-          "width": 10.76
+          "left": 3.98,
+          "width": 19.32
         },
         {
           "label": "Open the source",
-          "left": 56.65,
-          "width": 10.76
+          "left": 22.16,
+          "width": 19.32
         },
         {
           "label": "Copy reference",
-          "left": 66.77,
-          "width": 10.76
+          "left": 40.34,
+          "width": 19.32
         },
         {
           "label": "Open on its own",
-          "left": 76.9,
-          "width": 10.76
+          "left": 58.52,
+          "width": 19.32
         },
         {
           "label": "More",
-          "left": 87.03,
-          "width": 10.76
+          "left": 76.7,
+          "width": 19.32
         }
       ]
     },

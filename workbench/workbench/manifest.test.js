@@ -190,7 +190,7 @@ test('names every problem with an implementation and keeps the rest', function (
       'Dev Server': { kind: 'url', base: 'http://localhost:3000' },
       dev: { kind: 'url', base: 'localhost:3000' },
       stories: { kind: 'storybook', base: 'http://localhost:6006' },
-      docs: { kind: 'docs', url: 'http://localhost:1' },
+      docs: { kind: 'wiki', url: 'http://localhost:1' },
       bare: 'http://localhost:2',
       staging: { kind: 'url', base: 'https://staging.example.com', render: 'popup', root: 'file:///x', catalog: true },
       odd: { kind: 'storybook', url: 'http://localhost:3', catalog: 'yes' },
@@ -205,7 +205,7 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations: “Dev Server” must be kebab-case — it travels in a URL.',
     'implementations › dev: needs a base starting with http:// or https://.',
     'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
-    'implementations › docs: kind must be url, storybook, workbench, examples, ios-simulator, or window.',
+    'implementations › docs: kind must be url, storybook, workbench, docs, ios-simulator, or window.',
     'implementations › bare: needs a kind, and a url or base.',
     'implementations › staging: catalog is only available for Storybook and iOS Simulator implementations.',
     'implementations › staging: render is no longer used; remove it. URL and Storybook implementations use iframes.',
@@ -525,17 +525,17 @@ test('a local file merges into one space by key', function () {
   assert.deepEqual(merged.spaces.ui, { name: 'UI' });
 });
 
-test('reads examples implementations, which render a docs page’s examples', function () {
+test('reads docs implementations, which render a page’s docs examples', function () {
   var problems = [];
   var impls = manifest.implementations({
-    web: { kind: 'examples', adapter: 'react', styles: ['src/theme.css', 'src/web.css'], environment: 'src/docs/environment.tsx' },
-    native: { kind: 'examples', label: 'React Native Web', adapter: 'react-native-web', styles: 'src/native.css' },
-    bare: { kind: 'examples' },
-    away: { kind: 'examples', adapter: 'html', styles: ['../acme/theme.css', '/etc/theme.css'], environment: 'http://example.com/env.js',
+    web: { kind: 'docs', adapter: 'react', styles: ['src/theme.css', 'src/web.css'], environment: 'src/docs/environment.tsx' },
+    native: { kind: 'docs', label: 'React Native Web', adapter: 'react-native-web', styles: 'src/native.css' },
+    bare: { kind: 'docs' },
+    away: { kind: 'docs', adapter: 'html', styles: ['../acme/theme.css', '/etc/theme.css'], environment: 'http://example.com/env.js',
       base: 'http://localhost:1', root: '../acme', start: { command: 'npm start' } },
   }, problems);
   assert.deepEqual(impls.web, {
-    key: 'web', label: 'Web', kind: 'examples', root: '.', adapter: 'react',
+    key: 'web', label: 'Web', kind: 'docs', root: '.', adapter: 'react',
     styles: ['src/theme.css', 'src/web.css'], environment: 'src/docs/environment.tsx',
   });
   assert.deepEqual(impls.native.styles, ['src/native.css']);
@@ -546,63 +546,92 @@ test('reads examples implementations, which render a docs page’s examples', fu
     'implementations › away: styles must be paths inside the project, relative to its root.',
     'implementations › away: styles must be paths inside the project, relative to its root.',
     'implementations › away: environment must be a path inside the project, relative to its root.',
-    'implementations › away: base doesn’t apply to examples, which Workbench compiles itself.',
+    'implementations › away: base doesn’t apply to docs, whose examples Workbench compiles itself.',
     'implementations › away: start is available for URL and Storybook implementations.',
-    'implementations › away: Examples use this project root.',
+    'implementations › away: Docs examples use this project root.',
   ]);
 });
 
-test('a docs page maps examples lenses to example sources and opens with its lens', function () {
+function readPage(raw, impls, where, problems) {
+  var item = { label: raw.label, src: raw.src };
+  manifest.pageMarkdown(raw, item, where, problems);
+  var lenses = manifest.pageLenses(raw.implementations, item, impls, where, problems);
+  if (lenses) item.implementations = lenses;
+  manifest.docsPageEntry(raw, item, impls, where, problems);
+  return item;
+}
+
+test('a Markdown page maps docs lenses, and other lenses, and opens with its docs lens', function () {
   var problems = [];
   var impls = manifest.implementations({
-    light: { kind: 'examples', adapter: 'html' },
-    dark: { kind: 'examples', adapter: 'html' },
+    light: { kind: 'docs', adapter: 'html' },
+    dark: { kind: 'docs', adapter: 'html' },
     dev: { kind: 'url', base: 'http://localhost:3000' },
   }, problems);
-  var raw = { label: 'Card', src: 'docs/card.md', lens: 'dark',
-    implementations: { light: 'src/card/examples/', dark: 'src/card/card.examples.ts', dev: '/card', away: '../x/' } };
-  var item = { label: 'Card', src: raw.src };
-  item.implementations = manifest.pageLenses(raw.implementations, item, impls, 'Docs › Card', problems);
-  manifest.docsPageEntry(raw, item, 'Docs › Card', problems);
+  var item = readPage({ label: 'Card', src: 'docs/card.md', lens: 'dark',
+    implementations: { light: 'src/card/examples/', dark: 'src/card/card.examples.ts', dev: '/card', away: '../x/' } }, impls, 'Docs › Card', problems);
   assert.deepEqual(item.implementations, {
     light: { examples: 'src/card/examples/' },
     dark: { examples: 'src/card/card.examples.ts' },
+    dev: { path: '/card' },
   });
-  assert.equal(item.docs, true);
+  assert.equal(item.markdown, 'docs/card.md');
   assert.equal(item.lens, 'dark');
+  assert.deepEqual(problems, ['Docs › Card: implementation “away” isn’t declared under implementations.']);
+
+  problems = [];
+  var unnamed = readPage({ label: 'Button', src: 'docs/button.md', lens: 'dev', sizes: ['mobile'],
+    implementations: { dark: '../outside/', light: 'src/button/', dev: '/button' } }, impls, 'Docs › Button', problems);
+  assert.equal(unnamed.lens, 'light', 'without a docs lens named, the first mapped docs lens opens');
   assert.deepEqual(problems, [
-    'Docs › Card: docs pages take examples lenses; “dev” is a url implementation.',
-    'Docs › Card: implementation “away” isn’t declared under implementations.',
+    'Docs › Button: docs lens “dark” needs an example folder (ending in /) or file, relative to the project root.',
+    'Docs › Button: sizes don’t apply to a Markdown page, which uses the whole canvas.',
+    'Docs › Button: lens “dev” isn’t one of this page’s docs lenses (light).',
   ]);
 
   problems = [];
-  var unnamed = { label: 'Button', src: 'docs/button.md' };
-  unnamed.implementations = manifest.pageLenses({ dark: '../outside/', light: 'src/button/' }, unnamed, impls, 'Docs › Button', problems);
-  manifest.docsPageEntry({ lens: 'sepia', sizes: ['mobile'] }, unnamed, 'Docs › Button', problems);
-  assert.equal(unnamed.lens, 'light', 'without a valid lens, the first mapped lens opens');
-  assert.deepEqual(problems, [
-    'Docs › Button: examples lens “dark” needs an example folder (ending in /) or file, relative to the project root.',
-    'Docs › Button: sizes don’t apply to a docs page, which uses the whole canvas.',
-    'Docs › Button: lens “sepia” isn’t one of this page’s lenses (light).',
-  ]);
+  var guide = readPage({ label: 'Colors', src: 'docs/colors.MD', docs: 'docs/other.md' }, impls, 'Docs › Colors', problems);
+  assert.deepEqual(guide, { label: 'Colors', src: 'docs/colors.MD', markdown: 'docs/colors.MD' }, 'a Markdown page needs no lenses');
+  assert.deepEqual(problems, ['Docs › Colors: docs doesn’t apply to a Markdown page, which is its own docs.']);
+});
 
-  problems = [];
-  var guide = { label: 'Colors', src: 'docs/colors.MD' };
-  manifest.docsPageEntry({}, guide, 'Docs › Colors', problems);
-  assert.deepEqual(guide, { label: 'Colors', src: 'docs/colors.MD', docs: true }, 'a docs page needs no lenses');
+test('any page can have docs: its Markdown, read through docs lenses beside its design', function () {
+  var problems = [];
+  var impls = manifest.implementations({
+    web: { kind: 'docs', adapter: 'react' },
+    dev: { kind: 'url', base: 'http://localhost:3000' },
+  }, problems);
+  var item = readPage({ label: 'Button', src: 'pages/button.html', docs: 'docs/button.md',
+    implementations: { web: 'src/button/examples/', dev: '/button' } }, impls, 'Pages › Button', problems);
+  assert.equal(item.markdown, 'docs/button.md');
+  assert.deepEqual(item.implementations, { web: { examples: 'src/button/examples/' }, dev: { path: '/button' } });
+  assert.equal(item.lens, undefined, 'a page with a design opens on its design');
+  assert.deepEqual(problems, []);
+
+  var builtIn = readPage({ label: 'Guide', src: 'pages/guide.html', docs: 'docs/guide.md' }, impls, 'Pages › Guide', problems);
+  assert.equal(builtIn.markdown, 'docs/guide.md', 'Markdown without a docs implementation gets the built-in Docs lens');
   assert.deepEqual(problems, []);
 });
 
-test('examples lenses and lens belong to docs pages only', function () {
+test('docs lenses need Markdown, and lens belongs to Markdown pages only', function () {
   var problems = [];
-  var impls = manifest.implementations({ light: { kind: 'examples', adapter: 'html' } }, problems);
-  var item = { label: 'Sign in', src: 'pages/sign-in.html' };
-  assert.equal(manifest.pageLenses({ light: 'src/examples/' }, item, impls, 'Pages › Sign in', problems), undefined);
-  manifest.docsPageEntry({ lens: 'light' }, item, 'Pages › Sign in', problems);
-  assert.equal(item.docs, undefined);
+  var impls = manifest.implementations({
+    light: { kind: 'docs', adapter: 'html' },
+    docs: { kind: 'url', base: 'http://localhost:3000' },
+  }, problems);
+  var item = readPage({ label: 'Sign in', src: 'pages/sign-in.html', lens: 'light',
+    implementations: { light: 'src/examples/' } }, impls, 'Pages › Sign in', problems);
+  assert.equal(item.implementations, undefined);
+  assert.equal(item.markdown, undefined);
+  readPage({ label: 'Away', src: 'pages/away.html', docs: '../away.md' }, impls, 'Pages › Away', problems);
+  readPage({ label: 'Text', src: 'pages/text.html', docs: 'docs/text.txt' }, impls, 'Pages › Text', problems);
+  readPage({ label: 'Clash', src: 'pages/clash.html', docs: 'docs/clash.md', implementations: { docs: '/clash' } }, impls, 'Pages › Clash', problems);
   assert.deepEqual(problems, [
-    'Pages › Sign in: implementation “light” renders examples, which only docs pages (a .md src) have.',
-    'Pages › Sign in: lens is only for docs pages (a .md src).',
+    'Pages › Sign in: docs lens “light” needs the page’s Markdown — a .md src, or docs: with a .md file.',
+    'Pages › Sign in: lens is only for Markdown pages (a .md src).',
+    'Pages › Away: docs must be a .md file inside the project, relative to its root.',
+    'Pages › Text: docs must be a .md file inside the project, relative to its root.',
+    'Pages › Clash: “docs” names this page’s built-in Docs lens; give implementation “docs” another name.',
   ]);
 });
 

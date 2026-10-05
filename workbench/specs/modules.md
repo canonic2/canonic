@@ -43,9 +43,17 @@ the implementation moves.
 ## Current status
 
 The layout convention was agreed on 2026-10-04. Existing capabilities include
-`src/docs/`, `src/sizes/`, `src/canvas/` and other directories directly under
-`src/`; the host still includes CommonJS files such as `server.js`. These
-capabilities have not yet migrated to the target directory layout.
+`src/sizes/`, `src/canvas/` and other directories directly under `src/`; the
+host still includes CommonJS files such as `server.js`. These capabilities
+have not yet migrated to the target directory layout.
+
+Docs are TypeScript under `src/modules/docs/`. The server, the compiler and
+the portable export use `index.ts`; the canvas loads `canvas/bootstrap.ts`,
+which hands the lens rules (`canvas/lenses.ts`) and the docs geometry to the
+classic scripts, and a docs page loads `page/docs-page.ts`. The
+`workbench.yaml` rules for docs stay in `workbench/manifest.js`, which both
+config readers share, and the canvas's use of the lens rules stays in
+`workbench/workbench.js`.
 
 The design-system source and archive exporter is TypeScript under
 `src/modules/export/`, exposed through `index.ts`. Its [product contract](export.md)

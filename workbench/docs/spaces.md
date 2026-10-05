@@ -161,8 +161,8 @@ nothing starts until you open the Workbench view or the canvas.
 
 ## Handoffs, files, and agents
 
-**More** › **Download design-system ZIP** exports the whole current space,
-including all its collections and pages. Export each space separately by
+**More** › **Export…** exports a page, selected pages, a collection, or the whole
+current space as a source ZIP, PDF, images, or portable viewer. Export each space separately by
 switching to it before downloading. An included `workbench.yaml` may declare
 several spaces, but the export's page records and reference screenshots cover
 only the current one. See [Design-system export](design-system-export.md).

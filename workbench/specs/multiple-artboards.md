@@ -70,9 +70,9 @@ restrict the tool to a particular comparison workflow.
   type: authored pages, Workbench previews, URL lenses, Storybook stories,
   Simulator streams, and window streams. A canvas may combine content from
   different spaces. The model must not privilege a particular use case or
-  renderer. Docs pages are included: beside other artboards a docs page is an
-  artboard, as [docs pages](docs-pages.md#in-a-multiple-artboard-canvas)
-  specifies.
+  renderer. Docs lenses are included: beside other artboards a page's docs are
+  an artboard, as [docs](docs-pages.md#in-a-multiple-artboard-canvas)
+  specifies, so one page's design and docs can sit side by side.
 - **Phase 1: complete review output.** When a canvas has multiple artboards,
   screenshots, handoffs, and agent context include all of them. Selection
   identifies the user's current focus within the canvas; it must not hide
@@ -121,8 +121,8 @@ changes were present during investigation.
   [agent-view.js](../agent-view.js) report one view. The editor sidebar uses
   `wb-go` and `wb-here` for one selection. Full-canvas context needs an
   expanded report while preserving a selected-artboard field for focus.
-- [Docs pages](docs-pages.md) shown alone use the docs canvas mode, and are
-  ordinary artboards beside others
+- A page in a [docs lens](docs-pages.md) shown alone uses the docs canvas
+  mode, and is an ordinary artboard beside others
   ([contract](docs-pages.md#in-a-multiple-artboard-canvas)). Space switching
   currently changes the server address, so the agreed cross-space scope needs
   space-aware routing and resource ownership within one canvas.
@@ -208,7 +208,7 @@ changes were present during investigation.
   Full-layout links and shared named canvases need their own contract if
   included. Single-artboard agent context retains existing view information;
   multi-artboard context extends it with the whole canvas.
-- Docs pages in artboards follow
+- Docs lenses in artboards follow
   [their contract](docs-pages.md#in-a-multiple-artboard-canvas): 1056 × 900 by
   default and resizable, scrolling inside the artboard, the canvas's zoom, and
   per-artboard lens, state, and example.
@@ -451,7 +451,7 @@ They make the implementation boundaries concrete without narrowing content.
    are included either way. Large arrangements need a defined resolution and
    image-size policy.
 3. **Docs integration:** decided 2026-10-04 in
-   [docs pages](docs-pages.md#in-a-multiple-artboard-canvas).
+   [docs](docs-pages.md#in-a-multiple-artboard-canvas).
 4. **Canvas ownership:** Where should a mixed-space handoff be saved, and
    which space owns canvas-level actions such as export and configuration?
    Recommendation: a host space owns the handoff bundle; editing and export

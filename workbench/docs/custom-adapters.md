@@ -259,13 +259,13 @@ their controls.
 
 ## Docs page examples
 
-A registered adapter also renders a [docs page](docs-pages.md)'s examples.
-Name it as the `adapter` of an `examples` lens:
+A registered adapter also renders the examples in a page's
+[docs](docs-pages.md). Name it as the `adapter` of a `docs` lens:
 
 ```yaml
 implementations:
   web:
-    kind: examples
+    kind: docs
     label: Web components
     adapter: web-components
 ```

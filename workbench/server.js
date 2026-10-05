@@ -36,11 +36,10 @@ var previewCompiler = require('./preview/compiler.cjs');
 var windowStream = require('./window-stream');
 var agentView = require('./agent-view');
 var manifest = require('./workbench/manifest');
-var docsService = require('./src/docs/docs-service.ts');
+var docsModule = require('./src/modules/docs/index.ts');
 var browserModules = require('./src/server/browser-modules.ts');
 var canvasSpaces = require('./src/spaces/coordinator.ts');
 var nativePool = require('./src/native-streams/pool.ts');
-var docsList = require('./src/docs/pages.ts');
 var sizeSchema = require('./src/sizes/schema.ts');
 var sizeExport = require('./src/sizes/export.ts');
 var sizeChoice = require('./src/sizes/browser/choice.ts');
@@ -322,8 +321,9 @@ function exportCapturePlan(view, baseUrl) {
   var warnings = [];
   var seen = new Set();
   items.forEach(function (item) {
-    /* Docs pages are planned separately: see docsExportPlan. */
-    if (seen.has(item.src) || item.docs) return;
+    /* Docs are planned separately: see docsExportPlan. A Markdown page has
+       nothing else to capture. */
+    if (seen.has(item.src) || docsModule.isMarkdownPage(item)) return;
     seen.add(item.src);
     var implementationKey = item.implementationOnly;
     var implementation = implementationKey && view.implementations[implementationKey];
@@ -389,7 +389,7 @@ function exportCapturePlan(view, baseUrl) {
   return { captures: captures, warnings: warnings };
 }
 
-function captureExportReferences(capture, plan, baseUrl, progress) {
+function captureExportReferences(capture, plan, baseUrl, progress, request) {
   // One load per local URL during this export; a new job sees fresh sources.
   var revision = 'export-' + crypto.randomBytes(12).toString('hex');
   var screenshots = new Array(plan.captures.length);
@@ -424,19 +424,22 @@ function captureExportReferences(capture, plan, baseUrl, progress) {
           var reference = group[i].reference;
           var payload = {
             url: reference.url, width: reference.width, height: reference.height,
-            scroll: { x: 0, y: 0 }, annotations: '', anchors: [], format: 'jpeg',
+            scroll: { x: 0, y: 0 }, annotations: '', anchors: [], format: request && request.format === 'images' ? request.imageFormat : 'jpeg',
+            docsPage: !!reference.docsPage, paper: request && request.paper,
             revision: reference.external || reference.docsPage ? '' : revision,
             reuse: reference.external ? 'storybook' : '',
           };
           /* A docs page loads as a page, whole, cropped to an example when the
              reference is one. */
-          if (reference.docsPage) {
+          if (reference.docsPage || request && request.format === 'images') {
             payload.fullPage = true;
+            payload.strictFullPage = request && request.format === 'images';
             if (reference.selector) payload.selector = reference.selector;
           }
           try {
-            var shot = reference.external || reference.docsPage ? await worker.captureExportPage(payload) : await worker.capture(baseUrl, payload);
-            var body = shot && (shot.image || shot.png) ? (shot.image || shot.png) : shot;
+            var shot = request && request.format === 'pdf' ? await worker.printExportPage(payload)
+              : reference.external || reference.docsPage || request && request.format === 'images' ? await worker.captureExportPage(payload) : await worker.capture(baseUrl, payload);
+            var body = shot && (shot.pdf || shot.image || shot.png) ? (shot.pdf || shot.image || shot.png) : shot;
             if (!body || !body.length) throw new Error('the renderer returned an empty image');
             screenshots[index] = Object.assign({}, reference, { body: body });
           } catch (error) {
@@ -1085,7 +1088,7 @@ function start(options) {
   /* Docs pages: pages written in Markdown, with examples their lenses
      compile in the preview worker. See src/docs/ and specs/docs-pages.md. */
   function docsPages(view) {
-    return docsList.docsPages(view, discoveredDocs);
+    return docsModule.docsPages(view, discoveredDocs);
   }
 
   /* Why examples can't run here, or null. They run project code, like previews. */
@@ -1096,7 +1099,7 @@ function start(options) {
     return null;
   }
 
-  var docs = docsService.createDocsService({
+  var docs = docsModule.createDocsService({
     blocked: docsBlocked,
     readFile: function (file) {
       var target = path.resolve(root, file);
@@ -1108,11 +1111,11 @@ function start(options) {
     },
     listExamples: function (lens) {
       if (!previews) return Promise.reject(new Error('The preview worker isn’t running.'));
-      return previews.docs('index', docsService.lensRequest(lens));
+      return previews.docs('index', docsModule.lensRequest(lens));
     },
     bundle: function (lens) {
       if (!previews) return Promise.reject(new Error('The preview worker isn’t running.'));
-      return previews.docs('bundle', docsService.lensRequest(lens));
+      return previews.docs('bundle', docsModule.lensRequest(lens));
     },
   });
 
@@ -1135,7 +1138,7 @@ function start(options) {
      layout, and each example that lens renders, cropped to its panel. */
   var DOCS_EXPORT_WIDTH = 960 + 2 * 48;
   function docsExportPlan(view, baseUrl) {
-    var pages = docsPages(view);
+    var pages = docsPages(view).filter(function (page) { return Object.hasOwn(view.pages || {}, page.page || page.src); });
     var captures = [];
     var warnings = [];
     return pages.reduce(function (pending, page) {
@@ -1145,7 +1148,7 @@ function start(options) {
         return lenses.reduce(function (next, lens) {
           return next.then(function () {
             if (!lens || docsBlocked() || !previews) return [];
-            return previews.docs('index', docsService.lensRequest(lens)).then(function (listed) {
+            return previews.docs('index', docsModule.lensRequest(lens)).then(function (listed) {
               return listed.examples.map(function (example) { return example.id; });
             }, function (error) {
               warnings.push(page.label + ' — ' + lens.label + ': ' + String(error.message || error));
@@ -1154,7 +1157,7 @@ function start(options) {
           }).then(function (available) {
             var url = new URL(page.src, baseUrl);
             if (lens) url.searchParams.set('lens', lens.key);
-            var base = { page: page.src, state: 'default', size: 'docs', sizeLabel: 'Docs page',
+            var base = { page: page.page, state: 'default', size: 'docs', sizeLabel: 'Docs page',
               url: url.href, external: false, docsPage: true, width: DOCS_EXPORT_WIDTH, height: sizeModel.EXPORT_FILL.height };
             var prefix = lens ? lens.key + '-' : '';
             captures.push(Object.assign({}, base, { variant: prefix + 'page', label: (lens ? lens.label + ' · ' : '') + 'Whole page' }));
@@ -1169,17 +1172,17 @@ function start(options) {
     }, Promise.resolve()).then(function () { return { captures: captures, warnings: warnings }; });
   }
 
-  /* A handoff from a docs page names the Markdown and, for each example in
+  /* A handoff from a docs lens names the Markdown and, for each example in
      view, where its code is. Examples that can't be listed keep their IDs. */
   function docsHandoff(canvas) {
     if (!canvas.docs) return Promise.resolve();
-    var page = docsPages(resolved()).find(function (candidate) { return candidate.src === canvas.src; });
+    var page = docsPages(resolved()).find(function (candidate) { return candidate.page === canvas.src; });
     if (!page) return Promise.resolve();
-    var lens = docsService.chooseLens(page, canvas.docs.lens);
+    var lens = docsModule.chooseLens(page, canvas.docs.lens);
     canvas.docs.markdown = page.src;
     canvas.docs.lensLabel = lens ? lens.label : null;
     if (!lens || docsBlocked() || !previews) return Promise.resolve();
-    return previews.docs('index', docsService.lensRequest(lens)).then(function (listed) {
+    return previews.docs('index', docsModule.lensRequest(lens)).then(function (listed) {
       (canvas.docs.examples || []).forEach(function (example) {
         var found = listed.examples.find(function (candidate) { return candidate.id === example.id; });
         if (found) example.file = found.file + (found.export !== 'default' ? ' (' + found.export + ')' : '');
@@ -1191,12 +1194,16 @@ function start(options) {
   function importDocs(view, problems, resolvedPages) {
     var pages = docsPages(view);
     if (!pages.length) return Promise.resolve();
-    /* The source menu: the Markdown is the page's design file; each lens adds
-       its example source. */
+    /* The source menu: a Markdown page's Markdown is its design file, and
+       any other page lists its Markdown after its design; each docs lens
+       adds its example source. */
     pages.forEach(function (page) {
-      var entry = resolvedPages[page.src] = Object.assign({}, resolvedPages[page.src]);
-      entry.design = path.join(root, page.src);
-      entry.code = (entry.code || []).concat(page.lenses.map(function (lens) {
+      var entry = resolvedPages[page.page] = Object.assign({}, resolvedPages[page.page]);
+      var markdown = path.join(root, page.src);
+      var code = [];
+      if (page.page === page.src) entry.design = markdown;
+      else code.push({ implementation: null, label: 'Docs', path: markdown, relative: page.src, exists: fs.existsSync(markdown) });
+      entry.code = (entry.code || []).concat(code, page.lenses.map(function (lens) {
         var target = path.join(root, lens.examples);
         return { implementation: lens.key, path: target, relative: lens.examples, exists: fs.existsSync(target) };
       }));
@@ -1214,7 +1221,7 @@ function start(options) {
   var docsListings = new Map();
   function knownListing(lens) {
     if (!previews) return null;
-    var key = JSON.stringify(docsService.lensRequest(lens));
+    var key = JSON.stringify(docsModule.lensRequest(lens));
     var entry = docsListings.get(key);
     if (!entry) { entry = { result: null, pending: null }; docsListings.set(key, entry); }
     refreshListing(lens, entry);
@@ -1224,7 +1231,7 @@ function start(options) {
   function refreshListing(lens, entry) {
     if (entry.pending || !previews) return entry.pending;
     var before = JSON.stringify(entry.result);
-    entry.pending = previews.docs('index', docsService.lensRequest(lens)).then(function (value) {
+    entry.pending = previews.docs('index', docsModule.lensRequest(lens)).then(function (value) {
       entry.result = { value: { examples: value.examples, problems: value.problems } };
     }, function (error) {
       entry.result = { error: String(error.message || error) };
@@ -1258,10 +1265,10 @@ function start(options) {
         return page.lenses.reduce(function (next, lens) {
           return next.then(function () {
             if (!previews) return;
-            var key = JSON.stringify(docsService.lensRequest(lens));
+            var key = JSON.stringify(docsModule.lensRequest(lens));
             var entry = docsListings.get(key);
             if (!entry) { entry = { result: null, pending: null }; docsListings.set(key, entry); }
-            return Promise.all([refreshListing(lens, entry), previews.docs('bundle', docsService.lensRequest(lens))])
+            return Promise.all([refreshListing(lens, entry), previews.docs('bundle', docsModule.lensRequest(lens))])
               .then(function () { built++; }, function () { /* The page says why when it's opened. */ });
           });
         }, pending);
@@ -1304,16 +1311,16 @@ function start(options) {
         docs: (index.docs || []).length, errors: (index.errors || []).length,
       });
       problems.push.apply(problems, index.errors);
-      /* Discovered docs pages go where their titles say, like previews. A
-         docs page workbench.yaml declares for the same Markdown file wins. */
-      var authored = new Set(pageItems(view.collections).map(function (item) { return item.src; }));
+      /* Discovered Markdown pages go where their titles say, like previews.
+         A page workbench.yaml gives the same Markdown file wins. */
+      var authored = new Set(pageItems(view.collections).map(function (item) { return item.markdown || item.src; }));
       (index.docs || []).forEach(function (page) {
         if (authored.has(page.src)) return;
         var parts = page.title.split('/').filter(Boolean);
         var collectionName = parts.length > 1 ? parts.shift() : 'Docs';
         var label = parts.pop() || page.id;
-        discoveredDocs.push({ src: page.src, label: label, lens: page.lens, lenses: page.lenses });
-        var item = { src: page.src, label: label, docs: true, icon: page.icon || 'book-open',
+        discoveredDocs.push({ src: page.src, page: page.src, label: label, lens: page.lens, lenses: page.lenses });
+        var item = { src: page.src, label: label, markdown: page.src, icon: page.icon || 'book-open',
           docsLenses: page.lenses.map(function (lens) { return { key: lens.key, label: lens.label }; }) };
         if (page.lens) item.lens = page.lens;
         if (page.states.length > 1) item.states = page.states;
@@ -1511,6 +1518,8 @@ function start(options) {
       ok: job.status !== 'failed', id: job.id, status: job.status,
       completed: job.completed, total: job.total, current: job.current,
       warnings: job.warnings, error: job.error || null,
+      warningMessages: job.archive ? job.archive.report.warnings.concat(job.archive.report.captureWarnings,
+        job.archive.report.browser ? job.archive.report.browser.warnings : []) : [],
       download: job.archive ? { filename: job.archive.download.filename, bytes: job.archive.download.body.length } : null,
       parts: job.archive ? job.archive.archives.map(function (archive, index) {
         return { number: index + 1, filename: archive.filename, bytes: archive.body.length };
@@ -1518,36 +1527,86 @@ function start(options) {
     };
   }
 
-  function beginExport(view, baseUrl) {
-    if (activeExport && activeExport.status === 'running') return activeExport;
+  function beginExport(view, baseUrl, request) {
+    var key = designExport.requestKey(request);
+    if (activeExport && activeExport.status === 'running') {
+      if (activeExport.key === key) return activeExport;
+      throw refused(409, 'Another export is running. Wait for it to finish before starting a different export.');
+    }
     pruneSettledExports();
     var plan = exportCapturePlan(view, baseUrl);
     var job = {
-      id: crypto.randomBytes(12).toString('hex'), status: 'running',
+      id: crypto.randomBytes(12).toString('hex'), status: 'running', key: key,
       completed: 0, total: plan.captures.length, current: null,
       warnings: plan.warnings.length, archive: null, error: null,
     };
     exportJobs.set(job.id, job);
     activeExport = job;
     diagnostic('info', 'export.started', { screenshots: job.total });
-    job.promise = captureReady.then(function () {
-      return docsExportPlan(view, baseUrl);
-    }).then(function (docsPlan) {
+    job.promise = Promise.resolve().then(function () {
+      if (request.format === 'browser') return { captures: [], warnings: [] };
+      return captureReady.then(function () {
+        return docsExportPlan(view, baseUrl);
+      });
+    }).then(async function (docsPlan) {
       plan.captures = plan.captures.concat(docsPlan.captures);
       plan.warnings = plan.warnings.concat(docsPlan.warnings);
+      var lensKey = request.variants === 'current' ? request.current.lens : request.lens;
+      var selectedImplementation = lensKey && view.implementations && view.implementations[lensKey];
+      if (selectedImplementation && selectedImplementation.kind === 'storybook') {
+        var storyIndex = await storybookIndex(selectedImplementation);
+        var replacements = [];
+        pageItems(view.collections || []).concat(pageItems(view.catalogCollections || [])).forEach(function (item) {
+          var mapping = item.implementations && item.implementations[lensKey];
+          if (!mapping || !mapping.title) return;
+          var sizes = plan.captures.filter(function (reference) { return reference.page === item.src && !reference.docsPage; });
+          var uniqueSizes = new Map(sizes.map(function (reference) { return [reference.size, reference]; }));
+          storiesTitled(storyIndex, mapping.title, selectedImplementation).forEach(function (story) {
+            uniqueSizes.forEach(function (reference) {
+              replacements.push(Object.assign({}, reference, { state: story.state, label: story.name || story.state,
+                variant: story.state + '-' + reference.size, external: true,
+                url: selectedImplementation.url + '/iframe.html?id=' + encodeURIComponent(story.id) + '&viewMode=story' }));
+            });
+          });
+        });
+        plan.captures = plan.captures.filter(function (reference) { return reference.docsPage; }).concat(replacements);
+      }
+      plan.captures = designExport.selectCaptures(plan.captures, request);
+      if (lensKey && view.implementations && view.implementations[lensKey] && view.implementations[lensKey].kind === 'docs') {
+        plan.captures = plan.captures.filter(function (reference) { return reference.docsPage; });
+      }
+      if (lensKey) plan.captures.forEach(function (reference) {
+        if (reference.docsPage) return;
+        var item = pageItems(view.collections || []).concat(pageItems(view.catalogCollections || [])).find(function (p) { return p.src === reference.page; });
+        if (item && item.implementationOnly === lensKey) return;
+        var implementation = view.implementations && view.implementations[lensKey];
+        if (!implementation || !item || !item.implementations || !item.implementations[lensKey]) throw new Error('The selected lens is not available for ' + reference.page + '.');
+        if (implementation.kind === 'storybook') return;
+        if (implementation.kind !== 'url' && implementation.kind !== 'workbench') throw new Error('Export of this lens is not supported: ' + lensKey);
+        var mapping = item.implementations[lensKey];
+        var target = mapping.states && mapping.states[reference.state] || mapping.path;
+        reference.url = new URL((implementation.base || '') + target, baseUrl).href;
+        reference.external = implementation.kind !== 'workbench';
+      });
+      if (request.format === 'browser') plan.captures = [];
       job.total = plan.captures.length;
       return captureExportReferences(capture, plan, baseUrl, function (completed) {
         job.completed = completed;
         if (completed === 1 || (completed > 0 && completed % 100 === 0)) {
           diagnostic('info', 'export.progress', { completed: completed, total: job.total });
         }
-      });
+      }, request);
     }).then(async function (references) {
-      job.archive = await designExport.build(root, view, {
+      if (request.format === 'pdf') job.archive = await designExport.pdfOutput(view.name || 'Workbench', request, references.screenshots, references.warnings);
+      else if (request.format === 'images') job.archive = designExport.imagesOutput(view.name || 'Workbench', request, references.screenshots, references.warnings, options.exportMaxArchiveBytes);
+      else if (request.format === 'browser') job.archive = designExport.browserOutput(view.name || 'Workbench', request,
+        previews && await previews.export({ pages: Object.keys(view.pages), states: request.states, sizes: request.sizes }), options.exportMaxArchiveBytes);
+      else job.archive = await designExport.build(root, view, {
         manifest: path.join(where.dir, config.FILE),
         screenshots: references.screenshots,
         captureWarnings: references.warnings,
         maxArchiveBytes: options.exportMaxArchiveBytes,
+        request: request,
       }, previews);
       var report = job.archive.report;
       job.warnings = report.warnings.length + report.captureWarnings.length + (report.browser ? report.browser.warnings.length : 0);
@@ -1580,7 +1639,7 @@ function start(options) {
 
   function sendArchive(res, archive, head) {
     res.writeHead(200, {
-      'Content-Type': 'application/zip',
+      'Content-Type': archive.contentType || 'application/zip',
       'Content-Length': archive.body.length,
       'Content-Disposition': 'attachment; filename="' + archive.filename + '"',
       'Cache-Control': 'no-store',
@@ -1613,16 +1672,16 @@ function start(options) {
       return;
     }
 
-    if (url.pathname === docsService.SOURCE_PATH || url.pathname === docsService.REVISION_PATH || url.pathname === docsService.BUNDLE_PATH) {
+    if (url.pathname === docsModule.SOURCE_PATH || url.pathname === docsModule.REVISION_PATH || url.pathname === docsModule.BUNDLE_PATH) {
       if (req.method !== 'GET') { send(res, 405, 'GET a docs page’s source, revision, or bundle here.'); return; }
       docsReady().then(function (view) {
         var page = docsPages(view).find(function (candidate) { return candidate.src === url.searchParams.get('page'); });
         if (!page) throw refused(404, 'Not a docs page: ' + url.searchParams.get('page'));
         var lens = url.searchParams.get('lens');
-        if (url.pathname === docsService.REVISION_PATH) {
+        if (url.pathname === docsModule.REVISION_PATH) {
           return docs.revision(page, lens).then(function (revision) { json(res, 200, { revision: revision }); });
         }
-        if (url.pathname === docsService.BUNDLE_PATH) {
+        if (url.pathname === docsModule.BUNDLE_PATH) {
           return docs.bundleInfo(page, lens).then(function (info) { json(res, 200, info); });
         }
         return docs.exampleSource(page, lens, url.searchParams.get('example') || '').then(function (code) { json(res, 200, code); });
@@ -1630,8 +1689,8 @@ function start(options) {
       return;
     }
 
-    /* A declared docs page is served at its Markdown path as the page; any
-       other Markdown file is served as it is. */
+    /* A page's Markdown is served at its path as the page's docs, in the
+       docs lens `?lens=` names; any other Markdown file is served as it is. */
     if (/\.md$/i.test(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
       var docsSrc;
       try { docsSrc = decodeURIComponent(url.pathname.slice(1)); } catch (_) { docsSrc = null; }
@@ -1832,8 +1891,7 @@ function start(options) {
       var configBegan = Date.now();
       var configTiming = {};
       diagnostic('info', 'config.requested', {});
-      Promise.resolve()
-        .then(resolvedWithCatalogs)
+      Promise.resolve().then(resolvedWithCatalogs)
         .then(function (view) {
           configTiming.catalogsMs = Date.now() - configBegan;
           return proxied(view);
@@ -1871,18 +1929,24 @@ function start(options) {
         json(res, 200, exportStatus(existing));
         return;
       }
-      Promise.resolve()
-        .then(resolvedWithCatalogs)
+      if (req.method === 'POST' && !sameOrigin(req)) { json(res, 403, { ok: false, error: 'Only this canvas can start an export.' }); return; }
+      var exportRequest;
+      Promise.resolve().then(async function () {
+        try { exportRequest = designExport.readRequest(req.method === 'POST' ? JSON.parse(String(await readBody(req, 1024 * 1024)) || '{}') : {}); }
+        catch (error) { throw refused(400, String(error.message || error)); }
+      }).then(resolvedWithCatalogs)
         .then(function (view) {
           if (!view) throw refused(404, 'There is no ' + config.FILE + ' at the project root.');
-          var job = beginExport(view, baseUrl);
+          try { view = designExport.selectView(view, exportRequest); }
+          catch (error) { throw refused(400, String(error.message || error)); }
+          var job = beginExport(view, baseUrl, exportRequest);
           if (req.method === 'POST') { json(res, 202, exportStatus(job)); return; }
           return job.promise.then(function () {
             if (job.status === 'failed') throw new Error(job.error);
             sendArchive(res, archivePart(job.archive, url), req.method === 'HEAD');
           });
         })
-        .catch(function (err) { trouble(res, err, 500); });
+        .catch(function (err) { trouble(res, err, err.status || 500); });
       return;
     }
 

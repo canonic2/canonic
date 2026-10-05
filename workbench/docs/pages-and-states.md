@@ -5,7 +5,7 @@ those pages are served, how one page shows several states, how links behave,
 and how to choose the artboard sizes a page supports. To render components
 from your codebase instead, see [TypeScript previews](workbench-previews.md).
 To document components in Markdown with live examples, see
-[Docs pages](docs-pages.md).
+[Docs](docs-pages.md).
 
 ## Design pages
 
@@ -145,8 +145,8 @@ if (document.documentElement.dataset.wbState === 'empty') renderEmptyState();
   fixture keyed by `dataset.wbState`, rather than making a second page.
 - State ids also map to implementation paths, so the same state can be shown
   on your dev server. See [Map states to paths](lenses.md#3-map-states-to-paths).
-- A [docs page](docs-pages.md#states) applies its state to every example on
-  it, and its states aren't listed in the page list.
+- In a [docs lens](docs-pages.md#states), the page's state applies to every
+  example in its docs. A Markdown page's states aren't listed in the page list.
 
 ## Links and actions
 
@@ -210,7 +210,9 @@ switcher's other sizes are disabled while it is showing, and
 Omit `sizes` to allow all four. The page always lays out at the artboard's
 real size; when the artboard is larger than the canvas, the canvas zooms out
 rather than squeezing the page. See [Artboard sizes and zoom](canvas.md#artboard-sizes).
-A docs page has no artboard and takes no `sizes`; it fills the canvas.
+In a [docs lens](docs-pages.md#on-the-canvas), the docs fill the canvas and
+the size switcher is disabled; the design lens keeps the page's size. A
+Markdown page has no artboard and takes no `sizes`.
 
 ## Component previews
 
@@ -243,6 +245,6 @@ its variants as states:
 
 To render the real components from your codebase instead of HTML copies, write
 [TypeScript previews](workbench-previews.md). To document each component on
-one page, with its examples, their code, and props tables, write
-[docs pages](docs-pages.md). If your components already have Storybook
+one page, with its examples, their code, and props tables, give the page
+[docs](docs-pages.md). If your components already have Storybook
 stories, consider [importing them](storybook.md#import-the-whole-catalog).

@@ -16,7 +16,8 @@ explains the build, the screenshots, and publishing.
   `marks.js` (logo and product marks), each with tests where they have logic.
 - `src/styles/global.css` and `docs.css`: tokens and components.
 - `src/data/screenshots.json`, `public/images/`, `screenshots/`: Workbench
-  screenshots, their regions, and the fixture and script that capture them.
+  screenshots, their regions, and the script that captures them from the
+  repository's Acme demo.
 
 ## Architecture direction
 

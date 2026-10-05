@@ -285,7 +285,10 @@ reached through `node_modules` are listed by name and version.
 
 - Built-ins: `html`, `react`, `vue`, `astro`, and `react-native-web` (the
   React runtime with `react-native` aliased to `react-native-web` and `.web.*`
-  extensions preferred).
+  extensions preferred). Its host uses a column flex layout, allowing a root
+  view with `flex: 1` to fill the frame at fixed and resizable sizes without
+  project CSS. Project styles can override these defaults. Other adapters keep
+  their existing host layout; custom runtimes own their host styling.
 - `workbench.config.ts`, or `previews.config`, is evaluated like a definition.
   Its `adapters` map a name to a `runtime` module (`mount(canvas, source,
   context, environment)`) and optional `plugins`; registering a built-in name

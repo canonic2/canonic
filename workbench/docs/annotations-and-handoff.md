@@ -18,7 +18,7 @@ The toolbar floats at the bottom of the canvas.
 | **Comment** | A comment pinned to a point on the page. Click the thing you're commenting on and type. |
 | **Undo** (⌘Z or Ctrl+Z) | Removes the last annotation. |
 | **Clear annotations** | Removes every annotation. |
-| **Save screenshot** | Downloads the artboard, or the part of a docs page in view, with its annotations. See [Screenshots](#screenshots). |
+| **Save screenshot** | Downloads the artboard, or in a docs lens the part of the docs in view, with its annotations. See [Screenshots](#screenshots). |
 | **Copy handoff** | Saves the screenshot and copies a prompt. See [Hand off to an agent](#hand-off-to-an-agent). |
 
 While you have annotations, a count such as **3 annotations** beside **Copy handoff**
@@ -52,15 +52,15 @@ screenshots are cropped to the artboard either way.
   switch to another page or state. Changing size or lens keeps them, so you can
   draw on the design and then check the same spots on the implementation.
 - Annotations stay in place when you zoom and pan, because they scale with the
-  artboard. On a docs page, they stay on the page as it scrolls and zooms.
+  artboard. In a docs lens, they stay on the docs as they scroll and zoom.
 
 Every key is listed in [Keyboard shortcuts](canvas.md#keyboard-shortcuts).
 
 ## Screenshots
 
 **Save screenshot** (the camera) downloads a JPEG of the artboard at its real
-size, whatever the zoom, with your annotations on it. On a
-[docs page](#on-a-docs-page), it captures the part of the page in view. It is
+size, whatever the zoom, with your annotations on it. In a
+[docs lens](#in-a-docs-lens), it captures the part of the docs in view. It is
 named after the page's file, state, and lens:
 
 | View | Filename |
@@ -161,7 +161,7 @@ When the page has [code pointers](lenses.md#point-at-the-code), a `Source:`
 line gives their absolute paths, so the agent changes the right code. That
 line appears on the Design lens too. For a
 [TypeScript preview](workbench-previews.md), it gives the preview's source
-file. For a docs page, see [On a docs page](#on-a-docs-page).
+file. For a docs lens, see [In a docs lens](#in-a-docs-lens).
 
 When the elements under the annotations can't be read, the prompt says so, and
 the coordinates are what the agent has to go on. An annotation over empty space
@@ -205,17 +205,27 @@ in your project. Nothing is sent anywhere until you paste it.
 - **Use states.** Pick the error state in the page list before handing off,
   so the prompt and filename say which state it is.
 
-## On a docs page
+## In a docs lens
 
-A [docs page](docs-pages.md) fills the canvas and scrolls, so annotations,
-screenshots, and handoffs follow the page rather than an artboard:
+In a [docs lens](docs-pages.md#lenses), a page's docs fill the canvas and
+scroll, so annotations, screenshots, and handoffs follow the docs rather than
+an artboard:
 
-- **Annotations** stay on the page as it scrolls and zooms, over the example
+- **Annotations** stay on the docs as they scroll and zoom, over the example
   or the text you drew them on.
-- **Screenshots** capture the part of the page in view, with your annotations.
-- **Handoffs** name the docs page's Markdown file, the lens that renders its
-  examples, and the examples in view with their source files. In place of a
-  width, the prompt gives the size of the part in view.
+- **Screenshots** capture the part of the docs in view, with your annotations.
+  Their size is named *Docs, filling the canvas*.
+- **Handoffs** name the Markdown file, the lens that renders its examples,
+  and the examples in view with their source files. In place of a width, the
+  prompt gives the size of the part in view:
+
+```text
+- Docs: `docs/card.md`, examples rendered by Web
+- Examples in view: basic — `src/components/card/examples/basic.tsx`
+- View: the docs fill the canvas; the part in view is 1200 × 800 CSS px
+
+The screenshot is the part of the docs in view, with their examples rendered live.
+```
 
 Scroll the example you mean into view before handing off, so the prompt names
 it.

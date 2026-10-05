@@ -1,7 +1,7 @@
 # Design-system export contract
 
-The design-system export packages the whole current space as one download: the
-source closure of every page in that space, reference screenshots, a guide per page,
+The source-package export packages the selected pages as one download: the
+source closure of each selected page, reference screenshots, a guide per page,
 and, when the project has [TypeScript previews](previews.md), a portable
 `browser/` viewer. It is a server-backed operation available from the editor
 or a hosted browser; a `file://` workbench cannot export. See
@@ -17,6 +17,8 @@ typed inputs and reports in `types.ts`, filesystem-backed source closure and
 page guides in `source.ts`, reference parsing in `references.ts`, and ZIP
 assembly and partitioning in `archive.ts`. `build.ts` coordinates the optional
 portable build and source archive, preserving a portable failure as a warning.
+`request.ts` validates options and filters page scope; `selection.ts` filters
+reference variants; `output.ts` assembles PDFs and image/browser archives.
 Tests live beside the module.
 
 The server owns job lifecycle, capture planning and coordination with the capture
@@ -25,17 +27,17 @@ existing owners.
 
 ## Space scope
 
-- One export targets one space, including all its collections, authored
-  pages, discovered previews and docs pages, and imported catalog pages.
-  It is independent of the selected page, collection, or lens. It does not
-  aggregate other spaces listed in the switcher or configuration file.
+- One export targets a page, explicit pages, a named collection, or the whole
+  current space. It does not aggregate other spaces listed in the switcher.
+  The selection filters the resolved pages and collection hierarchy before
+  source traversal, capture planning, and portable compilation.
 - The export endpoint uses its server's selected configuration directory,
   space key, and root. It resolves that space's configuration and catalogs,
   then passes that resolved view to the source exporter, reference planner,
   and portable preview builder. It does not traverse the space registry.
 - On a mixed-space canvas, the export action targets the selected artboard's
   owning space, as described under [capture scheduling](#capture-scheduling-versus-the-camera).
-  The export still covers that entire space rather than the visible artboards.
+  The dialog chooses a scope within that space.
 - The archive's page records, references, and portable catalog cover the
   target space. Shared imports and assets required by that space may also
   be used by other spaces; their inclusion follows the source closure.
@@ -51,8 +53,8 @@ existing owners.
 
 - With spaces A and B in one configuration, exporting A includes all A's
   pages and reference variants and excludes B-only page records and references.
-- Selecting another page, collection, or lens within A leaves the export's
-  space scope unchanged.
+- A page or collection export excludes unrelated page records, references,
+  and portable previews; shared source dependencies remain included.
 - Exporting B separately produces B's page records and reference plan.
 - An included multi-space manifest retains its declarations without causing
   B's pages to enter A's export. Shared dependencies needed by A remain included.
@@ -85,12 +87,38 @@ components retain their own licensing.
   part; an incomplete job answers `409`, and an expired one `404`. A `GET`
   without a job, for scripted callers, starts or joins a job, waits, and
   downloads.
-- Only one export runs at a time per space server; a request to that server during a running export joins
-  it. A settled job is kept for 15 minutes, and starting a new export keeps
+- Only one export runs at a time per space server. Identical normalized requests
+  join it; a different request answers `409`. A settled job is kept for 15 minutes, and starting a new export keeps
   only the most recent settled job.
-- Export waits for the capture service's start-up warm-up, captures the
-  references, then builds the portable preview viewer, then the archive.
-- A failed portable build never fails the export (decided 2026-10-03). If the
+- Visual and source exports wait for the capture service's start-up warm-up, capture the
+  references, then produce their output. Source ZIP adds the portable viewer;
+  browser-only ZIP skips capture. PDF merges renderer PDFs in capture-plan order.
+
+## Export request and output
+
+`POST` accepts JSON: `format` (`zip`, `pdf`, `images`, `browser`), `scope`
+(`space`, `page`, `pages`, `collection`), page IDs, collection name, `variants`
+(`all`, `current`, `custom`), optional state/size filters, and lens. Current-view
+requests include the selected page, state, lens, size and viewport dimensions.
+Unknown pages, invalid options and mismatched current selections answer `400`.
+Empty legacy requests and direct GET downloads default to a whole-space source ZIP.
+
+The dialog offers all declared variants or the current view. Source ZIP defaults
+to all; single-page PDF/images default to current. Browser ZIP uses declared
+variants. The request is recorded in ZIP metadata.
+
+Capture owns PDF rendering. Visual pages use screen media, full document height,
+custom paper size and zero margins. Docs use print media, A4/Letter, half-inch
+margins and automatic pagination. The export module merges them with `pdf-lib`,
+preserving each page's size and selectable text. Individual capture failures are
+warnings; no successful pages fails the job. PDF returns `application/pdf`.
+Visual pages above 19,200 CSS pixels fail their capture rather than clip. Images
+above 8,192 pixels likewise warn rather than silently truncate.
+
+The portable worker receives the selected page IDs and optional state/size
+filters. Browser-only output fails if no compiled previews or docs are available.
+
+- A failed portable build never fails a source ZIP. If the
   preview worker cannot produce it at all, the export records a warning, leaves
   out `browser/`, and still delivers the sources and references. The warning
   retains the cause under `warnings` in `canonic-export.json`; individual preview
@@ -114,7 +142,9 @@ components retain their own licensing.
   as `size` and its label as `sizeLabel`; README headings read `Label · Laptop`.
   See the [sizes contract](sizes.md#design-system-export).
 - Design pages load as designed with actions off; the first state loads
-  without a `state` parameter. Lenses on a design page are not captured.
+  without a `state` parameter. Current-view or explicit lens requests use the
+  page's declared URL/workbench mapping; imported Storybook pages retain their
+  mapped stories. Native lenses do not support visual export.
 - TypeScript preview states load the preview's page with `?state=<id>`. A
   capture waits up to 8 seconds for the preview to report it has rendered; a
   preview render error fails that reference instead of capturing an error

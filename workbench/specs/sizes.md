@@ -36,7 +36,7 @@ model.
 
 Out of scope:
 
-- Docs pages, which have no artboard size ([docs pages](docs-pages.md)).
+- Docs lenses, which have no artboard size ([docs](docs-pages.md)).
 - iOS Simulator and window lenses, which show the device's or window's own
   size letterboxed in the artboard ([implementations](implementations.md));
   their artboard size behaves as it does today.
@@ -159,7 +159,8 @@ space's sizes the page supports, and it can add sizes of its own.
 - Omitting `sizes` supports every size in the space.
 - An entry that is neither a space size nor a valid new size is reported and
   skipped. If no entry is valid, the page supports every size in the space.
-- On a docs page, `sizes` is reported and ignored.
+- On a Markdown page, `sizes` is reported and ignored. A page with a design
+  and docs keeps its sizes for its design.
 - When the page opens and the current size isn't one of its sizes, the
   artboard takes the page's first listed size. Listing `sidebar` first makes
   the Sidebar page open at 340 × fill.
@@ -216,7 +217,7 @@ name. A menu button follows them and opens the **size menu**:
 - When the current size isn't a button, the menu button shows that size's
   icon and is pressed, and its accessible name and title name the size, such
   as *Sidebar, 340 × fill*. Otherwise it shows a chevron.
-- On a docs page, every size is disabled and nothing is pressed or checked.
+- In a docs lens, every size is disabled and nothing is pressed or checked.
 - The size switcher never folds into **More**. The top bar's compact
   measurement includes however many buttons the space has.
 - The menu is a menu of radio items: arrow keys move between enabled entries,
@@ -251,7 +252,7 @@ artboard to it.
   catalog page) gets the size from the space. If a preview definition lists
   `sizes`, the dialog says the definition must list the new key for this page
   to use it, and the artboard stays where it is.
-- On a docs page, **Only for this page** is unavailable, and the size is added
+- On a Markdown page, **Only for this page** is unavailable, and the size is added
   to the space without changing the canvas.
 - **Add** stays disabled until the values are valid, and the dialog says why.
 
@@ -314,7 +315,7 @@ The size part of an address is the size's key:
   ([core](core.md#selection-and-navigation)).
 - Keys are kebab-case, so they never contain the `:`, `!`, `~`, or `@` that
   mark the other parts of an address.
-- A docs page's address still has no size part.
+- An address in a docs lens still has no size part.
 
 ## Handoffs, references, and agents
 
@@ -322,7 +323,7 @@ The size part of an address is the size's key:
   dimensions, then the real artboard size:
   `Size: Sidebar, 340 × fill (artboard is 340 × 812 CSS px)`. Fit and
   Resizable have no declared dimensions: `Size: Resizable (artboard is
-  1024 × 768 CSS px)`. A docs page keeps its own line.
+  1024 × 768 CSS px)`. A docs lens keeps its own line.
 - Handoff screenshot names include the size key, such as
   `sign-in-error-mobile.jpg`, so shots of one page at two sizes don't
   overwrite each other.

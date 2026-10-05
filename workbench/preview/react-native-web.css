@@ -1,0 +1,5 @@
+/* Low specificity lets project styles override the adapter's host defaults. */
+:where(.wb-react-native-root) {
+  display: flex;
+  flex-direction: column;
+}

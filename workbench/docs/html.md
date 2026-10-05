@@ -361,8 +361,8 @@ With a `pages/checkout` preview in the project and **Actions** on, clicking
 
 ## Document components with a docs page
 
-A [docs page](docs-pages.md) can show HTML components as live examples. Give
-it an `examples` lens with `adapter: html`. Each example is a function
+A page's [docs](docs-pages.md) can show HTML components as live examples.
+Give the page a `docs` lens with `adapter: html`. Each example is a function
 `(canvas, context)` that draws into `canvas`, like a
 [function source](#render-from-a-function), and may return a cleanup function.
 HTML files aren't examples.
@@ -370,7 +370,7 @@ HTML files aren't examples.
 ```yaml
 implementations:
   web:
-    kind: examples
+    kind: docs
     label: Web
     adapter: html
     styles:
@@ -414,13 +414,14 @@ export function warning(canvas: HTMLElement, context: PreviewContext) {
 
 `docs/banner.md` places each one with a fenced block, such as
 ```` ```example warning ````; see
-[Docs pages](docs-pages.md#write-the-markdown). A folder works too, with one
+[Docs](docs-pages.md#write-the-markdown). A folder works too, with one
 `.ts` or `.js` file per example and the function as its default export.
 
 Examples get no inputs or controls, so set what each one shows in its code.
 The lens's `styles` load with the examples, and an `environment`'s `setup` and
-`ready` run once for the page. Its `mount` isn't called, as for a function
-source.
+`ready` run once for the docs. Its `mount` isn't called, as for a function
+source. To read the docs beside a design page, give that page
+`docs: docs/banner.md` in place of a Markdown `src`.
 
 ## Errors and fixes
 

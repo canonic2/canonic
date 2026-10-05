@@ -148,6 +148,7 @@ async function prepareExportPage(request) {
      (up to the capture limit), and the page settles again at that size. */
   if (request.payload.fullPage) {
     var full = await win.webContents.executeJavaScript('Math.ceil(Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0))');
+    if (request.payload.strictFullPage && full > 8192) throw new Error('This page exceeds the 8192-pixel full-page image limit. Use PDF for longer pages.');
     var grown = Math.max(1, Math.min(8192, Number(full) || height));
     if (grown !== height) {
       resize({ width: width, height: grown });
@@ -166,6 +167,40 @@ async function elementRect(selector) {
   var x = Math.max(0, Math.floor(box.x));
   var y = Math.max(0, Math.floor(box.y));
   return { x: x, y: y, width: Math.max(1, Math.min(width - x, Math.ceil(box.width))), height: Math.max(1, Math.min(height - y, Math.ceil(box.height))) };
+}
+
+async function printExportPage(request) {
+  // PDF measures the full document without growing the bitmap viewport.
+  await prepareExportPage(Object.assign({}, request, { payload: Object.assign({}, request.payload, { fullPage: false }) }));
+  await win.webContents.executeJavaScript(`(async function () {
+    await Promise.all(Array.from(document.images).map(async function (image) {
+      image.loading = 'eager';
+      if (image.decode) await Promise.race([image.decode().catch(function () {}), new Promise(function (resolve) { setTimeout(resolve, 3000); })]);
+    }));
+  })()`);
+  var docs = !!request.payload.docsPage;
+  var dimensions = await win.webContents.executeJavaScript('({ width: innerWidth, height: Math.max(innerHeight, document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0) })');
+  if (!docs && dimensions.height > 19200) throw new Error('This visual page exceeds Chromium’s 200-inch PDF page limit.');
+  var css = docs
+    ? '.wb-docs { max-width:none!important; padding:0!important; margin:0!important } .wb-docs-tools,.wb-docs-example-tools { display:none!important } pre { white-space:pre-wrap!important; overflow:visible!important; overflow-wrap:anywhere } h1,h2,h3,h4 { break-after:avoid } .wb-docs-example { break-inside:avoid }'
+    : '@page { size:' + dimensions.width / 96 + 'in ' + dimensions.height / 96 + 'in; margin:0 } html,body { margin:0!important; overflow:visible!important }';
+  var style = await win.webContents.insertCSS(css);
+  var attached = false;
+  try {
+    if (!win.webContents.debugger.isAttached()) { win.webContents.debugger.attach('1.3'); attached = true; }
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { media: docs ? 'print' : 'screen' });
+    var pdf = await win.webContents.printToPDF({ printBackground: true,
+      pageSize: docs ? request.payload.paper || 'A4' : { width: dimensions.width / 96, height: dimensions.height / 96 },
+      preferCSSPageSize: !docs, margins: docs ? { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } : { top: 0, bottom: 0, left: 0, right: 0 },
+      generateTaggedPDF: docs, generateDocumentOutline: docs });
+    return { data: pdf.toString('base64'), width: dimensions.width, height: dimensions.height };
+  } finally {
+    await win.webContents.removeInsertedCSS(style);
+    if (win.webContents.debugger.isAttached()) {
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { media: '' });
+      if (attached) win.webContents.debugger.detach();
+    }
+  }
 }
 
 async function captureBitmap(rect) {
@@ -248,6 +283,7 @@ async function handle(request) {
       } finally {
         await win.webContents.executeJavaScript(request.removeOverlay).catch(function () {});
       }
+    case 'printExportPage': return printExportPage(request);
     case 'info': return {
       visible: win.isVisible(), initialDockVisible: initialDockVisible,
       dockVisible: process.platform === 'darwin' ? app.dock.isVisible() : false,

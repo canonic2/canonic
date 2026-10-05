@@ -14,7 +14,7 @@ There are six kinds of implementation:
 | `storybook` | One Storybook story, without Storybook's own interface | [Storybook](storybook.md) |
 | `ios-simulator` | A live, interactive stream of a booted iOS Simulator | [iOS Simulator](ios-simulator.md) |
 | `window` | A live stream of a window from any macOS app, such as an Android emulator | [App windows](windows.md) |
-| `examples` | A docs page's examples, rendered with an adapter such as React or React Native Web | [Docs pages](docs-pages.md#lenses) |
+| `docs` | A page's docs, with their examples rendered by an adapter such as React or React Native Web | [Docs](docs-pages.md#lenses) |
 
 This page covers how lenses work in general, how to set up a `url`
 implementation, and how to point a design page at a
@@ -31,7 +31,8 @@ are two or more lenses to choose from, so a page imported from a single catalog,
 with no design, has none.
 
 - **The choice sticks** as you move between pages, like the artboard size.
-  A page that doesn't have the chosen lens shows its design.
+  A page that doesn't have the chosen lens shows its default: its design, or
+  a Markdown page's own docs lens.
 - **The address includes it.** `#pages/sign-in.html:error@393~staging` is the
   sign-in page in its error state, at mobile width, on staging. A copied link
   opens the same view. See [Links and the address](canvas.md#links-and-the-address).
@@ -87,14 +88,16 @@ used. These settings belong in `workbench.yaml`, rather than in `definePreview`.
 See [Previews](configuration.md#previews) and [Pages](configuration.md#pages)
 in the configuration reference.
 
-### Lenses on a docs page
+### Docs lenses
 
-A [docs page](docs-pages.md) has no design to compare with: its lenses are
-`examples` implementations, and each one renders the page's examples, such as
-with React or with React Native Web. The Markdown is the same in every lens,
-and there is no authored design lens. The switcher shows when the page has two or
-more lenses. A docs page that doesn't have the chosen lens shows its own
-default lens. See [Lenses](docs-pages.md#lenses) in the docs page guide.
+A page with [docs](docs-pages.md) has a docs lens for each `docs`
+implementation it maps, beside its design and its other implementations. Each
+docs lens shows the page's Markdown with its examples rendered by the lens's
+adapter, such as React or React Native Web. The Markdown is the same in every
+docs lens. In a docs lens, the docs fill the canvas instead of an artboard, and
+the size switcher is disabled. A Markdown page, whose `src` is its Markdown,
+has no design lens and opens on its own docs lens. See
+[Lenses](docs-pages.md#lenses) in the docs page guide.
 
 ## Set up a URL implementation
 

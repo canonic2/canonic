@@ -8,11 +8,12 @@ async function create(compiler, options = {}) {
   const previews = [];
   const warnings = index.errors.slice();
   function add(name, body) { files.push({ path: 'browser/' + name, data: Buffer.from(body).toString('base64') }); }
-  for (const preview of index.previews) {
+  for (const preview of index.previews.filter(preview => !options.selection || options.selection.pages.includes(preview.file))) {
     try {
       const result = await compiler.compile(preview.file, false);
       for (const [name, body] of result.outputs) add(result.slug + '/' + name, body);
-      previews.push({ ...preview, ...(result.portableNote ? { controls: {}, docs: (preview.docs || '') + '\n' + result.portableNote } : {}), directory: 'browser/' + result.slug, files: result.localFiles,
+      previews.push({ ...preview, states: options.selection?.states.length ? preview.states.filter(state => options.selection.states.includes(state.id)) : preview.states,
+        ...(result.portableNote ? { controls: {}, docs: (preview.docs || '') + '\n' + result.portableNote } : {}), directory: 'browser/' + result.slug, files: result.localFiles,
         packages: result.packages, revision: result.revision });
     } catch (error) { warnings.push(preview.file + ': ' + error.message); }
   }
@@ -24,11 +25,13 @@ async function create(compiler, options = {}) {
   const { supported } = require('../src/sizes/browser/choice.ts');
   const { defaultSizes } = require('../src/sizes/browser/size.ts');
   const spaceSizes = config && config.sizes || defaultSizes();
-  for (const preview of previews) preview.sizes = supported(spaceSizes, readPageSizes(preview.sizes, spaceSizes, preview.file, warnings));
-  const discovered = (index.docs || []).map(page => ({ src: page.src, label: page.title.split('/').filter(Boolean).pop() || page.id, lens: page.lens, lenses: page.lenses }));
-  const { docsPages } = require('../src/docs/pages.ts');
-  const { portableDocs } = require('../src/docs/portable.ts');
-  const docs = await portableDocs(compiler, docsPages(config, discovered), add);
+  for (const preview of previews) {
+    preview.sizes = supported(spaceSizes, readPageSizes(preview.sizes, spaceSizes, preview.file, warnings));
+    if (options.selection?.sizes.length) preview.sizes = preview.sizes.filter(size => options.selection.sizes.includes(size.key));
+  }
+  const discovered = (index.docs || []).map(page => ({ src: page.src, page: page.src, label: page.title.split('/').filter(Boolean).pop() || page.id, lens: page.lens, lenses: page.lenses }));
+  const { docsPages, portableDocs } = require('../src/modules/docs/index.ts');
+  const docs = await portableDocs(compiler, docsPages(config, discovered).filter(page => !options.selection || options.selection.pages.includes(page.page || page.src)), add);
   warnings.push(...docs.warnings);
   for (const file of ['index.html', 'viewer.js', 'viewer.css']) add(file, fs.readFileSync(path.join(__dirname, 'viewer', file)));
   for (const file of ['preview-controls.js', 'preview-controls.css']) add(file, fs.readFileSync(path.join(__dirname, '..', 'workbench', file)));

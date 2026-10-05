@@ -106,11 +106,12 @@ the discovery patterns.
 
 A `.workbench.ts` or `.workbench.tsx` file can also default-export
 `defineDocs({...})` from `@canonic2/workbench` instead of `definePreview`, to
-declare a [docs page](docs-pages.md#declare-a-docs-page-in-a-definition):
-Markdown with live examples and the lenses that render them. It is
+declare a [Markdown page](docs-pages.md#declare-a-markdown-page-in-a-definition):
+Markdown with live examples and the docs lenses that render them. It is
 discovered with the previews and placed by its `title` the same way, except
 that a title without `/` goes in a **Docs** collection. If `workbench.yaml` also lists its Markdown
-file, the listed page is used instead. See [Docs pages](docs-pages.md).
+file, the listed page is used instead. To give a preview page its own docs,
+set `docs` on its entry in `workbench.yaml`. See [Docs](docs-pages.md).
 
 ## Name the preview lens
 
@@ -211,7 +212,7 @@ covers all of it:
 
 Hooks and sources receive a context with `id`, `state`, `inputs`, `fixtures`,
 `globals`, an abort `signal`, `action(name, ...values)`, `navigate(to)`, and
-`error(error)`. Examples on a [docs page](docs-pages.md#examples) get the same
+`error(error)`. Examples in a page's [docs](docs-pages.md#examples) get the same
 context, with empty `inputs`, `fixtures`, and `globals`.
 
 - `setup(context)` runs before the source mounts and may return a cleanup
@@ -299,7 +300,7 @@ node ~/.vscode/extensions/canonic.canonic-workbench-<version>/preview/cli.cjs ch
 
 ## Portable exports
 
-**Download design-system ZIP** includes compiled previews in a `browser/`
+**Export…** › **Source package (ZIP)** includes compiled previews in a `browser/`
 folder, alongside their editable sources. See
 [Design-system export](design-system-export.md). Serve the extracted folder
 with any static HTTP server and open `browser/index.html`. The `build` command

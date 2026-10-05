@@ -21,7 +21,7 @@
       <div class="wb-export-progress-card">
         <span class="wb-export-progress-icon" data-icon="archive"></span>
         <div class="wb-export-progress-copy">
-          <strong>Preparing design-system export</strong>
+          <strong>Preparing export</strong>
           <span id="exportProgressText">Finding reference views…</span>
         </div>
         <progress id="exportProgressBar" value="0" max="1"></progress>
@@ -119,8 +119,8 @@
                 aria-label="Configure pages"></button>
 
         <button class="wb-action wb-in-menu" type="button" id="exportSpace" hidden
-                data-icon="archive" title="Download design-system ZIP"
-                aria-label="Download design-system ZIP"></button>
+                data-icon="archive" title="Export…"
+                aria-label="Export…"></button>
       </div>
     </header>
 
@@ -326,10 +326,12 @@
   <script src="describe.js"></script>
   <script src="config-editor.js"></script>
   <script src="zoom.js"></script>
+  <wb-export-dialog id="exportDialog"></wb-export-dialog>
   <script type="module" src="src/components/canvas-bootstrap.ts"></script>
   <script src="preview-sessions.js"></script>
-  <!-- Sizes load before the shell, which waits for them; see workbench.js whenSizes. -->
+  <!-- Sizes and docs lenses load before the shell, which waits for them; see workbench.js whenRules. -->
   <script type="module" src="src/sizes/browser/bootstrap.ts"></script>
+  <script type="module" src="src/modules/docs/canvas/bootstrap.ts"></script>
   <script src="workbench.js"></script>
   <script src="capture-sync.js"></script>
   <script src="dom-mirror.js"></script>
@@ -339,8 +341,6 @@
   <script src="agent-context.js"></script>
   <script src="top-bar.js"></script>
   <script src="preview-controls.js"></script>
-  <!-- Docs pages: their canvas geometry, served from src/ with types stripped. -->
-  <script type="module" src="src/docs/canvas/bootstrap.ts"></script>
   <script type="module" src="src/canvas/legacy-runtime.ts"></script>
 </body>
 </html>

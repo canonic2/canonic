@@ -1,5 +1,20 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+
+// Both preview frames and docs example stages use this native host contract.
+export async function mountNative(canvas, Component, context, environment) {
+  const hadClass = canvas.classList.contains('wb-react-native-root');
+  canvas.classList.add('wb-react-native-root');
+  const restore = () => { if (!hadClass) canvas.classList.remove('wb-react-native-root'); };
+  try {
+    const unmount = await mount(canvas, Component, context, environment);
+    return () => { try { unmount(); } finally { restore(); } };
+  } catch (error) {
+    restore();
+    throw error;
+  }
+}
+
 export async function mount(canvas, Component, context, environment) {
   let tree = React.createElement(Component, context.inputs);
   if (environment?.wrap) tree = environment.wrap(tree, context);

@@ -182,6 +182,97 @@ test('bundles React and Vue SFCs with scoped styles using project framework vers
   }
 });
 
+test('React Native Web fills preview frames and docs stages without project styles', {
+  timeout: 60000, skip: require('./electron-runtime').unavailable() || false,
+}, async t => {
+  const root = fixture(t, {
+    'native.workbench.ts': definition('react-native-web', './Screen.tsx'),
+    'web.workbench.ts': definition('react', './Web.tsx'),
+    'Screen.tsx': `import { View, Text } from 'react-native';
+      export default function Screen() { return <View testID="screen" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Text>Acme modal</Text></View>; }`,
+    'Web.tsx': 'export default function Web() { return <div data-testid="screen">Acme web</div>; }',
+    'examples.ts': 'export { default as screen } from "./Screen.tsx";',
+    'web-examples.ts': 'export { default as screen } from "./Web.tsx";',
+  });
+  const compiler = new Compiler(root);
+  const routes = new Map();
+  for (const name of ['native', 'web']) {
+    const built = await compiler.compile(name + '.workbench.ts', false);
+    for (const [file, contents] of built.outputs) routes.set('/' + name + '/' + file, contents);
+    const docs = await compiler.compileDocs({ adapter: name === 'native' ? 'react-native-web' : 'react', examples: name === 'native' ? 'examples.ts' : 'web-examples.ts' }, false);
+    for (const [file, contents] of docs.outputs) routes.set('/' + name + '-docs/' + file, contents);
+    routes.set('/' + name + '-docs/index.html', Buffer.from(`<link rel="stylesheet" href="./examples.css">
+      <style>.stage { min-height:48px; padding:32px; } .sized { height:200px; }</style>
+      <div class="stage sized"></div><div class="stage intrinsic"></div>
+      <script type="module">import { adapter, examples, environment } from './examples.js';
+      window.stops = []; for (const stage of document.querySelectorAll('.stage')) {
+        window.stops.push(await adapter.mount(stage, examples.screen, { inputs:{}, error:console.error }, environment));
+      } window.ready = true;</script>`));
+  }
+  const http = require('node:http');
+  const listener = http.createServer((req, res) => {
+    const contents = routes.get(req.url);
+    if (!contents) { res.writeHead(404); res.end(); return; }
+    res.setHeader('Content-Type', req.url.endsWith('.js') ? 'text/javascript' : req.url.endsWith('.css') ? 'text/css' : 'text/html');
+    res.end(contents);
+  });
+  await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => listener.close(resolve)));
+  const base = 'http://127.0.0.1:' + listener.address().port;
+  const runner = path.join(root, 'check.cjs');
+  fs.writeFileSync(runner, `const { app, BrowserWindow } = require('electron');
+    const assert = require('node:assert/strict');
+    app.whenReady().then(async () => {
+      const win = new BrowserWindow({ show:false, width:393, height:852, useContentSize:true });
+      const evaluate = code => win.webContents.executeJavaScript(code);
+      const load = async path => {
+        await win.loadURL(${JSON.stringify(base)} + path);
+        await evaluate(\`new Promise((resolve, reject) => { const start=Date.now(); const poll=()=> {
+          if (window.ready || document.querySelector('[data-testid="screen"]')) resolve();
+          else if(Date.now()-start>10000) reject(new Error('Mount timed out')); else setTimeout(poll,20);
+        }; poll(); })\`);
+      };
+      await load('/native/index.html');
+      for (const [width,height] of [[393,852],[800,600],[320,480]]) {
+        win.setContentSize(width,height);
+        await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+        const box = await evaluate(\`(() => { const root=document.querySelector('[data-testid="screen"]');
+          const r=root.getBoundingClientRect(), text=root.firstElementChild.getBoundingClientRect();
+          return {height:r.height,width:r.width,viewport:innerHeight,viewportWidth:innerWidth,
+            centered:Math.abs(text.top+text.height/2-innerHeight/2)<1}; })()\`);
+        assert.equal(box.height,box.viewport); assert.equal(box.width,box.viewportWidth); assert.ok(box.centered);
+      }
+      await evaluate(\`(() => { const style=document.createElement('style'); style.textContent='#workbench-preview { display:block; }'; document.head.append(style); })()\`);
+      assert.equal(await evaluate('getComputedStyle(document.querySelector("#workbench-preview")).display'), 'block');
+      await load('/web/index.html');
+      assert.equal(await evaluate('getComputedStyle(document.querySelector("#workbench-preview")).display'), 'block');
+      assert.ok(await evaluate('document.querySelector("[data-testid=screen]").getBoundingClientRect().height < innerHeight'));
+      await load('/native-docs/index.html');
+      assert.equal(await evaluate('document.querySelector(".sized [data-testid=screen]").getBoundingClientRect().height'),200);
+      assert.equal(await evaluate('getComputedStyle(document.querySelector(".sized")).paddingTop'),'32px');
+      assert.ok(await evaluate('document.querySelector(".intrinsic").getBoundingClientRect().height < innerHeight'));
+      await evaluate('window.stops.forEach(stop => stop())');
+      assert.equal(await evaluate('document.querySelectorAll(".wb-react-native-root").length'),0);
+      await load('/web-docs/index.html');
+      assert.equal(await evaluate('getComputedStyle(document.querySelector(".stage")).display'),'block');
+      win.destroy(); app.exit(0);
+    }).catch(error => { console.error(error); app.exit(1); });`);
+  // Use a test-owned copy of the packaged app so its entry can run assertions.
+  const binary = await require('./electron-runtime').prepare(path.join(root, 'runtime'));
+  const appMain = process.platform === 'darwin'
+    ? path.resolve(path.dirname(binary), '../Resources/app/main.cjs')
+    : path.join(path.dirname(binary), 'resources/app/main.cjs');
+  fs.copyFileSync(runner, appMain);
+  const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+  const child = require('node:child_process').spawn(binary, ['--user-data-dir=' + path.join(root, 'browser-profile'), runner], { env });
+  t.after(() => { if (child.exitCode === null) child.kill(); });
+  let output = '';
+  child.stdout.on('data', data => { output += data; });
+  child.stderr.on('data', data => { output += data; });
+  const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
+  assert.equal(code, 0, output);
+});
+
 test('live builds serve separate source maps and reuse artifacts across compiler restarts until source or config changes', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts'),
@@ -473,6 +564,21 @@ test('portable build includes the interactive viewer and shared controls while r
   const exported = exporter.create(root, { name: 'Acme', pages: {}, implementations: {} }, { portable: result });
   assert.ok(exported.body.includes(Buffer.from('browser/CANONIC-LICENSE.txt')));
   assert.ok(exported.body.includes(contents('CANONIC-LICENSE.txt')));
+});
+
+test('portable export compiles only selected previews and filters declared variants', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('html', './button.ts'),
+    'other.workbench.ts': definition('html', './other.ts').replace('components/button', 'components/other'),
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Selected"; }',
+    'other.ts': 'export default function(canvas) { canvas.textContent = "Unselected"; }',
+  });
+  const result = await portable.create(new Compiler(root), { selection: { pages: ['button.workbench.ts'], states: ['disabled'], sizes: ['mobile'] } });
+  assert.deepEqual(result.previews.map(p => p.file), ['button.workbench.ts']);
+  assert.deepEqual(result.previews[0].states.map(s => s.id), ['disabled']);
+  assert.deepEqual(result.previews[0].sizes.map(s => s.key), ['mobile']);
+  const catalog = JSON.parse(Buffer.from(result.files.find(f => f.path === 'browser/workbench.json').data, 'base64'));
+  assert.equal(catalog.previews.length, 1);
 });
 
 test('CLI builds a static viewer without starting a server and refuses to overwrite existing content', t => {

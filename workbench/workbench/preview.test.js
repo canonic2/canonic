@@ -41,6 +41,8 @@ function sizeChoice(current, supported) {
   var calls = [];
   var state = {
     current: current,
+    view: null,
+    lensRules: require('../src/modules/docs/canvas/lenses.ts'),
     index: current ? { [current]: { src: current } } : {},
     sizesOf: function () { return (supported || ['laptop', 'mobile']).map(function (key) { return { key: key }; }); },
     setSize: function (key) { calls.push(['size', key]); },
@@ -71,7 +73,8 @@ function sizeAvailability(options) {
     pinnedSize: !!options.pinned,
     appliedSize: '',
     signature: function (size) { return size.key; },
-    sizesOf: function (item) { return item.docs ? [] : sizeRules.supported(SPACE, options.page); },
+    sizesOf: function () { return sizeRules.supported(SPACE, options.page); },
+    lensRules: require('../src/modules/docs/canvas/lenses.ts'),
     sizeByKey: function (key) { return SPACE.concat((options.page && options.page.ownSizes) || []).find(function (size) { return size.key === key; }) || null; },
     setSize: function (key) { selected.push(key); state.canvas.dataset.size = key; },
     window: { wbSizes: sizeRules },
@@ -80,7 +83,7 @@ function sizeAvailability(options) {
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
   var handler = source.slice(source.indexOf('  /* What the size switcher shows for a page'), source.indexOf('  /* A size switcher change'));
   vm.runInNewContext(handler, state);
-  state.updateSizeAvailability(Object.assign({ src: 'page.html' }, options.item));
+  state.updateSizeAvailability(Object.assign({ src: 'page.html' }, options.item), options.lens || null);
   return { switcher: switcher, selected: selected, requested: state.requestedSize };
 }
 
@@ -258,12 +261,20 @@ test('a page reaches its own size by address, and the switcher lists it after th
   assert.deepEqual(result.switcher.sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable', 'popover']);
 });
 
-test('a docs page disables every size and keeps the one the canvas is on', function () {
-  var result = sizeAvailability({ current: 'mobile', requested: 'laptop', item: { docs: true } });
-  assert.deepEqual(result.switcher.supported, []);
+test('a docs lens disables every size and keeps the one the canvas is on', function () {
+  var result = sizeAvailability({ current: 'mobile', requested: 'laptop', page: { sizes: ['laptop', 'mobile'] },
+    item: { markdown: 'docs/page.md' }, lens: { key: 'web', label: 'Web', kind: 'docs' } });
+  assert.deepEqual(Array.from(result.switcher.supported), []);
   assert.equal(result.switcher.current, '');
-  assert.equal(result.switcher.reason, 'a docs page fills the canvas');
+  assert.equal(result.switcher.reason, 'docs fill the canvas');
   assert.deepEqual(result.selected, []);
+});
+
+test('the same page in its design lens gets its sizes back', function () {
+  var result = sizeAvailability({ current: 'mobile', requested: 'laptop', page: { sizes: ['laptop', 'mobile'] },
+    item: { markdown: 'docs/page.md' }, lens: null });
+  assert.deepEqual(result.switcher.supported, ['laptop', 'mobile']);
+  assert.deepEqual(result.selected, ['laptop']);
 });
 
 test('an artboard runtime keeps the size it set, whatever the page lists', function () {
@@ -324,10 +335,12 @@ function lensSwitcher(item) {
   var box = { hidden: false, innerHTML: '', children: [], appendChild: function (el) { this.children.push(el); } };
   var context = {
     window: { wbManifest: require('./manifest') },
+    lensRules: require('../src/modules/docs/canvas/lenses.ts'),
     config: {
       implementations: {
         storybook: { key: 'storybook', label: 'Storybook' },
         dev: { key: 'dev', label: 'Dev' },
+        web: { key: 'web', label: 'Web', kind: 'docs' },
       },
     },
     lensesBox: box,
@@ -353,6 +366,7 @@ test('opening on no page still tells the host it is ready', function () {
   var context = {
     index: {}, showSeq: 0, view: null, current: 'old.html', currentState: null, renderedStory: null,
     pageList: { setCurrent: noop },
+    lensRules: require('../src/modules/docs/canvas/lenses.ts'),
     cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
     cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop,
     updateSizeAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
@@ -381,6 +395,21 @@ test('the lens switcher only appears when there are two lenses to switch between
   assert.deepEqual(
     lensSwitcher({ implementationOnly: 'storybook', implementations: { storybook: { title: 'Button' }, dev: '/b' } }),
     { hidden: false, labels: ['Storybook', 'Dev'] }
+  );
+});
+
+test('docs are lenses: a page with a design lists them after it, a Markdown page lists its own', function () {
+  assert.deepEqual(
+    lensSwitcher({ src: 'a.html', markdown: 'docs/a.md', implementations: { dev: '/a', web: { examples: 'docs/a/' } } }),
+    { hidden: false, labels: ['Design', 'Dev', 'Web'] }
+  );
+  assert.deepEqual(lensSwitcher({ src: 'b.html', markdown: 'docs/b.md' }), { hidden: false, labels: ['Design', 'Docs'] },
+    'Markdown without a docs implementation has the built-in Docs lens');
+  assert.deepEqual(lensSwitcher({ src: 'docs/c.md', markdown: 'docs/c.md' }), { hidden: true, labels: [] },
+    'a Markdown page with only its own docs has nothing to switch between');
+  assert.deepEqual(
+    lensSwitcher({ src: 'docs/d.md', markdown: 'docs/d.md', implementations: { web: { examples: 'docs/d/' }, dev: '/d' } }),
+    { hidden: false, labels: ['Web', 'Dev'] }
   );
 });
 

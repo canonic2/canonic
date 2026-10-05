@@ -87,8 +87,8 @@
       ' — “:”, “!”, and “~” mark the state, the example, and the lens in the address.';
   }
 
-  /* A page written in Markdown: it uses the whole canvas, and its lenses
-     render its examples. See specs/docs-pages.md. */
+  /* A page written in Markdown: its docs are its own view, so it has no
+     design lens. See specs/docs-pages.md. */
   function isDocs(src) {
     return DOCS.test(text(src));
   }
@@ -305,15 +305,16 @@
         return;
       }
       var kind = text(spec.kind);
-      if (kind !== 'url' && kind !== 'storybook' && kind !== 'workbench' && kind !== 'examples' && kind !== 'ios-simulator' && kind !== 'window') {
-        problems.push(where + ': kind must be url, storybook, workbench, examples, ios-simulator, or window.');
+      if (kind !== 'url' && kind !== 'storybook' && kind !== 'workbench' && kind !== 'docs' && kind !== 'ios-simulator' && kind !== 'window') {
+        problems.push(where + ': kind must be url, storybook, workbench, docs, ios-simulator, or window.');
         return;
       }
       var impl = { key: key, label: text(spec.label) || labelOf(key), kind: kind, root: null };
       if (kind === 'workbench') {
         impl.root = '.';
-      } else if (kind === 'examples') {
-        /* Renders a docs page's examples with an adapter, like a preview. */
+      } else if (kind === 'docs') {
+        /* A docs lens: the page's Markdown, its examples rendered with an
+           adapter, like a preview. */
         var adapter = text(spec.adapter);
         if (!KEY.test(adapter)) {
           problems.push(where + ': needs an adapter — html, react, vue, react-native-web, or one registered in workbench.config.ts.');
@@ -334,7 +335,7 @@
           else problems.push(where + ': environment must be a path inside the project, relative to its root.');
         }
         ['base', 'url'].forEach(function (field) {
-          if (spec[field] !== undefined) problems.push(where + ': ' + field + ' doesn’t apply to examples, which Workbench compiles itself.');
+          if (spec[field] !== undefined) problems.push(where + ': ' + field + ' doesn’t apply to docs, whose examples Workbench compiles itself.');
         });
       } else if (kind === 'ios-simulator') {
         impl.device = text(spec.device) || 'booted';
@@ -378,7 +379,7 @@
       }
 
       if (spec.start !== undefined) {
-        if (kind === 'ios-simulator' || kind === 'window' || kind === 'workbench' || kind === 'examples') {
+        if (kind === 'ios-simulator' || kind === 'window' || kind === 'workbench' || kind === 'docs') {
           problems.push(where + ': start is available for URL and Storybook implementations.');
         } else {
           impl.start = startup(spec.start, where, problems);
@@ -387,8 +388,8 @@
 
       var root = text(spec.root);
       if (root) {
-        if ((kind === 'workbench' || kind === 'examples') && root !== '.') {
-          problems.push(where + ': ' + (kind === 'workbench' ? 'Workbench previews' : 'Examples') + ' use this project root.');
+        if ((kind === 'workbench' || kind === 'docs') && root !== '.') {
+          problems.push(where + ': ' + (kind === 'workbench' ? 'Workbench previews' : 'Docs examples') + ' use this project root.');
           return;
         }
         if (SCHEME.test(root)) problems.push(where + ': root must be a folder path, not a URL.');
@@ -495,21 +496,16 @@
         return;
       }
 
-      /* A docs page's lenses render its examples, and only a docs page has
-         examples to render. */
-      var docs = isDocs(item && item.src);
-      if (impl.kind === 'examples' || docs) {
-        if (!docs) {
-          problems.push(where + ': implementation “' + key + '” renders examples, which only docs pages (a .md src) have.');
-          return;
-        }
-        if (impl.kind !== 'examples') {
-          problems.push(where + ': docs pages take examples lenses; “' + key + '” is a ' + impl.kind + ' implementation.');
+      /* A docs lens renders the page's Markdown, so only a page with
+         Markdown has one. Call after pageMarkdown. */
+      if (impl.kind === 'docs') {
+        if (!item || !item.markdown) {
+          problems.push(where + ': docs lens “' + key + '” needs the page’s Markdown — a .md src, or docs: with a .md file.');
           return;
         }
         var source = projectPath(value);
         if (!source) {
-          problems.push(where + ': examples lens “' + key + '” needs an example folder (ending in /) or file, relative to the project root.');
+          problems.push(where + ': docs lens “' + key + '” needs an example folder (ending in /) or file, relative to the project root.');
           return;
         }
         out[key] = { examples: source };
@@ -604,25 +600,48 @@
     return count ? out : undefined;
   }
 
-  /* What only a docs page has: it is marked, takes the lens it opens with,
-     and has no artboard sizes. Call after pageLenses. */
-  function docsPageEntry(raw, item, where, problems) {
-    var lens = text(raw && raw.lens);
-    if (!isDocs(item.src)) {
-      if (lens) problems.push(where + ': lens is only for docs pages (a .md src).');
+  /* The page's Markdown, which its docs lenses render: its src for a
+     Markdown page, or `docs` for any other. Call before pageLenses. */
+  function pageMarkdown(raw, item, where, problems) {
+    var given = raw && raw.docs !== undefined && raw.docs !== null && raw.docs !== '';
+    if (isDocs(item.src)) {
+      item.markdown = item.src;
+      if (given) problems.push(where + ': docs doesn’t apply to a Markdown page, which is its own docs.');
       return;
     }
-    item.docs = true;
-    if (raw && raw.sizes !== undefined && raw.sizes !== null && raw.sizes !== '') {
-      problems.push(where + ': sizes don’t apply to a docs page, which uses the whole canvas.');
+    if (!given) return;
+    var file = projectPath(raw.docs);
+    if (!file || !isDocs(file) || srcProblem(file)) {
+      problems.push(where + ': docs must be a .md file inside the project, relative to its root.');
+      return;
     }
-    var keys = Object.keys(item.implementations || {});
-    if (lens && keys.indexOf(lens) === -1) {
-      problems.push(where + ': lens “' + lens + '” isn’t one of this page’s lenses' + (keys.length ? ' (' + keys.join(', ') + ').' : '.'));
+    item.markdown = file;
+  }
+
+  /* What only a Markdown page has: the docs lens it opens with, and no
+     artboard sizes. A page with Markdown and no docs lens of its own gets
+     the built-in Docs lens, keyed `docs`, so no other lens may take that
+     key. Call after pageLenses. */
+  function docsPageEntry(raw, item, impls, where, problems) {
+    var lens = text(raw && raw.lens);
+    var mapped = Object.keys(item.implementations || {});
+    var docsKeys = mapped.filter(function (key) { return impls[key] && impls[key].kind === 'docs'; });
+    if (item.markdown && !docsKeys.length && mapped.indexOf('docs') !== -1) {
+      problems.push(where + ': “docs” names this page’s built-in Docs lens; give implementation “docs” another name.');
+    }
+    if (!isDocs(item.src)) {
+      if (lens) problems.push(where + ': lens is only for Markdown pages (a .md src).');
+      return;
+    }
+    if (raw && raw.sizes !== undefined && raw.sizes !== null && raw.sizes !== '') {
+      problems.push(where + ': sizes don’t apply to a Markdown page, which uses the whole canvas.');
+    }
+    if (lens && docsKeys.indexOf(lens) === -1) {
+      problems.push(where + ': lens “' + lens + '” isn’t one of this page’s docs lenses' + (docsKeys.length ? ' (' + docsKeys.join(', ') + ').' : '.'));
     } else if (lens) {
       item.lens = lens;
     }
-    if (!item.lens && keys.length) item.lens = keys[0];
+    if (!item.lens && docsKeys.length) item.lens = docsKeys[0];
   }
 
   /* Where a page's implementation code lives, by implementation. Paths are
@@ -759,6 +778,7 @@
     pageLensLabel: pageLensLabel,
     authoredLensLabel: authoredLensLabel,
     pageLenses: pageLenses,
+    pageMarkdown: pageMarkdown,
     docsPageEntry: docsPageEntry,
     isDocs: isDocs,
     srcProblem: srcProblem,

@@ -70,7 +70,7 @@ implementations:
     kind: url
     base: https://staging.example.com
   web:
-    kind: examples
+    kind: docs
     label: Web
     adapter: react
     styles:
@@ -111,9 +111,11 @@ collections:
         sizes:
           - fit
           - resizable
+        docs: design/docs/button.md
         implementations:
           preview: components/button
           storybook: Components/Button
+          web: packages/ui/src/button/examples/
         code:
           storybook: src/button
       - label: Card
@@ -131,7 +133,7 @@ collections:
 | `icon` | string | no | The space's icon in the switcher: a [Lucide](https://lucide.dev/icons/) icon name such as `rocket`, or a project-relative `.svg`, `.png`, `.jpg`, `.webp`, or `.gif` file of at most 256 KB, such as `brand/logo.svg`. Defaults to the first letter of `name`. |
 | `collections` | list of [collections](#collections) | no, unless `previews: false` and no [catalog](#catalogs) | The sidebar's collections, in order. |
 | `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
-| `implementations` | map of name to [implementation](#implementations) | no | Where pages also exist as running code, and what renders docs pages' examples. |
+| `implementations` | map of name to [implementation](#implementations) | no | Where pages also exist as running code, and what renders the examples in pages' docs. |
 | `spaces` | map of id to [space](#spaces) | no | Several spaces in this one file. Without it, the file is one space. |
 
 With `previews: false`, no catalog, and no usable collection, the config fails
@@ -144,7 +146,7 @@ Workbench discovers [TypeScript previews](workbench-previews.md) in
 `**/*.workbench.ts` and `**/*.workbench.tsx` files without any configuration.
 Each preview becomes a page, in the collection named by the first segment of
 its title, or in **Previews** when the title has no `/`. The same files can
-define [docs pages](docs-pages.md#declare-a-docs-page-in-a-definition), which are
+define [Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition), which are
 discovered the same way. Previews run project code, so in VS Code they need a
 trusted workspace.
 
@@ -216,7 +218,7 @@ collections:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | yes | The collection's label. [Previews](#previews), discovered [docs pages](docs-pages.md#declare-a-docs-page-in-a-definition), and [catalog](#catalogs) pages that belong in a collection with the same name are added to it. |
+| `name` | string | yes | The collection's label. [Previews](#previews), discovered [Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition), and [catalog](#catalogs) pages that belong in a collection with the same name are added to it. |
 | `icon` | Lucide icon name | no | Shown on the collection and on its pages that don't set their own. Defaults to `file-text`. |
 | `items` | list of [pages](#pages) and [groups](#groups) | unless `icon` is set | An icon-only collection styles previews and catalogs imported into the same collection. Collections that remain empty after imports are hidden. An empty collection without an icon is dropped and reported. |
 
@@ -272,27 +274,29 @@ items:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `label` | string | yes | The page's name in the sidebar, in screenshots, and in handoffs. |
-| `lensLabel` | nonempty string | no | Label of this page's authored lens. Defaults to **Design** for HTML, or `previews.lensLabel` then **Workbench** for a discovered TypeScript preview. Renames the existing lens without changing its identity. Docs pages use implementation `label` instead. |
-| `src` | path | yes | The HTML file, [preview definition](#previews), or Markdown file of a [docs page](docs-pages.md), relative to the project root. |
+| `lensLabel` | nonempty string | no | Label of this page's authored lens. Defaults to **Design** for HTML, or `previews.lensLabel` then **Workbench** for a discovered TypeScript preview. Renames the existing lens without changing its identity. Docs lenses use implementation `label` instead. A Markdown page has no authored lens; `lensLabel` on one is reported. |
+| `src` | path | yes | The HTML file, [preview definition](#previews), or Markdown file of a [Markdown page](docs-pages.md#a-markdown-page), relative to the project root. |
+| `docs` | path | no | The page's [docs](docs-pages.md): a `.md` file relative to the project root. Gives the page its docs lenses. Reported on a Markdown page, which is its own docs. |
 | `icon` | Lucide icon name | no | Overrides the collection's icon for this page. |
 | `states` | list of [states](#states) | no | Variations of the page. Shown only when there are two or more. |
-| `sizes` | list of [sizes](#sizes) | no | Which artboard sizes the page supports. Defaults to all four. A docs page has no artboard; `sizes` on one is reported and ignored. |
-| `implementations` | map | no | [Where this page is in each implementation](#a-pages-implementations). For a docs page, its lenses: each `examples` implementation and its example source. |
-| `lens` | implementation name | no | A docs page only: the lens it opens with, one of its `implementations`. Defaults to its first. On any other page, it is reported. |
+| `sizes` | list of [sizes](#sizes) | no | Which artboard sizes the page supports. Defaults to all four. A Markdown page has no artboard; `sizes` on one is reported and ignored. In a docs lens, the docs fill the canvas whatever the sizes. |
+| `implementations` | map | no | [Where this page is in each implementation](#a-pages-implementations). For a page with docs, also its docs lenses: each `docs` implementation and its example source. |
+| `lens` | implementation name | no | A Markdown page only: the docs lens it opens with, one of its `docs` implementations. Defaults to its first. On any other page, it is reported. |
 | `code` | map | no | [Where this page's code lives](#code-pointers), per implementation. |
 
 `src` rules:
 
 - It is relative to the project root. It can't start with `/` or contain `..`.
-- It can't contain `:`, `!`, or `~`, which mark the state, a docs page's
-  example, and the lens in the [address](canvas.md#links-and-the-address).
+- It can't contain `:`, `!`, or `~`, which mark the state, an
+  example in the docs, and the lens in the [address](canvas.md#links-and-the-address).
 - A page without both `label` and `src` is dropped and reported, and the rest
   of the sidebar still builds.
 
 `src` usually points at an HTML file, but any file the server can serve works,
 including a page with a query string (`preview/index.html?component=button`).
-A `src` ending in `.md` is a [docs page](docs-pages.md): Markdown with live
-examples, filling the canvas instead of an artboard.
+A `src` ending in `.md` is a [Markdown page](docs-pages.md#a-markdown-page):
+docs with live examples and no design, filling the canvas instead of an
+artboard. Any other page can have docs too, with `docs`.
 
 ## States
 
@@ -314,8 +318,9 @@ states:
 - A page with fewer than two states shows no states in the page list.
 - Declaring a state only adds it to the sidebar. The page has to answer to the
   id; see [Pages and states](pages-and-states.md#states).
-- A [docs page](docs-pages.md#states) can declare states too. Every example
-  receives the state, and the page list doesn't list them.
+- In a [docs lens](docs-pages.md#states), every example receives the page's
+  state. A Markdown page can declare states too, and the page list doesn't
+  list them.
 
 ## Sizes
 
@@ -358,16 +363,16 @@ implementations:
 
 | Key | Kinds | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | all | yes | `workbench`, `url`, `storybook`, `examples`, `ios-simulator`, or `window`. |
+| `kind` | all | yes | `workbench`, `url`, `storybook`, `docs`, `ios-simulator`, or `window`. |
 | `label` | all | no | The lens's display label, independent of kind: for example **Live**, **Prod**, or **Design**. Defaults to the name in sentence case. Changing it preserves the implementation key and addresses. |
 | `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`. Page paths are appended to it. A trailing slash is removed. |
 | `url` | `storybook` | yes | Storybook's origin, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). |
 | `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
-| `adapter` | `examples` | yes | What renders a docs page's examples: `html`, `react`, `vue`, `astro`, `react-native-web`, or an adapter registered in `workbench.config.ts`. |
-| `styles` | `examples` | no | Stylesheets loaded with the examples, relative to the project root. |
-| `environment` | `examples` | no | An [environment](preview-data.md#environments) around the examples, relative to the project root. |
+| `adapter` | `docs` | yes | What renders the examples in a page's docs: `html`, `react`, `vue`, `astro`, `react-native-web`, or an adapter registered in `workbench.config.ts`. |
+| `styles` | `docs` | no | Stylesheets loaded with the examples, relative to the project root. |
+| `environment` | `docs` | no | An [environment](preview-data.md#environments) around the examples, relative to the project root. |
 | `app` | `window` | yes | The macOS application whose window is streamed: its bundle ID, or part of it, such as `com.example.app`. Letters, digits, dots, and hyphens only. |
-| `root` | all but `workbench` and `examples` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
+| `root` | all but `workbench` and `docs` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
 | `catalog` | `storybook`, `ios-simulator` | no | Import pages automatically. See [Catalogs](#catalogs). |
 | `start` | `url`, `storybook` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
@@ -377,14 +382,16 @@ root is always the project root, and any other `root` is reported and the
 implementation dropped. A `catalog` or `start` on a kind that doesn't support
 it is reported and ignored.
 
-An `examples` implementation renders the examples of [docs pages](docs-pages.md).
+A `docs` implementation renders the examples in pages' [docs](docs-pages.md).
 It takes no address or `start`, and its root is the project root. It applies
-only to pages whose `src` is a Markdown file, and a docs page takes only
-`examples` implementations. Each one is a lens of the docs pages that map it,
-and switching lenses switches what renders the examples; see
-[Lenses](docs-pages.md#lenses).
+only to pages with Markdown: a Markdown page, or a page with `docs`. Each one
+is a docs lens of the pages that map it: the Markdown is the same in every
+docs lens, and the lens says what renders the examples; see
+[Lenses](docs-pages.md#lenses). A page with Markdown that maps no `docs`
+implementation gets the built-in **Docs** lens, keyed `docs`, so no other
+implementation it maps can be named `docs`.
 
-Guides: [TypeScript previews](workbench-previews.md), [Docs pages](docs-pages.md),
+Guides: [TypeScript previews](workbench-previews.md), [Docs](docs-pages.md),
 [URL implementations](lenses.md), [Storybook](storybook.md),
 [iOS Simulator](ios-simulator.md), [App windows](windows.md).
 
@@ -393,7 +400,7 @@ Guides: [TypeScript previews](workbench-previews.md), [Docs pages](docs-pages.md
 A page lists the implementations it exists in, and where. The value depends
 on the implementation's kind.
 
-**`examples`**: the docs page's example source, relative to the project root:
+**`docs`**: the docs lens's example source, relative to the project root:
 a folder ending in `/`, one example per file, or a file, one example per named
 export. See [Examples](docs-pages.md#examples).
 
@@ -672,7 +679,7 @@ everything else:
 - `GET /_workbench/config` on the workbench server lists, under `problems`,
   problems with implementations, previews, sizes, pages' implementation
   mappings, and `code`, plus catalogs and previews that couldn't load, and
-  [docs page problems](docs-pages.md#requirements-and-problems). It sits
+  [docs problems](docs-pages.md#requirements-and-problems). It sits
   alongside the config as your machine resolves it. A page dropped for a bad
   `src`, label, state id, or group is left out of it without a problem, so
   check the console for those. See

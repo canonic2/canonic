@@ -57,7 +57,7 @@ port. See [Several spaces](spaces.md).
 | **Workbench: Open Canvas** | Opens the canvas in an editor tab. |
 | **Workbench: Open Canvas in Browser** | Opens the same canvas in your default browser. |
 | **Workbench: Copy Canvas URL** | Copies the canvas address, for a bookmark, a script, or an agent. |
-| **Workbench: Refresh Pages** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) and [`defineDocs`](docs-pages.md#declare-a-docs-page-in-a-definition) docs pages again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a `*.workbench.ts` file. |
+| **Workbench: Refresh Pages** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) and [`defineDocs`](docs-pages.md#declare-a-markdown-page-in-a-definition) Markdown pages again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a `*.workbench.ts` file. |
 | **Workbench: Switch Space…** | Lists the [spaces](spaces.md) and shows the one you pick. |
 | **Workbench: Add Space…** | Adds a folder with a `workbench.yaml` to the spaces and switches to it. |
 | **Workbench: Show Log** | Opens the Workbench output log. |
@@ -106,7 +106,7 @@ a separate native helper and need Screen Recording permission.
 ## The preview worker
 
 When the space has [TypeScript previews](workbench-previews.md) or
-[docs pages](docs-pages.md) with examples, the server starts a separate worker
+[docs](docs-pages.md) with examples, the server starts a separate worker
 process that compiles them and runs their project code: definitions, examples,
 `workbench.config.ts`, compiler plugins, and Astro rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
 separate Node installation.
@@ -115,7 +115,7 @@ separate Node installation.
 - If it stops, the next preview request starts a new one.
 - Changing the `previews` key in `workbench.yaml` restarts it with the new
   settings. With `previews: false`, nothing is compiled and no worker runs:
-  docs pages show their Markdown, and each example panel says why its example
+  docs show their Markdown, and each example panel says why its example
   is missing.
 
 ## Logs
@@ -223,7 +223,7 @@ What works where:
 | Pages, states, sizes, zoom | Yes | Yes |
 | Lenses, including Simulator and window streams | Yes | Yes |
 | TypeScript previews | Yes | Yes |
-| Docs pages and their examples | Yes | Yes |
+| Docs and their examples | Yes | Yes |
 | Annotations and camera | Yes | Yes |
 | Handoff | Yes | No |
 | Open source files in the editor | Yes | No |

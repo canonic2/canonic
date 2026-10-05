@@ -94,11 +94,11 @@ function prompt(payload) {
      address. Then where the code is, whichever lens was up — a design with
      a known implementation is the point of the bridge. */
   if (payload.story) out.push('- Story: ' + payload.story.name + ' — `' + payload.story.id + '`');
-  /* A docs page: its Markdown, the lens rendering its examples, and the
-     examples the screenshot shows with where their code is. */
+  /* Seen through a docs lens: the page's Markdown, the lens rendering its
+     examples, and the examples the screenshot shows with where their code is. */
   var docs = payload.docs;
   if (docs) {
-    out.push('- Docs page: `' + (docs.markdown || payload.src) + '`' + (docs.lensLabel ? ', examples rendered by ' + docs.lensLabel : ''));
+    out.push('- Docs: `' + (docs.markdown || payload.src) + '`' + (docs.lensLabel ? ', examples rendered by ' + docs.lensLabel : ''));
     var shown = (docs.examples || []).filter(function (example) { return example.id; });
     if (shown.length) {
       out.push('- Examples in view: ' + shown.map(function (example) {
@@ -113,13 +113,13 @@ function prompt(payload) {
       return '`' + file + '`';
     }).join(', '));
   }
-  if (docs) out.push('- View: the docs page fills the canvas; the part in view is ' + payload.frame.w + ' × ' + payload.frame.h + ' CSS px');
+  if (docs) out.push('- View: the docs fill the canvas; the part in view is ' + payload.frame.w + ' × ' + payload.frame.h + ' CSS px');
   else out.push('- Size: ' + payload.size + ' (artboard is ' + payload.frame.w + ' × ' + payload.frame.h + ' CSS px)');
   out.push('- Screenshot: `' + payload.file + '`');
   out.push('');
 
   if (docs) {
-    out.push('The screenshot is the part of the docs page in view, with its examples rendered live.');
+    out.push('The screenshot is the part of the docs in view, with their examples rendered live.');
     out.push('');
   } else if (payload.lens) {
     out.push(
@@ -132,7 +132,7 @@ function prompt(payload) {
   if (!annotations.length) {
     out.push(
       docs
-        ? 'Nothing is annotated — the screenshot is the docs page as it stands.'
+        ? 'Nothing is annotated — the screenshot is the docs as they stand.'
         : payload.lens
         ? 'Nothing is annotated — the screenshot is the implementation as it stands.'
         : 'Nothing is annotated — the screenshot is the design as it stands.'

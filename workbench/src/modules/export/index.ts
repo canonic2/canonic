@@ -3,6 +3,9 @@
  */
 export { create } from './source.ts';
 export { build } from './build.ts';
+export { readRequest, selectView, requestKey } from './request.ts';
+export { pdfOutput, imagesOutput, browserOutput } from './output.ts';
+export { selectCaptures } from './selection.ts';
 export type { PortableBuilder } from './build.ts';
 import path from 'node:path';
 import { parseReferences } from './references.ts';

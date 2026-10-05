@@ -318,14 +318,14 @@ design system.
 
 ## Document components with a docs page
 
-A [docs page](docs-pages.md) shows a component's examples in Markdown, each
-in its own panel with its code. Render the examples with React through an
-`examples` lens whose `adapter` is `react`:
+A page's [docs](docs-pages.md) show a component's examples in Markdown, each
+in its own panel with its code. Render the examples with React through a
+`docs` lens whose `adapter` is `react`:
 
 ```yaml
 implementations:
   web:
-    kind: examples
+    kind: docs
     label: Web
     adapter: react
     styles:
@@ -369,9 +369,11 @@ wrap each example with `wrap`, so the providers your previews use apply to the
 examples too; see
 [Examples on docs pages](preview-data.md#examples-on-docs-pages). To render
 the same Markdown with React Native Web, add a second lens with
-`adapter: react-native-web`. A `*.workbench.ts` file can declare the page and
-its lenses with `defineDocs` instead; see
-[Docs pages](docs-pages.md#declare-a-docs-page-in-a-definition).
+`adapter: react-native-web`. To read the docs beside a component's design or
+preview, give that page `docs: docs/button.md` in place of a Markdown `src`.
+A `*.workbench.ts` file can declare a Markdown page and its lenses with
+`defineDocs` instead; see
+[Docs](docs-pages.md#declare-a-markdown-page-in-a-definition).
 
 ## What isn't supported
 

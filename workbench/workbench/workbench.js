@@ -128,7 +128,7 @@
         exportProgressBar.value = status.completed || 0;
         exportProgressText.textContent = status.total
           ? 'Captured ' + status.completed + ' of ' + status.total
-          : 'Packaging source files…';
+          : 'Preparing download…';
       }
       if (status.status === 'failed') throw new Error(status.error || 'Export failed.');
       if (status.status === 'complete') return status;
@@ -137,7 +137,7 @@
   }
 
   function downloadExport(job) {
-    exportProgressText.textContent = job.parts && job.parts.length > 1 ? 'Downloading ZIP bundle…' : 'Downloading ZIP…';
+    exportProgressText.textContent = 'Downloading export…';
     return fetch('/_workbench/export?job=' + encodeURIComponent(job.id) + '&download=1')
       .then(function (response) {
         if (!response.ok) return exportJson(response).then(function () { throw new Error('Export failed.'); });
@@ -162,6 +162,14 @@
   }
 
   exportSpace.addEventListener('click', function () {
+    var dialog = document.getElementById('exportDialog');
+    dialog.pages = Object.keys(resolved.pages).map(function (id) { return { id: id, label: resolved.pages[id].label }; });
+    dialog.collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
+    dialog.current = current ? { page: current, state: currentState, lens: view && view.lens ? view.lens.key : null,
+      size: canvas.dataset.size, width: Math.round(frame.offsetWidth) || 1440, height: Math.round(frame.offsetHeight) || 900 } : undefined;
+    dialog.show();
+  });
+  document.getElementById('exportDialog').addEventListener('wb-export-request', function (event) {
     if (exportSpace.disabled) return;
     exportSpace.disabled = true;
     exportSpace.setAttribute('aria-busy', 'true');
@@ -170,15 +178,16 @@
     exportProgressBar.value = 0;
     exportProgressText.textContent = 'Finding reference views…';
     window.dispatchEvent(new CustomEvent('wb-export-start'));
-    say('Preparing design-system export…');
+    say('Preparing export…');
     var finished = null;
     var startedAt = Date.now();
-    fetch('/_workbench/export', { method: 'POST' })
+    fetch('/_workbench/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event.detail) })
       .then(exportJson)
       .then(function (job) { return pollExport(job, startedAt); })
       .then(function (status) { finished = status; exportProgressText.textContent = 'Packaging download…'; return downloadExport(status); })
       .then(function (name) {
-        say('Downloaded ' + name + (finished && finished.warnings ? ' with ' + finished.warnings + ' export warning(s).' : '.'));
+        say('Downloaded ' + name + (finished && finished.warnings ? ' with ' + finished.warnings + ' export warning(s).' : '.') +
+          (finished && finished.warningMessages && finished.warningMessages.length ? ' ' + finished.warningMessages[0] : ''));
       })
       .catch(function (error) { say(String(error.message || error)); })
       .then(function () {
@@ -221,7 +230,8 @@
      so the hash for a page with states and the hash for one without look
      the same. A pick that names no lens keeps the one the top bar is on. */
   function writeHash(src, state, size, lens, example) {
-    var docs = !!(index[src] && index[src].docs);
+    /* A docs lens has no size, and only a docs lens has examples. */
+    var docs = lensRules.isDocsLens(lensRules.chooseLens(index[src], config.implementations, lens || lensPref));
     location.hash = window.wbAddress.write({ src: src, state: state, size: docs ? null : size || null,
       lens: lens || null, example: docs ? example || null : null });
   }
@@ -233,10 +243,9 @@
      it there again. */
   function syncHash() {
     var have = window.wbAddress.parse(location.hash);
-    var lens = view && view.lens ? view.lens.key : null;
-    var docs = !!(view && view.item && view.item.docs);
-    /* A docs page's own lens is left out, as the design lens is elsewhere. */
-    if (docs && lens && lens === defaultDocsLens(view.item)) lens = null;
+    /* A page's default lens is left out: the design, or a Markdown page's own docs lens. */
+    var lens = view ? lensRules.addressLens(view.item, config.implementations, view.lens) : null;
+    var docs = !!view && lensRules.isDocsLens(view.lens);
     var size = docs ? null : canvas.dataset.size || null;
     var example = docs ? currentExample : null;
     if (have.src === current && have.state === currentState && have.size === size && have.lens === lens &&
@@ -273,46 +282,40 @@
 
   /* ------------------------------------------------------------ lenses */
 
-  /* Which lenses a page has, in the order the config declared them. */
+  /* Which lens a page shows, and which it has, are decided by the docs
+     module (src/modules/docs/canvas/lenses.ts), loaded before the config is
+     applied: see whenRules. Docs are a lens there, so a page can be read as
+     its docs beside its design. Off a server (file://) the module can't
+     load and docs can't render, so pages have their other lenses only. */
+  var lensRules = null;
+  var NO_DOCS = {
+    pageLenses: function (item, impls) {
+      if (!item) return [];
+      return Object.keys(impls).filter(function (key) { return !!(item.implementations && item.implementations[key]) && impls[key].kind !== 'docs'; })
+        .map(function (key) { return impls[key]; });
+    },
+    chooseLens: function (item, impls, wanted) {
+      if (!item) return null;
+      if (item.implementationOnly) return impls[item.implementationOnly] || null;
+      return NO_DOCS.pageLenses(item, impls).filter(function (lens) { return lens.key === wanted; })[0] || null;
+    },
+    hasLens: function (item, impls, key) { return NO_DOCS.pageLenses(item, impls).some(function (lens) { return lens.key === key; }); },
+    hasDesignLens: function (item) { return !!item && !item.implementationOnly; },
+    addressLens: function (item, impls, lens) { return lens ? lens.key : null; },
+    docsLinkLens: function () { return null; },
+    isDocsLens: function () { return false; },
+    isMarkdownPage: function () { return false; },
+    canvasMode: function () { return 'default'; },
+  };
+
+  /* Which lenses a page has besides its design, in order. */
   function lensesOf(item) {
-    if (item && item.docs) return docsLenses(item).map(function (lens) { return lens.key; });
-    if (!item || !item.implementations) return [];
-    return Object.keys(config.implementations).filter(function (key) {
-      return !!item.implementations[key];
-    });
+    return lensRules.pageLenses(item, config.implementations);
   }
 
-  /* The lens the top bar is on, if this page has it; else the design. */
-  /* A docs page's lenses: examples implementations from workbench.yaml, or
-     the ones its defineDocs definition declares. */
-  function docsLenses(item) {
-    if (item.docsLenses) {
-      return item.docsLenses.map(function (lens) { return { key: lens.key, label: lens.label, kind: 'examples' }; });
-    }
-    return Object.keys(config.implementations).filter(function (key) {
-      return !!(item.implementations && item.implementations[key]);
-    }).map(function (key) { return config.implementations[key]; });
-  }
-
-  /* The lens the top bar is on when the page has it, else the page's own,
-     else its first: a docs page always shows one of its lenses. */
-  function defaultDocsLens(item) {
-    var lenses = docsLenses(item);
-    var own = lenses.filter(function (lens) { return lens.key === item.lens; })[0] || lenses[0];
-    return own ? own.key : null;
-  }
-
-  function docsLens(item) {
-    var lenses = docsLenses(item);
-    function find(key) { return lenses.filter(function (lens) { return lens.key === key; })[0] || null; }
-    return find(lensPref) || find(item.lens) || lenses[0] || null;
-  }
-
+  /* The lens the top bar is on, if this page has it; else the page's default. */
   function effectiveLens(item) {
-    if (item && item.docs) return docsLens(item);
-    if (item && item.implementationOnly) return config.implementations[item.implementationOnly] || null;
-    if (!lensPref || !item.implementations || !item.implementations[lensPref]) return null;
-    return config.implementations[lensPref] || null;
+    return lensRules.chooseLens(item, config.implementations, lensPref);
   }
 
   function setLensPref(key) {
@@ -327,7 +330,8 @@
   /* The address the frame loads: the design with its flags, or the page's
      path on the implementation. Stories are asked for first — see loadStory. */
   function viewUrl(item, lens, state) {
-    if (item.docs) return withFlags(item.src, state) + (lens ? '&lens=' + encodeURIComponent(lens.key) : '');
+    /* The server serves a page's Markdown as its docs, in the lens named. */
+    if (lensRules.isDocsLens(lens)) return withFlags(item.markdown, state) + '&lens=' + encodeURIComponent(lens.key);
     if (!lens) return withFlags(item.src, state);
     if (lens.kind === 'workbench') {
       var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], state), config.root);
@@ -449,17 +453,16 @@
 
   /* A switcher needs at least two lenses to switch between. A design with no
      implementation has one (itself); a page imported from a single
-     implementation, with no design, has one too. Neither shows the control. */
+     implementation, with no design, has one too. Neither shows the control.
+     A Markdown page has no design: its docs lenses come first. */
   function drawLenses(item, lens) {
     lensesBox.innerHTML = '';
-    var keys = lensesOf(item);
-    var choices = item && (item.implementationOnly || item.docs) ? keys : [null].concat(keys);
-    var docsLabels = {};
-    if (item && item.docs) docsLenses(item).forEach(function (entry) { docsLabels[entry.key] = entry; });
+    var lenses = lensesOf(item);
+    var choices = lensRules.hasDesignLens(item) ? [null].concat(lenses) : lenses;
     lensesBox.hidden = choices.length < 2;
     if (lensesBox.hidden) return;
-    choices.forEach(function (key) {
-      var impl = key ? docsLabels[key] || config.implementations[key] : null;
+    choices.forEach(function (impl) {
+      var key = impl ? impl.key : null;
       var button = document.createElement('button');
       button.className = 'wb-lens';
       button.type = 'button';
@@ -478,7 +481,7 @@
   /* Through a lens the page is served by somebody else and actions.js isn't
      in it, so the switch has nothing to switch: it shows on and stays put. */
   function setActionsAvailability(lens) {
-    if (lens && lens.kind !== 'workbench' && lens.kind !== 'examples') {
+    if (lens && lens.kind !== 'workbench' && lens.kind !== 'docs') {
       actionsToggle.disabled = true;
       actionsToggle.checked = true;
       actionsToggle.hint = 'always on here: ' + lens.label +
@@ -569,10 +572,11 @@
   }
 
   /* A design's states, or a lens that answers to them. An implementation
-     with none of its own shows the page itself and nothing to pick. */
+     with none of its own shows the page itself and nothing to pick. Every
+     example in a docs lens gets the page's state. */
   function drawStates(item, lens) {
     var states = statesOf(item);
-    var mapped = !lens || item.implementationOnly || item.docs || !!item.implementations[lens.key].states;
+    var mapped = !lens || item.implementationOnly || lensRules.isDocsLens(lens) || !!item.implementations[lens.key].states;
     if (!states || !mapped || window.wbManifest.streamed(lens)) {
       drawStateMenu(null);
       return;
@@ -670,13 +674,14 @@
     sourceControl.hidden = !info;
     if (!info) return;
     if (info.design) {
-      sourceRow(window.wbManifest.authoredLensLabel(item), item.src, true, info.design, function () {
+      sourceRow(lensRules.hasDesignLens(item) ? window.wbManifest.authoredLensLabel(item) : 'Docs', item.src, true, info.design, function () {
         openSource(item.src, null);
       });
     }
+    var lenses = lensesOf(item);
     info.code.forEach(function (entry) {
-      var impl = config.implementations[entry.implementation];
-      var label = impl ? impl.label : entry.implementation;
+      var impl = lenses.filter(function (lens) { return lens.key === entry.implementation; })[0] || config.implementations[entry.implementation];
+      var label = entry.label || (impl ? impl.label : entry.implementation);
       var title = !entry.path
         ? 'Implementation “' + entry.implementation + '” has no root, so this can’t be found'
         : entry.exists ? entry.path : 'Not on this machine: ' + entry.path;
@@ -722,8 +727,8 @@
     artboardName.textContent = [item.label, shown].filter(Boolean).join(' / ');
   }
 
-  /* The canvas mode: 'docs' for a docs page, which fills the canvas;
-     'default' for every other page, which sits on an artboard. */
+  /* The canvas mode follows the lens: 'docs' for a docs lens, whose page
+     fills the canvas; 'default' for every other lens, on an artboard. */
   function setCanvasMode(mode) {
     if (shell.dataset.canvasMode === mode) return;
     shell.dataset.canvasMode = mode;
@@ -754,12 +759,12 @@
 
   function show(src, state, example) {
     var item = index[src];
-    var docsItem = !!(item && item.docs);
+    var nextLens = item ? effectiveLens(item) : null;
+    var docsItem = lensRules.isDocsLens(nextLens);
     var nextState = docsItem ? stateOf(item, state) : null;
-    var nextLens = docsItem ? effectiveLens(item) : null;
-    /* Another example on the page already showing only scrolls it. */
+    /* Another example on the docs already showing only scrolls them. */
     if (docsItem && view && view.src === src && view.state === nextState && frameReady &&
-        (view.lens ? view.lens.key : null) === (nextLens ? nextLens.key : null)) {
+        (view.lens ? view.lens.key : null) === nextLens.key) {
       currentExample = example || null;
       scrollToExample(currentExample);
       syncHash();
@@ -770,7 +775,7 @@
     }
     currentExample = docsItem ? example || null : null;
     exampleToReveal = currentExample;
-    setCanvasMode(docsItem ? 'docs' : 'default');
+    setCanvasMode(lensRules.canvasMode(nextLens));
     var seq = ++showSeq;
     var previousView = view;
     frame.wbFrameSize = { width: frame.offsetWidth, height: frame.offsetHeight };
@@ -778,18 +783,18 @@
     cancelPendingFrame();
     renderedStory = null;
     current = item ? src : null;
-    var lens = item ? effectiveLens(item) : null;
+    var lens = nextLens;
     var story = !!lens && lens.kind === 'storybook';
     /* Under a Storybook lens the state slot carries the story; it's checked
        against the title's stories once they're in. */
     currentState = !item ? null : story ? state || null : stateOf(item, state);
-    updateSizeAvailability(item);
+    updateSizeAvailability(item, lens);
 
     /* The list marks the row and follows it into its collection, wherever the
        pick came from — its own rows, a link in the preview, or the editor.
        Through a lens that doesn't answer to the page's states, the row
        marked is the page itself. */
-    var mapped = !item || item.implementationOnly || item.docs || !lens || (!story && !!item.implementations[lens.key].states);
+    var mapped = !item || item.implementationOnly || docsItem || !lens || (!story && !!item.implementations[lens.key].states);
     var reported = mapped ? currentState : null;
     if (pageList) pageList.setCurrent(current, reported, item && item.collection);
     tellHost(current, reported, lens ? lens.key : null, story);
@@ -1276,10 +1281,17 @@
     }
 
     if (data.type === 'workbench-preview' && data.docsPage) {
-      if (e.source !== frame.contentWindow || e.origin !== location.origin || !view || !view.item.docs) return;
-      if (data.event === 'docs-navigate' && index[data.page]) {
-        if (pageList) pageList.reveal(data.page);
-        writeHash(data.page, null, null, null, data.example || null);
+      if (e.source !== frame.contentWindow || e.origin !== location.origin || !view || !lensRules.isDocsLens(view.lens)) return;
+      /* A link names the other page's Markdown; it opens that page's docs,
+         in this docs lens when it has it. */
+      var linked = data.event === 'docs-navigate' && Object.keys(index).filter(function (src) {
+        return index[src].markdown === data.page;
+      })[0];
+      if (linked) {
+        var linkLens = lensRules.docsLinkLens(index[linked], config.implementations, view.lens.key);
+        if (linkLens) setLensPref(linkLens.key);
+        if (pageList) pageList.reveal(linked);
+        writeHash(linked, null, null, linkLens ? linkLens.key : null, data.example || null);
       }
       return;
     }
@@ -1332,11 +1344,11 @@
       : sizes ? sizes.defaultSizes() : FIT_ONLY;
   }
 
-  /* The sizes a page supports: none for a docs page; otherwise the space's,
-     limited and added to by what the server resolved for the page. */
+  /* The sizes a page supports: none for a Markdown page; otherwise the
+     space's, limited and added to by what the server resolved for the page. */
   function sizesOf(item) {
     if (!item) return spaceSizes;
-    if (item.docs) return [];
+    if (lensRules.isMarkdownPage(item)) return [];
     var page = resolved && resolved.pages ? resolved.pages[item.src] : null;
     return window.wbSizes ? window.wbSizes.supported(spaceSizes, page) : spaceSizes;
   }
@@ -1396,26 +1408,27 @@
     }
   }
 
-  /* A docs page takes the canvas's width: every size stays in the size
-     switcher, off and unpressed, and the page after it gets its size back.
-     Any other page shows the size the address asked for, the one the canvas
-     is on, or the remembered one, if it supports it; else its first size. */
-  /* What the size switcher shows for a page: the space's sizes, then the
-     page's own, those it supports enabled. A docs page has none, so none is
-     pressed. */
-  function showSizes(item) {
-    var docs = !!(item && item.docs);
+  /* A docs lens takes the canvas's width: every size stays in the size
+     switcher, off and unpressed, and the lens or page after it gets its size
+     back. Any other lens shows the size the address asked for, the one the
+     canvas is on, or the remembered one, if the page supports it; else its
+     first size. */
+  /* What the size switcher shows for a page in a lens: the space's sizes,
+     then the page's own, those it supports enabled. A docs lens has none, so
+     none is pressed. */
+  function showSizes(item, lens) {
+    var docs = lensRules.isDocsLens(lens);
     var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
     sizeSwitcher.sizes = spaceSizes.concat((!docs && page && page.ownSizes) || []);
-    sizeSwitcher.supported = sizesOf(item).map(function (size) { return size.key; });
-    sizeSwitcher.setAttribute('unsupported-reason', docs ? 'a docs page fills the canvas' : 'not supported by this page');
+    sizeSwitcher.supported = docs ? [] : sizesOf(item).map(function (size) { return size.key; });
+    sizeSwitcher.setAttribute('unsupported-reason', docs ? 'docs fill the canvas' : 'not supported by this page');
     if (docs) sizeSwitcher.current = '';
   }
 
-  function updateSizeAvailability(item) {
-    var docs = !!(item && item.docs);
+  function updateSizeAvailability(item, lens) {
+    var docs = lensRules.isDocsLens(lens);
     var supported = sizesOf(item);
-    showSizes(item);
+    showSizes(item, lens);
     var asked = requestedSize;
     requestedSize = null;
     if (!item || docs || pinnedSize) return;
@@ -1434,6 +1447,7 @@
   function chooseSize(key) {
     var item = current ? index[current] : null;
     if (item && !sizesOf(item).some(function (size) { return size.key === key; })) return;
+    if (view && lensRules.isDocsLens(view.lens)) return;
     pinnedSize = false;
     setSize(key);
     if (current) syncHash();
@@ -1547,11 +1561,11 @@
 
   function openSizeDialog() {
     var item = current ? index[current] : null;
-    var docs = !!(item && item.docs);
+    var docs = lensRules.isMarkdownPage(item);
     var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
     var listed = !!item && !docs && listedInYaml(item.src);
     sizeDialog.allowPageOnly = listed;
-    sizeDialog.notice = docs ? 'A docs page has no size; the new size is added to the space.'
+    sizeDialog.notice = docs ? 'A Markdown page has no size; the new size is added to the space.'
       : page && page.preview && page.preview.sizes && !listed
         ? 'This page’s preview definition lists its sizes; add the new size’s key there to use it on this page.' : '';
     sizeDialog.open = true;
@@ -1559,7 +1573,7 @@
 
   sizeDialog.addEventListener('wb-size-add', function (e) {
     var item = current ? index[current] : null;
-    var docs = !!(item && item.docs);
+    var docs = lensRules.isMarkdownPage(item);
     var size = Object.assign({}, e.detail, { page: item && !docs && listedInYaml(item.src) ? item.src : null });
     sizeDialog.error = '';
     sizeDialog.pending = true;
@@ -1704,8 +1718,7 @@
        and one that isn't declared here means the design. No lens keeps the
        one the top bar is on. */
     var item = index[target.src];
-    var known = config.implementations[target.lens] ||
-      (item && item.docs && docsLenses(item).some(function (lens) { return lens.key === target.lens; }));
+    var known = config.implementations[target.lens] || lensRules.hasLens(item, config.implementations, target.lens);
     if (target.lens !== null) setLensPref(known ? target.lens : null);
     show(target.src, target.state, target.example);
   }
@@ -1804,7 +1817,7 @@
       loadSpaceSizes();
       /* Custom size… and Edit sizes… write through the server. */
       sizeSwitcher.allowEdit = !!resolved;
-      showSizes(current ? index[current] : null);
+      showSizes(current ? index[current] : null, view && view.lens);
       collections = window.wbManifest.mergeCollections(config.collections, (resolved && resolved.catalogCollections) || []);
       index = window.wbPageList.index(collections);
       storyCache = {};
@@ -1838,28 +1851,40 @@
     });
   }
 
-  /* The canvas decides sizes with src/sizes/, a module that loads after
-     this script; it waits for it, or for it to fail to load. */
-  function whenSizes(then) {
-    if (window.wbSizes || location.protocol === 'file:') { then(); return; }
+  /* The canvas decides sizes with src/sizes/ and lenses with
+     src/modules/docs/, modules that load after this script; it waits for
+     one, or for it to fail to load. */
+  function whenModule(present, event, script, then) {
+    if (present() || location.protocol === 'file:') { then(); return; }
     var done = false;
     function go() { if (!done) { done = true; then(); } }
-    window.addEventListener('wb-sizes-ready', go, { once: true });
-    var script = document.querySelector('script[src$="sizes/browser/bootstrap.ts"]');
-    if (script) script.addEventListener('error', go, { once: true });
+    window.addEventListener(event, go, { once: true });
+    var tag = document.querySelector('script[src$="' + script + '"]');
+    if (tag) tag.addEventListener('error', go, { once: true });
     else go();
   }
 
+  function whenRules(then) {
+    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'sizes/browser/bootstrap.ts', function () {
+      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'docs/canvas/bootstrap.ts', function () {
+        lensRules = window.wbDocsLenses || NO_DOCS;
+        then();
+      });
+    });
+  }
+
   function start(loaded) {
-    whenSizes(function () { applyConfig(loaded, true); });
+    whenRules(function () { applyConfig(loaded, true); });
   }
 
   function refreshConfig(loaded) {
-    cancelStorySwitch();
-    cancelPendingFrame();
-    sessions.clearInactive();
-    sessions.forget(frame);
-    applyConfig(loaded, false);
+    whenRules(function () {
+      cancelStorySwitch();
+      cancelPendingFrame();
+      sessions.clearInactive();
+      sessions.forget(frame);
+      applyConfig(loaded, false);
+    });
   }
 
   /* No config, no workbench — say which file and why, where the pages would
@@ -1880,7 +1905,7 @@
     read: function () {
       if (!view) return null;
       return { src: current, state: currentState, lens: view.lens ? view.lens.key : null,
-        sizes: view.item && !view.item.docs ? sizesOf(view.item) : undefined,
+        sizes: view.item && !lensRules.isDocsLens(view.lens) ? sizesOf(view.item) : undefined,
         label: artboardName.textContent || (view.item && view.item.label) || current,
         hash: location.hash, ready: !!view.lens && window.wbManifest.streamed(view.lens) ? !!(window.wbSimulator && window.wbSimulator.ready()) : (frameReady && !pendingFrame && !pendingStorySwitch),
         states: Array.from(stateMenu.querySelectorAll('button')).map(function (b, i) { return { id: String(i), label: b.textContent, current: b.getAttribute('aria-current') === 'true' }; }),

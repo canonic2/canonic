@@ -2,6 +2,7 @@
    with its dialogs, and the Actions switch. The sidebar webview bundles
    bootstrap.ts alone. */
 import { registerActionsComponents, registerSizeComponents, registerSpaceComponents } from './register.ts';
+import './export-dialog/element.ts';
 
 registerSpaceComponents();
 registerSizeComponents();

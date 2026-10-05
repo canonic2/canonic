@@ -16,6 +16,13 @@ in [capture-scripts.js](../capture-scripts.js). The user-facing description is
 
 ## Why a helper exists
 
+The helper also accepts `printExportPage` for export jobs. It settles the page,
+measures its document height, switches to screen media for visual pages or print
+media for docs, and returns PDF bytes. Visual pages use their viewport width and
+full height; docs use A4/Letter with half-inch margins. Inserted print styles and
+media emulation are restored after every request. Export owns selection, job
+progress, PDF assembly and downloading; the camera retains its image workflow.
+
 The VS Code extension host can run Node code but does not own the compositor
 pixels of a webview. The embedded webview also cannot rely on browser display
 capture to read its own view or a foreign-origin iframe. The extension ships

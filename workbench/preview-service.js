@@ -79,7 +79,7 @@ function create(root, options) {
         return answer.body;
       });
     },
-    export: function () { return launch().then(function (base) { return remote.fetchJson(base + '/export', { timeout: 300000 }); }).then(function (answer) {
+    export: function (selection) { return launch().then(function (base) { return remote.fetchJson(base + '/export' + (selection ? '?selection=' + encodeURIComponent(JSON.stringify(selection)) : ''), { timeout: 300000 }); }).then(function (answer) {
       if (answer.status !== 200) throw new Error(answer.body && answer.body.error || 'Preview export failed');
       return answer.body;
     }); },

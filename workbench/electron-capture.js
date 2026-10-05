@@ -239,7 +239,19 @@ Capture.prototype.close = function () {
   return this.closing;
 };
 
-var METHODS = ['warm', 'prepare', 'preparePage', 'capture', 'capturePage', 'captureExportPage'];
+Capture.prototype.printExportPage = function (payload) {
+  var request = { method: 'printExportPage', payload: payload, inject: this.options.inject,
+    settle: scripts.settleScript(), settleFast: scripts.settleScript({ quiet: false, imageTimeout: 250 }),
+    switchStory: scripts.storybookSwitchScript(payload.url) };
+  this.desired = request;
+  ++this.generation;
+  var self = this;
+  return this.serial(function () { return self.send(request); }).then(function (result) {
+    return { pdf: Buffer.from(result.data, 'base64'), width: result.width, height: result.height };
+  });
+};
+
+var METHODS = ['warm', 'prepare', 'preparePage', 'capture', 'capturePage', 'captureExportPage', 'printExportPage'];
 
 /* The service the server uses. A helper that exits mid-request gets that
    request once more on its replacement. On a host that can't run the bundled

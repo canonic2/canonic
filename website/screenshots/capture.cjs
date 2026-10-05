@@ -1,6 +1,7 @@
-/* Regenerates the site's screenshots from the Acme fixture beside this file.
-   Starts the extension's server on the fixture, drives headless Chrome through
-   the extension's development DevTools driver, and writes JPEGs into
+/* Regenerates the site's screenshots from the repository's Acme demo: the
+   first space of the root workbench.yaml, with its pages in demo/. Starts the
+   extension's server on the repository, drives headless Chrome through the
+   extension's development DevTools driver, and writes JPEGs into
    ../public/images.
 
    It also measures the workbench's four regions in the overview and writes
@@ -20,7 +21,8 @@ var fs = require('node:fs');
 var path = require('node:path');
 var EXTENSION = path.resolve(__dirname, '../../workbench');
 var chrome = require(path.join(EXTENSION, 'scripts/chrome.cjs'));
-var FIXTURE = path.join(__dirname, 'fixture');
+// The Acme demo is the repository's first space; see workbench.yaml.
+var REPOSITORY = path.resolve(__dirname, '../../..');
 var OUT = path.resolve(__dirname, '../public/images');
 var PAGE = path.resolve(__dirname, '../src/pages/index.astro');
 var DATA = path.resolve(__dirname, '../src/data/screenshots.json');
@@ -30,8 +32,9 @@ var W = 1440, SIDE = 1120, H = 860, SCALE = 2;
 // Control crops render at 4x and are shown at ZOOM times their CSS size.
 var CONTROLS_SCALE = 4, ZOOM = 1.25;
 var CONTROLS = [
+  { name: 'sizes', selector: '#sizeSwitcher', alt: 'The size switcher, enlarged: Fit, Laptop, Mobile, and Resizable, then the menu of every size.' },
   { name: 'actions', selector: '#actionsToggle', alt: 'The Actions switch, switched off, enlarged.' },
-  { name: 'page', selector: '.wb-topbar-right', alt: 'The size switcher and the page’s actions, enlarged: four sizes, then Reload, Open the source, Copy reference, Open on its own, and More.' },
+  { name: 'page', selector: '.wb-topbar-right', alt: 'The page’s actions, enlarged: Reload, Open the source, Copy reference, Open on its own, and More.' },
   { name: 'annotations', selector: '.wb-annotation-tools', alt: 'The annotation tools from the toolbar under the canvas, enlarged: Select, Scribble, Arrow, Shapes, Text, Comment, Undo, Clear annotations, and Save screenshot.' },
   { name: 'view', selector: '#viewControls', alt: 'The view controls, enlarged: Recenter view, Zoom out, the zoom level, and Zoom in.' },
 ];
@@ -40,7 +43,7 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
 function serve() {
   return new Promise(function (resolve, reject) {
-    var server = cp.spawn(process.execPath, [path.join(EXTENSION, 'server.js'), FIXTURE], { stdio: ['ignore', 'pipe', 'inherit'] });
+    var server = cp.spawn(process.execPath, [path.join(EXTENSION, 'server.js'), REPOSITORY], { stdio: ['ignore', 'pipe', 'inherit'] });
     var out = '';
     server.on('error', reject);
     server.on('exit', function (code) { reject(new Error('The workbench server exited with ' + code)); });
@@ -97,11 +100,11 @@ async function main() {
         JSON.stringify(selector) + ').getBoundingClientRect();return {x:o.x+r.x*s,y:o.y+r.y*s,w:r.width*s,h:r.height*s};})()');
     }
 
-    await open('#pages/sign-in.html', W);
+    await open('#demo/pages/sign-in.html', W);
     await shot('overview.jpg');
     writeRegions(await t.evaluate('(' + measureRegions + ')()'));
 
-    await open('#pages/sign-in.html', W, CONTROLS_SCALE);
+    await open('#demo/pages/sign-in.html', W, CONTROLS_SCALE);
     var page = fs.readFileSync(PAGE, 'utf8'), strip = [];
     for (var g = 0; g < CONTROLS.length; g++) {
       var group = CONTROLS[g];
@@ -120,10 +123,10 @@ async function main() {
     }
     writeData('controls', strip);
 
-    await open('#pages/sign-in.html:error@mobile', SIDE);
+    await open('#demo/pages/sign-in.html:error@mobile', SIDE);
     await shot('states.jpg');
 
-    await open('#pages/sign-in.html:error@mobile', SIDE);
+    await open('#demo/pages/sign-in.html:error@mobile', SIDE);
     var alert = await rectOf('.alert');
     var field = await rectOf('input[type=password]');
     await tool('#shapeTool');
@@ -140,7 +143,7 @@ async function main() {
     await mouse('mouseReleased', 400, 700);
     await wait(300);
     await shot('annotations.jpg');
-    await open('#preview/interactive-button.workbench.ts@laptop', SIDE);
+    await open('#demo/previews/button.workbench.ts@laptop', SIDE);
     await t.evaluate(`(async function () {
       var deadline = Date.now() + 8000;
       while (document.getElementById('previewControls').hidden) {
@@ -151,6 +154,22 @@ async function main() {
     })()`);
     await wait(200);
     await shot('workbench-previews.jpg');
+
+    // The same Button through its HTML docs lens, once every example has mounted.
+    await open('#demo/previews/button.workbench.ts~html', SIDE);
+    await t.evaluate(`(async function () {
+      var deadline = Date.now() + 15000;
+      for (;;) {
+        var page = null;
+        try { page = document.querySelector('iframe.is-active').contentDocument; } catch (e) {}
+        var panels = page ? Array.from(page.querySelectorAll('[data-wb-example]')) : [];
+        if (panels.length && panels.every(function (panel) { return panel.dataset.status === 'ready'; })) return;
+        if (Date.now() > deadline) throw new Error('The docs examples did not become ready');
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    })()`);
+    await wait(300);
+    await shot('docs.jpg');
   } finally {
     await browser.close();
     server.process.removeAllListeners('exit');
@@ -187,9 +206,23 @@ function measureRegions() {
 function measureControls(selector) {
   var group = document.querySelector(selector);
   var bar = group.closest('.wb-topbar, .wb-toolbar, .wb-view-controls').getBoundingClientRect();
-  var controls = group.matches('button, a') ? [group] : Array.prototype.filter.call(
-    group.querySelectorAll('button, a'),
-    function (el) { return el.offsetParent && !el.closest('[hidden]') && !el.closest('.wb-menu') && !el.classList.contains('wb-caret'); });
+  // Workbench's Web Components keep their buttons in open shadow roots, in
+  // document order with the light DOM around them.
+  function all(root) {
+    var out = [];
+    Array.prototype.forEach.call(root.querySelectorAll('*'), function (el) {
+      if (el.matches('button, a')) out.push(el);
+      if (el.shadowRoot) out = out.concat(all(el.shadowRoot));
+    });
+    return out;
+  }
+  function shown(el) {
+    for (var node = el; node; node = node.parentNode || node.host) {
+      if (node.nodeType === 1 && (node.hidden || node.classList.contains('wb-menu'))) return false;
+    }
+    return el.getClientRects().length > 0 && !el.classList.contains('wb-caret');
+  }
+  var controls = group.matches('button, a') ? [group] : (group.shadowRoot ? all(group.shadowRoot) : []).concat(all(group)).filter(shown);
   return {
     barY: bar.y, barH: bar.height,
     controls: controls.map(function (el) {

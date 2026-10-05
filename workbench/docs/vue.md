@@ -416,14 +416,14 @@ text.
 
 ## Document components with a docs page
 
-A [docs page](docs-pages.md) shows a component's examples in Markdown, each
-in its own panel with its code. Render the examples with Vue through an
-`examples` lens whose `adapter` is `vue`:
+A page's [docs](docs-pages.md) show a component's examples in Markdown, each
+in its own panel with its code. Render the examples with Vue through a
+`docs` lens whose `adapter` is `vue`:
 
 ```yaml
 implementations:
   web:
-    kind: examples
+    kind: docs
     label: Web
     adapter: vue
     environment: preview/vue-environment.ts
@@ -469,10 +469,11 @@ Examples receive no props and have no controls: write the props in the
 example's template. Each example mounts as its own app, and the project's
 environment for `vue` and the lens's `environment` apply to each one: `wrap`
 receives the example's vnode, and `configure` installs plugins in its app. See
-[Examples on docs pages](preview-data.md#examples-on-docs-pages). A
-`*.workbench.ts` file can declare the page and its lenses with `defineDocs`
-instead; see
-[Docs pages](docs-pages.md#declare-a-docs-page-in-a-definition).
+[Examples on docs pages](preview-data.md#examples-on-docs-pages). To read the
+docs beside a component's design or preview, give that page
+`docs: docs/button.md` in place of a Markdown `src`. A `*.workbench.ts` file
+can declare a Markdown page and its lenses with `defineDocs` instead; see
+[Docs](docs-pages.md#declare-a-markdown-page-in-a-definition).
 
 ## What .vue files can use
 

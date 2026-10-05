@@ -15,7 +15,7 @@ addresses follow [core.md](core.md#selection-and-navigation).
 - Every lens supports a project-configured display label. This includes the
   page's own authored lens, whether its source is HTML or a `.workbench.ts(x)`
   preview, and every implementation kind: `url`, `workbench`, `storybook`,
-  `ios-simulator`, `window`, and `examples`.
+  `ios-simulator`, `window`, and `docs`.
 - Kind determines rendering behavior; it does not restrict the label. A URL
   lens pointing at the live website can be called **Live**, **Prod**, or another
   project-chosen name. Storybook and Workbench preview lenses have the same
@@ -31,10 +31,16 @@ addresses follow [core.md](core.md#selection-and-navigation).
 - Lens names shown by the interface and in review outputs use the resolved
   display label consistently. Rendering, startup, actions, states, and capture
   behavior continue to depend on kind and configuration.
-- An authored page has its own lens plus the implementations it maps to.
-  Catalog pages and docs pages have no authored design lens. The switcher
-  appears only when the page has at least two lenses; customizing a label
-  does not change that count.
+- An authored page has its own lens plus the implementations it maps to,
+  its docs lenses among them. Catalog pages and Markdown pages have no
+  authored design lens. The switcher appears only when the page has at least
+  two lenses; customizing a label does not change that count.
+- Docs are a lens: a page with Markdown is read through one docs lens per
+  renderer of its examples, or the built-in **Docs** lens when it maps none.
+  The canvas mode follows the lens; see [docs](docs-pages.md).
+- The chosen lens carries across pages. A page without it shows its default
+  lens: its design, its catalog implementation, or a Markdown page's own docs
+  lens. [lenses.ts](../src/modules/docs/canvas/lenses.ts) decides it.
 
 ## Acceptance criteria
 
@@ -56,7 +62,7 @@ entry. Discovery supplies `previews.lensLabel` for TypeScript previews; an
 explicit page's `lensLabel` takes precedence when that preview is placed in
 YAML. Both keys accept nonempty strings and trim surrounding whitespace.
 Invalid values produce named problems and leave the fallback available.
-Docs pages reject page `lensLabel`, since they have no authored lens.
+Markdown pages reject page `lensLabel`, since they have no authored lens.
 
 The shared [manifest reader](../workbench/manifest.js) validates labels and
 resolves authored defaults. The server supplies the discovery label, and

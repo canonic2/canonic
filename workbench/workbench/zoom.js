@@ -99,7 +99,7 @@
   var fitted = true; /* follows the canvas until zoomed or panned by hand */
   /* The canvas mode. In 'docs', a docs page has no artboard of its own: the
      artboard fills the canvas and the page scrolls inside it
-     (src/docs/canvas/docs-layout.ts). */
+     (src/modules/docs/canvas/docs-layout.ts). */
   var canvasMode = 'default';
 
   function docsFrame() {

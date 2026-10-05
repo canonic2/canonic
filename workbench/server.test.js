@@ -727,6 +727,8 @@ test('coalesces overlapping exports into one capture job', async function () {
     var first = await post(running.port, server.EXPORT_PATH, {});
     var second = await post(running.port, server.EXPORT_PATH, {});
     assert.equal(second.body.id, first.body.id);
+    var different = await post(running.port, server.EXPORT_PATH, { scope: 'page', pages: ['pages/sign-in.html'] });
+    assert.equal(different.status, 409);
     releaseCapture();
     var status;
     for (var i = 0; i < 20; i += 1) {
@@ -739,6 +741,37 @@ test('coalesces overlapping exports into one capture job', async function () {
     await running.close();
     fs.rmSync(made.root, { recursive: true, force: true });
   }
+});
+
+test('a current-page PDF prints only its selected state and actual viewport', async function () {
+  var made = project('http://localhost:6006');
+  var PDFDocument = require('pdf-lib').PDFDocument;
+  var printed = [];
+  var running = await server.start({ root: made.root, capture: {
+    printExportPage: async function (payload) {
+      printed.push(payload);
+      var doc = await PDFDocument.create(); doc.addPage([payload.width * 0.75, 2000]);
+      return { pdf: Buffer.from(await doc.save()) };
+    }, close: function () {},
+  } });
+  try {
+    var invalid = await post(running.port, server.EXPORT_PATH, { scope: 'page', pages: ['foreign.html'] });
+    assert.equal(invalid.status, 400);
+    var started = await post(running.port, server.EXPORT_PATH, { format: 'pdf', scope: 'page',
+      current: { page: 'pages/sign-in.html', width: 777, height: 600 } });
+    assert.equal(started.status, 202);
+    var status;
+    for (var i = 0; i < 30; i += 1) {
+      status = (await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id)).body;
+      if (status.status !== 'running') break;
+    }
+    assert.equal(status.status, 'complete'); assert.equal(printed.length, 1);
+    assert.equal(printed[0].width, 777); assert.equal(printed[0].height, 600);
+    var download = await getRaw(running.port, server.EXPORT_PATH + '?job=' + started.body.id + '&download=1');
+    assert.equal(download.headers['content-type'], 'application/pdf');
+    var doc = await PDFDocument.load(download.body);
+    assert.deepEqual(doc.getPages().map(function (p) { return [p.getWidth(), p.getHeight()]; }), [[582.75, 2000]]);
+  } finally { await running.close(); fs.rmSync(made.root, { recursive: true, force: true }); }
 });
 
 test('retains a slow export job until after it settles', async function () {

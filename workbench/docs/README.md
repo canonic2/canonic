@@ -6,9 +6,10 @@ implementation, and copy a screenshot with your annotations and a description
 of them for a coding agent.
 
 A project's configuration is `workbench.yaml` at the project root. Pages can
-come from HTML design pages you list there, from Markdown docs pages with live
+come from HTML design pages you list there, from Markdown pages with live
 examples, from TypeScript previews of your own components, or from a
-Storybook or Simulator catalog. The tool ships inside
+Storybook or Simulator catalog, and any page can have Markdown docs as a
+lens. The tool ships inside
 the extension; in your project it writes only handoff screenshots and the
 collections you edit with **Configure pages**. See
 [Files and network access](extension.md#files-and-network-access).
@@ -19,7 +20,7 @@ collections you edit with **Configure pages**. See
 | --- | --- |
 | [Getting started](getting-started.md) | Install the extension, write a first `workbench.yaml`, and open the canvas |
 | [Pages and states](pages-and-states.md) | Write design pages, give one page several states, and choose its sizes |
-| [Docs pages](docs-pages.md) | Document components and foundations in Markdown, with live examples, their code, and lenses that render them |
+| [Docs](docs-pages.md) | Document components and foundations in Markdown, read as a lens beside a page's design, with live examples and their code |
 | [Using the canvas](canvas.md) | Find your way around the sidebar, the top bar, artboard sizes, zoom, and links |
 | [Annotations and handoff](annotations-and-handoff.md) | Annotate a page with the toolbar, save screenshots, and hand the result to an agent |
 | [Several spaces](spaces.md) | Switch between spaces in one window, add spaces from elsewhere on disk, and serve several from the command line |

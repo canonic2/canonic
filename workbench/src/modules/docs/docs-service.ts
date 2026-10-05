@@ -12,7 +12,7 @@ import { pageDocument } from './page-document.ts';
 import { matchLens } from './placement.ts';
 import { renderDocs, type PanelView } from './render-markdown.ts';
 
-/** One lens of a docs page: an examples implementation and the source the page maps to it. */
+/** One docs lens of a page: a docs implementation and the example source the page maps to it. */
 export interface DocsLens {
   key: string;
   label: string;
@@ -24,10 +24,12 @@ export interface DocsLens {
 }
 
 export interface DocsPageEntry {
-  /** The Markdown file, relative to the project root, with `/` separators. */
+  /** The Markdown file, relative to the project root, with `/` separators. Docs are served at it. */
   src: string;
+  /** The page whose docs these are: the Markdown file itself for a Markdown page. */
+  page: string;
   label: string;
-  /** The lens the page opens with. */
+  /** The docs lens a Markdown page opens with. */
   lens: string | null;
   lenses: DocsLens[];
 }
@@ -130,7 +132,7 @@ export function createDocsService(options: DocsServiceOptions) {
     const source = await markdown(entry);
     const lens = chooseLens(entry, request.lens);
     let bundle: DocsBundle | null = null;
-    let unavailable: string | null = lens ? null : 'This page has no examples lens.';
+    let unavailable: string | null = lens ? null : 'This page has no docs lens that renders examples.';
     const blocked = options.blocked();
     const deferred = !!(lens && !blocked && mode.defer);
     if (lens && blocked) unavailable = blocked;
@@ -175,7 +177,7 @@ export function createDocsService(options: DocsServiceOptions) {
     const source = await markdown(entry);
     const lens = chooseLens(entry, lensKey);
     const none = (error: string): BundleInfo => ({ module: null, stylesheet: null, examples: [], error, revision: revisionOf(source, null) });
-    if (!lens) return none('This page has no examples lens.');
+    if (!lens) return none('This page has no docs lens that renders examples.');
     const blocked = options.blocked();
     if (blocked) return none(blocked);
     let bundle: DocsBundle;
@@ -198,7 +200,7 @@ export function createDocsService(options: DocsServiceOptions) {
   /** One example's code: a whole file for a folder source, the export's statement for a file source. */
   async function exampleSource(entry: DocsPageEntry, lensKey: string | null, id: string): Promise<{ file: string; text: string; html: string }> {
     const lens = chooseLens(entry, lensKey);
-    if (!lens) throw new DocsPageError(404, entry.src + ' has no examples lens.');
+    if (!lens) throw new DocsPageError(404, entry.src + ' has no docs lens that renders examples.');
     const blocked = options.blocked();
     if (blocked) throw new DocsPageError(403, blocked);
     const listed = await options.listExamples(lens);

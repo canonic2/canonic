@@ -380,15 +380,15 @@ adapter entirely, including server rendering. See
 
 ## Document components with a docs page
 
-A [docs page](docs-pages.md) can show Astro components as live examples. Give
-it an `examples` lens with `adapter: astro`, and point the page's lens at a
+A page's [docs](docs-pages.md) can show Astro components as live examples.
+Give the page a `docs` lens with `adapter: astro`, and point the page's lens at a
 folder of `.astro` files. Each file is one example, named after the file:
 `featured.astro` is `featured`.
 
 ```yaml
 implementations:
   site:
-    kind: examples
+    kind: docs
     label: Astro
     adapter: astro
 
@@ -414,7 +414,7 @@ import PlanCard from '../PlanCard.astro';
 ```
 
 `docs/plan-card.md` places it with a fenced block, as described in
-[Docs pages](docs-pages.md#write-the-markdown):
+[Docs](docs-pages.md#write-the-markdown):
 
 ````md
 ## Featured
@@ -434,7 +434,7 @@ caption: featured
 - **Lens settings.** The lens's `styles` and `environment` apply. The
   environment's `setup` runs before the examples mount, and its
   `mount(canvas, context)` is called after each example's HTML is in place.
-- **`window.workbench`** isn't set on a docs page, so a script's
+- **`window.workbench`** isn't set in a docs lens, so a script's
   `window.workbench?.action(...)` call does nothing there.
 - **A folder only.** An `.astro` file holds one component, so an Astro lens
   takes a folder. A file fails the lens with `Astro examples are one component
@@ -442,14 +442,14 @@ caption: featured
 
 ## Portable exports
 
-`build` and **Download design-system ZIP** render every authored state when
+`build` and **Export…** source/browser packages render every authored state when
 they export the preview, so the [portable viewer](workbench-previews.md#portable-exports)
 shows them with no Astro installation or server. The controls are left out,
 since editing inputs needs a live render, and the preview's **Documentation**
 gains the note `Astro input edits require the live Workbench server. This export
 contains the authored states.`
 
-Docs pages with an Astro lens export the same way: the viewer shows each
+Docs with an Astro lens export the same way: the viewer shows each
 example as it was rendered, with its styles and scripts.
 
 ## Errors and fixes

@@ -10,7 +10,7 @@ const files: Record<string, string> = {
 
 const web: DocsLens = { key: 'web', label: 'Web', adapter: 'react', styles: [], examples: 'docs/card.examples.ts' };
 const native: DocsLens = { key: 'native', label: 'Native', adapter: 'react', styles: ['docs/native.css'], examples: 'docs/native/' };
-const card: DocsPageEntry = { src: 'docs/card.md', label: 'Card', lens: 'web', lenses: [web, native] };
+const card: DocsPageEntry = { src: 'docs/card.md', page: 'docs/card.md', label: 'Card', lens: 'web', lenses: [web, native] };
 
 const listings: Record<string, ListedExample[]> = {
   web: [{ id: 'basic', file: 'docs/card.examples.ts', export: 'basic' }, { id: 'nested', file: 'docs/card.examples.ts', export: 'nested' }, { id: 'large', file: 'docs/card.examples.ts', export: 'large' }],
@@ -88,7 +88,7 @@ test('Show code gets a named export’s statement, or a folder example’s whole
 test('problems name the page, the line, and the lens', async () => {
   files['docs/broken.md'] = ['```example basic', 'title: x', '```'].join('\n');
   const { docs } = service({ failing: 'native' });
-  assert.deepEqual(await docs.problems([card, { src: 'docs/broken.md', label: 'Broken', lens: null, lenses: [] }, { src: 'docs/gone.md', label: 'Gone', lens: null, lenses: [] }]), [
+  assert.deepEqual(await docs.problems([card, { src: 'docs/broken.md', page: 'docs/broken.md', label: 'Broken', lens: null, lenses: [] }, { src: 'docs/gone.md', page: 'docs/gone.md', label: 'Gone', lens: null, lenses: [] }]), [
     'Card (docs/card.md): example “large” in Web is not placed in docs/card.md.',
     'Card (docs/card.md): Native: Build failed: missing ./card.tsx',
     'Broken (docs/broken.md), line 2: example “basic”: unknown key “title”',

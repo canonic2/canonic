@@ -97,7 +97,11 @@ const server = http.createServer((req, res) => {
     }
     if (url.pathname === '/export') {
       const config = require('../config').read(compiler.root);
-      json(res, await portable.create(compiler, { name: config && config.name }));
+      var selection = url.searchParams.has('selection') ? JSON.parse(url.searchParams.get('selection')) : undefined;
+      if (selection && (!Array.isArray(selection.pages) || selection.pages.some(file => typeof file !== 'string') ||
+          !Array.isArray(selection.states) || selection.states.some(state => typeof state !== 'string') ||
+          !Array.isArray(selection.sizes) || selection.sizes.some(size => typeof size !== 'string'))) throw new Error('Invalid portable export selection');
+      json(res, await portable.create(compiler, { name: config && config.name, selection: selection }));
       return;
     }
     const match = /^\/preview\/([^/]+)\/(.+)$/.exec(url.pathname);

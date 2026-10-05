@@ -504,9 +504,10 @@ test('refreshing a rendered docs page releases the next sidebar pick without rel
     document: { getElementById: function () { return frame; }, addEventListener: function () {} },
     window: { addEventListener: function (type, fn) { if (type === 'message') receive = fn; } },
   });
-  var lens = { key: 'html' };
+  var lens = { key: 'html', label: 'HTML', kind: 'docs' };
   child = vm.createContext({
-    index: { 'docs/card.md': { docs: true } },
+    lensRules: require('./src/modules/docs/canvas/lenses.ts'),
+    index: { 'docs/card.md': { src: 'docs/card.md', markdown: 'docs/card.md' } },
     view: { src: 'docs/card.md', state: null, lens: lens },
     frameReady: true,
     stateOf: function () { return null; },

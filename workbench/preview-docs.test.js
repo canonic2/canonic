@@ -130,12 +130,12 @@ const DOCS_YAML = [
   'name: Acme',
   'implementations:',
   '  web:',
-  '    kind: examples',
+  '    kind: docs',
   '    adapter: html',
   '    styles:',
   '      - theme.css',
   '  native:',
-  '    kind: examples',
+  '    kind: docs',
   '    adapter: html',
   'collections:',
   '  - name: Design system',
@@ -170,7 +170,7 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /text\/html/);
   const html = await page.text();
-  assert.match(html, /<link rel="stylesheet" href="\/_workbench\/src\/docs\/page\/docs-page.css">/);
+  assert.match(html, /<link rel="stylesheet" href="\/_workbench\/src\/modules\/docs\/page\/docs-page.css">/);
   // The Markdown answers at once; its panels wait for the page's script to ask for the bundle.
   assert.match(html, /data-wb-example="primary" data-status="pending"/);
   assert.match(html, /data-wb-example="secondary" data-status="pending"/);
@@ -223,19 +223,49 @@ test('docs problems join the config’s problems once listed, and the host hears
   assert.deepEqual((await running.config()).problems, ['Button (docs/button.md): example “ghost” in Web is not placed in docs/button.md.']);
 });
 
+test('a page with a design has its docs as a lens: served at its Markdown, listed in its sources, and in a handoff', async t => {
+  const root = docsProject(t);
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), DOCS_YAML.replace(
+    '      - label: Button\n        src: docs/button.md\n',
+    '      - label: Button\n        src: pages/button.html\n        docs: docs/button.md\n'));
+  fs.mkdirSync(path.join(root, 'pages'));
+  fs.writeFileSync(path.join(root, 'pages/button.html'), '<!doctype html><button>Acme</button>');
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
+  const base = `http://127.0.0.1:${running.port}`;
+
+  const config = await running.config();
+  const item = config.collections[0].items[0];
+  assert.equal(item.src, 'pages/button.html');
+  assert.equal(item.markdown, 'docs/button.md');
+  const page = config.pages['pages/button.html'];
+  assert.equal(page.design, path.join(root, 'pages/button.html'), 'the design stays the page’s design file');
+  assert.deepEqual(page.code.map(entry => [entry.label || entry.implementation, entry.relative]),
+    [['Docs', 'docs/button.md'], ['web', 'docs/button/'], ['native', 'docs/button.examples.ts']]);
+
+  const html = await (await fetch(base + '/docs/button.md?lens=native')).text();
+  assert.equal(JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]).lens, 'native');
+
+  const review = await fetch(base + '/_workbench/canvas/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ src: 'pages/button.html', label: 'Button', docs: { lens: 'native', examples: [{ id: 'primary', status: 'ready' }] } }) });
+  const reviewed = await review.json();
+  assert.equal(reviewed.payload.docs.markdown, 'docs/button.md');
+  assert.equal(reviewed.payload.docs.lensLabel, 'Native');
+});
+
 test('the page script and stylesheet are served from src/ with types stripped', async t => {
   const root = docsProject(t);
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
   const base = `http://127.0.0.1:${running.port}`;
-  const script = await fetch(base + '/_workbench/src/docs/page/docs-page.ts');
+  const script = await fetch(base + '/_workbench/src/modules/docs/page/docs-page.ts');
   assert.equal(script.status, 200);
   assert.match(script.headers.get('content-type'), /text\/javascript/);
   const body = await script.text();
   assert.match(body, /import \{ mountExamples \} from "\.\/mount-examples\.ts"/);
   assert.doesNotMatch(body, /interface ExampleSource|: string\)/);
-  assert.equal((await fetch(base + '/_workbench/src/docs/docs-service.ts')).status, 404);
-  assert.equal((await fetch(base + '/_workbench/src/docs/page/docs-page.css')).status, 200);
+  assert.equal((await fetch(base + '/_workbench/src/modules/docs/docs-service.ts')).status, 404);
+  assert.equal((await fetch(base + '/_workbench/src/modules/docs/page/docs-page.css')).status, 200);
 });
 
 test('without trust, a docs page renders its Markdown and says why its examples are missing', async t => {
@@ -276,7 +306,7 @@ test('defineDocs definitions are discovered, placed by title, and served like de
   const collection = config.catalogCollections.find(candidate => candidate.name === 'Design system');
   assert.equal(collection.items.find(item => item.label === 'Type').icon, 'type', 'a definition can name its icon');
   assert.deepEqual(collection.items.filter(item => item.group), [{ group: 'Foundations', items: [{
-    src: 'docs/colors.md', label: 'Colors', docs: true, icon: 'book-open', lens: 'react-native',
+    src: 'docs/colors.md', label: 'Colors', markdown: 'docs/colors.md', icon: 'book-open', lens: 'react-native',
     docsLenses: [{ key: 'web', label: 'Web' }, { key: 'react-native', label: 'React Native Web' }],
     implementations: { web: { examples: 'docs/colors.examples.ts' }, 'react-native': { examples: 'docs/colors.examples.ts' } },
   }] }]);

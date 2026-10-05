@@ -203,9 +203,10 @@
     if (icon) item.icon = icon;
     var found = states(raw.states, where + ' › ' + label, problems);
     if (found) item.states = found;
+    window.wbManifest.pageMarkdown(raw, item, where + ' › ' + label, problems);
     var lenses = window.wbManifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
     if (lenses) item.implementations = lenses;
-    window.wbManifest.docsPageEntry(raw, item, where + ' › ' + label, problems);
+    window.wbManifest.docsPageEntry(raw, item, impls, where + ' › ' + label, problems);
     var code = window.wbManifest.pageCode(raw.code, impls, where + ' › ' + label, problems);
     if (code) item.code = code;
     return item;

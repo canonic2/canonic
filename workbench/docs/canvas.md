@@ -1,10 +1,9 @@
 # Using the canvas
 
 The canvas shows one page at a time, on an artboard at a real device size, on
-a surface you can zoom and pan like a design tool. A
-[docs page](docs-pages.md) fills the canvas instead; see
-[Docs pages on the canvas](#docs-pages-on-the-canvas). This page covers each
-part of it.
+a surface you can zoom and pan like a design tool. In a
+[docs lens](docs-pages.md), a page's docs fill the canvas instead; see
+[Docs on the canvas](#docs-on-the-canvas). This page covers each part of it.
 
 ## Layout
 
@@ -32,11 +31,11 @@ editor's theme, and the canvas tab doesn't repeat it.
 - **Pages** with two or more states expand to show them. Pick a state to show
   it; the first is the page as authored. Selecting the page itself shows its
   first state, and selecting it again while it is showing collapses it. A
-  [docs page](docs-pages.md) has nothing listed under it.
+  [Markdown page](docs-pages.md#a-markdown-page) has nothing listed under it.
 - **Search**, the field at the bottom (*Search pages…*), filters every
   collection's pages, groups, and states as you type, and groups the results
   by collection.
-- [TypeScript previews](workbench-previews.md) and docs pages defined in
+- [TypeScript previews](workbench-previews.md) and Markdown pages defined in
   `*.workbench.ts` files appear in the collections their titles name, beside the
   pages listed in `workbench.yaml`.
 
@@ -56,11 +55,11 @@ reset the width. The width is remembered.
 | --- | --- |
 | **Breadcrumb: space** | The space's mark and name, before the page. Select it to switch to another [space](spaces.md). Shown when there is more than one space. |
 | **Breadcrumb: page and state** | The page's name, then the state showing. The state is the state switcher: select it to pick another state. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
-| **Lens switcher** | Switches between the authored page and each [implementation](lenses.md) the page has. Shown when the page has two or more lenses. The authored lens defaults to **Design**, or **Workbench** for a TypeScript preview. [Every label is customizable](lenses.md#customize-lens-labels). On a docs page, it switches what renders the examples. |
-| **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Artboard sizes](#artboard-sizes). Disabled on a docs page. |
+| **Lens switcher** | Switches between the authored page and each [implementation](lenses.md) the page has. Shown when the page has two or more lenses. The authored lens defaults to **Design**, or **Workbench** for a TypeScript preview. [Every label is customizable](lenses.md#customize-lens-labels). A page with [docs](docs-pages.md) also lists its docs lenses, one for each renderer of its examples. |
+| **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Artboard sizes](#artboard-sizes). Disabled in a docs lens, because the docs fill the canvas. |
 | **Actions** (pointer icon and switch) | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
 | **Reload** | Reloads the current page. |
-| **Open the source** (`</>`) | Lists the design file and the page's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file; for a docs page, the Markdown file and each lens's example source. A path that isn't on this machine is listed but can't be opened. |
+| **Open the source** (`</>`) | Lists the design file and the page's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file; for a page with docs, its design file, then **Docs**, its Markdown, then each docs lens's example source. On a Markdown page, **Docs** is the first row. A path that isn't on this machine is listed but can't be opened. |
 | **Copy reference** | Copies a short text reference to the current view. See [Copy a reference](#copy-a-reference). |
 | **Open on its own** | Opens the current page in your browser, outside the workbench. |
 | **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Preview data, mocks, and actions](preview-data.md). |
@@ -72,7 +71,8 @@ overlapping.
 
 Your choices of lens, size, and actions are remembered across pages and
 sessions. A page that doesn't support a remembered choice uses its own
-default: the Design lens, or the first size it supports.
+default: the Design lens, a Markdown page's own docs lens, or the first size
+it supports.
 
 ## Artboard sizes
 
@@ -120,15 +120,15 @@ inside the pages it serves, and through Storybook's key channel for a Storybook
 lens. A page from another origin, such as a URL lens, keeps its own scroll
 wheel.
 
-## Docs pages on the canvas
+## Docs on the canvas
 
-The canvas has two modes. In the default canvas mode, the page is on an
-artboard. A [docs page](docs-pages.md) is shown in the docs canvas mode: it
-has no artboard, it fills the canvas, at most 960 pixels wide and centered,
-and the wheel scrolls it like a page in a browser.
-The size switcher stays visible but is disabled, and the lens switcher, shown
-when the page has two or more lenses, switches what renders its examples.
-Zoom, annotations, screenshots, and handoffs work on it too; see
+The canvas has two modes, and the lens decides which. In the default canvas
+mode, the page is on an artboard. In a [docs lens](docs-pages.md#lenses), the
+canvas is in its docs mode: there is no artboard, the page's docs fill the
+canvas, at most 960 pixels wide and centered, and the wheel scrolls them like
+a page in a browser. The size switcher stays visible but is disabled.
+Switching back to the design lens restores the artboard at its size. Zoom,
+annotations, screenshots, and handoffs work in a docs lens too; see
 [On the canvas](docs-pages.md#on-the-canvas).
 
 ## Keyboard and clipboard in the editor
@@ -205,12 +205,13 @@ copied link lands on the same page, state, size, and lens:
 | --- | --- | --- |
 | src | The page's `src` | Never |
 | `:state` | A state id, or on a Storybook lens the part of the story's id after `--` | The first state is showing, or the page has no states |
-| `!example` | On a docs page, an example's ID; the page opens scrolled to that example | No example is named |
-| `@width` | `fit`, `1512`, `393`, or `resizable` | On a docs page, which has no width. Elsewhere the workbench always writes it, though a link you type may omit it |
-| `~lens` | An implementation name | The Design lens is showing, or on a docs page, the lens the page opens with |
+| `!example` | In a docs lens, an example's ID; the docs open scrolled to that example | No example is named, or the lens isn't a docs lens |
+| `@width` | `fit`, `1512`, `393`, or `resizable` | In a docs lens, which has no width. Elsewhere the workbench always writes it, though a link you type may omit it |
+| `~lens` | An implementation name | The Design lens is showing, or on a Markdown page, its own docs lens |
 
-See [Addresses](docs-pages.md#addresses) for an example of a docs page's
-address.
+The src is always the page's `src`, also in a docs lens of a page with a
+design. See [Addresses](docs-pages.md#addresses) for examples of addresses in a
+docs lens.
 
 After a page loads, the address is rewritten to describe exactly what is
 showing.

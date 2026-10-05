@@ -81,8 +81,9 @@ collections:
   collection list. `icon` is any [Lucide](https://lucide.dev/icons/) icon
   name, written in kebab-case.
 - Each entry under `items` is a page: a `label` and the HTML file to show. A
-  `src` ending in `.md` is a [docs page](docs-pages.md) instead: Markdown with
-  live examples of your components.
+  `src` ending in `.md` is a [Markdown page](docs-pages.md#a-markdown-page)
+  instead: docs with live examples of your components. Any page can also have
+  docs, with `docs`.
 - `states` lists variations of one page. The first is the page as written.
 
 The [configuration reference](configuration.md) lists every key.
@@ -128,7 +129,7 @@ Try these:
   paste to an agent.
 
 Workbench also lists any [TypeScript previews](workbench-previews.md) and
-[docs pages](docs-pages.md#declare-a-docs-page-in-a-definition) defined in
+[Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition) defined in
 `*.workbench.ts` and `*.workbench.tsx` files, once you trust the workspace.
 Step 6 adds a preview.
 
@@ -204,7 +205,7 @@ CSS, which are inert without it. To remove the extension itself, see
 - Give pages more states and choose their sizes:
   [Pages and states](pages-and-states.md).
 - Document components in Markdown with live examples:
-  [Docs pages](docs-pages.md).
+  [Docs](docs-pages.md).
 - Show the same page as it runs on your dev server:
   [Lenses and URL implementations](lenses.md).
 - Use your Storybook: [Storybook](storybook.md).

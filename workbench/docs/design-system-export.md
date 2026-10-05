@@ -1,10 +1,26 @@
 # Design-system export
 
-**More** › **Download design-system ZIP** packages the whole current space,
-across all its collections and pages, into an archive an agent or another tool can work from:
-every design page, implementation source, TypeScript preview, and docs page the
-space points at, what they import, reference screenshots, and a README per
-page.
+**More** › **Export…** opens a dialog for the current page, selected pages, a
+collection, or the whole current space. Choose a source package (ZIP), PDF,
+images (ZIP), or portable browser viewer (ZIP).
+
+Source packages include the selected pages' implementation sources, imports,
+reference screenshots, and a README per page. They default to all declared
+states and sizes. A single-page PDF or image export defaults to the current
+state, size, and lens; choose all declared variants to include every state and
+size instead. Select several entries in the page list with your platform's
+multiple-selection keys.
+
+Visual PDF pages preserve the artboard's width and full document height.
+Documentation uses paginated A4 or Letter paper. A document can contain both
+kinds, with different page sizes. Text remains selectable. Visual pages taller
+than 19,200 CSS pixels exceed the renderer's PDF limit and produce a warning.
+PNG or JPEG image exports capture the full page up to 8,192 pixels high; use
+PDF for longer pages. Unsupported native lenses report an error.
+
+Portable browser exports include compiled TypeScript previews and pages' docs
+with their declared variants. Authored HTML and native views do not have a
+portable viewer; a selection with no supported pages fails with an explanation.
 
 The export covers the space open in the canvas. It does not combine every
 space listed in the switcher or in `workbench.yaml`. To export another space,
@@ -19,15 +35,15 @@ page opened from disk.
 
 ## What goes in
 
-The export starts from every page's entry points in the current space:
+The source package starts from the selected pages' entry points in the current space:
 
 - the design page (`src`),
 - its [code pointers](lenses.md#point-at-the-code),
 - for Storybook, each story's file and component, from Storybook's index,
 - for a [TypeScript preview](workbench-previews.md), its definition, its source
   file, and the local files the compiler resolves for it,
-- for a [docs page](docs-pages.md), its Markdown file and each lens's example
-  source.
+- for a page with [docs](docs-pages.md), its Markdown file and each docs
+  lens's example source.
 
 From there it follows local imports and referenced assets, and includes:
 
@@ -41,8 +57,8 @@ From there it follows local imports and referenced assets, and includes:
 | Asset folders referenced statically | `new URL("./assets/", import.meta.url)` includes the folder, which covers plugins that build sprites or font sets from a directory. |
 | SVG sprite sources | Source SVGs for a Vite `iconDirs` folder named through `path.resolve(process.cwd(), "…")`. |
 | Package configuration | The `package.json`, `tsconfig`/`jsconfig`, and Vite, Tailwind, and PostCSS configuration files the included sources need. |
-| Reference screenshots | One JPEG per design state, imported story, and TypeScript preview state, at each of the page's sizes, and per docs page lens, one of the whole page and one of each example. |
-| Compiled TypeScript previews and docs pages | A `browser/` viewer you can open without Workbench. See [The browser viewer](#the-browser-viewer). |
+| Reference screenshots | One JPEG per design state, imported story, and TypeScript preview state, at each of the page's sizes, and per docs lens, one of the whole docs and one of each example. |
+| Compiled TypeScript previews and docs | A `browser/` viewer you can open without Workbench. See [The browser viewer](#the-browser-viewer). |
 
 TypeScript imports written with `.js` extensions resolve to the `.ts` or
 `.tsx` file when the JavaScript file doesn't exist. Imports starting with `@/`
@@ -79,13 +95,15 @@ size's key and label.
 Design pages are captured as designed, with actions off; lenses on a design
 page aren't captured.
 
-A [docs page](docs-pages.md) has no sizes. For each of its lenses, the
-export captures the whole page at its 960-pixel layout, 1056 pixels wide with
-its margins and as tall as the page (up to 8192 pixels), and each example the
-lens renders, cropped to its panel. Files are named after the lens key and the
-example ID: in a `web` lens, `web-page.jpg` is the whole page and
-`web-basic.jpg` the `basic` example. An example a lens doesn't have gets no
-reference in that lens.
+A page's [docs](docs-pages.md) have no sizes. For each docs lens of a page
+with docs, the export captures the whole docs at their 960-pixel layout, 1056
+pixels wide with their margins and as tall as the docs (up to 8192 pixels),
+and each example the lens renders, cropped to its panel. Files are named after
+the lens key and the example ID: in a `web` lens, `web-page.jpg` is the whole
+docs and `web-basic.jpg` the `basic` example. An example a lens doesn't have
+gets no reference in that lens. These references are filed under the page that
+owns the docs, by its `src`, beside its design references. A Markdown page has
+no other references.
 
 Capture runs as a background job with a progress bar over the canvas. It uses
 up to four renderers in parallel and doesn't change what the canvas shows. A
@@ -99,9 +117,9 @@ preview builds.
 ## The browser viewer
 
 When the current space has [TypeScript previews](workbench-previews.md) or
-[docs pages](docs-pages.md) with examples, the archive also contains a
-`browser/` folder with each preview, and each docs page in each of its lenses,
-compiled for the browser.
+pages with [docs](docs-pages.md) and examples, the archive also contains a
+`browser/` folder with each preview, and each page's docs in each of its docs
+lenses, compiled for the browser.
 
 The viewer includes `browser/CANONIC-LICENSE.txt` for Canonic-owned code and
 generated authoring types. Your project content and third-party components
@@ -111,10 +129,10 @@ To view them, serve the extracted archive with any static HTTP server and open
 packages installed.
 
 The viewer lets you search previews, pick a state and a size, and use the
-same preview controls as the canvas. Docs pages are listed with them, marked
-Docs: the **State** menu becomes a **Lens** menu, the **Size** menu is hidden,
-and **Show code** works under each example. Links between docs pages open the
-other page in the viewer. See [Portable exports](workbench-previews.md#portable-exports) for its controls and
+same preview controls as the canvas. Each page's docs are listed with them as
+their own entry, marked Docs: the **State** menu becomes a **Lens** menu, the
+**Size** menu is hidden, and **Show code** works under each example. Links
+between docs open the other docs in the viewer. See [Portable exports](workbench-previews.md#portable-exports) for its controls and
 what each adapter supports there. To build the viewer on its own, without the
 rest of the export, use the `build` command in
 [Command-line tools](workbench-previews.md#command-line-tools).
@@ -122,7 +140,7 @@ rest of the export, use the `build` command in
 The original definitions and sources stay editable at their project-relative
 paths. When the project has no `workbench-env.d.ts`, the export adds one with
 the `@canonic2/workbench` types. `browser/workbench.json` lists the previews and
-their states, and the docs pages and their lenses. `canonic-export.json` lists
+their states, and the docs and their lenses. `canonic-export.json` lists
 the compiled entries and any previews that failed to build under `browser`.
 
 ## The archive
@@ -157,7 +175,7 @@ Inside the extracted tree:
 | `canonic-export.json` | The manifest: `files`, external packages under `dependencies`, one record per page under `pages`, unresolved references under `warnings`, failed screenshots under `captureWarnings`, compiled TypeScript previews under `browser`, and the archive's `parts`. |
 | `<page folder>/README.md` | Beside each page's main design file or component: its hash, entry points, included files, reference screenshots, and guidance for an agent. |
 | `<page folder>/screenshots/` | That page's reference JPEGs. |
-| `browser/` | The [browser viewer](#the-browser-viewer), when the project has TypeScript previews or docs pages with examples. |
+| `browser/` | The [browser viewer](#the-browser-viewer), when the project has TypeScript previews or docs with examples. |
 
 When several pages share a folder, each gets its own
 `<page name>.README.md` and `screenshots/<page name>/` folder, so they

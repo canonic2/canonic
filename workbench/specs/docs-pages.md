@@ -1,62 +1,72 @@
-# Docs pages
+# Docs
 
-A docs page is a page written in Markdown, with live examples rendered
-through it. It documents a component or a design-system foundation the way a
-component library's documentation site does: a title and introduction,
-sections, examples with captions and notes, hand-written props tables, and
-each example's code. Docs pages are meant to replace Storybook documentation
-pages such as a component's `Default` story built from page, section, panel,
-caption, and note helpers.
+Docs are a page written in Markdown, with live examples rendered through it.
+They document a component or a design-system foundation the way a component
+library's documentation site does: a title and introduction, sections,
+examples with captions and notes, hand-written props tables, and each
+example's code. They are meant to replace Storybook documentation pages such
+as a component's `Default` story built from page, section, panel, caption,
+and note helpers.
+
+Docs are a [lens](lenses.md). Any page can have docs and be read through a
+docs lens beside its design and its implementations, so a component's design,
+its running code, and its documentation are one page in the page list. A page
+whose `src` is the Markdown file itself, a **Markdown page**, is its docs and
+nothing else: it has no design lens.
 
 This spec is the agreed contract (2026-10-04). **Status:** implemented and
 verified in the Acme demo; see [current status](#current-status) for what was
 checked and the remaining gaps. The user guide is
-[Docs pages](../docs/docs-pages.md). Shared navigation and problem reporting are in [core](core.md);
+[Docs](../docs/docs-pages.md). Shared navigation and problem reporting are in [core](core.md);
 compilation, adapters, and environments are in
-[TypeScript previews](previews.md); lenses are in
-[implementations](implementations.md).
+[TypeScript previews](previews.md); lenses are in [lenses](lenses.md) and
+[implementations](implementations.md). The code is the
+[docs module](../src/modules/docs/).
 
 ## Purpose and scope
 
-A docs page shown on its own uses the whole canvas, in the docs canvas mode
-below. Beside other artboards on a
-[multiple-artboard canvas](multiple-artboards.md) it is an artboard like any
-other content; see
+Docs shown on their own use the whole canvas, in the docs canvas mode below.
+Beside other artboards on a [multiple-artboard canvas](multiple-artboards.md)
+they are an artboard like any other content; see
 [in a multiple-artboard canvas](#in-a-multiple-artboard-canvas).
 
-- A docs page uses the whole [canvas](terminology.md#canvas). There is no
-  artboard: the page is centered on a white canvas and scrolls vertically until
-  its end, like a documentation website.
-- Its text comes from a Markdown file that can live anywhere in the project.
-  Its examples come from project source files, compiled and mounted by the
+- Docs use the whole [canvas](terminology.md#canvas). There is no artboard:
+  the page is centered on a white canvas and scrolls vertically until its end,
+  like a documentation website. The canvas mode follows the lens: switching a
+  page from its docs to its design brings its artboard and size back.
+- The text comes from a Markdown file that can live anywhere in the project.
+  The examples come from project source files, compiled and mounted by the
   same adapters and environments as [TypeScript previews](previews.md).
-- Lenses switch what renders the examples, such as web and React Native Web.
-  The Markdown is the same in every lens. Themes are not lenses.
+- Each docs lens is one renderer of the examples, such as web and React
+  Native Web. The Markdown is the same in every docs lens. Themes are not
+  lenses.
 - Annotations, zoom, screenshots, handoffs, and the design-system export work
-  on docs pages.
+  in docs lenses.
 - Out of scope: generated props tables (tables are written by hand in the
-  Markdown), MDX, and interactive controls for examples.
+  Markdown), MDX, interactive controls for examples, and examples drawn from a
+  preview's states and controls.
 
-## Declaring a docs page
+## Declaring docs
 
-A docs page is declared in `workbench.yaml` like any other page, or discovered
-from a definition file like any TypeScript preview.
+Docs are declared in `workbench.yaml` on any page, or discovered from a
+definition file like any TypeScript preview.
 
 ### In workbench.yaml
 
-A page whose `src` ends in `.md` is a docs page. Its lenses are
-implementations of the new kind `examples`:
+A page's `docs` key names its Markdown file. A page whose `src` ends in `.md`
+is a Markdown page, and its `src` is its Markdown. Docs lenses are
+implementations of kind `docs`:
 
 ```yaml
 implementations:
   web:
-    kind: examples
+    kind: docs
     label: Web
     adapter: react
     styles:
       - src/styles/theme.css
   native:
-    kind: examples
+    kind: docs
     label: React Native Web
     adapter: react-native-web
 
@@ -64,35 +74,44 @@ collections:
   - name: Design system
     items:
       - label: Button
-        src: docs/button.md
+        src: src/button/button.workbench.ts   # its design: a preview
+        docs: docs/button.md                  # its docs
         implementations:
           web: src/button/examples/
           native: src/button/native-examples/
       - label: Card
-        src: docs/card.md
-        lens: native                      # optional: the lens shown by default
+        src: docs/card.md                     # a Markdown page
+        lens: native                          # optional: the docs lens shown by default
         implementations:
           web: src/card/card.examples.tsx
 ```
 
-- An `examples` implementation takes `label`, `adapter` (a built-in or
+- A `docs` implementation takes `label`, `adapter` (a built-in or
   project-registered adapter), and optional `styles` and `environment`, with
   paths relative to the project root. `environment` composes with the
   project's `workbench.config.ts` environment as previews' environments do.
-  `base`, `url`, `start`, and `catalog` are reported as problems.
-- A page maps each lens to an [example source](#examples): a directory (ending
-  in `/`) or a single file, relative to the project root.
-- `lens` names the lens selected by default. Without it, the first lens the
-  page maps is the default.
-- A `.md` page with no lenses is a valid docs page with no examples. This
-  covers foundations whose guides need nothing live.
+  `base`, `url`, `start`, and `catalog` are reported as problems, and `root`
+  other than `.`.
+- A page maps each docs lens to an [example source](#examples): a directory
+  (ending in `/`) or a single file, relative to the project root. A page
+  without Markdown that maps a docs lens is a problem.
+- `docs` must be a `.md` file inside the project. On a Markdown page it is a
+  problem: the page is its own docs.
+- A page with Markdown that maps no docs lens has the built-in **Docs** lens,
+  keyed `docs`: the Markdown with no examples. This covers foundations whose
+  guides need nothing live. Such a page can't also map another implementation
+  named `docs`.
+- A Markdown page has no design lens and may map other implementations too.
+  `lens` names its docs lens selected by default; without it, the first docs
+  lens it maps is the default. `lens` on any other page is a problem: a page
+  with a design opens on its design.
 
 ### Discovered from a definition
 
 A `*.workbench.ts` or `*.workbench.tsx` file may default-export
-`defineDocs({...})` from `@canonic2/workbench` instead of `definePreview`. It is
-discovered, placed by its `title`, and merged with authored pages the same
-way as a preview. Its optional `icon`, a kebab-case Lucide name, is its icon in
+`defineDocs({...})` from `@canonic2/workbench` instead of `definePreview`. It
+declares a Markdown page with its docs lenses, and is discovered, placed by
+its `title`, and merged with authored pages the same way as a preview. Its optional `icon`, a kebab-case Lucide name, is its icon in
 the page list; without one it shows `book-open`. An invalid icon fails the
 definition, as a preview's does.
 
@@ -118,10 +137,12 @@ export default defineDocs({
   in `lenses`. `states` is accepted with the same shape as a preview's.
 - `id` and `title` follow the preview rules, and IDs are unique across
   previews and docs pages.
+- A preview definition can't declare docs: a preview gets them where
+  `workbench.yaml` places it, with `docs` and docs lenses on its entry.
 
-## The canvas for a docs page
+## The canvas for docs
 
-- The docs page fills the canvas. The canvas background is white wherever
+- The docs fill the canvas. The canvas background is white wherever
   the page is not, at every zoom level. There is no artboard label, border, or
   shadow. The floating toolbar and view controls stay.
 - The page's content is at most 960 CSS pixels wide, centered, with side
@@ -139,8 +160,10 @@ export default defineDocs({
   **Zoom to fit** and **100%** both return to 100%. **Recenter view** centers
   horizontally at the current zoom and keeps the scroll position.
 - The size switcher (Fit, Laptop, Mobile, Resizable) stays in the top bar,
-  disabled with no size pressed. `sizes` on a docs page is reported as a problem ("sizes don’t apply to a
-  docs page, which uses the whole canvas.") and ignored.
+  disabled with no size pressed ("docs fill the canvas"). The page keeps the
+  sizes its design supports, and its design lens shows them again. `sizes` on
+  a Markdown page is reported as a problem ("sizes don’t apply to a Markdown
+  page, which uses the whole canvas.") and ignored.
 - **Annotations** work over the page. They belong to positions in the page,
   so they scroll with it and scale with zoom.
 
@@ -166,7 +189,8 @@ Decided 2026-10-04, to be built with the
 - **Zoom** is the canvas's, scaling every artboard alike; the docs page's own
   zoom rules apply only in the docs canvas mode.
 - **Lens, state, and example** belong to the artboard's view, so two artboards
-  can show one docs page in two lenses.
+  can show one page in two lenses: its design beside its docs, or its docs in
+  two renderers.
 - **Capture and handoff** treat it as any artboard: its viewport in the
   complete canvas image, and in the prompt its page, lens, and the examples in
   its view. The design-system export is unchanged: references per lens,
@@ -273,50 +297,64 @@ example Ant Design's):
 
 ## States
 
-- A docs page can declare states (`states` in YAML or in `defineDocs`). The
-  state applies to the whole page: every example receives it as
-  `context.state`. The state switcher in the top bar selects it.
+- In a docs lens the page's states apply to the whole page: every example
+  receives the current one as `context.state`. The state switcher in the top
+  bar selects it. A Markdown page declares its own (`states` in YAML or in
+  `defineDocs`).
 - The user guide recommends showing a component's variations side by side on
   the page instead of as states.
 
 ## Sidebar and address
 
-- A docs page has no entries under it in the page list: its examples are not
-  listed in the sidebar.
-- The address is `#<src>[:<state>][!<example>][~<lens>]`, for example
-  `#docs/card.md!with-custom-style~native`. An address that names an example
-  opens the page scrolled to it. A docs page has no width part; one given by
-  hand is ignored. The default state and lens are omitted. `!` joins `:`, `@`,
-  and `~` as characters a `src` cannot contain. Scrolling does not rewrite the
-  address.
-- The lens choice persists across pages as for other pages. A docs page
-  that lacks the chosen lens shows its default lens. A docs page always shows
-  one of its lenses; it has no separate design lens.
+- A page has no entries for its examples in the page list.
+- The address is `#<src>[:<state>][!<example>][~<lens>]`, with the page's own
+  `src`: `#src/button/button.workbench.ts!disabled~web` for a page with a
+  design, `#docs/card.md!with-custom-style~native` for a Markdown page. An
+  address that names an example opens the docs scrolled to it; `!` applies
+  only in a docs lens. A docs lens has no width part; one given by hand is
+  ignored. The default state is omitted, and so is a page's default lens: its
+  design, or a Markdown page's own docs lens. `!` joins `:`, `@`, and `~` as
+  characters a `src` cannot contain. Scrolling does not rewrite the address.
+- The lens choice persists across pages as for every lens. A page that
+  lacks the chosen lens shows its default lens: its design, or a Markdown
+  page's own docs lens. A Markdown page always shows one of its lenses.
+- A link in the docs to another page's Markdown opens that page in a docs
+  lens: the one showing when that page has it, else its default docs lens.
 
 ## Top bar
 
 The top bar shows the breadcrumb with its state switcher, the lens switcher
-when there are two or more lenses, reload, source files (the Markdown and the current
-lens's example source), the copyable reference, **Open on its own**, and
-**More**. **Preview controls** shows **Actions** and **Reset state** only.
+when there are two or more lenses (a page's design first, or a Markdown
+page's docs lenses first), reload, source files, the copyable reference,
+**Open on its own**, and **More**. A page with a design lists its design file,
+then **Docs** (its Markdown), then its implementations' code and each docs
+lens's example source; a Markdown page lists its Markdown first, as **Docs**.
+In a docs lens, **Preview controls** shows **Actions** and **Reset state**
+only.
 
 ## Screenshots, handoff, and export
 
-- A screenshot captures the visible part of the page at the current scroll
-  position, with annotations, as the camera does for other pages.
-- A handoff names the docs page, lens, state, the Markdown file, and the
+- A screenshot captures the visible part of the docs at the current scroll
+  position, with annotations, as the camera does for other lenses. Its size
+  is named "Docs, filling the canvas".
+- A handoff names the page, the docs lens, state, the Markdown file, and the
   examples visible in the captured area with their source files.
-- The [design-system export](export.md) captures, for every lens, one
-  reference per placed example (the example panel alone) and one reference of
-  the whole page at its 960-pixel layout. A docs page with no lenses gets the
-  whole-page reference only. Sources include the Markdown and example files.
+- The [design-system export](export.md) captures, for every page with docs
+  and every docs lens, one reference per placed example (the example panel
+  alone) and one reference of the whole docs at their 960-pixel layout, filed
+  under the page. With only the built-in Docs lens, the whole-docs reference
+  only. A page with a design gets its design references too; a Markdown page
+  has none. Sources include the Markdown and example files.
 
 ## Problems
 
-Docs-page problems join the shared problems list, named by page: unknown or
-invalid lens, missing Markdown file, unknown example key, duplicate
-placement, unplaced example, non-kebab-case example file, `sizes` on a docs
-page, and compile failures. Example sources compile only in a trusted
+Docs problems join the shared problems list, named by page: a docs lens on a
+page without Markdown, `docs` that isn't a `.md` file in the project, `docs`
+on a Markdown page, an implementation named `docs` beside the built-in Docs
+lens, `lens` on a page with a design or naming no docs lens, missing Markdown
+file, unknown example key, duplicate placement, unplaced example,
+non-kebab-case example file, `sizes` on a Markdown page, and compile
+failures. Example sources compile only in a trusted
 workspace. In an untrusted workspace the Markdown renders and every example
 shows a placeholder naming the trust requirement.
 
@@ -350,6 +388,18 @@ problems update when they arrive.
 - **Source text.** The server returns an example's source text for **Show
   code**: the whole file for directory examples, the export's declaration for
   named exports.
+- **Which lens shows.** [lenses.ts](../src/modules/docs/canvas/lenses.ts)
+  decides a page's lenses, the lens it shows, its default lens, the lens a
+  docs link opens, the lens the address names, and the canvas mode. It is
+  pure; the canvas loads it through
+  [bootstrap.ts](../src/modules/docs/canvas/bootstrap.ts) and waits for it
+  before applying the config, and Node tests check it. Off a server
+  (`file://`) the module can't load and the canvas shows no docs lenses.
+- **Docs entries.** The server keeps one entry per Markdown file, naming the
+  page it belongs to ([pages.ts](../src/modules/docs/pages.ts)); the first page
+  to claim a file has it. Docs are served at the Markdown's path in the lens
+  `?lens=` names, and the routes take the Markdown as `page`. Handoffs, the
+  source menu, and export references use the owning page.
 - **Schema documentation.** The schema change updates `workbench/README.md`,
   `docs/configuration.md`, `shared/skills/canonic-workbench/SKILL.md`, and
   `shared/rules/canonic-workbench.md`. A new user guide, `docs/docs-pages.md`,
@@ -357,13 +407,15 @@ problems update when they arrive.
 
 ## Pilot
 
-The first implementation is exercised in this repository's Acme demo
-(`demo/`), with one `html` lens. Button and Card are the **Components**
+The implementation is exercised in this repository's Acme demo (`demo/`),
+with one `html` docs lens. Button and Card are the **Components**
 collection; Colors is in **Design system**:
 
-- **Button**: declared in `workbench.yaml`, a directory of examples (one file
-  per example).
-- **Card**: declared in `workbench.yaml`, named exports in one file.
+- **Button**: the Interactive button TypeScript preview, placed in
+  `workbench.yaml` with `docs` and a directory of examples (one file per
+  example), so its design and its docs are two lenses of one page.
+- **Card**: a Markdown page declared in `workbench.yaml`, named exports in one
+  file.
 - **Colors**: discovered from `defineDocs`, a foundation page whose live
   swatch example reads the stylesheet's custom properties.
 
@@ -372,8 +424,12 @@ the pilot and is not part of this contract.
 
 ## Acceptance criteria
 
-- The Acme demo's three docs pages open on a white canvas, centered at a
+- The Acme demo's three docs open on a white canvas, centered at a
   960-pixel maximum, scrolled to the top at 100%, and scroll to their end.
+- Button opens on its design with Workbench and HTML in the lens switcher;
+  HTML shows its docs with the size switcher disabled, and Workbench brings
+  its artboard and size back. With HTML on, Card shows its docs and Sign in,
+  which has no docs, its design.
 - Zooming out shows more of the page without reflowing it; annotations drawn
   on an example stay on it while scrolling and zooming.
 - Switching lenses re-renders the examples without moving the text; an
@@ -396,9 +452,27 @@ the pilot and is not part of this contract.
   artboard on it. A full-height artboard would have made `position: fixed`
   and `vh` resolve against the whole page, so a modal example would center on
   a page thousands of pixels tall.
-- **2026-10-04: lenses render the examples.** Native and web renders are
-  lenses with developer-chosen names; a docs page has no design lens and
-  always shows one of its lenses, the first unless `lens` says otherwise.
+- **2026-10-04: docs are a lens, one per renderer.** A page has one or more
+  lenses onto the same component, so its docs are a lens of it, not a kind of
+  page: a component's design, implementation, and documentation are one entry
+  in the page list and two artboards can compare them. Each renderer of the
+  examples, such as web and React Native Web, is its own docs lens with a
+  developer-chosen name, keeping one lens switcher and one concept; the
+  Markdown is the same in each. The implementation kind is `docs`. A page
+  with Markdown and no docs lens has the built-in Docs lens. The canvas mode
+  follows the lens.
+- **2026-10-04: a Markdown page stays.** A page whose `src` is its Markdown is
+  its docs, with no design lens, for foundations and guides that have no
+  design. It always shows one of its lenses, its own docs lens unless the
+  chosen one is another it has.
+- **2026-10-04: the lens decision is the docs module's.** Which lens a page
+  shows is pure TypeScript in `src/modules/docs/canvas/lenses.ts`, shared by
+  the canvas and tests; `manifest.js` keeps the `workbench.yaml` rules both
+  config readers share (the `docs` kind and key, `lens`, and their problems),
+  so the browser and the server still read one file.
+- **2026-10-04: examples don't come from a preview's states.** Docs examples
+  stay their own example sources; drawing them from a preview's states and
+  controls is out of scope for now.
 - **2026-10-04: themes are not lenses.** A lens says what renders a page;
   a theme is a setting applied whatever renders it, and belongs with the
   planned tweaks controls. The demo's Light and Dark lenses were removed.
@@ -441,6 +515,9 @@ the pilot and is not part of this contract.
   bundle exports `examples`, `adapter`, and `environment`; the page script
   mounts them. The worker also starts for a project whose only compiled code
   is docs examples.
+  React Native Web examples receive a column flex host in each stage, allowing
+  `flex: 1` to fill its available content area. Stage padding and content-based
+  height remain intact; the adapter does not impose viewport height on panels.
 - **2026-10-04: a docs page renders before its examples are built.** Markdown
   renders in about a millisecond; building, listing, and starting the worker
   took the rest of a cold page's time (0.5–1 s locally, several seconds in
@@ -519,13 +596,26 @@ Verified 2026-10-04:
   wide and the page's height (Card 1426, Colors 1084), example references
   cropped to their panels (958 × 129 to 958 × 288), a lens lacking one example
   without a reference for it, no capture warnings.
+- **Docs as a lens**, headless Chrome against the Acme demo (`node server.js`
+  on this repository): Button opened on its Workbench design with sizes Laptop
+  and Mobile and the lens switcher showing Workbench and HTML; HTML switched
+  the canvas to the docs mode with no size enabled, its four examples ready,
+  and the address `#demo/previews/button.workbench.ts~html`; with HTML on,
+  Card showed its docs with its own lens left out of the address and Sign in
+  showed its design with its sizes; `!secondary~html` opened Button's docs;
+  Workbench brought the artboard and its size back; no script errors.
+  Annotations, the handoff, and the export through a docs lens of a page with
+  a design were checked by the server tests only, not in a live capture.
 
 ### Built
 
-- **Schema.** `manifest.js` reads the `examples` kind, `.md` pages, `lens`,
-  and `!` in `src` for both config readers; `address.js` reads and writes
-  `!example` and omits the width of a docs page; a docs page's own lens is left
-  out of the address.
+- **Schema.** `manifest.js` reads the `docs` kind, the page's `docs` key, `.md`
+  pages, `lens`, and `!` in `src` for both config readers; `address.js` reads
+  and writes `!example`; the canvas leaves the width out of a docs lens's
+  address and a Markdown page's own docs lens out of its address.
+- **Lenses.** [lenses.ts](../src/modules/docs/canvas/lenses.ts) and its tests;
+  the canvas's lens switcher, routing, sizes, canvas mode, and docs links in
+  [workbench.js](../workbench/workbench.js) decide with it.
 - **Discovery.** `defineDocs` from `@canonic2/workbench` (typed in
   [api.d.ts](../preview/api.d.ts)); the compiler's index validates definitions
   and the server places them by title, in a **Docs** collection when the title has
@@ -533,7 +623,7 @@ Verified 2026-10-04:
 - **Astro.** An `astro` lens takes a directory; each `.astro` file renders in the
   worker as an Astro preview's state does, and the bundle hands the page its
   HTML with asset URLs made absolute against the bundle.
-- **Portable viewer.** [portable.ts](../src/docs/portable.ts) writes each page
+- **Portable viewer.** [portable.ts](../src/modules/docs/portable.ts) writes each page
   in each lens as a static page under `browser/docs/`: the production bundle,
   the page script compiled once, Show code as JSON per example, and the images
   the Markdown references; [viewer.js](../preview/viewer/viewer.js) lists docs
@@ -544,8 +634,9 @@ Verified 2026-10-04:
   bundle. A listing is kept until a file it read changes, as a bundle is.
   Worker routes: `/docs/index`, `/docs/bundle`, and the bundle's files
   under `/_workbench/previews/docs/<slug>/`.
-- **Serving.** A declared docs page is served at its Markdown path (`?lens=`,
-  `?state=`); any other `.md` is served as a file, with its panels pending.
+- **Serving.** A page's Markdown is served as its docs at the Markdown's path
+  (`?lens=`, `?state=`), with its panels pending; any other `.md` is served as
+  a file.
   `/_workbench/docs/bundle` answers what the page mounts (the module, its
   stylesheet, the lens's example IDs, and the page's revision),
   `/_workbench/docs/source` Show code, and `/_workbench/docs/revision` the
@@ -554,20 +645,21 @@ Verified 2026-10-04:
   `onCatalogChanged` tells the host when a listing changes the problems.
   Workbench's own browser code is served from `/_workbench/src/` with types
   stripped ([browser-modules.ts](../src/server/browser-modules.ts)).
-- **The page.** [docs-service.ts](../src/docs/docs-service.ts) decides each
-  panel; [render-markdown.ts](../src/docs/render-markdown.ts) renders the
-  Markdown; [docs-page.ts](../src/docs/page/docs-page.ts) and
-  [mount-examples.ts](../src/docs/page/mount-examples.ts) mount the examples,
+- **The page.** [docs-service.ts](../src/modules/docs/docs-service.ts) decides each
+  panel; [render-markdown.ts](../src/modules/docs/render-markdown.ts) renders the
+  Markdown; [docs-page.ts](../src/modules/docs/page/docs-page.ts) and
+  [mount-examples.ts](../src/modules/docs/page/mount-examples.ts) mount the examples,
   run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and reload on edits with
   the scroll position kept.
 - **The canvas.** The docs canvas mode in [zoom.js](../workbench/zoom.js) with
-  the geometry from [docs-layout.ts](../src/docs/canvas/docs-layout.ts) (loaded by
-  [bootstrap.ts](../src/docs/canvas/bootstrap.ts)); `.wb[data-canvas-mode="docs"]` styles in
+  the geometry from [docs-layout.ts](../src/modules/docs/canvas/docs-layout.ts) (loaded by
+  [bootstrap.ts](../src/modules/docs/canvas/bootstrap.ts)); `.wb[data-canvas-mode="docs"]` styles in
   [workbench.css](../workbench/workbench.css); lenses, states, addresses,
   scrolling to an addressed example, and docs links in
   [workbench.js](../workbench/workbench.js).
-- **Source menu, handoff, export.** Each lens's example source joins the
-  page's code entries; the handoff names the docs page, the lens, and the
+- **Source menu, handoff, export.** A page's Markdown, when it isn't the
+  page's own file, and each docs lens's example source join the page's code
+  entries; the handoff names the page, the docs lens, the Markdown, and the
   examples in view with their files; the export plans docs references
   separately (`docsExportPlan` in [server.js](../server.js)) through the helper's
   `fullPage` and `selector` options
@@ -591,20 +683,31 @@ Verified 2026-10-04:
   instance, with its own dimensions, scroll, example state, and capture.
   The [canvas support API](multiple-artboards.md) includes them in full
   review/context output. The docs canvas mode remains renderer-level behavior.
+- **A preview definition can't declare its docs.** `definePreview` has no
+  docs field; a preview gets docs only where `workbench.yaml` places it.
+- **An address naming a page's Markdown** opens nothing when the Markdown
+  belongs to a page with a design: the address names the page's own `src`.
+- **The portable viewer** lists each page's docs as an entry of its own with a
+  Lens menu, apart from the page's preview.
 
 ### Verification points
 
-- [src/docs/](../src/docs/) `*.test.ts`: Markdown reading, rendering, example
-  IDs, placement, export source, the docs service with fake I/O, and the canvas
-  geometry ([docs-layout.test.ts](../src/docs/canvas/docs-layout.test.ts)).
+- [src/modules/docs/](../src/modules/docs/) `*.test.ts`: Markdown reading,
+  rendering, example IDs, placement, export source, the docs service with fake
+  I/O, the canvas geometry
+  ([docs-layout.test.ts](../src/modules/docs/canvas/docs-layout.test.ts)), and
+  which lens a page shows ([lenses.test.ts](../src/modules/docs/canvas/lenses.test.ts)).
+- [preview.test.js](../workbench/preview.test.js): the lens switcher and the
+  size switcher in a docs lens, with the canvas's own code.
 - [browser-modules.test.ts](../src/server/browser-modules.test.ts): serving
   and caching browser modules.
 - [preview-docs.test.js](../preview-docs.test.js): docs bundles (directory and
   file lenses, `export *`, environments, rebuilds, request validation) and the
   server (pages in each lens, Show code, revision, problems, untrusted
-  workspaces, `defineDocs` discovery, export planning).
+  workspaces, `defineDocs` discovery, export planning, and a page with a
+  design whose docs are served, listed in its sources, and named in a review).
 - [zoom.test.js](../workbench/zoom.test.js): docs canvas mode zoom, fit, and scroll.
 - [manifest.test.js](../workbench/manifest.test.js),
   [address.test.js](../workbench/address.test.js),
   and [config.test.js](../config.test.js): the schema and the address.
-- [handoff.test.js](../handoff.test.js): the docs-page handoff prompt.
+- [handoff.test.js](../handoff.test.js): the handoff prompt through a docs lens.

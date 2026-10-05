@@ -55,7 +55,7 @@ function page(raw, where, impls, sizes, problems) {
   if (manifest.srcProblem(src)) return null;
   var item = { label: label, src: src };
   manifest.pageLensLabel(raw.lensLabel, item, where + ' › ' + label, problems);
-  /* A docs page has no artboard size; docsPageEntry reports sizes on one. */
+  /* A Markdown page has no artboard size; docsPageEntry reports sizes on one. */
   if (!manifest.isDocs(src)) {
     var sized = sizeSchema.readPageSizes(raw.sizes, sizes, where + ' › ' + label, problems);
     if (sized) {
@@ -67,9 +67,10 @@ function page(raw, where, impls, sizes, problems) {
   if (icon) item.icon = icon;
   var found = states(raw.states);
   if (found) item.states = found;
+  manifest.pageMarkdown(raw, item, where + ' › ' + label, problems);
   var lenses = manifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
   if (lenses) item.implementations = lenses;
-  manifest.docsPageEntry(raw, item, where + ' › ' + label, problems);
+  manifest.docsPageEntry(raw, item, impls, where + ' › ' + label, problems);
   var code = manifest.pageCode(raw.code, impls, where + ' › ' + label, problems);
   if (code) item.code = code;
   return item;

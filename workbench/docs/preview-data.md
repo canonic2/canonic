@@ -282,15 +282,15 @@ every render.
 
 ### Examples on docs pages
 
-The examples on a [docs page](docs-pages.md) render through environments too:
+The examples in a page's [docs](docs-pages.md) render through environments too:
 the project's environment for the lens's adapter, with the lens's own
 [`environment`](docs-pages.md#lenses) inside it. Exports such as `wrap`,
-`configure`, and `mount` run for each example. `setup` runs once for the page
+`configure`, and `mount` run for each example. `setup` runs once for the docs
 before the first example mounts, and `ready` once after the last.
 
 An example's context has `state`, `signal`, `action`, and `navigate`, but its
 `inputs`, `fixtures`, and `globals` are empty, so an environment that reads
-them gets its defaults on a docs page. Docs pages have no request mocks or
+them gets its defaults in a docs lens. Docs have no request mocks or
 controls.
 
 ## Request mocks
@@ -509,8 +509,8 @@ tried to do, newest last. **Reset state** clears it.
 
 Values are shown as text; objects are shown as JSON.
 
-On a [docs page](docs-pages.md), **Actions** lists the examples'
-`context.action` calls, and the page's links and forms when **Actions** is on.
+In a [docs lens](docs-pages.md), **Actions** lists the examples'
+`context.action` calls, and the docs' links and forms when **Actions** is on.
 
 Log your own events with `context.action`. Components usually report them
 through callback props or events; connect those in an environment or a page

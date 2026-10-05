@@ -19,8 +19,11 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
 - `handoff.js`: handoffs. `remote.js`: requests to implementations.
 - `src/modules/export/`: the TypeScript design-system source and archive
   exporter, exposed through `index.ts`. Job orchestration remains in `server.js`.
+- `src/modules/docs/`: docs, a lens of any page: which lens a page shows
+  (`canvas/lenses.ts`), the docs canvas, the docs page script, and the server's
+  docs service, exposed through `index.ts`.
 - `src/`: TypeScript source. Current capability directories include
-  `src/docs/`, `src/sizes/` and `src/canvas/`; shared presentation and
+  `src/sizes/` and `src/canvas/`; shared presentation and
   infrastructure live in `src/components/`, `src/theme/` and `src/server/`.
 - `workbench/`: the browser canvas: manifest reader, states, lenses,
   page list, annotations. Read `workbench/README.md` before changing it.

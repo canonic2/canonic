@@ -1,3 +1,4 @@
+import type { ExportRequest } from './request.ts';
 /** The resolved-space subset consumed by the source exporter. */
 export interface ExportView {
   name?: string;
@@ -13,6 +14,7 @@ export interface PortablePreview {
   packages?: { name: string; version?: string | null }[];
 }
 export interface PortableExport {
+  docs?: unknown[];
   files: { path: string; data: string }[];
   previews: PortablePreview[];
   warnings: string[];
@@ -29,6 +31,7 @@ export interface ReferenceScreenshot {
   body: Buffer;
 }
 export interface ExportOptions {
+  request?: ExportRequest;
   /** Build warnings recorded alongside unresolved source references. */
   warnings?: string[];
   manifest?: string;
@@ -48,6 +51,7 @@ export interface PageReport {
   screenshots: { state: string | null; label: string; size: string; sizeLabel?: string; path: string; width: number; height: number }[];
 }
 export interface ExportReport {
+  request?: ExportRequest;
   name?: string;
   generatedAt: string;
   selection: string;
@@ -60,7 +64,7 @@ export interface ExportReport {
   parts?: { number: number; filename: string; files: number }[];
 }
 export interface ZipEntry { name: string; body: string | Buffer }
-export interface Archive { filename: string; body: Buffer }
+export interface Archive { filename: string; body: Buffer; contentType?: string }
 export interface ExportResult {
   filename: string | null;
   body: Buffer | null;
