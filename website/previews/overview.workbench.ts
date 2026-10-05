@@ -4,9 +4,9 @@ export default definePreview({
   id: 'website/overview',
   title: 'Pages/Overview',
   adapter: 'astro',
-  source: { entry: '../src/pages/index.astro' },
+  source: { entry: '../src/pages/workbench/index.astro' },
   links: {
-    '/': 'website/overview',
+    '/workbench/': 'website/overview',
     '/workbench/install/': 'website/install',
     '/workbench/changelog/': 'website/changelog',
     '/workbench/docs/': 'website/docs',

@@ -462,7 +462,7 @@ Replacing the fixed sizes touches code that assumes them
 - Multiple-artboard children open at `@resizable`, and
   `wbArtboardShell.size` switches to Resizable; that path has to set the
   artboard's size without going through the space's sizes.
-- Shield's policy hook (`shield/src/adapters/policy-hook.mjs`) recognizes
+- Shield's policy hook (`private/shield/src/adapters/policy-hook.mjs`) recognizes
   Workbench addresses only with `fit`, `resizable`, `390`, `393`, or `1512`;
   it has to accept any kebab-case size key. The shared Workbench skill and
   rule describe the size part of an address and change with it.

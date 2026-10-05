@@ -6,6 +6,7 @@ import { docsMarkdown, shikiConfig } from './src/lib/docs.js';
 export default defineConfig({
   site: process.env.SITE_ORIGIN || 'https://canonic.sh',
   base: process.env.SITE_BASE || '/',
+  redirects: { '/': '/workbench/' },
   integrations: [docsMarkdown()],
   markdown: { shikiConfig },
 });

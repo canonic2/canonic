@@ -13,6 +13,11 @@ everything else it would do on a real site, such as following a route,
 submitting a form, or starting a download, is recorded under **Actions**
 instead. See [Preview data, mocks, and actions](preview-data.md).
 
+Workbench mounts your content into a container that fills the artboard width,
+including with a flex body and loading, empty, or error content. Styles targeting
+your production root, such as `#app`, do not target the preview mount; keep any
+additional root styling in your preview source or environment.
+
 This page covers what every preview shares: definitions, states, controls,
 lifecycle hooks, the command-line tools, and portable exports. Each framework
 has its own guide:

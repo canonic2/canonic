@@ -35,6 +35,10 @@ project-registered adapters. They do not run a project's application server,
   and custom adapter.
 - Managed previews use retained iframe sessions and become ready only
   after mounting, fonts, and visible images.
+- The preview mount fills the artboard width, including when project styles
+  make the body a flex container. Loading, empty, and error content use the
+  same width. The mount retains a viewport minimum height; web content does
+  not need to stretch vertically.
 - The export adds a `browser/` package that opens from a static HTTP server
   without Electron or Workbench; failed builds become warnings while successful
   previews remain; browser build products do not enter source hashes. The CLI

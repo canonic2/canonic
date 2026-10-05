@@ -24,7 +24,7 @@ var chrome = require(path.join(EXTENSION, 'scripts/chrome.cjs'));
 // The Acme demo is the repository's first space; see workbench.yaml.
 var REPOSITORY = path.resolve(__dirname, '../../..');
 var OUT = path.resolve(__dirname, '../public/images');
-var PAGE = path.resolve(__dirname, '../src/pages/index.astro');
+var PAGE = path.resolve(__dirname, '../src/pages/workbench/index.astro');
 var DATA = path.resolve(__dirname, '../src/data/screenshots.json');
 // The overview is a full desktop window. The state and annotations shots use
 // a narrower window, which the canvas zooms to fit.

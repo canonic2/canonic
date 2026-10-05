@@ -145,8 +145,8 @@ versionless asset names, with the changelog entry as its notes. It then
 publishes the same files to the Visual Studio Marketplace and Open VSX, publishes
 `preview/` to npm as `@canonic2/workbench`, and publishes the website. Build
 files are also available as workflow artifacts for 14 days.
-Open VSX publishing uses the `canonic` namespace and requires the `OVSX_PAT`
-Actions repository secret for an account with publishing access. Already-published
+Open VSX publishing uses the `canonic` namespace and GitHub trusted publishing
+through OIDC, with `extension.yml` registered as a trusted publisher. Already-published
 platform versions are skipped when the Open VSX job is rerun. See
 [distribution setup](../../docs/distribution.md#workbench-extension) for account
 and credential requirements.

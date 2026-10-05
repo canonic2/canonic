@@ -7,7 +7,7 @@ release downloads and publishes to GitHub Pages.
 
 | File | Job |
 | --- | --- |
-| `src/pages/index.astro` | the Workbench overview |
+| `src/pages/workbench/index.astro` | the Workbench overview |
 | `src/pages/workbench/install.astro` | the Install page: the download for this computer, every platform's file, and the setup steps |
 | `src/pages/workbench/changelog.astro` | the Changelog page: every published release, newest first, with its notes, links, and builds where it has them |
 | `src/layouts/Base.astro` | the page shell: head, the product bar and section links, and footer |
@@ -81,7 +81,7 @@ tied to their files, so after editing a guide, restart the Workbench server to
 see the change in the preview.
 
 The previews are mocks of the pages. Each definition's `links` maps the site's
-routes that have a preview, `/`, `/workbench/install/`, `/workbench/changelog/`,
+routes that have a preview, `/workbench/`, `/workbench/install/`, `/workbench/changelog/`,
 and each guide under `/workbench/docs/`, so with Actions on the header, buttons,
 and docs navigation move between them on the canvas. Links to GitHub and the
 `.vsix` downloads are recorded under **Actions** instead of followed. When you add a page preview,
@@ -129,6 +129,7 @@ releases if it can't reach them.
 
 ## Workbench documentation
 
+The site root redirects to `/workbench/`, where the Workbench overview lives.
 The docs live at `/workbench/docs/`. Astro's content collection reads every
 Markdown file in `../workbench/docs/`, which contains the public user guides.
 Edit those files directly; the website keeps no duplicate content and requires

@@ -120,7 +120,7 @@ function load(address) {
       document.head.append(viewport);
       const style = document.createElement('style');
       style.setAttribute('data-wb-host-style', '');
-      style.textContent = 'html,body{margin:0;min-height:100%}#workbench-preview{min-height:100vh}';
+      style.textContent = 'html,body{margin:0;min-height:100%}#workbench-preview{width:100%;min-width:0;box-sizing:border-box;min-height:100vh}';
       document.head.append(style);
       if (content.stylesheet) {
         const link = document.createElement('link');

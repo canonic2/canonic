@@ -301,7 +301,7 @@ point or explicitly adapt its own delivery before removing the shared script.
 Manifest validation, capture fidelity, compiler/framework adapters, and catalog
 export remain existing capabilities, reused through their public boundaries.
 
-Keep Shield integration changes in `shield/src/`. Test canonical code first;
+Keep Shield integration changes in `private/shield/src/`. Test canonical code first;
 regeneration/rollout into distributed copies requires its own authorized scope.
 Do not alter the other session's runtime files as part of writing this plan.
 
@@ -323,7 +323,7 @@ Do not alter the other session's runtime files as part of writing this plan.
   Unit stubs cannot establish those host/resource contracts.
 - Package checks: `pnpm --dir packages/workbench test` and
   `pnpm --dir packages/workbench run check`. Shield reader changes also run
-  `node --test shield/src/integrations/workbench-context.test.mjs` and any
+  `node --test private/shield/src/integrations/workbench-context.test.mjs` and any
   affected pipeline tests. Website guide/UI changes use its test/build and
   screenshot workflow. Finish with `git diff --check` and relevant untracked
   file review. Record platform/prerequisite limits separately from passing

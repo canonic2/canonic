@@ -471,7 +471,7 @@ class Compiler {
       (development ? '<base href="/_workbench/previews/preview/' + slug + '/">' : '') +
       '<title>' + (definition.title || definition.id).replace(/[&<>"']/g, char => '&#' + char.charCodeAt(0) + ';') + '</title>' +
       (outputs.has('preview.css') ? '<link rel="stylesheet" href="./preview.css">' : '') +
-      '<style>html,body{margin:0;min-height:100%}#workbench-preview{min-height:100vh}</style></head><body>' +
+      '<style>html,body{margin:0;min-height:100%}#workbench-preview{width:100%;min-width:0;box-sizing:border-box;min-height:100vh}</style></head><body>' +
       '<script>window.__workbenchOptions=' + JSON.stringify({ development, revision, revisionUrl: '/_workbench/previews/revision?file=' + encodeURIComponent(slash(path.relative(this.root, file))) }).replace(/</g, '\\u003c') + '</script>' +
       '<script type="module" src="./preview.js"></script></body></html>';
     outputs.set('index.html', Buffer.from(html));

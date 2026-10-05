@@ -182,10 +182,19 @@ test('bundles React and Vue SFCs with scoped styles using project framework vers
   }
 });
 
-test('React Native Web fills preview frames and docs stages without project styles', {
+test('preview mounts fill flex-body artboards and React Native Web fills frames and docs stages', {
   timeout: 60000, skip: require('./electron-runtime').unavailable() || false,
 }, async t => {
   const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\n',
+    'flex.workbench.ts': `import { definePreview } from '@canonic2/workbench';
+      export default definePreview({ id:'pages/jobs', title:'Pages/Jobs', adapter:'react',
+        source:{entry:'./Flex.tsx'}, states:{loading:{inputs:{label:'Loading'}},
+          empty:{inputs:{label:'No jobs'}}, 'load-error':{inputs:{label:'Load error'}}} });`,
+    'Flex.tsx': `import './flex.css';
+      export default function Jobs({label}) { return <section data-testid="screen" style={{width:'100%'}}>
+        <div style={{width:827,maxWidth:'100%'}}>{label}</div></section>; }`,
+    'flex.css': 'body { display:flex; } #app { width:100%; }',
     'native.workbench.ts': definition('react-native-web', './Screen.tsx'),
     'web.workbench.ts': definition('react', './Web.tsx'),
     'Screen.tsx': `import { View, Text } from 'react-native';
@@ -196,9 +205,10 @@ test('React Native Web fills preview frames and docs stages without project styl
   });
   const compiler = new Compiler(root);
   const routes = new Map();
-  for (const name of ['native', 'web']) {
+  for (const name of ['native', 'web', 'flex']) {
     const built = await compiler.compile(name + '.workbench.ts', false);
     for (const [file, contents] of built.outputs) routes.set('/' + name + '/' + file, contents);
+    if (name === 'flex') continue;
     const docs = await compiler.compileDocs({ adapter: name === 'native' ? 'react-native-web' : 'react', examples: name === 'native' ? 'examples.ts' : 'web-examples.ts' }, false);
     for (const [file, contents] of docs.outputs) routes.set('/' + name + '-docs/' + file, contents);
     routes.set('/' + name + '-docs/index.html', Buffer.from(`<link rel="stylesheet" href="./examples.css">
@@ -211,7 +221,7 @@ test('React Native Web fills preview frames and docs stages without project styl
   }
   const http = require('node:http');
   const listener = http.createServer((req, res) => {
-    const contents = routes.get(req.url);
+    const contents = routes.get(req.url.split('?')[0]);
     if (!contents) { res.writeHead(404); res.end(); return; }
     res.setHeader('Content-Type', req.url.endsWith('.js') ? 'text/javascript' : req.url.endsWith('.css') ? 'text/css' : 'text/html');
     res.end(contents);
@@ -219,6 +229,8 @@ test('React Native Web fills preview frames and docs stages without project styl
   await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => listener.close(resolve)));
   const base = 'http://127.0.0.1:' + listener.address().port;
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
   const runner = path.join(root, 'check.cjs');
   fs.writeFileSync(runner, `const { app, BrowserWindow } = require('electron');
     const assert = require('node:assert/strict');
@@ -232,6 +244,24 @@ test('React Native Web fills preview frames and docs stages without project styl
           else if(Date.now()-start>10000) reject(new Error('Mount timed out')); else setTimeout(poll,20);
         }; poll(); })\`);
       };
+      for (const surface of ['portable','live']) {
+        if (surface === 'live') await win.loadURL(${JSON.stringify(new URL(running.url).origin)} + '/_workbench/preview-host.html');
+        for (const [state,label] of [['loading','Loading'],['empty','No jobs'],['load-error','Load error']]) {
+          if (surface === 'portable') await load('/flex/index.html?state=' + state);
+          else await evaluate('window.wbPreviewHost.load(' + JSON.stringify(${JSON.stringify(new URL(running.url).origin)} + '/flex.workbench.ts?state=' + state) + ')');
+          assert.equal(await evaluate('document.querySelector("[data-testid=screen]").textContent.trim()'),label);
+          for (const [width,height] of [[1512,982],[393,852],[800,600]]) {
+            win.setContentSize(width,height);
+            await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+            const box = await evaluate(\`(() => { const mount=document.querySelector('#workbench-preview').getBoundingClientRect();
+              const screen=document.querySelector('[data-testid=screen]').getBoundingClientRect();
+              return {mount:mount.width,screen:screen.width,width:innerWidth,height:mount.height,viewportHeight:innerHeight}; })()\`);
+            assert.equal(box.mount,box.width,surface + ' ' + state);
+            assert.equal(box.screen,box.width,surface + ' ' + state);
+            assert.ok(box.height >= box.viewportHeight);
+          }
+        }
+      }
       await load('/native/index.html');
       for (const [width,height] of [[393,852],[800,600],[320,480]]) {
         win.setContentSize(width,height);

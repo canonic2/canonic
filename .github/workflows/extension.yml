@@ -146,12 +146,13 @@ jobs:
           npx --yes "@vscode/vsce@$vsce" publish --azure-credential --packagePath "${files[@]}"
 
   # Publish the same six VSIX files under the manifest's `canonic` publisher.
-  # OVSX_PAT is a repository secret for an Open VSX namespace member.
+  # Open VSX trusts this GitHub workflow through OIDC, so no token is stored.
   publish_openvsx:
     needs: release
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/setup-node@v7
         with:
@@ -162,17 +163,11 @@ jobs:
           merge-multiple: true
           path: dist
       - name: Publish six VSIX files to Open VSX
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
-          if [ -z "$OVSX_PAT" ]; then
-            echo '::error::Set the OVSX_PAT repository secret to an Open VSX token with publishing access to canonic.'
-            exit 1
-          fi
           version="${GITHUB_REF_NAME#workbench/v}"
           files=(dist/*-"$version".vsix)
           test "${#files[@]}" -eq 6
-          npx --yes ovsx@1.2.0 publish --skip-duplicate --packagePath "${files[@]}"
+          npx --yes ovsx@1.2.0 publish --trusted-publishing --skip-duplicate --packagePath "${files[@]}"
 
   # @canonic/workbench, the authoring types, at the extension's version. npm
   # trusts this workflow as the package's publisher, so no token is stored.

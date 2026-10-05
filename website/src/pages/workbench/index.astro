@@ -1,17 +1,17 @@
 ---
-import Base from '../layouts/Base.astro';
-import CodeBlock from '../components/CodeBlock.astro';
-import ControlStrip from '../components/ControlStrip.astro';
-import DownloadCards from '../components/DownloadCards.astro';
-import Feature from '../components/Feature.astro';
-import InstallCommand from '../components/InstallCommand.astro';
-import SectionHead from '../components/SectionHead.astro';
-import { base } from '../lib/base.js';
-import { products } from '../lib/marks.js';
-import { download, downloads as loadDownloads, github, marketplace, pages, setupYaml, workbenchNav } from '../lib/workbench.js';
+import Base from '../../layouts/Base.astro';
+import CodeBlock from '../../components/CodeBlock.astro';
+import ControlStrip from '../../components/ControlStrip.astro';
+import DownloadCards from '../../components/DownloadCards.astro';
+import Feature from '../../components/Feature.astro';
+import InstallCommand from '../../components/InstallCommand.astro';
+import SectionHead from '../../components/SectionHead.astro';
+import { base } from '../../lib/base.js';
+import { products } from '../../lib/marks.js';
+import { download, downloads as loadDownloads, github, marketplace, pages, setupYaml, workbenchNav } from '../../lib/workbench.js';
 // Written by screenshots/capture.cjs: the overview's numbered regions and
 // the controls strip's crops and hotspots, as percentages of each image.
-import screenshots from '../data/screenshots.json';
+import screenshots from '../../data/screenshots.json';
 
 const downloads = await loadDownloads();
 const version = downloads && downloads.version;

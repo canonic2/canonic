@@ -2,12 +2,12 @@
 
 The Canonic website, served at `https://canonic.sh/`. It covers four products
 (Workbench, Sandbox, Playground, Shield). Only Workbench has pages so far:
-an overview (the home page), Docs, Install, and Changelog. `README.md`
+an overview at `/workbench/`, Docs, Install, and Changelog. `README.md`
 explains the build, the screenshots, and publishing.
 
 ## Layout
 
-- `src/pages/index.astro`: the Workbench overview.
+- `src/pages/workbench/index.astro`: the Workbench overview.
 - `src/pages/workbench/`: the Docs pages (built from the Workbench guides),
   the Install page, and the Changelog.
 - `src/layouts/Base.astro`: the product bar, section nav, and footer.

@@ -100,14 +100,14 @@ workbench:
   agent_context: true
 ```
 
-Shield's [workbench-context.mjs](../../../shield/src/integrations/workbench-context.mjs)
+Shield's [workbench-context.mjs](../../../private/shield/src/integrations/workbench-context.mjs)
 does the work in both roles: `hook` prints the view (or nothing), and `mcp`
 serves the tool and resource over stdio. Shield adds the MCP server to every
 enabled editor's configuration and the hook to Claude Code's
 `.claude/settings.json` and Codex's `.codex/hooks.json`. Its configuration
 docs cover the generated entries.
 
-The [Shield hook specification](../../../shield/specs/hooks.md) defines
+The [Shield hook specification](../../../private/shield/specs/hooks.md) defines
 generation, runtime protocols, approval, and agent coverage. Codex requires
 review and trust of new or changed hook definitions before they can run.
 
@@ -155,9 +155,9 @@ review and trust of new or changed hook definitions before they can run.
   heartbeats, closing, staleness, field filtering, the announcement file),
   [server.test.js](../server.test.js) (the route and the file's lifecycle),
   and Shield's
-  [integration](../../../shield/src/integrations/workbench-context.test.mjs),
-  [output](../../../shield/src/outputs/workbench-context.test.mjs), and
-  [loader](../../../shield/src/loaders/workbench.test.mjs) tests.
+  [integration](../../../private/shield/src/integrations/workbench-context.test.mjs),
+  [output](../../../private/shield/src/outputs/workbench-context.test.mjs), and
+  [loader](../../../private/shield/src/loaders/workbench.test.mjs) tests.
 - Manual, not yet done: the hook and tool inside the Claude Code and Codex
   extensions, with their versions recorded.
 

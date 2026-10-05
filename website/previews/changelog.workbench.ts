@@ -35,7 +35,7 @@ export default definePreview({
     unavailable: { label: 'GitHub unavailable', requests: { 'GET /repos/canonic2/canonic/releases': { status: 503 } } },
   },
   links: {
-    '/': 'website/overview',
+    '/workbench/': 'website/overview',
     '/workbench/install/': 'website/install',
     '/workbench/changelog/': 'website/changelog',
     '/workbench/docs/': 'website/docs',

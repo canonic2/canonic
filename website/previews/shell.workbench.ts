@@ -10,9 +10,9 @@ export default definePreview({
     description: 'A page using the website layout.',
     product: 'Workbench',
     version: '',
-    nav: [{ label: 'Overview', href: '/', current: true }],
+    nav: [{ label: 'Overview', href: '/workbench/', current: true }],
   },
-  links: { '/': 'website/overview' },
+  links: { '/workbench/': 'website/overview' },
   controls: { title: { type: 'text' }, version: { type: 'text' }, nav: { type: 'json' } },
   states: {
     default: {},

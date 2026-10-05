@@ -8,7 +8,7 @@ export const github = `https://github.com/${repository}`;
 export const marketplace = 'https://marketplace.visualstudio.com/items?itemName=canonic.canonic-workbench';
 
 export const pages = {
-  overview: base,
+  overview: `${base}workbench/`,
   docs: `${base}workbench/docs/`,
   install: `${base}workbench/install/`,
   changelog: `${base}workbench/changelog/`,

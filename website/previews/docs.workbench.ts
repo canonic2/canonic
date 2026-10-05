@@ -14,7 +14,7 @@ export default definePreview({
   source: { entry: './docs-page.astro' },
   states: Object.fromEntries(ids.map(id => [id, { label: label(id), inputs: { id } }])),
   links: {
-    '/': 'website/overview',
+    '/workbench/': 'website/overview',
     '/workbench/install/': 'website/install',
     '/workbench/changelog/': 'website/changelog',
     ...Object.fromEntries(ids.map(id => [route(id), { preview: 'website/docs', state: id }])),

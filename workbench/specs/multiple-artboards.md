@@ -140,7 +140,7 @@ changes were present during investigation.
   and optional manifest key, not just its served root. Several spaces can
   share a root and still have different configurations. Runtime space IDs
   depend on local paths and are not portable team-sharing references.
-- [Shield's context reader](../../../shield/src/integrations/workbench-context.mjs)
+- [Shield's context reader](../../../private/shield/src/integrations/workbench-context.mjs)
   validates the reporting server's root and consumes `view.text`.
   [Agent context](agent-context.md#finding-the-server) also notes that spaces
   sharing a root share one announcement file. Multi-space publication must
