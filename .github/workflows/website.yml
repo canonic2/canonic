@@ -37,23 +37,23 @@ jobs:
           ref: ${{ steps.website.outputs.ref }}
       - uses: pnpm/action-setup@v4
         with:
-          package_json_file: website/package.json
+          package_json_file: packages/website/package.json
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: pnpm
-          cache-dependency-path: website/pnpm-lock.yaml
+          cache-dependency-path: packages/website/pnpm-lock.yaml
       - name: Check website tag
         if: startsWith(github.ref, 'refs/tags/website/')
         run: node -e 'if (!/^website\/v\d+\.\d+\.\d+$/.test(process.env.GITHUB_REF_NAME)) { console.error("Tag must be website/v<major>.<minor>.<patch>"); process.exit(1); }'
       - uses: actions/configure-pages@v6
         id: pages
       - run: pnpm install --frozen-lockfile
-        working-directory: website
+        working-directory: packages/website
       - run: pnpm test
-        working-directory: website
+        working-directory: packages/website
       - name: Build the site
-        working-directory: website
+        working-directory: packages/website
         env:
           GITHUB_TOKEN: ${{ github.token }}
           WORKBENCH_TAG: ${{ inputs.workbench_tag }}
@@ -62,7 +62,7 @@ jobs:
         run: pnpm run build
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: website/dist
+          path: packages/website/dist
 
   deploy:
     needs: build

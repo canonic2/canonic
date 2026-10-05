@@ -211,19 +211,22 @@ guides describe current layouts, runtimes and compatibility constraints.
 - Organize capabilities into modules with one clear owner for behavior, types,
   validation, state and lifecycle. Group files by responsibility; do not split
   every function into a file or create empty architectural layers.
-- Use `src/modules/<capability>/` for new capability modules and bounded
-  capability migrations by default. Keep the capability's logic, orchestration,
+- Place capability modules where the package's language expects them.
+  JavaScript/TypeScript packages use `src/modules/<capability>/` for new
+  capability modules and bounded capability migrations. Rust packages follow
+  the Rust architecture rule. Keep the capability's logic, orchestration,
   dedicated adapters, types and tests together, following the package's test
-  convention. A module directory represents an owned capability, not one file
-  or every JavaScript/TypeScript importable unit.
+  convention. A capability module represents an owned capability, not one file
+  or every importable unit.
 - Keep application composition, shared presentation, themes and host/platform
-  infrastructure outside `src/modules/` in the locations defined by the package
-  guide. Capability-specific adapters stay with their module; infrastructure
-  shared across capabilities has its own explicit owner. Do not create empty
-  folders or move code into a generic utilities directory to tidy the tree.
+  infrastructure outside capability modules, in the locations defined by the
+  package guide. Capability-specific adapters stay with their module;
+  infrastructure shared across capabilities has its own explicit owner. Do not
+  create empty folders or move code into a generic utilities directory to tidy
+  the tree.
 - Package guides document current locations, target locations and justified
-  layout exceptions. Existing directories outside `src/modules/` are not an
-  instruction to move them all at once. Migrate within the requested capability,
+  layout exceptions. Existing code outside the target location is not an
+  instruction to move it all at once. Migrate within the requested capability,
   preserving public entry points and updating consumers, asset serving and
   packaging where paths change.
 - Separate domain decisions, application workflows, external adapters and
@@ -242,8 +245,8 @@ guides describe current layouts, runtimes and compatibility constraints.
 - Compose dependencies at application entry points. Avoid hidden I/O or lifecycle
   initialization during imports. Prefer explicit dependencies over global service
   lookup; functions and classes are both valid when their responsibility is clear.
-- Match each package's JavaScript/TypeScript module format, supported runtime,
-  build and dependency constraints. Shared rules do not mandate a framework,
+- Match each package's language, module format, supported runtime, build and
+  dependency constraints. Shared rules do not mandate a framework,
   dependency-injection library, package manager or repository-wide toolchain.
 - Extract shared implementations after repeated behavior establishes a compatible
   contract. Shared instructions do not require shared code or a new package.
@@ -271,6 +274,10 @@ writing rule defines its source locations, audience, publishing, and validation.
 - Record durable discoveries with evidence and rationale. Label hypotheses;
   include dates and conditions for measurements where relevant. Keep current
   requirements prominent rather than accumulating a conversation transcript.
+- Build experiments, probes and prototypes in temporary folders, not in the
+  repository. Record their findings in the relevant spec, with enough detail
+  about each fixture's setup to rebuild it, then delete the scripts. Product
+  code and tests replace prototypes; they are not kept alongside them.
 - Update affected documentation when supported behavior changes. Verify claims,
   examples, labels, commands, defaults, and recovery instructions against the
   product. A specification does not establish that a proposed feature is available.

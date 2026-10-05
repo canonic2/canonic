@@ -132,7 +132,7 @@ native validation; Linux hosts without a display have no screenshots.
 
 ## GitHub builds and releases
 
-The [extension workflow](../.github/workflows/extension.yml) tests the extension
+The [extension workflow](../../.github/workflows/extension.yml) tests the extension
 and builds all six platform VSIX files on matching GitHub-hosted runners when a
 `workbench/v<version>` tag is pushed. Bump `version` in `package.json`,
 `preview/package.json`, and the lockfile, add a `## <version>` entry to

@@ -157,7 +157,7 @@ the GitHub Pages workflow.
 
 ## Publishing
 
-The [Publish website workflow](../.github/workflows/website.yml) builds the
+The [Publish website workflow](../../.github/workflows/website.yml) builds the
 site and deploys `dist/` to GitHub Pages when a `website/v<version>` tag is
 pushed (for example, `website/v1.0.1`). A successful `workbench/v<version>`
 build and release also calls it, using the newest tagged website version and
