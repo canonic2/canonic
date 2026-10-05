@@ -7,7 +7,7 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## 0.13.0
+## 0.13.1
 
 - Action needed: pages and preview definitions list their supported sizes under `sizes`, with the values `fit`, `laptop`, `mobile`, and `resizable`. Rename `viewports` to `sizes`, `desktop` to `laptop`, and `responsive` to `resizable`, in `workbench.yaml`, `workbench.local.yaml`, and your `.workbench.ts` and `.workbench.tsx` files. In the browser viewer of a design-system export, the Viewport menu is the Size menu and the `viewport` address parameter is `size`; in `canonic-export.json`, screenshot records name their size in `size` and `sizeLabel`. See Sizes in Pages and states.
 - Action needed: implementations that render docs examples use `kind: docs`. Change `kind: examples` to `kind: docs` in `workbench.yaml` and `workbench.local.yaml`. Handoffs through docs say `- Docs:` where they said `- Docs page:`. See Docs.
