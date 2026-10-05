@@ -7,9 +7,16 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## Unreleased
+## 0.13.0
 
 - Action needed: pages and preview definitions list their supported sizes under `sizes`, with the values `fit`, `laptop`, `mobile`, and `resizable`. Rename `viewports` to `sizes`, `desktop` to `laptop`, and `responsive` to `resizable`, in `workbench.yaml`, `workbench.local.yaml`, and your `.workbench.ts` and `.workbench.tsx` files. In the browser viewer of a design-system export, the Viewport menu is the Size menu and the `viewport` address parameter is `size`; in `canonic-export.json`, screenshot records name their size in `size` and `sizeLabel`. See Sizes in Pages and states.
+- Action needed: implementations that render docs examples use `kind: docs`. Change `kind: examples` to `kind: docs` in `workbench.yaml` and `workbench.local.yaml`. Handoffs through docs say `- Docs:` where they said `- Docs page:`. See Docs.
+- Docs are a lens of any page. Give a page `docs` with a Markdown file, and its docs appear in the lens switcher beside its design and other implementations: one docs lens for each `docs` implementation the page maps, or the built-in Docs lens when it maps none. A page whose `src` is a Markdown file is still its own docs, with no design lens. The design lens keeps the page's size while you read its docs, and the lens you choose stays when you open another page that has it. See Docs.
+- A space can define its own artboard sizes under `sizes`, with a width and height (either of which can fill the canvas), a label, an icon, and whether it is a button in the size switcher; a page can list which of them it supports and add its own. The size switcher has a menu with **Custom size…** and **Edit sizes…**, which write those sizes to `workbench.yaml`.
+- **More** › **Export…** replaces Download design-system ZIP. Export the current page, the pages selected in the page list, a collection, or the whole space, as a source ZIP, a PDF, PNG or JPEG images, or a portable browser viewer. A single-page PDF or image export defaults to the current state, size, and lens. PDFs keep each design's dimensions and full height, and paginate docs on A4 or Letter paper. See Design-system export.
+- Docs show their Markdown before their examples finish building, and Workbench builds docs in the background when a session starts.
+- In React Native Web previews and docs examples, a root view with `flex: 1` fills its frame or panel without a stylesheet. The React Native Web guide also covers previewing a screen inside its app layout and safe areas.
+- The top bar shows the size switcher before the Actions switch.
 
 ## 0.12.2
 
