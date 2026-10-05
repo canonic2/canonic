@@ -23,7 +23,7 @@
       lines.push('- State: ' + named(state.label, state.id));
     }
     var address = lens && window.wbLenses ? window.wbLenses.upstream(lens, view.url) : view.url;
-    lines.push('- Lens: ' + (lens ? named(lens.label, lens.key) + ' — `' + address + '`' : 'Design'));
+    lines.push('- Lens: ' + (lens ? named(lens.label, lens.key) + ' — `' + address + '`' : window.wbManifest.authoredLensLabel(item)));
     return lines.join('\n');
   }
 

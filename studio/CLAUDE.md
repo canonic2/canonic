@@ -121,6 +121,21 @@ guides describe current layouts, runtimes and compatibility constraints.
 - Organize capabilities into modules with one clear owner for behavior, types,
   validation, state and lifecycle. Group files by responsibility; do not split
   every function into a file or create empty architectural layers.
+- Use `src/modules/<capability>/` for new capability modules and bounded
+  capability migrations by default. Keep the capability's logic, orchestration,
+  dedicated adapters, types and tests together, following the package's test
+  convention. A module directory represents an owned capability, not one file
+  or every JavaScript/TypeScript importable unit.
+- Keep application composition, shared presentation, themes and host/platform
+  infrastructure outside `src/modules/` in the locations defined by the package
+  guide. Capability-specific adapters stay with their module; infrastructure
+  shared across capabilities has its own explicit owner. Do not create empty
+  folders or move code into a generic utilities directory to tidy the tree.
+- Package guides document current locations, target locations and justified
+  layout exceptions. Existing directories outside `src/modules/` are not an
+  instruction to move them all at once. Migrate within the requested capability,
+  preserving public entry points and updating consumers, asset serving and
+  packaging where paths change.
 - Separate domain decisions, application workflows, external adapters and
   presentation. Pure logic must not depend on UI, transport or host frameworks.
   Application code coordinates capabilities; adapters implement external I/O.

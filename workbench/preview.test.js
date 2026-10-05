@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Compiler, discover } = require('./preview/compiler.cjs');
 const server = require('./server');
-const exporter = require('./export');
+const exporter = require('./src/modules/export/index.ts');
 const manifest = require('./workbench/manifest');
 const portable = require('./preview/portable.cjs');
 
@@ -22,6 +22,24 @@ function fixture(t, files) {
 const definition = (adapter, entry, extra = '') => `import { definePreview } from '@canonic2/workbench';
 export default definePreview({ id: 'components/button', title: 'Components/Button', adapter: '${adapter}', source: { entry: '${entry}' },
 inputs: { label: 'Continue' }, states: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
+
+test('the server supplies discovered lens labels while retaining per-page overrides', async t => {
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\npreviews:\n  lensLabel: Design\ncollections:\n  - name: Components\n    items:\n      - label: My button\n        src: button.workbench.ts\n        lensLabel: Reference\n',
+    'button.workbench.ts': definition('html', './button.ts'),
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Button"; }',
+  });
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
+  const resolved = await running.config();
+  assert.deepEqual(resolved.problems, []);
+  assert.equal(resolved.catalogCollections[0].items[0].lensLabel, 'Design');
+  assert.equal(resolved.collections[0].items[0].lensLabel, 'Reference');
+  const merged = manifest.mergeCollections(resolved.collections, resolved.catalogCollections);
+  assert.equal(merged[0].items.length, 1);
+  assert.equal(merged[0].items[0].label, 'My button');
+  assert.equal(manifest.authoredLensLabel(merged[0].items[0]), 'Reference');
+});
 
 test('preview icons pass through discovery, override maps, and isolate invalid names', async t => {
   const root = fixture(t, {
@@ -89,6 +107,31 @@ test('discovers TypeScript previews, validates IDs and states, and isolates inva
   await assert.rejects(new Compiler(root, { include: ['src/**'] }).compile('button.workbench.ts'), /declared/);
 });
 
+test('indexes a definition’s size keys and rejects entries that aren’t keys', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('html', './button.ts', "sizes: ['laptop', 'sidebar']"),
+    'wide.workbench.ts': definition('html', './button.ts', "sizes: ['1024']").replace('components/button', 'components/wide').replace('Components/Button', 'Components/Wide'),
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Button"; }',
+  });
+  const index = await new Compiler(root).index();
+  assert.deepEqual(index.previews.map(preview => [preview.id, preview.sizes]), [['components/button', ['laptop', 'sidebar']]]);
+  assert.match(index.errors.join('\n'), /wide\.workbench\.ts: sizes must be a list of size keys/);
+});
+
+test('the server resolves a definition’s sizes against the space and reports unknown keys', async t => {
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\nsizes:\n  fit: true\n  sidebar:\n    width: 340\n    height: fill\n',
+    'button.workbench.ts': definition('html', './button.ts', "sizes: ['sidebar', 'tablet']"),
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Button"; }',
+  });
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
+  const resolved = await running.config();
+  assert.deepEqual(resolved.sizes.map(size => size.key), ['fit', 'sidebar']);
+  assert.deepEqual(resolved.pages['button.workbench.ts'].sizes, ['sidebar']);
+  assert.match(resolved.problems.join('\n'), /button\.workbench\.ts: size “tablet” isn’t one of the space’s sizes\./);
+});
+
 test('builds HTML scripts, inline modules, CSS, srcset and assets into portable output', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.html'),
@@ -113,6 +156,17 @@ test('builds HTML scripts, inline modules, CSS, srcset and assets into portable 
   fs.writeFileSync(path.join(root, 'label.ts'), 'export const label = "Changed";');
   const changed = await compiler.compile('button.workbench.ts', false);
   assert.notEqual(changed.revision, output.revision);
+});
+
+test('an inline script keeps attributes that look like replacement patterns', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('html', './button.html'),
+    'button.html': '<!doctype html><html><body><button>Continue</button><script data-price="$&amp;$1"> document.body.dataset.ready = "yes";</script></body></html>',
+  });
+  const output = await new Compiler(root).compile('button.workbench.ts', false);
+  const preview = output.outputs.get('preview.js').toString();
+  assert.match(preview, /data-price=\\?"\$&amp;\$1\\?" src=/);
+  assert.doesNotMatch(preview, /document\.body\.dataset\.ready = "yes";<\/script>/);
 });
 
 test('bundles React and Vue SFCs with scoped styles using project framework versions', async t => {
@@ -205,7 +259,7 @@ test('server imports default previews, serves compiled pages, exports runnable o
   const diagnostics = [];
   const root = fixture(t, {
     'workbench.yaml': 'name: Acme\n',
-    'button.workbench.ts': definition('html', './button.ts', "viewports: ['mobile'], controls: { label: { type: 'text' } },"),
+    'button.workbench.ts': definition('html', './button.ts', "sizes: ['mobile'], controls: { label: { type: 'text' } },"),
     'button.ts': 'export default function(canvas, ctx) { canvas.textContent = ctx.inputs.label; }',
   });
   const running = await server.start({ root, onLog: entry => diagnostics.push(entry), capture: { capture: async () => Buffer.from('jpeg'), close: () => Promise.resolve() } });

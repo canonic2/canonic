@@ -15,7 +15,7 @@ export function createRuntime(board: Artboard, callbacks: { view(info: ViewInfo)
   url.searchParams.set('artboard-runtime', channel);
   url.searchParams.set('canvas-origin', location.origin);
   url.searchParams.set('canvas-host', window.parent === window ? 'browser' : 'editor');
-  url.hash = `${board.target.src}${board.target.state ? ':' + board.target.state : ''}${board.target.example ? '!' + board.target.example : ''}@resizable${board.target.lens ? '~' + board.target.lens : ''}`;
+  url.hash = `${board.target.src}${board.target.state ? ':' + board.target.state : ''}${board.target.example ? '!' + board.target.example : ''}${board.target.lens ? '~' + board.target.lens : ''}`;
   element.src = url.href;
   let disposed = false;
   const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();

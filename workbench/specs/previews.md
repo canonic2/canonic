@@ -27,7 +27,9 @@ project-registered adapters. They do not run a project's application server,
   open other previews through the canvas or are recorded as actions, and the
   Actions switch governs both. Nothing in a preview navigates the frame or
   starts a download. See [links and navigation](#links-and-navigation).
-- Previews are discovered by default and open in the native **Workbench** lens.
+- Previews are discovered by default and open in their own authored lens,
+  labelled **Workbench** by default and customizable under the
+  [lens contract](lenses.md).
 - Source compiles in a managed worker. Live and portable output share one
   adapter and state lifecycle, and that lifecycle is shared by every built-in
   and custom adapter.
@@ -90,11 +92,11 @@ project-registered adapters. They do not run a project's application server,
 - An authored page whose `src` is a definition file keeps its place and
   label and takes the definition's states and icon unless it has an explicit
   authored icon; the imported duplicate is dropped.
-  The file must still match discovery. Viewports: see
+  The file must still match discovery. Sizes: see
   [open question 2](#open-questions).
 - **Requirement (decided 2026-10-03):** the sidebar and canvas update when a
   definition file matching discovery is added, removed, renamed, or changes
-  its title, states, or viewports, without **Workbench: Refresh Pages**; see
+  its title, states, or sizes, without **Workbench: Refresh Pages**; see
   [the extension's refresh contract](vscode-extension.md#refresh).
   **Gap:** only `workbench.yaml` and `workbench.local.yaml` are watched today,
   so definition changes need **Refresh Pages** or a YAML change.
@@ -110,8 +112,10 @@ origin storage/backend state remains external state. The
 contracts through explicit runtime adapters. The renderer behavior below
 applies independently within each isolated artboard.
 
-- A discovered page's design lens is the preview itself, labelled
-  **Workbench**. Its address is the definition path; `?state=<id>` selects a
+- A discovered page's design lens is the preview itself. Its customizable
+  label defaults to **Workbench**; `previews.lensLabel` sets the discovery
+  fallback and an explicit page's `lensLabel` overrides it under the
+  [lens contract](lenses.md). Its address is the definition path; `?state=<id>` selects a
   state and the first state is the default. An unknown state renders an error.
 - Same-origin `.workbench.ts(x)` addresses load into a warm preview host
   rather than navigating the iframe. A newer load supersedes a queued one, and
@@ -222,7 +226,7 @@ after 8 seconds.
 ### Export
 
 The [design-system export](export.md) plans one reference per preview state at
-the page's viewports, loading the definition URL with `?state=`. After
+the page's sizes, loading the definition URL with `?state=`. After
 references, it asks the worker for the portable build and adds the `browser/`
 package and catalog. A preview that fails to build is a warning. **Requirement
 (decided 2026-10-03):** a portable build that fails entirely, including a
@@ -237,9 +241,10 @@ reached through `node_modules` are listed by name and version.
 - The portable build writes each preview's production bundle, an interactive
   viewer (`index.html`, `viewer.js`, `viewer.css`), the canvas's own
   `preview-controls.js`/`.css`, and `workbench.json` (version 1, name,
-  previews, warnings). The viewer offers search, State and Viewport menus,
+  previews, warnings). The viewer offers search, State and Size menus,
   resizable dimensions, Reload, the shared controls, and **Open preview**;
-  its address keeps the selection.
+  its address keeps the selection (`size` is `fit`, `laptop`, `mobile`, or
+  `resizable`, with `width` and `height` for `resizable`).
 - Astro previews carry every authored state pre-rendered. Their controls are
   removed and a note is appended to their docs, since input edits need a live
   render.
@@ -263,7 +268,8 @@ reached through `node_modules` are listed by name and version.
 - `inputs`, `fixtures`, `globals` merge preview, then state, then (for inputs)
   control overrides, and are structured-cloned per render. Validation only
   checks that state values serialize as JSON.
-- `viewports`: a nonempty subset of `fit`, `desktop`, `mobile`, `responsive`.
+- `sizes`: a nonempty subset of `fit`, `laptop`, `mobile`, `resizable`
+  (`type Size = 'fit' | 'laptop' | 'mobile' | 'resizable'`).
   `controls`: known types; `select` needs nonempty `options`.
 - `styles`, `assets`, and `environment` resolve from the definition. Declared
   assets must stay inside the project.
@@ -392,8 +398,8 @@ and the installed extension downloads none.
   `navigate` (verified by hand; see the 2026-10-03 entries under decisions).
 - Not covered: [manifest.test.js](../workbench/manifest.test.js) and
   [server.test.js](../server.test.js) have no TypeScript-preview cases; no test
-  covers an unknown lens ID, manual-placement viewports, definition watching,
-  an export that survives a failed portable build, CLI `check` or `init`
+  covers an unknown lens ID, manual-placement sizes, definition watching,
+  CLI `check` or `init`
   beyond type generation, the worker's timeouts or restart, or packaging.
 
 ## Decisions and discoveries
@@ -492,12 +498,7 @@ and the installed extension downloads none.
    no problem at all when previews are disabled, untrusted, or none are
    discovered, because mapping is skipped. Should the lens be dropped, or show
    a named error?
-2. **Manual-placement viewports.** The merge adopts a preview's viewports only
-   when the authored page has none, but both config readers always fill all
-   four, so the definition's `viewports` never apply to a manually placed
-   page, on the canvas or in export. [Core](core.md#canvas-and-artboard) says
-   omission enables all four; which rule wins for a placed preview?
-3. **CLI from an installed extension.** No automated test runs the CLI from a
+2. **CLI from an installed extension.** No automated test runs the CLI from a
    packaged or installed VSIX, on other platforms, or with React, Vue, or Astro
    resolving from the user's project. The documented install path assumes a
    folder without a platform suffix, which matched the local install.

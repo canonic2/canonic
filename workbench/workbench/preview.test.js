@@ -37,44 +37,51 @@ function preview() {
   return { state: state, events: events, paint: function () { paints.splice(0).forEach(function (fn) { fn(); }); } };
 }
 
-function widthChoice(current) {
+function sizeChoice(current, supported) {
   var calls = [];
-  var sizeButtons = [
-    { dataset: { width: '1512' }, disabled: false },
-    { dataset: { width: '393' }, disabled: false },
-  ];
   var state = {
     current: current,
-    sizeButtons: sizeButtons,
-    setWidth: function (mode) { calls.push(['width', mode]); },
+    index: current ? { [current]: { src: current } } : {},
+    sizesOf: function () { return (supported || ['laptop', 'mobile']).map(function (key) { return { key: key }; }); },
+    setSize: function (key) { calls.push(['size', key]); },
     syncHash: function () { calls.push(['sync']); },
   };
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
-  var handler = source.slice(source.indexOf('  function chooseWidth('), source.indexOf('  /* ----------------------------------------------------- sidebar resize */'));
+  var handler = source.slice(source.indexOf('  function chooseSize('), source.indexOf('  /* ----------------------------------------------------- sidebar resize */'));
   vm.runInNewContext(handler, state);
-  return { choose: state.chooseWidth, calls: calls, buttons: sizeButtons };
+  return { choose: state.chooseSize, calls: calls };
 }
 
-function widthAvailability(mode, viewports) {
-  var buttons = ['fit', '1512', '393', 'resizable'].map(function (width) {
-    return { dataset: { width: width }, disabled: false, title: width };
-  });
+var sizeRules = require('../src/sizes/browser/choice.ts');
+var SPACE = require('../src/sizes/browser/size.ts').defaultSizes();
+
+/* updateSizeAvailability with the real size rules, the page's sizes given
+   as the server resolves them. */
+function sizeAvailability(options) {
+  var switcher = { sizes: null, supported: null, current: options.current, reason: null,
+    setAttribute: function (name, value) { if (name === 'unsupported-reason') this.reason = value; } };
   var selected = [];
   var state = {
-    widths: buttons.map(function (button) { return button.dataset.width; }),
-    sizeButtons: buttons,
-    canvas: { dataset: { width: mode } },
-    setWidth: function (width) { selected.push(width); state.canvas.dataset.width = width; },
-    window: { wbManifest: { viewportWidths: function () {
-      var map = { fit: 'fit', desktop: '1512', mobile: '393', responsive: 'resizable' };
-      return viewports.map(function (viewport) { return map[viewport]; });
-    } } },
+    sizeSwitcher: switcher,
+    spaceSizes: SPACE,
+    resolved: { pages: { 'page.html': options.page || {} } },
+    canvas: { dataset: { size: options.current } },
+    requestedSize: options.requested || null,
+    rememberedSize: options.remembered || null,
+    pinnedSize: !!options.pinned,
+    appliedSize: '',
+    signature: function (size) { return size.key; },
+    sizesOf: function (item) { return item.docs ? [] : sizeRules.supported(SPACE, options.page); },
+    sizeByKey: function (key) { return SPACE.concat((options.page && options.page.ownSizes) || []).find(function (size) { return size.key === key; }) || null; },
+    setSize: function (key) { selected.push(key); state.canvas.dataset.size = key; },
+    window: { wbSizes: sizeRules },
   };
+  state.appliedSize = options.current || '';
   var source = fs.readFileSync(path.join(__dirname, 'workbench.js'), 'utf8');
-  var handler = source.slice(source.indexOf('  function updateWidthAvailability('), source.indexOf('  /* A size switcher change'));
+  var handler = source.slice(source.indexOf('  /* What the size switcher shows for a page'), source.indexOf('  /* A size switcher change'));
   vm.runInNewContext(handler, state);
-  state.updateWidthAvailability({ viewports: viewports });
-  return { buttons: buttons, selected: selected };
+  state.updateSizeAvailability(Object.assign({ src: 'page.html' }, options.item));
+  return { switcher: switcher, selected: selected, requested: state.requestedSize };
 }
 
 function storyNavigation() {
@@ -192,10 +199,10 @@ test('managed previews retain the outgoing mounted session and resume it without
   assert.equal(resets, 0);
 });
 
-test('changing width resizes the current iframe without routing or reloading it', function () {
-  var choice = widthChoice('preview/components-button.html');
-  choice.choose('1512');
-  assert.deepEqual(choice.calls, [['width', '1512'], ['sync']]);
+test('changing size resizes the current iframe without routing or reloading it', function () {
+  var choice = sizeChoice('preview/components-button.html');
+  choice.choose('laptop');
+  assert.deepEqual(choice.calls, [['size', 'laptop'], ['sync']]);
 });
 
 test('URL sessions retain their iframe across other pages, while Reload replaces the document', async function () {
@@ -213,23 +220,56 @@ test('URL sessions retain their iframe across other pages, while Reload replaces
   assert.equal(a.removed, true);
 });
 
-test('changing width before a page is selected does not write an address', function () {
-  var choice = widthChoice(null);
-  choice.choose('393');
-  assert.deepEqual(choice.calls, [['width', '393']]);
+test('changing size before a page is selected does not write an address', function () {
+  var choice = sizeChoice(null);
+  choice.choose('mobile');
+  assert.deepEqual(choice.calls, [['size', 'mobile']]);
 });
 
-test('an unsupported width cannot resize the current page', function () {
-  var choice = widthChoice('preview/components-button.html');
-  choice.buttons[0].disabled = true;
-  choice.choose('1512');
+test('an unsupported size cannot resize the current page', function () {
+  var choice = sizeChoice('preview/components-button.html', ['mobile']);
+  choice.choose('laptop');
   assert.deepEqual(choice.calls, []);
 });
 
 test('a page disables unsupported sizes and falls back to its first supported one', function () {
-  var result = widthAvailability('fit', ['desktop', 'responsive']);
-  assert.deepEqual(result.buttons.map(function (button) { return button.disabled; }), [true, false, true, false]);
-  assert.deepEqual(result.selected, ['1512']);
+  var result = sizeAvailability({ current: 'fit', page: { sizes: ['laptop', 'resizable'] } });
+  assert.deepEqual(result.switcher.supported, ['laptop', 'resizable']);
+  assert.deepEqual(result.switcher.sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable']);
+  assert.equal(result.switcher.reason, 'not supported by this page');
+  assert.deepEqual(result.selected, ['laptop']);
+});
+
+test('a page shows the size its address names when it supports it, and its first size when not', function () {
+  assert.deepEqual(sizeAvailability({ current: 'fit', requested: 'mobile' }).selected, ['mobile']);
+  assert.deepEqual(sizeAvailability({ current: 'fit', requested: 'tablet', page: { sizes: ['mobile', 'laptop'] } }).selected, ['mobile']);
+  assert.equal(sizeAvailability({ current: 'fit', requested: 'mobile' }).requested, null, 'the request is used once');
+});
+
+test('a remembered size applies when the address names none and the current size is unsupported', function () {
+  var result = sizeAvailability({ current: 'fit', remembered: 'mobile', page: { sizes: ['laptop', 'mobile'] } });
+  assert.deepEqual(result.selected, ['mobile']);
+});
+
+test('a page reaches its own size by address, and the switcher lists it after the space’s', function () {
+  var popover = { key: 'popover', label: 'Popover', icon: 'frame', button: false, kind: 'fixed', width: 280, height: 360 };
+  var result = sizeAvailability({ current: 'laptop', requested: 'popover', page: { sizes: ['popover', 'laptop'], ownSizes: [popover] } });
+  assert.deepEqual(result.selected, ['popover']);
+  assert.deepEqual(result.switcher.sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable', 'popover']);
+});
+
+test('a docs page disables every size and keeps the one the canvas is on', function () {
+  var result = sizeAvailability({ current: 'mobile', requested: 'laptop', item: { docs: true } });
+  assert.deepEqual(result.switcher.supported, []);
+  assert.equal(result.switcher.current, '');
+  assert.equal(result.switcher.reason, 'a docs page fills the canvas');
+  assert.deepEqual(result.selected, []);
+});
+
+test('an artboard runtime keeps the size it set, whatever the page lists', function () {
+  var result = sizeAvailability({ current: 'resizable', pinned: true, page: { sizes: ['mobile'] } });
+  assert.deepEqual(result.selected, []);
+  assert.deepEqual(result.switcher.supported, ['mobile']);
 });
 
 test('switches stories in the loaded Storybook preview without navigating', async function () {
@@ -283,6 +323,7 @@ function lensSwitcher(item) {
   var end = source.indexOf('  /* Through a lens the page is served by somebody else');
   var box = { hidden: false, innerHTML: '', children: [], appendChild: function (el) { this.children.push(el); } };
   var context = {
+    window: { wbManifest: require('./manifest') },
     config: {
       implementations: {
         storybook: { key: 'storybook', label: 'Storybook' },
@@ -314,7 +355,7 @@ test('opening on no page still tells the host it is ready', function () {
     pageList: { setCurrent: noop },
     cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
     cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop,
-    updateWidthAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
+    updateSizeAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
     drawSources: noop, setActionsAvailability: noop,
     tellHost: function (src, state, lens) { told.push([src, state, lens]); },
     window: { wbSimulator: { hide: noop } },
@@ -341,4 +382,13 @@ test('the lens switcher only appears when there are two lenses to switch between
     lensSwitcher({ implementationOnly: 'storybook', implementations: { storybook: { title: 'Button' }, dev: '/b' } }),
     { hidden: false, labels: ['Storybook', 'Dev'] }
   );
+});
+
+test('renaming the authored preview lens changes its button without adding a lens', function () {
+  var item = { src: 'button.workbench.ts', workbench: true, implementations: { dev: '/button' } };
+  assert.deepEqual(lensSwitcher(item), { hidden: false, labels: ['Workbench', 'Dev'] });
+  item.lensLabel = 'Design';
+  assert.deepEqual(lensSwitcher(item), { hidden: false, labels: ['Design', 'Dev'] });
+  assert.deepEqual(lensSwitcher({ src: 'button.workbench.ts', workbench: true, lensLabel: 'Design' }), { hidden: true, labels: [] });
+  assert.deepEqual(lensSwitcher({ src: 'button.html', lensLabel: 'Reference', implementations: { storybook: {} } }), { hidden: false, labels: ['Reference', 'Storybook'] });
 });

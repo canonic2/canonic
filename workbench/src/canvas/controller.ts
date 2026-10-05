@@ -1,4 +1,6 @@
 import { add, change, createState, remove, select, size, supportsSize } from './model.ts';
+import { dimensions as sizeDimensions } from '../sizes/browser/geometry.ts';
+import { EXPORT_FILL } from '../sizes/browser/size.ts';
 import type { Artboard, CanvasState, Size, Target, ViewInfo } from './model.ts';
 import type { Runtime } from './runtime.ts';
 export function createController(ports: {
@@ -6,6 +8,8 @@ export function createController(ports: {
   render(state: CanvasState): void;
   host(board: Artboard, data: unknown): void;
   error(error: unknown): void;
+  /** The room an artboard has on the canvas, for a size that fills it; EXPORT_FILL when unknown. */
+  available?(): Size;
 }) {
   let state = createState(crypto.randomUUID());
   const runtimes = new Map<string, Runtime>();
@@ -28,7 +32,9 @@ export function createController(ports: {
       view(info) {
         const current = state.artboards.find(b => b.id === board.id); if (disposed || !current || current.generation !== board.generation) return;
         const parsed = { ...current.target, src: info.src, state: info.state, lens: info.lens };
-        const dimensions = supportsSize(current.size, info.sizes) ? current.size : info.sizes?.includes('1512') ? { width: 1512, height: 982 } : { width: 393, height: 852 };
+        /* A page that can't be shown at the artboard's size takes its first size, a filled axis at the canvas's length now. */
+        const first = info.sizes?.[0];
+        const dimensions = supportsSize(current.size, info.sizes) || !first ? current.size : sizeDimensions(first, ports.available?.() || EXPORT_FILL, current.size);
         state = change(state, board.id, { view: info, target: parsed, size: dimensions }); notify();
         if (dimensions.width !== current.size.width || dimensions.height !== current.size.height) void runtime.request('size', dimensions).catch(ports.error);
       }, focus() { if (state.selected !== board.id) choose(board.id); }, host(data) { ports.host(board, data); },

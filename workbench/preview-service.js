@@ -11,12 +11,22 @@ function create(root, options) {
   var starting = null;
   var address = null;
   var closed = false;
+  function diagnostic(level, event, details) {
+    if (!options.diagnostic) return;
+    try { options.diagnostic(level, event, details); } catch (_) {}
+  }
   function launch() {
     if (closed) return Promise.reject(new Error('Preview service is closed'));
     if (starting) return starting;
+    var began = Date.now();
+    var bundled = runtime.available();
+    diagnostic('info', 'preview.worker.starting', { runtime: bundled ? 'electron' : 'node' });
     starting = Promise.resolve().then(function () {
-      return runtime.available() ? runtime.prepare(options.storage) : process.execPath;
+      return bundled ? runtime.prepare(options.storage, null, function (event, details) {
+        diagnostic('info', event, Object.assign({ for: 'preview' }, details));
+      }) : process.execPath;
     }).then(function (executable) {
+      var spawned = Date.now();
       return new Promise(function (resolve, reject) {
         var env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' });
         delete env.NODE_OPTIONS;
@@ -33,6 +43,11 @@ function create(root, options) {
         });
         worker.once('message', function (message) {
           clearTimeout(timer);
+          /* `launchMs` is the process alone: on macOS a newly unpacked
+             runtime's first launch includes the system's code check. */
+          diagnostic('info', 'preview.worker.ready', {
+            prepareMs: spawned - began, launchMs: Date.now() - spawned, elapsedMs: Date.now() - began,
+          });
           address = 'http://127.0.0.1:' + message.port;
           resolve(address);
         });
@@ -43,7 +58,11 @@ function create(root, options) {
           reject(new Error('Preview worker stopped'));
         });
       });
-    }).catch(function (error) { starting = null; throw error; });
+    }).catch(function (error) {
+      diagnostic('warn', 'preview.worker.failed', { elapsedMs: Date.now() - began, message: String(error.message || error) });
+      starting = null;
+      throw error;
+    });
     return starting;
   }
   return {

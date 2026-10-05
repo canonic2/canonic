@@ -70,6 +70,11 @@ named after the page's file, state, and lens:
 | Same, through the `staging` lens | `sign-in-error-staging.jpg` |
 | TypeScript preview `src/button.workbench.ts`, state `disabled` | `button.workbench-disabled.jpg` |
 
+Lens labels are display names. Renaming one leaves screenshot filenames
+unchanged: implementation filenames use the implementation key, and the
+authored lens adds no lens suffix. References and handoffs use the configured
+display label. See [Customize lens labels](lenses.md#customize-lens-labels).
+
 On a Storybook lens, the story stands where the state does. The file goes to
 your browser's downloads, and a message names it.
 
@@ -134,6 +139,7 @@ Here is a page from Workbench.
 
 - Page: Sign in — `pages/sign-in.html`
 - State: Wrong password
+- Lens: Design
 - Width: Mobile · iPhone 15 Pro, 393 × 852 (artboard is 393 × 852 CSS px)
 - Screenshot: `.canonic/.handoffs/sign-in-error.jpg`
 

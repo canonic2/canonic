@@ -205,7 +205,7 @@ on 2026-10-03. The findings that shape this spec:
   the folder holding `workbench.yaml`; the script looks in the folder holding
   `.canonic/canonic.yml`. They are the same folder here, but a project with
   `workbench.yaml` in a package gets no context.
-- **Viewport.** **Copy reference** doesn't include the viewport. Adding it
+- **Size.** **Copy reference** doesn't include the artboard size. Adding it
   would change the "same as Copy reference" requirement.
 - **Unverified agent behavior.** Whether the Codex IDE extension runs hooks,
   and the working directory Codex starts MCP servers in (the commands don't

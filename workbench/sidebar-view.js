@@ -29,6 +29,8 @@
 var vscode = require('vscode');
 var path = require('path');
 var fs = require('fs');
+var crypto = require('node:crypto');
+var components = require('./src/server/webview-components.ts');
 
 var VIEW_ID = 'canonic.sidebar';
 var PAGE = 'sidebar.html';
@@ -37,14 +39,14 @@ var PAGE = 'sidebar.html';
    scripts and styles, and the space's root, which is where it fetches
    workbench.yaml from. Those are two different places now that the workbench
    ships in here — one root each, below. */
-function policy(webview) {
+function policy(webview, nonce) {
   var source = webview.cspSource;
   return [
     "default-src 'none'",
     'img-src ' + source + ' data:',
     'font-src ' + source,
     'style-src ' + source,
-    'script-src ' + source,
+    'script-src ' + source + " 'nonce-" + nonce + "'",
     /* The config is fetched, not built in — the same request a browser makes. */
     'connect-src ' + source,
   ].join('; ');
@@ -54,8 +56,8 @@ function policy(webview) {
    the workbench folder is, the policy saying what the page may load, the
    space's root — which the page can't work out for itself, because a webview's
    address is the editor's — the spaces to switch between, and which build
-   this is. <meta> rather than script tags so nothing inline has to be allowed
-   through the policy.
+   this is. Configuration stays in metadata; the component bootstrap is bundled
+   from source in memory and authorized with its own CSP nonce.
 
    The build number is there to make the string differ. Assigning `webview.html`
    only takes when the value changes; an identical one is dropped, so without a
@@ -70,6 +72,15 @@ function attribute(value) {
    built. */
 function page(webview, dir, space, build, spaces) {
   var body = fs.readFileSync(path.join(dir.fsPath, PAGE), 'utf8');
+  var nonce = crypto.randomBytes(18).toString('base64');
+  /* Replacer functions, because a replacement string reads `$&` and the
+     like as patterns, and the bundled code contains them. */
+  body = body.replace('href="/_workbench/src/theme/defaults.css"', function () {
+    return 'href="' + webview.asWebviewUri(vscode.Uri.file(path.join(dir.fsPath, '../src/theme/defaults.css'))).toString() + '"';
+  });
+  body = body.replace('<script type="module" src="/_workbench/src/components/bootstrap.ts"></script>', function () {
+    return '<script nonce="' + nonce + '">' + components.webviewComponents() + '</script>';
+  });
   var root = vscode.Uri.file(space.root);
   /* A space whose workbench.yaml isn't at its root, or is one of several
      in the file, says where the file is and which space it is. */
@@ -86,7 +97,7 @@ function page(webview, dir, space, build, spaces) {
       where +
       '  <meta name="canonic-spaces" content="' + attribute(JSON.stringify(spaces || { spaces: [] })) + '" />\n' +
       '  <meta name="canonic-build" content="' + build + '" />\n' +
-      '  <meta http-equiv="Content-Security-Policy" content="' + policy(webview) + '" />'
+      '  <meta http-equiv="Content-Security-Policy" content="' + policy(webview, nonce) + '" />'
   );
 }
 
@@ -164,7 +175,7 @@ function register(context, options) {
      and the folder of its workbench.yaml — which change with the space, so
      they are set on every build. */
   function resources() {
-    var roots = [dir, lucideDir];
+    var roots = [dir, lucideDir, vscode.Uri.joinPath(context.extensionUri, 'src/theme')];
     if (space) {
       roots.push(vscode.Uri.file(space.root));
       if (space.dir && space.dir !== space.root) roots.push(vscode.Uri.file(space.dir));
@@ -235,14 +246,7 @@ function register(context, options) {
         }
 
         if (type === 'canonic-catalog-request') {
-          Promise.resolve(catalog ? catalog() : null).then(
-            function (loaded) {
-              if (view) view.webview.postMessage(catalogMessage(loaded));
-            },
-            function (error) {
-              if (view) view.webview.postMessage(catalogFailure(error));
-            }
-          );
+          sendCatalog();
           return;
         }
 
@@ -341,7 +345,21 @@ function register(context, options) {
     vscode.commands.registerCommand('canonic.refreshPages', rebuild)
   );
 
-  return { retarget: retarget };
+  /* The catalog, again: the server learned something after it last answered,
+     such as a docs page's problems. */
+  function sendCatalog() {
+    if (!view) return;
+    Promise.resolve(catalog ? catalog() : null).then(
+      function (loaded) {
+        if (view) view.webview.postMessage(catalogMessage(loaded));
+      },
+      function (error) {
+        if (view) view.webview.postMessage(catalogFailure(error));
+      }
+    );
+  }
+
+  return { retarget: retarget, catalogChanged: sendCatalog };
 }
 
 module.exports = { register: register };

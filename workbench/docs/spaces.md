@@ -61,6 +61,11 @@ space's mark and name, then a menu of every space when you select it. The
 current space is checked. Pick another one, and the sidebar and the canvas
 tab both change to it.
 
+Use Enter, Space, or an arrow key to open the switcher from the keyboard. Up and
+Down move through its actions; Home and End jump to the ends. Escape closes the
+menu and returns focus to the switcher. Tab closes it and moves to the next
+control; Shift+Tab moves to the previous control.
+
 You can also run **Workbench: Switch Space…** from the Command Palette.
 
 When there's more than one space, the breadcrumb in the top bar starts with
@@ -155,6 +160,12 @@ space, even a window with no `workbench.yaml` of its own. In that case,
 nothing starts until you open the Workbench view or the canvas.
 
 ## Handoffs, files, and agents
+
+**More** › **Download design-system ZIP** exports the whole current space,
+including all its collections and pages. Export each space separately by
+switching to it before downloading. An included `workbench.yaml` may declare
+several spaces, but the export's page records and reference screenshots cover
+only the current one. See [Design-system export](design-system-export.md).
 
 Everything stays in the space it belongs to:
 

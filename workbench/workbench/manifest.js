@@ -52,7 +52,6 @@
   var BUNDLE = /^[A-Za-z0-9.-]+$/;
   /* Kinds shown as a live stream of a native window rather than an iframe. */
   var STREAMED = ['ios-simulator', 'window'];
-  var VIEWPORTS = ['fit', 'desktop', 'mobile', 'responsive'];
   /* Characters that mark the state, the example, and the lens in the address
      (see address.js), so no src may contain them. */
   var RESERVED = [':', '!', '~'];
@@ -98,28 +97,6 @@
   function labelOf(key) {
     var words = String(key).split('-').join(' ');
     return words.charAt(0).toUpperCase() + words.slice(1);
-  }
-
-  /* How an exported page should be framed. Responsive deliberately means
-     two references; the renderer expands it into desktop and mobile. */
-  function pageViewports(raw, where, problems) {
-    if (raw === undefined || raw === null || raw === '') return VIEWPORTS.slice();
-    var values = isList(raw) ? raw : [raw];
-    var out = [];
-    values.forEach(function (entry) {
-      var value = text(entry).toLowerCase();
-      if (VIEWPORTS.indexOf(value) === -1) {
-        problems.push(where + ': viewports may only contain desktop, mobile, responsive, or fit.');
-        return;
-      }
-      if (out.indexOf(value) === -1) out.push(value);
-    });
-    return out.length ? out : VIEWPORTS.slice();
-  }
-
-  function viewportWidths(viewports) {
-    var map = { fit: 'fit', desktop: '1512', mobile: '393', responsive: 'resizable' };
-    return (viewports || VIEWPORTS).map(function (viewport) { return map[viewport]; }).filter(Boolean);
   }
 
   function catalog(raw, where, problems) {
@@ -204,8 +181,12 @@
   }
 
   /* workbench.local.yaml over workbench.yaml. Top-level keys replace, except
-     the implementations map, which merges one level deep so a local file can
-     say `dev: { base: http://localhost:4000 }` and leave the rest alone. */
+     the implementations and sizes maps, which merge one level deep so a local
+     file can say `dev: { base: http://localhost:4000 }` and leave the rest
+     alone. A key the local file adds goes at the end, keeping the order of
+     the committed ones. */
+  var BY_NAME = ['implementations', 'sizes'];
+
   function merge(base, local) {
     var out = {};
     var key;
@@ -227,19 +208,19 @@
         out.spaces = spaces;
         continue;
       }
-      if (key !== 'implementations' || !isMap(base.implementations) || !isMap(local.implementations)) {
+      if (BY_NAME.indexOf(key) === -1 || !isMap(base[key]) || !isMap(local[key])) {
         out[key] = local[key];
         continue;
       }
-      var impls = {};
+      var named = {};
       var name;
-      for (name in base.implementations) impls[name] = base.implementations[name];
-      for (name in local.implementations) {
-        impls[name] = isMap(impls[name]) && isMap(local.implementations[name])
-          ? Object.assign({}, impls[name], local.implementations[name])
-          : local.implementations[name];
+      for (name in base[key]) named[name] = base[key][name];
+      for (name in local[key]) {
+        named[name] = isMap(named[name]) && isMap(local[key][name])
+          ? Object.assign({}, named[name], local[key][name])
+          : local[key][name];
       }
-      out.implementations = impls;
+      out[key] = named;
     }
     return out;
   }
@@ -251,6 +232,8 @@
     if (raw === undefined || raw === null) return {};
     if (!isMap(raw)) { problems.push('previews: must be false or a map with include, config, and icon settings.'); return false; }
     var result = {};
+    var lensLabel = readLensLabel(raw.lensLabel, 'previews.lensLabel', problems);
+    if (lensLabel) result.lensLabel = lensLabel;
     if (raw.icon !== undefined) {
       if (!KEY.test(text(raw.icon))) problems.push('previews.icon: must be a kebab-case Lucide icon name.');
       else result.icon = text(raw.icon);
@@ -278,6 +261,29 @@
       result.config = file;
     }
     return result;
+  }
+
+  function readLensLabel(raw, where, problems) {
+    if (raw === undefined) return null;
+    if (typeof raw !== 'string' || !raw.trim()) {
+      problems.push(where + ': must be a nonempty string.');
+      return null;
+    }
+    return raw.trim();
+  }
+
+  function pageLensLabel(raw, item, where, problems) {
+    var label = readLensLabel(raw, where + ': lensLabel', problems);
+    if (!label) return;
+    if (isDocs(item.src)) {
+      problems.push(where + ': lensLabel is only available for authored pages; docs lenses use implementation labels.');
+      return;
+    }
+    item.lensLabel = label;
+  }
+
+  function authoredLensLabel(item) {
+    return text(item && item.lensLabel) || (item && item.workbench ? 'Workbench' : 'Design');
   }
 
   function implementations(raw, problems) {
@@ -444,7 +450,7 @@
       function remaining(items) { return (items || []).map(function (item) {
         if (item.group) { var children = remaining(item.items); return children.length ? Object.assign({}, item, { items: children }) : null; }
         var original = item.workbench && existing(item.src);
-        if (original) { original.states = item.states; original.workbench = true; if (!original.icon && item.icon) original.icon = item.icon; if (!original.viewports && item.viewports) original.viewports = item.viewports; return null; }
+        if (original) { original.states = item.states; original.workbench = true; if (!original.lensLabel && item.lensLabel) original.lensLabel = item.lensLabel; if (!original.icon && item.icon) original.icon = item.icon; return null; }
         return item;
       }).filter(Boolean); }
       var items = remaining(clone(collection.items));
@@ -607,8 +613,8 @@
       return;
     }
     item.docs = true;
-    if (raw && raw.viewports !== undefined && raw.viewports !== null && raw.viewports !== '') {
-      problems.push(where + ': viewports don’t apply to a docs page, which uses the whole canvas.');
+    if (raw && raw.sizes !== undefined && raw.sizes !== null && raw.sizes !== '') {
+      problems.push(where + ': sizes don’t apply to a docs page, which uses the whole canvas.');
     }
     var keys = Object.keys(item.implementations || {});
     if (lens && keys.indexOf(lens) === -1) {
@@ -690,7 +696,7 @@
      keys replace those, with `implementations` merged by name. A space's
      `name`, `color` and `icon` are its own and never inherited; its name
      defaults to its id. A file without `spaces` is one space. */
-  var SPACE_OWN = ['name', 'color', 'icon', 'root'];
+  var SPACE_OWN = ['name', 'color', 'icon', 'root', 'sizes'];
 
   function spaceKeys(raw, problems) {
     if (!isMap(raw) || raw.spaces === undefined || raw.spaces === null) return [];
@@ -750,8 +756,8 @@
     SPACE_COLORS: SPACE_COLORS,
     implementations: implementations,
     previews: previews,
-    pageViewports: pageViewports,
-    viewportWidths: viewportWidths,
+    pageLensLabel: pageLensLabel,
+    authoredLensLabel: authoredLensLabel,
     pageLenses: pageLenses,
     docsPageEntry: docsPageEntry,
     isDocs: isDocs,

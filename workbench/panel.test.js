@@ -485,6 +485,51 @@ test('retries refresh after an invalid manifest without releasing a queued pick'
   f.dispose();
 });
 
+test('refreshing a rendered docs page releases the next sidebar pick without reloading its preview', async function () {
+  var f = fixture();
+  await f.panel.show(f.context, 'http://127.0.0.1:3579/_workbench/', 'docs/card.md');
+  var bridge = /<script nonce="[^"]+">([\s\S]*?)<\/script>/.exec(f.view.webview.html)[1];
+  var receive;
+  var child;
+  var picks = [];
+  var hostMessages = [];
+  var previewReloads = 0;
+  var finishRefresh;
+  var frame = { contentWindow: { postMessage: function (message) {
+    if (message.type === 'wb-refresh') finishRefresh = function () { child.show('docs/card.md', null); };
+    if (message.type === 'wb-go') picks.push(message.hash);
+  } } };
+  vm.runInNewContext(bridge, {
+    acquireVsCodeApi: function () { return { postMessage: function (message) { hostMessages.push(message); } }; },
+    document: { getElementById: function () { return frame; }, addEventListener: function () {} },
+    window: { addEventListener: function (type, fn) { if (type === 'message') receive = fn; } },
+  });
+  var lens = { key: 'html' };
+  child = vm.createContext({
+    index: { 'docs/card.md': { docs: true } },
+    view: { src: 'docs/card.md', state: null, lens: lens },
+    frameReady: true,
+    stateOf: function () { return null; },
+    effectiveLens: function () { return lens; },
+    scrollToExample: function () {}, syncHash: function () {},
+    setCanvasMode: function () { previewReloads += 1; },
+    tellHost: function (src, state, key, pending) {
+      receive({ source: frame.contentWindow, data: { type: 'wb-here', src: src, state: state, lens: key, pending: !!pending } });
+    },
+  });
+  var source = fs.readFileSync(path.join(__dirname, 'workbench/workbench.js'), 'utf8');
+  vm.runInContext(source.slice(source.indexOf('  function show('), source.indexOf('  /* ----------------------------------------------------------- actions */')), child);
+  receive({ source: frame.contentWindow, data: { type: 'wb-here', src: 'docs/card.md', state: null } });
+  receive({ data: { type: 'canonic-refresh' } });
+  receive({ data: { type: 'canonic-go', hash: 'pages/sidebar.html' } });
+  assert.deepEqual(picks, [], 'the new pick waits while the config is loading');
+  finishRefresh();
+  assert.deepEqual(picks, ['pages/sidebar.html']);
+  assert.equal(previewReloads, 0, 'the rendered docs preview is retained');
+  assert.equal(hostMessages.length, 2, 'the refresh acknowledges the retained selection');
+  f.dispose();
+});
+
 test('switching spaces loads the other server in the open tab and drops a slower earlier load', async function () {
   var f = fixture();
   var finishFirst;

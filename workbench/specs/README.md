@@ -29,11 +29,15 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 
 | Spec | Covers |
 | --- | --- |
+| [Web Components](web-components.md) | Target component structure, public APIs, Shadow DOM, lifecycle, host loading and bounded migration |
+| [Themes](themes.md) | Standalone defaults, semantic tokens, VS Code theme forwarding, live updates, accessibility and preview isolation |
 | [Terminology](terminology.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
 | [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, the canvas and artboards, and failures shared by every page |
+| [Lenses](lenses.md) | Rendering kinds, customizable display labels for every lens including the authored preview, stable identity, defaults, and configuration precedence |
 | [Multiple artboards](multiple-artboards.md) | Investigation and proposed comparison canvas, artboard ownership, selection, persistence, implementation phases, and open product decisions |
 | [Artboard code plan](multiple-artboards-code-plan.md) | Planned TypeScript capability boundaries, state and runtime APIs, space transport, capture/context workflows, migration slices, and validation |
 | [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, adapters, controls, the `workbench` lens, and the portable build |
+| [Artboard sizes](sizes.md) | Proposed sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
 | [Docs pages](docs-pages.md) | Markdown docs pages with live examples that use the whole canvas, `examples` lenses, `defineDocs`, the docs canvas mode, and docs references in the export |
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
@@ -41,7 +45,8 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 | [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, Shield's hooks and MCP server, and proposed Copilot surfaces |
 | [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
-| [Design-system export](export.md) | Background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
+| [Design-system export](export.md) | Exporting one whole space, manifest inclusion, background reference captures, worker scheduling, ZIP contents, hashes, and warnings |
+| [Module layout](modules.md) | Capability ownership under `src/modules/`, shared UI and infrastructure locations, and bounded migration requirements |
 
 The workbench is one implementation in `packages/workbench/workbench/`. Projects provide
 `workbench.yaml` and may override machine-specific values in the ignored

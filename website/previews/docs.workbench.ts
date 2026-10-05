@@ -19,5 +19,5 @@ export default definePreview({
     '/workbench/changelog/': 'website/changelog',
     ...Object.fromEntries(ids.map(id => [route(id), { preview: 'website/docs', state: id }])),
   },
-  viewports: ['desktop', 'mobile', 'responsive'],
+  sizes: ['laptop', 'mobile', 'resizable'],
 });

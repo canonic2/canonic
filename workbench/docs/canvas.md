@@ -15,7 +15,7 @@ part of it.
 | Collection list | Sidebar, under the heading **Collections** | The space's collections |
 | Page list | Sidebar | The chosen collection's groups, pages, and states |
 | Search | Bottom of the sidebar | Filters every collection's pages, groups, and states |
-| Top bar | Top of the canvas | The breadcrumb with the state switcher, actions, lenses, size, reload, source, reference, and more |
+| Top bar | Top of the canvas | The breadcrumb with the state switcher, lenses, size, actions, reload, source, reference, and more |
 | Artboard | Middle | The page, labeled with its name and size by the artboard label |
 | Toolbar | Floating at the bottom | Annotation tools, undo, clear, screenshot, and handoff |
 | View controls | Floating at the bottom right | Recenter view, zoom out, the zoom level and its menu, and zoom in |
@@ -56,15 +56,15 @@ reset the width. The width is remembered.
 | --- | --- |
 | **Breadcrumb: space** | The space's mark and name, before the page. Select it to switch to another [space](spaces.md). Shown when there is more than one space. |
 | **Breadcrumb: page and state** | The page's name, then the state showing. The state is the state switcher: select it to pick another state. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
-| **Actions** | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
-| **Lens switcher** | Switches between **Design** and each [implementation](lenses.md) the page has. Shown when the page has two or more lenses. A TypeScript preview's own lens is labeled **Workbench**. On a docs page, it switches what renders the examples. |
+| **Lens switcher** | Switches between the authored page and each [implementation](lenses.md) the page has. Shown when the page has two or more lenses. The authored lens defaults to **Design**, or **Workbench** for a TypeScript preview. [Every label is customizable](lenses.md#customize-lens-labels). On a docs page, it switches what renders the examples. |
 | **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Artboard sizes](#artboard-sizes). Disabled on a docs page. |
+| **Actions** (pointer icon and switch) | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
 | **Reload** | Reloads the current page. |
 | **Open the source** (`</>`) | Lists the design file and the page's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file; for a docs page, the Markdown file and each lens's example source. A path that isn't on this machine is listed but can't be opened. |
 | **Copy reference** | Copies a short text reference to the current view. See [Copy a reference](#copy-a-reference). |
 | **Open on its own** | Opens the current page in your browser, outside the workbench. |
 | **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Preview data, mocks, and actions](preview-data.md). |
-| **More** | **Configure pages** and **Download design-system ZIP**. Shown when the workbench server is running. |
+| **More** | **Configure pages** and **Download design-system ZIP**, which [exports the whole current space](design-system-export.md) across its collections and pages. Shown when the workbench server is running. |
 
 When the canvas is narrow, **Reload**, **Open the source**, **Copy reference**,
 **Open on its own**, and **Preview controls** fold into **More** rather than
@@ -90,7 +90,7 @@ the canvas is zoomed out to fit, never squeezed, so a 1512-pixel layout is
 still 1512 pixels wide to the page. Screenshots are always taken at the
 artboard's real size, whatever the zoom.
 
-A page's [`viewports`](pages-and-states.md#viewports) decide which sizes are
+A page's [`sizes`](pages-and-states.md#sizes) decide which sizes are
 enabled.
 
 ## Zoom and pan
@@ -252,7 +252,7 @@ form:
 - Add, remove, and rename collections, and set their icons.
 - Rename and remove groups, and add pages to them.
 - Add and remove pages, and edit their labels and source paths.
-- Choose each page's supported viewports.
+- Choose each page's supported sizes.
 
 Saving rewrites only the `collections` block of `workbench.yaml`, and the
 sidebar refreshes. States, implementation mappings, and code pointers in that

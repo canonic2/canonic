@@ -23,11 +23,12 @@ implementation, and how to point a design page at a
 ## How lenses work
 
 A page that lists any implementations gets a **lens switcher** in the
-top bar: **Design**, then one button per implementation the page has. On a
+top bar: the authored page, then one button per implementation the page has.
+The authored page's button defaults to **Design**. On a
 page whose `src` is a `.workbench.ts` or `.workbench.tsx` file, the first
-button reads **Workbench** instead. The switcher shows only when there are two
-or more lenses to choose from, so a page imported from a single catalog, with
-no design, has none.
+button defaults to **Workbench** instead. The switcher shows only when there
+are two or more lenses to choose from, so a page imported from a single catalog,
+with no design, has none.
 
 - **The choice sticks** as you move between pages, like the artboard size.
   A page that doesn't have the chosen lens shows its design.
@@ -35,7 +36,7 @@ no design, has none.
   sign-in page in its error state, at mobile width, on staging. A copied link
   opens the same view. See [Links and the address](canvas.md#links-and-the-address).
 - **Annotations, screenshots, and handoffs work through every lens.** A
-  screenshot taken through a lens is named after it
+  screenshot taken through a lens uses its implementation key in the filename
   (`sign-in-error-staging.jpg`), and the handoff says which implementation it
   shows, at what URL, and where that implementation's code is.
 - **Actions** is always on through a `url` or `storybook` lens. Your app
@@ -43,12 +44,55 @@ no design, has none.
 - **Open on its own** in the top bar opens the current page in your browser,
   outside the workbench, for interaction the iframe can't provide.
 
+### Customize lens labels
+
+Every lens's display label is customizable, independently of its kind.
+Set `label` on an implementation
+to call a website lens **Live** or **Prod**, or to rename a Storybook or
+Workbench implementation. Set `previews.lensLabel` for discovered previews,
+or `lensLabel` on an authored page for a page-specific override:
+
+```yaml
+previews:
+  lensLabel: Design
+
+implementations:
+  live:
+    kind: url
+    label: Live
+    base: https://example.com
+
+collections:
+  - name: Pages
+    items:
+      - label: Home
+        src: previews/home.workbench.ts
+        lensLabel: Reference
+        implementations:
+          live: /
+```
+
+This example labels discovered previews **Design**, while Home's authored
+lens is **Reference**, beside **Live**. The page's `label: Home` still names
+the page in the sidebar.
+
+The page's `lensLabel` takes precedence over `previews.lensLabel`. Renaming
+changes the existing button; it does not add another lens or change copied
+addresses. Without overrides, HTML pages use **Design** and TypeScript previews
+use **Workbench**. Docs lenses use their implementation's `label`.
+
+`lensLabel` values must be nonempty strings; surrounding whitespace is
+trimmed. Invalid values are reported in `problems` and the fallback label is
+used. These settings belong in `workbench.yaml`, rather than in `definePreview`.
+See [Previews](configuration.md#previews) and [Pages](configuration.md#pages)
+in the configuration reference.
+
 ### Lenses on a docs page
 
 A [docs page](docs-pages.md) has no design to compare with: its lenses are
 `examples` implementations, and each one renders the page's examples, such as
 with React or with React Native Web. The Markdown is the same in every lens,
-and there is no **Design** button. The switcher shows when the page has two or
+and there is no authored design lens. The switcher shows when the page has two or
 more lenses. A docs page that doesn't have the chosen lens shows its own
 default lens. See [Lenses](docs-pages.md#lenses) in the docs page guide.
 

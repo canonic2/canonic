@@ -154,7 +154,7 @@ export default definePreview({
   title: 'Pages/Pricing',
   adapter: 'astro',
   source: { entry: './pricing.astro' },
-  viewports: ['desktop', 'mobile'],
+  sizes: ['laptop', 'mobile'],
   inputs: {
     plans: [
       { name: 'Team', price: '$12 per month' },

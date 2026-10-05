@@ -1,10 +1,14 @@
 # Design-system export
 
-**More** › **Download design-system ZIP** packages the whole workbench, not just
-the current page, into an archive an agent or another tool can work from:
+**More** › **Download design-system ZIP** packages the whole current space,
+across all its collections and pages, into an archive an agent or another tool can work from:
 every design page, implementation source, TypeScript preview, and docs page the
-workbench points at, what they import, reference screenshots, and a README per
+space points at, what they import, reference screenshots, and a README per
 page.
+
+The export covers the space open in the canvas. It does not combine every
+space listed in the switcher or in `workbench.yaml`. To export another space,
+switch to it and download its export separately.
 
 Use it to give an agent the complete context for a redesign or an
 implementation, or to check whether anything changed since the last export.
@@ -15,7 +19,7 @@ page opened from disk.
 
 ## What goes in
 
-The export starts from every page's entry points:
+The export starts from every page's entry points in the current space:
 
 - the design page (`src`),
 - its [code pointers](lenses.md#point-at-the-code),
@@ -29,7 +33,7 @@ From there it follows local imports and referenced assets, and includes:
 
 | Included | Notes |
 | --- | --- |
-| `workbench.yaml` | At the archive root. |
+| `workbench.yaml` | Included when it is inside the space's exportable source roots. The original file is copied as written, so it may declare other spaces; that does not include those spaces' pages in this export. A manifest outside those roots is omitted. |
 | Design pages and their local CSS, scripts, images, and fonts | Paths stay project-relative. |
 | Implementation sources and their local imports | Workspace files keep their project-relative paths at the archive root. Sources outside the workspace go under `implementations/`. |
 | Linked local packages | Followed through their `package.json` exports, instead of being treated as installed dependencies. |
@@ -37,7 +41,7 @@ From there it follows local imports and referenced assets, and includes:
 | Asset folders referenced statically | `new URL("./assets/", import.meta.url)` includes the folder, which covers plugins that build sprites or font sets from a directory. |
 | SVG sprite sources | Source SVGs for a Vite `iconDirs` folder named through `path.resolve(process.cwd(), "…")`. |
 | Package configuration | The `package.json`, `tsconfig`/`jsconfig`, and Vite, Tailwind, and PostCSS configuration files the included sources need. |
-| Reference screenshots | One JPEG per design state, imported story, and TypeScript preview state, at each of the page's viewports, and per docs page lens, one of the whole page and one of each example. |
+| Reference screenshots | One JPEG per design state, imported story, and TypeScript preview state, at each of the page's sizes, and per docs page lens, one of the whole page and one of each example. |
 | Compiled TypeScript previews and docs pages | A `browser/` viewer you can open without Workbench. See [The browser viewer](#the-browser-viewer). |
 
 TypeScript imports written with `.js` extensions resolve to the `.ts` or
@@ -49,29 +53,33 @@ external packages the sources import, so you can install them before running
 the copied setup.
 
 Left out: installed dependencies (`node_modules`), build output, secrets,
-tests, and any source the workbench doesn't reach.
+tests, and any source the current space doesn't reach. Shared sources needed
+by this space are included even when other spaces also use them.
 
 ## Reference screenshots
 
 The export captures a reference JPEG for every declared state of every design
 page, every story of every imported Storybook title, and every state of every
 TypeScript preview, at each of the page's
-[`viewports`](pages-and-states.md#viewports):
+[`sizes`](pages-and-states.md#sizes):
 
-| Viewport | Captured at |
+| Size | Captured at |
 | --- | --- |
-| `desktop` | 1512 × 982 |
+| `laptop` | 1512 × 982 |
 | `mobile` | 393 × 852 |
-| `responsive` | Both 1512 × 982 and 393 × 852 |
 | `fit` | 1440 × 900 |
+| Custom fixed size | Its configured width and height |
+| Size with a filled axis | 1440 wide or 900 tall on that axis |
+| `resizable` | Skipped; if it is the page's only size, one 1440 × 900 reference |
 
-A page without `viewports` is captured at all three sizes. Duplicate sizes
-are removed, so `desktop` plus `responsive` captures each size once.
+A page without `sizes` is captured at its space's sizes, except Resizable.
+Sizes that resolve to the same dimensions are captured once, using the first
+size's key and label.
 
 Design pages are captured as designed, with actions off; lenses on a design
 page aren't captured.
 
-A [docs page](docs-pages.md) has no viewports. For each of its lenses, the
+A [docs page](docs-pages.md) has no sizes. For each of its lenses, the
 export captures the whole page at its 960-pixel layout, 1056 pixels wide with
 its margins and as tall as the page (up to 8192 pixels), and each example the
 lens renders, cropped to its panel. Files are named after the lens key and the
@@ -85,11 +93,12 @@ screenshot that fails, or a page that can't be captured, such as an
 [iOS Simulator](ios-simulator.md) page or one whose design file is missing,
 is listed under `captureWarnings` in `canonic-export.json`, and the rest of the
 export continues. When the download finishes, a message gives the total
-number of screenshot and TypeScript preview build warnings.
+number of export warnings, covering unresolved sources, screenshots and portable
+preview builds.
 
 ## The browser viewer
 
-When the project has [TypeScript previews](workbench-previews.md) or
+When the current space has [TypeScript previews](workbench-previews.md) or
 [docs pages](docs-pages.md) with examples, the archive also contains a
 `browser/` folder with each preview, and each docs page in each of its lenses,
 compiled for the browser.
@@ -101,9 +110,9 @@ To view them, serve the extracted archive with any static HTTP server and open
 `browser/index.html`. You don't need Workbench, Electron, or the project's
 packages installed.
 
-The viewer lets you search previews, pick a state and a viewport, and use the
+The viewer lets you search previews, pick a state and a size, and use the
 same preview controls as the canvas. Docs pages are listed with them, marked
-Docs: the **State** menu becomes a **Lens** menu, the viewport menu is hidden,
+Docs: the **State** menu becomes a **Lens** menu, the **Size** menu is hidden,
 and **Show code** works under each example. Links between docs pages open the
 other page in the viewer. See [Portable exports](workbench-previews.md#portable-exports) for its controls and
 what each adapter supports there. To build the viewer on its own, without the
@@ -119,7 +128,7 @@ the compiled entries and any previews that failed to build under `browser`.
 ## The archive
 
 When everything fits in one 10 MB ZIP, the download is that ZIP, named after
-the workbench's `name`, such as `acme-design-system.zip`. A larger export
+the current space's `name`, such as `acme-design-system.zip`. A larger export
 downloads as one outer ZIP of numbered parts:
 
 ```text
@@ -174,8 +183,10 @@ doesn't change it.
   follow, such as aliases it doesn't understand.
 - Check `captureWarnings` for missing screenshots, and `browser.warnings` for
   TypeScript previews that didn't build.
-- A preview that fails to build is a warning, but if the preview worker can't
-  build the viewer at all, the whole export fails. Read **Workbench: Show Log**,
+- A preview that fails to build is a warning. If the preview worker cannot
+  build the viewer at all, the export still includes sources and reference
+  screenshots, leaves out `browser/`, and records the cause under `warnings`.
+  Read **Workbench: Show Log**,
   or run the `check` command in
   [Command-line tools](workbench-previews.md#command-line-tools) to find the
   failing preview.

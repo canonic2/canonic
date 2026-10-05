@@ -16,15 +16,17 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
   stream behind the iOS Simulator and window lenses.
 - `electron-runtime.js`, `electron-runtime/`: the shared bundled Electron
   runtime for capture and preview compilation/server processes.
-- `handoff.js`, `export.js`: handoffs and the design-system export.
-  `remote.js`: requests to implementations.
-- `src/`: TypeScript modules, grouped by capability (`src/docs/` holds docs
-  pages). New capabilities and code migrated out of the files above live here.
+- `handoff.js`: handoffs. `remote.js`: requests to implementations.
+- `src/modules/export/`: the TypeScript design-system source and archive
+  exporter, exposed through `index.ts`. Job orchestration remains in `server.js`.
+- `src/`: TypeScript source. Current capability directories include
+  `src/docs/`, `src/sizes/` and `src/canvas/`; shared presentation and
+  infrastructure live in `src/components/`, `src/theme/` and `src/server/`.
 - `workbench/`: the browser canvas: manifest reader, states, lenses,
   page list, annotations. Read `workbench/README.md` before changing it.
 - `docs/`: the user guides, published on the website as they are.
 - `design/`: the Workbench space's design pages, shown in this repository's
-  workbench. They load the shipping `workbench/` code with sample data and
+  workbench. They load the shipping browser code with sample data and
   aren't packaged.
 - `specs/`: internal product requirements, workflows, decisions, and discoveries;
   these are kept outside the published documentation.
@@ -46,16 +48,63 @@ New code is TypeScript under `src/`, run without a build step:
   CommonJS host files `require()` them directly.
 - Browser modules in `src/` are served with their types stripped by the local
   server; the canvas never loads a compiled copy.
+- The direct VS Code sidebar uses `src/server/webview-components.ts` to bundle
+  the component bootstrap in memory with the packaged compiler, authorized by
+  a per-document CSP nonce. Component styles use adopted stylesheets; shared
+  theme CSS loads as a local webview resource. No compiled copy is maintained.
 - Keep pure logic (validation, parsing, matching) free of Node, DOM, and
   transport so it is tested directly; filesystem, HTTP, compiler, and DOM code
   are adapters around it.
 
-The JavaScript files outside `src/` are the migration starting point. Move code
-into `src/` when a change substantially reworks it, in bounded steps that
-preserve public contracts; local fixes stay in place. Preserve browser/server
-manifest agreement, host compatibility and packaged assets during restructuring.
+### Capability module locations
+
+New capability modules and substantial capability migrations belong under
+`src/modules/<capability>/`, such as `src/modules/export/`. Keep each
+capability's domain logic, workflows, dedicated filesystem/HTTP/compiler/browser
+adapters, types and behavioral tests together. Expose deliberate public entry
+points; callers use those contracts rather than another module's private files.
+Browser-safe entry points must not import Node or host-only adapters.
+
+Shared Web Components stay under `src/components/`, shared themes under
+`src/theme/`, and shared server transport and asset serving under `src/server/`.
+Application entry points compose these owners. A controller dedicated to one
+capability belongs with that module; rendering remains in its component.
+
+The existing capability directories and JavaScript host files are the migration
+starting point. Move a capability into `src/modules/` when the requested change
+substantially reworks it, in bounded steps that preserve public contracts; local
+fixes stay in place. Update consumers, runtime imports, browser asset allowlists,
+webview loading/CSP and packaging references together when paths change. Preserve
+browser/server manifest agreement, host compatibility and packaged assets.
 Use develop-module, review-module, create-ui-component, write-tests, fix-checks
 and debug-runtime with the commands below. A shared UI package is not required.
+
+### Browser UI direction
+
+The target for Workbench-owned UI is Web Components, defined in
+[`specs/web-components.md`](specs/web-components.md), with host-independent themes
+defined in [`specs/themes.md`](specs/themes.md). Read both before component or theme
+work, and use `workbench-ui` with the shared component/review workflows.
+
+New components and substantial migrations belong under `src/components/<name>/`
+as TypeScript custom elements with `wb-` tags, open Shadow DOM, explicit inputs,
+typed events and owned connection cleanup. Shared theme assets belong under
+`src/theme/`; components consume semantic `--wb-*` tokens with standalone defaults.
+Host adapters supply VS Code theme values, including live changes, across the
+canvas iframe boundary. Project preview frameworks and styling remain independent.
+
+These are target locations and contracts, not a claim that the legacy shell has
+been migrated. Local fixes can stay in place; migrate bounded controls and their
+consumers when substantially reworking them. Check server asset allowlists,
+webview resource loading/CSP and packaging when introducing new browser paths.
+
+Every component has a docs page in this repository's Workbench space, added or
+updated in the same change as the element: `design/<name>.md`,
+`design/<name>.examples.ts` and a `defineDocs` `design/<name>.workbench.ts`
+listed under **Components** in its interface area's group (Sidebar, Top bar, …). Examples use the shipping component's public API,
+one per meaningful state, and the page ends with its Public API.
+[`specs/web-components.md`](specs/web-components.md#design-pages) defines the
+page; `src/components/design-pages.test.ts` fails a component without one.
 
 ## Rules
 
@@ -159,6 +208,21 @@ guides describe current layouts, runtimes and compatibility constraints.
 - Organize capabilities into modules with one clear owner for behavior, types,
   validation, state and lifecycle. Group files by responsibility; do not split
   every function into a file or create empty architectural layers.
+- Use `src/modules/<capability>/` for new capability modules and bounded
+  capability migrations by default. Keep the capability's logic, orchestration,
+  dedicated adapters, types and tests together, following the package's test
+  convention. A module directory represents an owned capability, not one file
+  or every JavaScript/TypeScript importable unit.
+- Keep application composition, shared presentation, themes and host/platform
+  infrastructure outside `src/modules/` in the locations defined by the package
+  guide. Capability-specific adapters stay with their module; infrastructure
+  shared across capabilities has its own explicit owner. Do not create empty
+  folders or move code into a generic utilities directory to tidy the tree.
+- Package guides document current locations, target locations and justified
+  layout exceptions. Existing directories outside `src/modules/` are not an
+  instruction to move them all at once. Migrate within the requested capability,
+  preserving public entry points and updating consumers, asset serving and
+  packaging where paths change.
 - Separate domain decisions, application workflows, external adapters and
   presentation. Pure logic must not depend on UI, transport or host frameworks.
   Application code coordinates capabilities; adapters implement external I/O.
@@ -250,6 +314,49 @@ the actual component format, styles, host integration and verification commands.
 - Verify interactions with keyboard and rendered behavior, including cleanup and
   failure states. Screenshots supplement assertions; they do not establish focus,
   accessibility or resource lifecycle correctness.
+
+---
+
+# Workbench UI architecture
+
+Apply to Workbench-owned browser presentation, not the frameworks of previewed
+projects. The target contracts are `packages/workbench/specs/web-components.md`
+and `packages/workbench/specs/themes.md`; read them before component or theme work.
+
+- New components and substantial component migrations use autonomous Web
+  Components in `src/components/<name>/`, written in erasable TypeScript. Use
+  `wb-` tags, open Shadow DOM, owned styles, explicit inputs, and typed public
+  events. Register at browser entry points; keep DOM modules out of Node imports.
+- Controllers own application state and product operations. Elements own rendering
+  and interaction, release connection resources on disconnect, and reconnect
+  without duplicate listeners. Preserve focus/input on updates and never reach
+  into another element's private DOM or rely on document-wide IDs.
+- Components consume semantic `--wb-*` tokens. Shared theme assets under
+  `src/theme/` own complete standalone defaults and host mappings. VS Code colors
+  are an adapter input, not a requirement for running a component.
+- CSS variables cross Shadow DOM boundaries, not iframe documents. The embedding
+  webview owns validated theme forwarding, initial readiness, live updates and
+  snapshot replacement. Keep themes document-scoped and out of project previews,
+  captures, configuration and server state.
+- Verify native semantics, keyboard and focus in a real browser; cover defaults,
+  custom host colors and high contrast. Check direct webview and server asset
+  loading, CSP, and packaging for migrated components and styles.
+- Every element in `src/components/<name>/` has its docs page in the Workbench
+  space, in the same change: `design/<name>.md` with one section per meaningful
+  state and a **Public API** section, `design/<name>.examples.ts` rendering the
+  shipping element through its public inputs, and `design/<name>.workbench.ts`
+  (`defineDocs`, `components/<name>`, `Components/<Area>/<Label>`, grouped by the interface area it appears in). A changed API or
+  visible state updates the page with it. Examples import only what they draw.
+  The contract is `specs/web-components.md#design-pages`; the
+  `design-pages.test.ts` check fails a component without one.
+- Existing vanilla UI is migration debt, not evidence that the target is shipped.
+  Local fixes may remain in place; migrate bounded controls when substantially
+  reworking them. Do not combine a component task with an unsolicited full UI
+  rewrite, a new rendering framework, or changes to project preview adapters.
+
+Use `workbench-ui` with `create-ui-component` for implementation or
+`review-module` for review. These instructions refine the shared UI contracts;
+they do not distribute a UI package or configuration to consuming projects.
 
 ---
 

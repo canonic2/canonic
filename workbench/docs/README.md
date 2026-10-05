@@ -18,7 +18,7 @@ collections you edit with **Configure pages**. See
 | Guide | Read it to |
 | --- | --- |
 | [Getting started](getting-started.md) | Install the extension, write a first `workbench.yaml`, and open the canvas |
-| [Pages and states](pages-and-states.md) | Write design pages, give one page several states, and choose its viewports |
+| [Pages and states](pages-and-states.md) | Write design pages, give one page several states, and choose its sizes |
 | [Docs pages](docs-pages.md) | Document components and foundations in Markdown, with live examples, their code, and lenses that render them |
 | [Using the canvas](canvas.md) | Find your way around the sidebar, the top bar, artboard sizes, zoom, and links |
 | [Annotations and handoff](annotations-and-handoff.md) | Annotate a page with the toolbar, save screenshots, and hand the result to an agent |
@@ -41,7 +41,7 @@ collections you edit with **Configure pages**. See
 
 | Guide | Read it to |
 | --- | --- |
-| [Lenses and URL implementations](lenses.md) | Show a page as it runs on a dev server, staging, or as a preview, point at its code, and start the server automatically |
+| [Lenses and URL implementations](lenses.md) | Compare a design with previews or a dev, staging, or live website; customize every lens label, point at its code, and start the server automatically |
 | [Storybook](storybook.md) | Map pages to stories, or import a whole Storybook as the workbench |
 | [iOS Simulator](ios-simulator.md) | Stream and drive a booted Simulator on the canvas |
 | [App windows](windows.md) | Stream a window from any macOS app, such as an Android emulator |

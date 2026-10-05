@@ -3,11 +3,11 @@
    raw objects intact so states, implementation mappings, and code pointers
    survive edits even when they are not exposed as form controls here. */
 (function () {
-  var VIEWPORTS = [
+  var SIZES = [
     { id: 'fit', label: 'Fit', icon: 'minimize-2', description: 'Fill the available workbench', exportLabel: '1440 × 900 reference' },
-    { id: 'desktop', label: 'Desktop', icon: 'monitor', description: 'MacBook Pro 14 frame', exportLabel: '1512 × 982 reference' },
+    { id: 'laptop', label: 'Laptop', icon: 'monitor', description: 'MacBook Pro 14 frame', exportLabel: '1512 × 982 reference' },
     { id: 'mobile', label: 'Mobile', icon: 'smartphone', description: 'iPhone 15 Pro frame', exportLabel: '393 × 852 reference' },
-    { id: 'responsive', label: 'Responsive', icon: 'scaling', description: 'Drag to test any size', exportLabel: 'Desktop + mobile references' },
+    { id: 'resizable', label: 'Resizable', icon: 'scaling', description: 'Drag to test any size', exportLabel: 'Not exported' },
   ];
 
   function element(name, className, text) {
@@ -48,20 +48,35 @@
     return wrapper;
   }
 
-  function pageViewports(page) {
-    return window.wbManifest.pageViewports(page.viewports, page.label || 'Page', []);
+  /* A page's `sizes` as written: a list, or null when it has none and so
+     supports every size of the space. */
+  function sizeList(page) {
+    var raw = page.sizes;
+    if (raw === undefined || raw === null || raw === '') return null;
+    return Array.isArray(raw) ? raw : [raw];
   }
 
-  function canonicalize(entries) {
-    (entries || []).forEach(function (entry) {
-      if (entry.group) {
-        canonicalize(entry.items);
-        return;
-      }
-      var selected = pageViewports(entry);
-      if (selected.length === VIEWPORTS.length) delete entry.viewports;
-      else entry.viewports = selected;
-    });
+  /* The keys a page supports, out of `spaceKeys`. The server resolves and
+     checks sizes; this only reads which listed keys are on. */
+  function pageSizes(page, spaceKeys) {
+    var listed = sizeList(page);
+    if (!listed) return spaceKeys.slice();
+    return listed.filter(function (entry) { return typeof entry === 'string'; });
+  }
+
+  /* Turns one of the space's sizes on or off for a page, keeping its other
+     entries — sizes of its own included — as they are written. A page left
+     with exactly the space's sizes loses its list. */
+  function toggleSize(page, key, spaceKeys) {
+    var listed = sizeList(page) || spaceKeys.slice();
+    var at = listed.indexOf(key);
+    var next = at === -1 ? listed.concat([key]) : listed.filter(function (entry) { return entry !== key; });
+    if (!next.length) return;
+    var keys = next.filter(function (entry) { return typeof entry === 'string'; });
+    var every = keys.length === next.length && keys.length === spaceKeys.length &&
+      spaceKeys.every(function (candidate) { return keys.indexOf(candidate) !== -1; });
+    if (every) delete page.sizes;
+    else page.sizes = next;
   }
 
   function create(options) {
@@ -69,6 +84,7 @@
     var body = options.body;
     var status = options.status;
     var collections = [];
+    var spaceKeys = SIZES.map(function (size) { return size.id; });
     var selection = null;
     var navPane = null;
     var inspector = null;
@@ -220,40 +236,35 @@
       }, { placeholder: 'pages/sign-in.html', help: 'Relative to the project root.' }));
       inspector.appendChild(form);
 
-      var viewportSection = element('section', 'wb-config-option-section');
-      viewportSection.appendChild(element('h4', '', 'Supported viewports'));
-      viewportSection.appendChild(element('p', '', 'Only selected modes are available in the workbench. Responsive exports desktop and mobile references.'));
-      var grid = element('div', 'wb-config-viewport-grid');
-      var active = pageViewports(page);
-      VIEWPORTS.forEach(function (viewport) {
-        var card = element('button', 'wb-config-viewport-card');
+      var sizeSection = element('section', 'wb-config-option-section');
+      sizeSection.appendChild(element('h4', '', 'Supported sizes'));
+      sizeSection.appendChild(element('p', '', 'Only selected sizes are available in the workbench. Each is exported at its size, except Resizable.'));
+      var grid = element('div', 'wb-config-size-grid');
+      var active = pageSizes(page, spaceKeys);
+      SIZES.filter(function (size) { return spaceKeys.indexOf(size.id) !== -1; }).forEach(function (size) {
+        var card = element('button', 'wb-config-size-card');
         card.type = 'button';
-        var on = active.indexOf(viewport.id) !== -1;
+        var on = active.indexOf(size.id) !== -1;
         card.setAttribute('aria-pressed', String(on));
-        var cardIcon = element('span', 'wb-config-viewport-icon');
-        cardIcon.appendChild(icon(viewport.icon, 19));
+        var cardIcon = element('span', 'wb-config-size-icon');
+        cardIcon.appendChild(icon(size.icon, 19));
         card.appendChild(cardIcon);
-        var cardCopy = element('span', 'wb-config-viewport-copy');
-        cardCopy.appendChild(element('strong', '', viewport.label));
-        cardCopy.appendChild(element('span', '', viewport.description));
-        cardCopy.appendChild(element('small', '', viewport.exportLabel));
+        var cardCopy = element('span', 'wb-config-size-copy');
+        cardCopy.appendChild(element('strong', '', size.label));
+        cardCopy.appendChild(element('span', '', size.description));
+        cardCopy.appendChild(element('small', '', size.exportLabel));
         card.appendChild(cardCopy);
-        var check = element('span', 'wb-config-viewport-check');
+        var check = element('span', 'wb-config-size-check');
         check.appendChild(icon(on ? 'check' : 'plus', 13));
         card.appendChild(check);
         card.addEventListener('click', function () {
-          var next = active.slice();
-          var at = next.indexOf(viewport.id);
-          if (at === -1) next.push(viewport.id);
-          else if (next.length > 1) next.splice(at, 1);
-          if (next.length === VIEWPORTS.length) delete page.viewports;
-          else page.viewports = VIEWPORTS.map(function (item) { return item.id; }).filter(function (id) { return next.indexOf(id) !== -1; });
+          toggleSize(page, size.id, spaceKeys);
           renderInspector();
         });
         grid.appendChild(card);
       });
-      viewportSection.appendChild(grid);
-      inspector.appendChild(viewportSection);
+      sizeSection.appendChild(grid);
+      inspector.appendChild(sizeSection);
 
       var advanced = element('div', 'wb-config-preserved');
       advanced.appendChild(icon('braces', 16));
@@ -343,6 +354,7 @@
         });
       }).then(function (result) {
         collections = result.collections || [];
+        if (Array.isArray(result.sizes) && result.sizes.length) spaceKeys = result.sizes;
         selection = collections.length ? { kind: 'collection', value: collections[0], owner: collections, collection: collections[0] } : null;
         setStatus('');
         render();
@@ -371,7 +383,6 @@
     function save() {
       var problem = validate();
       if (problem) { setStatus(problem, true); return; }
-      collections.forEach(function (collection) { canonicalize(collection.items); });
       options.save.disabled = true;
       setStatus('Saving…');
       fetch('/_workbench/config-file', {
@@ -405,5 +416,5 @@
     return { open: open };
   }
 
-  window.wbConfigEditor = { create: create, pageViewports: pageViewports };
+  window.wbConfigEditor = { create: create, pageSizes: pageSizes, toggleSize: toggleSize };
 })();

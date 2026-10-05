@@ -1,7 +1,8 @@
-/* Docs pages on the server: the page document for a lens, the problems the
-   shared list shows, an example's code for Show code, and the revision that
-   reloads an open page. Reading files and building examples are passed in,
-   so this module decides what a page shows without owning any I/O. */
+/* Docs pages on the server: the page document for a lens, the bundle its
+   script mounts, the problems the shared list shows, an example's code for
+   Show code, and the revision that reloads an open page. Reading files and
+   building examples are passed in, so this module decides what a page shows
+   without owning any I/O. */
 
 import { createHash } from 'node:crypto';
 import { highlight, languageOf } from './code-highlight.ts';
@@ -62,6 +63,21 @@ export interface DocsRequest {
   state?: string | null;
 }
 
+/** A lens's listed examples, or why they couldn't be listed. */
+export type Listing = { examples: ListedExample[]; problems: string[] };
+
+/** What a page's script mounts, answered after the page itself: see `bundleInfo`. */
+export interface BundleInfo {
+  module: string | null;
+  stylesheet: string | null;
+  /** The IDs the lens exports; a placed example that isn't one says it's missing. */
+  examples: string[];
+  /** Why nothing mounts: the build failed, or examples can't run here. */
+  error: string | null;
+  /** The page's revision, which the page then polls against. */
+  revision: string;
+}
+
 /** Where a page finds its script, stylesheet, and example code: the server's routes unless given. */
 export interface PageLocations {
   script?: string;
@@ -72,8 +88,14 @@ export interface PageLocations {
   revision?: string;
 }
 
+export interface PageMode {
+  /** Answer with the Markdown at once; the page's script then asks `bundleUrl` what to mount. */
+  defer?: boolean;
+}
+
 export const SOURCE_PATH = '/_workbench/docs/source';
 export const REVISION_PATH = '/_workbench/docs/revision';
+export const BUNDLE_PATH = '/_workbench/docs/bundle';
 
 export class DocsPageError extends Error {
   readonly status: number;
@@ -102,14 +124,17 @@ export function createDocsService(options: DocsServiceOptions) {
     return text;
   }
 
-  async function page(entry: DocsPageEntry, request: DocsRequest, docsPages: ReadonlySet<string>, locations: PageLocations = {}): Promise<string> {
+  /* The Markdown, rendered without waiting for anything else, is the page; a
+     deferred page's examples follow once its script has the bundle. */
+  async function page(entry: DocsPageEntry, request: DocsRequest, docsPages: ReadonlySet<string>, locations: PageLocations = {}, mode: PageMode = {}): Promise<string> {
     const source = await markdown(entry);
     const lens = chooseLens(entry, request.lens);
     let bundle: DocsBundle | null = null;
     let unavailable: string | null = lens ? null : 'This page has no examples lens.';
     const blocked = options.blocked();
+    const deferred = !!(lens && !blocked && mode.defer);
     if (lens && blocked) unavailable = blocked;
-    else if (lens) {
+    else if (lens && !deferred) {
       try { bundle = await options.bundle(lens); }
       catch (error) { unavailable = lens.label + ': ' + String((error as Error).message ?? error); }
     }
@@ -119,6 +144,7 @@ export function createDocsService(options: DocsServiceOptions) {
         return { status: 'invalid', note: placement.id ? 'This example is placed more than once on the page.' : 'This example block names no example.' };
       }
       if (unavailable) return { status: 'unavailable', note: unavailable };
+      if (deferred) return { status: 'pending' };
       if (!available.has(placement.id)) return { status: 'missing', note: 'Not available in ' + lens!.label };
       return { status: 'ready' };
     };
@@ -133,13 +159,29 @@ export function createDocsService(options: DocsServiceOptions) {
       options: {
         page: entry.src,
         lens: lens?.key ?? null,
+        lensLabel: lens?.label ?? null,
         state: request.state ?? null,
-        bundle: bundle && !unavailable ? { module: bundle.module } : null,
+        bundle: deferred ? { info: BUNDLE_PATH + query } : bundle && !unavailable ? { module: bundle.module } : null,
         sourceUrl: locations.source ?? SOURCE_PATH + query + '&example=',
         revisionUrl: locations.revision ?? REVISION_PATH + query,
-        revision: revisionOf(source, bundle),
+        // A deferred page learns its revision with its bundle.
+        revision: deferred ? '' : revisionOf(source, bundle),
       },
     });
+  }
+
+  /** What a deferred page mounts in a lens, with the page's revision. */
+  async function bundleInfo(entry: DocsPageEntry, lensKey?: string | null): Promise<BundleInfo> {
+    const source = await markdown(entry);
+    const lens = chooseLens(entry, lensKey);
+    const none = (error: string): BundleInfo => ({ module: null, stylesheet: null, examples: [], error, revision: revisionOf(source, null) });
+    if (!lens) return none('This page has no examples lens.');
+    const blocked = options.blocked();
+    if (blocked) return none(blocked);
+    let bundle: DocsBundle;
+    try { bundle = await options.bundle(lens); }
+    catch (error) { return none(lens.label + ': ' + String((error as Error).message ?? error)); }
+    return { module: bundle.module, stylesheet: bundle.stylesheet, examples: bundle.examples.map(example => example.id), error: null, revision: revisionOf(source, bundle) };
   }
 
   /** The current revision of a page in a lens; it changes when the Markdown or the examples do. */
@@ -178,8 +220,10 @@ export function createDocsService(options: DocsServiceOptions) {
       .map(placement => ({ id: placement.id, label: placement.label }));
   }
 
-  /** Problems for the shared list, named by page. */
-  async function problems(entries: readonly DocsPageEntry[]): Promise<string[]> {
+  /** Problems for the shared list, named by page. `listing` answers a lens's
+      examples; a lens it answers null for isn't listed yet and is left out. */
+  async function problems(entries: readonly DocsPageEntry[],
+    listing: (lens: DocsLens) => Promise<Listing> | null = lens => options.listExamples(lens)): Promise<string[]> {
     const out: string[] = [];
     const blocked = options.blocked();
     let skipped = false;
@@ -191,8 +235,10 @@ export function createDocsService(options: DocsServiceOptions) {
       for (const problem of doc.problems) out.push(where + ', line ' + problem.line + ': ' + problem.message);
       for (const lens of entry.lenses) {
         if (blocked) { skipped = true; continue; }
+        const pending = listing(lens);
+        if (!pending) continue;
         try {
-          const listed = await options.listExamples(lens);
+          const listed = await pending;
           for (const problem of listed.problems) out.push(where + ': ' + lens.label + ': ' + problem);
           const match = matchLens(doc.placements, listed.examples.map(example => example.id));
           for (const id of match.unplaced) out.push(where + ': example “' + id + '” in ' + lens.label + ' is not placed in ' + entry.src + '.');
@@ -205,7 +251,7 @@ export function createDocsService(options: DocsServiceOptions) {
     return out;
   }
 
-  return { page, revision, exampleSource, outline, problems };
+  return { page, bundleInfo, revision, exampleSource, outline, problems };
 }
 
 function revisionOf(markdown: string, bundle: DocsBundle | null): string {

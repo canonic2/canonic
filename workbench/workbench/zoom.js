@@ -126,13 +126,15 @@
     return { w: canvas.clientWidth, h: canvas.clientHeight };
   }
 
-  /* The Fit width mode is the canvas itself, less the room the canvas keeps
-     around an artboard — the artboard is still an artboard, not the whole window. */
-  function sizeFitMode() {
-    if (canvasMode === 'docs' || canvas.dataset.width !== 'fit') return;
+  /* A filled axis — both of Fit's, or the `fill` side of a fixed size — is
+     the canvas itself, less the room the canvas keeps around an artboard: the
+     artboard is still an artboard, not the whole window. workbench.js flags
+     the axes; the floor is src/sizes' FILL_FLOOR. */
+  function sizeFilledAxes() {
+    if (canvasMode === 'docs') return;
     var v = view();
-    artboard.style.width = Math.max(320, v.w - INSET.left - INSET.right) + 'px';
-    artboard.style.height = Math.max(320, v.h - INSET.top - INSET.bottom) + 'px';
+    if (canvas.dataset.fillWidth === 'true') artboard.style.width = Math.max(320, v.w - INSET.left - INSET.right) + 'px';
+    if (canvas.dataset.fillHeight === 'true') artboard.style.height = Math.max(320, v.h - INSET.top - INSET.bottom) + 'px';
   }
 
   function applyDocsMode() {
@@ -177,7 +179,7 @@
       x = 0;
       return apply();
     }
-    sizeFitMode();
+    sizeFilledAxes();
     var w = artboard.offsetWidth;
     var h = artboard.offsetHeight;
     var v = view();
@@ -441,7 +443,7 @@
   function relayout() {
     if (fitted) fit();
     else {
-      sizeFitMode();
+      sizeFilledAxes();
       apply();
     }
   }

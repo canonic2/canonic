@@ -46,6 +46,40 @@ test('icon-only collections survive reading and editor saves', function () {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('server and browser readers retain authored lens labels and editor saves preserve them', async function () {
+  var body = 'name: Acme\npreviews:\n  lensLabel: Design\ncollections:\n  - name: Pages\n    items:\n      - label: Button\n        src: button.workbench.ts\n        lensLabel: Reference\n      - label: Invalid\n        src: invalid.html\n        lensLabel: false\n';
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-lens-label-'));
+  try {
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), body);
+    var read = config.read(root);
+    assert.equal(read.previews.lensLabel, 'Design');
+    assert.equal(read.collections[0].items[0].lensLabel, 'Reference');
+    assert.equal(read.collections[0].items[1].lensLabel, undefined);
+    assert.deepEqual(read.problems, ['Pages › Invalid: lensLabel: must be a nonempty string.']);
+    config.updateCollections(root, config.source(root).collections);
+    assert.equal(config.read(root).collections[0].items[0].lensLabel, 'Reference');
+    var warnings = [];
+    var window = { wbManifest: require('./workbench/manifest'), wbYaml: yaml.parse };
+    function Request() {}
+    Request.prototype.open = function (_, url) { this.url = url; };
+    Request.prototype.send = function () {
+      this.status = this.url.endsWith('workbench.local.yaml') ? 404 : 200;
+      this.responseText = body;
+      this.onload();
+    };
+    require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, 'workbench/config.js'), 'utf8'), {
+      window: window, URL: URL, URLSearchParams: URLSearchParams,
+      location: { protocol: 'http:', search: '' },
+      document: { baseURI: 'http://127.0.0.1/', querySelector: () => null },
+      XMLHttpRequest: Request, console: { warn: message => warnings.push(message) },
+    });
+    var browser = await new Promise((resolve, reject) => window.wbConfig.load(resolve, reject));
+    assert.equal(browser.collections[0].items[0].lensLabel, 'Reference');
+    assert.equal(browser.previews.lensLabel, 'Design');
+    assert.deepEqual(warnings, ['[workbench] workbench.yaml:\nPages › item 2 › Invalid: lensLabel: must be a nonempty string.']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 /* The shapes a workbench.yaml is actually written in. The tree in the sidebar
    is only ever as right as this is. */
 
@@ -134,8 +168,8 @@ var MAIN = [
   '    items:',
   '      - label: Sign in',
   '        src: pages/sign-in.html',
-  '        viewports:',
-  '          - desktop',
+  '        sizes:',
+  '          - laptop',
   '          - mobile',
   '        states:',
   '          - id: default',
@@ -182,7 +216,7 @@ test('reads implementations, lenses and code pointers', function () {
     assert.deepEqual(read.files, { main: true, local: false });
 
     var signIn = read.collections[0].items[0];
-    assert.deepEqual(signIn.viewports, ['desktop', 'mobile']);
+    assert.deepEqual(signIn.sizes, ['laptop', 'mobile']);
     assert.deepEqual(signIn.implementations, {
       dev: { path: '/', states: { error: '/?error=1' } },
       staging: { path: '/' },
@@ -193,7 +227,7 @@ test('reads implementations, lenses and code pointers', function () {
     ]);
 
     var button = read.collections[1].items[0];
-    assert.deepEqual(button.viewports, ['fit', 'desktop', 'mobile', 'responsive']);
+    assert.equal(button.sizes, undefined, 'a page without sizes supports every size of the space');
     assert.equal(button.icon, 'square-mouse-pointer');
     assert.deepEqual(button.implementations, { storybook: { title: 'Components/Button' } });
     assert.deepEqual(read.problems, []);
@@ -219,13 +253,13 @@ test('updates the collections block without rewriting the rest of the YAML file'
   var root = project({ 'workbench.yaml': original });
   try {
     config.updateCollections(root, [{ name: 'Pages', icon: 'file-text', items: [{
-      label: 'Sign in', src: 'pages/sign-in.html', viewports: ['desktop', 'mobile'],
+      label: 'Sign in', src: 'pages/sign-in.html', sizes: ['laptop', 'mobile'],
     }] }]);
     var body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
     assert.match(body, /name: Acme # keep this comment/);
     assert.match(body, /base: http:\/\/localhost:3000/);
-    assert.match(body, /viewports:\n\s+- desktop\n\s+- mobile/);
-    assert.deepEqual(config.read(root).collections[0].items[0].viewports, ['desktop', 'mobile']);
+    assert.match(body, /sizes:\n\s+- laptop\n\s+- mobile/);
+    assert.deepEqual(config.read(root).collections[0].items[0].sizes, ['laptop', 'mobile']);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -542,5 +576,127 @@ test('reads docs pages, their examples lenses, and the lens they open with', fun
     assert.deepEqual(read.problems, []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+var SIZED = [
+  'name: Acme # keep this comment',
+  'sizes:',
+  '  fit: true',
+  '  sidebar:',
+  '    width: 340',
+  '    height: fill',
+  '  tablet:',
+  '    width: 1024',
+  '    height: 1366',
+  'collections:',
+  '  - name: Interface',
+  '    items:',
+  '      # the sidebar is 340 wide',
+  '      - label: Sidebar',
+  '        src: sidebar.html',
+  '        sizes:',
+  '          - sidebar',
+  '          - laptop',
+  '      - label: Menu',
+  '        src: menu.html',
+  '        sizes:',
+  '          - popover:',
+  '              width: 280',
+  '              height: 360',
+  '          - fit',
+  '      - label: Card',
+  '        src: card.md',
+  '        sizes:',
+  '          - fit',
+  '      - label: Dashboard',
+  '        src: dashboard.html',
+  '',
+].join('\n');
+
+test('reads a space’s sizes and each page’s, with what the local file sets marked', function () {
+  var root = project({ 'workbench.yaml': SIZED, 'workbench.local.yaml': 'sizes:\n  sidebar:\n    width: 360\n' });
+  try {
+    var read = config.read(root);
+    assert.deepEqual(read.sizes.map(function (size) { return [size.key, size.width, size.height, !!size.local]; }),
+      [['fit', null, null, false], ['sidebar', 360, 'fill', true], ['tablet', 1024, 1366, false]]);
+    var items = read.collections[0].items;
+    assert.deepEqual(items[0].sizes, ['sidebar']);
+    assert.deepEqual(items[1].sizes, ['popover', 'fit']);
+    assert.deepEqual(items[1].ownSizes.map(function (size) { return [size.key, size.width, size.height, size.button]; }), [['popover', 280, 360, false]]);
+    assert.equal(items[2].sizes, undefined, 'a docs page has no size');
+    assert.equal(items[3].sizes, undefined, 'a page without sizes supports every size of the space');
+    assert.deepEqual(read.problems, [
+      'Interface › Sidebar: size “laptop” isn’t one of the space’s sizes.',
+      'Interface › Card: sizes don’t apply to a docs page, which uses the whole canvas.',
+    ]);
+    var resolved = config.resolve(root, read);
+    assert.equal(resolved.sizes, read.sizes);
+    assert.deepEqual(resolved.pages['sidebar.html'].sizes, ['sidebar']);
+    assert.equal(resolved.pages['menu.html'].ownSizes[0].key, 'popover');
+    assert.equal(resolved.pages['dashboard.html'].sizes, undefined);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sizes belong to each space of a file that lists several', function () {
+  var dir = multiSpace(MULTI.replace('spaces:\n  web:\n', 'sizes:\n  fit: true\nspaces:\n  web:\n    sizes:\n      mobile: true\n'));
+  try {
+    var web = config.read({ dir: dir, key: 'web' });
+    assert.deepEqual(web.sizes.map(function (size) { return size.key; }), ['mobile']);
+    assert.match(web.problems.join('\n'), /Sizes: sizes go in each space, under spaces.<key>, when the file lists spaces\./);
+    var ui = config.read({ dir: dir, key: 'ui' });
+    assert.deepEqual(ui.sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('saving sizes replaces the sizes block, and the collections only when a page changes', function () {
+  var edit = require('./src/sizes/edit.ts');
+  var root = project({ 'workbench.yaml': SIZED });
+  try {
+    config.updateSizes(root, function (sizes, collections) {
+      return edit.addSize(sizes, collections, { name: 'Wide', width: 'fill', height: 200 });
+    });
+    var body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
+    assert.match(body, /name: Acme # keep this comment/);
+    assert.match(body, /# the sidebar is 340 wide/, 'collections were not rewritten');
+    assert.deepEqual(config.read(root).sizes.map(function (size) { return size.key; }), ['fit', 'sidebar', 'tablet', 'wide']);
+
+    config.updateSizes(root, function (sizes, collections) {
+      return edit.addSize(sizes, collections, { name: 'Narrow', width: 200, height: 'fill', page: 'sidebar.html' });
+    });
+    body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
+    assert.match(body, /name: Acme # keep this comment/);
+    assert.deepEqual(config.read(root).collections[0].items[0].sizes, ['sidebar', 'narrow']);
+
+    config.updateSizes(root, function (sizes, collections) {
+      return edit.updateSizes(sizes, collections, [{ key: 'fit', value: true }, { key: 'narrow', value: sizes.narrow }]);
+    });
+    var read = config.read(root);
+    assert.deepEqual(read.sizes.map(function (size) { return size.key; }), ['fit', 'narrow']);
+    assert.deepEqual(read.collections[0].items[0].sizes, ['narrow']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('saving sizes for one space of several writes only that space', function () {
+  var edit = require('./src/sizes/edit.ts');
+  var dir = multiSpace(MULTI);
+  try {
+    config.updateSizes({ dir: dir, key: 'ui' }, function (sizes, collections) {
+      return edit.addSize(sizes, collections, { name: 'Tablet', width: 1024, height: 1366 });
+    });
+    var body = fs.readFileSync(path.join(dir, 'workbench.yaml'), 'utf8');
+    assert.match(body, /^# Two spaces in one file/);
+    assert.match(body, /\n\npreviews: false\n$/);
+    assert.deepEqual(config.read({ dir: dir, key: 'ui' }).sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable', 'tablet']);
+    assert.deepEqual(config.read({ dir: dir, key: 'web' }).sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable']);
+    assert.equal(config.read({ dir: dir, key: 'web' }).collections[0].items[0].src, 'index.html');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

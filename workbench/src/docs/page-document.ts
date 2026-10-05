@@ -9,15 +9,17 @@ import { escapeHtml } from './code-highlight.ts';
 export interface DocsPageOptions {
   /** The docs page's src, relative to the project root. */
   page: string;
-  /** The lens rendering the examples, or null when the page has none. */
+  /** The lens rendering the examples, and its label, or null when the page has none. */
   lens: string | null;
+  lensLabel: string | null;
   state: string | null;
-  /** The lens's examples bundle, or null when nothing is mounted. */
-  bundle: { module: string } | null;
+  /** The lens's examples bundle, where to ask for it (a deferred page), or null when nothing is mounted. */
+  bundle: { module: string } | { info: string } | null;
   /** Where Show code asks for an example's source; the example ID is appended. */
   sourceUrl: string;
   /** Answers the page's current revision, so an edit reloads it; empty where nothing changes. */
   revisionUrl: string;
+  /** Empty on a deferred page until its bundle answers. */
   revision: string;
 }
 

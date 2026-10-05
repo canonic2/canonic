@@ -15,7 +15,7 @@ to be the top of an open folder; see
 - [Groups](#groups)
 - [Pages](#pages)
 - [States](#states)
-- [Viewports](#viewports)
+- [Sizes](#sizes)
 - [Implementations](#implementations)
 - [A page's implementations](#a-pages-implementations)
 - [Code pointers](#code-pointers)
@@ -85,8 +85,8 @@ collections:
           - label: Sign in
             src: design/pages/sign-in.html
             icon: log-in
-            viewports:
-              - desktop
+            sizes:
+              - laptop
               - mobile
             states:
               - id: default
@@ -108,9 +108,9 @@ collections:
     items:
       - label: Button
         src: design/components/button.html
-        viewports:
+        sizes:
           - fit
-          - responsive
+          - resizable
         implementations:
           preview: components/button
           storybook: Components/Button
@@ -159,8 +159,15 @@ previews:
 | --- | --- | --- | --- |
 | `include` | list of glob patterns | no | Which files are preview definitions, relative to the project root. Replaces the default patterns. Patterns can't start with `/` or contain `..`. |
 | `config` | path | no | The preview configuration file, relative to the project root. Defaults to `workbench.config.ts`. See [Custom adapters](custom-adapters.md#configuration-file). |
+| `lensLabel` | nonempty string | no | Label of discovered previews' authored lens. Defaults to **Workbench**. An explicit page's `lensLabel` takes precedence. Does not rename docs lenses or `workbench` implementations, which use implementation `label`. |
 | `icon` | Lucide icon name | no | Fallback for discovered preview pages and collections. Defaults to `component`. |
 | `icons` | map of title prefix to Lucide icon name | no | The longest matching prefix wins; matches end at a `/` boundary or the whole title. |
+
+`previews.lensLabel` sets a display label, such as **Design**, without changing
+preview IDs or adding another lens. A page listed in `collections` can
+override it with its own `lensLabel`. Invalid or blank values are reported
+and ignored; surrounding whitespace is trimmed. See
+[Customize lens labels](lenses.md#customize-lens-labels) for a complete example.
 
 For example, choose an icon for a collection and another for its pages:
 
@@ -183,8 +190,8 @@ load. An invalid definition icon makes that definition a preview problem.
 
 A page whose `src` is a preview definition, such as
 `src: src/button.workbench.ts`, keeps its place in your collections and takes
-its states from the definition. Its viewports come from the page's own
-`viewports`, not from the definition's.
+its states from the definition. Its sizes come from the page's own `sizes`,
+not from the definition's.
 
 An explicitly placed preview keeps its handwritten page icon when set;
 otherwise it takes the discovered preview icon.
@@ -265,10 +272,11 @@ items:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `label` | string | yes | The page's name in the sidebar, in screenshots, and in handoffs. |
+| `lensLabel` | nonempty string | no | Label of this page's authored lens. Defaults to **Design** for HTML, or `previews.lensLabel` then **Workbench** for a discovered TypeScript preview. Renames the existing lens without changing its identity. Docs pages use implementation `label` instead. |
 | `src` | path | yes | The HTML file, [preview definition](#previews), or Markdown file of a [docs page](docs-pages.md), relative to the project root. |
 | `icon` | Lucide icon name | no | Overrides the collection's icon for this page. |
 | `states` | list of [states](#states) | no | Variations of the page. Shown only when there are two or more. |
-| `viewports` | list of [viewports](#viewports) | no | Which artboard sizes the page supports. Defaults to all four. A docs page has no artboard; `viewports` on one is reported and ignored. |
+| `sizes` | list of [sizes](#sizes) | no | Which artboard sizes the page supports. Defaults to all four. A docs page has no artboard; `sizes` on one is reported and ignored. |
 | `implementations` | map | no | [Where this page is in each implementation](#a-pages-implementations). For a docs page, its lenses: each `examples` implementation and its example source. |
 | `lens` | implementation name | no | A docs page only: the lens it opens with, one of its `implementations`. Defaults to its first. On any other page, it is reported. |
 | `code` | map | no | [Where this page's code lives](#code-pointers), per implementation. |
@@ -309,30 +317,30 @@ states:
 - A [docs page](docs-pages.md#states) can declare states too. Every example
   receives the state, and the page list doesn't list them.
 
-## Viewports
+## Sizes
 
 ```yaml
-viewports:
-  - desktop
+sizes:
+  - laptop
   - mobile
-  - responsive
+  - resizable
 ```
 
 | Value | Artboard | Export reference size |
 | --- | --- | --- |
-| `desktop` | Laptop, MacBook Pro 14 | 1512 × 982 |
+| `laptop` | Laptop, MacBook Pro 14 | 1512 × 982 |
 | `mobile` | iPhone 15 Pro | 393 × 852 |
-| `responsive` | An artboard you resize by dragging its edges | Both 1512 × 982 and 393 × 852 |
+| `resizable` | An artboard you resize by dragging its edges | Both 1512 × 982 and 393 × 852 |
 | `fit` | Fills the available canvas | 1440 × 900 |
 
-- Omitting `viewports` enables all four.
-- Sizes in the size switcher for viewports a page doesn't list are disabled
-  while it is showing.
-- A single value may be written without a list: `viewports: mobile`.
+- Omitting `sizes` enables all four.
+- Sizes in the size switcher that a page doesn't list are disabled while it
+  is showing.
+- A single value may be written without a list: `sizes: mobile`.
 - An unknown value is reported and skipped. If no value is valid, all four
   are enabled.
 - [Design-system exports](design-system-export.md) capture one reference per
-  listed viewport, removing duplicate sizes.
+  listed size, removing duplicate sizes.
 
 ## Implementations
 
@@ -351,7 +359,7 @@ implementations:
 | Key | Kinds | Required | Description |
 | --- | --- | --- | --- |
 | `kind` | all | yes | `workbench`, `url`, `storybook`, `examples`, `ios-simulator`, or `window`. |
-| `label` | all | no | The lens's label in the lens switcher. Defaults to the name in sentence case. |
+| `label` | all | no | The lens's display label, independent of kind: for example **Live**, **Prod**, or **Design**. Defaults to the name in sentence case. Changing it preserves the implementation key and addresses. |
 | `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`. Page paths are appended to it. A trailing slash is removed. |
 | `url` | `storybook` | yes | Storybook's origin, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). |
 | `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
@@ -662,7 +670,7 @@ everything else:
 - In the canvas, every problem found while reading the file is written to the
   browser console.
 - `GET /_workbench/config` on the workbench server lists, under `problems`,
-  problems with implementations, previews, viewports, pages' implementation
+  problems with implementations, previews, sizes, pages' implementation
   mappings, and `code`, plus catalogs and previews that couldn't load, and
   [docs page problems](docs-pages.md#requirements-and-problems). It sits
   alongside the config as your machine resolves it. A page dropped for a bad
@@ -675,7 +683,7 @@ everything else:
 ## Editing with the form
 
 **Configure pages**, in the top bar's **More** menu, edits collections,
-groups, pages, labels, source paths, and viewports in a form. See
+groups, pages, labels, source paths, and sizes in a form. See
 [Configure pages](canvas.md#configure-pages). Saving rewrites only the
 `collections` block of `workbench.yaml`. Implementations, states, implementation
 mappings, and code pointers are preserved. Comments outside `collections` are

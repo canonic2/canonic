@@ -92,7 +92,9 @@ collections:
 A `*.workbench.ts` or `*.workbench.tsx` file may default-export
 `defineDocs({...})` from `@canonic2/workbench` instead of `definePreview`. It is
 discovered, placed by its `title`, and merged with authored pages the same
-way as a preview.
+way as a preview. Its optional `icon`, a kebab-case Lucide name, is its icon in
+the page list; without one it shows `book-open`. An invalid icon fails the
+definition, as a preview's does.
 
 ```ts
 import { defineDocs } from '@canonic2/workbench';
@@ -137,7 +139,8 @@ export default defineDocs({
   **Zoom to fit** and **100%** both return to 100%. **Recenter view** centers
   horizontally at the current zoom and keeps the scroll position.
 - The size switcher (Fit, Laptop, Mobile, Resizable) stays in the top bar,
-  disabled with no size pressed. `viewports` on a docs page is reported as a problem and ignored.
+  disabled with no size pressed. `sizes` on a docs page is reported as a problem ("sizes don’t apply to a
+  docs page, which uses the whole canvas.") and ignored.
 - **Annotations** work over the page. They belong to positions in the page,
   so they scroll with it and scale with zoom.
 
@@ -312,10 +315,15 @@ lens's example source), the copyable reference, **Open on its own**, and
 
 Docs-page problems join the shared problems list, named by page: unknown or
 invalid lens, missing Markdown file, unknown example key, duplicate
-placement, unplaced example, non-kebab-case example file, `viewports` on a docs
+placement, unplaced example, non-kebab-case example file, `sizes` on a docs
 page, and compile failures. Example sources compile only in a trusted
 workspace. In an untrusted workspace the Markdown renders and every example
 shows a placeholder naming the trust requirement.
+
+Problems that need a lens's examples listed (unplaced examples, rejected
+files, duplicate IDs, build failures) join the list once that lens has been
+listed: the config never waits for a listing. In VS Code the sidebar's
+problems update when they arrive.
 
 ## System behavior
 
@@ -325,6 +333,12 @@ shows a placeholder naming the trust requirement.
   the Markdown to HTML with example placeholders. Markdown parsing and syntax
   highlighting use pinned dependencies shipped in the extension, like Lucide;
   no runtime network.
+- **The page before its examples.** The page answers with its Markdown without
+  waiting for a build: its panels are `pending` until the page script learns
+  the lens's bundle, which then mounts them or names why not. The examples are
+  usually built already: the extension and the command-line server start the
+  compile worker with the session and build every docs page in each lens in
+  the background, one at a time.
 - **Compilation.** The compile worker builds one bundle per docs page and lens
   from that lens's example source, with the lens's adapter, styles,
   environment, and the project's `workbench.config.ts`. Bundles share the
@@ -427,6 +441,14 @@ the pilot and is not part of this contract.
   bundle exports `examples`, `adapter`, and `environment`; the page script
   mounts them. The worker also starts for a project whose only compiled code
   is docs examples.
+- **2026-10-04: a docs page renders before its examples are built.** Markdown
+  renders in about a millisecond; building, listing, and starting the worker
+  took the rest of a cold page's time (0.5–1 s locally, several seconds in
+  VS Code). The page answers with its Markdown and asks for the bundle from
+  its script; the config shows listing problems once known instead of waiting
+  for them; and the extension warms the worker and every docs bundle when the
+  session starts. A portable export still embeds its bundle, having no server
+  to ask.
 - **2026-10-04: a declared page wins over a discovered one.** A `defineDocs`
   definition whose Markdown file `workbench.yaml` also lists is skipped, and
   the YAML's lenses apply.
@@ -519,11 +541,17 @@ Verified 2026-10-04:
 - **Compilation.** `Compiler.docsExamples` lists a lens's examples: a directory's
   files, or a file's named exports from a bundled build with packages external,
   so `export * from` re-exports are listed. `Compiler.compileDocs` builds the
-  bundle. Worker routes: `/docs/index`, `/docs/bundle`, and the bundle's files
+  bundle. A listing is kept until a file it read changes, as a bundle is.
+  Worker routes: `/docs/index`, `/docs/bundle`, and the bundle's files
   under `/_workbench/previews/docs/<slug>/`.
 - **Serving.** A declared docs page is served at its Markdown path (`?lens=`,
-  `?state=`); any other `.md` is served as a file. `/_workbench/docs/source`
-  answers Show code and `/_workbench/docs/revision` the page's revision.
+  `?state=`); any other `.md` is served as a file, with its panels pending.
+  `/_workbench/docs/bundle` answers what the page mounts (the module, its
+  stylesheet, the lens's example IDs, and the page's revision),
+  `/_workbench/docs/source` Show code, and `/_workbench/docs/revision` the
+  page's revision. `eagerPreviews` on `server.start` warms the worker and
+  every docs bundle (`warmDocs` in [server.js](../server.js)), and
+  `onCatalogChanged` tells the host when a listing changes the problems.
   Workbench's own browser code is served from `/_workbench/src/` with types
   stripped ([browser-modules.ts](../src/server/browser-modules.ts)).
 - **The page.** [docs-service.ts](../src/docs/docs-service.ts) decides each

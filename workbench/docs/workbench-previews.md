@@ -112,6 +112,23 @@ discovered with the previews and placed by its `title` the same way, except
 that a title without `/` goes in a **Docs** collection. If `workbench.yaml` also lists its Markdown
 file, the listed page is used instead. See [Docs pages](docs-pages.md).
 
+## Name the preview lens
+
+To rename the preview's own lens, set `previews.lensLabel` in `workbench.yaml`:
+
+```yaml
+previews:
+  lensLabel: Design
+```
+
+This changes the default **Workbench** label to **Design** for discovered
+previews. An explicitly listed page can set its own `lensLabel` to override
+that value. These are YAML settings, separate from the preview definition's
+`title`, which places and names the page in the sidebar. They rename the
+existing lens without adding a second button. If a preview is used as a
+`kind: workbench` implementation, set that implementation's `label` instead.
+See [Customize lens labels](lenses.md#customize-lens-labels).
+
 ## Define a preview
 
 | Key | Description |
@@ -125,7 +142,7 @@ file, the listed page is used instead. See [Docs pages](docs-pages.md).
 | `states` | A map of kebab-case state IDs to [states](#states). |
 | `links` | The addresses the source links or submits to, each mapped to the preview it opens. See [Links and navigation](preview-data.md#links-and-navigation). |
 | `requests` | Answers to the page's `fetch` and `XMLHttpRequest` calls. See [Request mocks](preview-data.md#request-mocks). |
-| `viewports` | The artboard sizes the preview supports: any of `fit`, `desktop`, `mobile`, and `responsive`. See [Viewports](pages-and-states.md#viewports). |
+| `sizes` | The artboard sizes the preview supports: any of `fit`, `laptop`, `mobile`, and `resizable`. See [Sizes](pages-and-states.md#sizes). |
 | `docs` | Text shown under **Documentation** in **Preview controls**. |
 | `fixtures`, `globals` | Data and settings that environments, hooks, and request handlers read from the context. See [Fixtures and globals](preview-data.md#fixtures-and-globals). |
 | `styles` | Stylesheets to load with the preview, relative to the definition. |
@@ -292,14 +309,14 @@ package installation, or build step.
 The viewer has:
 
 - a searchable list of previews, and the build warnings, if any,
-- **State** and **Viewport** menus, with **Width** and **Height** for
+- **State** and **Size** menus, with **Width** and **Height** for
   **Resizable**,
 - **Reload**, and **Preview controls** with the same inputs, reset, actions,
   and documentation as the canvas,
 - **Open preview**, which opens the preview on its own page. That page also
   accepts `?state=<id>`.
 
-The viewer's address keeps the preview, state, viewport, and resizable size, so
+The viewer's address keeps the preview, state, size, and resizable dimensions, so
 you can copy it to share a selection.
 
 Astro previews carry every authored state but no input controls; see

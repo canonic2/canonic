@@ -2,6 +2,7 @@
  * Explicit shell/annotation ports preserve its compiler, native and capture APIs.
  * Only this adapter knows the legacy window surface. */
 import type { ViewInfo } from './model.ts';
+import { validDimensions } from '../sizes/browser/geometry.ts';
 interface Shell {
   problem(): string | null;
   read(): Omit<ViewInfo, 'reference' | 'problem' | 'payload'> | null;
@@ -57,9 +58,8 @@ function start(legacy: LegacyWindow, channel: string, origin: string) {
         case 'unlock': held = false; legacy.wbArtboardHeld = false; document.getElementById('artboardContent')!.inert = false; break;
         case 'navigate': legacy.wbArtboardShell.navigate(data.value); break;
         case 'size': {
-          const { width, height } = data.value || {};
-          if (![width, height].every(n => Number.isFinite(n) && n >= 320 && n <= 8192)) throw new Error('Invalid artboard size.');
-          legacy.wbArtboardShell.size(width, height); break;
+          if (!validDimensions(data.value)) throw new Error('Invalid artboard size.');
+          legacy.wbArtboardShell.size(data.value.width, data.value.height); break;
         }
         case 'state': legacy.wbArtboardShell.pickState(String(data.value)); break;
         case 'lens': legacy.wbArtboardShell.lens(String(data.value || '')); break;

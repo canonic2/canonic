@@ -201,7 +201,7 @@ CSS, which are inert without it. To remove the extension itself, see
 - Learn the canvas's controls and shortcuts: [Using the canvas](canvas.md).
 - Hand an annotated page to your agent:
   [Annotations and handoff](annotations-and-handoff.md).
-- Give pages more states and choose their viewports:
+- Give pages more states and choose their sizes:
   [Pages and states](pages-and-states.md).
 - Document components in Markdown with live examples:
   [Docs pages](docs-pages.md).

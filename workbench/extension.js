@@ -57,6 +57,7 @@ function serve(context, space, diagnostics, shared) {
       config: { dir: space.dir, key: space.key },
       isTrusted: vscode.workspace.isTrusted,
       eagerCapture: true,
+      eagerPreviews: true,
       capture: shared.capture(),
       captureShared: true,
       captureStorage: path.join(context.globalStorageUri.fsPath, 'capture'),
@@ -70,6 +71,12 @@ function serve(context, space, diagnostics, shared) {
       },
       onShot: function (file) {
         vscode.window.setStatusBarMessage('$(device-camera) Saved ' + file, 4000);
+      },
+
+      /* Docs problems are listed after the config answers; the sidebar
+         shows them when they arrive. */
+      onCatalogChanged: function () {
+        if (shared.catalogChanged) shared.catalogChanged();
       },
 
       /* A handoff is deliberately just a saved screenshot and a prompt on the
@@ -113,10 +120,14 @@ function activate(context) {
   var capture = null;
   var shared = {
     capture: function () {
-      if (!capture) capture = server.createCapture(path.join(context.globalStorageUri.fsPath, 'capture'));
+      if (!capture) capture = server.createCapture(path.join(context.globalStorageUri.fsPath, 'capture'), function (level, event, details) {
+        var write = diagnostics[level] || diagnostics.info;
+        write.call(diagnostics, event + ' ' + JSON.stringify(details || {}));
+      });
       return capture;
     },
     hub: null,
+    catalogChanged: null,
   };
   var hub = spaces.create({
     start: function (space) {
@@ -357,6 +368,7 @@ function activate(context) {
      through the hash — `#pages/sign-in.html:error` — so opening a page from
      the editor and picking it inside the workbench end up in the same place.
      No size is named: the workbench keeps the one the size switcher is set to. */
+  shared.catalogChanged = function () { if (sidebar) sidebar.catalogChanged(); };
   sidebar = sidebarView.register(context, {
     space: function () {
       var space = currentSpace();

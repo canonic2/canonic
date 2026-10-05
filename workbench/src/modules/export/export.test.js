@@ -1,10 +1,48 @@
-var test = require('node:test');
-var assert = require('node:assert');
-var fs = require('fs');
-var os = require('os');
-var path = require('path');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-var designExport = require('./export');
+import * as designExport from './index.ts';
+
+test('a failed portable build still exports sources and reference screenshots with its cause', async function (t) {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-export-fallback-'));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  fs.writeFileSync(path.join(root, 'button.html'), '<button>Acme</button>');
+  var result = await designExport.build(root, { name: 'Acme', pages: {
+    button: { label: 'Button', design: path.join(root, 'button.html') },
+  } }, { screenshots: [{ page: 'button', width: 393, height: 852, body: Buffer.from('jpeg') }] }, {
+    export: async function () { throw new Error('Preview worker stopped'); },
+  });
+  assert.ok(names(result.download.body).includes('acme-design-system/button.html'));
+  assert.ok(names(result.download.body).some(function (name) { return name.endsWith('.jpg'); }));
+  assert.equal(result.report.browser, null);
+  assert.deepEqual(result.report.warnings, ['Portable browser previews: Preview worker stopped']);
+  assert.equal(result.report.captureWarnings.length, 0);
+});
+
+test('successful portable builds retain their files and individual preview warnings', async function (t) {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-export-portable-'));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  var result = await designExport.build(root, { name: 'Acme' }, {}, {
+    export: async function () { return { files: [{ path: 'browser/index.html', data: Buffer.from('viewer').toString('base64') }],
+      previews: [], warnings: ['Card: build failed'] }; },
+  });
+  assert.ok(names(result.download.body).includes('acme-design-system/browser/index.html'));
+  assert.deepEqual(result.report.browser.warnings, ['Card: build failed']);
+  assert.deepEqual(result.report.warnings, []);
+});
+
+test('portable fallback does not hide an archive assembly failure', async function (t) {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-export-build-failure-'));
+  t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
+  await assert.rejects(designExport.build(root, {}, { maxArchiveBytes: 1 }, {
+    export: async function () { throw new Error('Preview worker stopped'); },
+  }), /Export ZIP limit/);
+});
 
 function names(zip) {
   var out = [];
@@ -58,7 +96,7 @@ test('exports workbench entries and transitive UI dependencies without unrelated
       ] } },
     };
     var result = designExport.create(root, view, { screenshots: [{
-      page: 'button', state: 'default', variant: 'default-desktop', label: 'Default', viewport: 'desktop',
+      page: 'button', state: 'default', variant: 'default-laptop', label: 'Default', size: 'laptop',
       width: 1512, height: 982, body: Buffer.from('reference jpeg'),
     }] });
     var files = result.report.files;
@@ -87,12 +125,12 @@ test('exports workbench entries and transitive UI dependencies without unrelated
     assert.match(archived['acme-ui-design-system/package.json'], /stripe/);
     assert.match(archived['acme-ui-design-system/src/button/README.md'], new RegExp(button.hash));
     assert.match(archived['acme-ui-design-system/src/button/README.md'], /Source \(storybook\)/);
-    assert.match(archived['acme-ui-design-system/src/button/README.md'], /Default · Desktop/);
-    assert.match(archived['acme-ui-design-system/src/button/README.md'], /screenshots\/default-desktop\.jpg/);
-    assert.strictEqual(archived['acme-ui-design-system/src/button/screenshots/default-desktop.jpg'], 'reference jpeg');
+    assert.match(archived['acme-ui-design-system/src/button/README.md'], /Default · Laptop/);
+    assert.match(archived['acme-ui-design-system/src/button/README.md'], /screenshots\/default-laptop\.jpg/);
+    assert.strictEqual(archived['acme-ui-design-system/src/button/screenshots/default-laptop.jpg'], 'reference jpeg');
     assert.deepStrictEqual(button.screenshots, [{
-      state: 'default', label: 'Default', viewport: 'desktop',
-      path: 'src/button/screenshots/default-desktop.jpg', width: 1512, height: 982,
+      state: 'default', label: 'Default', size: 'laptop',
+      path: 'src/button/screenshots/default-laptop.jpg', width: 1512, height: 982,
     }]);
 
     fs.writeFileSync(path.join(root, 'src', 'billing', 'charge.ts'), 'unrelated change\n');
@@ -119,8 +157,8 @@ test('keeps generated guides and screenshots distinct when pages share a folder'
       signin: { label: 'Sign in', design: path.join(root, 'pages', 'sign-in.html'), code: [] },
       account: { label: 'Account', design: path.join(root, 'pages', 'account.html'), code: [] },
     } }, { screenshots: [
-      { page: 'signin', variant: 'default-mobile', label: 'Default', viewport: 'mobile', width: 393, height: 852, body: Buffer.from('signin') },
-      { page: 'account', variant: 'default-mobile', label: 'Default', viewport: 'mobile', width: 393, height: 852, body: Buffer.from('account') },
+      { page: 'signin', variant: 'default-mobile', label: 'Default', size: 'mobile', width: 393, height: 852, body: Buffer.from('signin') },
+      { page: 'account', variant: 'default-mobile', label: 'Default', size: 'mobile', width: 393, height: 852, body: Buffer.from('account') },
     ] });
     var archived = names(result.body);
     assert.ok(archived.includes('pages-design-system/pages/sign-in.README.md'));
@@ -139,8 +177,8 @@ test('downloads one ZIP containing attachment-sized ZIP parts', function () {
     fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Split\n');
     fs.writeFileSync(path.join(root, 'pages', 'home.html'), '<main>Home</main>');
     var screenshots = Array.from({ length: 4 }, function (_, index) {
-      return { page: 'home', variant: 'state-' + index + '-desktop', label: 'State ' + index,
-        viewport: 'desktop', width: 1512, height: 982, body: Buffer.alloc(25000, index) };
+      return { page: 'home', variant: 'state-' + index + '-laptop', label: 'State ' + index,
+        size: 'laptop', width: 1512, height: 982, body: Buffer.alloc(25000, index) };
     });
     var result = designExport.create(root, { name: 'Split', implementations: {}, pages: {
       home: { label: 'Home', design: path.join(root, 'pages', 'home.html'), code: [] },

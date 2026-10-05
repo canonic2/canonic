@@ -25,6 +25,13 @@
   --wb-accent-text: #4cbcff;
 }
 
+/* Migrated controls use host role colors without changing the legacy list. */
+wb-space-switcher {
+  --wb-raised: var(--vscode-input-background, #2c2c2c);
+  --wb-hover: var(--vscode-list-hoverBackground, #333);
+  --wb-line: var(--vscode-contrastBorder, var(--vscode-widget-border, #383838));
+}
+
 /* On a light panel the bright blue is too pale to read as text. */
 body.vscode-light {
   --wb-accent-text: #0a6fbd;

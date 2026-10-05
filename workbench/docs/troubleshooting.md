@@ -220,9 +220,9 @@ preview. Every other link and form is recorded under **Actions** in
 
 ## A size is disabled
 
-The page's `viewports` doesn't list it. On a docs page, every size in the size
+The page's `sizes` doesn't list it. On a docs page, every size in the size
 switcher is disabled, because the docs canvas mode has no artboard. Hover
-over the button to see why. See [Viewports](pages-and-states.md#viewports).
+over the button to see why. See [Sizes](pages-and-states.md#sizes).
 
 ## A lens is missing
 
@@ -230,12 +230,29 @@ over the button to see why. See [Viewports](pages-and-states.md#viewports).
 - The page must list the implementation under its own `implementations`,
   and the implementation must be declared at the top level. Read `problems`.
 - A docs page's lenses are `examples` implementations, and it has no
-  **Design** button. See [Lenses](docs-pages.md#lenses).
+  authored design lens. See [Lenses](docs-pages.md#lenses).
 - For `url`, every path must start with `/`, and a state map needs a path for
   the default state.
 - For `storybook`, the title must match exactly. [Check the title](#check-a-storybook-title).
 - An implementation whose `base` or `url` isn't an `http://` or `https://`
   address is dropped.
+
+## A lens has the wrong name
+
+- For an implementation lens, set `label` on the top-level implementation,
+  whatever its kind. Renaming its key also changes page mappings and addresses;
+  use the display label to keep them working.
+- For the page's own authored lens, use `lensLabel` on its page entry. For
+  discovered TypeScript previews, `previews.lensLabel` supplies the default;
+  an explicit page's `lensLabel` wins over it.
+- A page's `label` and a preview's `title` name the page in the sidebar,
+  rather than its lens. `lensLabel` belongs in YAML, not `definePreview`.
+- Blank or non-string `lensLabel` values are reported and ignored. Read
+  `problems` in the [resolved config](#read-the-resolved-config).
+- A docs page has no authored lens; rename its `examples` implementation
+  with `label`.
+
+See [Customize lens labels](lenses.md#customize-lens-labels) for examples.
 
 ## A URL lens is blank, refuses to load, or loses its sign-in
 

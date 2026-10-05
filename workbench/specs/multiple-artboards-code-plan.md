@@ -42,8 +42,9 @@ Use [develop-module](../../../.codex/skills/develop-module/SKILL.md) for bounded
 implementation, review-module for boundary/lifecycle review, create-ui-component
 for presentation, and write-tests for behavioral verification.
 
-- New and substantially reworked capabilities live under `src/` as TypeScript
-  ES modules. Use strict checking, erasable syntax, explicit `.ts` imports, and
+- New and substantially reworked capabilities live under
+  `src/modules/<capability>/` as TypeScript ES modules. Use strict checking,
+  erasable syntax, explicit `.ts` imports, and
   `import type`. No enums, namespaces, parameter properties, top-level await,
   or import-time effects. Existing CommonJS hosts load synchronous ESM modules
   under the package's Node 24 contract; asynchronous work starts through APIs.
@@ -64,24 +65,27 @@ for presentation, and write-tests for behavioral verification.
 Presentation, annotation UI extraction, and host composition below are
 future integration work, outside the current infrastructure-only scope.
 
-Suggested paths are relative to `packages/workbench/`. Names may be adjusted
-to fit concurrent work; ownership and dependency constraints are the contract.
+Suggested paths are relative to `packages/workbench/` and follow the
+[module layout contract](modules.md). These are target paths; the actual module
+boundaries above retain current paths until a bounded migration moves them.
+Names may be adjusted to fit concurrent work; ownership and dependency
+constraints are the contract.
 
 | Capability | Proposed files | Responsibility and public API |
 | --- | --- | --- |
-| Canvas model | `src/canvas/model.ts` | View descriptors, IDs, canvas snapshot, validated pure command transitions; `createCanvasState`, `applyCanvasCommand`, `validateCanvasDescriptor` |
-| Canvas geometry | `src/canvas/geometry.ts` | Bounds, automatic placement, CSS-pixel camera math and Fit operations; pure functions, no DOM |
-| Canvas workflows | `src/canvas/controller.ts` | Sole owner of mutable canvas state; add/select/replace/close/reload/refresh; coordinates runtimes and emits snapshots |
-| Canvas presentation | `src/canvas/view.ts`, `src/canvas/interactions.ts` | Keyed artboard shells, labels/status, selected outline, focus, pan/zoom and resize input; emits commands, never performs space I/O |
-| Content runtimes | `src/artboards/runtime.ts`, `src/artboards/iframe.ts`, `src/artboards/native.ts` | Renderer contracts and owned instances; mount/update/readiness, source verification, capture acquisition, disposal |
-| Space access | `src/spaces/access.ts`, `src/spaces/host.ts` | Public space-scoped request contract, registry lookup and host/server dispatch; uses existing space services rather than a second registry |
-| Annotation state/UI | `src/annotations/model.ts`, `src/annotations/view.ts` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
-| Canvas review | `src/canvas-review/model.ts`, `src/canvas-review/controller.ts` | Immutable capture manifest, full-canvas reference/context derivation, acquisition workflow, review result and errors |
-| Capture composition | `src/capture/composition.ts`, `src/capture/service.ts` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
-| Agent publication | `src/agent-context/report.ts`, `src/agent-context/publisher.ts` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and Shield reader |
-| Browser/host entry points | `src/canvas/bootstrap.ts`, existing server/extension entry points | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
+| Canvas model | `src/modules/canvas/model.ts` | View descriptors, IDs, canvas snapshot, validated pure command transitions; `createCanvasState`, `applyCanvasCommand`, `validateCanvasDescriptor` |
+| Canvas geometry | `src/modules/canvas/geometry.ts` | Bounds, automatic placement, CSS-pixel camera math and Fit operations; pure functions, no DOM |
+| Canvas workflows | `src/modules/canvas/controller.ts` | Sole owner of mutable canvas state; add/select/replace/close/reload/refresh; coordinates runtimes and emits snapshots |
+| Canvas presentation | `src/components/canvas/` | Keyed artboard shells, labels/status, selected outline, focus, pan/zoom and resize input; emits commands, never performs space I/O |
+| Content runtimes | `src/modules/artboards/runtime.ts`, `src/modules/artboards/iframe.ts`, `src/modules/artboards/native.ts` | Renderer contracts and owned instances; mount/update/readiness, source verification, capture acquisition, disposal |
+| Space access | `src/modules/spaces/access.ts`, `src/modules/spaces/host.ts` | Public space-scoped request contract, registry lookup and host/server dispatch; uses existing space services rather than a second registry |
+| Annotation state/UI | `src/modules/annotations/model.ts`, `src/components/annotations/` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
+| Canvas review | `src/modules/canvas-review/model.ts`, `src/modules/canvas-review/controller.ts` | Immutable capture manifest, full-canvas reference/context derivation, acquisition workflow, review result and errors |
+| Capture composition | `src/modules/capture/composition.ts`, `src/modules/capture/service.ts` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
+| Agent publication | `src/modules/agent-context/report.ts`, `src/modules/agent-context/publisher.ts` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and Shield reader |
+| Browser/host entry points | Browser bootstrap and existing server/extension entry points outside `src/modules/` | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
 
-Persistence is a conditional capability under `src/canvas-storage/`, created
+Persistence is a conditional capability under `src/modules/canvas-storage/`, created
 only after its product policy is agreed. It receives descriptors through an
 explicit port; it never serializes renderer handles or observes DOM to infer
 state. Phase 2 extends geometry/interactions for free placement and Arrange;
@@ -155,7 +159,7 @@ ephemeral URLs come from resolution rather than replacing source identity.
   UI labels, top bar availability, selected view, and context text are derived
   from snapshots rather than stored as competing copies.
 - Parse external values as `unknown`. Validate space/source identities,
-  finite bounded geometry, supported viewport modes, unique IDs, and selection
+  finite bounded geometry, supported sizes, unique IDs, and selection
   membership. Types never replace request/message validation. Persisted schema
   versions and legacy address adaptation have explicit parsers.
 
@@ -191,7 +195,7 @@ or framework mounts for this feature.
 
 Native runtime owns decoder/client subscriptions, not the device/window itself.
 Move the substantially changed stream manager into TypeScript under a coherent
-`src/native-streams/` capability. Its server-side producer pool is keyed by
+`src/modules/native-streams/` capability. Its server-side producer pool is keyed by
 validated source and codec, with reference-counted subscriptions. Closing the
 last subscriber stops owned capture resources; other devices/codecs/subscribers
 continue. Simulator input is space/device-qualified. Window runtime exposes

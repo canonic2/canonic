@@ -22,6 +22,11 @@ other implementations.
 
 ## Multiple-artboard support
 
+The [module layout contract](../specs/modules.md) defines target locations for
+new and substantially migrated capabilities under `src/modules/`, alongside
+shared components, themes and server infrastructure. The paths below describe
+the current implementation.
+
 The default `/_workbench/` route continues to serve `index.html` with its
 existing controls and layout. TypeScript modules under `../src/canvas/` supply
 serializable multi-artboard state, geometry, a controller with injected runtime
@@ -58,6 +63,7 @@ icon: brand/logo.svg          # optional: a Lucide icon name, or a project image
 #     collections: [...]      # space's implementations merge over the shared ones by name
 
 previews:                     # optional: TypeScript preview discovery; false turns it off
+  lensLabel: Design           # optional: authored preview lens label; default Workbench
   icon: component             # fallback for preview pages and collections
   icons:                      # longest matching title prefix wins
     Pages: monitor
@@ -80,10 +86,11 @@ collections:                  # one entry in the collection list, in this order
         items:
           - label: Sign in
             src: pages/sign-in.html    # relative to the project root
-            viewports:                # one or more supported artboard sizes
-              - desktop
+            lensLabel: Reference      # optional: authored lens label; default Design for HTML
+            sizes:                    # one or more supported artboard sizes
+              - laptop
               - mobile
-              - responsive            # resizable artboard; exports desktop + mobile
+              - resizable             # resizable artboard; skipped in reference exports
             states:                    # optional; the first is the page as authored
               - id: default
                 label: Default
@@ -125,17 +132,17 @@ canvas instead of an artboard. A `.workbench.ts` file can declare one with
 `defineDocs`. See [Docs pages](../docs/docs-pages.md); the server and page code
 are in `src/docs/`.
 
-`viewports` controls both the sizes the size switcher offers for a page and its
-reference images in a design-system export. It accepts any combination of
-`desktop`, `mobile`, `responsive`, and `fit`; unsupported sizes are
-disabled. `desktop` captures 1512 × 982, `mobile` captures 393 × 852,
-`responsive` enables the resizable artboard and captures both desktop and mobile,
-and `fit` captures the standard 1440 × 900 artboard. When `viewports` is omitted,
-all four modes are enabled. The configuration GUI omits the property when all
-four are selected.
+`sizes` controls both the sizes the size switcher offers for a page and its
+reference images in a design-system export. A page lists keys from its space's
+sizes, including custom sizes; omitted `sizes` supports every size in the space.
+Unknown keys are reported. Fixed sizes capture their dimensions, filled axes use
+1440 wide or 900 tall, and Fit captures 1440 × 900. Resizable enables an editable
+artboard and is skipped in reference exports; a page whose only size is Resizable
+gets one 1440 × 900 reference. Duplicate dimensions are captured once. See the
+[sizes contract](../specs/sizes.md#design-system-export).
 
 Use **Configure pages** in the top bar’s More menu to add or remove collections and
-pages, edit labels and source paths, and select supported viewports. Saving
+pages, edit labels and source paths, and select supported sizes. Saving
 rewrites only the `collections` block in `workbench.yaml`; implementations and
 comments outside that block are preserved. Advanced state, implementation, and
 code mappings remain in the YAML and survive form edits.
@@ -204,6 +211,14 @@ it goes in `.gitignore`.
 
 `manifest.js` holds these rules, and the server reads the same file with
 them, so the two never disagree about which lens a page has.
+
+Every lens has a customizable display label. Implementations of every kind
+use `label`; authored pages use `lensLabel`. For discovered TypeScript previews,
+`previews.lensLabel` supplies the fallback, and an explicit page's `lensLabel`
+takes precedence. Defaults remain **Design** for HTML and **Workbench** for
+TypeScript previews. Renaming the authored lens changes its existing button
+and review label, without adding a lens or changing addresses. Docs pages have
+no authored lens and use their implementations' labels.
 
 With `catalog: true`, a Storybook implementation can be the whole workbench;
 `collections` may be omitted. Workbench reads Storybook's live `/index.json`, turns
@@ -369,7 +384,7 @@ JPEG is lossy and does not preserve transparency.
 Interactive screenshots and handoffs use the continuously prepared, scroll-safe
 single-view renderer. Design-system exports schedule up to four workers,
 including the existing warm capture service: different pages or stories run in
-parallel, while all viewports of one story stay on the same renderer. Export
+parallel, while all sizes of one story stay on the same renderer. Export
 settling and Storybook reuse do not navigate the visible preview.
 
 Hosted captures report native failures instead of invoking the expensive
@@ -477,7 +492,7 @@ implementation's own address; Workbench never switches to a stream.
 | --- | --- |
 | `index.html` | the shell: top bar, sidebar, canvas, and the toolbar and view controls floating over it |
 | `config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |
-| `config-editor.js` | edits collections, pages, paths, and supported viewports through the local server |
+| `config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |
 | `yaml.js` | the part of YAML a config is written in |
 | `manifest.js` | the rules for implementations, lenses and code pointers — shared with the server |
 | `address.js` | reads and writes the hash: src, state, width, lens |
@@ -491,7 +506,8 @@ implementation's own address; Workbench never switches to a stream.
 | `zoom.js` | zooms and pans the artboard on the canvas, Figma-style, and labels it with its name and size |
 | `page-list.js` + `page-list.css` | the collection list and page list, laid out like Sketch's sidebar: collections, then the chosen one's groups, pages, and states, then search |
 | `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
-| `space-switcher.js` | the space switcher over the list and in the breadcrumb, styled in `page-list.css` |
+| `../src/components/space-switcher/` + `../src/components/space-mark/` | Web Components for the space switcher and its mark, with owned Shadow DOM styles |
+| `../src/theme/defaults.css` | shared shell theme defaults and direct webview host mappings for migrated controls |
 | `annotations.js` + `annotations.css` | the draw layer, screenshots, and clipboard handoff |
 | `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
 | `capture-sync.js` | coalesces preparation, checks readiness and retries failures |
@@ -531,8 +547,10 @@ default) or Storybook story, and the active lens with its implementation URL.
 It uses the resolved selection and works in both the editor and the standalone
 browser. Copying does not capture a screenshot, include annotations, or send a handoff.
 
-**Download design-system ZIP** exports the whole workbench rather than only the
-current page. It starts from every design file and resolved component, page,
+**Download design-system ZIP** exports the whole current space across its
+collections and pages. Other spaces are exported separately. An included
+`workbench.yaml` is copied as written and may declare other spaces without
+including their pages. It starts from every design file and resolved component, page,
 and Storybook source pointer, follows local imports and referenced assets, and
 preserves project-relative paths. The archive includes Storybook and package
 configuration plus a manifest of files, external packages, unresolved
@@ -548,9 +566,10 @@ secrets, tests, and source that is not reachable from the workbench. The button
 requires the local workbench server.
 
 The export also captures JPEGs for every declared design state and every
-imported Storybook story at each page's configured `viewports`. A responsive
-page produces both desktop and mobile references, with duplicate sizes
-removed when desktop or mobile is also declared. References live in a
+imported Storybook story at each page's supported `sizes`, except Resizable.
+Fixed sizes use their dimensions and filled axes use 1440 wide or 900 tall.
+A page whose only size is Resizable gets one 1440 × 900 reference. Duplicate
+dimensions are captured once. References live in a
 `screenshots/` directory beside that page's primary component or page entry
 and are embedded in its README. When multiple pages share a source directory,
 their README and screenshot paths include the page name to avoid collisions. They
@@ -564,7 +583,8 @@ When the project has TypeScript previews, the archive also holds a standalone
 browser viewer of them under `browser/`, built by `preview/portable.cjs`:
 serve the extracted directory with any static HTTP server and open
 `browser/index.html`. `canonic-export.json` lists its entries and build
-warnings under `browser`.
+warnings under `browser`. If the portable builder fails entirely, the sources
+and references still download without `browser/`; `warnings` records the cause.
 
 An export that fits in 10,000,000 bytes downloads as one `<design-system>.zip`.
 A larger one downloads as one outer `<design-system>-parts.zip` holding

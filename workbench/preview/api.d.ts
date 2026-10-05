@@ -1,4 +1,5 @@
-export type Viewport = 'fit' | 'desktop' | 'mobile' | 'responsive';
+/** A key of the space's sizes: one of the defaults, or one the space declares. */
+export type SizeKey = 'fit' | 'laptop' | 'mobile' | 'resizable' | (string & {});
 export interface PreviewContext<T extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
   state: string;
@@ -74,7 +75,7 @@ export interface Preview<T extends Record<string, unknown> = Record<string, unkn
   styles?: string[];
   assets?: string[];
   environment?: string;
-  viewports?: Viewport[];
+  sizes?: SizeKey[];
   controls?: Record<string, Control>;
   states?: Record<string, PreviewState<NoInfer<T>>>;
   /** Addresses the source links or submits to, mapped to the preview each opens. */
@@ -115,6 +116,8 @@ export interface DocsLens {
 export interface Docs {
   id: string;
   title?: string;
+  /** The page's icon in the page list, a kebab-case Lucide name; book-open otherwise. */
+  icon?: string;
   /** The Markdown file, relative to the definition file. */
   docs: string;
   lenses?: Record<string, DocsLens>;

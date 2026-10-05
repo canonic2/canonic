@@ -20,7 +20,7 @@ renderer; closing/replacing an instance disposes its iframe and pending
 requests. The controller suppresses old-generation view reports and
 coordinates capture locks.
 The model permits 32 instances with dimensions of 320–8192 CSS pixels, subject
-to authored viewport support. Geometry includes a 48px row gap; a future host
+to the page's authored `sizes`. Geometry includes a 48px row gap; a future host
 can use pure bounds/fit/zoom functions without changing the current camera.
 
 Review APIs compose every supplied artboard into one JPEG at CSS-pixel dimensions,
@@ -57,7 +57,7 @@ and sharing policy remain open.
 
 ## Purpose
 
-Review related views together: one page at desktop and mobile widths,
+Review related views together: one page at laptop and mobile sizes,
 several states of a component, a design beside its implementation, or several
 pages in a flow. An artboard is an instance of a view, not a new page in
 the space's catalog. Two instances may point to the same page and state.
@@ -156,7 +156,7 @@ changes were present during investigation.
   fresh preview instance. Runtime form edits, scroll, and application state
   are not cloned. Control overrides and annotations need a decided copy
   policy before implementation; the recommended default is a fresh instance.
-- Each artboard has its own page, state/story, lens, viewport dimensions,
+- Each artboard has its own page, state/story, lens, size and dimensions,
   controls, actions, loading/error state, and annotations. Its descriptor
   includes space identity and source/server resolution. Different spaces,
   content types, and repeated instances can coexist on the same canvas.
@@ -173,7 +173,7 @@ changes were present during investigation.
 - Zoom and pan apply to the whole arrangement. Provide **Fit all** and
   **Fit selected**. Resizing an artboard preserves preview CSS dimensions
   independently of canvas zoom. Define the distinction between the current
-  Fit viewport mode and fitting the camera before implementation; freeze Fit
+  Fit size and fitting the camera before implementation; freeze Fit
   to explicit dimensions when adding a comparison artboard is one option.
 - Interacting with a visible preview selects its artboard and reaches its
   content. Navigation originating inside a preview replaces that artboard's
@@ -245,7 +245,7 @@ They make the implementation boundaries concrete without narrowing content.
   canvas coordinates. Resizing can move following artboards to avoid overlap,
   but does not remount them or reset the camera. Fit all operates on bounds;
   Fit selected is unavailable when empty. Exact spacing is a UI design detail.
-- Suggested viewport policy: retain existing Fit behavior for one artboard;
+- Suggested size policy: retain existing Fit behavior for one artboard;
   on adding a second, resolve Fit into its current explicit CSS dimensions.
   Multi-artboard sizes remain independent of canvas-window resizing. Returning
   to one artboard does not implicitly change its dimensions. Native content
@@ -342,7 +342,7 @@ They make the implementation boundaries concrete without narrowing content.
 ## Implementation plan
 
 1. **Agree the interaction contract.** Resolve the questions below and create
-   a rendered prototype using Acme fixtures: desktop/mobile, two states, and
+   a rendered prototype using Acme fixtures: laptop/mobile, two states, and
    design/implementation, native streams, and mixed spaces. Verify selection,
    adding, closing, automatic placement, and keyboard access in browser and
    VS Code. Manual positioning and row/grid controls belong to phase 2.
@@ -391,7 +391,7 @@ They make the implementation boundaries concrete without narrowing content.
 
 ## Proposed acceptance criteria
 
-- Desktop and mobile instances of the same preview remain visible together;
+- Laptop and mobile instances of the same preview remain visible together;
   typing, controls, scroll, and reload in one do not alter the other instance.
   Frames provide independent document state; shared origin storage, cookies,
   and a live backend can still be shared and should not be claimed isolated.

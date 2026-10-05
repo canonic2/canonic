@@ -1,33 +1,30 @@
-/* Design-system export
-   --------------------
-   The workbench is already the project's curated visual surface. Its design
-   files and resolved code pointers are the export entry points; from those,
-   follow only local references so real helpers/assets come along without
-   unrelated application code. */
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { packageName, parseReferences, stylesheetImports } from './references.ts';
+import { splitArchives, zip } from './archive.ts';
+import type { ExportView, ExportOptions, ExportResult, PageReport, PageEntry, SourceFile, SourceOwner, PackageInfo, PackageManifest, PackageExport, ExportReport, ZipEntry } from './types.ts';
 
-var fs = require('fs');
-var path = require('path');
-var crypto = require('crypto');
-
+const workbenchRoot = fileURLToPath(new URL('../../../', import.meta.url));
 var TEXT_EXTENSIONS = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.json', '.css', '.scss', '.sass', '.less'];
 var RESOLVE_EXTENSIONS = ['', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.json', '.css', '.scss', '.sass', '.less', '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.woff', '.woff2', '.ttf'];
-var OMIT_DIRS = { '.git': true, '.canonic': true, 'node_modules': true, 'dist': true, 'build': true, 'coverage': true, '.next': true, '.turbo': true };
+var OMIT_DIRS: Record<string, boolean> = { '.git': true, '.canonic': true, 'node_modules': true, 'dist': true, 'build': true, 'coverage': true, '.next': true, '.turbo': true };
 var OMIT_FILE = /(?:^|\/)(?:\.env(?:\.|$)|.*\.(?:test|spec)\.[cm]?[jt]sx?|.*\.snap$)/i;
 var CONFIG_FILES = /^(?:package\.json|(?:ts|js)config(?:\.[^.]+)?\.json|vite\.config\.[cm]?[jt]s|tailwind\.config\.[cm]?[jt]s|postcss\.config\.[cm]?[jt]s)$/;
-var MAX_ARCHIVE_BYTES = 10 * 1000 * 1000;
 
-function inside(root, file) {
+function inside(root: string, file: string) {
   var relative = path.relative(root, file);
   return relative === '' || (relative.indexOf('..' + path.sep) !== 0 && relative !== '..' && !path.isAbsolute(relative));
 }
 
-function slug(value) {
+function slug(value: string | null | undefined) {
   return String(value || 'canonic').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'canonic';
 }
 
-function pageSlugs(sources) {
-  var used = {};
-  var out = {};
+function pageSlugs(sources: string[]) {
+  var used: Record<string, boolean> = {};
+  var out: Record<string, string> = {};
   sources.slice().sort().forEach(function (source) {
     var base = slug(source);
     var value = base;
@@ -38,7 +35,7 @@ function pageSlugs(sources) {
   return out;
 }
 
-function contentHash(items) {
+function contentHash(items: SourceFile[]) {
   var hash = crypto.createHash('sha256');
   items.slice().sort(function (a, b) { return a.destination < b.destination ? -1 : a.destination > b.destination ? 1 : 0; }).forEach(function (item) {
     var name = Buffer.from(item.destination);
@@ -53,8 +50,8 @@ function contentHash(items) {
   return 'sha256:' + hash.digest('hex');
 }
 
-function pageReadme(page) {
-  function link(file) {
+function pageReadme(page: PageReport) {
+  function link(file: string) {
     return path.posix.relative(path.posix.dirname(page.readme), file) || path.posix.basename(file);
   }
   var entryLines = page.entries.length
@@ -68,7 +65,8 @@ function pageReadme(page) {
     : '- No files are included in this page hash.';
   var screenshotLines = page.screenshots.length
     ? page.screenshots.map(function (shot) {
-        var label = shot.label + (shot.viewport ? ' · ' + shot.viewport.charAt(0).toUpperCase() + shot.viewport.slice(1) : '');
+        var sizeLabel = shot.sizeLabel || (shot.size ? shot.size.charAt(0).toUpperCase() + shot.size.slice(1) : '');
+        var label = shot.label + (sizeLabel ? ' · ' + sizeLabel : '');
         return '### ' + label + '\n\n![' + page.label + ' — ' + label + '](' + link(shot.path) + ')\n\n' +
           '`' + shot.width + ' × ' + shot.height + '` · [`' + shot.path + '`](' + link(shot.path) + ')';
       }).join('\n\n')
@@ -85,14 +83,7 @@ function pageReadme(page) {
     '## Files in this page hash\n\n' + fileLines + '\n';
 }
 
-function packageName(specifier) {
-  if (!specifier || specifier.charAt(0) === '.' || specifier.charAt(0) === '/' || specifier.charAt(0) === '#') return null;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(specifier)) return null;
-  var parts = specifier.split('/');
-  return specifier.charAt(0) === '@' ? parts.slice(0, 2).join('/') : parts[0];
-}
-
-function packageExportTarget(value) {
+function packageExportTarget(value: PackageExport | undefined): string | null {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
     for (var i = 0; i < value.length; i += 1) {
@@ -110,14 +101,14 @@ function packageExportTarget(value) {
   return null;
 }
 
-function storybookConfigDirectories(root) {
-  var found = [];
+function storybookConfigDirectories(root: string) {
+  var found: string[] = [];
   var conventional = path.join(root, '.storybook');
   if (fs.existsSync(conventional)) found.push(conventional);
-  var pkg;
+  var pkg: PackageManifest;
   try { pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')); } catch (_) { return found; }
   Object.keys(pkg.scripts || {}).forEach(function (name) {
-    var script = String(pkg.scripts[name] || '');
+    var script = String(pkg.scripts![name] || '');
     if (!/\bstorybook\b/.test(script)) return;
     var pattern = /(?:--config-dir|-c)(?:=|\s+)(?:"([^"]+)"|'([^']+)'|([^\s]+))/g;
     var match;
@@ -129,69 +120,10 @@ function storybookConfigDirectories(root) {
   return found;
 }
 
-function withoutComments(source) {
-  var out = '';
-  var quote = null;
-  for (var i = 0; i < source.length; i += 1) {
-    var char = source[i];
-    var next = source[i + 1];
-    if (quote) {
-      out += char;
-      if (char === '\\') { if (next) out += source[++i]; }
-      else if (char === quote) quote = null;
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') { quote = char; out += char; continue; }
-    if (char === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') i += 1;
-      out += '\n';
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      i += 2;
-      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i += 1;
-      i += 1;
-      out += ' ';
-      continue;
-    }
-    out += char;
-  }
-  return out;
-}
-
-function references(file, body) {
-  var ext = path.extname(file).toLowerCase();
-  var out = [];
-  function take(pattern) {
-    var match;
-    while ((match = pattern.exec(body))) if (out.indexOf(match[1]) === -1) out.push(match[1]);
-  }
-  if (['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'].indexOf(ext) > -1) {
-    body = withoutComments(body);
-    take(/(?:import|export)\s+(?:type\s+)?(?:[^"'`;]*?\s+from\s+)?["']([^"']+)["']/g);
-    take(/(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)/g);
-    take(/new\s+URL\s*\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g);
-  }
-  if (['.css', '.scss', '.sass', '.less'].indexOf(ext) > -1) {
-    take(/@(?:import|use|forward)\s+(?:url\(\s*)?["']([^"']+)["']/g);
-    take(/url\(\s*["']?([^"')]+)["']?\s*\)/g);
-  }
-  if (ext === '.html' || ext === '.htm') take(/(?:src|href)\s*=\s*["']([^"'#]+)["']/gi);
-  return out;
-}
-
-function stylesheetImports(body) {
-  var imports = new Set();
-  var pattern = /@(?:import|use|forward)\s+(?:url\(\s*)?["']([^"']+)["']/g;
-  var match;
-  while ((match = pattern.exec(body))) imports.add(match[1]);
-  return imports;
-}
-
-function resolveReference(from, specifier, ownerRoot, allowedRoots) {
+function resolveReference(from: string, specifier: string, ownerRoot: string, allowedRoots: string[]): string | null {
   var clean = String(specifier).split(/[?#]/)[0];
   if (!clean || /^(?:[a-z]+:|\/\/|#)/i.test(clean)) return null;
-  var start;
+  var start: string;
   if (/^[@~]\//.test(clean)) start = path.resolve(ownerRoot, 'src', clean.slice(2));
   else start = clean.charAt(0) === '/' ? path.resolve(ownerRoot, '.' + clean) : path.resolve(path.dirname(from), clean);
   if (!allowedRoots.some(function (root) { return inside(root, start); })) return null;
@@ -217,7 +149,7 @@ function resolveReference(from, specifier, ownerRoot, allowedRoots) {
   return null;
 }
 
-function walk(dir, visit) {
+function walk(dir: string, visit: (file: string) => void) {
   var entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
   entries.forEach(function (entry) {
@@ -229,7 +161,7 @@ function walk(dir, visit) {
   });
 }
 
-function nearestPackage(file, boundary) {
+function nearestPackage(file: string, boundary: string): string | null {
   var dir = fs.existsSync(file) && fs.statSync(file).isDirectory() ? file : path.dirname(file);
   while (inside(boundary, dir)) {
     var candidate = path.join(dir, 'package.json');
@@ -240,189 +172,75 @@ function nearestPackage(file, boundary) {
   return null;
 }
 
-function crc32(buffer) {
-  var crc = 0xffffffff;
-  for (var i = 0; i < buffer.length; i += 1) {
-    crc ^= buffer[i];
-    for (var bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-/* Stored ZIP entries avoid adding a runtime/native dependency to the extension. */
-function zip(entries) {
-  var local = [];
-  var central = [];
-  var offset = 0;
-  entries.forEach(function (entry) {
-    var name = Buffer.from(entry.name.replace(/\\/g, '/'));
-    var body = Buffer.isBuffer(entry.body) ? entry.body : Buffer.from(entry.body);
-    var crc = crc32(body);
-    var header = Buffer.alloc(30);
-    header.writeUInt32LE(0x04034b50, 0); header.writeUInt16LE(20, 4); header.writeUInt16LE(0x0800, 6);
-    header.writeUInt32LE(crc, 14); header.writeUInt32LE(body.length, 18); header.writeUInt32LE(body.length, 22);
-    header.writeUInt16LE(name.length, 26);
-    local.push(header, name, body);
-    var record = Buffer.alloc(46);
-    record.writeUInt32LE(0x02014b50, 0); record.writeUInt16LE(20, 4); record.writeUInt16LE(20, 6); record.writeUInt16LE(0x0800, 8);
-    record.writeUInt32LE(crc, 16); record.writeUInt32LE(body.length, 20); record.writeUInt32LE(body.length, 24);
-    record.writeUInt16LE(name.length, 28); record.writeUInt32LE(offset, 42);
-    central.push(record, name);
-    offset += header.length + name.length + body.length;
-  });
-  var centralBody = Buffer.concat(central);
-  var end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(centralBody.length, 12); end.writeUInt32LE(offset, 16);
-  return Buffer.concat(local.concat([centralBody, end]));
-}
-
-function zipSize(entries) {
-  return 22 + entries.reduce(function (total, entry) {
-    var name = Buffer.byteLength(entry.name.replace(/\\/g, '/'));
-    var body = Buffer.isBuffer(entry.body) ? entry.body.length : Buffer.byteLength(entry.body);
-    return total + body + 76 + name * 2;
-  }, 0);
-}
-
-function splitArchives(prefix, payload, readme, report, maximum) {
-  maximum = Number(maximum) || MAX_ARCHIVE_BYTES;
-  if (maximum < 1024) throw new Error('Export ZIP limit must be at least 1024 bytes');
-  var groups = [];
-  var current = [];
-  var reportReserve = Math.max(32768, payload.length * 160);
-  var baseReport = JSON.stringify(Object.assign({}, report, { parts: [] }), null, 2) + '\n';
-
-  function provisional(group) {
-    var listed = JSON.stringify({ part: 9999, of: 9999, files: group.map(function (entry) {
-      return entry.name.slice(prefix.length + 1);
-    }) }, null, 2) + '\n';
-    return zipSize([
-      { name: prefix + '/README.md', body: readme },
-      { name: prefix + '/canonic-export.json', body: baseReport + ' '.repeat(reportReserve) },
-      { name: prefix + '/canonic-export-part-9999.json', body: listed },
-    ].concat(group));
-  }
-
-  payload.forEach(function (entry) {
-    var candidate = current.concat([entry]);
-    if (current.length && provisional(candidate) > maximum) {
-      groups.push(current);
-      current = [entry];
-    } else current = candidate;
-    if (provisional(current) > maximum) {
-      throw new Error('“' + entry.name.slice(prefix.length + 1) + '” cannot fit inside the 10 MB export ZIP limit');
-    }
-  });
-  if (current.length || !groups.length) groups.push(current);
-
-  var archives;
-  while (true) {
-    var total = groups.length;
-    var width = Math.max(2, String(total).length);
-    function filename(index) {
-      return total === 1 ? prefix + '.zip' : prefix + '-part-' + String(index + 1).padStart(width, '0') + '-of-' + String(total).padStart(width, '0') + '.zip';
-    }
-    report.parts = groups.map(function (group, index) {
-      return { number: index + 1, filename: filename(index), files: group.length };
-    });
-    var reportBody = JSON.stringify(report, null, 2) + '\n';
-    var splitReadme = readme + '\n## Archive parts\n\n' +
-      (total === 1
-        ? 'This export fits in one ZIP file.\n'
-        : 'This export is split into ' + total + ' ZIP files so every upload remains at or below 10 MB. Extract every part into the same directory; their shared top-level folder and repeated metadata are designed to merge.\n');
-    archives = groups.map(function (group, index) {
-      var part = {
-        part: index + 1, of: total, filename: filename(index),
-        files: group.map(function (entry) { return entry.name.slice(prefix.length + 1); }),
-      };
-      var common = [
-        { name: prefix + '/README.md', body: splitReadme },
-        { name: prefix + '/canonic-export.json', body: reportBody },
-        { name: prefix + '/canonic-export-part-' + String(index + 1).padStart(width, '0') + '.json', body: JSON.stringify(part, null, 2) + '\n' },
-      ];
-      var body = zip(common.concat(group));
-      return { filename: filename(index), body: body, files: part.files };
-    });
-    var oversized = archives.findIndex(function (archive) { return archive.body.length > maximum; });
-    if (oversized < 0) break;
-    if (groups[oversized].length <= 1) {
-      throw new Error('“' + groups[oversized][0].name.slice(prefix.length + 1) + '” cannot fit inside the 10 MB export ZIP limit');
-    }
-    var moved = groups[oversized].pop();
-    if (groups[oversized + 1]) groups[oversized + 1].unshift(moved);
-    else groups.push([moved]);
-  }
-  return archives;
-}
-
-function create(root, view, options) {
+export function create(root: string, view: ExportView | null | undefined, options: ExportOptions = {}): ExportResult {
   options = options || {};
   root = path.resolve(root);
   var prefix = slug(view && view.name) + '-design-system';
-  var owners = [{ key: 'project', root: root, destination: '' }];
-  Object.keys((view && view.implementations) || {}).forEach(function (key) {
-    var implRoot = view.implementations[key].root;
+  const implementations = view?.implementations || {};
+  const pages = view?.pages || {};
+  var owners: SourceOwner[] = [{ key: 'project', root: root, destination: '' }];
+  Object.keys(implementations).forEach(function (key) {
+    var implRoot = implementations[key].root;
     if (!implRoot) return;
     implRoot = path.resolve(implRoot);
     if (owners.some(function (owner) { return owner.root === implRoot; })) return;
     owners.push({ key: key, root: implRoot, destination: inside(root, implRoot) ? path.relative(root, implRoot) : 'implementations/' + slug(key) });
   });
   var allowedRoots = owners.map(function (owner) { return owner.root; });
-  var files = new Map();
-  var queue = [];
-  var dependencies = new Map();
-  var warnings = [];
-  var packages = {};
-  var packageInfoByManifest = new Map();
-  var packageRoots = {};
-  var configuredPackages = new Set();
-  var spriteDirectories = [];
-  var pageSources = Object.keys((view && view.pages) || {});
+  var files = new Map<string, SourceFile>();
+  var queue: string[] = [];
+  var dependencies = new Map<string, Set<string>>();
+  var warnings: string[] = [...(options.warnings || [])];
+  var packages: Record<string, boolean> = {};
+  var packageInfoByManifest = new Map<string, PackageInfo | null>();
+  var packageRoots: Record<string, PackageInfo> = {};
+  var configuredPackages = new Set<string>();
+  var spriteDirectories: string[] = [];
+  var pageSources = Object.keys(pages);
   var pageDirectories = pageSlugs(pageSources);
-  var pageData = {};
+  var pageData: Record<string, { id: string; label: string; direct: Set<string>; entries: PageEntry[] }> = {};
   pageSources.forEach(function (src) {
-    var page = view.pages[src];
-    pageData[src] = { id: src, label: page.label, direct: new Set(), entries: [] };
+    var page = pages[src];
+    pageData[src] = { id: src, label: page.label, direct: new Set<string>(), entries: [] };
   });
 
-  function ownerFor(file, preferred) {
+  function ownerFor(file: string, preferred?: SourceOwner | null): SourceOwner | null {
     if (preferred && inside(preferred.root, file)) return preferred;
     return owners.filter(function (owner) { return inside(owner.root, file); }).sort(function (a, b) { return b.root.length - a.root.length; })[0] || null;
   }
-  function destinationFor(file, owner) {
+  function destinationFor(file: string, owner: SourceOwner) {
     var relative = path.relative(owner.root, file).replace(/\\/g, '/');
     return owner.destination ? owner.destination.replace(/\/$/, '') + '/' + relative : relative;
   }
-  function rememberPackage(file, boundary) {
+  function rememberPackage(file: string, boundary: string): PackageInfo | null {
     var manifest = nearestPackage(file, boundary);
     if (!manifest) return null;
     if (!packageInfoByManifest.has(manifest)) {
-      var info = null;
+      var info: PackageInfo | null = null;
       try {
-        var pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+        var pkg: PackageManifest = JSON.parse(fs.readFileSync(manifest, 'utf8'));
         info = { manifest: manifest, root: path.dirname(manifest), package: pkg };
         if (pkg.name) packageRoots[pkg.name] = info;
       } catch (_) {}
       packageInfoByManifest.set(manifest, info);
     }
-    return packageInfoByManifest.get(manifest);
+    return packageInfoByManifest.get(manifest) || null;
   }
-  function localPackage(from, specifier, itemOwner) {
+  function localPackage(from: string, specifier: string, itemOwner: SourceOwner) {
     var name = packageName(specifier);
     if (!name) return null;
-    var info = packageRoots[name];
+    var info: PackageInfo | null | undefined = packageRoots[name];
     if (!info) {
       var importer = rememberPackage(from, itemOwner.root);
-      var groups = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
-      var version = null;
-      groups.some(function (group) {
-        version = importer && importer.package[group] && importer.package[group][name];
-        return !!version;
-      });
+      const groups = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const;
+      var version: string | null | undefined = null;
+      for (const group of groups) {
+        version = importer?.package[group]?.[name];
+        if (version) break;
+      }
       var linked = typeof version === 'string' && version.match(/^(?:link|file):(.+)$/);
       if (linked) {
-        var linkedRoot = path.resolve(importer.root, linked[1]);
+        var linkedRoot = path.resolve(importer!.root, linked[1]);
         var linkedOwner = ownerFor(linkedRoot);
         if (linkedOwner) info = rememberPackage(linkedRoot, linkedOwner.root);
       }
@@ -431,10 +249,10 @@ function create(root, view, options) {
     var subpath = specifier.slice(name.length);
     var key = subpath ? '.' + subpath : '.';
     var exported = info.package.exports;
-    var target = null;
+    var target: string | null | undefined = null;
     if (typeof exported === 'string' && key === '.') target = exported;
     else if (exported && typeof exported === 'object') {
-      if (Object.prototype.hasOwnProperty.call(exported, key)) target = packageExportTarget(exported[key]);
+      if (Object.prototype.hasOwnProperty.call(exported, key)) target = packageExportTarget((exported as Record<string, PackageExport>)[key]);
       else if (key === '.' && !Object.keys(exported).some(function (entry) { return entry.charAt(0) === '.'; })) target = packageExportTarget(exported);
     }
     if (!target && key === '.') target = info.package.module || info.package.main;
@@ -442,7 +260,7 @@ function create(root, view, options) {
     if (!target) return null;
     return { info: info, target: resolveReference(info.manifest, target, info.root, allowedRoots) };
   }
-  function add(file, preferred, reason, pageSource) {
+  function add(file: string, preferred: SourceOwner | null | undefined, reason: string, pageSource?: string) {
     file = path.resolve(file);
     var owner = ownerFor(file, preferred);
     if (!owner || OMIT_FILE.test(file.replace(/\\/g, '/'))) return;
@@ -459,20 +277,20 @@ function create(root, view, options) {
     rememberPackage(file, owner.root);
     queue.push(file);
   }
-  function linkDependency(from, target) {
+  function linkDependency(from: string, target: string) {
     var linked = files.has(target)
       ? [target]
       : Array.from(files.keys()).filter(function (file) { return inside(target, file); });
     if (!linked.length) return;
     if (!dependencies.has(from)) dependencies.set(from, new Set());
-    linked.forEach(function (file) { dependencies.get(from).add(file); });
+    linked.forEach(function (file) { dependencies.get(from)!.add(file); });
   }
 
   /* A space of a file that lists several, or whose root is elsewhere,
      names its file; one outside the project isn't exported. */
   add(options.manifest || path.join(root, 'workbench.yaml'), owners[0], 'workbench manifest');
-  Object.keys((view && view.pages) || {}).forEach(function (src) {
-    var page = view.pages[src];
+  Object.keys(pages).forEach(function (src) {
+    var page = pages[src];
     if (page.design) {
       add(page.design, owners[0], 'design: ' + page.label, src);
       if (files.has(path.resolve(page.design))) pageData[src].entries.push({ kind: 'design', path: destinationFor(path.resolve(page.design), owners[0]) });
@@ -497,35 +315,35 @@ function create(root, view, options) {
       add(path.join(owner.root, name), owner, 'project configuration');
     });
   });
-  Object.keys((view && view.implementations) || {}).forEach(function (key) {
-    var implementation = view.implementations[key];
+  Object.keys(implementations).forEach(function (key) {
+    var implementation = implementations[key];
     if (!implementation || implementation.kind !== 'storybook' || !implementation.root) return;
     var implementationRoot = path.resolve(implementation.root);
     var owner = ownerFor(implementationRoot);
-    var pages = pageSources.filter(function (src) {
-      return (view.pages[src].code || []).some(function (entry) { return entry.implementation === key; });
+    var storyPages = pageSources.filter(function (src) {
+      return (pages[src].code || []).some(function (entry) { return entry.implementation === key; });
     });
     storybookConfigDirectories(implementationRoot).forEach(function (directory) {
-      if (pages.length) pages.forEach(function (src) { add(directory, owner, 'Storybook configuration', src); });
+      if (storyPages.length) storyPages.forEach(function (src) { add(directory, owner, 'Storybook configuration', src); });
       else add(directory, owner, 'Storybook configuration');
     });
   });
 
   for (var at = 0; at < queue.length; at += 1) {
     var file = queue[at];
-    var item = files.get(file);
+    var item = files.get(file)!;
     var packageInfo = rememberPackage(file, item.owner.root);
     if (packageInfo && !configuredPackages.has(packageInfo.root)) {
       configuredPackages.add(packageInfo.root);
       try {
         fs.readdirSync(packageInfo.root).filter(function (name) { return CONFIG_FILES.test(name); }).forEach(function (name) {
-          add(path.join(packageInfo.root, name), item.owner, 'package configuration');
+          add(path.join(packageInfo!.root, name), item.owner, 'package configuration');
         });
       } catch (_) {}
     }
     if (packageInfo && !CONFIG_FILES.test(path.basename(file))) {
       Array.from(files.keys()).filter(function (candidate) {
-        return path.dirname(candidate) === packageInfo.root && CONFIG_FILES.test(path.basename(candidate));
+        return path.dirname(candidate) === packageInfo!.root && CONFIG_FILES.test(path.basename(candidate));
       }).forEach(function (config) { linkDependency(file, config); });
     }
     var ext = path.extname(file).toLowerCase();
@@ -544,7 +362,7 @@ function create(root, view, options) {
       }
     }
     var cssImports = ['.css', '.scss', '.sass', '.less'].indexOf(ext) > -1 ? stylesheetImports(body) : null;
-    references(file, body).forEach(function (specifier) {
+    parseReferences(ext, body).forEach(function (specifier) {
       var dependency = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'].indexOf(ext) > -1 && !/^[@~]\//.test(specifier)
         ? packageName(specifier)
         : null;
@@ -581,21 +399,21 @@ function create(root, view, options) {
     spriteDirectories.forEach(function (directory) { linkDependency(item.source, directory); });
   });
 
-  var manifests = [];
+  var manifests: string[] = [];
   files.forEach(function (item) {
     var found = nearestPackage(item.source, item.owner.root);
     if (found && manifests.indexOf(found) === -1) manifests.push(found);
   });
-  var dependencyVersions = {};
+  var dependencyVersions: Record<string, string | null | undefined> = {};
   (options.portable && options.portable.previews || []).forEach(function (preview) {
     (preview.packages || []).forEach(function (pkg) { packages[pkg.name] = true; dependencyVersions[pkg.name] = pkg.version; });
   });
   manifests.forEach(function (manifest) {
     try {
-      var pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-      ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].forEach(function (group) {
+      var pkg: PackageManifest = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+      (['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const).forEach(function (group) {
         Object.keys(pkg[group] || {}).forEach(function (name) {
-          if (packages[name] && !dependencyVersions[name]) dependencyVersions[name] = pkg[group][name];
+          if (packages[name] && !dependencyVersions[name]) dependencyVersions[name] = pkg[group]![name];
         });
       });
     } catch (_) { warnings.push('Could not read package manifest: ' + manifest); }
@@ -603,28 +421,28 @@ function create(root, view, options) {
 
   var pageReports = pageSources.slice().sort().map(function (src) {
     var data = pageData[src];
-    var included = new Set();
+    var included = new Set<string>();
     var pending = Array.from(data.direct);
     while (pending.length) {
-      var current = pending.pop();
+      var current = pending.pop()!;
       if (included.has(current) || !files.has(current)) continue;
       included.add(current);
       Array.from(dependencies.get(current) || []).forEach(function (dependency) { pending.push(dependency); });
     }
-    var items = Array.from(included).map(function (file) { return files.get(file); });
-    var page = {
+    var items = Array.from(included).map(function (file) { return files.get(file)!; });
+    var page: PageReport = {
       id: data.id,
       label: data.label,
       hash: contentHash(items),
-      readme: null,
+      readme: '',
       entries: data.entries,
       files: items.map(function (item) { return item.destination; }).sort(),
       screenshots: [],
     };
     return page;
   });
-  var pageParents = {};
-  var artifactParents = {};
+  var pageParents: Record<string, string> = {};
+  var artifactParents: Record<string, number> = {};
   pageReports.forEach(function (page) {
     var primary = page.entries.find(function (entry) { return entry.kind === 'design'; }) || page.entries[0];
     var parent = primary ? path.posix.dirname(primary.path) : 'workbench-pages/' + pageDirectories[page.id];
@@ -635,8 +453,8 @@ function create(root, view, options) {
   var reserved = new Set(Array.from(files.values()).map(function (item) { return item.destination; }));
   reserved.add('README.md');
   reserved.add('canonic-export.json');
-  var screenshotDirectories = {};
-  var artifactNames = {};
+  var screenshotDirectories: Record<string, string> = {};
+  var artifactNames: Record<string, Record<string, boolean>> = {};
   pageReports.forEach(function (page) {
     var parent = pageParents[page.id];
     var shared = artifactParents[parent] > 1;
@@ -650,10 +468,10 @@ function create(root, view, options) {
     reserved.add(readme);
     screenshotDirectories[page.id] = path.posix.join(parent, 'screenshots', shared ? base : '');
   });
-  var reportByPage = {};
+  var reportByPage: Record<string, PageReport> = {};
   pageReports.forEach(function (page) { reportByPage[page.id] = page; });
-  var screenshotEntries = [];
-  var screenshotNames = {};
+  var screenshotEntries: ZipEntry[] = [];
+  var screenshotNames: Record<string, number> = {};
   (options.screenshots || []).forEach(function (shot) {
     var page = reportByPage[shot.page];
     if (!page || !shot.body) return;
@@ -662,19 +480,20 @@ function create(root, view, options) {
     var count = (screenshotNames[key] || 0) + 1;
     screenshotNames[key] = count;
     var name = base + (count > 1 ? '-' + count : '') + '.jpg';
-    var screenshot = {
+    var screenshot: PageReport['screenshots'][number] = {
       state: shot.state || null,
       label: shot.label || 'Default',
-      viewport: shot.viewport || 'fit',
+      size: shot.size || 'fit',
       path: path.posix.join(screenshotDirectories[page.id], name),
       width: shot.width,
       height: shot.height,
     };
+    if (shot.sizeLabel) screenshot.sizeLabel = shot.sizeLabel;
     page.screenshots.push(screenshot);
     screenshotEntries.push({ name: prefix + '/' + screenshot.path, body: shot.body });
   });
-  var report = {
-    name: view && view.name,
+  var report: ExportReport = {
+    name: view?.name,
     generatedAt: new Date().toISOString(),
     selection: 'Workbench design/source/story entry points plus transitive local imports, assets, and captured visual references.',
     files: Array.from(files.values()).map(function (item) { return item.destination; }).sort(),
@@ -688,12 +507,12 @@ function create(root, view, options) {
   };
   var readme = '# ' + (view && view.name || 'Workbench') + ' design-system export\n\n' +
     'This archive was generated from Workbench. Workspace files keep their original project-relative paths at this archive’s root; sources outside the workspace are under `implementations/`.\n\n' +
-    'The export starts with every design, component, page, and story source declared or discovered by the workbench, then includes their transitive local imports and referenced assets. Each generated page guide embeds reference screenshots for its declared states or Storybook stories at the configured viewports: desktop, mobile, both for responsive, or the standard fit frame. Duplicate capture sizes are removed. A docs page instead embeds, for each lens, the whole page at its 960-pixel layout and each example the lens renders, cropped to its panel. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n' +
+    'The export starts with every design, component, page, and story source declared or discovered by the workbench, then includes their transitive local imports and referenced assets. Each generated page guide embeds reference screenshots for its declared states or Storybook stories at each size the page supports except Resizable; a size that fills the canvas, and Fit, are captured 1440 wide or 900 tall. Duplicate capture sizes are removed. A docs page instead embeds, for each lens, the whole page at its 960-pixel layout and each example the lens renders, cropped to its panel. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n' +
     'See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each page’s content hash. Each generated page guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n' +
-    (options.portable ? '\n## Portable browser previews\n\nServe this extracted directory with any static HTTP server and open `browser/index.html`. The viewer includes searchable previews, state and viewport selection, editable controls, reset, actions, and documentation. Copy its address to share a selection. These compiled Workbench previews need no Electron, Workbench, package installation, or build step. Direct preview pages accept `?state=<id>`. Original editable sources remain in their project-relative locations. Check `browser.warnings` in the export report for previews that could not be built.\n' : '');
-  var generatedPackage = { private: true, name: slug(view && view.name) + '-design-system', version: '0.0.0', dependencies: {} };
+    (options.portable ? '\n## Portable browser previews\n\nServe this extracted directory with any static HTTP server and open `browser/index.html`. The viewer includes searchable previews, state and size selection, editable controls, reset, actions, and documentation. Copy its address to share a selection. These compiled Workbench previews need no Electron, Workbench, package installation, or build step. Direct preview pages accept `?state=<id>`. Original editable sources remain in their project-relative locations. Check `browser.warnings` in the export report for previews that could not be built.\n' : '');
+  var generatedPackage = { private: true, name: slug(view && view.name) + '-design-system', version: '0.0.0', dependencies: {} as Record<string, string> };
   report.dependencies.forEach(function (dependency) { generatedPackage.dependencies[dependency.name] = dependency.version || '*'; });
-  var entries = Array.from(files.values()).map(function (item) {
+  var entries: ZipEntry[] = Array.from(files.values()).map(function (item) {
     return { name: prefix + '/' + item.destination, body: fs.readFileSync(item.source) };
   }).sort(function (a, b) { return a.name.localeCompare(b.name); });
   pageReports.forEach(function (page) {
@@ -705,7 +524,7 @@ function create(root, view, options) {
     entries.push({ name: prefix + '/' + file.path, body: Buffer.from(file.data, 'base64') });
   });
   if (options.portable && !files.has(path.join(root, 'workbench-env.d.ts'))) {
-    var types = fs.readFileSync(path.join(__dirname, 'preview', 'api.d.ts'), 'utf8');
+    var types = fs.readFileSync(path.join(workbenchRoot, 'preview', 'api.d.ts'), 'utf8');
     entries.push({ name: prefix + '/workbench-env.d.ts', body: '// Canonic types: see browser/CANONIC-LICENSE.txt.\n' + 'declare module "@canonic2/workbench" {\n' + types + '\n}\n' });
   }
   if (!files.has(path.join(root, 'package.json'))) {
@@ -718,9 +537,9 @@ function create(root, view, options) {
     body: zip([{ name: 'README.md', body:
       '# Workbench export ZIP parts\n\n' +
       'This bundle contains ' + archives.length + ' attachment-sized ZIP files. Extract this outer ZIP, then upload the numbered ZIP parts together or extract every part into one directory.\n' },
-    ].concat(archives.map(function (archive) {
+    ...archives.map(function (archive) {
       return { name: archive.filename, body: archive.body };
-    }))),
+    })]),
   };
   return {
     filename: archives.length === 1 ? archives[0].filename : null,
@@ -730,5 +549,3 @@ function create(root, view, options) {
     report: report,
   };
 }
-
-module.exports = { create: create, zip: zip, zipSize: zipSize, references: references, packageName: packageName, MAX_ARCHIVE_BYTES: MAX_ARCHIVE_BYTES };

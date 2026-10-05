@@ -446,11 +446,11 @@ test('reads and updates page configuration through the local form endpoint', asy
     assert.strictEqual(before.body.collections[0].items[0].label, 'Sign in');
     var updated = await post(running.port, server.CONFIG_FILE_PATH, { collections: [{
       name: 'Pages', icon: 'file-text', items: [{
-        label: 'Home', src: 'pages/home.html', viewports: ['desktop', 'mobile'],
+        label: 'Home', src: 'pages/home.html', sizes: ['laptop', 'mobile'],
       }],
     }] });
     assert.strictEqual(updated.status, 200);
-    assert.deepStrictEqual(config.read(made.root).collections[0].items[0].viewports, ['desktop', 'mobile']);
+    assert.deepStrictEqual(config.read(made.root).collections[0].items[0].sizes, ['laptop', 'mobile']);
     assert.match(fs.readFileSync(path.join(made.root, 'workbench.yaml'), 'utf8'), /label: Home/);
   } finally {
     await running.close();
@@ -488,12 +488,12 @@ test('plans every local state and imported Storybook story for export capture', 
     implementations: { storybook: { kind: 'storybook', url: 'http://127.0.0.1:6006' } },
     collections: [{ items: [{
       label: 'Sign in', src: 'pages/sign-in.html',
-      viewports: ['responsive', 'fit'],
+      sizes: ['laptop', 'mobile', 'resizable', 'fit'],
       states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Error' }],
     }] }],
     catalogCollections: [{ items: [{
       label: 'Button', src: '__storybook/storybook/button.html', implementationOnly: 'storybook',
-      viewports: ['mobile'],
+      sizes: ['mobile'],
       states: [{ id: 'default', label: 'Default' }, { id: 'icon-only', label: 'Icon Only' }],
     }] }],
     pages: {
@@ -505,12 +505,12 @@ test('plans every local state and imported Storybook story for export capture', 
   };
   var plan = server.exportCapturePlan(view, 'http://127.0.0.1:3579/');
   assert.deepStrictEqual(plan.captures.map(function (capture) {
-    return [capture.page, capture.state, capture.viewport, capture.width, capture.height, capture.external];
+    return [capture.page, capture.state, capture.size, capture.width, capture.height, capture.external];
   }), [
-    ['pages/sign-in.html', 'default', 'desktop', 1512, 982, false],
+    ['pages/sign-in.html', 'default', 'laptop', 1512, 982, false],
     ['pages/sign-in.html', 'default', 'mobile', 393, 852, false],
     ['pages/sign-in.html', 'default', 'fit', 1440, 900, false],
-    ['pages/sign-in.html', 'error', 'desktop', 1512, 982, false],
+    ['pages/sign-in.html', 'error', 'laptop', 1512, 982, false],
     ['pages/sign-in.html', 'error', 'mobile', 393, 852, false],
     ['pages/sign-in.html', 'error', 'fit', 1440, 900, false],
     ['__storybook/storybook/button.html', 'default', 'mobile', 393, 852, true],
@@ -542,7 +542,7 @@ test('captures export references through four reusable workers', async function 
   } };
   var captures = Array.from({ length: 7 }, function (_, index) {
     return { page: 'story-' + index, state: 'default', variant: 'default-mobile', label: 'Story ' + index,
-      viewport: 'mobile', viewportLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=story--' + index,
+      size: 'mobile', sizeLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=story--' + index,
       external: true, width: 393, height: 852 };
   });
   var result = await server.captureExportReferences(capture, { captures: captures, warnings: [] }, 'http://localhost:3579/', function () {});
@@ -559,7 +559,7 @@ test('keeps successful export captures when pool cleanup fails', async function 
   } };
   var captures = ['button', 'card'].map(function (story) {
     return { page: story, state: 'default', variant: 'default-mobile', label: story,
-      viewport: 'mobile', viewportLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=' + story,
+      size: 'mobile', sizeLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=' + story,
       external: true, width: 393, height: 852 };
   });
   var result = await server.captureExportReferences(capture, { captures: captures, warnings: [] }, 'http://localhost:3579/', function () {});
@@ -567,7 +567,7 @@ test('keeps successful export captures when pool cleanup fails', async function 
   assert.deepEqual(result.warnings, ['Capture worker cleanup: close failed']);
 });
 
-test('keeps every viewport for a story on one warm capture worker', async function () {
+test('keeps every size for a story on one warm capture worker', async function () {
   var assignments = new Map();
   var workers = Array.from({ length: 2 }, function (_, worker) {
     return { captureExportPage: async function (payload) {
@@ -581,15 +581,33 @@ test('keeps every viewport for a story on one warm capture worker', async functi
     return { workers: workers, close: async function () {} };
   } };
   var captures = ['button', 'card'].flatMap(function (story) {
-    return ['mobile', 'desktop', 'fit'].map(function (viewport) {
-      return { page: story, state: 'default', variant: 'default-' + viewport, label: story,
-        viewport: viewport, viewportLabel: viewport, url: 'http://localhost:6006/iframe.html?id=' + story,
-        external: true, width: viewport === 'mobile' ? 393 : 1512, height: 852 };
+    return ['mobile', 'laptop', 'fit'].map(function (size) {
+      return { page: story, state: 'default', variant: 'default-' + size, label: story,
+        size: size, sizeLabel: size, url: 'http://localhost:6006/iframe.html?id=' + story,
+        external: true, width: size === 'mobile' ? 393 : 1512, height: 852 };
     });
   });
   var result = await server.captureExportReferences(capture, { captures: captures, warnings: [] }, 'http://localhost:3579/', function () {});
   assert.equal(result.screenshots.length, 6);
   assert.deepEqual(Array.from(assignments.values(), function (workerIds) { return workerIds.size; }), [1, 1]);
+});
+
+test('local export sizes share a document revision, while another export gets a fresh one', async function () {
+  var requests = [];
+  var capture = { capture: async function (_, payload) {
+    requests.push(payload);
+    return Buffer.from('jpeg');
+  } };
+  var plan = { warnings: [], captures: [393, 1512].map(function (width) {
+    return { page: 'button', label: 'Default', sizeLabel: String(width),
+      url: 'http://localhost:3579/button.html', width: width, height: 852 };
+  }) };
+  await server.captureExportReferences(capture, plan, 'http://localhost:3579/', function () {});
+  assert.ok(requests[0].revision);
+  assert.equal(requests[0].revision, requests[1].revision);
+  await server.captureExportReferences(capture, plan, 'http://localhost:3579/', function () {});
+  assert.notEqual(requests[0].revision, requests[2].revision);
+  assert.equal(requests[2].revision, requests[3].revision);
 });
 
 test('reports export capture progress before serving the completed job', async function () {
@@ -622,6 +640,43 @@ test('reports export capture progress before serving the completed job', async f
     assert.ok(download.body.length <= 90000);
   } finally {
     await running.close();
+    fs.rmSync(made.root, { recursive: true, force: true });
+  }
+});
+
+test('an export job downloads sources and references when the portable worker fails', async function () {
+  var service = require('./preview-service');
+  var original = service.create;
+  var made = project('http://localhost:6006');
+  fs.writeFileSync(path.join(made.root, 'button.workbench.ts'), 'export default {};\n');
+  var running;
+  service.create = function () { return {
+    index: async function () { return { previews: [], docs: [], errors: [] }; },
+    export: async function () { throw new Error('Preview worker stopped'); },
+    close: async function () {},
+  }; };
+  try {
+    running = await server.start({ root: made.root, capture: {
+      capture: async function () { return Buffer.from('reference jpeg'); },
+      close: async function () {},
+    } });
+    var started = await post(running.port, server.EXPORT_PATH, {});
+    var status;
+    do {
+      status = await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id);
+      if (status.body.status === 'running') await new Promise(function (resolve) { setTimeout(resolve, 5); });
+    } while (status.body.status === 'running');
+    assert.equal(status.body.status, 'complete');
+    assert.equal(status.body.warnings, 1);
+    var answer = await getRaw(running.port, server.EXPORT_PATH + '?job=' + started.body.id + '&download=1');
+    assert.equal(answer.status, 200);
+    assert.ok(answer.body.includes(Buffer.from('pages/sign-in.html')));
+    assert.ok(answer.body.includes(Buffer.from('reference jpeg')));
+    assert.ok(answer.body.includes(Buffer.from('Portable browser previews: Preview worker stopped')));
+    assert.ok(!answer.body.includes(Buffer.from('browser/index.html')));
+  } finally {
+    service.create = original;
+    if (running) await running.close();
     fs.rmSync(made.root, { recursive: true, force: true });
   }
 });
@@ -1414,6 +1469,49 @@ test('a single-space canvas is served unchanged', async function () {
   try {
     var canvas = await getRaw(running.port, '/_workbench/');
     assert.doesNotMatch(canvas.body.toString(), /canonic-config|canonic-space/);
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('adds and updates a space’s sizes through the sizes route, and the config carries them', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-sizes-test-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), [
+    'name: Acme',
+    'collections:',
+    '  - name: Interface',
+    '    items:',
+    '      - label: Sidebar',
+    '        src: sidebar.html',
+    '        sizes:',
+    '          - fit',
+    '',
+  ].join('\n'));
+  var running = await server.start({ root: root, capture: { close: function () {} } });
+  try {
+    var added = await post(running.port, server.SIZES_PATH, { action: 'add',
+      size: { name: 'Sidebar', width: 340, height: 'fill', icon: 'panel-left', button: true, page: 'sidebar.html' } });
+    assert.strictEqual(added.status, 200);
+    assert.strictEqual(added.body.key, 'sidebar');
+    assert.deepStrictEqual(added.body.sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable', 'sidebar']);
+    var resolved = await running.config();
+    assert.deepStrictEqual(resolved.pages['sidebar.html'].sizes, ['fit', 'sidebar']);
+    assert.strictEqual(resolved.sizes[4].height, 'fill');
+
+    var updated = await post(running.port, server.SIZES_PATH, { action: 'update', sizes: [
+      { key: 'sidebar', value: { label: 'Panel', width: 340, height: 'fill', icon: 'panel-left', button: true } },
+      { key: 'resizable', value: true },
+    ] });
+    assert.strictEqual(updated.status, 200);
+    assert.deepStrictEqual(updated.body.sizes.map(function (size) { return size.label; }), ['Panel', 'Resizable']);
+    assert.deepStrictEqual((await running.config()).pages['sidebar.html'].sizes, ['sidebar']);
+
+    var refused = await post(running.port, server.SIZES_PATH, { action: 'update', sizes: [] });
+    assert.strictEqual(refused.status, 400);
+    assert.match(refused.body.error, /at least one size/);
+    var editor = await get(running.port, server.CONFIG_FILE_PATH);
+    assert.deepStrictEqual(editor.body.sizes, ['sidebar', 'resizable']);
   } finally {
     await running.close();
     fs.rmSync(root, { recursive: true, force: true });

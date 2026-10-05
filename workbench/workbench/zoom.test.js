@@ -130,3 +130,20 @@ test('a docs page fills the canvas at 100%, keeps its layout width when zoomed, 
   c.zoom.mode('default');
   assert.equal(c.frame.style.width, '', 'an artboard page gets its own size back');
 });
+
+test('fitting fills only the flagged axes with the canvas’s room, never below 320', function () {
+  var c = canvas();
+  c.canvas.dataset.fillHeight = 'true';
+  c.frame.style.width = '340px';
+  c.zoom.fit();
+  assert.equal(c.frame.style.width, '340px', 'a fixed width is left as it is');
+  assert.equal(c.frame.style.height, (900 - 40 - 80) + 'px');
+  c.canvas.dataset.fillWidth = 'true';
+  c.canvas.clientWidth = 200;
+  c.zoom.fit();
+  assert.equal(c.frame.style.width, '320px');
+  c.canvas.dataset.fillWidth = 'false'; c.canvas.dataset.fillHeight = 'false';
+  c.frame.style.height = '90px';
+  c.zoom.fit();
+  assert.equal(c.frame.style.height, '90px', 'nothing filled, nothing changed');
+});

@@ -200,8 +200,8 @@ export default defineDocs({
 
 The page is discovered like a preview and placed by its `title`: the first
 segment names the collection, the last the page, and any between are a group. A
-title without `/` goes in **Docs**. In the page list, the page shows the
-`book-open` icon. If `workbench.yaml` also lists the same Markdown file, its
+title without `/` goes in **Docs**. In the page list, the page shows its
+`icon`, a Lucide name, or `book-open` without one. If `workbench.yaml` also lists the same Markdown file, its
 entry is used and the definition is skipped.
 
 ## States
@@ -245,4 +245,6 @@ panel says why its example is missing.
 The problems list reports, with the page named: a missing Markdown file, an
 example block with an unknown key or a duplicate ID (with its line), an example
 a lens has that the page never places, example file names that aren't
-kebab-case, and lenses that fail to build.
+kebab-case, and lenses that fail to build. Problems that come from a lens's
+examples appear once Workbench has read them, usually a moment after the list
+loads.

@@ -28,7 +28,7 @@ var handoff = require('./handoff');
 var config = require('./config');
 var spaces = require('./spaces');
 var remote = require('./remote');
-var designExport = require('./export');
+var designExport = require('./src/modules/export/index.ts');
 var previewService = require('./preview-service');
 var previewScripts = require('./preview-scripts');
 var implementationProxy = require('./proxy');
@@ -41,6 +41,11 @@ var browserModules = require('./src/server/browser-modules.ts');
 var canvasSpaces = require('./src/spaces/coordinator.ts');
 var nativePool = require('./src/native-streams/pool.ts');
 var docsList = require('./src/docs/pages.ts');
+var sizeSchema = require('./src/sizes/schema.ts');
+var sizeExport = require('./src/sizes/export.ts');
+var sizeChoice = require('./src/sizes/browser/choice.ts');
+var sizeModel = require('./src/sizes/browser/size.ts');
+var sizeEdit = require('./src/sizes/edit.ts');
 
 var SHOT_PATH = '/_workbench/shot';
 var CAPTURE_WARM_PATH = '/_workbench/capture/warm';
@@ -54,6 +59,7 @@ var HANDOFF_PATH = '/_workbench/handoff';
 var LOG_PATH = '/_workbench/log';
 var CONFIG_PATH = '/_workbench/config';
 var CONFIG_FILE_PATH = '/_workbench/config-file';
+var SIZES_PATH = '/_workbench/sizes';
 var OPEN_PATH = '/_workbench/open';
 var STORIES_PATH = '/_workbench/stories';
 var SPACES_PATH = '/_workbench/spaces';
@@ -90,11 +96,6 @@ var MAX_VIEW = 256 * 1024; /* complete canvas context; no silent truncation */
 var MAX_LOG_SESSION = 2 * 1024 * 1024; /* one noisy workbench cannot grow forever */
 var REMOTE_TIMEOUT = 5000; /* a dev server that isn't running says so quickly */
 var EXPORT_CAPTURE_WORKERS = 4;
-var EXPORT_VIEWPORTS = {
-  fit: { id: 'fit', label: 'Fit', width: 1440, height: 900 },
-  desktop: { id: 'desktop', label: 'Desktop', width: 1512, height: 982 },
-  mobile: { id: 'mobile', label: 'Mobile', width: 393, height: 852 },
-};
 
 /* What the annotations are dressed in when they're laid over a page the workbench
    doesn't serve — see capture-scripts.js. The tokens annotations.css leans on come from
@@ -311,8 +312,8 @@ function pageItems(collections, out) {
   return out;
 }
 
-/* Stable reference viewports for every declared state or Storybook story.
-   Responsive pages produce both desktop and mobile references. The
+/* Stable reference sizes for every declared state or Storybook story: each
+   size the page supports but Resizable (see src/sizes/export.ts). The
    background renderer loads these directly, so exporting never drives or
    annotates the visible workbench canvas. */
 function exportCapturePlan(view, baseUrl) {
@@ -327,25 +328,18 @@ function exportCapturePlan(view, baseUrl) {
     var implementationKey = item.implementationOnly;
     var implementation = implementationKey && view.implementations[implementationKey];
     var variants = item.states && item.states.length ? item.states : [{ id: 'default', label: 'Default' }];
-    var declaredViewports = item.viewports || ['fit', 'desktop', 'mobile', 'responsive'];
-    var viewports = [];
-    declaredViewports.forEach(function (viewport) {
-      var expanded = viewport === 'responsive'
-        ? [EXPORT_VIEWPORTS.desktop, EXPORT_VIEWPORTS.mobile]
-        : [EXPORT_VIEWPORTS[viewport] || EXPORT_VIEWPORTS.fit];
-      expanded.forEach(function (size) {
-        if (!viewports.some(function (candidate) { return candidate.id === size.id; })) viewports.push(size);
-      });
-    });
+    var known = view.pages && view.pages[item.src];
+    var sizes = sizeExport.exportSizes(sizeChoice.supported(view.sizes || sizeModel.defaultSizes(), {
+      sizes: (known && known.sizes) || item.sizes, ownSizes: (known && known.ownSizes) || item.ownSizes }));
     var preview = view.pages[item.src] && view.pages[item.src].preview;
     if (preview) {
       variants = preview.states;
       variants.forEach(function (state) {
-        viewports.forEach(function (size) {
+        sizes.forEach(function (size) {
           var target = new URL(preview.file, baseUrl);
           target.searchParams.set('state', state.id);
-          captures.push({ page: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
-            viewport: size.id, viewportLabel: size.label, url: target.href, external: false, width: size.width, height: size.height });
+          captures.push({ page: item.src, state: state.id, variant: state.id + '-' + size.key, label: state.label,
+            size: size.key, sizeLabel: size.label, url: target.href, external: false, width: size.width, height: size.height });
         });
       });
       return;
@@ -363,10 +357,10 @@ function exportCapturePlan(view, baseUrl) {
           warnings.push(item.label + ' — ' + state.label + ': Storybook did not provide a story id.');
           return;
         }
-        viewports.forEach(function (size) {
+        sizes.forEach(function (size) {
           captures.push({
-            page: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
-            viewport: size.id, viewportLabel: size.label,
+            page: item.src, state: state.id, variant: state.id + '-' + size.key, label: state.label,
+            size: size.key, sizeLabel: size.label,
             url: implementation.url + '/iframe.html?id=' + encodeURIComponent(story.id) + '&viewMode=story',
             external: true, width: size.width, height: size.height,
           });
@@ -383,10 +377,10 @@ function exportCapturePlan(view, baseUrl) {
       var target = new URL(item.src, baseUrl);
       target.searchParams.set('actions', 'off');
       if (index > 0) target.searchParams.set('state', state.id);
-      viewports.forEach(function (size) {
+      sizes.forEach(function (size) {
         captures.push({
-          page: item.src, state: state.id, variant: state.id + '-' + size.id, label: state.label,
-          viewport: size.id, viewportLabel: size.label,
+          page: item.src, state: state.id, variant: state.id + '-' + size.key, label: state.label,
+          size: size.key, sizeLabel: size.label,
           url: target.toString(), external: false, width: size.width, height: size.height,
         });
       });
@@ -396,9 +390,11 @@ function exportCapturePlan(view, baseUrl) {
 }
 
 function captureExportReferences(capture, plan, baseUrl, progress) {
+  // One load per local URL during this export; a new job sees fresh sources.
+  var revision = 'export-' + crypto.randomBytes(12).toString('hex');
   var screenshots = new Array(plan.captures.length);
   var warnings = plan.warnings.slice();
-  // Keep every viewport of a page/story on the same renderer. The first shot
+  // Keep every size of a page/story on the same renderer. The first shot
   // pays the navigation/render cost; the remaining sizes reuse that document.
   var groups = [];
   var groupsByUrl = new Map();
@@ -428,7 +424,8 @@ function captureExportReferences(capture, plan, baseUrl, progress) {
           var reference = group[i].reference;
           var payload = {
             url: reference.url, width: reference.width, height: reference.height,
-            scroll: { x: 0, y: 0 }, annotations: '', anchors: [], format: 'jpeg', revision: '',
+            scroll: { x: 0, y: 0 }, annotations: '', anchors: [], format: 'jpeg',
+            revision: reference.external || reference.docsPage ? '' : revision,
             reuse: reference.external ? 'storybook' : '',
           };
           /* A docs page loads as a page, whole, cropped to an example when the
@@ -443,7 +440,7 @@ function captureExportReferences(capture, plan, baseUrl, progress) {
             if (!body || !body.length) throw new Error('the renderer returned an empty image');
             screenshots[index] = Object.assign({}, reference, { body: body });
           } catch (error) {
-            warnings.push(reference.page + ' — ' + reference.label + ' · ' + reference.viewportLabel + ': ' + String(error.message || error));
+            warnings.push(reference.page + ' — ' + reference.label + ' · ' + reference.sizeLabel + ': ' + String(error.message || error));
           }
           completed += 1;
           progress(completed);
@@ -834,13 +831,15 @@ function serveFile(root, pathname, res, options) {
 /* The screenshot service a server makes when it isn't given one. Servers for
    several spaces can share one, started with `captureShared` so closing one
    space leaves the service to whoever made it. */
-function createCapture(storage) {
-  return electronCapture.createService({ inject: DESCRIBE_SOURCE, storage: storage });
+function createCapture(storage, diagnostic) {
+  return electronCapture.createService({ inject: DESCRIBE_SOURCE, storage: storage, diagnostic: diagnostic });
 }
 
 function start(options) {
   var root = path.resolve(options.root);
-  var capture = options.capture || createCapture(options.captureStorage);
+  var capture = options.capture || createCapture(options.captureStorage, function (level, event, details) {
+    diagnostic(level, event, details);
+  });
   var captureReady = Promise.resolve();
   var previews = null;
   var previewSettings = null;
@@ -1155,8 +1154,8 @@ function start(options) {
           }).then(function (available) {
             var url = new URL(page.src, baseUrl);
             if (lens) url.searchParams.set('lens', lens.key);
-            var base = { page: page.src, state: 'default', viewport: 'docs', viewportLabel: 'Docs page',
-              url: url.href, external: false, docsPage: true, width: DOCS_EXPORT_WIDTH, height: EXPORT_VIEWPORTS.fit.height };
+            var base = { page: page.src, state: 'default', size: 'docs', sizeLabel: 'Docs page',
+              url: url.href, external: false, docsPage: true, width: DOCS_EXPORT_WIDTH, height: sizeModel.EXPORT_FILL.height };
             var prefix = lens ? lens.key + '-' : '';
             captures.push(Object.assign({}, base, { variant: prefix + 'page', label: (lens ? lens.label + ' · ' : '') + 'Whole page' }));
             examples.forEach(function (example) {
@@ -1202,8 +1201,75 @@ function start(options) {
         return { implementation: lens.key, path: target, relative: lens.examples, exists: fs.existsSync(target) };
       }));
     });
-    return docs.problems(pages).then(function (found) {
+    return docs.problems(pages, knownListing).then(function (found) {
       problems.push.apply(problems, found);
+    });
+  }
+
+  /* Each docs lens's examples as last listed. The config shows what is known
+     and never waits for a listing: one is listed again in the background each
+     time it's asked for (the worker answers from its cache until a file
+     changes), and a listing that turns out different tells the host the
+     catalog changed, so the sidebar shows its problems. */
+  var docsListings = new Map();
+  function knownListing(lens) {
+    if (!previews) return null;
+    var key = JSON.stringify(docsService.lensRequest(lens));
+    var entry = docsListings.get(key);
+    if (!entry) { entry = { result: null, pending: null }; docsListings.set(key, entry); }
+    refreshListing(lens, entry);
+    if (!entry.result) return null;
+    return entry.result.error ? Promise.reject(new Error(entry.result.error)) : Promise.resolve(entry.result.value);
+  }
+  function refreshListing(lens, entry) {
+    if (entry.pending || !previews) return entry.pending;
+    var before = JSON.stringify(entry.result);
+    entry.pending = previews.docs('index', docsService.lensRequest(lens)).then(function (value) {
+      entry.result = { value: { examples: value.examples, problems: value.problems } };
+    }, function (error) {
+      entry.result = { error: String(error.message || error) };
+    }).then(function () {
+      entry.pending = null;
+      if (JSON.stringify(entry.result) !== before) catalogChanged();
+    });
+    return entry.pending;
+  }
+  var catalogNotice = null;
+  function catalogChanged() {
+    if (catalogNotice || typeof options.onCatalogChanged !== 'function') return;
+    catalogNotice = setTimeout(function () {
+      catalogNotice = null;
+      try { options.onCatalogChanged(); } catch (error) {
+        diagnostic('warn', 'catalog.notify.failed', { message: String(error.message || error) });
+      }
+    }, 50);
+  }
+
+  /* Started with the session when the host asks: the worker, its index, and
+     then every docs page's bundle, one at a time, so the first visit to a
+     page is already built. A page asked for meanwhile waits for one build at
+     most. */
+  function warmDocs() {
+    var began = Date.now();
+    var built = 0;
+    return docsReady().then(function (view) {
+      if (!view || !previews || docsBlocked()) return;
+      return docsPages(view).reduce(function (pending, page) {
+        return page.lenses.reduce(function (next, lens) {
+          return next.then(function () {
+            if (!previews) return;
+            var key = JSON.stringify(docsService.lensRequest(lens));
+            var entry = docsListings.get(key);
+            if (!entry) { entry = { result: null, pending: null }; docsListings.set(key, entry); }
+            return Promise.all([refreshListing(lens, entry), previews.docs('bundle', docsService.lensRequest(lens))])
+              .then(function () { built++; }, function () { /* The page says why when it's opened. */ });
+          });
+        }, pending);
+      }, Promise.resolve());
+    }).then(function () {
+      diagnostic('info', 'docs.warmed', { bundles: built, elapsedMs: Date.now() - began });
+    }, function (error) {
+      diagnostic('warn', 'docs.warm.failed', { elapsedMs: Date.now() - began, message: String(error.message || error) });
     });
   }
 
@@ -1231,7 +1297,12 @@ function start(options) {
         previewSettings = settings;
       }
       if (!discovered) return;
+      var indexing = Date.now();
       var index = await previews.index();
+      diagnostic(Date.now() - indexing >= 1000 ? 'warn' : 'info', 'previews.indexed', {
+        elapsedMs: Date.now() - indexing, previews: (index.previews || []).length,
+        docs: (index.docs || []).length, errors: (index.errors || []).length,
+      });
       problems.push.apply(problems, index.errors);
       /* Discovered docs pages go where their titles say, like previews. A
          docs page workbench.yaml declares for the same Markdown file wins. */
@@ -1242,7 +1313,7 @@ function start(options) {
         var collectionName = parts.length > 1 ? parts.shift() : 'Docs';
         var label = parts.pop() || page.id;
         discoveredDocs.push({ src: page.src, label: label, lens: page.lens, lenses: page.lenses });
-        var item = { src: page.src, label: label, docs: true, icon: 'book-open',
+        var item = { src: page.src, label: label, docs: true, icon: page.icon || 'book-open',
           docsLenses: page.lenses.map(function (lens) { return { key: lens.key, label: lens.label }; }) };
         if (page.lens) item.lens = page.lens;
         if (page.states.length > 1) item.states = page.states;
@@ -1268,7 +1339,9 @@ function start(options) {
         var label = parts.pop() || preview.id;
         var iconSettings = view.previews || {};
         var item = { src: preview.file, label: label, states: preview.states, workbench: true, icon: preview.icon || manifest.titleIcon(iconSettings, preview.title, 'component').icon };
-        if (preview.viewports) item.viewports = preview.viewports;
+        if (iconSettings.lensLabel) item.lensLabel = iconSettings.lensLabel;
+        var previewSizes = sizeSchema.readPageSizes(preview.sizes, view.sizes, preview.file, problems);
+        if (previewSizes) item.sizes = previewSizes.sizes;
         var collection = collections.find(function (candidate) { return candidate.name === collectionName; });
         if (!collection) {
           var selected = manifest.titleIcon(iconSettings, collectionName, 'component');
@@ -1282,6 +1355,8 @@ function start(options) {
           group.items.push(item);
         } else collection.items.push(item);
         var previous = pages[preview.file];
+        /* A page that lists the preview keeps its own sizes; without any, the definition's apply. */
+        if (previewSizes && !(previous && previous.sizes)) previous = Object.assign({}, previous, { sizes: previewSizes.sizes });
         pages[preview.file] = Object.assign({}, previous, { label: previous && previous.label || label,
           design: path.join(root, preview.file), preview: preview, code: (previous && previous.code || []).concat([
             { implementation: 'workbench', path: path.join(root, preview.source), relative: preview.source, exists: true },
@@ -1468,15 +1543,14 @@ function start(options) {
         }
       });
     }).then(async function (references) {
-      var portable = previews ? await previews.export() : null;
-      job.warnings = references.warnings.length + (portable ? portable.warnings.length : 0);
-      job.archive = designExport.create(root, view, {
+      job.archive = await designExport.build(root, view, {
         manifest: path.join(where.dir, config.FILE),
-        portable: portable,
         screenshots: references.screenshots,
         captureWarnings: references.warnings,
         maxArchiveBytes: options.exportMaxArchiveBytes,
-      });
+      }, previews);
+      var report = job.archive.report;
+      job.warnings = report.warnings.length + report.captureWarnings.length + (report.browser ? report.browser.warnings.length : 0);
       job.completed = job.total;
       job.current = null;
       job.status = 'complete';
@@ -1484,7 +1558,7 @@ function start(options) {
         files: job.archive.report.files.length,
         screenshots: references.screenshots.length,
         archives: job.archive.archives.length,
-        warnings: job.archive.report.warnings.length + references.warnings.length,
+        warnings: job.warnings,
       });
       return job;
     }).catch(function (error) {
@@ -1539,14 +1613,17 @@ function start(options) {
       return;
     }
 
-    if (url.pathname === docsService.SOURCE_PATH || url.pathname === docsService.REVISION_PATH) {
-      if (req.method !== 'GET') { send(res, 405, 'GET a docs page’s source or revision here.'); return; }
+    if (url.pathname === docsService.SOURCE_PATH || url.pathname === docsService.REVISION_PATH || url.pathname === docsService.BUNDLE_PATH) {
+      if (req.method !== 'GET') { send(res, 405, 'GET a docs page’s source, revision, or bundle here.'); return; }
       docsReady().then(function (view) {
         var page = docsPages(view).find(function (candidate) { return candidate.src === url.searchParams.get('page'); });
         if (!page) throw refused(404, 'Not a docs page: ' + url.searchParams.get('page'));
         var lens = url.searchParams.get('lens');
         if (url.pathname === docsService.REVISION_PATH) {
           return docs.revision(page, lens).then(function (revision) { json(res, 200, { revision: revision }); });
+        }
+        if (url.pathname === docsService.BUNDLE_PATH) {
+          return docs.bundleInfo(page, lens).then(function (info) { json(res, 200, info); });
         }
         return docs.exampleSource(page, lens, url.searchParams.get('example') || '').then(function (code) { json(res, 200, code); });
       }).catch(function (error) { trouble(res, error, 500); });
@@ -1565,7 +1642,7 @@ function start(options) {
         var docsPage = pages.find(function (candidate) { return candidate.src === docsSrc; });
         if (!docsPage) { serveFile(root, url.pathname, res, { inject: true }); return; }
         return docs.page(docsPage, { lens: url.searchParams.get('lens'), state: url.searchParams.get('state') },
-          new Set(pages.map(function (page) { return page.src; }))).then(function (html) {
+          new Set(pages.map(function (page) { return page.src; })), {}, { defer: true }).then(function (html) {
           send(res, 200, withPreviewScripts(html), 'text/html; charset=utf-8');
         });
       }).catch(function (error) { trouble(res, error, 500); });
@@ -1640,6 +1717,34 @@ function start(options) {
       return;
     }
 
+    /* Custom size… and Edit sizes…: `add` one size, to the space or one page,
+       or `update` the space's sizes as the dialog left them. Answers with the
+       space's sizes as they now resolve. See src/sizes/edit.ts. */
+    if (url.pathname === SIZES_PATH) {
+      if (req.method !== 'POST') { send(res, 405, 'POST a size change here.'); return; }
+      readBody(req, MAX_HANDOFF)
+        .then(function (body) {
+          var ask = JSON.parse(body.toString('utf8'));
+          var before = config.read(where);
+          if (!before) throw new Error('There is no ' + config.FILE + ' at the project root.');
+          var local = before.sizes.filter(function (size) { return size.local; }).map(function (size) { return size.key; });
+          var key = null;
+          config.updateSizes(where, function (sizes, collections) {
+            if (ask && ask.action === 'add') {
+              var added = sizeEdit.addSize(sizes, collections, ask.size || {});
+              key = added.key;
+              return added;
+            }
+            if (ask && ask.action === 'update') return sizeEdit.updateSizes(sizes, collections, ask.sizes || [], local);
+            throw new Error('Ask to add a size or update the sizes.');
+          });
+          var after = config.read(where);
+          json(res, 200, { ok: true, key: key, sizes: after ? after.sizes : [] });
+        })
+        .catch(function (error) { trouble(res, error, 400); });
+      return;
+    }
+
     /* The form editor changes only the committed collections block. The rest of
        the file, including implementations and its comments, stays untouched. */
     if (url.pathname === CONFIG_FILE_PATH) {
@@ -1647,7 +1752,11 @@ function start(options) {
         try {
           var configSource = config.source(where);
           if (!configSource) json(res, 404, { ok: false, error: 'There is no ' + config.FILE + ' at the project root.' });
-          else json(res, 200, { ok: true, collections: configSource.collections });
+          else {
+            var spaceView = config.read(where);
+            json(res, 200, { ok: true, collections: configSource.collections,
+              sizes: spaceView ? spaceView.sizes.map(function (size) { return size.key; }) : [] });
+          }
         } catch (error) { trouble(res, error, 400); }
         return;
       }
@@ -1718,14 +1827,29 @@ function start(options) {
        problem named. The workbench reads it for the source menu and the
        handoff; `curl` reads it to check a setup. */
     if (url.pathname === CONFIG_PATH) {
+      /* The canvas shows nothing until this answers, so every answer says
+         how long it took and where the time went. */
+      var configBegan = Date.now();
+      var configTiming = {};
+      diagnostic('info', 'config.requested', {});
       Promise.resolve()
         .then(resolvedWithCatalogs)
-        .then(proxied)
         .then(function (view) {
+          configTiming.catalogsMs = Date.now() - configBegan;
+          return proxied(view);
+        })
+        .then(function (view) {
+          configTiming.proxyMs = Date.now() - configBegan - configTiming.catalogsMs;
+          configTiming.elapsedMs = Date.now() - configBegan;
+          configTiming.found = !!view;
+          diagnostic(configTiming.elapsedMs >= 1000 ? 'warn' : 'info', 'config.resolved', configTiming);
           if (!view) json(res, 404, { ok: false, error: 'There is no ' + config.FILE + ' at the project root.' });
           else json(res, 200, Object.assign({ ok: true }, view));
         })
-        .catch(function (err) { trouble(res, err, 500); });
+        .catch(function (err) {
+          diagnostic('warn', 'config.failed', { elapsedMs: Date.now() - configBegan, message: String(err.message || err) });
+          trouble(res, err, 500);
+        });
       return;
     }
 
@@ -2129,6 +2253,7 @@ function start(options) {
        the leading slash is what makes /_workbench/ mean the folder's root. */
     if (url.pathname.indexOf(WORKBENCH_PREFIX) === 0) {
       var workbenchFile = url.pathname === WORKBENCH_PREFIX ? '/index.html' : url.pathname.slice(WORKBENCH_PREFIX.length - 1);
+      if (workbenchFile === '/index.html') diagnostic('info', 'canvas.served', {});
       serveFile(WORKBENCH_DIR, workbenchFile, res, { head: canvasHead });
       return;
     }
@@ -2168,6 +2293,7 @@ function start(options) {
     try { shown.announce('http://127.0.0.1:' + port + '/'); } catch (error) {
       diagnostic('warn', 'view.announce.failed', { message: String(error.message || error) });
     }
+    if (options.eagerPreviews) warmDocs();
     if (options.eagerCapture) {
       captureReady = Promise.resolve().then(function () {
         return capture.warm('http://127.0.0.1:' + port + '/');
@@ -2234,6 +2360,7 @@ module.exports = {
   HANDOFF_PATH: HANDOFF_PATH,
   CONFIG_PATH: CONFIG_PATH,
   CONFIG_FILE_PATH: CONFIG_FILE_PATH,
+  SIZES_PATH: SIZES_PATH,
   LOG_PATH: LOG_PATH,
   OPEN_PATH: OPEN_PATH,
   SHOT_PATH: SHOT_PATH,
@@ -2274,7 +2401,7 @@ if (require.main === module) {
 
   if (found.length <= 1) {
     var only = found[0] || { dir: path.resolve(dirs[0]), key: null, root: path.resolve(dirs[0]) };
-    start({ root: only.root, config: { dir: only.dir, key: only.key }, eagerCapture: true, onShot: onShot }).then(function (running) {
+    start({ root: only.root, config: { dir: only.dir, key: only.key }, eagerCapture: true, eagerPreviews: true, onShot: onShot }).then(function (running) {
       console.log('workbench on ' + running.url);
     }, failed);
   } else {
@@ -2285,7 +2412,7 @@ if (require.main === module) {
       start: function (space) {
         return start({
           root: space.root, config: { dir: space.dir, key: space.key },
-          capture: shared, captureShared: true, eagerCapture: true,
+          capture: shared, captureShared: true, eagerCapture: true, eagerPreviews: true,
           spaces: hub, onShot: onShot,
         });
       },

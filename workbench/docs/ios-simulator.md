@@ -58,7 +58,7 @@ collections:
     items:
       - label: Onboarding
         src: design/onboarding.html
-        viewports:
+        sizes:
           - mobile
         implementations:
           simulator: 6A1F2B3C-0000-4000-8000-123456789ABC

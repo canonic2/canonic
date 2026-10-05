@@ -30,7 +30,7 @@ collections:
     items:
       - label: Sign in
         src: design/sign-in.html
-        viewports:
+        sizes:
           - mobile
         implementations:
           emulator: Example Phone

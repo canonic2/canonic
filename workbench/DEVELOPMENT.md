@@ -19,7 +19,7 @@ HTML and script files with no build step; opening
 | `server.js` | the HTTP server, capture, export, preview and lens endpoints, and script injection — plain node |
 | `preview-scripts.js` | the `preview-compat.js` bundle (`keys.js`, `actions.js`, `states.js`) injected into served pages |
 | `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, request mocks, the portable viewer, and the `cli.cjs` command line |
-| `export.js` | the design-system ZIP export |
+| `src/modules/export/` | the TypeScript design-system source and ZIP exporter; `index.ts` is its public Node API |
 | `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
 | `capture-scripts.js` | scripts the screenshot helper runs in a page: the annotation overlay, element descriptions, and export settling |
 | `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window, for the iOS Simulator and window lenses |

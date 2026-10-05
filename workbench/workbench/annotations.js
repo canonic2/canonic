@@ -891,17 +891,20 @@
     return { src: target.src, state: target.state, stateLabel: null, lens: null, story: null, url: null, code: [] };
   }
 
-  /* "#pages/sign-in.html@393"           -> "sign-in.jpg".
-     "#pages/sign-in.html:error@393"     -> "sign-in-error.jpg", so two states
-     of one page don't land on top of each other in .canonic/.handoffs/ — and through a
-     lens "sign-in-error-staging.jpg", so neither do the design and the
-     implementation. A story stands where the state does. */
+  /* "#pages/sign-in.html@mobile"        -> "sign-in-mobile.jpg".
+     "#pages/sign-in.html:error@mobile"  -> "sign-in-error-mobile.jpg", so two
+     states of one page don't land on top of each other in .canonic/.handoffs/ —
+     and through a lens "sign-in-error-staging-mobile.jpg", so neither do the
+     design and the implementation, nor one page at two sizes. A story stands
+     where the state does; a docs page has no size. */
   function shotName() {
     var view = viewNow();
     var base = String(view.src || '').split('/').pop().replace(/\.[^.]+$/, '');
     var state = view.story ? view.story.state : view.state;
     if (state) base += '-' + state;
     if (view.lens) base += '-' + view.lens.key;
+    var size = docsShowing() ? null : window.wbSize && window.wbSize();
+    if (size) base += '-' + size.key;
     return (base || 'canonic') + '.jpg';
   }
 
@@ -1347,14 +1350,18 @@
     return spec;
   }
 
-  /* The size switcher names itself better than "393" does — an agent told
-     "iPhone 15 Pro" knows more than one told a number. */
-  function widthName() {
-    /* A docs page has no artboard size: it fills the canvas. */
-    if (document.querySelector('.wb[data-canvas-mode="docs"]')) return 'Docs page, filling the canvas';
-    var mode = canvas.dataset.width;
-    var button = document.querySelector('.wb-size[data-width="' + mode + '"]');
-    return button ? button.title : mode;
+  function docsShowing() {
+    return !!document.querySelector('.wb[data-canvas-mode="docs"]');
+  }
+
+  /* The size as the space names it — "Sidebar, 340 × fill" tells an agent
+     more than a number does. A docs page has no artboard size: it fills the
+     canvas. */
+  function sizeName() {
+    if (docsShowing()) return 'Docs page, filling the canvas';
+    var size = window.wbSize && window.wbSize();
+    if (!size) return canvas.dataset.size || 'Unknown';
+    return window.wbSizes ? window.wbSizes.describe(size) : size.label;
   }
 
   /* An agent told "Wrong password" knows which of the page's versions it is
@@ -1386,7 +1393,7 @@
       src: view.src,
       label: item ? item.label : view.src,
       state: view.state ? stateName(view) : null,
-      width: widthName(),
+      size: sizeName(),
       frame: { w: Math.round(box.width), h: Math.round(box.height) },
       annotations: annotations.map(function (annotation, i) {
         var spec = specOf(annotation);
@@ -1399,6 +1406,7 @@
         url: window.wbLenses ? window.wbLenses.upstream(view.lens, view.url) : view.url };
       out.inspected = readable || !!targets;
     }
+    if (!view.lens && item && !item.docs) out.lensLabel = window.wbManifest.authoredLensLabel(item);
     if (view.story) out.story = { id: view.story.id, name: view.story.name };
     if (view.code && view.code.length) out.code = view.code.slice();
     /* A docs page says which of its examples the shot shows; the server adds

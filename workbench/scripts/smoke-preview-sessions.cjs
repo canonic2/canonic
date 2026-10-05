@@ -90,7 +90,7 @@ collections:
     async function pick(lens, state = 'default') {
       const started = performance.now();
       const changed = await target.evaluate('changes');
-      await target.evaluate('location.hash=' + JSON.stringify('page.workbench.ts:' + state + '@1512~' + (lens || 'design')));
+      await target.evaluate('location.hash=' + JSON.stringify('page.workbench.ts:' + state + '@laptop~' + (lens || 'design')));
       await until('changes > ' + changed);
       console.log(JSON.stringify({ lens: lens || 'workbench', state, ms: Math.round(performance.now() - started) }));
     }
@@ -104,7 +104,7 @@ collections:
       return target.evaluate('fixtureReports.find(report=>report.token===' + token + ')');
     }
     // Retained preview sessions belong to each isolated artboard renderer.
-    await target.navigate(running.url + 'index.html#page.workbench.ts:default@1512');
+    await target.navigate(running.url + 'index.html#page.workbench.ts:default@laptop');
     await until('changes > 0');
     await target.evaluate(`window.reactFrame=${active};${page}.document.querySelector('#edit').value='Edited React';
       ${page}.document.querySelector('#menu').open=true;${page}.document.querySelector('#counter').click();${page}.scrollTo(0,300);`);

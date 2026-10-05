@@ -77,6 +77,10 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
   including links followed in a live page. Chats in the editor don't see
   the tab as context; [agent context](agent-context.md) covers how they learn
   which page it shows.
+- Every completed route reports `wb-here`, including a docs page whose rendered
+  preview is reused for an example selection or after a config refresh. Reusing
+  a preview must still release sidebar picks waiting for that refresh. The
+  regression in `panel.test.js` exercises this canvas path through the panel relay.
 - Source actions ask the extension to open a file in the editor or reveal a
   directory; the server only opens paths the resolved config names. A handoff
   asks it to copy the generated prompt to the clipboard; the server has
@@ -91,7 +95,9 @@ switcher below still changes the editor's host space. Sidebar picks edit the
 selected instance; canvas context and handoffs cover every instance.
 
 Implemented in [spaces.js](../spaces.js), [extension.js](../extension.js),
-and [space-switcher.js](../workbench/space-switcher.js). User guide:
+and the [space switcher element](../src/components/space-switcher/element.ts).
+Component and theme contracts: [Web Components](web-components.md) and
+[themes](themes.md). User guide:
 [Several spaces](../docs/spaces.md).
 
 - Spaces come from `workbench.yaml` files. A file without `spaces` is one
@@ -183,7 +189,7 @@ and [space-switcher.js](../workbench/space-switcher.js). User guide:
 - The extension watches `workbench.yaml`, `workbench.local.yaml`, and every
   file matching the resolved preview discovery patterns (`previews.include`,
   or the defaults) for changes, creation, and deletion. Adding, removing, or
-  renaming a definition, or changing its title, states, or viewports, updates
+  renaming a definition, or changing its title, states, or sizes, updates
   the sidebar and canvas without **Refresh Pages**. With `previews: false`,
   only the YAML files are watched. **Refresh Pages** runs the same rebuild
   by hand.

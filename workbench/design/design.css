@@ -1,9 +1,10 @@
 /* The Workbench design pages
    --------------------------
-   The frame around each design: a panel the size of VS Code's sidebar, or a
-   board of variants. Everything inside is the shipping code — page-list.css,
-   sidebar.css, space-switcher.js, page-list.js — so these pages show the
-   Workbench as it is built, and a change to the product shows here first. */
+   The frame around each design: the sidebar at VS Code's width, or an area
+   in the sidebar's colours inside a docs page's example. Everything inside is
+   the shipping code — page-list.css, sidebar.css, Web Components,
+   page-list.js — so these pages show the Workbench as it is built, and a
+   change to the product shows here first. */
 
 html,
 body {
@@ -11,25 +12,32 @@ body {
   min-height: 100%;
 }
 
-/* sidebar.css sets body to the panel; a board sets its own. */
-body.board {
+/* Docs pages load sidebar.css for its colours; its body rules are for the
+   sidebar, so the docs page itself stays a page. */
+body.wb-docs-body {
   display: block;
-  padding: 32px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  height: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* An area in the sidebar's colours, for a docs page's example. */
+.design-surface {
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 13px;
   color: var(--wb-fg);
   background: var(--wb-panel);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.board h1 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.board p {
-  margin: 0 0 24px;
-  color: var(--wb-fg-3);
+/* The width of VS Code's sidebar. */
+.design-surface.is-sidebar {
+  width: 300px;
+  padding: 0;
 }
 
 .board-grid {
@@ -47,22 +55,31 @@ body.board {
   border-radius: 8px;
 }
 
-.board-cell .wb-space-mark {
+.board-cell wb-space-mark {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  font-size: 15px;
+  --wb-mark-radius: 8px;
+  --wb-mark-font-size: 15px;
 }
 
-.board-cell small {
-  display: block;
-  color: var(--wb-fg-3);
-}
-
-/* Sizes the switcher is drawn at: the sidebar, and the canvas breadcrumb. */
-.board-sizes {
+/* A stretch of the canvas's top bar, for the size components' examples. */
+.design-top-bar {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 32px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Controls side by side, as the top bar's middle spaces them. */
+.design-top-bar-group {
+  gap: 8px;
+}
+
+.design-open {
+  padding: 6px 12px;
+  font: inherit;
+  color: var(--wb-fg);
+  background: var(--wb-raised);
+  border: 1px solid var(--wb-line);
+  border-radius: 6px;
+  cursor: pointer;
 }

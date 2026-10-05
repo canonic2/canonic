@@ -31,7 +31,7 @@ one.
 | Term | Meaning |
 | --- | --- |
 | **Lens** | One way of rendering a page: its design lens or one of its implementations. A page has one or more lenses; the lens switcher shows when it has two or more. |
-| **Design lens** | The page as authored in the space: the HTML file, or the TypeScript preview. Labeled **Design**, or **Workbench** for a TypeScript preview. A page imported from a catalog and a docs page have none. |
+| **Design lens** | The page as authored in the space: the HTML file, or the TypeScript preview. Its customizable label defaults to **Design**, or **Workbench** for a TypeScript preview; see the [lens contract](lenses.md). A page imported from a catalog and a docs page have none. |
 | **Implementation** | Somewhere a page is built, declared once under `implementations` in `workbench.yaml` and named by its key, such as `dev` or `storybook`. A page maps to it with a value that says where the page is in it, such as a path, a story title, a preview ID, or an example source, and the implementation becomes one of that page's lenses, labeled with its `label`. |
 | **Kind** | What an implementation is and how its lens renders: `url` (a running app), `storybook` (a Storybook story), `workbench` (a TypeScript preview of a design page), `ios-simulator` and `window` (a live stream of a device or a macOS window), and `examples` (a docs page's examples). |
 | **Examples lens** | An implementation of kind `examples`. It renders a docs page's examples with an adapter, and only a docs page has one. A docs page with examples lenses always shows one of them. |
@@ -39,6 +39,10 @@ one.
 
 Under a Storybook lens, the state switcher lists the title's stories instead
 of the page's states.
+
+Every lens's display label is customizable independently of its kind. The
+[lens contract](lenses.md) defines labels, defaults, and stable identity for
+both the authored lens and implementation lenses.
 
 "Project" is not a Workbench term. It keeps its everyday meaning: the codebase
 a space's root belongs to, as in the project root, project code, or a trusted
@@ -88,7 +92,8 @@ The bar across the top of the canvas, with controls for the page showing.
 | **Breadcrumb** | The space, page, and state showing, at the left. The state part is the **state switcher**. |
 | **Actions switch** | Whether links and forms in the page work. |
 | **Lens switcher** | One button per lens, in the middle. Shown only when the page has two or more lenses. |
-| **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**: the artboard's size. Which sizes a page supports is its `viewports`. Disabled in the docs canvas mode. |
+| **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**: the artboard's size. Which sizes a page supports is its `sizes`. Disabled in the docs canvas mode. |
+| **Size menu** | Proposed in [artboard sizes](sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
 | **Reload**, **Open the source**, **Copy reference**, **Open on its own** | Actions on the page showing, named by their labels. |
 | **Preview controls** | The panel of a preview's inputs, actions, and **Reset state**. |
 | **More menu** | Space-wide commands, such as **Configure pages** and the design-system export, and the top bar's controls that don't fit a narrow window. |

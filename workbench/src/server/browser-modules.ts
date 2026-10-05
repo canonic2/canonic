@@ -24,7 +24,7 @@ const TYPES: Record<string, string> = {
 };
 
 /* Browser code lives in these folders; the rest of src/ runs in Node. */
-const BROWSER = /(^|\/)(page|canvas|browser)\//;
+const BROWSER = /^(components|theme)\/|(^|\/)(page|canvas|browser)\//;
 
 export function createBrowserModules(root: string, transform: Transform) {
   const cache = new Map<string, { stamp: string; body: string }>();
@@ -32,6 +32,7 @@ export function createBrowserModules(root: string, transform: Transform) {
   return async function serve(pathname: string): Promise<BrowserAsset> {
     let relative: string;
     try { relative = decodeURIComponent(pathname.slice(PREFIX.length)); } catch { return missing(pathname); }
+    if (relative.includes('\\') || relative.split('/').some(part => part === '.' || part === '..')) return missing(pathname);
     const extension = path.extname(relative);
     if (!TYPES[extension] || /\.test\.ts$/.test(relative) || !BROWSER.test(relative)) return missing(pathname);
     const file = path.resolve(root, relative);

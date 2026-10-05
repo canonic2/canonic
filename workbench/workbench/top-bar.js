@@ -1,9 +1,9 @@
 /* Responsive top bar
    ------------------
-   Keep where you are, the lens, and the viewport switch visible. The More
-   menu always holds the space-wide actions; when the three top bar regions
-   would collide, the secondary view actions fold into it too, and on a very
-   narrow bar the labels beside the breadcrumb and the Actions switch go. The
+   Keep where you are, the lens, the size switcher, and the Actions switch
+   visible. The More menu always holds the space-wide actions; when the three
+   top bar regions would collide, the secondary view actions fold into it
+   too, and on a very narrow bar the page's name in the breadcrumb goes. The
    menu's rows invoke the original controls. */
 (function (root) {
   function needsCompact(available, left, center, right, gap) {

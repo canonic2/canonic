@@ -16,6 +16,9 @@ function fixture(t: { after(fn: () => void): void }): string {
   write('docs/page/view.test.ts', 'export {};');
   write('docs/page/view.css', '.acme { color: red; }');
   write('docs/service.ts', 'export const secret = 1;');
+  write('components/space-switcher/element.ts', 'export const tag: string = "wb-space-switcher";');
+  write('components/space-switcher/element.test.ts', 'export {};');
+  write('theme/defaults.css', ':root { --wb-fg: white; }');
   return root;
 }
 
@@ -40,7 +43,17 @@ test('tests, server code, and anything outside src/ are not served', async t => 
   const root = fixture(t);
   const serve = createBrowserModules(root, async code => code);
   for (const pathname of ['/_workbench/src/docs/page/view.test.ts', '/_workbench/src/docs/service.ts',
+    '/_workbench/src/components/space-switcher/element.test.ts', '/_workbench/src/server/webview-components.ts',
+    '/_workbench/src/components/../docs/service.ts', '/_workbench/src/components/%2e%2e/docs/service.ts',
+    '/_workbench/src/components/../../etc/passwd.ts',
     '/_workbench/src/docs/page/../../../etc/passwd.ts', '/_workbench/src/docs/page/missing.ts', '/_workbench/src/docs/page/%E0%A4%A.ts']) {
     assert.equal((await serve(pathname)).status, 404, pathname);
   }
+});
+
+test('component source and shared theme assets are served for the browser host', async t => {
+  const serve = createBrowserModules(fixture(t), async code => code.replace(': string', ''));
+  assert.equal((await serve('/_workbench/src/components/space-switcher/element.ts')).body,
+    'export const tag = "wb-space-switcher";');
+  assert.equal((await serve('/_workbench/src/theme/defaults.css')).type, 'text/css; charset=utf-8');
 });

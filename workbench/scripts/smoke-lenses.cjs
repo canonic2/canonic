@@ -91,7 +91,7 @@ async function main() {
       await until('window.fixtureMessages.some(function(m){return m.path===' + JSON.stringify(pathname) + ';})');
     }
     // Exercise the isolated artboard renderer; smoke-canvas covers its parent.
-    await target.navigate(running.url + 'index.html#fixture.html@393~dev');
+    await target.navigate(running.url + 'index.html#fixture.html@mobile~dev');
     await until('window.fixtureMessages.length && !document.getElementById("artboard").hidden');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).width'), 393);
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).signedIn'), false);
@@ -112,14 +112,14 @@ async function main() {
     assert.equal(new URLSearchParams(submitted).get('name'), 'Acme');
     await target.evaluate('window.fixtureMessages=[];document.getElementById("reload").click()');
     await until('window.fixtureMessages.length && window.fixtureMessages.at(-1).signedIn');
-    await pick('#fixture.html@393~storybook', '/iframe.html');
-    await pick('#fixture.html@393~dev', '/app');
+    await pick('#fixture.html@mobile~storybook', '/iframe.html');
+    await pick('#fixture.html@mobile~dev', '/app');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).signedIn'), true);
-    await pick('#fixture.html@1512~dev', '/app');
+    await pick('#fixture.html@laptop~dev', '/app');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).width'), 1512);
     await target.evaluate('document.querySelector("#lenses button").click()');
     await until('document.querySelector("iframe.is-active").src.includes("/fixture.html")');
-    await pick('#fixture.html@393~dev', '/app');
+    await pick('#fixture.html@mobile~dev', '/app');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).signedIn'), true);
     assert.ok(!traffic.some(function (url) { return /\/_workbench\/(live\/|lens\/probe)/.test(url); }));
     assert.deepEqual(failures, []);

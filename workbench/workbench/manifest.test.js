@@ -6,6 +6,45 @@ var vm = require('node:vm');
 
 var manifest = require('./manifest');
 
+test('authored lens labels validate and retain defaults on invalid configuration', function () {
+  var problems = [];
+  var item = { src: 'button.html' };
+  manifest.pageLensLabel(' Reference ', item, 'Pages › Button', problems);
+  assert.equal(manifest.authoredLensLabel(item), 'Reference');
+  assert.equal(manifest.authoredLensLabel({ workbench: true }), 'Workbench');
+  assert.equal(manifest.authoredLensLabel({}), 'Design');
+  assert.deepEqual(manifest.previews({ lensLabel: ' Design ' }, problems), { lensLabel: 'Design' });
+  assert.deepEqual(problems, []);
+  for (var invalid of ['', '  ', 12, null, {}]) {
+    var invalidItem = { src: 'button.html' };
+    manifest.pageLensLabel(invalid, invalidItem, 'Pages › Button', problems);
+    assert.equal(manifest.authoredLensLabel(invalidItem), 'Design');
+    assert.deepEqual(manifest.previews({ lensLabel: invalid }, problems), {});
+  }
+  assert.equal(problems.length, 10);
+  assert.ok(problems.every(function (problem) { return /lensLabel: must be a nonempty string/.test(problem); }));
+  var docs = { src: 'button.md' };
+  manifest.pageLensLabel('Design', docs, 'Docs › Button', problems);
+  assert.equal(docs.lensLabel, undefined);
+  assert.match(problems[10], /docs lenses use implementation labels/);
+});
+
+test('manual preview placement overrides the discovery lens label and inherits it when omitted', function () {
+  var imported = [{ name: 'Components', items: [{ src: 'button.workbench.ts', workbench: true, lensLabel: 'Design', states: [{ id: 'default', label: 'Default' }] }] }];
+  for (var label of [undefined, 'Reference']) {
+    var original = { src: 'button.workbench.ts', label: 'Button', implementations: { live: { path: '/button' } } };
+    if (label) original.lensLabel = label;
+    var base = [{ name: 'Components', items: [original] }];
+    var merged = manifest.mergeCollections(base, imported);
+    assert.equal(merged[0].items.length, 1);
+    assert.equal(merged[0].items[0].lensLabel, label || 'Design');
+    assert.equal(merged[0].items[0].workbench, true);
+    assert.deepEqual(merged[0].items[0].implementations, original.implementations);
+    assert.equal(original.workbench, undefined);
+    assert.equal(original.lensLabel, label);
+  }
+});
+
 test('preview icon maps validate and match complete title prefixes', function () {
   var problems = [];
   var settings = manifest.previews({ icon: 'boxes', icons: { 'Web App/': 'app-window', 'Web App/Pages': 'monitor' } }, problems);
@@ -278,20 +317,21 @@ var signIn = {
   states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Wrong password' }],
 };
 
-test('normalizes page viewports and enables every mode when omitted', function () {
-  var problems = [];
-  assert.deepEqual(manifest.pageViewports(undefined, 'Pages › Sign in', problems), ['fit', 'desktop', 'mobile', 'responsive']);
-  assert.deepEqual(manifest.pageViewports(['desktop', 'mobile', 'desktop'], 'Pages › Sign in', problems), ['desktop', 'mobile']);
-  assert.deepEqual(manifest.pageViewports(['tablet'], 'Pages › Sign in', problems), ['fit', 'desktop', 'mobile', 'responsive']);
-  assert.deepEqual(problems, [
-    'Pages › Sign in: viewports may only contain desktop, mobile, responsive, or fit.',
-  ]);
+test('a local file merges sizes by key and keeps the committed order', function () {
+  var merged = manifest.merge(
+    { sizes: { fit: true, sidebar: { width: 340, height: 'fill', icon: 'panel-left' }, mobile: true } },
+    { sizes: { sidebar: { width: 360 }, tablet: { width: 1024, height: 1366 } } }
+  );
+  assert.deepEqual(Object.keys(merged.sizes), ['fit', 'sidebar', 'mobile', 'tablet']);
+  assert.deepEqual(merged.sizes.sidebar, { width: 360, height: 'fill', icon: 'panel-left' });
 });
 
-test('maps declared viewports to the workbench width controls', function () {
-  assert.deepEqual(manifest.viewportWidths(['desktop', 'mobile', 'responsive']), ['1512', '393', 'resizable']);
-  assert.deepEqual(manifest.viewportWidths(['fit']), ['fit']);
-  assert.deepEqual(manifest.viewportWidths(), ['fit', '1512', '393', 'resizable']);
+test('sizes belong to each space: a file’s top-level sizes are not shared with its spaces', function () {
+  var raw = { sizes: { fit: true }, spaces: { web: { sizes: { mobile: true } }, docs: {} } };
+  assert.deepEqual(manifest.selectSpace(raw, 'web', []).raw.sizes, { mobile: true });
+  assert.equal(manifest.selectSpace(raw, 'docs', []).raw.sizes, undefined);
+  var local = manifest.merge(raw, { spaces: { web: { sizes: { mobile: { label: 'Phone' } } } } });
+  assert.deepEqual(manifest.selectSpace(local, 'web', []).raw.sizes, { mobile: { label: 'Phone' } });
 });
 
 test('reads a page’s lenses in both forms', function () {
@@ -538,11 +578,11 @@ test('a docs page maps examples lenses to example sources and opens with its len
   problems = [];
   var unnamed = { label: 'Button', src: 'docs/button.md' };
   unnamed.implementations = manifest.pageLenses({ dark: '../outside/', light: 'src/button/' }, unnamed, impls, 'Docs › Button', problems);
-  manifest.docsPageEntry({ lens: 'sepia', viewports: ['mobile'] }, unnamed, 'Docs › Button', problems);
+  manifest.docsPageEntry({ lens: 'sepia', sizes: ['mobile'] }, unnamed, 'Docs › Button', problems);
   assert.equal(unnamed.lens, 'light', 'without a valid lens, the first mapped lens opens');
   assert.deepEqual(problems, [
     'Docs › Button: examples lens “dark” needs an example folder (ending in /) or file, relative to the project root.',
-    'Docs › Button: viewports don’t apply to a docs page, which uses the whole canvas.',
+    'Docs › Button: sizes don’t apply to a docs page, which uses the whole canvas.',
     'Docs › Button: lens “sepia” isn’t one of this page’s lenses (light).',
   ]);
 

@@ -53,7 +53,7 @@ previews supply the pages. See
 
 ## Features
 
-- Viewports: fit, desktop, mobile, or a custom size, with zoom, pan, and a
+- Sizes: fit, laptop, mobile, or a resizable artboard, with zoom, pan, and a
   recenter button to bring the artboard back into view.
 - Annotations: drawing, arrows, shapes, text, and comments. The camera button saves
   a JPEG.

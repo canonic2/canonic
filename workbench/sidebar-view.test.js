@@ -73,6 +73,8 @@ function resolveView(visible, overrides) {
     if (name === 'vscode') return vscode;
     if (name === 'path') return path;
     if (name === 'fs') return fs;
+    if (name === 'node:crypto') return require(name);
+    if (name === './src/server/webview-components.ts') return require(name);
     throw new Error('unexpected require: ' + name);
   };
   fakeRequire.resolve = function () { return '/lucide/dist/umd/lucide.min.js'; };
@@ -150,6 +152,14 @@ test('the page carries the current space root and the spaces to switch between',
   assert.equal(meta(html, 'canonic-root'), '/acme/');
   assert.deepEqual(JSON.parse(meta(html, 'canonic-spaces')), sidebar.space.list);
   assert.ok(sidebar.view.webview.options.localResourceRoots.some(function (uri) { return uri.fsPath === '/acme'; }));
+});
+
+test('the page inlines the component bundle exactly as built', function () {
+  var bundle = require('./src/server/webview-components.ts').webviewComponents();
+  var html = resolveView(true).view.webview.html;
+  assert.ok(bundle.includes('$&'), 'the bundle has a replacement pattern to preserve');
+  assert.ok(html.includes('">' + bundle + '</script>'));
+  assert.ok(!html.includes('/_workbench/src/components/bootstrap.ts'));
 });
 
 test('switching spaces moves the page, its resources and the watcher to the new root', function () {

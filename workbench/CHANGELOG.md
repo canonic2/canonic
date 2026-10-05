@@ -7,6 +7,10 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## Unreleased
+
+- Action needed: pages and preview definitions list their supported sizes under `sizes`, with the values `fit`, `laptop`, `mobile`, and `resizable`. Rename `viewports` to `sizes`, `desktop` to `laptop`, and `responsive` to `resizable`, in `workbench.yaml`, `workbench.local.yaml`, and your `.workbench.ts` and `.workbench.tsx` files. In the browser viewer of a design-system export, the Viewport menu is the Size menu and the `viewport` address parameter is `size`; in `canonic-export.json`, screenshot records name their size in `size` and `sizeLabel`. See Sizes in Pages and states.
+
 ## 0.12.2
 
 - Action needed: `workbench.yaml` uses new names. Rename `sections` to `collections`, `folder:` to `group:`, and `projects` to `spaces`, in `workbench.yaml` and in `workbench.local.yaml`. A file that still uses the old names shows an empty sidebar and reports no problem. See the workbench.yaml reference.

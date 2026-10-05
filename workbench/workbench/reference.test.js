@@ -30,6 +30,7 @@ function load(options) {
     },
   };
   var window = {
+    wbManifest: require('./manifest'),
     wbView: function () { return options.view; },
     dispatchEvent: function (event) { messages.push(event.detail.message); },
   };
@@ -59,6 +60,20 @@ function design() {
     state: null, lens: null, story: null, url: 'http://localhost:3579/pages/sign-in.html',
   };
 }
+
+test('authored references use the preview default or custom label without changing identity', function () {
+  var view = design();
+  view.src = 'button.workbench.ts';
+  view.item.workbench = true;
+  var format = load().text;
+  assert.match(format(view), /Lens: Workbench$/);
+  view.item.lensLabel = 'Design';
+  assert.match(format(view), /Lens: Design$/);
+  view.item.lensLabel = 'Reference';
+  assert.match(format(view), /Lens: Reference$/);
+  assert.equal(view.lens, null);
+  assert.equal(view.src, 'button.workbench.ts');
+});
 
 test('copies a design reference with an explicit default, without capture or handoff details', function () {
   var view = design();

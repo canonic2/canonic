@@ -28,7 +28,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
   and a local `previews` value replaces the committed one.
 - The config accepts block YAML. Names and IDs used in addresses are checked;
   invalid entries are reported rather than silently converted into pages.
-  The browser and server use the same implementation, viewport, and `previews`
+  The browser and server use the same implementation, size, and `previews`
   rules from `manifest.js`.
 - `collections` contains the ordered collections. Each collection contains pages
   and optionally one level of groups (`group:`). `collections` may be omitted
@@ -51,7 +51,9 @@ Space, collection, group, page, state, lens, and the parts of the interface
   the others.
 - `GET /_workbench/config` answers with the server-resolved configuration,
   imported collections (`catalogCollections`), absolute source paths, and
-  `problems`. It is read fresh on every request. The VS Code sidebar asks the
+  `problems`. It is read fresh on every request, except docs pages' example
+  listings, which it shows as last known and refreshes in the background
+  ([docs pages](docs-pages.md#problems)). The VS Code sidebar asks the
   server for imported collections because its webview cannot fetch them directly.
 
 ## Problem reporting
@@ -65,7 +67,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
   lists them under `problems`.
 - The list covers every entry dropped while reading the YAML (collections,
   groups, pages, states, and invalid `src` values), implementation,
-  viewport, mapping, code-pointer, `previews`, catalog, and
+  size, mapping, code-pointer, `previews`, catalog, and
   preview-compilation problems, and implementations that are not running,
   including a stopped Storybook used only by mappings and a mapped Simulator
   device that is not booted. See
@@ -88,7 +90,9 @@ Space, collection, group, page, state, lens, and the parts of the interface
   single-state authored page does not expand.
 - A lens choice persists across page picks. A page without that lens shows
   its design. An imported implementation-only page always uses its own lens;
-  a discovered TypeScript preview uses its **Workbench** lens.
+  a discovered TypeScript preview uses its own authored lens. Every lens has
+  a customizable display label independent of its identity and rendering
+  kind; defaults and configuration are in the [lens contract](lenses.md).
 - In VS Code, sidebar picks and canvas selections travel as `wb-go` and
   `wb-here`; the [extension contract](vscode-extension.md#editor-surfaces-and-messages)
   defines the relay and its ordering.
@@ -104,9 +108,10 @@ continues to describe the shipping single-view interface.
   preview shows **Loading preview…** until it is ready; later navigations keep
   the outgoing preview visible. Loading indicators honor reduced motion.
 - The size switcher offers Fit, Laptop (1512 × 982), Mobile (393 × 852), and
-  Resizable modes. A page's optional `viewports` list disables unsupported
+  Resizable modes. A page's optional `sizes` list disables unsupported
   modes; omission enables all four. Fit follows the available workbench space.
   Fixed and resizable sizes keep their dimensions when the editor is smaller.
+  Sizes defined by each space are proposed in [artboard sizes](sizes.md).
 - An ordinary iframe navigation uses a spare iframe. The current preview stays
   visible until its replacement loads, then the frames exchange roles. A
   superseded load must not replace a newer selection.
@@ -178,7 +183,7 @@ Checked against the working tree on 2026-10-03.
 - [config.test.js](../config.test.js) checks YAML reading, the local merge,
   and server-resolved paths and problems;
   [manifest.test.js](../workbench/manifest.test.js) checks the shared rules,
-  including viewports.
+  including sizes.
 - [preview.test.js](../workbench/preview.test.js) checks spare-iframe
   replacement, superseded loads, warm managed-preview swaps, width modes, and
   story switching.

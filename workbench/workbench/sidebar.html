@@ -8,16 +8,14 @@
        policy here: this document is loaded into a webview whose address is the
        editor's, so the base is the only thing that says where this folder
        actually is. Everything below is relative to it. -->
+  <link rel="stylesheet" href="/_workbench/src/theme/defaults.css" />
   <link rel="stylesheet" href="page-list.css" />
   <link rel="stylesheet" href="sidebar.css" />
 </head>
 <body>
   <!-- Which space's pages these are, and the others to switch to. The
        extension lists the spaces in a <meta name="canonic-spaces">. -->
-  <div class="wb-spaces" id="spaces" hidden>
-    <button class="wb-spaces-button" type="button" id="spaceButton"></button>
-    <div class="wb-spaces-menu" id="spaceMenu"></div>
-  </div>
+  <wb-space-switcher id="spaces" hidden></wb-space-switcher>
 
   <!-- The same list the workbench has, laid out like Sketch's sidebar: the
        collections on top, the chosen one's pages below, the filter at the
@@ -51,7 +49,7 @@
   <script src="manifest.js"></script>
   <script src="config.js"></script>
   <script src="page-list.js"></script>
-  <script src="space-switcher.js"></script>
+  <script type="module" src="/_workbench/src/components/bootstrap.ts"></script>
   <script src="sidebar.js"></script>
 </body>
 </html>

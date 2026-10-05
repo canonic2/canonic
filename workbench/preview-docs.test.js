@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { Compiler } = require('./preview/compiler.cjs');
+const { Compiler, docsRequest } = require('./preview/compiler.cjs');
 
 function fixture(t, files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-docs-test-'));
@@ -101,6 +101,18 @@ test('adding an example to a folder rebuilds the bundle', async t => {
   assert.notEqual(second.revision, first.revision);
 });
 
+test('a lens’s listing is kept until a file it read changes', async t => {
+  const root = fixture(t, { 'card.examples.ts': 'export * from "./more.ts";\nexport const basic = () => {};\n', 'more.ts': 'export const large = () => {};\n' });
+  const compiler = new Compiler(root);
+  const request = docsRequest({ adapter: 'html', examples: 'card.examples.ts' }, root);
+  const first = await compiler.docsExamples(request);
+  assert.deepEqual(first.examples.map(example => example.id).sort(), ['basic', 'large']);
+  assert.equal(await compiler.docsExamples(request), first, 'unchanged sources reuse the listing');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  fs.writeFileSync(path.join(root, 'more.ts'), 'export const large = () => {};\nexport const small = () => {};\n');
+  assert.deepEqual((await compiler.docsExamples(request)).examples.map(example => example.id).sort(), ['basic', 'large', 'small'], 'a re-exported file is watched too');
+});
+
 test('docs requests stay inside the project and name what is wrong', async t => {
   const root = fixture(t, { 'examples/basic.ts': 'export default () => {};', 'card.astro': '---\n---\n<p>Card</p>' });
   const compiler = new Compiler(root);
@@ -159,23 +171,29 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.match(page.headers.get('content-type'), /text\/html/);
   const html = await page.text();
   assert.match(html, /<link rel="stylesheet" href="\/_workbench\/src\/docs\/page\/docs-page.css">/);
-  assert.match(html, /data-wb-example="primary" data-status="ready"/);
-  assert.match(html, /data-wb-example="secondary" data-status="ready"/);
+  // The Markdown answers at once; its panels wait for the page's script to ask for the bundle.
+  assert.match(html, /data-wb-example="primary" data-status="pending"/);
+  assert.match(html, /data-wb-example="secondary" data-status="pending"/);
   assert.match(html, /<p class="wb-docs-caption">label<\/p>/);
   assert.match(html, /<a href="\/docs\/notes.md">notes<\/a>/, 'a Markdown file that isn’t a docs page is a plain link');
   assert.match(html, /preview-compat\.js|wbPreviewActions|actions/);
   const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]);
   assert.equal(options.lens, 'web');
+  assert.equal(options.lensLabel, 'Web');
+  assert.equal(options.revision, '', 'a deferred page learns its revision with its bundle');
 
-  const bundle = await fetch(base + options.bundle.module);
+  const info = await (await fetch(base + options.bundle.info)).json();
+  assert.deepEqual(info.examples.sort(), ['ghost', 'primary', 'secondary']);
+  assert.equal(info.error, null);
+  const bundle = await fetch(base + info.module);
   assert.equal(bundle.status, 200);
   assert.match(await bundle.text(), /Secondary/);
-  const css = /<link rel="stylesheet" href="(\/_workbench\/previews\/docs\/[^"]+examples\.css[^"]*)">/.exec(html);
-  assert.ok(css, 'the lens’s styles are linked');
-  assert.match(await (await fetch(base + css[1])).text(), /purple/);
+  assert.ok(info.stylesheet, 'the lens’s styles come with the bundle');
+  assert.match(await (await fetch(base + info.stylesheet)).text(), /purple/);
 
   const native = await (await fetch(base + '/docs/button.md?lens=native&state=loading')).text();
-  assert.match(native, /data-wb-example="secondary" data-status="missing"><p class="wb-docs-example-note">Not available in Native<\/p>/);
+  const nativeOptions = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(native)[1]);
+  assert.deepEqual((await (await fetch(base + nativeOptions.bundle.info)).json()).examples, ['primary'], 'Native lacks secondary, so its panel says so');
 
   const code = await (await fetch(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=primary')).json();
   assert.equal(code.text, 'export const primary = (canvas: HTMLElement) => { canvas.textContent = "Native primary"; };');
@@ -184,7 +202,7 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.equal(missing.status, 404);
 
   const revision = (await (await fetch(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision;
-  assert.equal(revision, options.revision);
+  assert.equal(revision, info.revision);
   fs.appendFileSync(path.join(root, 'docs/button.md'), '\nMore notes.\n');
   assert.notEqual((await (await fetch(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision, revision);
 
@@ -193,12 +211,16 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.equal(await raw.text(), '# Not a docs page');
 });
 
-test('docs problems join the config’s problems, named by page', async t => {
+test('docs problems join the config’s problems once listed, and the host hears when they do', async t => {
   const root = docsProject(t);
-  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  let changed;
+  const noticed = new Promise(resolve => { changed = resolve; });
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() }, onCatalogChanged: () => changed() });
   t.after(() => running.close());
-  const config = await running.config();
-  assert.deepEqual(config.problems, ['Button (docs/button.md): example “ghost” in Web is not placed in docs/button.md.']);
+  // The first config doesn't wait for the examples to be listed.
+  await running.config();
+  await noticed;
+  assert.deepEqual((await running.config()).problems, ['Button (docs/button.md): example “ghost” in Web is not placed in docs/button.md.']);
 });
 
 test('the page script and stylesheet are served from src/ with types stripped', async t => {
@@ -241,15 +263,19 @@ test('defineDocs definitions are discovered, placed by title, and served like de
       '});',
     ].join('\n'),
     'docs/broken.workbench.ts': "import { defineDocs } from '@canonic2/workbench';\nexport default defineDocs({ id: 'broken', docs: './missing.md' });",
+    'docs/type.workbench.ts': "import { defineDocs } from '@canonic2/workbench';\nexport default defineDocs({ id: 'type', title: 'Design system/Type', icon: 'type', docs: './colors.md' });",
+    'docs/odd.workbench.ts': "import { defineDocs } from '@canonic2/workbench';\nexport default defineDocs({ id: 'odd', icon: 'Odd Icon', docs: './colors.md' });",
     'docs/colors.md': '# Colors\n\n```example swatch\n```\n',
     'docs/colors.examples.ts': 'export const swatch = (canvas: HTMLElement) => { canvas.textContent = "Swatch"; };\n',
   });
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
   const config = await running.config();
-  assert.deepEqual(config.problems, ['docs/broken.workbench.ts: docs must exist inside the project: ./missing.md']);
+  assert.deepEqual(config.problems.sort(), ['docs/broken.workbench.ts: docs must exist inside the project: ./missing.md',
+    'docs/odd.workbench.ts: icon must be a kebab-case Lucide icon name.']);
   const collection = config.catalogCollections.find(candidate => candidate.name === 'Design system');
-  assert.deepEqual(collection.items, [{ group: 'Foundations', items: [{
+  assert.equal(collection.items.find(item => item.label === 'Type').icon, 'type', 'a definition can name its icon');
+  assert.deepEqual(collection.items.filter(item => item.group), [{ group: 'Foundations', items: [{
     src: 'docs/colors.md', label: 'Colors', docs: true, icon: 'book-open', lens: 'react-native',
     docsLenses: [{ key: 'web', label: 'Web' }, { key: 'react-native', label: 'React Native Web' }],
     implementations: { web: { examples: 'docs/colors.examples.ts' }, 'react-native': { examples: 'docs/colors.examples.ts' } },
@@ -257,8 +283,10 @@ test('defineDocs definitions are discovered, placed by title, and served like de
   const html = await new Promise((resolve, reject) => require('node:http').get(`http://127.0.0.1:${running.port}/docs/colors.md`, { agent: false }, answer => {
     let body = ''; answer.setEncoding('utf8'); answer.on('data', chunk => { body += chunk; }); answer.on('end', () => resolve(body));
   }).on('error', reject));
-  assert.match(html, /data-wb-example="swatch" data-status="ready"/);
-  assert.equal(JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]).lens, 'react-native');
+  assert.match(html, /data-wb-example="swatch" data-status="pending"/);
+  const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]);
+  assert.equal(options.lens, 'react-native');
+  assert.deepEqual((await (await fetch(`http://127.0.0.1:${running.port}` + options.bundle.info)).json()).examples, ['swatch']);
 });
 
 test('a file lens lists examples it re-exports, with export * included', async t => {

@@ -4,11 +4,15 @@
   var list = document.getElementById('previews');
   var search = document.getElementById('search');
   var state = document.getElementById('state');
-  var viewport = document.getElementById('viewport');
+  var size = document.getElementById('size');
   var status = document.getElementById('status');
   var selected = null;
   var catalog = null;
-  var modes = { fit: ['Fit', null], desktop: ['Desktop', [1512, 982]], mobile: ['Mobile', [393, 852]], responsive: ['Resizable', null] };
+  /* Sizes come with each preview, resolved by the space it was exported from
+     (see src/sizes/). A filled axis, and Fit, take the room there is. */
+  var FIT = { key: 'fit', label: 'Fit', kind: 'fit', width: null, height: null };
+  function sizesOf(preview) { return preview && preview.sizes && preview.sizes.length ? preview.sizes : [FIT]; }
+  function sizeOf(key) { return sizesOf(selected).find(function (size) { return size.key === key; }) || sizesOf(selected)[0]; }
   function notice(message, error) { status.textContent = message; status.toggleAttribute('data-error', !!error); }
   function options(select, values, current) {
     select.replaceChildren();
@@ -21,8 +25,8 @@
     url.searchParams.set('preview', selected.id);
     url.searchParams.set(selected.docs ? 'lens' : 'state', state.value);
     url.searchParams.delete(selected.docs ? 'state' : 'lens');
-    if (selected.docs) url.searchParams.delete('viewport'); else url.searchParams.set('viewport', viewport.value);
-    if (viewport.value === 'responsive') {
+    if (selected.docs) url.searchParams.delete('size'); else url.searchParams.set('size', size.value);
+    if (sizeOf(size.value).kind === 'resizable') {
       url.searchParams.set('width', document.getElementById('width').value);
       url.searchParams.set('height', document.getElementById('height').value);
     } else { url.searchParams.delete('width'); url.searchParams.delete('height'); }
@@ -35,15 +39,17 @@
     var padding = parseFloat(getComputedStyle(canvas).padding) || 0;
     var available = [Math.max(1, canvas.clientWidth - padding * 2), Math.max(1, canvas.clientHeight - padding * 2)];
     /* A docs page fills the space, as on the canvas. */
-    var dimensions = selected.docs ? available : modes[viewport.value][1] || available;
-    if (viewport.value === 'responsive') dimensions = ['width', 'height'].map(function (key) {
+    var shown = sizeOf(size.value);
+    var dimensions = selected.docs || shown.kind === 'fit' ? available
+      : [shown.width === 'fill' ? available[0] : shown.width, shown.height === 'fill' ? available[1] : shown.height];
+    if (!selected.docs && shown.kind === 'resizable') dimensions = ['width', 'height'].map(function (key) {
       var input = document.getElementById(key);
-      var value = Math.min(3840, Math.max(240, Number(input.value) || 720)); input.value = value; return value;
+      var value = Math.min(8192, Math.max(1, Number(input.value) || 720)); input.value = value; return value;
     });
     var scale = Math.min(1, available[0] / dimensions[0], available[1] / dimensions[1]);
     frame.style.width = dimensions[0] + 'px'; frame.style.height = dimensions[1] + 'px'; frame.style.transform = 'scale(' + scale + ')';
     var artboard = document.getElementById('artboard'); artboard.style.width = dimensions[0] * scale + 'px'; artboard.style.height = dimensions[1] * scale + 'px';
-    document.querySelectorAll('.dimensions').forEach(function (label) { label.hidden = !!selected.docs || viewport.value !== 'responsive'; });
+    document.querySelectorAll('.dimensions').forEach(function (label) { label.hidden = !!selected.docs || sizeOf(size.value).kind !== 'resizable'; });
     remember();
   }
   function target() {
@@ -83,22 +89,22 @@
     selected = preview;
     document.getElementById('previewTitle').textContent = preview.title;
     document.title = preview.title + ' — ' + catalog.name;
-    [state, viewport, document.getElementById('reload')].forEach(function (control) { control.disabled = false; });
+    [state, size, document.getElementById('reload')].forEach(function (control) { control.disabled = false; });
     state.parentElement.firstChild.textContent = preview.docs ? 'Lens' : 'State';
-    viewport.parentElement.hidden = !!preview.docs;
+    size.parentElement.hidden = !!preview.docs;
     if (preview.docs) {
       options(state, preview.lenses.map(function (lens) { return { id: lens.key, label: lens.label }; }), query && query.get('lens') || preview.lens);
       draw(); load();
       return;
     }
     options(state, preview.states, query && query.get('state'));
-    options(viewport, (preview.viewports || Object.keys(modes)).map(function (id) { return { id: id, label: modes[id][0] }; }), query && query.get('viewport') || viewport.value || 'fit');
+    options(size, sizesOf(preview).map(function (entry) { return { id: entry.key, label: entry.label }; }), query && query.get('size') || size.value);
     if (query) ['width', 'height'].forEach(function (key) { if (query.has(key)) document.getElementById(key).value = query.get(key); });
     draw(); load();
   }
   search.addEventListener('input', draw);
   state.addEventListener('change', load);
-  viewport.addEventListener('change', resize);
+  size.addEventListener('change', resize);
   ['width', 'height'].forEach(function (key) { document.getElementById(key).addEventListener('change', resize); });
   document.getElementById('reload').addEventListener('click', load);
   frame.addEventListener('load', function () { window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } })); });
@@ -111,7 +117,7 @@
     }
     if (event.data.event === 'navigate') {
       var next = catalog.previews.find(function (preview) { return preview.id === event.data.preview; });
-      if (next) choose(next, new URLSearchParams({ state: event.data.state || '', viewport: viewport.value }));
+      if (next) choose(next, new URLSearchParams({ state: event.data.state || '', size: size.value }));
       return;
     }
     if (!selected.docs && event.data.state && event.data.state !== state.value) return;

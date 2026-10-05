@@ -20,7 +20,7 @@
 
    The selection lives in the URL hash, so a reload or a copied link lands on
    the same page, in the same state, at the same width, through the same
-   lens: #pages/sign-in.html:error@393~staging — address.js reads and writes
+   lens: #pages/sign-in.html:error@mobile~staging — address.js reads and writes
    it. The default state and the design lens are left out, so a page without
    states — or on the version you land on — reads as it always did.
 
@@ -80,21 +80,20 @@
   var exportProgress = document.getElementById('exportProgress');
   var exportProgressBar = document.getElementById('exportProgressBar');
   var exportProgressText = document.getElementById('exportProgressText');
-  var sizeButtons = Array.prototype.slice.call(
-    document.querySelectorAll('.wb-size')
-  );
+  /* The size switcher and its two dialogs: Web Components that show sizes
+     and say what was asked for. This controller owns the size and every
+     change to workbench.yaml; see src/components/size-switcher/. */
+  var sizeSwitcher = document.getElementById('sizeSwitcher');
+  var sizeDialog = document.getElementById('sizeDialog');
+  var sizesEditor = document.getElementById('sizesEditor');
 
   var BLANK_TEXT = 'Pick a page or a component to see it here.';
-  var ACTIONS_TITLE = actionsToggle.title;
 
   var current = null;      /* src of the picked page */
   var currentState = null; /* its state id, or null for the default one */
   var currentExample = null; /* on a docs page, the example the address names */
   var lensPref = null;     /* the lens the top bar was left on, or null for the design */
   var view = null;         /* what the canvas is showing — see wbView below */
-  var widths = sizeButtons.map(function (b) {
-    return b.dataset.width;
-  });
 
   /* What the canvas is showing, for the annotation layer: it names screenshots
      and tells the agent what it is looking at, and both want the same
@@ -179,7 +178,7 @@
       .then(function (job) { return pollExport(job, startedAt); })
       .then(function (status) { finished = status; exportProgressText.textContent = 'Packaging download…'; return downloadExport(status); })
       .then(function (name) {
-        say('Downloaded ' + name + (finished && finished.warnings ? ' with ' + finished.warnings + ' screenshot warning(s).' : '.'));
+        say('Downloaded ' + name + (finished && finished.warnings ? ' with ' + finished.warnings + ' export warning(s).' : '.'));
       })
       .catch(function (error) { say(String(error.message || error)); })
       .then(function () {
@@ -211,22 +210,19 @@
     },
   });
 
-  /* "#pages/sign-in.html:error@393~staging" -> { src, state, width, lens }.
-     address.js does the reading; a width that isn't one of the buttons is
-     dropped here, the state and the lens are checked against the page and
-     the config when they're used. */
+  /* "#pages/sign-in.html:error@mobile~staging" -> { src, state, size, lens }.
+     address.js does the reading; the size, the state, and the lens are
+     checked against the page and the config when they're used. */
   function parseHash() {
-    var target = window.wbAddress.parse(location.hash);
-    if (target.width !== null && widths.indexOf(target.width) === -1) target.width = null;
-    return target;
+    return window.wbAddress.parse(location.hash);
   }
 
   /* The default state and the design lens are addressed by leaving them out,
      so the hash for a page with states and the hash for one without look
      the same. A pick that names no lens keeps the one the top bar is on. */
-  function writeHash(src, state, width, lens, example) {
+  function writeHash(src, state, size, lens, example) {
     var docs = !!(index[src] && index[src].docs);
-    location.hash = window.wbAddress.write({ src: src, state: state, width: docs ? null : width,
+    location.hash = window.wbAddress.write({ src: src, state: state, size: docs ? null : size || null,
       lens: lens || null, example: docs ? example || null : null });
   }
 
@@ -241,11 +237,11 @@
     var docs = !!(view && view.item && view.item.docs);
     /* A docs page's own lens is left out, as the design lens is elsewhere. */
     if (docs && lens && lens === defaultDocsLens(view.item)) lens = null;
-    var width = docs ? null : canvas.dataset.width;
+    var size = docs ? null : canvas.dataset.size || null;
     var example = docs ? currentExample : null;
-    if (have.src === current && have.state === currentState && have.width === width && have.lens === lens &&
+    if (have.src === current && have.state === currentState && have.size === size && have.lens === lens &&
         have.example === example) return;
-    var want = window.wbAddress.write({ src: current, state: currentState, width: width, lens: lens, example: example });
+    var want = window.wbAddress.write({ src: current, state: currentState, size: size, lens: lens, example: example });
     history.replaceState(null, '', location.pathname + location.search + (want ? '#' + want : ''));
   }
 
@@ -468,12 +464,12 @@
       button.className = 'wb-lens';
       button.type = 'button';
       button.dataset.lens = key || '';
-      button.textContent = impl ? impl.label : (item.workbench ? 'Workbench' : 'Design');
+      button.textContent = impl ? impl.label : window.wbManifest.authoredLensLabel(item);
       button.title = impl ? 'This page as ' + impl.label + ' has it' : 'This page as designed';
       button.setAttribute('aria-pressed', String((lens ? lens.key : null) === key));
       button.addEventListener('click', function () {
         setLensPref(key);
-        writeHash(current, currentState, canvas.dataset.width, key, currentExample);
+        writeHash(current, currentState, canvas.dataset.size, key, currentExample);
       });
       lensesBox.appendChild(button);
     });
@@ -484,14 +480,14 @@
   function setActionsAvailability(lens) {
     if (lens && lens.kind !== 'workbench' && lens.kind !== 'examples') {
       actionsToggle.disabled = true;
-      actionsToggle.setAttribute('aria-checked', 'true');
-      actionsToggle.title = 'Actions — always on here: ' + lens.label +
+      actionsToggle.checked = true;
+      actionsToggle.hint = 'always on here: ' + lens.label +
         ' serves this page, not the workbench, so nothing inside it is switched off';
       return;
     }
     actionsToggle.disabled = false;
-    actionsToggle.setAttribute('aria-checked', String(actionsOn));
-    actionsToggle.title = ACTIONS_TITLE;
+    actionsToggle.checked = actionsOn;
+    actionsToggle.hint = '';
   }
 
   /* ----------------------------------------------------------- stories */
@@ -567,7 +563,7 @@
       return {
         label: story.name,
         current: story.id === picked.id,
-        pick: function () { writeHash(current, story.state, canvas.dataset.width, lens.key); },
+        pick: function () { writeHash(current, story.state, canvas.dataset.size, lens.key); },
       };
     }), 'story');
   }
@@ -586,7 +582,7 @@
         label: state.label,
         current: currentState ? currentState === state.id : i === 0,
         pick: function () {
-          writeHash(current, window.wbPageList.statePick(item, state, i), canvas.dataset.width, lens ? lens.key : null);
+          writeHash(current, window.wbPageList.statePick(item, state, i), canvas.dataset.size, lens ? lens.key : null);
         },
       };
     }), 'state');
@@ -674,7 +670,7 @@
     sourceControl.hidden = !info;
     if (!info) return;
     if (info.design) {
-      sourceRow(info.preview ? 'Workbench' : 'Design', item.src, true, info.design, function () {
+      sourceRow(window.wbManifest.authoredLensLabel(item), item.src, true, info.design, function () {
         openSource(item.src, null);
       });
     }
@@ -732,7 +728,8 @@
     if (shell.dataset.canvasMode === mode) return;
     shell.dataset.canvasMode = mode;
     if (window.wbZoom && window.wbZoom.mode) window.wbZoom.mode(mode);
-    if (mode === 'default') setWidth(canvas.dataset.width || 'fit');
+    /* Back from a docs page, the next page's size is applied afresh. */
+    if (mode === 'default') appliedSize = '';
   }
 
   /* The docs page in the frame, when it has loaded its script. */
@@ -766,6 +763,9 @@
       currentExample = example || null;
       scrollToExample(currentExample);
       syncHash();
+      /* Routing still acknowledges the selection when its preview is reused.
+         The editor holds sidebar picks until a config refresh is acknowledged. */
+      tellHost(src, nextState, nextLens ? nextLens.key : null);
       return;
     }
     currentExample = docsItem ? example || null : null;
@@ -773,7 +773,7 @@
     setCanvasMode(docsItem ? 'docs' : 'default');
     var seq = ++showSeq;
     var previousView = view;
-    frame.wbViewport = { width: frame.offsetWidth, height: frame.offsetHeight };
+    frame.wbFrameSize = { width: frame.offsetWidth, height: frame.offsetHeight };
     cancelStorySwitch();
     cancelPendingFrame();
     renderedStory = null;
@@ -783,7 +783,7 @@
     /* Under a Storybook lens the state slot carries the story; it's checked
        against the title's stories once they're in. */
     currentState = !item ? null : story ? state || null : stateOf(item, state);
-    updateWidthAvailability(item);
+    updateSizeAvailability(item);
 
     /* The list marks the row and follows it into its collection, wherever the
        pick came from — its own rows, a link in the preview, or the editor.
@@ -944,14 +944,14 @@
     frame.classList.remove('is-active');
     frame.setAttribute('aria-hidden', 'true');
     frame.inert = true;
-    freezeViewport(frame);
+    freezeFrameSize(frame);
     frameReady = false;
   }
 
-  function freezeViewport(target) {
-    if (target.style && target.wbViewport && target.wbViewport.width) {
-      target.style.width = target.wbViewport.width + 'px';
-      target.style.height = target.wbViewport.height + 'px';
+  function freezeFrameSize(target) {
+    if (target.style && target.wbFrameSize && target.wbFrameSize.width) {
+      target.style.width = target.wbFrameSize.width + 'px';
+      target.style.height = target.wbFrameSize.height + 'px';
     }
   }
 
@@ -1051,7 +1051,7 @@
         loaded.removeAttribute('aria-hidden');
         previous.inert = true;
         loaded.inert = false;
-        freezeViewport(previous);
+        freezeFrameSize(previous);
         if (loaded.style) { loaded.style.width = ''; loaded.style.height = ''; }
         loaded.title = 'Preview';
         previous.title = 'Preview loading';
@@ -1177,22 +1177,20 @@
         document.getElementById('sidebarHead').hidden = several && !host;
         if (!several) return;
         if (!crumbSwitcher) {
-          crumbSwitcher = window.wbSpaces.create({
-            button: document.getElementById('spaceCrumbButton'),
-            menu: document.getElementById('spaceCrumbMenu'),
-            onPick: switchSpace,
-          });
+          crumbSwitcher = document.getElementById('spaceCrumbSwitcher');
+          crumbSwitcher.iconRenderer = window.wbIcon;
+          crumbSwitcher.addEventListener('wb-space-pick', function (e) { switchSpace(e.detail.id); });
         }
-        crumbSwitcher.set(answer.spaces, answer.current);
+        crumbSwitcher.spaces = answer.spaces;
+        crumbSwitcher.currentId = answer.current;
         if (host) return;
         if (!sideSwitcher) {
-          sideSwitcher = window.wbSpaces.create({
-            button: document.getElementById('spaceButton'),
-            menu: document.getElementById('spaceMenu'),
-            onPick: switchSpace,
-          });
+          sideSwitcher = document.getElementById('spaces');
+          sideSwitcher.iconRenderer = window.wbIcon;
+          sideSwitcher.addEventListener('wb-space-pick', function (e) { switchSpace(e.detail.id); });
         }
-        sideSwitcher.set(answer.spaces, answer.current);
+        sideSwitcher.spaces = answer.spaces;
+        sideSwitcher.currentId = answer.current;
       })
       .catch(function () { /* one space, as far as anyone can tell */ });
   }
@@ -1273,7 +1271,7 @@
       });
       if (!target) return;
       if (pageList) pageList.reveal(target);
-      writeHash(target, stateOf(index[target], data.state), canvas.dataset.width);
+      writeHash(target, stateOf(index[target], data.state), canvas.dataset.size);
       return;
     }
 
@@ -1297,12 +1295,12 @@
     if (!index[src]) return;
 
     if (pageList) pageList.reveal(src);
-    writeHash(src, stateOf(index[src], data.state), canvas.dataset.width);
+    writeHash(src, stateOf(index[src], data.state), canvas.dataset.size);
   });
 
   function setActions(on) {
     actionsOn = !!on;
-    actionsToggle.setAttribute('aria-checked', String(actionsOn));
+    actionsToggle.checked = actionsOn;
     try {
       localStorage.setItem('canonic-workbench-actions', actionsOn ? 'on' : 'off');
     } catch (e) {
@@ -1315,66 +1313,129 @@
   var resizableWidth = RESIZABLE_DEFAULT_WIDTH;
   var resizableHeight = RESIZABLE_DEFAULT_HEIGHT;
 
+  /* The space's sizes, in order, as the server resolves them (see
+     src/sizes/). Without the server, the defaults; without the sizes module
+     either (a workbench opened off disk), Fit alone. */
+  var FIT_ONLY = [{ key: 'fit', label: 'Fit', icon: 'minimize-2', button: true, kind: 'fit', width: null, height: null }];
+  var spaceSizes = FIT_ONLY;
+  /* The size the address asked for, until the page it names shows. */
+  var requestedSize = null;
+  /* The size stored from last time, tried when the address names none. */
+  var rememberedSize = null;
+  /* An artboard runtime sets its size directly; the page's sizes then only
+     enable the buttons. */
+  var pinnedSize = false;
+
+  function loadSpaceSizes() {
+    var sizes = window.wbSizes;
+    spaceSizes = resolved && resolved.sizes && resolved.sizes.length ? resolved.sizes
+      : sizes ? sizes.defaultSizes() : FIT_ONLY;
+  }
+
+  /* The sizes a page supports: none for a docs page; otherwise the space's,
+     limited and added to by what the server resolved for the page. */
+  function sizesOf(item) {
+    if (!item) return spaceSizes;
+    if (item.docs) return [];
+    var page = resolved && resolved.pages ? resolved.pages[item.src] : null;
+    return window.wbSizes ? window.wbSizes.supported(spaceSizes, page) : spaceSizes;
+  }
+
+  function sizeByKey(key) {
+    var shown = current && index[current] ? sizesOf(index[current]) : spaceSizes;
+    return shown.concat(spaceSizes).find(function (size) { return size.key === key; }) || null;
+  }
+
+  /* The size the canvas is on, as the space describes it, for the annotation
+     layer and the artboard runtime. */
+  window.wbSize = function () {
+    return sizeByKey(canvas.dataset.size);
+  };
+
   function showFrameSize() {
     if (window.wbZoom) window.wbZoom.update();
   }
 
-  /* A mode carries its width and, for devices with a real display size, its
-     height too. Resizable restores the last freeform size instead. Fit is
-     sized by zoom.js, which knows how much canvas there is. Every change of
-     mode fits the new frame to the canvas, the way a fresh frame opens. */
-  function setWidth(mode) {
-    var button = null;
-    canvas.dataset.width = mode;
-    sizeButtons.forEach(function (b) {
-      var on = b.dataset.width === mode;
-      if (on) button = b;
-      b.setAttribute('aria-pressed', String(on));
-    });
-    if (mode === 'fit') {
-      artboard.style.width = '';
-      artboard.style.height = '';
-    } else if (mode === 'resizable') {
+  /* The artboard at its CSS size, or with an axis left to zoom.js, which
+     knows how much canvas there is and fills the flagged axes. */
+  var appliedSize = '';
+
+  function signature(size) {
+    return [size.key, size.kind, size.width, size.height].join(' ');
+  }
+
+  function applySize(size) {
+    var fixed = size.kind === 'fixed';
+    appliedSize = signature(size);
+    canvas.dataset.size = size.key;
+    canvas.dataset.fillWidth = String(size.kind === 'fit' || (fixed && size.width === 'fill'));
+    canvas.dataset.fillHeight = String(size.kind === 'fit' || (fixed && size.height === 'fill'));
+    sizeSwitcher.current = size.key;
+    if (size.kind === 'resizable') {
       artboard.style.width = resizableWidth + 'px';
       artboard.style.height = resizableHeight + 'px';
       showFrameSize();
     } else {
-      artboard.style.width = mode + 'px';
-      artboard.style.height = button && button.dataset.height
-        ? button.dataset.height + 'px'
-        : '';
+      artboard.style.width = fixed && typeof size.width === 'number' ? size.width + 'px' : '';
+      artboard.style.height = fixed && typeof size.height === 'number' ? size.height + 'px' : '';
     }
     if (window.wbZoom) window.wbZoom.fit();
+  }
+
+  /* Every change of size fits the artboard to the canvas, the way a fresh
+     artboard opens, and is remembered for next time by key. */
+  function setSize(key) {
+    var size = sizeByKey(key);
+    if (!size) return;
+    applySize(size);
+    rememberedSize = size.key;
     try {
-      localStorage.setItem('canonic-workbench-size', mode);
+      localStorage.setItem('canonic-workbench-size', size.key);
     } catch (e) {
       /* file:// storage can be blocked; the size switcher still works. */
     }
   }
 
   /* A docs page takes the canvas's width: every size stays in the size
-     switcher, off and unpressed, and the page after it gets its width back. */
-  function updateWidthAvailability(item) {
+     switcher, off and unpressed, and the page after it gets its size back.
+     Any other page shows the size the address asked for, the one the canvas
+     is on, or the remembered one, if it supports it; else its first size. */
+  /* What the size switcher shows for a page: the space's sizes, then the
+     page's own, those it supports enabled. A docs page has none, so none is
+     pressed. */
+  function showSizes(item) {
     var docs = !!(item && item.docs);
-    var supported = docs ? [] : item ? window.wbManifest.viewportWidths(item.viewports) : widths.slice();
-    sizeButtons.forEach(function (button) {
-      var enabled = supported.indexOf(button.dataset.width) !== -1;
-      button.disabled = !enabled;
-      if (!button.dataset.enabledTitle) button.dataset.enabledTitle = button.title;
-      button.title = enabled ? button.dataset.enabledTitle
-        : button.dataset.enabledTitle + (docs ? ' · a docs page fills the canvas' : ' · not supported by this page');
-      if (docs) button.setAttribute('aria-pressed', 'false');
-    });
-    if (item && !docs && supported.indexOf(canvas.dataset.width) === -1) setWidth(supported[0] || 'fit');
+    var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
+    sizeSwitcher.sizes = spaceSizes.concat((!docs && page && page.ownSizes) || []);
+    sizeSwitcher.supported = sizesOf(item).map(function (size) { return size.key; });
+    sizeSwitcher.setAttribute('unsupported-reason', docs ? 'a docs page fills the canvas' : 'not supported by this page');
+    if (docs) sizeSwitcher.current = '';
+  }
+
+  function updateSizeAvailability(item) {
+    var docs = !!(item && item.docs);
+    var supported = sizesOf(item);
+    showSizes(item);
+    var asked = requestedSize;
+    requestedSize = null;
+    if (!item || docs || pinnedSize) return;
+    var wanted = [asked, canvas.dataset.size, rememberedSize];
+    var key = window.wbSizes ? window.wbSizes.choose(supported, asked, canvas.dataset.size, rememberedSize)
+      : (wanted.find(function (candidate) { return candidate && supported.some(function (size) { return size.key === candidate; }); }) ||
+        (supported[0] && supported[0].key));
+    /* The same key can change dimensions when the config does. */
+    var size = key && sizeByKey(key);
+    if (size && (key !== canvas.dataset.size || signature(size) !== appliedSize)) setSize(key);
   }
 
   /* A size switcher change only resizes the frame already on the canvas.
      Keep the address shareable without sending the same page through the
      hash router, which would navigate its iframe and reset live state. */
-  function chooseWidth(mode) {
-    var button = sizeButtons.find(function (candidate) { return candidate.dataset.width === mode; });
-    if (button && button.disabled) return;
-    setWidth(mode);
+  function chooseSize(key) {
+    var item = current ? index[current] : null;
+    if (item && !sizesOf(item).some(function (size) { return size.key === key; })) return;
+    pinnedSize = false;
+    setSize(key);
     if (current) syncHash();
   }
 
@@ -1443,11 +1504,94 @@
 
   /* ------------------------------------------------------------- wiring */
 
-  sizeButtons.forEach(function (b) {
-    b.addEventListener('click', function () {
-      chooseWidth(b.dataset.width);
+  sizeSwitcher.iconRenderer = window.wbIcon;
+  actionsToggle.iconRenderer = window.wbIcon;
+  sizeDialog.iconRenderer = window.wbIcon;
+  sizesEditor.iconRenderer = window.wbIcon;
+  sizeSwitcher.addEventListener('wb-size-pick', function (e) { chooseSize(e.detail.key); });
+  sizeSwitcher.addEventListener('wb-size-custom', openSizeDialog);
+  sizeSwitcher.addEventListener('wb-size-edit', openSizesEditor);
+
+  /* Whether workbench.yaml lists the page itself, so it can hold sizes of its
+     own; a discovered preview or a catalog page isn't there. */
+  function listedInYaml(src) {
+    function visit(items) {
+      return (items || []).some(function (entry) { return entry.items ? visit(entry.items) : entry.src === src; });
+    }
+    return !!(resolved && (resolved.collections || []).some(function (collection) { return visit(collection.items); }));
+  }
+
+  function postSizes(body) {
+    return fetch('/_workbench/sizes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (result) {
+          if (!response.ok || !result.ok) throw new Error(result.error || 'Could not save workbench.yaml.');
+          return result;
+        });
+      });
+  }
+
+  /* After a size change the canvas reads the config again. `key`, when
+     given, is the size the address asks for next, so a new size shows. */
+  function reloadSizes(key, message) {
+    if (key && current) {
+      var have = window.wbAddress.parse(location.hash);
+      have.size = key;
+      history.replaceState(null, '', location.pathname + location.search + '#' + window.wbAddress.write(have));
+    }
+    window.wbConfig.load(function (loaded) {
+      refreshConfig(loaded);
+      say(message);
+    }, refuse);
+  }
+
+  function openSizeDialog() {
+    var item = current ? index[current] : null;
+    var docs = !!(item && item.docs);
+    var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
+    var listed = !!item && !docs && listedInYaml(item.src);
+    sizeDialog.allowPageOnly = listed;
+    sizeDialog.notice = docs ? 'A docs page has no size; the new size is added to the space.'
+      : page && page.preview && page.preview.sizes && !listed
+        ? 'This page’s preview definition lists its sizes; add the new size’s key there to use it on this page.' : '';
+    sizeDialog.open = true;
+  }
+
+  sizeDialog.addEventListener('wb-size-add', function (e) {
+    var item = current ? index[current] : null;
+    var docs = !!(item && item.docs);
+    var size = Object.assign({}, e.detail, { page: item && !docs && listedInYaml(item.src) ? item.src : null });
+    sizeDialog.error = '';
+    sizeDialog.pending = true;
+    postSizes({ action: 'add', size: size }).then(function (result) {
+      sizeDialog.pending = false;
+      sizeDialog.open = false;
+      reloadSizes(docs ? null : result.key, 'Added ' + e.detail.name.trim() + ' to workbench.yaml.');
+    }, function (error) {
+      sizeDialog.pending = false;
+      sizeDialog.error = String(error.message || error);
     });
   });
+  sizeDialog.addEventListener('wb-size-dialog-close', function () { sizeDialog.open = false; });
+
+  function openSizesEditor() {
+    sizesEditor.sizes = (resolved && resolved.sizes) || spaceSizes;
+    sizesEditor.open = true;
+  }
+
+  sizesEditor.addEventListener('wb-sizes-save', function (e) {
+    sizesEditor.error = '';
+    sizesEditor.pending = true;
+    postSizes({ action: 'update', sizes: e.detail.sizes }).then(function () {
+      sizesEditor.pending = false;
+      sizesEditor.open = false;
+      reloadSizes(null, 'Saved the sizes to workbench.yaml.');
+    }, function (error) {
+      sizesEditor.pending = false;
+      sizesEditor.error = String(error.message || error);
+    });
+  });
+  sizesEditor.addEventListener('wb-sizes-close', function () { sizesEditor.open = false; });
 
   /* Chrome-style rails sit outside the preview. Side rails change width, the
      bottom changes height, and either bottom corner changes both. Pointer
@@ -1466,7 +1610,7 @@
 
   Array.prototype.forEach.call(document.querySelectorAll('.wb-artboard-resize'), function (handle) {
     handle.addEventListener('pointerdown', function (e) {
-      if (canvas.dataset.width !== 'resizable') return;
+      if (canvas.dataset.size !== 'resizable') return;
       if (window.wbZoom) window.wbZoom.hold();
       artboardDrag = {
         edge: handle.dataset.resize,
@@ -1487,14 +1631,14 @@
       var left = artboardDrag.edge.indexOf('left') > -1;
       var horizontal = (left ? artboardDrag.x - e.clientX : e.clientX - artboardDrag.x) / artboardDrag.scale;
       if (artboardDrag.edge !== 'bottom') {
-        resizableWidth = Math.max(320, Math.round(artboardDrag.width + horizontal));
+        resizableWidth = Math.max(1, Math.round(artboardDrag.width + horizontal));
         artboard.style.width = resizableWidth + 'px';
         if (left && artboardDrag.pan) {
           window.wbZoom.panTo(artboardDrag.pan.x - (resizableWidth - artboardDrag.width) * artboardDrag.scale, artboardDrag.pan.y);
         }
       }
       if (artboardDrag.edge.indexOf('bottom') > -1) {
-        resizableHeight = Math.max(320, Math.round(artboardDrag.height + (e.clientY - artboardDrag.y) / artboardDrag.scale));
+        resizableHeight = Math.max(1, Math.round(artboardDrag.height + (e.clientY - artboardDrag.y) / artboardDrag.scale));
         artboard.style.height = resizableHeight + 'px';
       }
       showFrameSize();
@@ -1513,8 +1657,8 @@
   });
 
   /* Reloading is what applies it — the flag is read as the page parses. */
-  actionsToggle.addEventListener('click', function () {
-    setActions(!actionsOn);
+  actionsToggle.addEventListener('wb-actions-toggle', function (e) {
+    setActions(e.detail.checked);
     if (current) show(current, currentState);
   });
 
@@ -1555,7 +1699,7 @@
   function route() {
     if (window.wbArtboardHeld) { syncHash(); return; }
     var target = parseHash();
-    if (target.width && !(index[target.src] && index[target.src].docs)) setWidth(target.width);
+    requestedSize = target.size || null;
     /* A lens in the address is an instruction — a copied link says which —
        and one that isn't declared here means the design. No lens keeps the
        one the top bar is on. */
@@ -1595,7 +1739,7 @@
   function restore() {
     var saved = {};
     try {
-      saved.width = localStorage.getItem('canonic-workbench-size');
+      saved.size = localStorage.getItem('canonic-workbench-size');
       saved.sidebar = localStorage.getItem('canonic-workbench-sidebar');
       saved.actions = localStorage.getItem('canonic-workbench-actions');
       saved.resizableWidth = localStorage.getItem('canonic-workbench-resizable-width');
@@ -1609,9 +1753,9 @@
     lensPref = saved.lens || null;
     if (saved.resizableWidth) resizableWidth = parseInt(saved.resizableWidth, 10) || RESIZABLE_DEFAULT_WIDTH;
     if (saved.resizableHeight) resizableHeight = parseInt(saved.resizableHeight, 10) || RESIZABLE_DEFAULT_HEIGHT;
-    /* A stored mode from an older build (or a hand-edited value) is ignored
-       rather than leaving the switch with nothing pressed. */
-    setWidth(widths.indexOf(saved.width) > -1 ? saved.width : 'fit');
+    /* Checked against each page's sizes when it shows, so a key from another
+       space just means that page's first size here. */
+    rememberedSize = saved.size || null;
     if (saved.sidebar) setSidebar(parseInt(saved.sidebar, 10));
     /* Only an explicit "on" turns them on — anything else, including nothing
        stored, lands on off. Must run before route(), which builds the src. */
@@ -1657,6 +1801,10 @@
       blank.classList.remove('is-loading');
       config = loaded;
       if (resolved && resolved.implementations) config.implementations = resolved.implementations;
+      loadSpaceSizes();
+      /* Custom size… and Edit sizes… write through the server. */
+      sizeSwitcher.allowEdit = !!resolved;
+      showSizes(current ? index[current] : null);
       collections = window.wbManifest.mergeCollections(config.collections, (resolved && resolved.catalogCollections) || []);
       index = window.wbPageList.index(collections);
       storyCache = {};
@@ -1681,7 +1829,7 @@
           list: document.getElementById('pageList'),
           collections: collections,
           onPick: function (src, state) {
-            writeHash(src, state, canvas.dataset.width);
+            writeHash(src, state, canvas.dataset.size);
           },
         });
       }
@@ -1690,8 +1838,20 @@
     });
   }
 
+  /* The canvas decides sizes with src/sizes/, a module that loads after
+     this script; it waits for it, or for it to fail to load. */
+  function whenSizes(then) {
+    if (window.wbSizes || location.protocol === 'file:') { then(); return; }
+    var done = false;
+    function go() { if (!done) { done = true; then(); } }
+    window.addEventListener('wb-sizes-ready', go, { once: true });
+    var script = document.querySelector('script[src$="sizes/browser/bootstrap.ts"]');
+    if (script) script.addEventListener('error', go, { once: true });
+    else go();
+  }
+
   function start(loaded) {
-    applyConfig(loaded, true);
+    whenSizes(function () { applyConfig(loaded, true); });
   }
 
   function refreshConfig(loaded) {
@@ -1720,7 +1880,7 @@
     read: function () {
       if (!view) return null;
       return { src: current, state: currentState, lens: view.lens ? view.lens.key : null,
-        sizes: view.item && !view.item.docs ? window.wbManifest.viewportWidths(view.item.viewports) : undefined,
+        sizes: view.item && !view.item.docs ? sizesOf(view.item) : undefined,
         label: artboardName.textContent || (view.item && view.item.label) || current,
         hash: location.hash, ready: !!view.lens && window.wbManifest.streamed(view.lens) ? !!(window.wbSimulator && window.wbSimulator.ready()) : (frameReady && !pendingFrame && !pendingStorySwitch),
         states: Array.from(stateMenu.querySelectorAll('button')).map(function (b, i) { return { id: String(i), label: b.textContent, current: b.getAttribute('aria-current') === 'true' }; }),
@@ -1730,15 +1890,16 @@
       if (!config) throw new Error('The space is still loading.');
       setLensPref(target.lens || null);
       var before = location.hash;
-      writeHash(target.src, target.state || null, 'resizable', target.lens || null, target.example || null);
+      writeHash(target.src, target.state || null, null, target.lens || null, target.example || null);
       if (location.hash === before) route();
     },
+    /* The artboard's CSS size, set directly, whatever sizes the space lists. */
     size: function (width, height) {
-      resizableWidth = width; resizableHeight = height;
-      setWidth('resizable'); showFrameSize();
+      resizableWidth = width; resizableHeight = height; pinnedSize = true;
+      applySize(sizeByKey('resizable') || { key: 'resizable', label: 'Resizable', icon: 'scaling', button: false, kind: 'resizable', width: null, height: null });
     },
     pickState: function (id) { var b = stateMenu.querySelectorAll('button')[Number(id)]; if (b) b.click(); },
-    lens: function (key) { setLensPref(key || null); writeHash(current, currentState, 'resizable', key || null, currentExample); },
+    lens: function (key) { setLensPref(key || null); writeHash(current, currentState, canvas.dataset.size, key || null, currentExample); },
     reload: function () { reload.click(); },
     refresh: function () { window.wbConfig.load(refreshConfig, refuse); },
   };

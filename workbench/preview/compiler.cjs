@@ -68,7 +68,8 @@ function validate(raw, file, root) {
     if (!/^[a-z0-9-]+$/.test(id) || !state || typeof state !== 'object' || Array.isArray(state)) throw new Error(file + ': states need kebab-case IDs and object definitions.');
     for (const key of ['inputs', 'fixtures', 'globals']) if (state[key] !== undefined) JSON.stringify(state[key]);
   }
-  if (raw.viewports && (!Array.isArray(raw.viewports) || !raw.viewports.length || raw.viewports.some(v => !['fit', 'desktop', 'mobile', 'responsive'].includes(v)))) throw new Error(file + ': invalid viewports.');
+  /* Keys only; the server resolves them against the space it shows the preview in. */
+  if (raw.sizes !== undefined && (!Array.isArray(raw.sizes) || !raw.sizes.length || raw.sizes.some(v => typeof v !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v) || /^[0-9-]+$/.test(v)))) throw new Error(file + ': sizes must be a list of size keys, such as laptop or mobile.');
   for (const [name, control] of Object.entries(raw.controls || {})) {
     if (!control || !['text', 'number', 'boolean', 'select', 'json'].includes(control.type)) throw new Error(file + ': invalid control ' + name);
     if (control.type === 'select' && (!Array.isArray(control.options) || !control.options.length)) throw new Error(file + ': select controls need options.');
@@ -206,6 +207,8 @@ function createBuild(compiler, { file, adapter, addon, development, dependencies
       let html = initialHtml;
       // Copy referenced browser assets; scripts/styles are compiled so their
       // own imports and URLs travel too. Inline modules/styles enter the graph.
+      // Replacements are functions so `$&` and the like in the page's own
+      // markup are inserted as written rather than read as patterns.
       const linkedStyles = new Set();
       const tags = Array.from(html.matchAll(/<([a-z][a-z0-9-]*)\b[^>]*>/gi));
       for (const tag of tags) {
@@ -214,24 +217,24 @@ function createBuild(compiler, { file, adapter, addon, development, dependencies
           // Anchor links and base URLs describe navigation, not build assets.
           if (match[1].toLowerCase() === 'href' && tag[1].toLowerCase() !== 'link') continue;
           const url = await copyAsset(args.path, match[3]);
-          rewritten = rewritten.replace(match[0], match[1] + '=' + match[2] + url + match[2]);
+          rewritten = rewritten.replace(match[0], () => match[1] + '=' + match[2] + url + match[2]);
           const target = astro.resources.has(match[3]) ? match[3] : match[3].startsWith('/') ? path.join(compiler.root, match[3].slice(1).split(/[?#]/)[0]) : path.resolve(path.dirname(args.path), match[3].split(/[?#]/)[0]);
           for (const style of htmlStyles.get(target) || []) linkedStyles.add(style);
         }
-        html = html.replace(tag[0], rewritten);
+        html = html.replace(tag[0], () => rewritten);
       }
       const srcsets = Array.from(html.matchAll(/\bsrcset\s*=\s*(["'])([^"']+)\1/gi));
       for (const match of srcsets) {
         const values = [];
         for (const item of match[2].split(',')) { const [url, ...size] = item.trim().split(/\s+/); values.push(await copyAsset(args.path, url) + (size.length ? ' ' + size.join(' ') : '')); }
-        html = html.replace(match[0], 'srcset=' + match[1] + values.join(', ') + match[1]);
+        html = html.replace(match[0], () => 'srcset=' + match[1] + values.join(', ') + match[1]);
       }
       for (const match of Array.from(html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/gi))) {
         const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: match[1], loader: 'css', resolveDir: path.dirname(args.path) }, outdir, entryNames: 'assets/' + digest(args.path + match[1]) }));
         for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
         for (const dependency of compiler.tracked(result.metafile)) dependencies.add(dependency);
         const css = result.outputFiles.find(output => output.path.endsWith('.css'));
-        html = html.replace(match[0], '<link rel="stylesheet" href="./' + slash(path.relative(outdir, css.path)) + '">');
+        html = html.replace(match[0], () => '<link rel="stylesheet" href="./' + slash(path.relative(outdir, css.path)) + '">');
       }
       for (const match of Array.from(html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))) {
         if (/\bsrc\s*=/.test(match[1]) || /\btype\s*=\s*["'](?:application\/ld\+json|application\/json)/i.test(match[1])) continue;
@@ -241,7 +244,7 @@ function createBuild(compiler, { file, adapter, addon, development, dependencies
         for (const dependency of compiler.tracked(result.metafile)) dependencies.add(dependency);
         const js = result.outputFiles.find(output => output.path.endsWith('.js'));
         for (const output of result.outputFiles.filter(output => output.path.endsWith('.css'))) linkedStyles.add('./' + slash(path.relative(outdir, output.path)));
-        html = html.replace(match[0], '<script' + match[1] + ' src="./' + slash(path.relative(outdir, js.path)) + '"></script>');
+        html = html.replace(match[0], () => '<script' + match[1] + ' src="./' + slash(path.relative(outdir, js.path)) + '"></script>');
       }
       html = Array.from(linkedStyles, style => '<link rel="stylesheet" href="' + style + '">').join('') + html;
       // Keep document attributes for the HTML adapter (body classes and
@@ -338,7 +341,7 @@ class Compiler {
         previews.push({ id: definition.id, title, adapter: definition.adapter, file: slash(path.relative(this.root, file)),
           source: slash(path.relative(this.root, path.resolve(path.dirname(file), definition.source.entry))),
           states: Object.entries(definition.states).map(([id, state]) => ({ id, label: state.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
-          controls: definition.controls || {}, viewports: definition.viewports, docs: definition.docs || null,
+          controls: definition.controls || {}, sizes: definition.sizes, docs: definition.docs || null,
           ...(definition.icon ? { icon: definition.icon } : {}),
           links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
             typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.state ? { state: to.state } : {}) }])),
@@ -500,11 +503,23 @@ class Compiler {
   }
   // The examples one lens offers: each file of a folder (its default export),
   // or each named export of a file, as the compiler sees them.
+  // Kept until a file it read changes, so listing again is a few stats.
   async docsExamples(request) {
+    const key = 'list:' + JSON.stringify(request);
+    const cached = this.cache.get(key);
+    if (cached && this.fresh(cached.watched)) return cached.listed;
+    const watched = new Set(this.configFiles.keys());
+    const listed = await this.listDocsExamples(request, watched);
+    this.cache.set(key, { listed, watched: new Map(Array.from(watched, file => [file, stamp(file)])) });
+    return listed;
+  }
+  async listDocsExamples(request, watched) {
     const { examplesInFolder, exportNameToId } = require('../src/docs/example-ids.ts');
     const problems = [];
     if (request.adapter === 'astro' && !request.folder && !this.config.adapters?.astro) throw new Error(ASTRO_FOLDER);
     if (request.folder) {
+      // A folder's listing changes its own stamp when a file is added or removed.
+      watched.add(request.examples);
       const entries = fs.readdirSync(request.examples, { withFileTypes: true })
         .filter(entry => !entry.isSymbolicLink()).map(entry => ({ name: entry.name, isFile: entry.isFile() }));
       const found = examplesInFolder(entries, request.adapter);
@@ -519,6 +534,7 @@ class Compiler {
     const addon = this.config.adapters?.[request.adapter];
     const { buildOptions, outdir } = createBuild(this, { file: request.examples, adapter: request.adapter, addon, development: true, dependencies: new Set() });
     const result = await esbuild.build(Object.assign({}, buildOptions(), { entryPoints: [request.examples], outdir, packages: 'external', sourcemap: false }));
+    for (const file of this.tracked(result.metafile)) watched.add(file);
     const output = Object.values(result.metafile.outputs).find(candidate => candidate.entryPoint);
     const examples = [];
     const ids = new Map();
@@ -658,7 +674,8 @@ function validateDocs(raw, file, root) {
     if (!key.test(state)) throw new Error('states need kebab-case IDs.');
     return { id: state, label: spec && typeof spec.label === 'string' && spec.label ? spec.label : state.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) };
   });
-  return { id: raw.id, title: typeof raw.title === 'string' && raw.title ? raw.title : raw.id, file: slash(path.relative(root, file)),
+  if (raw.icon !== undefined && (typeof raw.icon !== 'string' || !key.test(raw.icon))) throw new Error('icon must be a kebab-case Lucide icon name.');
+  return { id: raw.id, title: typeof raw.title === 'string' && raw.title ? raw.title : raw.id, ...(raw.icon ? { icon: raw.icon } : {}), file: slash(path.relative(root, file)),
     src: docs, lens: raw.lens || (lenses[0] ? lenses[0].key : null), lenses, states };
 }
 

@@ -40,5 +40,5 @@ export default definePreview({
     '/workbench/changelog/': 'website/changelog',
     '/workbench/docs/': 'website/docs',
   },
-  viewports: ['desktop', 'mobile', 'responsive'],
+  sizes: ['laptop', 'mobile', 'resizable'],
 });

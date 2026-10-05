@@ -19,31 +19,31 @@ function plain(value) {
 
 test('reads every part of an address', function () {
   var address = load();
-  assert.deepEqual(plain(address.parse('#pages/sign-in.html:error@393~staging')), {
-    src: 'pages/sign-in.html', state: 'error', example: null, width: '393', lens: 'staging',
+  assert.deepEqual(plain(address.parse('#pages/sign-in.html:error@mobile~staging')), {
+    src: 'pages/sign-in.html', state: 'error', example: null, size: 'mobile', lens: 'staging',
   });
   assert.deepEqual(plain(address.parse('#pages/sign-in.html~staging')), {
-    src: 'pages/sign-in.html', state: null, example: null, width: null, lens: 'staging',
+    src: 'pages/sign-in.html', state: null, example: null, size: null, lens: 'staging',
   });
   assert.deepEqual(plain(address.parse('#pages/sign-in.html:error@fit')), {
-    src: 'pages/sign-in.html', state: 'error', example: null, width: 'fit', lens: null,
+    src: 'pages/sign-in.html', state: 'error', example: null, size: 'fit', lens: null,
   });
   assert.deepEqual(plain(address.parse('#pages/sign-in.html')), {
-    src: 'pages/sign-in.html', state: null, example: null, width: null, lens: null,
+    src: 'pages/sign-in.html', state: null, example: null, size: null, lens: null,
   });
-  assert.deepEqual(plain(address.parse('')), { src: '', state: null, example: null, width: null, lens: null });
+  assert.deepEqual(plain(address.parse('')), { src: '', state: null, example: null, size: null, lens: null });
 });
 
 test('reads a docs page address with its example, state, and lens', function () {
   var address = load();
   assert.deepEqual(plain(address.parse('#docs/card.md!with-custom-style~native')), {
-    src: 'docs/card.md', state: null, example: 'with-custom-style', width: null, lens: 'native',
+    src: 'docs/card.md', state: null, example: 'with-custom-style', size: null, lens: 'native',
   });
   assert.deepEqual(plain(address.parse('#docs/card.md:loading!basic')), {
-    src: 'docs/card.md', state: 'loading', example: 'basic', width: null, lens: null,
+    src: 'docs/card.md', state: 'loading', example: 'basic', size: null, lens: null,
   });
-  assert.deepEqual(plain(address.parse('#docs/card.md!basic@393')), {
-    src: 'docs/card.md', state: null, example: 'basic', width: '393', lens: null,
+  assert.deepEqual(plain(address.parse('#docs/card.md!basic@mobile')), {
+    src: 'docs/card.md', state: null, example: 'basic', size: 'mobile', lens: null,
   });
 });
 
@@ -55,26 +55,26 @@ test('decodes what the browser encoded, and tolerates what it can’t', function
 
 test('writes the address the shell always wrote, plus a lens when there is one', function () {
   var address = load();
-  assert.equal(address.write({ src: 'pages/sign-in.html', state: null, width: 'fit', lens: null }), 'pages/sign-in.html@fit');
-  assert.equal(address.write({ src: 'pages/sign-in.html', state: 'error', width: '393', lens: null }), 'pages/sign-in.html:error@393');
+  assert.equal(address.write({ src: 'pages/sign-in.html', state: null, size: 'fit', lens: null }), 'pages/sign-in.html@fit');
+  assert.equal(address.write({ src: 'pages/sign-in.html', state: 'error', size: 'mobile', lens: null }), 'pages/sign-in.html:error@mobile');
   assert.equal(
-    address.write({ src: 'pages/sign-in.html', state: 'error', width: '393', lens: 'staging' }),
-    'pages/sign-in.html:error@393~staging'
+    address.write({ src: 'pages/sign-in.html', state: 'error', size: 'mobile', lens: 'staging' }),
+    'pages/sign-in.html:error@mobile~staging'
   );
-  assert.equal(address.write({ src: '', state: 'error', width: '393', lens: 'staging' }), '');
+  assert.equal(address.write({ src: '', state: 'error', size: 'mobile', lens: 'staging' }), '');
   assert.equal(address.write(null), '');
 });
 
-test('writes a docs page without a width, with its example', function () {
+test('writes a docs page without a size, with its example', function () {
   var address = load();
-  assert.equal(address.write({ src: 'docs/card.md', state: null, example: 'basic', width: null, lens: 'native' }), 'docs/card.md!basic~native');
-  assert.equal(address.write({ src: 'docs/card.md', state: null, example: null, width: null, lens: null }), 'docs/card.md');
+  assert.equal(address.write({ src: 'docs/card.md', state: null, example: 'basic', size: null, lens: 'native' }), 'docs/card.md!basic~native');
+  assert.equal(address.write({ src: 'docs/card.md', state: null, example: null, size: null, lens: null }), 'docs/card.md');
 });
 
 test('round-trips', function () {
   var address = load();
-  var target = { src: 'preview/components-button.html', state: 'icon-only', example: null, width: 'resizable', lens: 'storybook' };
+  var target = { src: 'preview/components-button.html', state: 'icon-only', example: null, size: 'resizable', lens: 'storybook' };
   assert.deepEqual(plain(address.parse('#' + address.write(target))), target);
-  var docs = { src: 'docs/card.md', state: 'loading', example: 'with-custom-style', width: null, lens: 'native' };
+  var docs = { src: 'docs/card.md', state: 'loading', example: 'with-custom-style', size: null, lens: 'native' };
   assert.deepEqual(plain(address.parse('#' + address.write(docs))), docs);
 });

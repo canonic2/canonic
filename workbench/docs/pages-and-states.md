@@ -186,31 +186,31 @@ The switch applies to pages Workbench serves. Implementations shown through a
 Workbench sets `data-wb-actions="on"` or `"off"` on `<html>` if your styles
 need to know.
 
-## Viewports
+## Sizes
 
-`viewports` lists the artboard sizes a page is designed for. The size
+`sizes` lists the artboard sizes a page is designed for. The size
 switcher's other sizes are disabled while it is showing, and
-[exports](design-system-export.md) capture one reference image per viewport.
+[exports](design-system-export.md) capture one reference image per size.
 
 ```yaml
 - label: Reset password
   src: pages/reset.html
-  viewports:
+  sizes:
     - mobile
-    - responsive
+    - resizable
 ```
 
-| Viewport | Artboard | Use it for |
+| Size | Artboard | Use it for |
 | --- | --- | --- |
-| `desktop` | 1512 × 982, a 14-inch MacBook Pro | Desktop layouts |
+| `laptop` | 1512 × 982, a 14-inch MacBook Pro | Laptop and desktop layouts |
 | `mobile` | 393 × 852, an iPhone 15 Pro | Phone layouts |
-| `responsive` | An artboard you resize by dragging its edges or corners | Layouts that should work at any width. Exports both desktop and mobile references. |
+| `resizable` | An artboard you resize by dragging its edges or corners | Layouts that should work at any width. Exports both laptop and mobile references. |
 | `fit` | Fills the canvas | Components and pages without a fixed device size. Exports at 1440 × 900. |
 
-Omit `viewports` to allow all four. The page always lays out at the artboard's
+Omit `sizes` to allow all four. The page always lays out at the artboard's
 real size; when the artboard is larger than the canvas, the canvas zooms out
 rather than squeezing the page. See [Artboard sizes and zoom](canvas.md#artboard-sizes).
-A docs page has no artboard and takes no `viewports`; it fills the canvas.
+A docs page has no artboard and takes no `sizes`; it fills the canvas.
 
 ## Component previews
 
@@ -223,7 +223,7 @@ its variants as states:
   items:
     - label: Button
       src: components/button.html
-      viewports:
+      sizes:
         - fit
       states:
         - id: default

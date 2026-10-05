@@ -105,3 +105,33 @@ test('the revision follows the Markdown and the lens’s examples', async () => 
   files['docs/card.md'] += '\nMore.';
   assert.notEqual(await docs.revision(card, 'web'), first);
 });
+
+test('a deferred page answers with its Markdown, and its bundle says what each panel shows', async () => {
+  const { docs, built } = service();
+  const html = await docs.page(card, {}, new Set(), {}, { defer: true });
+  assert.deepEqual(built, [], 'nothing is built for the page itself');
+  assert.match(html, /data-wb-example="basic" data-status="pending"><div class="wb-docs-example-stage"/);
+  const options = optionsOf(html);
+  assert.deepEqual(options.bundle, { info: '/_workbench/docs/bundle?page=docs%2Fcard.md&lens=web' });
+  assert.equal(options.lensLabel, 'Web');
+  assert.equal(options.revision, '');
+
+  const info = await docs.bundleInfo(card, 'native');
+  assert.deepEqual(info, { module: '/_workbench/previews/docs/native/examples.js', stylesheet: '/_workbench/previews/docs/native/examples.css',
+    examples: ['basic'], error: null, revision: await docs.revision(card, 'native') });
+
+  const failing = await service({ failing: 'web' }).docs.bundleInfo(card, 'web');
+  assert.equal(failing.module, null);
+  assert.equal(failing.error, 'Web: Build failed: missing ./card.tsx');
+  assert.equal(failing.revision, await service({ failing: 'web' }).docs.revision(card, 'web'), 'a failing build still has a revision to poll');
+
+  const untrusted = service({ trusted: false });
+  assert.match(await untrusted.docs.page(card, {}, new Set(), {}, { defer: true }), /data-status="unavailable"/, 'what is known now is still said now');
+  assert.equal((await untrusted.docs.bundleInfo(card, 'web')).error, 'Examples run project code, so they appear in a trusted workspace only.');
+});
+
+test('problems leave out a lens that isn’t listed yet', async () => {
+  const { docs } = service();
+  const listed = await docs.problems([card], lens => lens.key === 'web' ? null : Promise.resolve({ examples: listings.native!, problems: ['Shadow.tsx: example file names must be kebab-case.'] }));
+  assert.deepEqual(listed, ['Card (docs/card.md): Native: Shadow.tsx: example file names must be kebab-case.'], 'Web’s unplaced “large” waits for its listing');
+});

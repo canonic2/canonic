@@ -19,7 +19,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   const requested = Date.now();
   let started;
-  const traced = ['/page', '/descriptor', '/render', '/export', '/docs/bundle'].includes(url.pathname);
+  const traced = ['/index', '/page', '/descriptor', '/render', '/export', '/docs/bundle'].includes(url.pathname);
   const diagnostic = (event, details) => {
     if (process.connected) process.send({ type: 'diagnostic', event, details });
   };

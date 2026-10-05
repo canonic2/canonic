@@ -107,13 +107,14 @@ function prompt(payload) {
     }
   }
   if (payload.lens && !docs) out.push('- Implementation: ' + payload.lens.label + ' — `' + payload.lens.url + '`');
+  if (!payload.lens && !docs && payload.lensLabel) out.push('- Lens: ' + payload.lensLabel);
   if (payload.code && payload.code.length) {
     out.push('- Source: ' + payload.code.map(function (file) {
       return '`' + file + '`';
     }).join(', '));
   }
   if (docs) out.push('- View: the docs page fills the canvas; the part in view is ' + payload.frame.w + ' × ' + payload.frame.h + ' CSS px');
-  else out.push('- Width: ' + payload.width + ' (artboard is ' + payload.frame.w + ' × ' + payload.frame.h + ' CSS px)');
+  else out.push('- Size: ' + payload.size + ' (artboard is ' + payload.frame.w + ' × ' + payload.frame.h + ' CSS px)');
   out.push('- Screenshot: `' + payload.file + '`');
   out.push('');
 
@@ -148,7 +149,7 @@ function prompt(payload) {
   out.push('');
   out.push(
     'Rather than reading them off the picture, here they are. Coordinates are CSS ' +
-      'pixels from the top-left of the artboard at the width above, and the element ' +
+      'pixels from the top-left of the artboard at the size above, and the element ' +
       'named on each line is the one under that annotation in the live DOM:'
   );
   out.push('');
@@ -201,7 +202,7 @@ if (require.main === module) {
       label: 'Sign in',
       src: 'pages/sign-in.html',
       state: 'Wrong password',
-      width: 'Mobile · iPhone 15 Pro, 393 × 852',
+      size: 'Mobile, 393 × 852',
       frame: { w: 393, h: 852 },
       file: '.canonic/.handoffs/sign-in.jpg',
       annotations: [

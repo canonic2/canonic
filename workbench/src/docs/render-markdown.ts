@@ -9,11 +9,12 @@ import { Marked, type Tokens } from 'marked';
 import { escapeHtml, highlight } from './code-highlight.ts';
 import { headingAnchor, readDocsMarkdown, type DocsHeading, type DocsProblem, type ExamplePlacement } from './docs-markdown.ts';
 
-export type PanelStatus = 'ready' | 'missing' | 'invalid' | 'unavailable';
+/** `pending` waits for the page's script to learn the bundle; it then becomes one of the others. */
+export type PanelStatus = 'ready' | 'pending' | 'missing' | 'invalid' | 'unavailable';
 
 export interface PanelView {
   status: PanelStatus;
-  /** Why the example isn't shown, for every status but `ready`. */
+  /** Why the example isn't shown, for every status but `ready` and `pending`. */
   note?: string;
 }
 
@@ -93,7 +94,7 @@ export function renderDocs(input: RenderInput): RenderedDocs {
 function panelHtml(placement: ExamplePlacement, view: PanelView): string {
   const id = escapeHtml(placement.id);
   const parts = [`<figure class="wb-docs-example" id="example-${id}" data-wb-example="${id}" data-status="${view.status}">`];
-  if (view.status === 'ready') {
+  if (view.status === 'ready' || view.status === 'pending') {
     parts.push('<div class="wb-docs-example-stage" data-wb-example-stage></div>');
     parts.push('<div class="wb-docs-example-tools">' +
       `<button type="button" class="wb-docs-tool" data-wb-show-code aria-expanded="false" aria-label="Show code" title="Show code">${CODE_ICON}</button>` +

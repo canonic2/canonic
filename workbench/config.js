@@ -23,6 +23,7 @@ var path = require('path');
 
 var yaml = require('./yaml');
 var manifest = require('./workbench/manifest');
+var sizeSchema = require('./src/sizes/schema.ts');
 
 var FILE = 'workbench.yaml';
 var LOCAL = 'workbench.local.yaml';
@@ -47,13 +48,21 @@ function states(raw) {
   return out.length > 1 ? out : null;
 }
 
-function page(raw, where, impls, problems) {
+function page(raw, where, impls, sizes, problems) {
   var label = text(raw && raw.label);
   var src = text(raw && raw.src);
   if (!label || !src || src.charAt(0) === '/' || src.indexOf('..') > -1) return null;
   if (manifest.srcProblem(src)) return null;
   var item = { label: label, src: src };
-  item.viewports = manifest.pageViewports(raw.viewports, where + ' › ' + label, problems);
+  manifest.pageLensLabel(raw.lensLabel, item, where + ' › ' + label, problems);
+  /* A docs page has no artboard size; docsPageEntry reports sizes on one. */
+  if (!manifest.isDocs(src)) {
+    var sized = sizeSchema.readPageSizes(raw.sizes, sizes, where + ' › ' + label, problems);
+    if (sized) {
+      item.sizes = sized.sizes;
+      if (sized.ownSizes) item.ownSizes = sized.ownSizes;
+    }
+  }
   var icon = text(raw.icon);
   if (icon) item.icon = icon;
   var found = states(raw.states);
@@ -66,24 +75,24 @@ function page(raw, where, impls, problems) {
   return item;
 }
 
-function entries(raw, where, impls, problems, inGroup) {
+function entries(raw, where, impls, sizes, problems, inGroup) {
   return list(raw)
     .map(function (entry) {
       var group = text(entry && entry.group);
-      if (!group) return page(entry, where, impls, problems);
+      if (!group) return page(entry, where, impls, sizes, problems);
       if (inGroup) return null;
-      var items = entries(entry.items, where + ' › ' + group, impls, problems, true);
+      var items = entries(entry.items, where + ' › ' + group, impls, sizes, problems, true);
       return items.length ? { group: group, items: items } : null;
     })
     .filter(Boolean);
 }
 
-function collections(raw, impls, problems) {
+function collections(raw, impls, sizes, problems) {
   return list(raw)
     .map(function (collection) {
       var name = text(collection && collection.name);
       if (!name) return null;
-      var items = entries(collection && collection.items, name, impls, problems, false);
+      var items = entries(collection && collection.items, name, impls, sizes, problems, false);
       return items.length || text(collection.icon) ? { name: name, icon: text(collection.icon), items: items } : null;
     })
     .filter(Boolean);
@@ -116,14 +125,37 @@ function locate(where) {
   return { dir: path.resolve(where.dir), key: where.key || null };
 }
 
-/* Both files, local over committed, or null without a workbench.yaml. */
+/* Both files, local over committed, or null without a workbench.yaml.
+   `localRaw` is the local file alone, for what it overrides. */
 function readRaw(dir) {
   var main = readFile(dir, FILE);
   if (main === null) return null;
   var local = readFile(dir, LOCAL);
   var raw = parseFile(main, FILE);
-  if (local !== null) raw = manifest.merge(raw, parseFile(local, LOCAL));
-  return { raw: raw, local: local !== null };
+  var localRaw = local !== null ? parseFile(local, LOCAL) : null;
+  if (localRaw !== null) raw = manifest.merge(raw, localRaw);
+  return { raw: raw, local: local !== null, localRaw: localRaw };
+}
+
+function isMap(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/* The size keys workbench.local.yaml sets for the space `key` (null for a
+   file without spaces), which the size dialogs can't change. */
+function localSizeKeys(localRaw, key) {
+  if (!isMap(localRaw)) return [];
+  var holder = key ? (isMap(localRaw.spaces) && localRaw.spaces[key]) : localRaw;
+  return isMap(holder) && isMap(holder.sizes) ? Object.keys(holder.sizes) : [];
+}
+
+/* Sizes belong to a space: in a file that lists spaces, a top-level
+   `sizes` isn't shared with them, so it is reported. */
+function sizesFor(found, picked, problems) {
+  if (picked.key && isMap(found.raw) && found.raw.sizes !== undefined) {
+    problems.push('Sizes: sizes go in each space, under spaces.<key>, when the file lists spaces.');
+  }
+  return sizeSchema.readSpaceSizes(picked.raw && picked.raw.sizes, problems, localSizeKeys(found.localRaw, picked.key));
 }
 
 /* The spaces a workbench.yaml holds, each { key, root }: one with a null
@@ -161,6 +193,7 @@ function read(where) {
   var raw = picked.raw;
   var root = picked.root ? path.resolve(at.dir, picked.root) : at.dir;
   var impls = manifest.implementations(raw && raw.implementations, problems);
+  var sizes = sizesFor(found, picked, problems);
 
   var mark = manifest.spaceMark(raw, problems);
 
@@ -169,7 +202,8 @@ function read(where) {
     key: picked.key,
     root: root,
     mark: mark,
-    collections: collections(raw && raw.collections, impls, problems),
+    sizes: sizes,
+    collections: collections(raw && raw.collections, impls, sizes, problems),
     implementations: impls,
     previews: manifest.previews(raw && raw.previews, problems),
     problems: problems,
@@ -177,15 +211,16 @@ function read(where) {
   };
 }
 
-/* The committed file, for the page form: its text, and the collections the
-   space shows — its own, or the shared ones it inherits. */
+/* The committed file, for the page form and the size dialogs: its text, the
+   collections the space shows — its own, or the shared ones it inherits —
+   and the space's own `sizes` as written, if any. */
 function source(where) {
   var at = locate(where);
   var body = readFile(at.dir, FILE);
   if (body === null) return null;
   var raw = parseFile(body, FILE);
   var picked = manifest.selectSpace(raw, at.key, []);
-  return { body: body, raw: raw, key: picked.key, collections: picked.raw.collections || [] };
+  return { body: body, raw: raw, key: picked.key, collections: picked.raw.collections || [], sizes: picked.raw.sizes };
 }
 
 function replaceTopLevel(body, key, replacement) {
@@ -241,17 +276,19 @@ function childBlock(lines, from, to, key, fallbackIndent) {
   return { start: -1, end: after, indent: depth === null ? fallbackIndent : depth };
 }
 
-/* `spaces.<key>.collections` replaced in place, or added at the end of that
+/* `spaces.<key>.<name>` replaced in place, or added at the end of that
    space, leaving every other line of the file as it was. */
-function replaceSpaceCollections(body, key, updated) {
+function replaceSpaceBlock(body, key, name, value) {
   var lines = String(body).split(/\r?\n/);
   var spaces = childBlock(lines, 0, lines.length, 'spaces', 0);
   if (spaces.start === -1) throw new Error('There is no spaces block in ' + FILE + '.');
   var space = childBlock(lines, spaces.start + 1, spaces.end, key, spaces.indent + 2);
   if (space.start === -1) throw new Error('There is no space “' + key + '” in ' + FILE + '.');
-  var block = childBlock(lines, space.start + 1, space.end, 'collections', space.indent + 2);
+  var block = childBlock(lines, space.start + 1, space.end, name, space.indent + 2);
   var pad = new Array(block.indent + 1).join(' ');
-  var replacement = yaml.stringify({ collections: updated }).trim().split('\n').map(function (line) {
+  var wrapped = {};
+  wrapped[name] = value;
+  var replacement = yaml.stringify(wrapped).trim().split('\n').map(function (line) {
     return line ? pad + line : line;
   });
   if (block.start === -1) lines.splice.apply(lines, [block.end, 0].concat(replacement));
@@ -259,16 +296,17 @@ function replaceSpaceCollections(body, key, updated) {
   return lines.join('\n').replace(/\n*$/, '\n');
 }
 
-/* The page form's save. A space of a file that lists several gets its own
-   collections, so the others keep theirs, shared or not. */
-function updateCollections(where, updated) {
-  if (!Array.isArray(updated)) throw new Error('collections must be a list.');
-  var at = locate(where);
-  var current = source(at);
-  if (!current) throw new Error('There is no ' + FILE + ' at the project root.');
-  var next = current.key
-    ? replaceSpaceCollections(current.body, current.key, updated)
-    : replaceTopLevel(current.body, 'collections', yaml.stringify({ collections: updated }).trim());
+/* One top-level block of the space replaced: at the top level of a file
+   without spaces, or inside the space's entry of a file that lists several. */
+function replaceBlock(body, key, name, value) {
+  if (key) return replaceSpaceBlock(body, key, name, value);
+  var wrapped = {};
+  wrapped[name] = value;
+  return replaceTopLevel(body, name, yaml.stringify(wrapped).trim());
+}
+
+/* The new text, checked to parse, replaces the file in one rename. */
+function writeChecked(at, next) {
   parseFile(next, FILE);
   var target = path.join(at.dir, FILE);
   var temporary = target + '.canonic-' + process.pid + '-' + Date.now();
@@ -278,7 +316,33 @@ function updateCollections(where, updated) {
   } finally {
     try { fs.unlinkSync(temporary); } catch (_) {}
   }
+}
+
+/* The page form's save. A space of a file that lists several gets its own
+   collections, so the others keep theirs, shared or not. */
+function updateCollections(where, updated) {
+  if (!Array.isArray(updated)) throw new Error('collections must be a list.');
+  var at = locate(where);
+  var current = source(at);
+  if (!current) throw new Error('There is no ' + FILE + ' at the project root.');
+  writeChecked(at, replaceBlock(current.body, current.key, 'collections', updated));
   return source(at);
+}
+
+/* The size dialogs' save: `edit(sizes, collections)` gets the space's sizes
+   and collections as written and answers with what to write (see
+   src/sizes/edit.ts). Sizes are the space's own block; collections are
+   replaced whole, as the page form replaces them. */
+function updateSizes(where, edit) {
+  var at = locate(where);
+  var current = source(at);
+  if (!current) throw new Error('There is no ' + FILE + ' at the project root.');
+  var change = edit(current.sizes, current.collections);
+  var next = current.body;
+  if (change.sizes) next = replaceBlock(next, current.key, 'sizes', change.sizes);
+  if (change.collections) next = replaceBlock(next, current.key, 'collections', change.collections);
+  if (next !== current.body) writeChecked(at, next);
+  return change;
 }
 
 function pagesIn(items, out) {
@@ -335,6 +399,8 @@ function resolve(root, config) {
         design: path.resolve(root, item.src),
         code: code,
       };
+      if (item.sizes) pages[item.src].sizes = item.sizes;
+      if (item.ownSizes) pages[item.src].ownSizes = item.ownSizes;
       /* The server opens a window stream only for a window a page names. */
       Object.keys(item.implementations || {}).forEach(function (key) {
         var ref = item.implementations[key];
@@ -348,6 +414,7 @@ function resolve(root, config) {
   return {
     name: config.name,
     mark: mark,
+    sizes: config.sizes,
     collections: config.collections,
     implementations: impls,
     pages: pages,
@@ -364,6 +431,7 @@ module.exports = {
   resolve: resolve,
   source: source,
   updateCollections: updateCollections,
+  updateSizes: updateSizes,
   FILE: FILE,
   LOCAL: LOCAL,
 };

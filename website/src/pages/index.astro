@@ -90,7 +90,7 @@ const docsMarkdown = [
         </SectionHead>
         <ol class="areas">
           <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s states are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
-          <li><span class="n">02</span><h3>Top bar</h3><p>The page and its state on the left, then the Actions switch. The lens switcher in the middle; the size switcher and the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
+          <li><span class="n">02</span><h3>Top bar</h3><p>The page and its state on the left. The lens switcher, the size switcher, and the Actions switch in the middle; the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
           <li><span class="n">03</span><h3>Canvas</h3><p>The page, rendered live in an artboard of the selected size. Zoom and pan change the view; the page keeps its layout width. The current page stays visible while the next one loads.</p></li>
           <li><span class="n">04</span><h3>Toolbar</h3><p>Annotation tools and the handoff, under the artboard. Select returns to using the page.</p></li>
         </ol>
@@ -98,7 +98,7 @@ const docsMarkdown = [
 
       <div class="controls-block" id="controls">
         <SectionHead kicker="Top bar and toolbar" title="Controls">
-          The Actions switch, the size switcher, and the page’s actions are in the top bar. The toolbar’s annotation tools and the view controls are at the bottom of the canvas. Point at or tap a control to see what it does.
+          The size switcher, the Actions switch, and the page’s actions are in the top bar. The toolbar’s annotation tools and the view controls are at the bottom of the canvas. Point at or tap a control to see what it does.
         </SectionHead>
 
         <ControlStrip groups={screenshots.controls}>
@@ -113,8 +113,9 @@ const docsMarkdown = [
               <div class="controls-group">
                 <h3>Only in some setups</h3>
                 <dl class="controls">
+                  <div><dt>Space switcher</dt><dd>At the top of the VS Code sidebar, and in the canvas breadcrumb when several spaces are available. Pick a space with the pointer or arrow keys; Escape closes the menu and Tab moves to the next control.</dd></div>
                   <div><dt>State switcher</dt><dd>Beside the page’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview.</dd></div>
-                  <div><dt>Lens switcher</dt><dd>Workbench for TypeScript previews, or Design for HTML pages, followed by additional implementations declared in <code>workbench.yaml</code>. See <a href="#lenses">Lenses</a>.</dd></div>
+                  <div><dt>Lens switcher</dt><dd>The authored page followed by additional implementations declared in <code>workbench.yaml</code>. Every lens label is customizable; defaults are Workbench for TypeScript previews and Design for HTML pages. See <a href="#lenses">Lenses</a>.</dd></div>
                   <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected state, inspect actions, and read documentation. Changes stay temporary.</dd></div>
                   <div><dt>Copy handoff</dt><dd>In VS Code only, at the end of the toolbar, beside a count of your annotations. See <a href="#annotations">Annotations and handoff</a>.</dd></div>
                 </dl>
@@ -150,12 +151,12 @@ const docsMarkdown = [
                 <div data-label="Fit"><dt>Fit</dt><dd>The artboard fills whatever space the workbench has.</dd></div>
                 <div data-label="Laptop, MacBook Pro 14, 1512 by 982 points"><dt>Laptop</dt><dd>1512 × 982, a 14-inch MacBook Pro. The canvas zooms out to show all of it; the page still lays out at its full width.</dd></div>
                 <div data-label="Mobile, iPhone 15 Pro, 393 by 852 points"><dt>Mobile</dt><dd>393 × 852, an iPhone 15 Pro.</dd></div>
-                <div data-label="Resizable viewport"><dt>Resizable</dt><dd>Drag an outside edge or corner to any size. The artboard keeps that size until you change it.</dd></div>
+                <div data-label="Resizable"><dt>Resizable</dt><dd>Drag an outside edge or corner to any size. The artboard keeps that size until you change it.</dd></div>
                 <div data-label="Reload"><dt>Reload</dt><dd>Reloads the page.</dd></div>
                 <div data-label="Open the source"><dt>Open the source</dt><dd>Lists the page’s design file and any implementation code, and opens one in the editor.</dd></div>
                 <div data-label="Copy reference"><dt>Copy reference</dt><dd>Copies a short text reference to the page, state, and lens, for pasting into a conversation. It doesn’t include a screenshot or your annotations.</dd></div>
                 <div data-label="Open on its own"><dt>Open on its own</dt><dd>Opens the page directly in a browser tab.</dd></div>
-                <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections and pages, editing labels and paths, and choosing each page’s viewports; it rewrites only the <code>collections</code> part of <code>workbench.yaml</code>. <b>Download design-system ZIP</b>: every page’s files, the sources they depend on, and a reference screenshot at each viewport, in parts of 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
+                <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections and pages, editing labels and paths, and choosing each page’s sizes; it rewrites only the <code>collections</code> part of <code>workbench.yaml</code>. <b>Download design-system ZIP</b>: every page’s files, the sources they depend on, and a reference screenshot at each size, in parts of 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
               </dl>
             </div>
           </div>
@@ -186,7 +187,7 @@ const docsMarkdown = [
       <Feature id="lenses" kicker="Lenses" title="TypeScript previews and lenses">
           <p>Define components and pages in <code>.workbench.ts</code> files. Built-in adapters render HTML, React, Vue, Astro, and React Native Web, and you can register others. Each preview has named states, editable inputs, and an action log. A page can also show its implementation as a lens: a Storybook story, a dev or staging URL, the iOS Simulator, or a macOS app window.</p>
           <p>Each state gives the preview its data: props, providers from a project-wide environment, or mocked responses to the page’s <code>fetch</code> and XMLHttpRequest calls. Links can open other previews; other navigation, such as a download or a route without a preview, is logged as an action. See <a href={`${pages.docs}preview-data/#choose-how-to-give-a-page-its-data`}>Give a page its data</a>.</p>
-          <p>The selected lens stays as you change pages and is part of the address, so a copied link opens the same view. You can choose sidebar icons for TypeScript previews individually or by title prefix, and give a shared collection its own icon. SVG icon sprites in TypeScript previews remain available as you switch states or return to a page. For a Storybook or local server, you can configure a start command and a readiness check; in a trusted workspace, Workbench runs the command in a terminal when the check fails. The design-system export includes a static viewer for the previews; Astro previews export their authored states only.</p>
+          <p>The selected lens stays as you change pages and is part of the address, so a copied link opens the same view. You can choose sidebar icons for TypeScript previews individually or by title prefix, and give a shared collection its own icon. SVG icon sprites in TypeScript previews remain available as you switch states or return to a page. For a Storybook or local server, you can configure a start command and a readiness check; in a trusted workspace, Workbench runs the command in a terminal when the check fails. The design-system export includes a static viewer for the previews; Astro previews export their authored states only. If the viewer cannot be built, the export still delivers sources and reference screenshots with a warning.</p>
           <img src={`${base}images/workbench-previews.jpg`} alt="Acme TypeScript preview with its named states and editable input controls" loading="lazy" />
         <div class="feature-media" slot="media">
           <CodeBlock file="address" code="#pages/sign-in.html:error@393~staging" copies="the address example" />

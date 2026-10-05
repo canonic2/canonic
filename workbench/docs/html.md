@@ -132,7 +132,7 @@ export default definePreview({
   title: 'Pages/Pricing',
   adapter: 'html',
   source: { entry: './pricing.html' },
-  viewports: ['desktop', 'mobile'],
+  sizes: ['laptop', 'mobile'],
   inputs: { plan: 'Team', price: 12 },
   controls: {
     plan: { type: 'select', options: ['Starter', 'Team', 'Enterprise'] },
@@ -309,7 +309,7 @@ export default definePreview({
   title: 'Components/Banner',
   adapter: 'html',
   source: { entry: './banner.ts', export: 'mountBanner' },
-  viewports: ['fit'],
+  sizes: ['fit'],
   inputs: { message: 'Your trial ends in 3 days.', tone: 'info' },
   controls: {
     message: { type: 'text' },

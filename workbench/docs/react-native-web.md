@@ -116,7 +116,7 @@ export default definePreview({
   source: { entry: './ProfileCard.tsx', export: 'ProfileCard' },
   environment: '../preview/environment.tsx',
   styles: ['../preview/canvas.css'],
-  viewports: ['mobile', 'fit'],
+  sizes: ['mobile', 'fit'],
   inputs: { name: 'Avery Example', role: 'Designer', online: false },
   controls: {
     name: { type: 'text' },
@@ -226,8 +226,8 @@ is at least as tall as the frame but isn't a flex container. A root view with
 add the `#workbench-preview` rule above in a stylesheet listed in `styles`, as
 in the example, or give the root view a height.
 
-Choose the artboard sizes with `viewports`; `mobile` suits most app screens. See
-[Viewports](pages-and-states.md#viewports).
+Choose the artboard sizes with `sizes`; `mobile` suits most app screens. See
+[Sizes](pages-and-states.md#sizes).
 
 ## Images and fonts
 

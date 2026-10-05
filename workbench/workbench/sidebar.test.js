@@ -5,7 +5,6 @@ var test = require('node:test');
 var vm = require('node:vm');
 
 function loadSidebar(overrides, spaces) {
-  var switcher = null;
   var shell = { hidden: false, dimmed: false, classList: { toggle: function (name, on) { shell.dimmed = on; } } };
   var listeners = {};
   var posted = [];
@@ -18,7 +17,7 @@ function loadSidebar(overrides, spaces) {
     loadingText: { textContent: '' },
     rail: {},
     pageList: {},
-    spaces: { hidden: true },
+    spaces: { hidden: true, addEventListener: function (name, callback) { listeners[name] = callback; } },
     spaceButton: {},
     spaceMenu: {},
   };
@@ -32,12 +31,6 @@ function loadSidebar(overrides, spaces) {
     addEventListener: function (type, listener) { listeners[type] = listener; },
     removeEventListener: function () {},
     wbIcon: function () {},
-    wbSpaces: {
-      create: function (options) {
-        switcher = { options: options, set: function (list, current) { switcher.list = list; switcher.current = current; } };
-        return switcher;
-      },
-    },
     wbConfig: { load: function (ok) { ok(config); } },
     wbManifest: {
       mergeCollections: function (base, imported) { return base.concat(imported); },
@@ -74,7 +67,8 @@ function loadSidebar(overrides, spaces) {
     search: elements.search,
     receive: function (data) { listeners.message({ data: data }); },
     built: function () { return built; },
-    switcher: function () { return switcher; },
+    switcher: function () { return elements.spaces.hidden ? null : elements.spaces; },
+    intent: function (name, detail) { listeners[name]({ detail: detail || {} }); },
     shell: shell,
     spaces: elements.spaces,
   };
@@ -86,21 +80,23 @@ test('the sidebar shows the space switcher from the spaces the extension lists',
   var switcher = sidebar.switcher();
 
   assert.equal(sidebar.spaces.hidden, false);
-  assert.equal(switcher.current, 'a1');
-  assert.equal(switcher.list.map(function (p) { return p.name; }).join(), 'Acme,Example');
+  assert.equal(switcher.currentId, 'a1');
+  assert.equal(switcher.spaces.map(function (p) { return p.name; }).join(), 'Acme,Example');
+  assert.equal(switcher.allowAdd, true);
+  assert.equal(switcher.allowRemove, true);
 
-  switcher.options.onPick('b2');
-  switcher.options.onAdd();
-  switcher.options.onRemove('b2');
+  sidebar.intent('wb-space-pick', { id: 'b2' });
+  sidebar.intent('wb-space-add');
+  sidebar.intent('wb-space-remove', { id: 'b2' });
   assert.deepEqual(JSON.parse(JSON.stringify(sidebar.posted.slice(-3))), [
     { type: 'canonic-space', id: 'b2' },
     { type: 'canonic-add-space' },
     { type: 'canonic-remove-space', id: 'b2' },
   ]);
 
-  switcher.options.onToggle(true);
+  sidebar.intent('wb-space-toggle', { open: true });
   assert.equal(sidebar.shell.dimmed, true);
-  switcher.options.onToggle(false);
+  sidebar.intent('wb-space-toggle', { open: false });
   assert.equal(sidebar.shell.dimmed, false);
 });
 

@@ -2,11 +2,19 @@ var assert = require('node:assert/strict');
 var test = require('node:test');
 var handoff = require('./handoff');
 
+test('an authored lens label appears in handoffs without treating it as an implementation', function () {
+  var text = handoff.prompt({ label: 'Button', src: 'button.workbench.ts', lensLabel: 'Reference',
+    size: 'Fit', frame: { w: 800, h: 600 }, file: 'button.jpg', annotations: [] });
+  assert.match(text, /- Lens: Reference/);
+  assert.doesNotMatch(text, /- Implementation:/);
+  assert.doesNotMatch(text, /the design it should match/);
+});
+
 test('serializes every annotation type with its geometry and target', function () {
   var text = handoff.prompt({
     label: 'Example',
     src: 'preview/example.html',
-    width: 'Fit',
+    size: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/example.png',
     annotations: [
@@ -33,7 +41,7 @@ test('includes both freeform notes and comments in the written request summary',
   var text = handoff.prompt({
     label: 'Example',
     src: 'preview/example.html',
-    width: 'Fit',
+    size: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/example.png',
     annotations: [
@@ -55,7 +63,7 @@ test('reads exactly as it did for a design without code pointers', function () {
     label: 'Sign in',
     src: 'pages/sign-in.html',
     state: 'Wrong password',
-    width: 'Mobile · iPhone 15 Pro, 393 × 852',
+    size: 'Mobile, 393 × 852',
     frame: { w: 393, h: 852 },
     file: '.canonic/.handoffs/sign-in-error.png',
     annotations: [
@@ -69,12 +77,12 @@ test('reads exactly as it did for a design without code pointers', function () {
     '',
     '- Page: Sign in — `pages/sign-in.html`',
     '- State: Wrong password',
-    '- Width: Mobile · iPhone 15 Pro, 393 × 852 (artboard is 393 × 852 CSS px)',
+    '- Size: Mobile, 393 × 852 (artboard is 393 × 852 CSS px)',
     '- Screenshot: `.canonic/.handoffs/sign-in-error.png`',
     '',
     'The screenshot has 2 annotations drawn over it. **Everything red in the image is an annotation, not the design** — arrows, boxes, circles, scribbles and the red text are notes about the page, drawn on top of it. Nothing red is something to build.',
     '',
-    'Rather than reading them off the picture, here they are. Coordinates are CSS pixels from the top-left of the artboard at the width above, and the element named on each line is the one under that annotation in the live DOM:',
+    'Rather than reading them off the picture, here they are. Coordinates are CSS pixels from the top-left of the artboard at the size above, and the element named on each line is the one under that annotation in the live DOM:',
     '',
     '1. Rectangle at (9, 10), 11 × 12 — on section.card',
     '2. Comment at (25, 26), 27 × 28: “Tighter”',
@@ -95,7 +103,7 @@ test('says which implementation, story and source a lens shot is of', function (
     lens: { key: 'storybook', label: 'Storybook', kind: 'storybook', url: 'http://localhost:6006/iframe.html?id=components-button--icon-only&viewMode=story' },
     code: ['/repo/packages/ui/src/button.tsx', '/repo/packages/ui/src/button.stories.tsx'],
     inspected: false,
-    width: 'Fit',
+    size: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/components-button-icon-only-storybook.png',
     annotations: [{ type: 'rect', box: { x: 9, y: 10, w: 11, h: 12 }, target: null }],
@@ -115,7 +123,7 @@ test('names the source on a design that has one, and nothing else new', function
     label: 'Sign in',
     src: 'pages/sign-in.html',
     code: ['/repo/src/pages/login'],
-    width: 'Fit',
+    size: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/sign-in.png',
     annotations: [],
@@ -131,7 +139,7 @@ test('an unannotated lens shot is the implementation as it stands', function () 
     label: 'Sign in',
     src: 'pages/sign-in.html',
     lens: { key: 'dev', label: 'Dev', kind: 'url', url: 'http://localhost:3710/' },
-    width: 'Fit',
+    size: 'Fit',
     frame: { w: 800, h: 600 },
     file: '.canonic/.handoffs/sign-in-dev.png',
     annotations: [],
@@ -142,7 +150,7 @@ test('an unannotated lens shot is the implementation as it stands', function () 
 
 test('a handoff from a docs page names its Markdown, lens, and the examples in view with their code', function () {
   var text = handoff.prompt({
-    file: '.canonic/.handoffs/card.jpg', src: 'docs/card.md', label: 'Card', state: null, width: 'Docs page',
+    file: '.canonic/.handoffs/card.jpg', src: 'docs/card.md', label: 'Card', state: null, size: 'Docs page',
     frame: { w: 1200, h: 800 }, annotations: [],
     lens: { key: 'dark', label: 'Dark', kind: 'examples', url: 'http://127.0.0.1:3579/docs/card.md?lens=dark' },
     docs: { lens: 'dark', markdown: 'docs/card.md', lensLabel: 'Dark', examples: [

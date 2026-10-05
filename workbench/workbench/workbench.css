@@ -192,10 +192,6 @@ textarea,
   gap: var(--wb-space-4);
 }
 
-.wb-topbar-right > .wb-sizes {
-  margin-right: var(--wb-space-8);
-}
-
 /* The bar's left cell: where you are, then the one control that changes how
    the preview behaves rather than how it's framed. */
 .wb-topbar-left {
@@ -209,6 +205,7 @@ textarea,
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--wb-space-8);
   min-width: 0;
 }
 
@@ -241,39 +238,6 @@ textarea,
 
 .wb-space-crumb[hidden] {
   display: none;
-}
-
-.wb-action.wb-space-crumb-button {
-  width: auto;
-  max-width: 200px;
-  gap: var(--wb-space-8);
-  padding: 0 var(--wb-space-4);
-  color: var(--wb-fg-2);
-  font: inherit;
-}
-
-.wb-space-crumb-button[aria-expanded='true'] {
-  background: var(--wb-hover);
-}
-
-.wb-space-crumb-button .wb-space-mark {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  font-size: 10px;
-}
-
-.wb-space-crumb-button .wb-spaces-caret {
-  display: none;
-}
-
-.wb-space-crumb-menu {
-  top: calc(100% + var(--wb-space-8));
-  left: 0;
-  right: auto;
-  width: max-content;
-  min-width: 220px;
-  max-width: min(320px, calc(100vw - 24px));
 }
 
 /* Nothing on the canvas yet: the space stands alone, without a slash. */
@@ -389,9 +353,9 @@ textarea,
 
 /* When equal side tracks can no longer keep the lens clear of the controls
    beside it, the measured top bar script folds the view actions into More.
-   The viewport switch stays visible because changing the canvas size is the
+   The size switcher stays visible because changing the artboard size is the
    most spatially important action in a narrow editor. Tighter still, the
-   page's name and the switch's word go; the state and the switch stay. */
+   page's name goes; the state stays. */
 .wb-topbar.is-topbar-compact #reload,
 .wb-topbar.is-topbar-compact #sourceControl,
 .wb-topbar.is-topbar-compact #copyReference,
@@ -410,92 +374,21 @@ textarea,
   max-width: none;
 }
 
-.wb-topbar.is-topbar-tight .wb-space-crumb .wb-spaces-name,
+.wb-topbar.is-topbar-tight .wb-space-crumb wb-space-switcher::part(name),
 .wb-topbar.is-topbar-tight .wb-crumb-page,
-.wb-topbar.is-topbar-tight .wb-crumb-sep,
-.wb-topbar.is-topbar-tight .wb-toggle-label {
+.wb-topbar.is-topbar-tight .wb-crumb-sep {
   display: none;
 }
 
-/* Its own control, not a .wb-action: those are a fixed 28px square, and the
-   same-specificity override was losing to them further down this file. */
-.wb-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--wb-space-4);
-  height: 28px;
-  padding: 0 var(--wb-space-8);
-  color: var(--wb-fg-2);
-  background: none;
-  border: 0;
-  border-radius: var(--wb-radius-md);
-  font: inherit;
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.wb-toggle:hover {
-  background: var(--wb-hover);
-  color: var(--wb-fg);
-}
-
-/* The icon and word name the control; the switch reports it, so it gets a
-   little air between itself and the label. */
-.wb-toggle-track {
-  position: relative;
-  width: 26px;
-  height: 16px;
-  flex: none;
-  margin-left: var(--wb-space-4);
-  border-radius: var(--wb-radius-pill);
-  background: var(--wb-raised);
-  transition: background 120ms ease;
-}
-
-.wb-toggle-knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--wb-fg-2);
-  transition: transform 120ms ease, background 120ms ease;
-}
-
-/* On: the track carries the product blue, so the state reads from across the
-   room rather than from a one-step change in gray. */
-.wb-toggle[aria-checked='true'] {
-  color: var(--wb-fg);
-}
-
-.wb-toggle[aria-checked='true'] .wb-toggle-track {
-  background: var(--wb-accent);
-}
-
-.wb-toggle[aria-checked='true'] .wb-toggle-knob {
-  transform: translateX(10px);
-  background: var(--wb-fg);
-}
-
-/* Seen through a lens, the page is somebody else's and the switch has no
-   say inside it: it shows on and stays put, with the title saying why. */
-.wb-toggle:disabled,
-.wb-toggle:disabled:hover {
-  background: none;
-  cursor: default;
-  opacity: 0.6;
-}
-
-/* The lens: the same segmented pill as the widths, with words instead of
+/* The lens: the same segmented group as the sizes, with words instead of
    glyphs — "Storybook" says what a book icon wouldn't. */
 .wb-lenses {
   display: flex;
   gap: var(--wb-space-2);
-  padding: var(--wb-space-2);
+  padding: 3px;
   background: var(--wb-raised);
-  border-radius: var(--wb-radius-pill);
+  border: 1px solid var(--wb-line);
+  border-radius: var(--wb-radius-md);
 }
 
 .wb-lenses[hidden] {
@@ -505,12 +398,12 @@ textarea,
 .wb-lens {
   display: flex;
   align-items: center;
-  height: 24px;
-  padding: 0 var(--wb-space-8);
+  height: 28px;
+  padding: 0 10px;
   color: var(--wb-fg-2);
   background: none;
   border: 0;
-  border-radius: var(--wb-radius-pill);
+  border-radius: 6px;
   font: inherit;
   font-size: 12px;
   white-space: nowrap;
@@ -607,7 +500,7 @@ textarea,
   display: none;
 }
 
-.wb-sidebar .wb-spaces {
+.wb-sidebar wb-space-switcher {
   padding: var(--wb-space-12) var(--wb-space-8) var(--wb-space-4);
 }
 
@@ -802,64 +695,6 @@ textarea,
 }
 
 /* The size switcher. */
-.wb-sizes {
-  display: flex;
-  gap: var(--wb-space-2);
-  padding: var(--wb-space-2);
-  background: var(--wb-raised);
-  border-radius: var(--wb-radius-pill);
-}
-
-.wb-size {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 24px;
-  padding: 0;
-  color: var(--wb-fg-2);
-  background: none;
-  border: 0;
-  border-radius: var(--wb-radius-pill);
-  cursor: pointer;
-}
-
-.wb-size:hover {
-  color: var(--wb-fg);
-}
-
-.wb-size:disabled {
-  color: var(--wb-fg-3);
-  cursor: not-allowed;
-  opacity: 0.38;
-}
-
-.wb-size:disabled:hover {
-  color: var(--wb-fg-3);
-}
-
-/* The icons step down with the physical devices; the freeform square is kept
-   between them so it reads as a viewport rather than another device. */
-.wb-size[data-width='1512'] .wb-icon {
-  width: 17px;
-  height: 17px;
-}
-
-.wb-size[data-width='resizable'] .wb-icon {
-  width: 15px;
-  height: 15px;
-}
-
-.wb-size[data-width='393'] .wb-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.wb-size[aria-pressed='true'] {
-  background: var(--wb-selected);
-  color: var(--wb-fg);
-}
-
 /* ----------------------------------------------------- configuration form */
 
 .wb-config-dialog {
@@ -1136,7 +971,7 @@ textarea,
 .wb-config-nav-add:focus-visible,
 .wb-config-nav-page:focus-visible,
 .wb-config-nav-group-head:focus-visible,
-.wb-config-viewport-card:focus-visible,
+.wb-config-size-card:focus-visible,
 .wb-config-inspector-action:focus-visible,
 .wb-config-danger button:focus-visible {
   outline: 2px solid var(--wb-accent);
@@ -1304,13 +1139,13 @@ textarea,
   line-height: 1.45;
 }
 
-.wb-config-viewport-grid {
+.wb-config-size-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.wb-config-viewport-card {
+.wb-config-size-card {
   position: relative;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 24px;
@@ -1327,26 +1162,26 @@ textarea,
   transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
 }
 
-.wb-config-viewport-card:hover {
+.wb-config-size-card:hover {
   color: var(--wb-fg);
   border-color: #505050;
   transform: translateY(-1px);
 }
 
-.wb-config-viewport-card[aria-pressed='true'] {
+.wb-config-size-card[aria-pressed='true'] {
   color: var(--wb-fg);
   background: rgb(0 161 255 / 0.075);
   border-color: rgb(0 161 255 / 0.52);
   box-shadow: inset 0 0 0 1px rgb(0 161 255 / 0.08);
 }
 
-.wb-config-viewport-icon,
-.wb-config-viewport-check {
+.wb-config-size-icon,
+.wb-config-size-check {
   display: grid;
   place-items: center;
 }
 
-.wb-config-viewport-icon {
+.wb-config-size-icon {
   width: 38px;
   height: 38px;
   color: var(--wb-fg-2);
@@ -1354,31 +1189,31 @@ textarea,
   border-radius: 8px;
 }
 
-.wb-config-viewport-card[aria-pressed='true'] .wb-config-viewport-icon {
+.wb-config-size-card[aria-pressed='true'] .wb-config-size-icon {
   color: var(--wb-accent);
   background: rgb(0 161 255 / 0.12);
 }
 
-.wb-config-viewport-copy {
+.wb-config-size-copy {
   display: grid;
   gap: 2px;
 }
 
-.wb-config-viewport-copy strong {
+.wb-config-size-copy strong {
   font-size: 14px;
 }
 
-.wb-config-viewport-copy span,
-.wb-config-viewport-copy small {
+.wb-config-size-copy span,
+.wb-config-size-copy small {
   color: var(--wb-fg-3);
   font-size: 12px;
 }
 
-.wb-config-viewport-copy small {
+.wb-config-size-copy small {
   margin-top: 3px;
 }
 
-.wb-config-viewport-check {
+.wb-config-size-check {
   width: 20px;
   height: 20px;
   color: var(--wb-fg-3);
@@ -1386,7 +1221,7 @@ textarea,
   border-radius: 50%;
 }
 
-.wb-config-viewport-card[aria-pressed='true'] .wb-config-viewport-check {
+.wb-config-size-card[aria-pressed='true'] .wb-config-size-check {
   color: #07131b;
   background: var(--wb-accent);
   border-color: var(--wb-accent);
@@ -1487,7 +1322,7 @@ textarea,
   }
 
   .wb-config-inspector-form,
-  .wb-config-viewport-grid {
+  .wb-config-size-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1550,7 +1385,7 @@ textarea,
   pointer-events: none !important;
 }
 
-/* The artboard owns viewport geometry; its content box stays clipped and clean
+/* The artboard owns the page's size; its content box stays clipped and clean
    so screenshots never include editor chrome. Its width and height are set
    from workbench.js (a device, or the freeform size) or zoom.js (Fit). */
 .wb-artboard {
@@ -1635,7 +1470,7 @@ textarea,
   touch-action: none;
 }
 
-.wb-canvas[data-width='resizable'] .wb-artboard-resize {
+.wb-canvas[data-size='resizable'] .wb-artboard-resize {
   display: block;
 }
 

@@ -33,16 +33,34 @@ Capture.prototype.recover = function () {
   this.retry.unref();
 };
 
+/* `options.diagnostic(level, event, details)`, when given, hears startup timing. */
+Capture.prototype.diagnostic = function (level, event, details) {
+  if (!this.options.diagnostic) return;
+  try { this.options.diagnostic(level, event, details); } catch (_) {}
+};
+
 Capture.prototype.launch = function () {
   if (this.closed) return Promise.reject(new Error('Capture helper is closed'));
   if (this.launching) return this.launching;
   var self = this;
+  var began = Date.now();
+  var spawned;
+  this.diagnostic('info', 'capture.helper.starting', {});
   this.launching = Promise.resolve().then(function () {
-    return self.options.executable || (self.options.spawn ? 'test-helper' : runtime.prepare(self.options.storage));
+    return self.options.executable || (self.options.spawn ? 'test-helper' : runtime.prepare(self.options.storage, null, function (event, details) {
+      self.diagnostic('info', event, Object.assign({ for: 'capture' }, details));
+    }));
   }).then(function (file) {
     if (self.closed) throw new Error('Capture helper is closed');
+    spawned = Date.now();
     return self.start(file);
+  }).then(function (result) {
+    self.diagnostic('info', 'capture.helper.ready', {
+      prepareMs: spawned - began, launchMs: Date.now() - spawned, elapsedMs: Date.now() - began,
+    });
+    return result;
   }).catch(function (error) {
+    self.diagnostic('warn', 'capture.helper.failed', { elapsedMs: Date.now() - began, message: String(error.message || error) });
     self.launching = null;
     if (!self.closed) error.code = 'CAPTURE_STARTUP_FAILED';
     self.recover();

@@ -1,8 +1,11 @@
 /* The script of a served docs page: it mounts the lens's examples, runs Show
    code and Copy code, reports readiness and actions to the canvas, and reloads
    the page, keeping its scroll position, when the Markdown or an example
-   changes. Options come from window.__workbenchDocs (page-document.ts). */
+   changes. Options come from window.__workbenchDocs (page-document.ts). The
+   server answers with the Markdown at once; a page served that way asks for
+   its bundle here, and its panels wait as `pending` until then. */
 
+import type { BundleInfo } from '../docs-service.ts';
 import type { DocsPageOptions } from '../page-document.ts';
 import { mountExamples, type ExamplesBundle, type ExampleResult } from './mount-examples.ts';
 
@@ -108,6 +111,48 @@ async function copyCode(id: string, button: HTMLButtonElement): Promise<void> {
   }
 }
 
+/* A pending panel, once the bundle says what it shows: mounted, or a note. */
+function settle(figure: HTMLElement, status: 'ready' | 'missing' | 'unavailable', note?: string): void {
+  figure.dataset.status = status;
+  if (status === 'ready') return;
+  figure.replaceChildren(Object.assign(document.createElement('p'), { className: 'wb-docs-example-note', textContent: note ?? '' }));
+}
+
+function stylesheet(href: string): Promise<void> {
+  return new Promise(resolve => {
+    const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href });
+    link.addEventListener('load', () => resolve(), { once: true });
+    link.addEventListener('error', () => resolve(), { once: true });
+    document.head.append(link);
+  });
+}
+
+/* Where a deferred page's bundle is, with its panels settled; null when nothing mounts. */
+async function resolveBundle(info: string): Promise<string | null> {
+  const pending = figures().filter(figure => figure.dataset.status === 'pending');
+  let answer: BundleInfo;
+  try {
+    const response = await fetch(info, { cache: 'no-store' });
+    answer = await response.json();
+    if (!response.ok) throw new Error((answer as unknown as { error?: string }).error || 'Couldn’t load the examples.');
+  } catch (error) {
+    for (const figure of pending) settle(figure, 'unavailable', String((error as Error).message ?? error));
+    return null;
+  }
+  options!.revision = answer.revision;
+  if (answer.error || !answer.module) {
+    for (const figure of pending) settle(figure, 'unavailable', answer.error ?? 'This page has no examples.');
+    return null;
+  }
+  const exported = new Set(answer.examples);
+  for (const figure of pending) {
+    if (exported.has(figure.dataset.wbExample ?? '')) settle(figure, 'ready');
+    else settle(figure, 'missing', 'Not available in ' + (options!.lensLabel ?? options!.lens));
+  }
+  if (answer.stylesheet) await stylesheet(answer.stylesheet);
+  return answer.module;
+}
+
 function figures(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('[data-wb-example]'));
 }
@@ -161,7 +206,9 @@ function watchRevision(): void {
     try {
       const answer = await fetch(options.revisionUrl, { cache: 'no-store' });
       const { revision } = await answer.json();
-      if (revision && revision !== options.revision) {
+      // A page that never learned its revision takes the first answer as it.
+      if (revision && !options.revision) options.revision = revision;
+      else if (revision && revision !== options.revision) {
         clearInterval(timer);
         try { sessionStorage.setItem(SCROLL_KEY, window.scrollX + ',' + window.scrollY); } catch { /* See restoreScroll. */ }
         location.reload();
@@ -178,10 +225,12 @@ async function start(): Promise<void> {
   wireTools();
   wireLinks();
   let results: ExampleResult[] = [];
-  if (options?.bundle) {
+  const wanted = options?.bundle;
+  const module = !wanted ? null : 'info' in wanted ? await resolveBundle(wanted.info) : wanted.module;
+  if (module && options) {
     try {
       // Against the page, not this script: in a portable export they sit in different folders.
-      const bundle = await import(new URL(options.bundle.module, location.href).href) as ExamplesBundle;
+      const bundle = await import(new URL(module, location.href).href) as ExamplesBundle;
       const mounted = await mountExamples(document, bundle, { page: options.page, state: options.state ?? 'default', report: onAction });
       results = mounted.results;
       addEventListener('pagehide', () => { void mounted.dispose().catch(() => {}); }, { once: true });

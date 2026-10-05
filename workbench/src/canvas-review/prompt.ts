@@ -12,7 +12,7 @@ export function canvasPrompt(value: unknown, singlePrompt: (payload: Record<stri
     if (typeof board.id !== 'string' || !board.id || ids.has(board.id) || typeof board.src !== 'string' || !space || typeof space.id !== 'string' || typeof space.name !== 'string' || !region || ![region.x,region.y,region.width,region.height].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0) || region.width === 0 || region.height === 0) throw new Error('Invalid artboard in canvas review.');
     ids.add(board.id);
     lines.push('', `Artboard ${board.id} — Space: ${space.name} (${space.id})`, `- Image region: (${region.x}, ${region.y}), ${region.width} × ${region.height}`,
-      `- Status: ${board.status || 'ready'}`, `- Captured at: ${board.capturedAt}`, singlePrompt({ ...board, file: review.file, width: `${region.width} × ${region.height}` }));
+      `- Status: ${board.status || 'ready'}`, `- Captured at: ${board.capturedAt}`, singlePrompt({ ...board, file: review.file, size: typeof board.size === 'string' ? board.size : `${region.width} × ${region.height}` }));
   }
   if (review.selected !== null && !ids.has(review.selected)) throw new Error('Invalid selected artboard in canvas review.');
   return lines.join('\n');

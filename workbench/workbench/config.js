@@ -195,8 +195,10 @@
       problems.push(where + ': ' + reserved);
       return null;
     }
+    /* Sizes are resolved by the server, which sends them per page in
+       /_workbench/config; see src/sizes/. */
     var item = { label: label, src: src };
-    item.viewports = window.wbManifest.pageViewports(raw.viewports, where + ' › ' + label, problems);
+    window.wbManifest.pageLensLabel(raw.lensLabel, item, where + ' › ' + label, problems);
     var icon = text(raw.icon);
     if (icon) item.icon = icon;
     var found = states(raw.states, where + ' › ' + label, problems);

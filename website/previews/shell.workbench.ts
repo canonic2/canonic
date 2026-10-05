@@ -18,5 +18,5 @@ export default definePreview({
     default: {},
     versioned: { inputs: { version: '1.0.0' } },
   },
-  viewports: ['desktop', 'mobile', 'responsive'],
+  sizes: ['laptop', 'mobile', 'resizable'],
 });

@@ -9,6 +9,7 @@
        tokens: the workbench is the tool, and it has to look the same in a
        project whose scale is named differently or not at all. The product's
        tokens live inside the frame, loaded by the pages themselves. -->
+  <link rel="stylesheet" href="src/theme/defaults.css" />
   <link rel="stylesheet" href="workbench.css" />
   <link rel="stylesheet" href="page-list.css" />
   <link rel="stylesheet" href="annotations.css" />
@@ -26,18 +27,18 @@
         <progress id="exportProgressBar" value="0" max="1"></progress>
       </div>
     </div>
-    <!-- Full-width top bar in three: where you are on the left, the lens
-         centred on the bar, the size switcher and page actions on the right.
+    <!-- Full-width top bar in three: where you are on the left, the lens,
+         size switcher, and Actions switch centred on the bar, the page
+         actions on the right.
          The annotation tools float over the canvas in the toolbar instead,
          beside the thing they draw on. -->
     <header class="wb-topbar">
       <div class="wb-topbar-left">
         <!-- Which space, when the workbench has more than one: its mark and
              name, with the others one click away. Drawn by
-             space-switcher.js from /_workbench/spaces. -->
+             wb-space-switcher from /_workbench/spaces. -->
         <span class="wb-space-crumb" id="spaceCrumb" hidden>
-          <button class="wb-action wb-space-crumb-button" type="button" id="spaceCrumbButton"></button>
-          <div class="wb-spaces-menu wb-space-crumb-menu" id="spaceCrumbMenu"></div>
+          <wb-space-switcher id="spaceCrumbSwitcher" variant="breadcrumb"></wb-space-switcher>
           <span class="wb-crumb-sep" aria-hidden="true">/</span>
         </span>
 
@@ -56,21 +57,6 @@
             <div class="wb-menu wb-menu-column" id="stateMenu" role="menu" aria-label="State" hidden></div>
           </span>
         </div>
-
-        <!-- Off by default: clicking around a page you're reviewing
-             shouldn't navigate you out of it. Turn it on to walk the real
-             flow. Enforced inside the page by actions.js, which the server
-             puts there — the shell can't reach into the frame off file://.
-
-             A switch rather than a lit icon: this changes how the preview
-             behaves, so its state has to be readable without hovering. -->
-        <button class="wb-toggle" type="button" id="actionsToggle"
-                role="switch" aria-checked="false"
-                title="Actions — let links navigate and forms submit">
-          <span data-icon="mouse-pointer-click"></span>
-          <span class="wb-toggle-label">Actions</span>
-          <span class="wb-toggle-track"><span class="wb-toggle-knob"></span></span>
-        </button>
       </div>
 
       <!-- The lens: the design, or one of the page's implementations in
@@ -78,26 +64,23 @@
            first. Rows are built in workbench.js from the config. -->
       <div class="wb-topbar-center">
         <div class="wb-lenses" id="lenses" role="group" aria-label="Lens" hidden></div>
+        <!-- The artboard's size: the space's button sizes, then a menu of
+             every size with Custom size… and Edit sizes…. workbench.js
+             supplies the sizes and handles what is picked; see specs/sizes.md. -->
+        <wb-size-switcher id="sizeSwitcher"></wb-size-switcher>
+
+        <!-- Off by default: clicking around a page you're reviewing
+             shouldn't navigate you out of it. Turn it on to walk the real
+             flow. Enforced inside the page by actions.js, which the server
+             puts there — the shell can't reach into the frame off file://.
+             workbench.js owns the setting; see design/actions-switch.md. -->
+        <wb-actions-switch id="actionsToggle"></wb-actions-switch>
       </div>
 
       <!-- data-icon is filled in from icons.js; every icon-only
            control keeps a title and an aria-label so it still says what it
            does. -->
       <div class="wb-topbar-right">
-        <div class="wb-sizes" role="group" aria-label="Size">
-          <button class="wb-size" type="button" data-width="fit"
-                  data-icon="minimize-2" title="Fit" aria-label="Fit"></button>
-          <button class="wb-size" type="button" data-width="1512" data-height="982"
-                  data-icon="monitor" title="Laptop · MacBook Pro 14, 1512 × 982"
-                  aria-label="Laptop, MacBook Pro 14, 1512 by 982 points"></button>
-          <button class="wb-size" type="button" data-width="393" data-height="852"
-                  data-icon="smartphone" title="Mobile · iPhone 15 Pro, 393 × 852"
-                  aria-label="Mobile, iPhone 15 Pro, 393 by 852 points"></button>
-          <button class="wb-size" type="button" data-width="resizable"
-                  data-icon="scaling" title="Resizable · drag an outside edge or corner"
-                  aria-label="Resizable viewport"></button>
-        </div>
-
         <button class="wb-action" type="button" id="reload"
                 data-icon="rotate-cw" title="Reload" aria-label="Reload"></button>
 
@@ -151,10 +134,7 @@
       </header>
 
       <!-- In place of the header when there is more than one space. -->
-      <div class="wb-spaces" id="spaces" hidden>
-        <button class="wb-spaces-button" type="button" id="spaceButton"></button>
-        <div class="wb-spaces-menu" id="spaceMenu"></div>
-      </div>
+      <wb-space-switcher id="spaces" hidden></wb-space-switcher>
 
       <section class="wb-browse-block" id="collectionsBlock" hidden>
         <h2 class="wb-browse-head">Collections</h2>
@@ -183,7 +163,7 @@
           <span class="wb-artboard-name" id="artboardName"></span>
           <span class="wb-artboard-size" id="artboardSize" aria-live="polite"></span>
         </div>
-        <!-- The artboard carries the viewport size and, in Resizable mode,
+        <!-- The artboard carries the page's size and, in Resizable mode,
              puts 5px drag rails outside the preview instead of over its
              content. Its content box clips the preview frames. zoom.js scales
              and moves it as one piece. -->
@@ -204,7 +184,7 @@
                clip, so a note can hang past the edge onto the canvas while the
                page stays clipped — and a focused note can never scroll the
                preview frame. Shapes go in the SVG; text boxes are siblings of
-               it. Screenshots render the artboard, whose viewport crops to the
+               it. Screenshots render the artboard, whose content box crops to the
                same box the content clip uses. -->
           <div class="wb-annotation-layer" id="annotationLayer">
             <svg id="annotationSvg" aria-hidden="true">
@@ -309,7 +289,7 @@
         <header class="wb-config-header">
           <div>
             <h2 id="configTitle">Configure pages</h2>
-            <p>Edit collections, page paths, and the viewports each page supports.</p>
+            <p>Edit collections, page paths, and the sizes each page supports.</p>
           </div>
           <button class="wb-action" type="button" id="configClose" data-icon="x"
                   title="Close" aria-label="Close configuration"></button>
@@ -325,6 +305,10 @@
 
     <p class="wb-toast" id="toast" role="status" aria-live="polite" hidden></p>
   </div>
+
+  <!-- Custom size… and Edit sizes…, opened from the size switcher's menu. -->
+  <wb-size-dialog id="sizeDialog"></wb-size-dialog>
+  <wb-sizes-editor id="sizesEditor"></wb-sizes-editor>
 
   <!-- yaml and config before the shell, which asks them for the space it is
        showing and builds itself around the answer. -->
@@ -342,8 +326,10 @@
   <script src="describe.js"></script>
   <script src="config-editor.js"></script>
   <script src="zoom.js"></script>
-  <script src="space-switcher.js"></script>
+  <script type="module" src="src/components/canvas-bootstrap.ts"></script>
   <script src="preview-sessions.js"></script>
+  <!-- Sizes load before the shell, which waits for them; see workbench.js whenSizes. -->
+  <script type="module" src="src/sizes/browser/bootstrap.ts"></script>
   <script src="workbench.js"></script>
   <script src="capture-sync.js"></script>
   <script src="dom-mirror.js"></script>

@@ -112,8 +112,8 @@ This work follows the iframe runtime ownership in the
   served from the workbench's origin instead; see that spec. Capture is in
   [capture.md](capture.md).
 - Design-system export plans a reference for each imported story at each of
-  the page's viewports; imported pages declare none, so they use fit,
-  desktop, and mobile. A state without a story ID becomes a warning. An
+  the page's sizes; imported pages declare none, so they use fit,
+  laptop, and mobile. A state without a story ID becomes a warning. An
   authored page mapped to Storybook exports its design, not the story.
   [Export capture](export.md) schedules background workers and does not drive
   the visible workbench preview.

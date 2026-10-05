@@ -1,0 +1,26 @@
+/* Shared defaults for migrated shell controls. Host/shell declarations override
+   these inherited tokens; components never redefine them on :host. */
+:root {
+  --wb-panel: var(--vscode-sideBar-background, #1e1e1e);
+  --wb-fg: var(--vscode-sideBar-foreground, var(--vscode-foreground, #fff));
+  --wb-fg-2: var(--vscode-descriptionForeground, #b3b3b3);
+  --wb-fg-3: var(--vscode-descriptionForeground, #8c8c8c);
+  --wb-raised: var(--vscode-input-background, #2c2c2c);
+  --wb-hover: var(--vscode-list-hoverBackground, #333);
+  --wb-line: var(--vscode-contrastBorder, var(--vscode-widget-border, #383838));
+  --wb-menu-bg: var(--vscode-menu-background, var(--wb-panel));
+  --wb-menu-fg: var(--vscode-menu-foreground, var(--wb-fg));
+  --wb-focus: var(--vscode-focusBorder, #00a1ff);
+  --wb-selection-fg: var(--vscode-list-activeSelectionForeground, var(--wb-fg));
+  --wb-check: var(--vscode-list-activeSelectionForeground, #4cbcff);
+  --wb-selection-bg: var(--vscode-list-activeSelectionBackground, #333);
+  --wb-ui-font: var(--vscode-font-family, system-ui, sans-serif);
+  --wb-ui-font-size: var(--vscode-font-size, 13px);
+  /* A pressed segment, an inline error, and the dialog's primary action. */
+  --wb-selected: var(--vscode-list-inactiveSelectionBackground, #383838);
+  --wb-error: var(--vscode-errorForeground, #f48771);
+  --wb-button-bg: var(--vscode-button-background, #0a7fd4);
+  --wb-button-fg: var(--vscode-button-foreground, #fff);
+  /* A switch that's on: Canonic blue. */
+  --wb-accent: #00a1ff;
+}

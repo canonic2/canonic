@@ -79,7 +79,7 @@ export default definePreview({
   title: 'Components/Button',
   adapter: 'vue',
   source: { entry: './AcmeButton.vue' },
-  viewports: ['fit'],
+  sizes: ['fit'],
   inputs: { label: 'Continue', tone: 'primary', disabled: false },
   controls: {
     label: { type: 'text' },

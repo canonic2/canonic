@@ -69,16 +69,17 @@
     } catch (error) {
       return;
     }
-    var switcher = window.wbSpaces.create({
-      button: document.getElementById('spaceButton'),
-      menu: document.getElementById('spaceMenu'),
-      onPick: function (id) { send({ type: 'canonic-space', id: id }); },
-      onAdd: function () { send({ type: 'canonic-add-space' }); },
-      onRemove: function (id) { send({ type: 'canonic-remove-space', id: id }); },
-      onToggle: function (open) { shell.classList.toggle('is-dimmed', open); },
-    });
-    switcher.set(listed.spaces, listed.current);
-    document.getElementById('spaces').hidden = false;
+    var switcher = document.getElementById('spaces');
+    switcher.iconRenderer = window.wbIcon;
+    switcher.allowAdd = true;
+    switcher.allowRemove = true;
+    switcher.spaces = listed.spaces;
+    switcher.currentId = listed.current;
+    switcher.addEventListener('wb-space-pick', function (e) { send({ type: 'canonic-space', id: e.detail.id }); });
+    switcher.addEventListener('wb-space-add', function () { send({ type: 'canonic-add-space' }); });
+    switcher.addEventListener('wb-space-remove', function (e) { send({ type: 'canonic-remove-space', id: e.detail.id }); });
+    switcher.addEventListener('wb-space-toggle', function (e) { shell.classList.toggle('is-dimmed', e.detail.open); });
+    switcher.hidden = false;
   }
 
   spaces();
@@ -128,11 +129,16 @@
       return config.implementations[key].catalog;
     }).map(function (key) { return config.implementations[key].label || key; });
     loadingText.textContent = catalogs.length ? 'Waiting for ' + catalogs.join(', ') + '…' : 'Finding previews…';
-    window.addEventListener('message', function catalog(e) {
+    /* The first answer builds the list. Later ones carry what the server
+       learned afterwards, such as docs pages' problems; they update the
+       problems and leave the list, its folds and its filter as they are. */
+    var built = false;
+    window.addEventListener('message', function (e) {
       var data = e.data || {};
       if (data.type !== 'canonic-catalog') return;
-      window.removeEventListener('message', catalog);
       showProblems(data.problems);
+      if (built) return;
+      built = true;
       config.collections = window.wbManifest.mergeCollections(config.collections, data.collections || []);
       build(config);
     });

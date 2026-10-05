@@ -1,4 +1,7 @@
 /** Serializable canvas state. Renderer handles and transport never enter it. */
+import { accepts, validDimensions } from '../sizes/browser/geometry.ts';
+import { MAX_LENGTH, MIN_LENGTH } from '../sizes/browser/size.ts';
+import type { ResolvedSize } from '../sizes/browser/size.ts';
 export interface Space { id: string; name: string; url: string; root?: string }
 export interface Target { space: Space; src: string; state: string | null; lens: string | null; example?: string | null }
 export interface Size { width: number; height: number }
@@ -8,19 +11,19 @@ export interface ViewInfo {
   payload: Record<string, unknown>; states: { id: string; label: string; current?: boolean }[];
   lenses: { id: string; label: string }[];
   tool?: string;
-  sizes?: string[];
+  /** The sizes the page supports, as the space resolves them; absent on a docs page. */
+  sizes?: ResolvedSize[];
 }
 export interface Artboard { id: string; target: Target; size: Size; x: number; y: number; generation: number; view: ViewInfo | null }
 export interface CanvasState { id: string; revision: number; selected: string | null; artboards: readonly Artboard[] }
 export const MAX_ARTBOARDS = 32;
 export function size(width: number, height: number): Size {
-  if (![width, height].every(n => Number.isFinite(n) && n >= 320 && n <= 8192)) throw new Error('Artboard dimensions must be between 320 and 8192 CSS pixels.');
+  if (!validDimensions({ width, height })) throw new Error(`Artboard dimensions must be between ${MIN_LENGTH} and ${MAX_LENGTH} CSS pixels.`);
   return { width: Math.round(width), height: Math.round(height) };
 }
-export function supportsSize(dimensions: Size, modes?: readonly string[]): boolean {
-  if (!modes || modes.includes('resizable') || modes.includes('fit')) return true;
-  return (modes.includes('1512') && dimensions.width === 1512 && dimensions.height === 982)
-    || (modes.includes('393') && dimensions.width === 393 && dimensions.height === 852);
+/** Whether a page that supports `sizes` can be shown at `dimensions`; every size fits a page that names none. */
+export function supportsSize(dimensions: Size, sizes?: readonly ResolvedSize[]): boolean {
+  return !sizes || sizes.some(candidate => accepts(candidate, dimensions));
 }
 export function createState(id: string): CanvasState { return { id, revision: 0, selected: null, artboards: [] }; }
 export function add(state: CanvasState, id: string, target: Target, dimensions: Size): CanvasState {

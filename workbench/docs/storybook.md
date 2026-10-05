@@ -56,7 +56,11 @@ shown in Storybook's sidebar with `/` between levels. `Button` doesn't match
 [stories route](troubleshooting.md#check-a-storybook-title) suggests the right
 title.
 
-On that page, the lens switcher shows **Design** and **Storybook**. Choosing
+With these defaults, the lens switcher shows **Design** and **Storybook**.
+Set the implementation's `label` to rename **Storybook**, and the page's
+`lensLabel` to rename **Design**. The implementation key and story address
+stay the same. See [Customize lens labels](lenses.md#customize-lens-labels).
+Choosing
 Storybook shows the title's first story. The state switcher, after the page's
 name in the top bar's breadcrumb, lists the title's stories instead of the
 design's states. Switch between them without leaving the frame.
@@ -236,7 +240,7 @@ cookies, storage, credentials, or code.
 A [design-system export](design-system-export.md) includes each story's source
 and local imports, your Storybook configuration from `.storybook` or a
 `--config-dir` named in a package script, and a reference screenshot of every
-imported story at each of the page's `viewports`. Set `root` so sources can be
+imported story at each of the page's `sizes`. Set `root` so sources can be
 found.
 
 ## Troubleshooting

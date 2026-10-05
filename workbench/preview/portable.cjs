@@ -19,6 +19,12 @@ async function create(compiler, options = {}) {
   // Docs pages: those workbench.yaml declares and those definitions declare.
   let config = null;
   try { config = require('../config').read(compiler.root); } catch (error) { warnings.push('workbench.yaml: ' + error.message); }
+  // Each preview carries its sizes as the space resolves them, so the viewer needs no space.
+  const { readPageSizes } = require('../src/sizes/schema.ts');
+  const { supported } = require('../src/sizes/browser/choice.ts');
+  const { defaultSizes } = require('../src/sizes/browser/size.ts');
+  const spaceSizes = config && config.sizes || defaultSizes();
+  for (const preview of previews) preview.sizes = supported(spaceSizes, readPageSizes(preview.sizes, spaceSizes, preview.file, warnings));
   const discovered = (index.docs || []).map(page => ({ src: page.src, label: page.title.split('/').filter(Boolean).pop() || page.id, lens: page.lens, lenses: page.lenses }));
   const { docsPages } = require('../src/docs/pages.ts');
   const { portableDocs } = require('../src/docs/portable.ts');

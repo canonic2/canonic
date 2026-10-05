@@ -120,10 +120,10 @@ async function main() {
     }
     writeData('controls', strip);
 
-    await open('#pages/sign-in.html:error@393', SIDE);
+    await open('#pages/sign-in.html:error@mobile', SIDE);
     await shot('states.jpg');
 
-    await open('#pages/sign-in.html:error@393', SIDE);
+    await open('#pages/sign-in.html:error@mobile', SIDE);
     var alert = await rectOf('.alert');
     var field = await rectOf('input[type=password]');
     await tool('#shapeTool');
@@ -140,7 +140,7 @@ async function main() {
     await mouse('mouseReleased', 400, 700);
     await wait(300);
     await shot('annotations.jpg');
-    await open('#preview/interactive-button.workbench.ts@1512', SIDE);
+    await open('#preview/interactive-button.workbench.ts@laptop', SIDE);
     await t.evaluate(`(async function () {
       var deadline = Date.now() + 8000;
       while (document.getElementById('previewControls').hidden) {
@@ -163,8 +163,8 @@ async function main() {
 function measureRegions() {
   function box(el) { var r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }
   var top = box(document.querySelector('.wb-topbar'));
-  var toggle = box(document.getElementById('actionsToggle'));
-  var sizes = box(document.querySelector('.wb-sizes'));
+  var crumb = box(document.getElementById('crumb'));
+  var center = box(document.querySelector('.wb-topbar-center'));
   var side = box(document.querySelector('.wb-sidebar'));
   var list = document.getElementById('pageList');
   var pages = box(list.lastElementChild || list);
@@ -174,7 +174,7 @@ function measureRegions() {
     width: innerWidth, height: innerHeight,
     regions: [
       { n: 1, name: 'page list', box: side, at: [side.x + side.w / 2, pages.y + pages.h + 40] },
-      { n: 2, name: 'top bar', box: top, at: [(toggle.x + toggle.w + sizes.x) / 2, top.y + top.h / 2] },
+      { n: 2, name: 'top bar', box: top, at: [(crumb.x + crumb.w + center.x) / 2, top.y + top.h / 2] },
       { n: 3, name: 'canvas', box: canvas, at: [canvas.x + 40, canvas.y + canvas.h * 0.22] },
       { n: 4, name: 'toolbar', box: toolbar, at: [toolbar.x - 28, toolbar.y + toolbar.h / 2] },
     ],
