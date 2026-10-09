@@ -1,0 +1,20 @@
+---
+source: tests/integration/gallery.rs
+expression: text
+---
+Canonic TUI · Component gallery
+
+┌Choose a component────────────────────────────────────────────┐
+│Search:                                                       │
+│> Option picker                                               │
+│  Full-screen chat                                            │
+│                                                              │
+│                                                              │
+│                                                              │
+│                                                              │
+│                                                              │
+│                                                              │
+│Up/Down move · Enter select · Esc cancel                      │
+└──────────────────────────────────────────────────────────────┘
+
+Esc back/quit · Ctrl-C quit · Ctrl-T theme · F2 next fixture · r

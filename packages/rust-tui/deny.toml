@@ -1,0 +1,24 @@
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "workspace"
+
+[licenses]
+private = { ignore = true }
+allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+# Ratatui's layout/cache hash tables depend on foldhash's Zlib-licensed implementation.
+[[licenses.exceptions]]
+name = "foldhash"
+allow = ["Zlib"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
