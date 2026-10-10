@@ -17,7 +17,7 @@ for mode in ['ansi16','ansi256','truecolor','none']:
             token=match.group()
             if token.startswith('\x1b['):
                 args=token[2:-1];command=token[-1]
-                if args.startswith('?'):continue
+                if args.startswith(('?', '>', '<')):continue
                 values=[int(v or 0) for v in args.split(';')]
                 if command in 'Hf':row=(values[0] or 1)-1;column=(values[1] if len(values)>1 else 1)-1
                 elif command=='G':column=(values[0] or 1)-1

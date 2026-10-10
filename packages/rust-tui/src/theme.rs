@@ -112,7 +112,18 @@ impl Presentation {
         Colors {
             foreground: None,
             background: None,
-            dim: roles[0],
+            dim: if self.colors == ColorMode::Ansi16 {
+                None
+            } else {
+                roles[0]
+            },
+            faded: match self.colors {
+                ColorMode::NoColor => None,
+                ColorMode::Ansi16 => Some(Color::DarkGray),
+                ColorMode::Ansi256 => Some(Color::Indexed(240)),
+                ColorMode::TrueColor if self.theme == Theme::Dark => Some(Color::Rgb(94, 96, 100)),
+                ColorMode::TrueColor => Some(Color::Rgb(154, 156, 159)),
+            },
             accent: roles[1],
             success: roles[2],
             warning: roles[3],
@@ -130,15 +141,37 @@ impl Presentation {
     pub fn base(self) -> Style {
         Style::default()
     }
-    /// Secondary text uses a color token, without the dim attribute.
+    /// Readable secondary text; ANSI 16 uses default foreground with faint.
     #[must_use]
     pub fn muted(self) -> Style {
-        Self::foreground(self.tokens().dim)
+        if self.colors == ColorMode::Ansi16 {
+            self.base().fg(Color::Reset).add_modifier(Modifier::DIM)
+        } else {
+            Self::foreground(self.tokens().dim)
+        }
+    }
+    /// Obscured live content; attribute-only hosts fade without color overrides.
+    #[must_use]
+    pub fn faded(self) -> Style {
+        if self.colors == ColorMode::NoColor {
+            self.base()
+        } else if self.colors == ColorMode::Ansi16 {
+            Self::foreground(self.tokens().faded).add_modifier(Modifier::DIM)
+        } else {
+            Self::foreground(self.tokens().faded)
+        }
     }
     /// Accent without emphasis.
     #[must_use]
     pub fn accent(self) -> Style {
         Self::foreground(self.tokens().accent)
+    }
+    /// Container heading, without the reverse emphasis reserved for focused fields.
+    #[must_use]
+    pub fn heading(self) -> Style {
+        self.accent()
+            .add_modifier(Modifier::BOLD)
+            .remove_modifier(Modifier::DIM | Modifier::REVERSED)
     }
     /// Focused heading; reverse emphasis in no-color mode.
     #[must_use]

@@ -61,22 +61,36 @@ components retain default foreground and bold, with no terminal-setting change
 or application workaround. Emitted label/title styles are covered by native PTY
 tests in all four color modes.
 
-`dialog::Stack` adds caller-owned body composition. Its view uses preferred
-dimensions from spacing tokens, clamps/centers in the host viewport, clears only
-each owned region and reuses title/footer rules. Active headings use focus styles;
-only the top body gets a focus target. Body rendering is delegated, so editor/
-picker styling stays in those components. Tiny regions omit rules to preserve
-body space. Gallery inspection text is a local fixture, not a general renderer.
+`dialog::Stack` adds caller-owned body composition. Its view measures content,
+places centered panels, fades visible background cells and
+reuses title/footer rules. Indexed/RGB modes fill the surface; ANSI 16/no-color
+use full boxes. Active headings use focus styles; only the top body renders and
+gets a focus target, with a parent title trail. Body rendering is delegated, so
+editor/picker styling stays in those components. Prompt fields use inset terminal
+backgrounds and grow to six rows. Tiny regions omit rules to preserve body space.
+Gallery inspection text is a local fixture, not a general renderer.
 
 ## Tokens and fallback behavior
 
-Body foreground/background remain terminal defaults. ANSI 16 uses terminal
-slots; indexed/RGB modes resolve dim, accent, success, warning, error, info,
+Body foreground/background remain terminal defaults. ANSI 16 secondary/live hint
+text uses default foreground plus faint, rather than the profile's bright-black
+slot. Obscured background may use that slot. Indexed/RGB modes resolve dim, accent, success, warning, error, info,
 surface and selection. The supplied dark/light role values are centralized.
 Editor selection uses an accent tint in extended modes and reverse otherwise.
-Focused headings are bold; no-color headings also reverse. Inactive chrome is
+Container headings are bold without reverse. In no-color only the focused field's
+heading reverses, and obscured content receives no fade styling. Inactive chrome is
 dim while body text remains readable. ASCII changes decorations/control display,
 preserving document Unicode. Fonts and cursor shape/blink belong to the terminal.
+
+In saved iTerm2 profiles inspected on 2026-10-10, “Use Bright Bold” is enabled:
+ordinary cyan is green-cyan while bright cyan is grey-green. The terminal can
+therefore display ANSI cyan plus bold as grey even when the app supplies the
+correct slot and attribute. This matches iTerm2's
+[bright-bold behavior](https://iterm2.com/documentation/2.1/documentation-preferences.html).
+Strict ANSI 16 cannot guarantee bold cyan's RGB appearance independently of that
+profile. Keep the requested cyan slot and bold attribute; do not modify terminal
+settings or emit RGB behind a 16-color request. Native active-profile confirmation
+remains separate from inspecting saved preferences.
 
 Gallery resolves nonempty `NO_COLOR`, `COLORTERM` and `TERM` once; explicit CLI
 options override it. Pure components perform no environment reads or terminal

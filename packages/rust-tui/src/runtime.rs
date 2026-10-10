@@ -1,5 +1,9 @@
 //! Owns one interactive terminal lease and restores its modes on drop or unwinding.
 
+#[cfg(unix)]
+use crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use crossterm::{
     cursor::{Hide, Show},
     event::{self, DisableBracketedPaste, EnableBracketedPaste, Event},
@@ -21,6 +25,8 @@ pub struct TerminalSession {
     raw: bool,
     screen: bool,
     paste: bool,
+    #[cfg(unix)]
+    keyboard: Option<KeyboardEnhancementFlags>,
 }
 
 impl TerminalSession {
@@ -45,6 +51,8 @@ impl TerminalSession {
             raw: false,
             screen: false,
             paste: false,
+            #[cfg(unix)]
+            keyboard: None,
         };
         terminal::enable_raw_mode()?;
         session.raw = true;
@@ -52,6 +60,12 @@ impl TerminalSession {
         execute!(io::stdout(), EnterAlternateScreen, Hide)?;
         session.paste = true;
         execute!(io::stdout(), EnableBracketedPaste)?;
+        #[cfg(unix)]
+        {
+            let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES;
+            session.keyboard = Some(flags);
+            execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
+        }
         session.terminal = Some(Terminal::new(CrosstermBackend::new(io::stdout()))?);
         Ok(session)
     }
@@ -86,6 +100,10 @@ impl TerminalSession {
 
 impl Drop for TerminalSession {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        if self.keyboard.is_some() {
+            let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+        }
         if self.paste {
             let _ = execute!(io::stdout(), DisableBracketedPaste);
         }

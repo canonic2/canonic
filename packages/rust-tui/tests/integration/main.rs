@@ -2,6 +2,7 @@
 
 mod components;
 mod dialog;
+mod dialog_design;
 #[cfg(feature = "gallery")]
 mod dialog_terminal;
 mod editor;

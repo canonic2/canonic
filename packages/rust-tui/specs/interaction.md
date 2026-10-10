@@ -37,9 +37,62 @@ and visible hints, not by each component adding its own global handler.
 Input normalization preserves key modifiers, press/repeat/release, paste as one
 event, pointer coordinates and resize/focus changes. Ignore release for commands;
 allow repeats for movement/editing, suppress repeated one-shot submission or
-confirmation while an action is pending. Traditional terminals cannot distinguish
-every enhanced key combination: Alt-Enter and a documented control-key fallback
-must be available for newline without requiring Shift-Enter support.
+confirmation while an action is pending. The shared
+[keyboard contract](#keyboard-contract-and-terminal-quirks) governs Enter and
+terminal reporting across every component and host adapter.
+
+## Keyboard contract and terminal quirks
+
+Agreed on 2026-10-10. This is a hard rule across the library, gallery and consumer
+adapters, including chat composers and dialog prompts. A host may choose plain
+Enter's action; it may not redefine modified Enter as submission.
+
+| Input | Multiline editor/composer/prompt | Picker or other single-line action control |
+| --- | --- | --- |
+| Shift-Enter | Insert a newline | Never confirm or activate |
+| Alt-Enter | Insert a newline | Never confirm or activate |
+| Ctrl-J | Insert a newline; traditional-terminal fallback | No implicit confirmation |
+| Plain Enter press | Host-defined: submit in chat/prompt, newline in standalone editor | Explicit confirmation of a valid enabled selection |
+| Modified Enter repeat/release | Release never edits; repeat never submits | Never confirm or activate |
+| Paste | Insert the supplied text, normalizing CRLF/CR to LF | Never confirm or activate |
+
+Multiline inputs use the same editor event adapter. A modifier-aware Enter event
+must reach that editor without a host intercepting it as submission. Submission
+requires an unmodified Enter press and must happen only once. Empty/disabled or
+pending actions retain their own validation. Completion or another overlay must
+not turn modified Enter into an affirmative action. Consumed input never reaches
+a background draft.
+
+Traditional terminals can send identical bytes for Enter and Shift-Enter, or omit
+Alt/Option. Those bytes cannot reveal which physical keys were pressed. The
+terminal owner requests enhanced keyboard reporting on supported hosts, preserves
+the reported modifiers, and restores the previous reporting state on every exit.
+Components neither acquire keyboard modes nor infer missing modifiers from timing.
+Ctrl-J remains a documented newline path when modifiers cannot be reported.
+Do not require a terminal-settings change as the default product workflow or
+claim a physical shortcut is supported solely because synthetic events pass.
+
+Unix `TerminalSession` pushes disambiguated keyboard reporting and pops it during
+cleanup. Windows uses the existing event backend without these Unix-only commands.
+No native Windows modifier acceptance is established. iTerm2 recommends the
+[Kitty keyboard protocol](https://iterm2.com/documentation-csiu.html); terminals and
+user profiles can still limit or remap reporting. Native keyboard observations
+belong in the [human gates](human-testing.md), with terminal and profile named.
+
+Automated evidence includes editor newline handling, chat submission guards,
+rich-picker modified/repeated Enter rejection, and the dialog PTY scenario sending
+encoded Shift/Alt-Enter, then plain Enter. The PTY also verifies keyboard-mode
+push/pop and restored shell input. This proves decoding and routing; physical
+Shift/Option behavior in the user's iTerm2 profile still awaits human confirmation.
+
+Acceptance requires both modified Enter combinations to grow the active multiline
+draft without closing/submitting, plain Enter to perform the documented host
+action once, and modal/background drafts to remain isolated. Test a terminal with
+enhanced reporting and a traditional-reporting path using Ctrl-J. Repeat/release
+and paste must not trigger confirmation, and closing the session must restore
+keyboard reporting along with its other owned modes.
+
+## Configurable bindings
 
 Hosts supply action IDs, scope and bindings. Components accept semantic editing
 or navigation actions as well as a documented default event adapter. Configurable

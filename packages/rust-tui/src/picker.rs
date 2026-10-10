@@ -82,7 +82,9 @@ impl Picker {
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     return Action::Cancelled;
                 }
-                KeyCode::Enter => return self.selected.map_or(Action::None, Action::Selected),
+                KeyCode::Enter if key.kind == KeyEventKind::Press && key.modifiers.is_empty() => {
+                    return self.selected.map_or(Action::None, Action::Selected);
+                }
                 KeyCode::Up | KeyCode::Down => {
                     let matches = self.matches();
                     let position = self

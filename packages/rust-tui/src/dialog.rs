@@ -1,6 +1,7 @@
 //! Owns modal stack generations, scoped focus and dismissal; bodies stay caller-owned.
 
 mod view;
+pub use view::DialogView;
 
 use crate::{
     event::{Event, KeyCode, KeyEventKind, MouseButton, MouseEventKind},
@@ -19,12 +20,12 @@ impl PartialEq for Ticket {
 }
 impl Eq for Ticket {}
 
-/// Preferred total dimensions, clamped and centered within the caller's area.
+/// Preferred panel width and compatibility-render height, clamped to the viewport.
 #[derive(Clone, Copy, Debug)]
 pub struct Size {
     /// Preferred cell width.
     pub width: u16,
-    /// Preferred row height, including two rules when space permits.
+    /// Preferred row height for `Stack::render`; `render_with` measures content.
     pub height: u16,
 }
 impl Default for Size {
@@ -67,6 +68,8 @@ pub struct Dialog<B, T> {
     pub size: Size,
     /// Dismissal policy.
     pub close: ClosePolicy,
+    /// Caller-owned presentation labels.
+    pub view: DialogView,
 }
 
 struct Layer<B> {
@@ -76,6 +79,8 @@ struct Layer<B> {
     ticket: Ticket,
     size: Size,
     close: ClosePolicy,
+    view: DialogView,
+    rendered_height: Option<u16>,
 }
 
 /// Why a layer ended. Hosts cancel outstanding work when they receive this record.
@@ -177,6 +182,11 @@ impl<B, T: Clone + Eq> Stack<B, T> {
     pub fn ticket(&self) -> Option<&Ticket> {
         self.layers.last().map(|l| &l.ticket)
     }
+    /// Active dismissal policy, for host activity hints.
+    #[must_use]
+    pub fn close_policy(&self) -> Option<ClosePolicy> {
+        self.layers.last().map(|l| l.close)
+    }
     /// True only for the active opening of this stack. Closed/replaced/foreign tickets fail.
     #[must_use]
     pub fn accepts(&self, ticket: &Ticket) -> bool {
@@ -216,6 +226,8 @@ impl<B, T: Clone + Eq> Stack<B, T> {
             ticket: ticket.clone(),
             size: dialog.size,
             close: dialog.close,
+            view: dialog.view.sanitized(),
+            rendered_height: None,
         });
         ticket
     }
@@ -284,7 +296,7 @@ impl<B, T: Clone + Eq> Stack<B, T> {
             }
         }
         if let Event::Mouse(mouse) = event
-            && !view::outer(area, layer.size).contains((mouse.column, mouse.row).into())
+            && !view::outer(area, layer.geometry()).contains((mouse.column, mouse.row).into())
         {
             if layer.close.outside_click && mouse.kind == MouseEventKind::Down(MouseButton::Left) {
                 return self

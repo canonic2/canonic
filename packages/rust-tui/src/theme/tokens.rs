@@ -72,6 +72,8 @@ pub struct Colors {
     pub background: Option<Color>,
     /// Secondary text and inactive rules.
     pub dim: Option<Color>,
+    /// Obscured content behind an active modal, distinct from secondary text.
+    pub faded: Option<Color>,
     /// Focus and current identity.
     pub accent: Option<Color>,
     /// Successful results.
@@ -110,4 +112,12 @@ pub mod spacing {
     pub const DIALOG_WIDTH: u16 = 72;
     /// Default preferred dialog height, including chrome.
     pub const DIALOG_HEIGHT: u16 = 14;
+    /// Prompt field growth limit before scrolling.
+    pub const DIALOG_FIELD_ROWS: usize = 6;
+    /// Width below which optional scope and verbose footer labels drop.
+    pub const DIALOG_SCOPE_WIDTH: u16 = 48;
+    /// Vertical breathing room around full-screen panels.
+    pub const DIALOG_PANEL_GAP: u16 = 4;
+    /// Persistent activity, composer and context rows in the dialog gallery dock.
+    pub const DIALOG_DOCK_HEIGHT: u16 = 7;
 }

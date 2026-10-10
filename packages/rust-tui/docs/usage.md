@@ -8,7 +8,8 @@ Body text uses the terminal's foreground/background in every profile.
 
 The rich picker returns stable choice IDs. The default three-row fixture has no
 filter: arrows/Home/End/Page keys navigate and 1–3 immediately choose a row.
-Enter confirms the highlighted row; disabled rows cannot be highlighted or chosen.
+Plain Enter confirms the highlighted row; modified, repeated or released Enter
+never confirms. Disabled rows cannot be highlighted or chosen.
 Danger rows require explicit navigation and are never implicit defaults. F3
 returns an inspection intent without choosing. Confirmation updates a fixture
 result label and does not change files. Esc cancels; with a nonempty filter it
@@ -124,8 +125,12 @@ Open **Dialogs** from the catalog, or run from the repository root:
 make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog"
 ```
 
-F2 cycles prompt → nested → long → locked → outside → removed-return → error.
-Prompt Enter returns local text, Ctrl-J adds a newline and paste never submits.
+F2 cycles prompt → nested → long → locked → outside → removed-return → error →
+confirm → notice → prompt-long → rename.
+Prompt plain Enter returns local text. Shift-Enter, Alt-Enter and Ctrl-J add a
+newline; paste never submits. Unix terminal sessions request enhanced keyboard
+reporting and restore it on exit. Modified Enter requires the terminal to report
+the modifier distinctly; Ctrl-J remains available with traditional key reporting.
 Escape clears an editor selection before closing one layer. Tab/Shift-Tab stays
 inside the current modal scope. Nested starts with a picker above a parent draft;
 choosing returns only that picker's ID. Long inspection uses arrows/page/Home/End;
@@ -140,10 +145,24 @@ focus. F9 simulates an outside left press; only the outside fixture opts into
 dismissal. The gallery does not enable mouse capture. These function keys are
 host test controls, not library dialog bindings.
 
-Two background drafts are read-only while a modal is open. After closing/clearing,
-Tab switches between their surviving focus targets. F2 preserves drafts; return
-to catalog and reopen resets the fixture. Resize clamps preferred 72 × 14 cells
-to the host area. Below three rows the body uses all space without rules. Ctrl-C
+Two background drafts and the dock's independent message draft are read-only
+and faded while a modal is open. After closing/clearing, Tab switches between
+their surviving focus targets. F2 preserves drafts; return to catalog and reopen
+resets the fixture. The panel centers over the visible screen, at most 72 columns,
+with one column of side padding and a lighter surface. The dock keeps its position.
+Prompt fields grow to six rows before scrolling.
+Nested titles form a trail; only the top body is visible. Confirm defaults to
+keeping the draft; notice returns a local acknowledgement; rename demonstrates
+scope, message and named action footer. No real operation executes.
+
+Indexed/RGB profiles fill the surface around a terminal-background field.
+ANSI 16/no-color use a full box and the field's own rules. Narrow layouts wrap
+messages, drop scope and shorten the footer. Boxed prompt scroll hints appear
+only on the field's line. ANSI 16 hints use the default foreground with faint;
+no-color reverses only the focused field title, with plain background content.
+Below three rows the body uses all
+space without chrome. The visible activity row stays live while the rest of the
+dock fades; it remains in place after closure. Ctrl-C
 exits through the gallery's single terminal owner.
 
 For hosts, `dialog::Stack<B,T>` owns scopes and caller-supplied bodies. `dispatch`
@@ -154,8 +173,13 @@ closes the current ticket with `Reason::Submitted`. `replace` and `clear` return
 dismissal records/bodies; cancel host work from those records. `body_mut(ticket)`
 accepts only the active opening, rejecting foreign, obscured, closed or replaced
 tickets. Recheck availability/authority in the host before executing any result.
-Render the background unfocused while open; `Stack::render` gives only its top
-body a focus target. Each body owns its scrolling and render/input contract.
+Render the background unfocused before the stack; the stack fades its visible
+cells while open. `DialogView` supplies scope, message and action
+footers. `Stack::render_with` receives a body measurement and renderer, rendering
+only the top body with its focus target. The renderer may return a scroll hint
+for the title rule. Each body owns its scrolling and render/input contract.
+`Editor::visual_rows` measures wrapped field content; `ChoicePicker::render_list`
+renders choices inside host-owned dialog chrome.
 
 ## Presentation profiles
 

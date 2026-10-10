@@ -379,7 +379,7 @@ impl Gallery {
         ])
         .areas(area);
         frame.render_widget(
-            Paragraph::new("Canonic TUI · Component gallery").style(self.theme.focus()),
+            Paragraph::new("Canonic TUI · Component gallery").style(self.theme.heading()),
             header,
         );
         match self.screen {
@@ -390,7 +390,7 @@ impl Gallery {
             Screen::Dialog => self.dialogs.render(frame, body, self.theme),
         }
         frame.render_widget(
-            Paragraph::new(self.note.as_str()).style(self.theme.focus()),
+            Paragraph::new(self.note.as_str()).style(self.theme.heading()),
             note,
         );
         frame.render_widget(

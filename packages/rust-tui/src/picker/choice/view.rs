@@ -54,6 +54,20 @@ pub(super) enum Row {
 }
 
 impl ChoicePicker {
+    /// Render list rows without picker title, footer or query field, for a host
+    /// that supplies its own chrome. Matching, paging and selection stay owned here.
+    pub fn render_list(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        p: Presentation,
+        focused: bool,
+    ) {
+        let rows = self.rows();
+        self.viewport = usize::from(area.height);
+        self.scroll(&rows, focused);
+        self.body(frame, area, &rows, p, focused);
+    }
     /// Measure preferred height for host placement, preserving opening height while
     /// filtering. Rendering still clamps this to the supplied area.
     #[must_use]

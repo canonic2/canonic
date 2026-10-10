@@ -1,5 +1,9 @@
 # Composer and editing
 
+All multiline surfaces follow the shared
+[keyboard contract](interaction.md#keyboard-contract-and-terminal-quirks), including
+Shift/Alt-Enter newlines, plain Enter host actions and traditional-terminal fallback.
+
 Status: target contract. Slice 1 implements bounded Unicode editing, selection,
 paste and undo/redo. Functional Gate 1 passed; the supplied editor/design-system
 redesign reopens human acceptance before commit. Draft lifecycle, persistence,

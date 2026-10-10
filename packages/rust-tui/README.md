@@ -34,7 +34,9 @@ Use `--colors none --ascii` for attribute-only ASCII chrome or
 Dialogs reuse those rules and tokens around caller-owned editors, pickers and
 inspection bodies. Only the top layer receives input. Close restores surviving
 focus; replacement/clear invalidate result tickets. F2 cycles dialog fixtures,
-F3 nests a prompt and F6 replaces the current layer. No host operation executes.
+F3 nests a prompt and F6 replaces the current layer. Dialogs center over faded
+content and the fixed dock. Indexed/RGB surfaces contain inset
+fields; ANSI 16/no-color use boxes. No host operation executes.
 
 ```sh
 cd packages/rust-tui

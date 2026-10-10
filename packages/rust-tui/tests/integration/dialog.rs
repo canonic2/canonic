@@ -28,6 +28,7 @@ fn dialog(id: &str, targets: Vec<u8>) -> Dialog<Editor, u8> {
             height: 5,
         },
         close: ClosePolicy::default(),
+        view: canonic_rust_tui::dialog::DialogView::default(),
     }
 }
 fn stack() -> Stack<Editor, u8> {
@@ -255,14 +256,14 @@ fn rendering_uses_shared_rules_and_focus_only_for_top_even_at_tiny_sizes() {
             });
         })
         .unwrap();
-    assert_eq!(targets, vec![None, Some(3)]);
+    assert_eq!(targets, vec![Some(3)]);
     assert_eq!(
         stack.area(Rect::new(0, 0, 30, 9)),
         Some(Rect::new(0, 2, 30, 5))
     );
     let text = super::components::dump(terminal.backend().buffer());
     assert!(text.contains("child dialog"));
-    assert!(text.contains("esc close"));
+    assert!(text.contains("esc cancel"));
     insta::assert_snapshot!("dialog_stack", text);
     for (width, height) in [(0, 0), (1, 1), (2, 2), (4, 3), (80, 30)] {
         let area = Rect::new(0, 0, width, height);

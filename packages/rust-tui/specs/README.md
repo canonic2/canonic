@@ -16,7 +16,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Inventory and gaps](inventory.md) | Complete experience inventory and dated implementation evidence |
 | [Foundation architecture](architecture.md) | Existing ownership, runtime, fixtures, limits and acceptance |
 | [System design](system-design.md) | Proposed modules, public contracts, composition, dependencies and state ownership |
-| [Input and navigation](interaction.md) | Focus, routing, bindings, pointer behavior, scrolling, selection and copy |
+| [Input and navigation](interaction.md) | Focus, routing, universal keyboard contract, terminal quirks, bindings, pointer behavior, scrolling, selection and copy |
 | [Composer and editing](composer.md) | Editor, draft lifecycle, history, stash, completion and references |
 | [Conversation and content](conversation.md) | Transcript, streaming, rich text, code, diffs, search and timeline |
 | [Activity and review](activity.md) | Tool/run states, permissions, questions and cancellation |

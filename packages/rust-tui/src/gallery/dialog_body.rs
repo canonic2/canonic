@@ -3,10 +3,15 @@
 use crate::{
     editor::{Editor, EditorView, Outcome},
     event::{Event, KeyCode, KeyEventKind},
-    picker::{Choice, ChoicePicker, Filter, Intent, PickerView, SelectionMode},
+    picker::{Choice, ChoicePicker, Filter, Intent, SelectionMode},
     theme::Presentation,
 };
-use ratatui::{Frame, layout::Rect, widgets::Paragraph};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    style::Color,
+    widgets::{Block, Paragraph},
+};
 
 pub(super) enum Body {
     Prompt(Editor),
@@ -27,10 +32,11 @@ impl Body {
     pub(super) fn choices() -> Self {
         Self::Choices(
             ChoicePicker::new(
-                vec![
-                    Choice::new("save", "Keep this draft"),
-                    Choice::new("cancel", "Cancel"),
-                ],
+                vec![Choice::new("cancel", "Keep this draft"), {
+                    let mut c = Choice::new("delete", "Discard this draft");
+                    c.danger = true;
+                    c
+                }],
                 Some("cancel"),
                 SelectionMode::Single,
                 Filter::Off,
@@ -52,6 +58,18 @@ impl Body {
             Self::Choices(p) => p.tick(elapsed),
             Self::Text { .. } => {}
         }
+    }
+    pub(super) fn height(&self, width: u16, boxed: bool, p: Presentation) -> u16 {
+        let rows = match self {
+            Self::Prompt(e) => {
+                e.visual_rows(width, p.symbols)
+                    .clamp(1, crate::theme::tokens::spacing::DIALOG_FIELD_ROWS)
+                    + usize::from(boxed) * 2
+            }
+            Self::Choices(c) => c.choices().len().max(1),
+            Self::Text { text, .. } => crate::text::wrapped(text, width.max(1)).len().max(1),
+        };
+        u16::try_from(rows).unwrap_or(u16::MAX)
     }
     pub(super) fn update(&mut self, event: &Event) -> (bool, Option<String>) {
         let enter = matches!(event,Event::Key(k) if k.code==KeyCode::Enter && k.kind==KeyEventKind::Press && k.modifiers.is_empty());
@@ -104,31 +122,32 @@ impl Body {
         area: Rect,
         p: Presentation,
         focused: bool,
-    ) {
+        boxed: bool,
+    ) -> Option<String> {
         match self {
-            Self::Prompt(e) => e.render_with(
-                frame,
-                area,
-                EditorView {
-                    placeholder: "Type a local draft",
-                    chrome: false,
-                    presentation: p,
-                    ..EditorView::default()
-                },
-                focused,
-            ),
-            Self::Choices(choices) => {
-                choices.render(
+            Self::Prompt(e) => {
+                frame.render_widget(
+                    Block::default().style(p.base().fg(Color::Reset).bg(Color::Reset)),
+                    area,
+                );
+                e.render_with(
                     frame,
                     area,
-                    PickerView {
-                        title: "choose",
-                        max_height: area.height,
+                    EditorView {
+                        placeholder: "Type a local draft",
+                        title: if boxed { "name" } else { "" },
+                        chrome: boxed && area.height >= 3,
                         presentation: p,
-                        ..PickerView::default()
+                        ..EditorView::default()
                     },
                     focused,
                 );
+                (!boxed && e.first_visible_row() > 0)
+                    .then(|| format!("{} {} more", p.symbols.more(true), e.first_visible_row()))
+            }
+            Self::Choices(choices) => {
+                choices.render_list(frame, area, p, focused);
+                None
             }
             Self::Text {
                 text,
@@ -150,6 +169,7 @@ impl Body {
                     .style(p.base()),
                     area,
                 );
+                (*offset > 0).then(|| format!("{} {} more", p.symbols.more(true), offset))
             }
         }
     }

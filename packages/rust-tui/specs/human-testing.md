@@ -7,7 +7,8 @@ reopens its human gate. The user explicitly requested a scoped commit on
 have not been reported as passed. Slice 1 redesign is committed; the user
 authorized advancing on 2026-10-09. Slice 2a rich picker is human accepted and
 committed; subsequent picker visual review reopened the bounded follow-up below.
-Slice 2b dialogs is implemented, awaiting its human gate; slice 2c and
+Slice 2b.1 dialog visual shell is implemented, awaiting its human gate;
+2b.2 arrival/removal timing, slice 2c and
 slices 3–13 remain unstarted. [Roadmap](roadmap.md) owns
 the acceptance criteria and architecture dependency groups; this topic owns
 their smaller delivery units and the human acceptance procedure.
@@ -296,13 +297,32 @@ edge padding/contrast behavior remains subject to this visual check.
 
 ## Gate 2b — dialogs
 
-Design acceptance is pending alignment with the official
-[Dialog design](../design/dialog/dialog.html). Its sheets/panels, content-driven
-height, fill/inset treatment, faded background, footer actions, title trails,
-waiting/removal activity states and boxed ANSI 16/no-color fallback supersede the
-current gallery presentation. The steps below check existing stack mechanics;
-passing them alone does not accept the official design. See the
-[design contract](dialogs.md#official-dialog-design) for the remaining scope.
+### Gate 2b.1 — visual shell and composition
+
+The official [Dialog design](../design/dialog/dialog.html) is implemented for
+centered panels, content-driven height, fill/inset fields, faded background, action
+footers, title trails and boxed ANSI 16/no-color fallback. Human acceptance is
+pending. Typing-aware arrival and timed removal notices belong to the separate
+2b.2 gate; passing this gate does not accept those unimplemented states.
+
+The user rejected the first visual handoff on 2026-10-09 and supplied a revised
+contract: one centered panel in every view. The corrected panel is awaiting
+review. Inline chat alternate-screen entry/exit is pending the inline adapter;
+the gallery uses its existing alternate-screen owner throughout.
+
+On 2026-10-10 the reviewer accepted title casing, live activity styling and emoji
+cursor placement. Fade remained open; multiline growth, nesting, parent restoration
+and fallback borders were not yet visually reviewed. Both timing and inline chat
+screen transitions remain required before the complete dialog ticket closes.
+
+The subsequent review passed growth, title trails and Escape parent restoration.
+Fallback styling required correction: readable ANSI 16 faint hints, field-only
+scroll hints, no-color field-only reverse focus, plain no-color background and
+box corner spacing. Those corrections await human review. Saved iTerm2 profiles
+brighten bold cyan to a grey-green bright-cyan slot; strict ANSI 16 cannot override
+that hue while honoring the profile. See [presentation limits](presentation.md#tokens-and-fallback-behavior).
+PTY input verifies one newline each for raw/encoded Ctrl-J and Shift/Alt-Enter;
+duplicate physical key reporting was not reproduced on a native iTerm2 surface.
 
 From the repository root, in iTerm2 for RGB:
 
@@ -310,55 +330,65 @@ From the repository root, in iTerm2 for RGB:
 make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors truecolor"
 ```
 
-1. **Prompt:** the modal sits over two background drafts. Ctrl-G then paste two
-   lines: only its draft changes and nothing submits. Ctrl-Z/Ctrl-Y undo/redo;
-   Ctrl-J adds a newline. Tab/Shift-Tab stays in the modal. Ctrl-G then Esc clears
-   selection without closing; a second Esc closes and returns focus to background
-   one. Type there, Tab to background two and verify independent editing.
-2. **Nested:** F3 opens a prompt; edit it, F3 opens its child, edit the child.
-   Esc closes only the child; parent text/caret survive. Enter returns the parent
-   text as a local result. Background drafts remain untouched while obscured.
-   F2's nested fixture opens a picker over a prompt: default Cancel is safe;
-   choosing returns the choice ID and leaves its parent available.
-3. **Fixtures:** F2 cycles prompt → nested → long → locked → outside → removed-
-   return → error. Long inspection scrolls by arrows/PageUp/PageDown/Home/End;
-   End exposes row 59. Enter acknowledges only its layer. Locked ignores Escape;
-   Enter returns local text. Error ignores Enter, and F6 replaces it with a usable
-   retry prompt; no real operation runs.
-4. **Return repair:** F5 removes background one's saved target. Close all layers:
-   focus returns to background two; typing changes only that draft. The removed-
-   return fixture demonstrates the same fallback. F2 preserves draft contents
-   while resetting each fixture's scope.
-5. **Lifecycle:** F3 nests; F6 replaces only the top. F7 reports `Rejected stale
-   result; draft unchanged` for its old ticket. F8 clears all layers and reports
-   the count; background drafts remain. F9 simulates an outside left press:
-   ordinary fixtures stay open; the outside fixture dismisses only the top.
-   This tests routing policy; the gallery does not enable native mouse capture.
-6. **Geometry/profiles:** resize narrow, tiny and back. Preferred 72 × 14 cells
-   clamp to the viewport; at fewer than three available modal rows, the body
-   takes all rows without chrome. Keyboard dismissal/result remains available.
-   F4/Ctrl-T and the command below exercise no-color/ASCII, with terminal-default
-   body colors and shared heading/footer rules. Native key encodings depend on
-   the terminal; unsupported function/modifier keys should be reported.
-7. **Reset/exit:** close layers, Esc returns to catalog, reopen resets fixtures.
-   Ctrl-C exits even with nested layers; ordinary shell echo/input/cursor work.
+1. **Panel:** the prompt centers over the screen, uses its content height and has
+   one column of padding on each side. Its title names the task; keys appear in the footer.
+   Background drafts and composer use a darker faded grey while their contents
+   survive. The activity row stays live: yellow dialog status and normal grey
+   Escape hints. A tall panel may cover the activity row.
+2. **Field growth:** Ctrl-G then paste several lines, including accented text,
+   CJK and a joined emoji. Only the prompt changes; paste never submits. Ctrl-J
+   adds a newline; Shift-Enter and Alt-Enter do too when distinctly encoded by the
+   terminal. Plain Enter submits. The panel grows and recenters; the field stops growing at six rows
+   and scrolls with its caret visible. Left/right cross the entire emoji in one
+   step without stopping on its second cell. Ctrl-Z/Ctrl-Y undo/redo the paste.
+   Ctrl-G then Esc clears selection before a second Esc closes the layer.
+3. **Nested/lifecycle:** reopen with F3, edit its prompt, then F3 again. Only the
+   child body displays; its title trail includes the parent. Esc restores the
+   parent's draft/caret. F6 replaces the top without adding a trail entry. F7
+   rejects the stale ticket. F8 clears all layers; the dock message position stays
+   fixed and activity becomes ready. Tab visits surviving background/composer
+   targets. F5 removes background one's target; closing falls back to draft two.
+4. **Fixtures:** F2 cycles prompt → nested → long → locked → outside →
+   removed-return → error → confirm → notice → prompt-long → rename.
+   Confirm defaults to Keep this draft. Notice acknowledges locally; rename shows
+   scope, message and a named action. Long scrolls with arrows/Page/Home/End.
+   Locked ignores Esc; Enter completes it. Error ignores Enter; F6 replaces it
+   with a retry prompt. F9 simulates outside dismissal only in the outside fixture.
+   These are local test actions; native mouse capture is not enabled.
+5. **Panel/resize:** the panel centers over the screen, at most 72 columns.
+   Resize to about 40 columns:
+   scope disappears, message wraps, footer shortens and body remains usable.
+   Shrink the height, then restore it: the active caret/content stay reachable.
+6. **Profiles:** F4 cycles all four modes. RGB/indexed use filled surfaces with
+   terminal-background fields; ANSI 16/no-color use full boxes and field rules.
+   Ctrl-T changes RGB dark/light roles. Repeat with no-color/ASCII below.
+   The previously demonstrated iTerm2 custom Bold color remains an accepted
+   terminal-profile limitation; no settings change or app workaround is required.
+7. **Exit/reset:** close layers and Esc returns to catalog. Reopen resets fixtures.
+   Ctrl-C exits even while nested; ordinary shell echo/input/cursor work.
 
 ```sh
 make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors none --ascii"
 ```
 
-Report **pass** or **fail**, naming the step and observed behavior. The user
-explicitly authorized a scoped checkpoint commit on 2026-10-09; dialog design
-acceptance remains pending. Commands/bindings (2c) wait for this gate.
+Report **pass** or **fail**, naming the step and observed behavior. Commit only
+the reviewed Rust TUI changes after confirmation, then proceed to 2b.2.
 
-Slice 2b engineering: formatting, strict Clippy, 43 all-feature tests (including
-two native macOS PTY scenarios), one doctest, API docs and dependency auditing
-passed. Gallery-disabled testing passed 36 tests; release build passed. Gate,
-Shield and Drone optional TUI features compiled offline with existing lockfiles
-restored byte-for-byte. Reviewed dialog geometry and selector snapshots. Both
-repositories' scoped diff checks and local Markdown links passed. Duplicate
-dependency warnings remain allowed by auditing; native Linux/Windows, human
-modifier/function-key encodings and native mouse capture are unverified.
+Engineering: formatting, strict Clippy, 52 all-feature tests including macOS PTY
+scenarios, 40 gallery-disabled tests, one doctest, API docs and dependency audit
+passed. Measured geometry, fallback styles, Unicode caret cells, fixed dock and
+snapshots are covered. Native Linux/Windows and human key encodings are unverified.
+The release build and Gate/Shield/Drone optional TUI feature compilation passed;
+consumer lockfiles were restored byte-for-byte. Scoped diff and local Markdown
+link checks passed in both owning repositories. Dependency auditing reports
+allowed duplicate-version warnings.
+
+### Gate 2b.2 — arrival and removal timing
+
+Unimplemented. After the visual gate is accepted and committed, add explicit
+host-clock arrival deferral within one second of typing, waiting activity with
+Ctrl-G opening, and a three-second host removal reason. Provide deterministic
+waiting/removal fixtures and a separate human gate before commands/bindings (2c).
 
 ## Acceptance record
 
@@ -367,7 +397,7 @@ modifier/function-key encodings and native mouse capture are unverified.
 | 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
 | 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
 | 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: private `f3e7579`, public `17e53d5` |
-| 2b | Engineering recorded below | Pending official design alignment | Scoped checkpoint commit explicitly authorized on 2026-10-09; keep design gate pending |
+| 2b | 2b.1 engineering passed; 2b.2 unstarted | Visual shell pending | Mechanics checkpoint: private `b0a4bdb`, public `46285d6`; visual changes await human confirmation and commit |
 | 2c, 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
 
 Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict

@@ -1,0 +1,44 @@
+---
+source: tests/integration/gallery.rs
+expression: text
+---
+Canonic TUI · Component gallery
+
+background one ─────────────────────────────────────────────────────────────────────────────────────
+Background draft one
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+background two ─────────────────────────────────────────────────────────────────────────────────────
+Background draft two
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+               draft prompt ─────────────────────────────────────────────────────────
+               Modal draft · Café · 界  · 👩‍💻
+               ───────────────────────────── enter done · ctrl+j newline · esc cancel
+
+
+
+
+
+
+
+
+! dialog · esc closes it
+message ────────────────────────────────────────────────────────────────────────────────────────────
+and then open the PR
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+example project · chat
+#dialog:prompt · F2 fixture · F3 nest · F6 replace · F8 clear
+
+
+Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F4 colors

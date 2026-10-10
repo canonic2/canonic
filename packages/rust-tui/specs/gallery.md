@@ -3,13 +3,15 @@
 ## Implemented dialog composition
 
 Slice 2b has prompt, nested choice/prompt, long inspection, locked Escape,
-outside dismissal, removed return target and local error scenarios. Two base
-drafts survive modal edits. Function-key controls demonstrate push/replace/clear,
+outside dismissal, removed return target, local error, confirmation, notice,
+multiline prompt and rename scenarios. Two background drafts and the dock composer
+survive modal edits. Dialogs use measured centered panels. Function-key controls demonstrate push/replace/clear,
 late ticket rejection and simulated outside routing. Bodies use public editor/
 picker APIs and fixture-owned inspection scrolling. Dialogs use one existing
 terminal owner; native mouse capture is not enabled. [Gate 2b](human-testing.md#gate-2b--dialogs)
 owns human acceptance. Tests cover pure state, rendered geometry/snapshot and
-an owned native macOS PTY scenario.
+an owned native macOS PTY scenario. Arrival deferral and timed removal notices
+remain the separate 2b.2 gate.
 
 ## Implemented picker composition
 

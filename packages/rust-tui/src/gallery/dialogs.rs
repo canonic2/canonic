@@ -2,15 +2,20 @@
 
 use super::dialog_body::Body;
 use crate::{
-    dialog::{ClosePolicy, Dialog, Dispatch, Reason, Size, Stack, Ticket},
+    dialog::{ClosePolicy, Dialog, DialogView, Dispatch, Reason, Size, Stack, Ticket},
     editor::{Editor, EditorView, Outcome},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
     theme::Presentation,
 };
-use ratatui::{Frame, layout::Rect, widgets::Paragraph};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 use std::fmt::Write;
 
-const NAMES: [&str; 7] = [
+const NAMES: [&str; 11] = [
     "prompt",
     "nested",
     "long",
@@ -18,9 +23,14 @@ const NAMES: [&str; 7] = [
     "outside",
     "removed-return",
     "error",
+    "confirm",
+    "notice",
+    "prompt-long",
+    "rename",
 ];
 pub(super) struct DialogDemo {
     drafts: [Editor; 2],
+    composer: Editor,
     stack: Stack<Body, usize>,
     scenario: usize,
     next: usize,
@@ -33,9 +43,12 @@ impl DialogDemo {
         let mut drafts = std::array::from_fn(|_| Editor::default());
         drafts[0].set_text("Background draft one");
         drafts[1].set_text("Background draft two");
+        let mut composer = Editor::default();
+        composer.set_text("and then open the PR");
         let mut demo = Self {
             drafts,
-            stack: Stack::new(vec![0, 1]).unwrap_or_else(|_| unreachable!("distinct targets")),
+            composer,
+            stack: Stack::new(vec![0, 1, 2]).unwrap_or_else(|_| unreachable!("distinct targets")),
             scenario: 0,
             next: 10,
             pending: None,
@@ -55,6 +68,7 @@ impl DialogDemo {
         for draft in &mut self.drafts {
             draft.tick(elapsed);
         }
+        self.composer.tick(elapsed);
         if let Some(ticket) = self.stack.ticket().cloned()
             && let Some(body) = self.stack.body_mut(&ticket)
         {
@@ -68,13 +82,35 @@ impl DialogDemo {
             id: format!("dialog-{id}"),
             title: title.into(),
             targets: vec![id],
-            body,
             size: Size::default(),
             close: ClosePolicy::default(),
+            view: DialogView {
+                footer: match &body {
+                    Body::Prompt(_) => "enter done · ctrl+j newline · esc cancel",
+                    Body::Choices(_) => "1–2 · enter · esc keep",
+                    Body::Text {
+                        acknowledge: true, ..
+                    } => "enter ok · esc cancel",
+                    Body::Text { .. } => "esc cancel",
+                }
+                .into(),
+                compact_footer: match &body {
+                    Body::Text {
+                        acknowledge: false, ..
+                    } => "esc",
+                    _ => "enter · esc",
+                }
+                .into(),
+                ..DialogView::default()
+            },
+            body,
         }
     }
     fn open(&mut self, body: Body, title: &str) {
-        let dialog = self.dialog(body, title);
+        let mut dialog = self.dialog(body, title);
+        if !self.stack.is_empty() {
+            dialog.view.footer = dialog.view.footer.replace("esc cancel", "esc back");
+        }
         match self.stack.push(dialog) {
             Ok(ticket) => self.pending = Some(ticket),
             Err(error) => self.note = error.to_string(),
@@ -82,13 +118,13 @@ impl DialogDemo {
     }
     fn reset(&mut self) {
         let _dismissed = self.stack.clear();
-        self.stack = Stack::new(vec![0, 1]).unwrap_or_else(|_| unreachable!("distinct targets"));
+        self.stack = Stack::new(vec![0, 1, 2]).unwrap_or_else(|_| unreachable!("distinct targets"));
         self.note.clear();
         match self.scenario {
             1 => {
                 self.open(
                     Body::prompt("Parent draft survives the child"),
-                    "Parent prompt",
+                    "parent prompt",
                 );
                 self.open(Body::choices(), "Nested choice");
             }
@@ -101,7 +137,7 @@ impl DialogDemo {
                     }),
                     true,
                 ),
-                "Long inspection · page/home/end",
+                "Long inspection",
             ),
             3 | 4 => {
                 let mut dialog = self.dialog(
@@ -112,6 +148,10 @@ impl DialogDemo {
                     escape: self.scenario != 3,
                     outside_click: self.scenario == 4,
                 };
+                if self.scenario == 3 {
+                    dialog.view.footer = "enter done · ctrl+j newline".into();
+                    dialog.view.compact_footer = "enter".into();
+                }
                 self.pending = Some(
                     self.stack
                         .push(dialog)
@@ -125,9 +165,24 @@ impl DialogDemo {
                 ),
                 "Local error",
             ),
+            7 => {
+                let mut dialog = self.dialog(Body::choices(), "Discard draft");
+                dialog.view.message = "This draft is local. Discarding it cannot be undone in this fixture.".into();
+                dialog.view.scope = "example project".into();
+                self.pending = Some(self.stack.push(dialog).unwrap_or_else(|_| unreachable!("valid fixture")));
+            }
+            8 => self.open(Body::text("Your example token expired. The fixture will ask again when it needs one.", true), "Signed out"),
+            9 => self.open(Body::prompt("Modal draft · Café · 界 · 🧑\nSecond line from Ctrl-J\nThird line\nFourth line\nFifth line\nSixth line\nSeventh line\nEighth line"), "draft prompt"),
+            10 => {
+                let mut dialog = self.dialog(Body::prompt("EXECDEV-22-example"), "Rename branch");
+                dialog.view.message = "Renames EXECDEV-22 here and on origin. Open pull requests follow the new name.".into();
+                dialog.view.scope = "example project".into();
+                dialog.view.footer = "enter rename · esc cancel".into();
+                self.pending = Some(self.stack.push(dialog).unwrap_or_else(|_| unreachable!("valid fixture")));
+            }
             _ => self.open(
                 Body::prompt("Modal draft · Cafe\u{301} · 界 · 👩‍💻"),
-                "Draft prompt · Enter returns / Ctrl-J newline",
+                "draft prompt",
             ),
         }
         if self.scenario == 5 {
@@ -156,7 +211,7 @@ impl DialogDemo {
                     return true;
                 }
                 KeyCode::F(3) => {
-                    self.open(Body::prompt("Nested inspection draft"), "Nested prompt");
+                    self.open(Body::prompt("Nested inspection draft"), "nested prompt");
                     return true;
                 }
                 KeyCode::F(5) => {
@@ -242,25 +297,28 @@ impl DialogDemo {
             return true;
         }
         if let Some(&index) = self.stack.focused() {
-            return self.drafts[index].update(event) != Outcome::Unhandled
+            let draft = if index == 2 {
+                &mut self.composer
+            } else {
+                &mut self.drafts[index]
+            };
+            return draft.update(event) != Outcome::Unhandled
                 || !matches!(event,Event::Key(key) if key.code==KeyCode::Esc);
         }
         !matches!(event,Event::Key(key) if key.code==KeyCode::Esc)
     }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
-        self.viewport = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(2));
-        let half = self.viewport.height / 2;
+        let dock_y = area
+            .bottom()
+            .saturating_sub(crate::theme::tokens::spacing::DIALOG_DOCK_HEIGHT + 2)
+            .max(area.y);
+        self.viewport = area;
         for (index, draft) in self.drafts.iter_mut().enumerate() {
-            let rect = if index == 0 {
-                Rect::new(area.x, area.y, area.width, half)
-            } else {
-                Rect::new(
-                    area.x,
-                    area.y + half,
-                    area.width,
-                    self.viewport.height - half,
-                )
-            };
+            let y = area
+                .y
+                .saturating_add(u16::try_from(index).unwrap_or(0) * 4)
+                .min(dock_y);
+            let rect = Rect::new(area.x, y, area.width, dock_y.saturating_sub(y).min(3));
             draft.render_with(
                 frame,
                 rect,
@@ -276,13 +334,89 @@ impl DialogDemo {
                 self.stack.is_empty() && self.stack.focused() == Some(&index),
             );
         }
-        self.stack
-            .render(frame, self.viewport, p, |body, frame, area, target| {
-                body.render(frame, area, p, target.is_some());
-            });
+        self.composer.render_with(
+            frame,
+            Rect::new(
+                area.x,
+                dock_y.saturating_add(1).min(area.bottom()),
+                area.width,
+                area.bottom().saturating_sub(dock_y + 1).min(5),
+            ),
+            EditorView {
+                title: "message",
+                presentation: p,
+                ..EditorView::default()
+            },
+            self.stack.is_empty() && self.stack.focused() == Some(&2),
+        );
+        self.render_activity(frame, area, dock_y, p);
+        if dock_y + 6 < area.bottom().saturating_sub(2) {
+            frame.render_widget(
+                Paragraph::new("example project · chat").style(p.muted()),
+                Rect::new(area.x, dock_y + 6, area.width, 1),
+            );
+        }
+        self.render_hints(frame, area, p);
+        self.stack.render_with(
+            frame,
+            self.viewport,
+            p,
+            |body, width, boxed| body.height(width, boxed, p),
+            |body, frame, area, target, boxed| body.render(frame, area, p, target.is_some(), boxed),
+        );
+        if self
+            .stack
+            .area(self.viewport)
+            .is_none_or(|panel| dock_y < panel.y || dock_y >= panel.bottom())
+        {
+            self.render_activity(frame, area, dock_y, p);
+        }
+    }
+    fn render_activity(&self, frame: &mut Frame<'_>, area: Rect, dock_y: u16, p: Presentation) {
+        if dock_y < area.bottom() {
+            let (status, hint) = if self.stack.is_empty() {
+                ("ready".to_owned(), String::new())
+            } else if self.stack.len() > 1 {
+                (
+                    format!("! dialog {} of {}", self.stack.len(), self.stack.len()),
+                    " · esc goes back".to_owned(),
+                )
+            } else {
+                (
+                    "! dialog".to_owned(),
+                    if self
+                        .stack
+                        .close_policy()
+                        .is_some_and(|policy| policy.escape)
+                    {
+                        " · esc closes it"
+                    } else {
+                        " · enter finishes it"
+                    }
+                    .to_owned(),
+                )
+            };
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(
+                        status,
+                        if self.stack.is_empty() {
+                            p.muted()
+                        } else {
+                            p.warning()
+                        },
+                    ),
+                    Span::styled(hint, p.muted()),
+                ]))
+                .style(p.base().remove_modifier(ratatui::style::Modifier::DIM)),
+                Rect::new(area.x, dock_y, area.width, 1),
+            );
+        }
+    }
+    fn render_hints(&self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
         if area.height >= 2 {
             let hint = format!(
-                "#dialog:{} · F2 fixture · F3 nest · F5 remove · F6 replace · F7 late · F8 clear · F9 outside",
+                "#dialog:{} · F2 fixture · F3 nest · F6 replace · F8 clear",
                 NAMES[self.scenario]
             );
             frame.render_widget(

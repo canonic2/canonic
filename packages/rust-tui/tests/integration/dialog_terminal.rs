@@ -16,7 +16,7 @@ def screen():
         token=match.group()
         if token.startswith('\x1b['):
             args=token[2:-1];command=token[-1]
-            if args.startswith('?'):continue
+            if args.startswith(('?', '>', '<')):continue
             values=[int(v or 0) for v in args.split(';')]
             if command in 'Hf':row=(values[0] or 1)-1;column=(values[1] if len(values)>1 else 1)-1
             elif command=='G':column=(values[0] or 1)-1
@@ -39,13 +39,21 @@ def wait_for(text):
         assert time.monotonic()<deadline,screen()
         if select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
 try:
-    wait_for('Draft prompt')
-    os.write(master,b'\x07\x1b[200~PARENT ALPHA 42\x1b[201~\x1bOR');wait_for('Nested prompt')
+    wait_for('draft prompt')
+    os.write(master,b'\x07\x1b[200~LINE ONE\x1b[201~\nLINE TWO\x1b[106;5uLINE THREE\x1b[13;2uLINE FOUR\x1b[13;3uLINE FIVE')
+    wait_for('LINE FIVE')
+    assert 'Prompt result: LINE ONE' not in screen(),screen()
+    lines=screen().splitlines()
+    positions=[next(i for i,line in enumerate(lines) if label in line) for label in ('LINE ONE','LINE TWO','LINE THREE','LINE FOUR','LINE FIVE')]
+    assert positions==list(range(positions[0],positions[0]+5)),screen()
+    os.write(master,b'\r');wait_for('Prompt result: LINE ONELINE TWOLINE THREELINE FOURLINE FIVE')
+    os.write(master,b'\x1bOR');wait_for('nested prompt')
+    os.write(master,b'\x07\x1b[200~PARENT ALPHA 42\x1b[201~\x1bOR');wait_for('nested prompt')
     os.write(master,b'\x07\x1b[200~CHILD OMEGA 93\x1b[201~\r');wait_for('Prompt result: CHILD OMEGA 93')
     wait_for('PARENT ALPHA 42')
     os.write(master,b'\r');wait_for('Prompt result: PARENT ALPHA 42')
     wait_for('Background draft one');wait_for('Background draft two')
-    os.write(master,b'\x1bOR');wait_for('Nested prompt')
+    os.write(master,b'\x1bOR');wait_for('nested prompt')
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',8,15,0,0));os.kill(child.pid,signal.SIGWINCH)
     os.write(master,b'\x03')
     deadline=time.monotonic()+5
@@ -57,6 +65,7 @@ try:
     assert os.read(slave,1024)==b'restored\n';assert termios.tcgetattr(slave)==before
     while select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
     assert b'\x1b[?1049l' in output
+    assert b'\x1b[>1u' in output and b'\x1b[<1u' in output
 finally:
     if child.poll() is None:child.kill();child.wait()
     os.close(master);os.close(slave)

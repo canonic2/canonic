@@ -49,15 +49,19 @@ hidden marks, physical-row paging, Unicode, narrow styles and a reviewed snapsho
 
 `dialog.rs` owns a generic bounded modal stack, scoped focus, opening tickets,
 validation and dismissal records. It wraps `Focus` rather than duplicating return
-scope logic. `dialog/view.rs` owns clamped/centered geometry and shared-rule chrome.
+scope logic. `dialog/view.rs` owns measured centered panels, background
+fading, surface/box fallbacks and shared-rule chrome.
 Bodies receive caller frames/events and own their state/scrolling. Stack dispatch
 never sends unhandled modal events to background views; hosts cancel work from
-returned dismissal records. `gallery/dialogs.rs` composes seven scenarios and
-two independent base drafts; `gallery/dialog_body.rs` supplies editors, choice
+returned dismissal records. `gallery/dialogs.rs` composes eleven scenarios and
+three independent base drafts, including a fixed dock composer;
+`gallery/dialog_body.rs` supplies editors, choice
 pickers and a fixture-only read-only text body. A general content renderer is a
-later slice. No callback, timer, terminal acquisition or process belongs to a layer.
+later slice. Measurement/render callbacks exist only during rendering; no retained
+callback, timer, terminal acquisition or process belongs to a layer.
 Dialog tests cover nested routing/focus repair, atomic validation, stale/foreign
-tickets, outside pointer isolation, tiny geometry and a reviewed snapshot. A
+tickets, outside pointer isolation, measured growth, Unicode caret cells, tiny
+geometry, color fallbacks and reviewed snapshots. A
 separate macOS PTY scenario tests nested paste, parent preservation and restoration.
 
 State and rendering tests run without a terminal. TestBackend supplies terminal

@@ -96,6 +96,16 @@ impl Editor {
     pub fn cursor(&self) -> usize {
         self.draft.cursor
     }
+    /// Number of visual rows using the same grapheme/control layout as rendering.
+    #[must_use]
+    pub fn visual_rows(&self, width: u16, symbols: Symbols) -> usize {
+        layout::rows(self.text(), width.max(1), symbols).len()
+    }
+    /// First visible visual row after the last render, for host scroll hints.
+    #[must_use]
+    pub fn first_visible_row(&self) -> usize {
+        self.offset
+    }
     /// Nonempty selected byte range.
     #[must_use]
     pub fn selection(&self) -> Option<Range<usize>> {

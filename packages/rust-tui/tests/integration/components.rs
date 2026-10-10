@@ -2,7 +2,7 @@
 
 use canonic_rust_tui::{
     chat::{self, Chat},
-    event::{Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     picker::{self, Picker},
     ratatui::{Terminal, backend::TestBackend, layout::Rect},
     theme::Theme,
@@ -20,6 +20,26 @@ fn picker_confirms_only_an_explicit_valid_selection_and_cancel_does_not_select()
         vec!["Allow once".into(), "Cancel".into()],
         Some(1),
     );
+    for modifiers in [
+        KeyModifiers::SHIFT,
+        KeyModifiers::ALT,
+        KeyModifiers::CONTROL,
+    ] {
+        assert_eq!(
+            picker.update(&Event::Key(KeyEvent::new(KeyCode::Enter, modifiers))),
+            picker::Action::None
+        );
+    }
+    for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+        assert_eq!(
+            picker.update(&Event::Key(KeyEvent::new_with_kind(
+                KeyCode::Enter,
+                KeyModifiers::NONE,
+                kind,
+            ))),
+            picker::Action::None
+        );
+    }
     assert_eq!(
         picker.update(&key(KeyCode::Enter)),
         picker::Action::Selected(1)

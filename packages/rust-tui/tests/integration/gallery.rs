@@ -185,7 +185,7 @@ fn picker_dock_reserves_activity_across_fixtures_and_confirmation() {
             );
             assert_eq!(
                 buffer[(13, activity)].fg,
-                presentation.tokens().dim.unwrap()
+                canonic_rust_tui::ratatui::style::Color::Reset
             );
             let title = lines
                 .iter()
@@ -252,6 +252,144 @@ fn dialog_fixtures_preserve_host_drafts_and_reject_replaced_results() {
     assert!(super::components::dump(terminal.backend().buffer()).contains("Inspection row 59"));
     gallery.update(&key(KeyCode::Enter));
     assert_eq!(gallery.dialog_depth(), 0);
+}
+
+#[test]
+fn dialog_panel_keeps_dock_position_across_growth_nesting_and_replacement() {
+    let mut g = Gallery::new();
+    g.update(&Event::Paste("Dialogs".into()));
+    g.update(&key(KeyCode::Enter));
+    // Default ANSI 16 -> indexed fill.
+    g.update(&key(KeyCode::F(4)));
+    let mut t = Terminal::new(TestBackend::new(100, 40)).unwrap();
+    let mut message_y = None;
+    for step in 0..6 {
+        t.draw(|f| g.render(f)).unwrap();
+        let text = super::components::dump(t.backend().buffer());
+        let lines: Vec<_> = text.lines().collect();
+        let message = lines
+            .iter()
+            .position(|line| line.starts_with("message "))
+            .unwrap();
+        assert_eq!(*message_y.get_or_insert(message), message);
+        assert!(lines[message - 1].starts_with(if step == 5 { "ready" } else { "! dialog" }));
+        if step == 0 {
+            let p = canonic_rust_tui::theme::Presentation {
+                colors: canonic_rust_tui::theme::ColorMode::Ansi256,
+                ..Default::default()
+            };
+            let activity_y = u16::try_from(message - 1).unwrap();
+            let buffer = t.backend().buffer();
+            assert_eq!(buffer[(0, activity_y)].fg, p.tokens().warning.unwrap());
+            assert_eq!(buffer[(8, activity_y)].fg, p.tokens().dim.unwrap());
+            assert_eq!(buffer[(0, 3)].fg, p.tokens().faded.unwrap());
+            assert!(text.contains("enter done"));
+            let title_y = lines
+                .iter()
+                .position(|line| line.contains("draft prompt"))
+                .unwrap();
+            assert!(title_y > 8 && title_y < message - 4);
+            assert!(
+                !lines
+                    .iter()
+                    .any(|line| line.starts_with("draft prompt · Enter"))
+            );
+            insta::assert_snapshot!("dialog_panel", text);
+        }
+        match step {
+            0 => {
+                g.update(&Event::Paste(
+                    "\nsecond\nthird\nfourth\nfifth\nsixth\nseventh".into(),
+                ));
+            }
+            1 => {
+                g.update(&key(KeyCode::F(3)));
+            }
+            2 => {
+                g.update(&key(KeyCode::Esc));
+            }
+            3 => {
+                g.update(&key(KeyCode::F(6)));
+            }
+            _ => {
+                g.update(&key(KeyCode::F(8)));
+            }
+        }
+    }
+}
+
+#[test]
+fn dialog_message_label_is_darker_than_the_live_activity_hint() {
+    use canonic_rust_tui::ratatui::style::Color;
+    for (cycles, faded, live) in [
+        (1, Color::Indexed(240), Color::Indexed(245)),
+        (2, Color::Rgb(94, 96, 100), Color::Rgb(133, 135, 140)),
+    ] {
+        let mut gallery = Gallery::new();
+        gallery.update(&Event::Paste("Dialogs".into()));
+        gallery.update(&key(KeyCode::Enter));
+        for _ in 0..cycles {
+            gallery.update(&key(KeyCode::F(4)));
+        }
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        terminal.draw(|f| gallery.render(f)).unwrap();
+        let text = super::components::dump(terminal.backend().buffer());
+        let message_y = u16::try_from(
+            text.lines()
+                .position(|l| l.starts_with("message "))
+                .unwrap(),
+        )
+        .unwrap();
+        let buffer = terminal.backend().buffer();
+        for x in 0..7 {
+            assert_eq!(buffer[(x, message_y)].fg, faded);
+        }
+        assert_eq!(buffer[(0, message_y + 1)].fg, faded);
+        assert_eq!(buffer[(10, message_y - 1)].fg, live);
+        assert_ne!(faded, live);
+    }
+}
+
+#[test]
+fn dialog_fallbacks_show_one_field_scroll_hint_without_reversed_host_bars() {
+    use canonic_rust_tui::ratatui::style::{Color, Modifier};
+    for cycles in [0, 3] {
+        let mut gallery = Gallery::new();
+        gallery.update(&Event::Paste("Dialogs".into()));
+        gallery.update(&key(KeyCode::Enter));
+        for _ in 0..cycles {
+            gallery.update(&key(KeyCode::F(4)));
+        }
+        for _ in 0..9 {
+            gallery.update(&key(KeyCode::F(2)));
+        }
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        terminal.draw(|f| gallery.render(f)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let text = super::components::dump(buffer);
+        assert_eq!(text.matches("more").count(), 1);
+        let hint_y = u16::try_from(text.lines().position(|l| l.contains("more")).unwrap()).unwrap();
+        assert!(
+            text.lines()
+                .nth(usize::from(hint_y))
+                .unwrap()
+                .contains("name ")
+        );
+        if cycles == 3 {
+            for x in 0..100 {
+                for y in [0, 38] {
+                    assert!(!buffer[(x, y)].modifier.contains(Modifier::REVERSED));
+                }
+            }
+            assert!(!buffer[(0, 3)].modifier.contains(Modifier::DIM));
+        } else {
+            let x = (0..100)
+                .find(|&x| buffer[(x, hint_y)].symbol() == "↑")
+                .unwrap();
+            assert_eq!(buffer[(x, hint_y)].fg, Color::Reset);
+            assert!(buffer[(x, hint_y)].modifier.contains(Modifier::DIM));
+        }
+    }
 }
 
 #[cfg(unix)]

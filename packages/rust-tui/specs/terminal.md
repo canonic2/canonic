@@ -28,14 +28,21 @@ Never signal or reset unrelated user terminals/processes in verification.
 
 ## Full-screen and inline coexistence
 
-Full-screen acquires alternate screen, raw input and bracketed paste. It draws
-only caller-owned frame contents and returns to previous screen on release.
+Full-screen acquires alternate screen, raw input and bracketed paste. Unix
+sessions push disambiguated keyboard reporting and pop it on exit so supported
+terminals distinguish modified Enter from submission, following the shared
+[keyboard contract](interaction.md#keyboard-contract-and-terminal-quirks).
+It draws only caller-owned frame contents and returns to the previous screen on release.
 Inline retains ordinary scrollback and draws a bounded interaction region after
 the host prompt. It acquires only required raw/paste/cursor modes, never alternate
 screen by default. Exit leaves a readable confirmed/cancelled result or clears
 temporary rows according to an explicit host policy, then returns the cursor to
 where ordinary output resumes. Window shrink and scrolling must not overwrite
 unrelated preceding output; if safe anchoring is unavailable, use host plain fallback.
+
+Chat dialogs follow the [dialog panel contract](dialogs.md#official-dialog-design):
+temporarily enter an alternate screen, redraw the visible conversation tail there,
+and return on close. This transition remains pending the inline adapter.
 
 Inline adapter owns cursor-region bookkeeping and redraw, not picker decisions.
 Same picker/review renders into a bounded area and returns same intent in both

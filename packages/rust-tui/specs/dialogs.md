@@ -1,21 +1,27 @@
 # Dialogs, commands and browsing
 
-Status: rich picker human accepted in slice 2a. Slice 2b dialog stack is implemented
-but its presentation does not yet match the official design; its human gate is
-pending that alignment. Commands, sessions, trees and panels remain proposed.
+Status: rich picker human accepted in slice 2a. Dialog stack mechanics and slice
+2b.1 visual design are implemented, with visual human acceptance pending. Slice
+2b.2 typing-aware arrival and timed removal notices remain unimplemented.
+Commands, sessions, trees and general content panels remain proposed.
 
 ## Official dialog design
 
-The authoritative visual and interaction reference is
-[Dialog design](../design/dialog/dialog.html), with a [PDF](../design/dialog/dialog.pdf).
-It contains Overview, Keys & behavior and States boards. The current implementation
-described below establishes stack mechanics; it does not establish design acceptance.
+The user-supplied revised contract is authoritative: one centered panel in every
+view. [Dialog design](../design/dialog/dialog.html) and its
+[PDF](../design/dialog/dialog.pdf) supply anatomy and behavior reference;
+the revised placement contract below governs implementation.
+It contains Overview, Keys & behavior and States boards. The implementation below
+covers the visual shell and stack mechanics; it does not establish human acceptance
+or implement the timing requirements below.
 
-- Inline/chat dialogs are full-width filled sheets at the bottom of the stage,
-  above the persistent seven-row dock. Full-screen dialogs are centered panels,
-  at most 72 columns and viewport height minus four rows.
-- Height follows content. Sheets use at most half the stage; prompt fields grow
-  from one to six rows before scrolling. No padding to a fixed preferred height.
+- Every view uses a centered panel, at most 72 columns and viewport height minus
+  four rows. Its lighter surface has one column of padding on each side.
+- Chat hosts open an alternate screen, redraw the visible conversation tail there,
+  and return on close; scrollback stays untouched. This transition is pending the
+  inline terminal adapter. The full-screen gallery already owns an alternate screen.
+- Height follows content. Prompt fields grow from one to six rows before scrolling.
+  No padding rows to a fixed preferred height.
 - Shared chrome contains a task title, optional scope at right, an optional
   one-to-three-row message, content and a footer with host-supplied action words.
   Editors use terminal-background insets inside the filled surface.
@@ -23,8 +29,11 @@ described below establishes stack mechanics; it does not establish design accept
   and shows a title trail; Escape resumes the preserved parent. Replacement adds
   no trail entry. Clear returns to the original background focus.
 - Visible background rows repaint faded, including the composer, while drafts
-  and cursor state survive. The activity row identifies the dialog and Escape
-  behavior, or the current nesting depth.
+  and cursor state survive. Dark RGB fading uses `#5E6064`, distinct from ordinary
+  secondary text; indexed mode uses color 240 while live grey uses 245.
+  The visible activity row remains live: warning-colored dialog
+  status and normal grey hints identify Escape behavior or nesting depth. A tall
+  panel may cover it; the activity row never paints over dialog content.
 - An arrival within one second of typing waits instead of taking focus. The
   activity row advertises `! dialog waiting · ctrl+g`; Ctrl-G opens it explicitly.
   Timing must be an explicit host input, not a hidden component clock.
@@ -33,12 +42,17 @@ described below establishes stack mechanics; it does not establish design accept
 - ANSI 16 and no-color modes use a full box and the editor's own field rules;
   indexed/RGB modes use the filled surface. Narrow layouts wrap messages, drop
   scope metadata and shorten footer text while keeping keys reachable.
+  Box title/footer lines leave a space next to each corner. Boxed prompt scroll
+  hints belong only to the editor's line. In no-color the dialog title is bold
+  only; reverse emphasis belongs to the focused field title. The background is
+  left plain. ANSI 16 live hints use default foreground plus faint.
 
 Design fixtures are prompt, multiline prompt, danger confirmation, notice,
 nested, replaced, waiting, removed, cleared, scrolling, narrow and ANSI 16.
 The gallery header, fixture controls and background test editors are host UI.
-The current seven fixtures and centered fixed preferred geometry do not cover
-this complete set. Existing stack/focus/ticket tests remain engineering evidence.
+The gallery has eleven fixtures covering visual presentation and stack mechanics.
+Waiting and timed removal fixtures belong to 2b.2. Existing stack/focus/ticket
+tests remain engineering evidence.
 
 ## Dialog composition
 
@@ -62,11 +76,20 @@ before closing; policy may forbid escape closure. Outside pointer events are
 consumed; only an opted-in outside left press dismisses. It never confirms.
 The gallery simulates that press without enabling terminal mouse capture.
 
-Preferred default size is 72 × 14, clamped/centered in the caller viewport.
-Rendering shares rules/tokens, gives only the top body an active focus target,
-and uses the entire region without chrome below three rows. The host renders
-base views unfocused while open. Body components own scrolling/action reachability;
-the seven gallery scenarios use an editor, picker and local inspection text.
+Every body and host adapter follows the universal
+[keyboard contract](interaction.md#keyboard-contract-and-terminal-quirks).
+Shift/Alt-Enter insert prompt newlines and never confirm a choice or submit a form.
+
+`DialogView` supplies scope, message and normal/compact action footer.
+`Stack::render_with` measures body height at the available width before placing
+the centered panel. Panels are at most 72 columns and leave four viewport rows.
+Tiny viewports omit chrome below three rows. The compatibility
+`render` method retains the preferred size height without a body measurement.
+Only the top body renders, with parent titles in its trail. The view fades the
+already-rendered visible background, fills the surface in indexed/RGB modes,
+and uses a full box in ANSI 16/no-color. Body components own scrolling and action
+reachability; gallery prompt fields grow to six rows, then scroll. The eleven
+gallery scenarios use an editor, picker and local inspection text.
 General review/content bodies and pointer capture remain their owning later slices.
 
 Dialog host owns an explicit stack, target ID, size policy, body component,
