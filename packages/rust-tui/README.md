@@ -1,7 +1,11 @@
 # Rust TUI
 
+The gallery includes a searchable command palette and keyboard help backed by
+host-supplied descriptors, plus validated scoped shortcuts and leader sequences.
+See [usage](docs/usage.md#commands-and-keyboard-help).
+
 An unpublished Rust component library and local full-screen gallery for Canonic.
-Drone, Shield and Gate use it through local Cargo path dependencies. Ratatui
+Drone and Shield use it through local Cargo path dependencies. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
@@ -11,8 +15,8 @@ From the repository root:
 make -C packages/rust-tui run
 ```
 
-The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**
-or **Dialogs**. Use arrows
+The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
+**Dialogs**, or **Commands and bindings**. Use arrows
 and Enter to open a component, Esc to return (or quit at the selector), Ctrl-C
 to quit and Ctrl-T to toggle dark/light themes. F2 cycles picker design states or
 cycles chat fixtures: ready, empty, streaming, error, disconnected and long text.

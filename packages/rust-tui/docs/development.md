@@ -64,6 +64,16 @@ tickets, outside pointer isolation, measured growth, Unicode caret cells, tiny
 geometry, color fallbacks and reviewed snapshots. A
 separate macOS PTY scenario tests nested paste, parent preservation and restoration.
 
+`commands.rs` owns sanitized descriptors, recent/grouped ranked search and palette/
+keys projections. `commands/view.rs` renders command columns using shared tokens
+and rules; `commands/bindings.rs` validates dispatch and explicit pending timing.
+`commands/remaps.rs` resolves ordered overrides with retained conflict/source
+evidence. Hosts supply scope maps, load bindings and execute returned intents.
+`gallery/commands.rs` owns docked palette/full-screen keys composition and delayed
+hint strips; its fixtures supply deterministic commands and remaps. Tests cover
+reserved/conflicting maps, source inspection, scoped search, key spelling, 400 ms
+hints, 3-second timeout, draft isolation and reviewed palette/keys snapshots.
+
 State and rendering tests run without a terminal. TestBackend supplies terminal
 dimensions; insta captures the selector, with behavioral assertions alongside
 snapshots. Review generated snapshots with `cargo insta review`; do not accept

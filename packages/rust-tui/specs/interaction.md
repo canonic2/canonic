@@ -1,8 +1,8 @@
 # Input, focus and navigation
 
 Status: target contract. Slice 1 implements shared focus orders/modal return
-scopes and editor keys, pending human acceptance. A shared binding dispatcher,
-pointer interaction and configurable shortcuts remain proposed.
+scopes and editor keys. Slice 2c implements scoped command maps and validated
+shortcut sequences; its human gate is pending. Pointer interaction remains proposed.
 See [System design](system-design.md).
 
 Slice 2b implements modal dispatch through `dialog::Stack`, wrapping existing
@@ -103,8 +103,28 @@ Optional leader sequences use an explicit clock, visible pending hint and
 configurable timeout. Timeout, focus change and dismissal reset pending sequence.
 An unmatched continuation is consumed with feedback while a sequence is pending;
 it must not leak into a draft or execute another action. Paste never participates
-in command sequences. Leader timing is a later increment, not a prerequisite
-for simple arrow/Enter/Esc controls.
+in command sequences. Slice 2c exposes a 400 ms hint threshold and uses a 3-second gallery timeout;
+the dispatcher accepts a host-supplied timeout.
+
+`commands::bindings::Dispatcher` validates one effective map per focus scope.
+It rejects duplicate IDs, duplicate/prefix-conflicting sequences, empty sequences,
+sequences longer than four strokes, and Enter/Escape/Ctrl-J/Ctrl-C bindings.
+Disabled commands reserve their bindings during validation but cannot invoke.
+Press events return one invocation ID; repeats and releases never invoke.
+The caller advances `tick(Duration)` and calls `reset()` on scope changes or
+dismissal. A pending mismatch or paste cancels and consumes that input; Ctrl-C
+clears pending state and reaches the host. Help uses `Binding::label()` from the
+same descriptors. `commands::remaps::resolve` accepts ordered host-loaded overrides,
+removes losing bindings, and retains both sides' conflict/source evidence.
+Reserved overrides remain visible as ignored and preserve the prior binding.
+File loading and persistence remain host responsibilities. Help groups by display
+scope; the caller supplies the active command map and omits hidden commands.
+
+Ctrl-P uses the docked palette in the gallery by product decision, overriding the
+commands-and-bindings board's centered placement. F1 uses full-screen keys.
+Palette groups are recent-first and disappear during ranked search. Keys use a
+separate scope projection of the same effective map; Tab changes the displayed
+scope and source inspection returns an intent. Neither projection executes work.
 
 ## Scrolling and resize
 

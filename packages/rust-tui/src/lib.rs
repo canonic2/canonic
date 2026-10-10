@@ -10,6 +10,7 @@
 //! ```
 
 pub mod chat;
+pub mod commands;
 pub mod dialog;
 pub mod editor;
 pub mod focus;

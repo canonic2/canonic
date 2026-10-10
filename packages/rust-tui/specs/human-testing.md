@@ -8,10 +8,59 @@ have not been reported as passed. Slice 1 redesign is committed; the user
 authorized advancing on 2026-10-09. Slice 2a rich picker is human accepted and
 committed; subsequent picker visual review reopened the bounded follow-up below.
 Slice 2b.1 dialog visual shell is implemented, awaiting its human gate;
-2b.2 arrival/removal timing, slice 2c and
-slices 3–13 remain unstarted. [Roadmap](roadmap.md) owns
+2b.2 arrival/removal timing and slices 3–13 remain unstarted. Slice 2c is implemented
+after the user's 2026-10-10 advancement request, awaiting its own human gate.
+[Roadmap](roadmap.md) owns
 the acceptance criteria and architecture dependency groups; this topic owns
 their smaller delivery units and the human acceptance procedure.
+
+## Gate 2c — commands and bindings
+
+Implemented; human acceptance pending. This gate does not accept the remaining
+dialog timing or inline chat screen-transition work.
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component commands --colors truecolor"
+```
+
+1. The palette sits directly above the live yellow activity row and message box.
+   Search `/branch`, then Enter. The activity reports `intent: rename`; the draft
+   survives and no operation runs. Ctrl-P reopens commands with recent rows first.
+2. Filter by `copy`, then `ctrl+x`. Groups disappear; keys align on the right.
+   Digits enter the query. Search `/push`: unavailable publish cannot confirm.
+   Esc clears the query first, then closes. No-match has no Enter hint.
+3. F1 opens full-screen keys, hiding the dock. Search a key or label; Tab changes
+   scope. Esc clears then closes, restoring the message box and its draft.
+   F3 switches between docked palette and full-screen keys.
+4. F5 remaps Ctrl-P to Ctrl-O; both views show the effective key. Close and use
+   Ctrl-O to reopen. F2 cycles the custom/conflict fixtures: the selected row shows
+   default keys and source/conflict details. `o` prints a source inspection intent.
+5. Close the view. Ctrl-X shows a pending activity immediately; wait 0.4 seconds
+   for the continuation strip. `h` records one handoff intent. Repeat Ctrl-X and
+   wait 3 seconds: the strip disappears. Esc quietly cancels. Ctrl-X then `z`
+   shows mismatch feedback for 3 seconds. Paste while pending never edits the draft.
+6. F6 changes focus and F5 replaces the map; both cancel pending input. Ctrl-C
+   exits even while pending. F2 cycles twelve design states, including empty,
+   unavailable and no-match. Long lists page/scroll. Resize to 40 columns and short
+   heights; optional details disappear before labels/keys. F4 checks all color
+   fallbacks. Modified Enter never confirms a search result.
+
+Report pass/fail by step before committing. The local commands-and-bindings HTML
+boards and PDF supplied the visual reference. Ctrl-P docking and F1 full-screen
+placement follow the user's explicit 2026-10-10 decision. Source loading/opening
+remain host boundaries; slash insertion remains slice 4. The native visual gate
+is pending even when rendered-buffer and PTY checks pass.
+
+Engineering on 2026-10-10: `make check` passed formatting, strict Clippy,
+63 all-feature tests (including native macOS PTY restoration), one doctest,
+API docs and dependency audit. Gallery-disabled nextest passed 47 tests, and
+the release build passed. The final recent-shortcut and stable-filter-height
+refinements passed their rendered regressions, strict Clippy and release rebuild.
+Shield's locked optional TUI compilation passed; Drone's workspace lockfile is
+out of date, so its optional TUI compilation used a disposable manifest/lockfile
+copy and passed without editing workspace files. Palette/keys snapshots
+were inspected against the supplied boards; Markdown targets and scoped diff
+checks passed. Native visual acceptance and Linux/Windows remain unverified.
 
 ## Delivery contract
 
@@ -388,7 +437,8 @@ allowed duplicate-version warnings.
 Unimplemented. After the visual gate is accepted and committed, add explicit
 host-clock arrival deferral within one second of typing, waiting activity with
 Ctrl-G opening, and a three-second host removal reason. Provide deterministic
-waiting/removal fixtures and a separate human gate before commands/bindings (2c).
+waiting/removal fixtures and a separate human gate. The user authorized starting
+commands/bindings separately; that does not accept this timing gap.
 
 ## Acceptance record
 
@@ -397,8 +447,9 @@ waiting/removal fixtures and a separate human gate before commands/bindings (2c)
 | 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
 | 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
 | 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: private `f3e7579`, public `17e53d5` |
-| 2b | 2b.1 engineering passed; 2b.2 unstarted | Visual shell pending | Mechanics checkpoint: private `b0a4bdb`, public `46285d6`; visual changes await human confirmation and commit |
-| 2c, 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
+| 2b | 2b.1 engineering passed; 2b.2 unstarted | Fallback visual review pending | Explicit checkpoint: private `4c6260d`, public `05857ee`; timing and inline transition remain pending |
+| 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
+| 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
 
 Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs

@@ -3,7 +3,8 @@
 Status: rich picker human accepted in slice 2a. Dialog stack mechanics and slice
 2b.1 visual design are implemented, with visual human acceptance pending. Slice
 2b.2 typing-aware arrival and timed removal notices remain unimplemented.
-Commands, sessions, trees and general content panels remain proposed.
+Commands and keys are implemented in slice 2c, awaiting their human gate.
+Sessions, trees and general content panels remain proposed.
 
 ## Official dialog design
 
@@ -146,11 +147,19 @@ full-screen gallery placement; an inline terminal adapter remains slice 12.
 
 ## Commands, completion and help
 
+Slice 2c implements `commands::Commands` for palette and searchable keyboard help,
+using one supplied descriptor map, command-specific columns and shared rules/tokens. Labels, categories,
+descriptions, aliases, disabled reasons and effective binding text are projected
+from that map. Selection returns a stable command ID; it never executes anything.
+Availability must be rechecked by the host. Replace a context map atomically by
+constructing a new validated view and dispatcher before swapping either instance.
+Slash insertion/completion is still slice 4 work; aliases are searchable here.
+
 Host supplies command ID, label/category, aliases/optional slash spelling,
 description, availability/disabled reason and effective binding. Palette searches
 and returns an invocation ID; it performs no dispatch, shell execution or parsing
-of agent commands. Help derives from the same descriptors/bindings, with category
-and pending-sequence hints. Current context controls visibility, not a persistent
+of agent commands. Help derives from the same descriptors/bindings, with scope groups, source/conflict details
+and delayed pending-sequence hints. Current context controls visibility, not a persistent
 global registry. Availability is rechecked by host after selection.
 
 Slash completion and command palette share descriptors while using separate

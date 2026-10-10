@@ -1,5 +1,21 @@
 # Independent gallery and verification
 
+## Implemented command composition
+
+Slice 2c follows the commands-and-bindings boards with one product placement
+override: Ctrl-P stays docked above the activity row/message editor, while F1
+fills the stage with keys. Twelve deterministic fixtures cover ranked search,
+key search, unavailable/no-match rows, scoped help, custom/conflicting remaps,
+pending sequences, delayed hints, mismatch feedback and an empty map. F3 switches
+projection, F5 replaces bindings and F6 changes focus. The independent draft
+survives both views; the full-screen keys projection hides the dock.
+
+Sequence hints wait 400 ms and timeout after 3 seconds using the host clock.
+The fixture returns invocation/source-inspection intents without executing
+commands or opening files. Behavioral and PTY tests verify isolation, layout,
+remaps and restoration. [Gate 2c](human-testing.md#gate-2c--commands-and-bindings)
+owns human acceptance. Slash-list insertion remains slice 4.
+
 ## Implemented dialog composition
 
 Slice 2b has prompt, nested choice/prompt, long inspection, locked Escape,

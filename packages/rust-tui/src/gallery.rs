@@ -1,5 +1,6 @@
 //! Composes reusable views into a local gallery using simulated product activity.
 
+mod commands;
 mod dialog_body;
 mod dialogs;
 mod editor;
@@ -97,6 +98,8 @@ pub enum Component {
     Editor,
     /// Nested caller-owned dialogs and host drafts.
     Dialog,
+    /// Command palette, keyboard help and scoped shortcut sequences.
+    Commands,
 }
 
 enum Screen {
@@ -105,6 +108,7 @@ enum Screen {
     Chat,
     Editor,
     Dialog,
+    Commands,
 }
 
 // The host's resolved presentation owns color policy while the gallery runs.
@@ -137,6 +141,7 @@ pub struct Gallery {
     stream: std::collections::VecDeque<String>,
     editor: editor::EditorDemo,
     dialogs: dialogs::DialogDemo,
+    commands: commands::CommandDemo,
 }
 
 impl Default for Gallery {
@@ -158,6 +163,7 @@ impl Gallery {
                     "Full-screen chat".into(),
                     "Multiline editor".into(),
                     "Dialogs".into(),
+                    "Commands and bindings".into(),
                 ],
                 Some(0),
             ),
@@ -169,6 +175,7 @@ impl Gallery {
             stream: std::collections::VecDeque::new(),
             editor: editor::EditorDemo::new(),
             dialogs: dialogs::DialogDemo::new(),
+            commands: commands::CommandDemo::new(),
         };
         gallery.reset_chat();
         gallery
@@ -183,6 +190,7 @@ impl Gallery {
             Screen::Chat => "chat",
             Screen::Editor => "editor",
             Screen::Dialog => "dialog",
+            Screen::Commands => "commands",
         }
     }
 
@@ -205,6 +213,12 @@ impl Gallery {
     #[must_use]
     pub fn dialog_depth(&self) -> usize {
         self.dialogs.depth()
+    }
+
+    /// Independent host draft in the command fixture.
+    #[must_use]
+    pub fn command_input(&self) -> &str {
+        self.commands.input()
     }
 
     fn reset_chat(&mut self) {
@@ -254,6 +268,7 @@ impl Gallery {
         self.editor.tick(elapsed);
         self.picker.tick(elapsed);
         self.dialogs.tick(elapsed);
+        self.commands.tick(elapsed);
         self.chat.tick(elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.chat.append(&fragment);
@@ -265,6 +280,9 @@ impl Gallery {
 
     /// Apply an input event. Returns true when the gallery should exit.
     pub fn update(&mut self, event: &Event) -> bool {
+        if matches!(self.screen, Screen::Commands) && self.commands.update(event) {
+            return false;
+        }
         if matches!(self.screen, Screen::Editor) && self.editor.update(event) {
             return false;
         }
@@ -316,11 +334,13 @@ impl Gallery {
                         0 => Screen::Picker,
                         1 => Screen::Chat,
                         2 => Screen::Editor,
-                        _ => Screen::Dialog,
+                        3 => Screen::Dialog,
+                        _ => Screen::Commands,
                     };
                     self.editor = editor::EditorDemo::new();
                     self.picker = option_picker::PickerDemo::new();
                     self.dialogs = dialogs::DialogDemo::new();
+                    self.commands = commands::CommandDemo::new();
                     if matches!(self.screen, Screen::Chat) {
                         self.reset_chat();
                     } else {
@@ -350,7 +370,7 @@ impl Gallery {
                 }
                 chat::Action::None => {}
             },
-            Screen::Picker | Screen::Editor | Screen::Dialog => {}
+            Screen::Picker | Screen::Editor | Screen::Dialog | Screen::Commands => {}
         }
         false
     }
@@ -388,6 +408,7 @@ impl Gallery {
             Screen::Chat => self.chat.render_with(frame, body, self.theme),
             Screen::Editor => self.editor.render(frame, body, self.theme),
             Screen::Dialog => self.dialogs.render(frame, body, self.theme),
+            Screen::Commands => self.commands.render(frame, body, self.theme),
         }
         frame.render_widget(
             Paragraph::new(self.note.as_str()).style(self.theme.heading()),
@@ -410,7 +431,7 @@ impl Gallery {
 pub fn run(cli: &Cli) -> Result<()> {
     if cli.list {
         println!(
-            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs"
+            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings"
         );
         return Ok(());
     }
@@ -430,6 +451,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             Component::Chat => Screen::Chat,
             Component::Editor => Screen::Editor,
             Component::Dialog => Screen::Dialog,
+            Component::Commands => Screen::Commands,
         };
     }
     // Declared first so the terminal restores its colors before policy is restored.

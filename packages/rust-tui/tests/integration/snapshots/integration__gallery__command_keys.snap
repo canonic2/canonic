@@ -1,0 +1,34 @@
+---
+source: tests/integration/gallery.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+keys ──────────────────────────────────────────────────────────────────────────────────────────── 31
+filter type a command or a key
+everywhere
+  ctrl+g    go to sessions
+  ctrl+p    commands
+  F1        keys
+chat
+  ctrl+x h  copy handoff
+  ctrl+x l  switch lens
+  ctrl+x a  actions on or off
+  ctrl+x y  copy reference
+  ctrl+x k  stop session
+  ctrl+t    theme
+            new tab
+            export chat
+editor
+  ctrl+x e  open in $EDITOR
+workspace
+            rename branch
+            publish branch
+            example command 00
+            example command 01
+            example command 02
+            example command 03
+────────────────────────────────────────────────────────────────── ↓ 13 more · tab scope · esc close
+#commands:palette · F2 fixture · F1 keys · F3 palette/keys · F5 remap · F6 focus
+
+Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F4 colors

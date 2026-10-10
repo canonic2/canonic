@@ -1,5 +1,47 @@
 # Usage
 
+## Commands and keyboard help
+
+Open **Commands and bindings** in the catalog, or use
+`make -C packages/rust-tui run CARGO_FLAGS="-- --component commands"` from the
+repository root. Ctrl-P opens the docked palette directly above the activity row
+and message box. F1 opens the full-screen keys view. Closing either preserves the
+message draft. F3 switches between the two projections.
+
+The palette shows recent commands first, then groups. Its plain filter searches
+labels, descriptions, aliases such as `/branch`, and effective keys. Exact keys
+rank first. Filtering hides group headings; digits enter the filter. Enter
+returns one enabled command ID; the gallery records the intent without executing
+an operation. Esc clears the filter first, then closes. Optional descriptions
+are omitted on narrow screens. Keys remain in their own right-aligned column.
+
+The keys view groups by host-supplied scope, displays effective shortcuts on the
+left, and shows selected custom bindings' defaults, source locations and conflicts.
+Tab cycles scopes. `o` on a custom/conflicting row returns a source inspection
+intent; the gallery prints it, and does not open a file. Help never runs commands.
+F5 remaps Ctrl-P to Ctrl-O using fixture data; the active map and help agree.
+
+Close the view and press Ctrl-X. The activity immediately shows the prefix; after
+0.4 seconds a continuation strip appears above it. The sequence expires after
+3 seconds. Follow with `h` to record a handoff intent. Esc quietly cancels;
+an unmatched continuation shows feedback for 3 seconds. Neither mismatches nor
+paste reach the message draft. F6 changes focus and cancels pending input.
+F2 cycles palette, text filter, key filter, unavailable, no-match, keys, custom
+keys, conflict, pending, delayed hints, mismatch and empty fixtures. F4 cycles
+color profiles. Ctrl-C always exits.
+
+Hosts supply `commands::Command` descriptors to `Commands` and
+`commands::bindings::Dispatcher`. `Commands::remapped` resolves ordered host-loaded
+overrides: later entries win, conflict losers remain visible without the losing
+key, and reserved-key overrides are ignored with evidence. Hosts load files,
+provide source paths/lines and execute inspection or invocation intents.
+Construct replacements before swapping the active map, advance dispatch with the
+host clock, reset on scope changes, and recheck availability before execution.
+Modified Enter, repeats, releases and paste never invoke commands. Slash insertion
+and completion are a separate roadmap slice.
+
+## Gallery
+
 Open the gallery with `make -C packages/rust-tui run`. It starts at the component
 selector. Arrow keys select a component; Enter opens it; Esc returns to the
 selector and Esc again exits. Ctrl-C exits from every view. Ctrl-T changes RGB

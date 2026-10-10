@@ -1,0 +1,34 @@
+---
+source: tests/integration/gallery.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+acme · 20:05
+  Both calls now send the app's language.
+
+  edit  example/account-deletion.rs   +6 −2 applied
+  run   example checks → 6 passed · 0.9s
+
+  ✓ done · 34s
+
+commands ──────────────────────────────────────────────────────────────────────────────────────── 31
+filter type a command or a key
+recent
+  copy handoff        summary and references for another agent                             ctrl+x h
+  switch lens         chat, diff, log, handoff                                             ctrl+x l
+session
+  actions on or off   apply edits and commands, or only log them                           ctrl+x a
+  copy reference      this session's address                                               ctrl+x y
+  stop session        draft and history are kept                                           ctrl+x k
+  open in $EDITOR     long message, your editor                                            ctrl+x e
+  export chat         copy the chat as Markdown
+────────────────────────────────────────────────────────────────── ↓ 24 more · enter run · esc close
+! commands · esc closes it
+message ────────────────────────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+#commands:palette · F2 fixture · F1 keys · F3 palette/keys · F5 remap · F6 focus
+
+Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F4 colors

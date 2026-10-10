@@ -10,7 +10,8 @@ slices each require an independent human gate.
 Current delivery: slice 1 was explicitly committed and advancement authorized.
 Slice 2 is divided into 2a rich picker (accepted/committed), 2b dialogs
 (2b.1 visual shell implemented, human gate pending; 2b.2 arrival/removal timing
-unstarted) and 2c commands/bindings (unstarted).
+unstarted) and 2c commands/bindings (implemented, human gate pending).
+The user authorized starting 2c on 2026-10-10; dialog timing remains a separate gap.
 This does not accept broader phase 2
 criteria or unreported slice 1 redesign actions.
 

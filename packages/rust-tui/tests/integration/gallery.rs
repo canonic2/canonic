@@ -13,6 +13,142 @@ fn key(code: KeyCode) -> Event {
 }
 
 #[test]
+fn command_fixture_preserves_draft_and_replaces_effective_help_bindings() {
+    let mut gallery = Gallery::new();
+    gallery.update(&Event::Paste("Commands".into()));
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.current(), "commands");
+    let original = gallery.command_input().to_owned();
+    gallery.update(&Event::Paste("/branch".into()));
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.command_input(), original);
+    let mut terminal = Terminal::new(TestBackend::new(100, 25)).unwrap();
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("intent: rename"));
+    gallery.update(&key(KeyCode::F(5)));
+    gallery.update(&key(KeyCode::F(3)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(
+        text.lines().any(|r| r.starts_with("keys ")) && text.contains("ctrl+o"),
+        "{text}"
+    );
+    gallery.update(&key(KeyCode::F(6)));
+    gallery.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('x'),
+        KeyModifiers::CONTROL,
+    )));
+    gallery.update(&Event::Paste("must not leak".into()));
+    assert_eq!(gallery.command_input(), original);
+    for (width, height) in [(40, 12), (1, 1), (80, 20)] {
+        terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal.draw(|f| gallery.render(f)).unwrap();
+    }
+}
+
+#[test]
+fn commands_dock_and_keys_fill_the_stage_without_losing_the_message_box() {
+    for (width, height) in [(100, 30), (40, 30)] {
+        let mut gallery = Gallery::new();
+        gallery.update(&Event::Paste("Commands".into()));
+        gallery.update(&key(KeyCode::Enter));
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let mut expected_title = None;
+        for _ in 0..3 {
+            terminal.draw(|f| gallery.render(f)).unwrap();
+            let text = super::components::dump(terminal.backend().buffer());
+            let rows: Vec<_> = text.lines().collect();
+            let message = rows
+                .iter()
+                .position(|r| r.starts_with("message "))
+                .unwrap_or_else(|| panic!("{text}"));
+            let title = rows
+                .iter()
+                .position(|r| r.starts_with("commands "))
+                .unwrap();
+            assert!(title > 2, "view should dock below the gallery header");
+            assert_eq!(
+                *expected_title.get_or_insert(title),
+                title,
+                "filter fixtures keep their opening height"
+            );
+            assert!(
+                rows[message - 2].contains("esc"),
+                "picker footer must touch activity row"
+            );
+            gallery.update(&key(KeyCode::F(3)));
+            terminal.draw(|f| gallery.render(f)).unwrap();
+            let help = super::components::dump(terminal.backend().buffer());
+            assert!(help.lines().nth(2).unwrap().starts_with("keys "));
+            assert!(!help.lines().any(|r| r.starts_with("message ")));
+            gallery.update(&key(KeyCode::F(6)));
+            terminal.draw(|f| gallery.render(f)).unwrap();
+            let closed = super::components::dump(terminal.backend().buffer());
+            assert_eq!(
+                closed.lines().position(|r| r.starts_with("message ")),
+                Some(message)
+            );
+            gallery.update(&key(KeyCode::F(2)));
+        }
+    }
+}
+
+#[test]
+fn command_design_palette_and_keys_have_distinct_reviewable_projections() {
+    let mut gallery = Gallery::new();
+    gallery.update(&Event::Paste("Commands".into()));
+    gallery.update(&key(KeyCode::Enter));
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    insta::assert_snapshot!(
+        "command_palette",
+        super::components::dump(terminal.backend().buffer())
+    );
+    gallery.update(&key(KeyCode::F(1)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    insta::assert_snapshot!(
+        "command_keys",
+        super::components::dump(terminal.backend().buffer())
+    );
+    gallery.update(&key(KeyCode::Esc));
+    let original = gallery.command_input().to_owned();
+    gallery.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('x'),
+        KeyModifiers::CONTROL,
+    )));
+    for _ in 0..4 {
+        gallery.tick();
+    }
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let before = super::components::dump(terminal.backend().buffer());
+    assert!(before.contains("ctrl+x …") && !before.contains("copy handoff"));
+    gallery.tick();
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("h  copy handoff"));
+    gallery.update(&key(KeyCode::Char('z')));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("isn't a command"));
+    assert_eq!(gallery.command_input(), original);
+    for _ in 0..38 {
+        gallery.tick();
+    }
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(!super::components::dump(terminal.backend().buffer()).contains("isn't a command"));
+    gallery.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('x'),
+        KeyModifiers::CONTROL,
+    )));
+    gallery.update(&key(KeyCode::Char('k')));
+    gallery.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('p'),
+        KeyModifiers::CONTROL,
+    )));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let recent = super::components::dump(terminal.backend().buffer());
+    assert!(recent.find("stop session").unwrap() < recent.find("copy handoff").unwrap());
+}
+
+#[test]
 fn gallery_opens_at_the_selector_and_both_components_are_independent_fixtures() {
     let mut gallery = Gallery::new();
     assert_eq!(gallery.current(), "catalog");
