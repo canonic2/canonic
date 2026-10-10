@@ -7,7 +7,12 @@ use crate::{
     picker::{Choice, ChoicePicker, Filter, Intent, PickerView, SelectionMode, Status},
     theme::Presentation,
 };
-use ratatui::{Frame, layout::Rect, widgets::Paragraph};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 
 const NAMES: [&str; 14] = [
     "default", "details", "disabled", "danger", "filter", "no-match", "scrolled", "multi",
@@ -33,7 +38,7 @@ impl PickerDemo {
             focus: Focus::new(vec![0, 1])
                 .unwrap_or_else(|| unreachable!("fixture IDs are distinct")),
             scenario: 0,
-            host: 0,
+            host: 1,
             result: None,
             note: String::new(),
         }
@@ -144,9 +149,42 @@ impl PickerDemo {
             },
             self.focus.active() == Some(&1),
         );
-        let available = Rect::new(area.x, area.y, area.width, dock_y.saturating_sub(area.y));
+        let activity_y = dock_y.saturating_sub(1).max(area.y);
+        if activity_y < dock_y {
+            self.render_activity(frame, Rect::new(area.x, activity_y, area.width, 1), p);
+        }
+        let available = Rect::new(
+            area.x,
+            area.y,
+            area.width,
+            activity_y.saturating_sub(area.y),
+        );
+        let width = if self.scenario == 10 {
+            area.width.min(40)
+        } else {
+            area.width
+        };
+        let branch = matches!(self.scenario, 4..=6);
+        let view = PickerView {
+            title: if branch {
+                "switch branch"
+            } else {
+                "github server"
+            },
+            source: if self.scenario == 1 { ".mcp.json" } else { "" },
+            context: if self.scenario == 1 {
+                "Can read issues and pull requests with your token. The host owns this decision."
+            } else {
+                ""
+            },
+            max_height: if self.host == 2 { available.height } else { 9 },
+            presentation: p,
+        };
         let y = if self.host == 1 {
-            available.bottom().saturating_sub(9).max(available.y)
+            available
+                .bottom()
+                .saturating_sub(self.picker.height(width, view).min(available.height))
+                .max(available.y)
         } else if self.host == 0 {
             available.y.saturating_add(2).min(available.bottom())
         } else {
@@ -158,16 +196,7 @@ impl PickerDemo {
                 Rect::new(area.x, area.y, area.width, 1),
             );
         }
-        let picker_area = Rect::new(
-            area.x,
-            y,
-            if self.scenario == 10 {
-                area.width.min(40)
-            } else {
-                area.width
-            },
-            available.bottom().saturating_sub(y),
-        );
+        let picker_area = Rect::new(area.x, y, width, available.bottom().saturating_sub(y));
         if let Some(result) = self.result.as_deref().or(if self.scenario == 11 {
             Some("github server -> skip")
         } else {
@@ -175,13 +204,8 @@ impl PickerDemo {
         }) {
             frame.render_widget(Paragraph::new(result).style(p.accent()), picker_area);
         } else {
-            let branch = matches!(self.scenario, 4..=6);
-            self.picker.render(frame, picker_area, PickerView {
-                title: if branch { "switch branch" } else { "github server" },
-                source: if self.scenario == 1 { ".mcp.json" } else { "" },
-                context: if self.scenario == 1 { "Can read issues and pull requests with your token. The host owns this decision." } else { "" },
-                max_height: if self.host == 2 { picker_area.height } else { 9 }, presentation: p,
-            }, self.focus.active() == Some(&0));
+            self.picker
+                .render(frame, picker_area, view, self.focus.active() == Some(&0));
         }
         let hint = format!(
             "#picker:{} · F2 fixture · F3 inspect · F5 refresh · F6 {} · Tab focus",
@@ -198,6 +222,39 @@ impl PickerDemo {
                 Rect::new(area.x, hints_y + 1, area.width, 1),
             );
         }
+    }
+
+    fn render_activity(&self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
+        let status = if self.result.is_some() || self.scenario == 11 {
+            "ready"
+        } else if self.scenario == 9 {
+            "reading supplied options"
+        } else if self.scenario == 13 {
+            "! source unavailable"
+        } else if self.scenario == 12 {
+            "ready"
+        } else if matches!(self.scenario, 4..=7) {
+            "! needs you · enter / esc"
+        } else if self.scenario == 2 {
+            "! needs you · 1 3"
+        } else if p.symbols == crate::theme::Symbols::Ascii {
+            "! needs you · 1-3"
+        } else {
+            "! needs you · 1–3"
+        };
+        let (label, detail) = status.split_once(" · ").unwrap_or((status, ""));
+        let mut spans = vec![Span::styled(
+            label,
+            if label == "! needs you" {
+                p.warning()
+            } else {
+                p.muted()
+            },
+        )];
+        if !detail.is_empty() {
+            spans.push(Span::styled(format!(" · {detail}"), p.muted()));
+        }
+        frame.render_widget(Paragraph::new(Line::from(spans)), area);
     }
 }
 

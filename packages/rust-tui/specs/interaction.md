@@ -5,6 +5,12 @@ scopes and editor keys, pending human acceptance. A shared binding dispatcher,
 pointer interaction and configurable shortcuts remain proposed.
 See [System design](system-design.md).
 
+Slice 2b implements modal dispatch through `dialog::Stack`, wrapping existing
+focus scopes. Only the top body handles input; Tab traps within that scope and
+Escape clears a body's local selection/query before closing one layer. Outside
+pointer events cannot activate background views. Result tickets identify active
+openings; closing/replacing rejects stale updates. Human acceptance is pending.
+
 ## Intended behavior
 
 All operations are keyboard reachable. A composition has one focused target;

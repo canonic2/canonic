@@ -194,11 +194,22 @@ fn compact_rendering_keeps_height_and_label_columns_without_side_borders() {
         .unwrap();
     assert_eq!(used.height, 5);
     let buffer = terminal.backend().buffer();
-    assert_eq!(buffer[(4, 1)].symbol(), "A");
-    assert_eq!(buffer[(4, 3)].symbol(), "G");
-    assert_eq!(Some(buffer[(0, 3)].bg), presentation.tokens().surface);
+    assert_eq!(buffer[(5, 1)].symbol(), "A");
+    assert_eq!(buffer[(5, 3)].symbol(), "G");
+    assert_eq!(buffer[(0, 3)].bg, Color::Reset);
+    assert!(!buffer[(0, 3)].modifier.contains(Modifier::REVERSED));
+    assert_eq!(Some(buffer[(2, 3)].bg), presentation.tokens().surface);
     assert!(buffer[(1, 3)].modifier.contains(Modifier::REVERSED));
-    assert!(buffer[(4, 3)].modifier.contains(Modifier::BOLD));
+    for row in 1..=3 {
+        assert_eq!(buffer[(1, row)].symbol(), " ");
+        assert_eq!(buffer[(2, row)].symbol(), row.to_string());
+        assert_eq!(buffer[(3, row)].symbol(), " ");
+        assert_eq!(buffer[(4, row)].symbol(), " ");
+        assert!(!buffer[(4, row)].modifier.contains(Modifier::REVERSED));
+    }
+    assert_eq!(buffer[(63, 3)].bg, Color::Reset);
+    assert!(!buffer[(63, 3)].modifier.contains(Modifier::REVERSED));
+    assert!(buffer[(5, 3)].modifier.contains(Modifier::BOLD));
     assert!(!terminal.backend().cursor_visible());
     insta::assert_snapshot!("option_picker", super::components::dump(buffer));
     let mut filtered = picker(Filter::On, SelectionMode::Single);
@@ -252,6 +263,95 @@ fn grouped_paging_tracks_body_rows_and_resize_keeps_the_highlight_visible() {
     p.update(&key(KeyCode::Home));
     p.update(&key(KeyCode::Up));
     assert_eq!(p.selected(), Some("0"));
+}
+
+#[test]
+fn selected_label_overrides_dim_underlay_and_details_keep_two_cells_of_space() {
+    use canonic_rust_tui::ratatui::{style::Style, widgets::Block};
+    for colors in [
+        ColorMode::Ansi16,
+        ColorMode::Ansi256,
+        ColorMode::TrueColor,
+        ColorMode::NoColor,
+    ] {
+        let mut p = picker(Filter::Off, SelectionMode::Single);
+        let mut rows = choices();
+        for row in &mut rows {
+            row.detail = "metadata".into();
+        }
+        p.replace_choices(rows).unwrap();
+        let view = PickerView {
+            presentation: Presentation {
+                colors,
+                ..Presentation::default()
+            },
+            ..PickerView::default()
+        };
+        let mut t = Terminal::new(TestBackend::new(25, 8)).unwrap();
+        t.draw(|f| {
+            f.render_widget(
+                Block::default()
+                    .style(Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)),
+                f.area(),
+            );
+            p.render(f, f.area(), view, true);
+        })
+        .unwrap();
+        let b = t.backend().buffer();
+        let label = &b[(5, 3)];
+        assert_eq!(label.fg, Color::Reset);
+        assert!(label.modifier.contains(Modifier::BOLD));
+        assert!(!label.modifier.contains(Modifier::DIM));
+        assert_eq!(b[(0, 3)].bg, Color::Reset);
+        assert!(!b[(0, 3)].modifier.contains(Modifier::REVERSED));
+        assert!(b[(0, 0)].modifier.contains(Modifier::BOLD));
+        assert_eq!(b[(10, 3)].symbol(), " ");
+        assert_eq!(b[(11, 3)].symbol(), " ");
+        assert_eq!(b[(12, 3)].symbol(), "m");
+        t = Terminal::new(TestBackend::new(24, 8)).unwrap();
+        t.draw(|f| {
+            p.render(f, f.area(), view, true);
+        })
+        .unwrap();
+        assert!(!super::components::dump(t.backend().buffer()).contains("metadata"));
+    }
+}
+
+#[test]
+fn number_hint_ranges_never_advertise_disabled_shortcuts() {
+    let rows: Vec<_> = (0..6)
+        .map(|i| Choice::new(i.to_string(), format!("Option {i}")))
+        .collect();
+    let mut p = ChoicePicker::new(rows.clone(), None, SelectionMode::Single, Filter::Off).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(70, 10)).unwrap();
+    for (symbols, expected) in [(Symbols::Unicode, "1–6"), (Symbols::Ascii, "1-6")] {
+        terminal
+            .draw(|f| {
+                p.render(
+                    f,
+                    f.area(),
+                    PickerView {
+                        presentation: Presentation {
+                            symbols,
+                            ..Presentation::default()
+                        },
+                        ..PickerView::default()
+                    },
+                    true,
+                );
+            })
+            .unwrap();
+        assert!(super::components::dump(terminal.backend().buffer()).contains(expected));
+    }
+    let mut disabled = rows;
+    disabled[2].disabled = Some("unavailable".into());
+    p.replace_choices(disabled).unwrap();
+    terminal
+        .draw(|f| {
+            p.render(f, f.area(), PickerView::default(), true);
+        })
+        .unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("1 2 4 5 6"));
 }
 
 #[test]

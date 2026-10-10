@@ -1,5 +1,12 @@
 # System design and module contracts
 
+Implemented dialog boundary (slice 2b, human gate pending): `Stack<B,T>` owns
+validated layers, unique opening tickets and shared focus scopes; caller bodies
+own input/rendering/scrolling. Hosts own work, cancel it from dismissal records,
+and render base views unfocused while open. `dispatch` reaches only the top body;
+`body_mut(ticket)` rejects non-active generations. General review/content bodies,
+commands and native pointer capture remain later contracts.
+
 Status: proposed decomposition. Names express intended owners, not existing
 exports or required exact Rust signatures. [Architecture](architecture.md) owns
 the existing foundation; [Inventory](inventory.md) records its limits.

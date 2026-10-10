@@ -47,6 +47,19 @@ The original `Picker`/`Action` API stays intact for index-based callers/catalog.
 Rich picker tests cover identity refresh, disabled/danger defaults, query undo,
 hidden marks, physical-row paging, Unicode, narrow styles and a reviewed snapshot.
 
+`dialog.rs` owns a generic bounded modal stack, scoped focus, opening tickets,
+validation and dismissal records. It wraps `Focus` rather than duplicating return
+scope logic. `dialog/view.rs` owns clamped/centered geometry and shared-rule chrome.
+Bodies receive caller frames/events and own their state/scrolling. Stack dispatch
+never sends unhandled modal events to background views; hosts cancel work from
+returned dismissal records. `gallery/dialogs.rs` composes seven scenarios and
+two independent base drafts; `gallery/dialog_body.rs` supplies editors, choice
+pickers and a fixture-only read-only text body. A general content renderer is a
+later slice. No callback, timer, terminal acquisition or process belongs to a layer.
+Dialog tests cover nested routing/focus repair, atomic validation, stale/foreign
+tickets, outside pointer isolation, tiny geometry and a reviewed snapshot. A
+separate macOS PTY scenario tests nested paste, parent preservation and restoration.
+
 State and rendering tests run without a terminal. TestBackend supplies terminal
 dimensions; insta captures the selector, with behavioral assertions alongside
 snapshots. Review generated snapshots with `cargo insta review`; do not accept

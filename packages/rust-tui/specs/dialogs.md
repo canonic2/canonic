@@ -1,9 +1,73 @@
 # Dialogs, commands and browsing
 
-Status: rich picker implemented and human accepted in slice 2a. Dialogs,
-commands, sessions, trees and panels below remain proposed targets.
+Status: rich picker human accepted in slice 2a. Slice 2b dialog stack is implemented
+but its presentation does not yet match the official design; its human gate is
+pending that alignment. Commands, sessions, trees and panels remain proposed.
+
+## Official dialog design
+
+The authoritative visual and interaction reference is
+[Dialog design](../design/dialog/dialog.html), with a [PDF](../design/dialog/dialog.pdf).
+It contains Overview, Keys & behavior and States boards. The current implementation
+described below establishes stack mechanics; it does not establish design acceptance.
+
+- Inline/chat dialogs are full-width filled sheets at the bottom of the stage,
+  above the persistent seven-row dock. Full-screen dialogs are centered panels,
+  at most 72 columns and viewport height minus four rows.
+- Height follows content. Sheets use at most half the stage; prompt fields grow
+  from one to six rows before scrolling. No padding to a fixed preferred height.
+- Shared chrome contains a task title, optional scope at right, an optional
+  one-to-three-row message, content and a footer with host-supplied action words.
+  Editors use terminal-background insets inside the filled surface.
+- Only the top dialog is visible. A nested opening replaces the parent visually
+  and shows a title trail; Escape resumes the preserved parent. Replacement adds
+  no trail entry. Clear returns to the original background focus.
+- Visible background rows repaint faded, including the composer, while drafts
+  and cursor state survive. The activity row identifies the dialog and Escape
+  behavior, or the current nesting depth.
+- An arrival within one second of typing waits instead of taking focus. The
+  activity row advertises `! dialog waiting · ctrl+g`; Ctrl-G opens it explicitly.
+  Timing must be an explicit host input, not a hidden component clock.
+- Host removal restores focus and displays the reason for three seconds on the
+  explicit host clock. Ctrl-C remains an application action in every state.
+- ANSI 16 and no-color modes use a full box and the editor's own field rules;
+  indexed/RGB modes use the filled surface. Narrow layouts wrap messages, drop
+  scope metadata and shorten footer text while keeping keys reachable.
+
+Design fixtures are prompt, multiline prompt, danger confirmation, notice,
+nested, replaced, waiting, removed, cleared, scrolling, narrow and ANSI 16.
+The gallery header, fixture controls and background test editors are host UI.
+The current seven fixtures and centered fixed preferred geometry do not cover
+this complete set. Existing stack/focus/ticket tests remain engineering evidence.
 
 ## Dialog composition
+
+Implemented `dialog::Stack<B,T>` owns up to sixteen caller-supplied bodies and
+wraps instance-local `Focus<T>`. `Dialog` supplies a unique open ID, title, body
+target order, preferred cell size and close policy. Duplicate IDs/targets or depth
+overflow reject push/replace before changing existing bodies/scopes. Closed body
+ownership returns in `Dismissed` with its ticket and reason; clear reports top to
+bottom. Replacement reports the old layer and creates a fresh opening.
+
+Tickets are unique per opening, including between independent stacks. Only the
+active ticket permits body updates or submission closure; foreign, obscured,
+closed and replaced results are rejected. Hosts can retry current data after an
+obscured parent resumes. The stack starts no asynchronous work and retains no
+completion callback; hosts cancel their own work from dismissal records and
+clear before tearing down a composition with outstanding tasks.
+
+Dispatch calls only the top handler. Tab/Shift-Tab advances its scope; releases
+are consumed. Escape is offered to the body first so a selection/filter clears
+before closing; policy may forbid escape closure. Outside pointer events are
+consumed; only an opted-in outside left press dismisses. It never confirms.
+The gallery simulates that press without enabling terminal mouse capture.
+
+Preferred default size is 72 × 14, clamped/centered in the caller viewport.
+Rendering shares rules/tokens, gives only the top body an active focus target,
+and uses the entire region without chrome below three rows. The host renders
+base views unfocused while open. Body components own scrolling/action reachability;
+the seven gallery scenarios use an editor, picker and local inspection text.
+General review/content bodies and pointer capture remain their owning later slices.
 
 Dialog host owns an explicit stack, target ID, size policy, body component,
 title, close policy and return focus. Only topmost layer handles input. Resize

@@ -1,0 +1,11 @@
+---
+source: tests/integration/dialog.rs
+expression: text
+---
+
+
+child dialog -----------------
+child
+
+
+-------------------- esc close

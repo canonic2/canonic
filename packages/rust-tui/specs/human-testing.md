@@ -5,9 +5,10 @@ Slice 1 functional testing passed; the supplied editor/design-system redesign
 reopens its human gate. The user explicitly requested a scoped commit on
 2026-10-09 after visible newline/color checks. Remaining redesign gate actions
 have not been reported as passed. Slice 1 redesign is committed; the user
-authorized advancing on 2026-10-09. Slice 2a rich picker is implemented pending
-human testing accepted on 2026-10-09 by the user's request to advance;
-slices 2b, 2c and 3–13 remain unstarted. [Roadmap](roadmap.md) owns
+authorized advancing on 2026-10-09. Slice 2a rich picker is human accepted and
+committed; subsequent picker visual review reopened the bounded follow-up below.
+Slice 2b dialogs is implemented, awaiting its human gate; slice 2c and
+slices 3–13 remain unstarted. [Roadmap](roadmap.md) owns
 the acceptance criteria and architecture dependency groups; this topic owns
 their smaller delivery units and the human acceptance procedure.
 
@@ -238,14 +239,136 @@ byte after temporary resolution. Reviewed the compact snapshot and six actual
 TestBackend style/geometry previews. Duplicate dependency warnings remain allowed
 by auditing. Native Linux/Windows and human modifier-key encoding are unverified.
 
+## Picker visual follow-up — 2026-10-09
+
+The picker uses default foreground, bold and no dim attribute for its selected
+enabled label. Number keys are centered in three cells with one plain band cell
+before each label; both highlight edges
+leave one clear cell, and details have a two-cell gap. The gallery reserves a
+persistent activity row between picker and composer in all fixture states.
+The user explicitly authorized a scoped checkpoint commit on 2026-10-09.
+Remaining visual checks are separate from that commit authorization.
+Package checks passed: formatting, strict Clippy, 47 tests (including three native
+PTY scenarios), one doctest, generated API documentation and dependency checks.
+The tests cover centered numbers, clear highlight edges, ANSI 16 heading weight,
+detail-width thresholds and activity-row/composer stability across all fourteen
+fixtures and confirmation.
+
+Diagnosis on the macOS host: an owned PTY capture shows SGR 39 (default
+foreground), SGR 1 (bold), and SGR 27 (reverse off) before the selected label;
+the title also receives SGR 1. An additional owned PTY test verifies default
+foreground, bold and no dim on selected labels and bold on titles in all four
+color modes, including selection transitions. ANSI 16/no-color retain the
+documented reverse fallback; indexed/RGB label text is not reversed.
+Saved iTerm2 profiles enable a custom Bold color
+that is darker than Foreground. The user's shell-only comparison on 2026-10-09
+reproduced the gray bold text outside the app, confirming this terminal behavior.
+The user explicitly accepts it as a terminal-profile limitation and does not want
+iTerm2 settings changed. The selected-label color concern is closed with this
+accepted limitation; other visual checks remain separate.
+iTerm2's [Colors documentation](https://iterm2.com/documentation-preferences-profiles-colors.html)
+describes this override. Terminal preferences have not been modified.
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors truecolor"
+```
+
+The confirmed shell-only reproduction was:
+
+```sh
+printf '\033[0;39mnormal text  \033[1mbold text\033[0m\n'
+```
+
+The bold sample turns gray under the user's iTerm2 profile. Accept that rendering
+for this gate without a terminal-settings change or application workaround.
+Navigate to Use this server and confirm bold emphasis. Detail remains muted;
+both outer cells stay outside the
+band; each number is centered without moving between rows and has one plain
+band cell between its block and label. The longest label has two blank cells before
+detail; shrinking drops details rather than squeezing that gap. F4 to ANSI 16:
+focused title stays bold. Between the picker footer and message title, confirm
+`! needs you` in warning yellow and `· 1–3` in muted color; the picker footer also
+uses `1–3`. Enter confirms: this row becomes `ready`, and the message
+title stays at the same height. F2 cycles all states with that row reserved.
+F6 changes placement while preserving state. Report
+pass/fail for this follow-up separately from the dialog gate. Native emulator
+edge padding/contrast behavior remains subject to this visual check.
+
+## Gate 2b — dialogs
+
+Design acceptance is pending alignment with the official
+[Dialog design](../design/dialog/dialog.html). Its sheets/panels, content-driven
+height, fill/inset treatment, faded background, footer actions, title trails,
+waiting/removal activity states and boxed ANSI 16/no-color fallback supersede the
+current gallery presentation. The steps below check existing stack mechanics;
+passing them alone does not accept the official design. See the
+[design contract](dialogs.md#official-dialog-design) for the remaining scope.
+
+From the repository root, in iTerm2 for RGB:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors truecolor"
+```
+
+1. **Prompt:** the modal sits over two background drafts. Ctrl-G then paste two
+   lines: only its draft changes and nothing submits. Ctrl-Z/Ctrl-Y undo/redo;
+   Ctrl-J adds a newline. Tab/Shift-Tab stays in the modal. Ctrl-G then Esc clears
+   selection without closing; a second Esc closes and returns focus to background
+   one. Type there, Tab to background two and verify independent editing.
+2. **Nested:** F3 opens a prompt; edit it, F3 opens its child, edit the child.
+   Esc closes only the child; parent text/caret survive. Enter returns the parent
+   text as a local result. Background drafts remain untouched while obscured.
+   F2's nested fixture opens a picker over a prompt: default Cancel is safe;
+   choosing returns the choice ID and leaves its parent available.
+3. **Fixtures:** F2 cycles prompt → nested → long → locked → outside → removed-
+   return → error. Long inspection scrolls by arrows/PageUp/PageDown/Home/End;
+   End exposes row 59. Enter acknowledges only its layer. Locked ignores Escape;
+   Enter returns local text. Error ignores Enter, and F6 replaces it with a usable
+   retry prompt; no real operation runs.
+4. **Return repair:** F5 removes background one's saved target. Close all layers:
+   focus returns to background two; typing changes only that draft. The removed-
+   return fixture demonstrates the same fallback. F2 preserves draft contents
+   while resetting each fixture's scope.
+5. **Lifecycle:** F3 nests; F6 replaces only the top. F7 reports `Rejected stale
+   result; draft unchanged` for its old ticket. F8 clears all layers and reports
+   the count; background drafts remain. F9 simulates an outside left press:
+   ordinary fixtures stay open; the outside fixture dismisses only the top.
+   This tests routing policy; the gallery does not enable native mouse capture.
+6. **Geometry/profiles:** resize narrow, tiny and back. Preferred 72 × 14 cells
+   clamp to the viewport; at fewer than three available modal rows, the body
+   takes all rows without chrome. Keyboard dismissal/result remains available.
+   F4/Ctrl-T and the command below exercise no-color/ASCII, with terminal-default
+   body colors and shared heading/footer rules. Native key encodings depend on
+   the terminal; unsupported function/modifier keys should be reported.
+7. **Reset/exit:** close layers, Esc returns to catalog, reopen resets fixtures.
+   Ctrl-C exits even with nested layers; ordinary shell echo/input/cursor work.
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors none --ascii"
+```
+
+Report **pass** or **fail**, naming the step and observed behavior. The user
+explicitly authorized a scoped checkpoint commit on 2026-10-09; dialog design
+acceptance remains pending. Commands/bindings (2c) wait for this gate.
+
+Slice 2b engineering: formatting, strict Clippy, 43 all-feature tests (including
+two native macOS PTY scenarios), one doctest, API docs and dependency auditing
+passed. Gallery-disabled testing passed 36 tests; release build passed. Gate,
+Shield and Drone optional TUI features compiled offline with existing lockfiles
+restored byte-for-byte. Reviewed dialog geometry and selector snapshots. Both
+repositories' scoped diff checks and local Markdown links passed. Duplicate
+dependency warnings remain allowed by auditing; native Linux/Windows, human
+modifier/function-key encodings and native mouse capture are unverified.
+
 ## Acceptance record
 
 | Slice | Engineering | Human | Commit / next action |
 | --- | --- | --- | --- |
 | 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
 | 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
-| 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Record scoped picker commit, then implement 2b |
-| 2b, 2c, 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
+| 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: private `f3e7579`, public `17e53d5` |
+| 2b | Engineering recorded below | Pending official design alignment | Scoped checkpoint commit explicitly authorized on 2026-10-09; keep design gate pending |
+| 2c, 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
 
 Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs

@@ -1,12 +1,25 @@
 # Independent gallery and verification
 
+## Implemented dialog composition
+
+Slice 2b has prompt, nested choice/prompt, long inspection, locked Escape,
+outside dismissal, removed return target and local error scenarios. Two base
+drafts survive modal edits. Function-key controls demonstrate push/replace/clear,
+late ticket rejection and simulated outside routing. Bodies use public editor/
+picker APIs and fixture-owned inspection scrolling. Dialogs use one existing
+terminal owner; native mouse capture is not enabled. [Gate 2b](human-testing.md#gate-2b--dialogs)
+owns human acceptance. Tests cover pure state, rendered geometry/snapshot and
+an owned native macOS PTY scenario.
+
 ## Implemented picker composition
 
 Slice 2a exposes fourteen resettable states: default, details, disabled, danger,
 filter, no-match, scrolled, multi, groups, loading, narrow, done, empty and error.
 F2 cycles states; F3 inspects, F5 simulates source refresh and F6 changes stage/
 dock/full-screen placement. Tab switches to an independent draft. The component
-returns intents; the gallery collapses confirmed output. No product operation
+returns intents; the gallery collapses confirmed output. The host reserves one
+activity row between picker and draft in every state, including `ready` after
+confirmation, so the composer keeps its position. No product operation
 or new terminal session runs. [Gate 2a](human-testing.md#gate-2a--rich-option-picker)
 owns human acceptance. The broader expansion below remains proposed.
 

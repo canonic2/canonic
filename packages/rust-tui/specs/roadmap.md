@@ -8,8 +8,9 @@ The phase groups below retain their acceptance mapping; their smaller delivery
 slices each require an independent human gate.
 
 Current delivery: slice 1 was explicitly committed and advancement authorized.
-Slice 2 is divided into 2a rich picker (implemented, human gate pending), 2b
-dialogs and 2c commands/bindings (unstarted). This does not accept broader phase 2
+Slice 2 is divided into 2a rich picker (accepted/committed), 2b dialogs
+(implemented, human gate pending) and 2c commands/bindings (unstarted).
+This does not accept broader phase 2
 criteria or unreported slice 1 redesign actions.
 
 ## Delivery scope and phase order

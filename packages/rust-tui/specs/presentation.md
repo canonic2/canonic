@@ -41,6 +41,33 @@ aligns details, drops details first and truncates labels by grapheme. Opening
 height stays stable while filtering; groups count toward paging. The gallery
 owns placement and the independent draft, without another terminal loop.
 
+Picker visual follow-up on 2026-10-09: labels explicitly reset foreground and
+remove inherited dim styling; active enabled labels stay bold. The first blank
+cell and final cell have default backgrounds outside the band. Number keys
+occupy the middle cell of a three-cell block on every row, followed by one plain
+band cell before the label. Detail separation uses its own
+two-cell token, preserved before dropping the column. Gallery default placement
+docks the measured opening height above a persistent host activity row and
+message editor. Muted
+unselected keys and bold focused headings are retained; contiguous shortcut sets
+with two or more keys use a range, while disabled holes remain explicit. The
+host activity prefix uses the warning token, with muted hints. These visual
+changes reopen the picker gate independently of pending dialog acceptance.
+
+Accepted terminal limitation (2026-10-09): the user's iTerm2 profile renders
+default-color bold text darker than ordinary text. A shell-only comparison
+reproduced this independently of the library. The user accepts this appearance;
+components retain default foreground and bold, with no terminal-setting change
+or application workaround. Emitted label/title styles are covered by native PTY
+tests in all four color modes.
+
+`dialog::Stack` adds caller-owned body composition. Its view uses preferred
+dimensions from spacing tokens, clamps/centers in the host viewport, clears only
+each owned region and reuses title/footer rules. Active headings use focus styles;
+only the top body gets a focus target. Body rendering is delegated, so editor/
+picker styling stays in those components. Tiny regions omit rules to preserve
+body space. Gallery inspection text is a local fixture, not a general renderer.
+
 ## Tokens and fallback behavior
 
 Body foreground/background remain terminal defaults. ANSI 16 uses terminal

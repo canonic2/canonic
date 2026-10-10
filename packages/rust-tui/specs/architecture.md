@@ -4,7 +4,10 @@ Slice 2a adds `ChoicePicker`: validated stable-ID choices, editor-backed query,
 single/multiple intents, status and compact rendering are separated under
 `src/picker/`. The original index-based `Picker` remains the catalog/compatibility
 API. Gallery placement/focus/refresh and independent draft ownership live in
-`gallery/option_picker.rs`; human acceptance is pending Gate 2a.
+`gallery/option_picker.rs`; slice 2a is accepted/committed. Slice 2b introduces a
+generic dialog stack wrapping shared focus, with unique opening tickets and
+top-only dispatch. `dialog/view.rs` owns geometry/chrome; gallery composition
+supplies bodies and simulated host operations. Its human gate is pending.
 
 Status: foundation contract and inspected baseline. The proposed expansion and
 module decomposition are in [System design](system-design.md). [Inventory](inventory.md)

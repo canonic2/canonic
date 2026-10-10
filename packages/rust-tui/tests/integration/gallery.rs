@@ -156,6 +156,104 @@ fn headless_listing_help_and_refusal_do_not_change_terminal_modes() {
         .stdout(predicate::str::contains("\x1b").not());
 }
 
+#[test]
+fn picker_dock_reserves_activity_across_fixtures_and_confirmation() {
+    let mut g = Gallery::new();
+    g.update(&key(KeyCode::Enter));
+    let mut t = Terminal::new(TestBackend::new(100, 28)).unwrap();
+    let mut message_y = None;
+    for step in 0..14 {
+        t.draw(|f| g.render(f)).unwrap();
+        let text = super::components::dump(t.backend().buffer());
+        let lines: Vec<_> = text.lines().collect();
+        let message = lines
+            .iter()
+            .position(|line| line.starts_with("message "))
+            .unwrap();
+        assert_ne!(lines[message - 1].trim(), "");
+        assert_eq!(*message_y.get_or_insert(message), message);
+        if step == 0 {
+            assert!(lines[message - 1].starts_with("! needs you · 1–3"));
+            assert!(lines[message - 2].contains("enter"));
+            assert!(lines[message - 2].contains("1–3"));
+            let presentation = canonic_rust_tui::theme::Presentation::default();
+            let buffer = t.backend().buffer();
+            let activity = u16::try_from(message - 1).unwrap();
+            assert_eq!(
+                buffer[(0, activity)].fg,
+                presentation.tokens().warning.unwrap()
+            );
+            assert_eq!(
+                buffer[(13, activity)].fg,
+                presentation.tokens().dim.unwrap()
+            );
+            let title = lines
+                .iter()
+                .position(|line| line.starts_with("github server "))
+                .unwrap();
+            assert_eq!(message - title, 6);
+        }
+        g.update(&key(KeyCode::F(2)));
+    }
+    g.update(&key(KeyCode::Enter));
+    t.draw(|f| g.render(f)).unwrap();
+    let text = super::components::dump(t.backend().buffer());
+    let lines: Vec<_> = text.lines().collect();
+    let message = lines
+        .iter()
+        .position(|line| line.starts_with("message "))
+        .unwrap();
+    assert_eq!(Some(message), message_y);
+    assert_eq!(lines[message - 1].trim(), "ready");
+}
+
+#[test]
+fn dialog_fixtures_preserve_host_drafts_and_reject_replaced_results() {
+    let mut gallery = Gallery::new();
+    let mut terminal = Terminal::new(TestBackend::new(100, 28)).unwrap();
+    gallery.update(&Event::Paste("Dialogs".into()));
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.current(), "dialog");
+    assert_eq!(gallery.dialog_depth(), 1);
+    let first = gallery.dialog_input(0).unwrap().to_owned();
+    let second = gallery.dialog_input(1).unwrap().to_owned();
+    gallery.update(&Event::Paste("MODAL ONLY".into()));
+    gallery.update(&key(KeyCode::F(3)));
+    assert_eq!(gallery.dialog_depth(), 2);
+    gallery.update(&Event::Paste("CHILD ONLY".into()));
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.dialog_depth(), 1);
+    gallery.update(&key(KeyCode::F(6)));
+    gallery.update(&key(KeyCode::F(7)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("Rejected stale result"));
+    assert_eq!(gallery.dialog_input(0), Some(first.as_str()));
+    assert_eq!(gallery.dialog_input(1), Some(second.as_str()));
+    gallery.update(&key(KeyCode::F(8)));
+    assert_eq!(gallery.dialog_depth(), 0);
+    gallery.update(&Event::Paste(" BASE ONLY".into()));
+    assert!(gallery.dialog_input(0).unwrap().ends_with(" BASE ONLY"));
+    // Removed return target repairs focus to the surviving second draft.
+    for _ in 0..5 {
+        gallery.update(&key(KeyCode::F(2)));
+    }
+    gallery.update(&key(KeyCode::Esc));
+    gallery.update(&Event::Paste(" SECOND ONLY".into()));
+    assert!(gallery.dialog_input(1).unwrap().ends_with(" SECOND ONLY"));
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "catalog");
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.dialog_input(0), Some(first.as_str()));
+    // Long inspection scrolls within its body; Enter acknowledges only that layer.
+    gallery.update(&key(KeyCode::F(2)));
+    gallery.update(&key(KeyCode::F(2)));
+    gallery.update(&key(KeyCode::End));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("Inspection row 59"));
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.dialog_depth(), 0);
+}
+
 #[cfg(unix)]
 #[test]
 fn real_terminal_navigation_resize_and_ctrl_c_restore_terminal_state() {

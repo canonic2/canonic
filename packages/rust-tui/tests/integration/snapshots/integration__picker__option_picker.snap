@@ -3,7 +3,7 @@ source: tests/integration/picker.rs
 expression: "super::components::dump(buffer)"
 ---
 github server ──────────────────────────────────────────────────
- 1  Alpha
- 2  Beta
- 3  Gamma
-───────────────────────────────────── 1 2 3 · enter · esc cancel
+  1  Alpha
+  2  Beta
+  3  Gamma
+─────────────────────────────────────── 1–3 · enter · esc cancel

@@ -1,5 +1,7 @@
 //! Composes reusable views into a local gallery using simulated product activity.
 
+mod dialog_body;
+mod dialogs;
 mod editor;
 mod option_picker;
 
@@ -93,6 +95,8 @@ pub enum Component {
     Chat,
     /// Multiline editors and modal focus isolation.
     Editor,
+    /// Nested caller-owned dialogs and host drafts.
+    Dialog,
 }
 
 enum Screen {
@@ -100,6 +104,7 @@ enum Screen {
     Picker,
     Chat,
     Editor,
+    Dialog,
 }
 
 // The host's resolved presentation owns color policy while the gallery runs.
@@ -131,6 +136,7 @@ pub struct Gallery {
     scenario: usize,
     stream: std::collections::VecDeque<String>,
     editor: editor::EditorDemo,
+    dialogs: dialogs::DialogDemo,
 }
 
 impl Default for Gallery {
@@ -151,6 +157,7 @@ impl Gallery {
                     "Option picker".into(),
                     "Full-screen chat".into(),
                     "Multiline editor".into(),
+                    "Dialogs".into(),
                 ],
                 Some(0),
             ),
@@ -161,6 +168,7 @@ impl Gallery {
             scenario: 0,
             stream: std::collections::VecDeque::new(),
             editor: editor::EditorDemo::new(),
+            dialogs: dialogs::DialogDemo::new(),
         };
         gallery.reset_chat();
         gallery
@@ -174,6 +182,7 @@ impl Gallery {
             Screen::Picker => "picker",
             Screen::Chat => "chat",
             Screen::Editor => "editor",
+            Screen::Dialog => "dialog",
         }
     }
 
@@ -186,6 +195,16 @@ impl Gallery {
     #[must_use]
     pub fn picker_input(&self) -> &str {
         self.picker.input()
+    }
+    /// Host drafts underneath the dialog fixture.
+    #[must_use]
+    pub fn dialog_input(&self, index: usize) -> Option<&str> {
+        self.dialogs.input(index)
+    }
+    /// Open layers in the dialog fixture.
+    #[must_use]
+    pub fn dialog_depth(&self) -> usize {
+        self.dialogs.depth()
     }
 
     fn reset_chat(&mut self) {
@@ -234,6 +253,7 @@ impl Gallery {
     fn tick_elapsed(&mut self, elapsed: Duration) {
         self.editor.tick(elapsed);
         self.picker.tick(elapsed);
+        self.dialogs.tick(elapsed);
         self.chat.tick(elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.chat.append(&fragment);
@@ -249,6 +269,9 @@ impl Gallery {
             return false;
         }
         if matches!(self.screen, Screen::Picker) && self.picker.update(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::Dialog) && self.dialogs.update(event) {
             return false;
         }
         if let Event::Key(key) = event {
@@ -292,10 +315,12 @@ impl Gallery {
                     self.screen = match index {
                         0 => Screen::Picker,
                         1 => Screen::Chat,
-                        _ => Screen::Editor,
+                        2 => Screen::Editor,
+                        _ => Screen::Dialog,
                     };
                     self.editor = editor::EditorDemo::new();
                     self.picker = option_picker::PickerDemo::new();
+                    self.dialogs = dialogs::DialogDemo::new();
                     if matches!(self.screen, Screen::Chat) {
                         self.reset_chat();
                     } else {
@@ -325,7 +350,7 @@ impl Gallery {
                 }
                 chat::Action::None => {}
             },
-            Screen::Picker | Screen::Editor => {}
+            Screen::Picker | Screen::Editor | Screen::Dialog => {}
         }
         false
     }
@@ -362,6 +387,7 @@ impl Gallery {
             Screen::Picker => self.picker.render(frame, body, self.theme),
             Screen::Chat => self.chat.render_with(frame, body, self.theme),
             Screen::Editor => self.editor.render(frame, body, self.theme),
+            Screen::Dialog => self.dialogs.render(frame, body, self.theme),
         }
         frame.render_widget(
             Paragraph::new(self.note.as_str()).style(self.theme.focus()),
@@ -383,7 +409,9 @@ impl Gallery {
 /// Returns errors for noninteractive terminals or terminal I/O failures.
 pub fn run(cli: &Cli) -> Result<()> {
     if cli.list {
-        println!("picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor");
+        println!(
+            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs"
+        );
         return Ok(());
     }
     let mut gallery = Gallery::new();
@@ -401,6 +429,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             Component::Picker => Screen::Picker,
             Component::Chat => Screen::Chat,
             Component::Editor => Screen::Editor,
+            Component::Dialog => Screen::Dialog,
         };
     }
     // Declared first so the terminal restores its colors before policy is restored.

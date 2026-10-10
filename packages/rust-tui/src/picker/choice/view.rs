@@ -7,14 +7,14 @@ use crate::{
     text::{clean, wrapped},
     theme::{
         Presentation,
-        tokens::spacing::{CURSOR_CONTEXT, GAP, INDENT, PICKER_DETAIL, PICKER_HEIGHT},
+        tokens::spacing::{CURSOR_CONTEXT, INDENT, PICKER_DETAIL, PICKER_GAP, PICKER_HEIGHT},
     },
     ui::Rule,
 };
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph},
 };
@@ -54,6 +54,34 @@ pub(super) enum Row {
 }
 
 impl ChoicePicker {
+    /// Measure preferred height for host placement, preserving opening height while
+    /// filtering. Rendering still clamps this to the supplied area.
+    #[must_use]
+    pub fn height(&self, width: u16, view: PickerView<'_>) -> u16 {
+        let context_rows = if view.context.is_empty() {
+            0
+        } else {
+            wrapped(&clean(view.context, 4096, true), width)
+                .len()
+                .min(3)
+        };
+        self.opened_height
+            .unwrap_or_else(|| self.natural_height(context_rows))
+            .min(view.max_height)
+    }
+    fn natural_height(&self, context_rows: usize) -> u16 {
+        let (source_rows, _) = self
+            .choices
+            .iter()
+            .fold((0_usize, ""), |(count, previous), c| {
+                (
+                    count + 1 + usize::from(!c.group.is_empty() && c.group != previous),
+                    c.group.as_str(),
+                )
+            });
+        u16::try_from(2 + context_rows + usize::from(self.filtering()) + source_rows.max(1))
+            .unwrap_or(u16::MAX)
+    }
     pub(super) fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         let mut group = "";
@@ -84,20 +112,8 @@ impl ChoicePicker {
                 .collect()
         };
         let rows = self.rows();
-        let filter = u16::from(self.filtering());
-        let (source_rows, _) = self
-            .choices
-            .iter()
-            .fold((0_usize, ""), |(count, previous), c| {
-                (
-                    count + 1 + usize::from(!c.group.is_empty() && c.group != previous),
-                    c.group.as_str(),
-                )
-            });
-        let natural = 2_usize + context.len() + usize::from(filter) + source_rows.max(1);
-        let desired = *self
-            .opened_height
-            .get_or_insert(u16::try_from(natural).unwrap_or(u16::MAX));
+        let natural = self.natural_height(context.len());
+        let desired = *self.opened_height.get_or_insert(natural);
         let used = Rect::new(
             area.x,
             area.y,
@@ -203,10 +219,10 @@ impl ChoicePicker {
         } else if self.filtering() {
             usize::from(INDENT)
         } else {
-            4
+            5
         };
-        let details =
-            usize::from(area.width) >= prefix + label_width + usize::from(GAP) + PICKER_DETAIL;
+        let details = usize::from(area.width.saturating_sub(1))
+            >= prefix + label_width + PICKER_GAP + PICKER_DETAIL;
         for (i, row) in rows
             .iter()
             .skip(self.offset)
@@ -241,25 +257,36 @@ impl ChoicePicker {
         let choice = &self.choices[m.index];
         let active = self.selected.as_ref() == Some(&choice.id) && focused;
         if active {
-            frame.render_widget(Block::default().style(p.surface()), area);
+            frame.render_widget(
+                Block::default().style(p.surface()),
+                Rect::new(
+                    area.x.saturating_add(1),
+                    area.y,
+                    area.width.saturating_sub(2),
+                    1,
+                ),
+            );
         }
         let (prefix, label_width, details) = columns;
         let current = if choice.current { '*' } else { ' ' };
         let key = if self.mode == SelectionMode::Multiple {
             if self.marked.contains(&choice.id) {
-                format!("{current}[x] ")
+                format!("[x]{current}")
             } else {
-                format!("{current}[ ] ")
+                format!("[ ]{current}")
             }
         } else if self.filtering() {
-            format!("{current} ")
+            current.to_string()
         } else if m.index < 9 {
-            format!("{current}{}  ", m.index + 1)
+            format!(" {}{current}", m.index + 1)
         } else {
-            format!("{current}   ")
+            format!(" {current} ")
         };
         let key_style = if active {
-            p.base().add_modifier(Modifier::REVERSED | Modifier::BOLD)
+            p.base()
+                .fg(Color::Reset)
+                .add_modifier(Modifier::REVERSED | Modifier::BOLD)
+                .remove_modifier(Modifier::DIM)
         } else if choice.current {
             p.accent()
         } else {
@@ -270,20 +297,34 @@ impl ChoicePicker {
         } else if choice.danger {
             p.error()
         } else {
-            p.base()
+            p.base().fg(Color::Reset).remove_modifier(Modifier::DIM)
         };
         let label_style = if active {
-            label_style.add_modifier(Modifier::BOLD)
+            label_style
+                .add_modifier(Modifier::BOLD)
+                .remove_modifier(Modifier::DIM)
         } else {
             label_style
         };
-        let budget = usize::from(area.width).saturating_sub(prefix);
+        let budget = usize::from(area.width.saturating_sub(1)).saturating_sub(prefix);
         let label = clip(
             &choice.label,
             if details { label_width } else { budget },
             p.symbols.ellipsis(),
         );
-        let mut spans = vec![Span::styled(key, key_style)];
+        let mut spans = vec![
+            Span::styled(
+                " ",
+                p.base()
+                    .fg(Color::Reset)
+                    .bg(Color::Reset)
+                    .remove_modifier(Modifier::REVERSED | Modifier::DIM),
+            ),
+            Span::styled(key, key_style),
+        ];
+        if self.mode == SelectionMode::Single && !self.filtering() {
+            spans.push(Span::raw(" "));
+        }
         spans.extend(highlight(
             &label,
             &m.label,
@@ -291,14 +332,14 @@ impl ChoicePicker {
             choice.disabled.is_none(),
         ));
         if details {
-            spans.push(Span::raw(" ".repeat(
-                label_width.saturating_sub(label.width()) + usize::from(GAP),
-            )));
+            spans.push(Span::raw(
+                " ".repeat(label_width.saturating_sub(label.width()) + PICKER_GAP),
+            ));
             let detail = choice.disabled.as_deref().unwrap_or(&choice.detail);
             spans.extend(highlight(
                 &clip(
                     detail,
-                    budget.saturating_sub(label_width + usize::from(GAP)),
+                    budget.saturating_sub(label_width + PICKER_GAP),
                     p.symbols.ellipsis(),
                 ),
                 &m.detail,
@@ -306,7 +347,10 @@ impl ChoicePicker {
                 choice.disabled.is_none(),
             ));
         }
-        frame.render_widget(Paragraph::new(Line::from(spans)), area);
+        frame.render_widget(
+            Paragraph::new(Line::from(spans)),
+            Rect::new(area.x, area.y, area.width.saturating_sub(1), 1),
+        );
     }
     fn chrome(
         &self,
@@ -351,16 +395,9 @@ impl ChoicePicker {
                 } else if self.filtering() {
                     hints.push(format!("{} of {}", self.matches.len(), self.choices.len()));
                 } else {
-                    let keys: Vec<_> = self
-                        .choices
-                        .iter()
-                        .take(9)
-                        .enumerate()
-                        .filter(|(_, c)| c.disabled.is_none())
-                        .map(|(i, _)| (i + 1).to_string())
-                        .collect();
+                    let keys = self.key_hints(p);
                     if !keys.is_empty() {
-                        hints.push(keys.join(" "));
+                        hints.push(keys);
                     }
                 }
                 if self.mode == SelectionMode::Multiple || self.selected.is_some() {
@@ -387,6 +424,29 @@ impl ChoicePicker {
             },
             Rect::new(area.x, area.bottom() - 1, area.width, 1),
         );
+    }
+    fn key_hints(&self, p: Presentation) -> String {
+        let keys: Vec<_> = self
+            .choices
+            .iter()
+            .take(9)
+            .enumerate()
+            .filter(|(_, c)| c.disabled.is_none())
+            .map(|(i, _)| i + 1)
+            .collect();
+        if keys.len() > 1 && keys.windows(2).all(|pair| pair[1] == pair[0] + 1) {
+            let separator = if p.symbols == crate::theme::Symbols::Ascii {
+                "-"
+            } else {
+                "–"
+            };
+            format!("{}{separator}{}", keys[0], keys[keys.len() - 1])
+        } else {
+            keys.iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
     }
 }
 

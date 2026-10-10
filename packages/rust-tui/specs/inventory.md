@@ -20,7 +20,8 @@ Full application operations appear below to establish host ownership.
 | Evidence | Observed behavior and qualification |
 | --- | --- |
 | [Picker](../src/picker.rs) | Single choice, original-index action, explicit default, case-insensitive substring search, arrows/Enter/Esc/Ctrl-C/paste; 128-byte title, 4 KiB labels/query; backspace removes a scalar rather than grapheme |
-| [Rich picker](../src/picker/choice.rs) | Slice 2a awaits human gate: stable IDs, disabled/danger/current rows, groups/details, editor-backed fuzzy filter, multiple marks, source refresh and compact view; compatibility picker stays intact |
+| [Rich picker](../src/picker/choice.rs) | Slice 2a accepted/committed: stable IDs, disabled/danger/current rows, groups/details, editor-backed fuzzy filter, multiple marks, source refresh and compact view; compatibility picker stays intact |
+| [Dialogs](../src/dialog.rs) | Slice 2b awaits human gate: generic caller bodies, bounded stack, top-only dispatch, return focus repair, unique tickets, replacement/clear records, close policy and clamped shared-rule view |
 | [Chat](../src/chat.rs) | Plain role/text, append only to last message, status string; 100 messages, 64 KiB each, 4 KiB editor draft; submit immediately clears and host may restore |
 | [Editor](../src/editor.rs) / [Focus](../src/focus.rs) | Slice 1 functional gate passed; redesign awaits renewed gate: word-wrapped source rows, selection, one-transaction paste with whole-grapheme cutting, grouped undo; independent focus orders and modal return scopes |
 | Chat viewport | Grapheme/cell wrapping, follow/manual, five-row paging; `u16` row offset clamped during render; no stable anchors, IDs, structured parts or virtualization |
@@ -30,6 +31,7 @@ Full application operations appear below to establish host ownership.
 | [Gallery](../src/gallery.rs) | Selector/picker/chat/editor; two independent editors and modal, resettable Unicode/long/limit scenarios; deterministic stream queue; busy/disconnected restores draft; tool/error fixtures are plain text |
 | [Editor tests](../tests/integration/editor.rs) | Editing, bounds, selection, undo, focus removal/return, cursor/style, reviewed multiline snapshot and arbitrary Unicode properties |
 | [Rich picker tests](../tests/integration/picker.rs) | Identity/default/disabled refresh, hidden marks, query undo, status isolation, group paging, compact snapshot, Unicode/narrow styles and supplied-ID properties |
+| [Dialog tests](../tests/integration/dialog.rs) | Nested routing, selection-first Esc, return repair, stale/foreign tickets, atomic validation, outside pointer isolation, tiny geometry, snapshot and arbitrary stack changes |
 | [Component tests](../tests/integration/components.rs) | Choice/default/cancel/search identity, paste/graphemes/bounds/safe control display, tiny rendering/focus style; property covers choice-index bounds |
 | [Gallery tests](../tests/integration/gallery.rs) | Navigation/simulation, one selector snapshot, headless paths; Unix Python PTY assertions for navigation, submission, resize, Ctrl-C, raw and alternate-screen restoration |
 | Consumers | Optional dependencies in [Gate](../../gate/Cargo.toml), [Shield](../../../private/shield/Cargo.toml), [Drone](../../../private/drone/Cargo.toml); no library calls found in consumer source; this is dependency readiness |
@@ -40,7 +42,10 @@ scroll positions, large-history behavior and cleanup-error reporting remain gaps
 Editor controls remain stored and render as safe pictures/hex; fragmented
 transcript sanitation remains pending. See [Gate 1](human-testing.md#gate-1--editor-and-focus)
 for the editor and [Gate 2a](human-testing.md#gate-2a--rich-option-picker) for the
-rich picker. Its fourteen fixtures preserve an independent host draft while
+rich picker. [Gate 2b](human-testing.md#gate-2b--dialogs) owns dialog acceptance.
+Its seven scenarios preserve two host drafts; a dedicated PTY test verifies
+nested paste, parent preservation, resize and restored terminal modes. The
+picker's fourteen fixtures preserve an independent host draft while
 cycling stage/dock/full-screen placement. Engineering and human evidence remain
 separate.
 

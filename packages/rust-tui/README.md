@@ -11,7 +11,8 @@ From the repository root:
 make -C packages/rust-tui run
 ```
 
-The first screen selects **Option picker**, **Full-screen chat** or **Multiline editor**. Use arrows
+The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**
+or **Dialogs**. Use arrows
 and Enter to open a component, Esc to return (or quit at the selector), Ctrl-C
 to quit and Ctrl-T to toggle dark/light themes. F2 cycles picker design states or
 cycles chat fixtures: ready, empty, streaming, error, disconnected and long text.
@@ -29,6 +30,11 @@ The editor uses full-width text between title/footer rules, with semantic color
 and cell tokens. F2 cycles its twelve design states; F4 cycles color profiles.
 Use `--colors none --ascii` for attribute-only ASCII chrome or
 `--colors truecolor --light` for light RGB roles. Body colors follow the terminal.
+
+Dialogs reuse those rules and tokens around caller-owned editors, pickers and
+inspection bodies. Only the top layer receives input. Close restores surviving
+focus; replacement/clear invalidate result tickets. F2 cycles dialog fixtures,
+F3 nests a prompt and F6 replaces the current layer. No host operation executes.
 
 ```sh
 cd packages/rust-tui

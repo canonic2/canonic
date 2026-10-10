@@ -104,4 +104,10 @@ pub mod spacing {
     pub const PICKER_HEIGHT: u16 = 9;
     /// Minimum useful second-column width before details disappear.
     pub const PICKER_DETAIL: usize = 12;
+    /// Clear separation between picker labels and aligned detail metadata.
+    pub const PICKER_GAP: usize = 2;
+    /// Default preferred dialog width; host area always clamps it.
+    pub const DIALOG_WIDTH: u16 = 72;
+    /// Default preferred dialog height, including chrome.
+    pub const DIALOG_HEIGHT: u16 = 14;
 }

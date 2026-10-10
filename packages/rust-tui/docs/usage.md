@@ -18,7 +18,11 @@ F2 cycles default → details → disabled → danger → filter → no-match �
 → multi → groups → loading → narrow → done → empty → error. It resets the picker
 while preserving the independent host draft. F5 simulates a source refresh by
 removing the highlighted ID. F6 changes stage/dock/full-screen placement within
-the gallery's existing terminal session. Tab/Shift-Tab switches picker/draft
+the gallery's existing terminal session. Default placement docks the measured
+picker above a persistent activity row and message editor; F6 cycles dock → full
+screen → stage. The activity row shows pending input or source status, then
+`ready` after confirmation. It remains reserved across fixture states.
+Tab/Shift-Tab switches picker/draft
 focus; Ctrl-J inserts a draft newline. Return to catalog/reopen resets both.
 
 Filtering defaults on above seven choices; hosts can force it on/off. Type or
@@ -32,6 +36,15 @@ marks survive filtering; Enter returns the marked IDs in supplied order, includi
 hidden marks. An empty marked set may be confirmed when the source is nonempty.
 Loading/error/empty sources cannot confirm. The compatibility `Picker`/`Action`
 API retains its original-index semantics and remains the catalog's implementation.
+
+Focused enabled labels use bold terminal-default text without inherited dim
+styling. The row band leaves both outer cells at terminal-default background;
+unselected keys stay muted. Number keys are centered in three cells, followed by
+one space outside the number block before aligned labels. Details start two cells after the longest visible
+label and disappear if the full gap/minimum detail width cannot fit. Contiguous
+shortcut sets with two or more keys use a range; disabled gaps remain spelled out.
+The host activity row uses warning color for `! needs you` and muted shortcut hints.
+`ChoicePicker::height(width, view)` lets hosts place the compact view accurately.
 
 The chat fixture has a conversation, status, composer and keyboard hints. Type or
 paste; Enter submits to the simulator. Alt-Enter inserts a newline where the
@@ -102,6 +115,47 @@ renders only its text area, as used by the picker's single-row filter. Edit noti
 temporarily override the footer, and pasted text is tinted until the next key or
 three seconds. Hosts call `Editor::tick(elapsed)` to advance time; the editor owns
 no timer. Empty footer props use line/column and selection metadata.
+
+## Dialogs
+
+Open **Dialogs** from the catalog, or run from the repository root:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog"
+```
+
+F2 cycles prompt → nested → long → locked → outside → removed-return → error.
+Prompt Enter returns local text, Ctrl-J adds a newline and paste never submits.
+Escape clears an editor selection before closing one layer. Tab/Shift-Tab stays
+inside the current modal scope. Nested starts with a picker above a parent draft;
+choosing returns only that picker's ID. Long inspection uses arrows/page/Home/End;
+Enter acknowledges. Locked ignores Escape; Enter returns its local prompt result.
+Error stays visible on Enter; F6 retries by replacing it with a prompt.
+
+F3 opens a child prompt. F5 removes background draft one's return target; closing
+returns to draft two. F6 replaces the active dialog, preserving its parent. F7
+checks the fixture's saved ticket; after replacement/close it reports a rejected
+stale result without changing a draft. F8 clears all layers and restores base
+focus. F9 simulates an outside left press; only the outside fixture opts into
+dismissal. The gallery does not enable mouse capture. These function keys are
+host test controls, not library dialog bindings.
+
+Two background drafts are read-only while a modal is open. After closing/clearing,
+Tab switches between their surviving focus targets. F2 preserves drafts; return
+to catalog and reopen resets the fixture. Resize clamps preferred 72 × 14 cells
+to the host area. Below three rows the body uses all space without rules. Ctrl-C
+exits through the gallery's single terminal owner.
+
+For hosts, `dialog::Stack<B,T>` owns scopes and caller-supplied bodies. `dispatch`
+calls only the top handler, consumes Tab/release and outside pointer events, and
+offers Escape to the body before applying `ClosePolicy`. Unhandled modal input
+never reaches the background. The caller decides when a body's explicit result
+closes the current ticket with `Reason::Submitted`. `replace` and `clear` return
+dismissal records/bodies; cancel host work from those records. `body_mut(ticket)`
+accepts only the active opening, rejecting foreign, obscured, closed or replaced
+tickets. Recheck availability/authority in the host before executing any result.
+Render the background unfocused while open; `Stack::render` gives only its top
+body a focus target. Each body owns its scrolling and render/input contract.
 
 ## Presentation profiles
 

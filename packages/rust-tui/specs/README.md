@@ -36,8 +36,9 @@ Optional dependency declarations establish neither integration nor application c
 Slice 1 editor/focus implementation is ready for its separate
 [human testing gate](human-testing.md#gate-1--editor-and-focus). Automated results
 are recorded there. Slice 1 was explicitly committed and advancement authorized;
-slice 2a rich picker awaits [human testing](human-testing.md#gate-2a--rich-option-picker).
-Dialogs (2b), commands/bindings (2c) and subsequent slices remain unstarted.
+slice 2a rich picker is accepted/committed. Dialogs (2b) await their
+[human gate](human-testing.md#gate-2b--dialogs). Commands/bindings (2c) and
+subsequent slices remain unstarted.
 
 Product execution, protocol translation, authentication, storage, policy and
 authority stay in consumers. No publication, distribution or product rollout is
