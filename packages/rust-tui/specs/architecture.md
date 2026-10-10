@@ -21,6 +21,7 @@ consumer UI rollout.
 | [picker](../src/picker.rs) | Compatibility index picker and stable-ID ChoicePicker | [Option Picker](components/option-picker.md) |
 | [dialog](../src/dialog.rs) | Validated modal stack, opening tickets, top-only dispatch and measured chrome | [Dialog](components/dialog.md) |
 | [commands](../src/commands.rs) | Descriptors, search/help views, bindings and remaps | [Command Palette](components/command-palette.md) |
+| [completion](../src/completion.rs) | Ranked source snapshots, opaque queries, selection, progress/retry and fixed-height view | [Completion Menu](components/completion-menu.md) |
 | [composer](../src/composer.rs) | Draft/submission, queue, recall/stash, payloads, completion, saved state and editor conflicts | [Composer](components/composer.md), [Completion Menu](components/completion-menu.md) |
 | [chat](../src/chat.rs) | Bounded plain transcript, delivery/shell projection, scroll/follow and Composer composition | [Chat](components/chat.md) |
 | [focus](../src/focus.rs) | Instance-local target orders, modal scopes and return focus | [Input/navigation](features/interaction.md) |
@@ -33,7 +34,7 @@ consumer UI rollout.
 
 A consumer or gallery owns one terminal runtime and supplies events, frames,
 areas, focus, presentation and elapsed time to components. Chat composes Composer;
-Composer uses Editor, Option Picker and Dialog. Commands share descriptor/binding
+Composer uses Editor, Option Picker, Completion Menu and Dialog. Commands share descriptor/binding
 values with host dispatch. Detailed limits belong to the component specs.
 
 Pure construction/update/render does not connect agents, execute commands, read
@@ -43,7 +44,7 @@ terminal handoff. Both boundaries are opt-in and independently report failures.
 
 ## Existing limitations
 
-Standalone completion, rich identified conversation parts, structured activity
+Rich identified conversation parts, structured activity
 and review, resource browsers, native inline hosting and broad platform acceptance
 remain separately tracked work. No current module map implies those targets exist.
 The terminal guard is process-local; it does not establish cross-process ownership

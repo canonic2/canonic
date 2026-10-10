@@ -54,6 +54,39 @@ fn label(text: &str) -> String {
 }
 
 impl Editor {
+    /// Draw a host-supplied suggestion after the actual text, without changing it.
+    pub(crate) fn render_ghost(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        view: EditorView<'_>,
+        text: &str,
+    ) {
+        if self.cursor() != self.text().len() || self.selection().is_some() || text.is_empty() {
+            return;
+        }
+        let inner = Rect::new(
+            area.x,
+            area.y
+                .saturating_add(u16::from(view.chrome && area.height > 0)),
+            area.width,
+            area.height
+                .saturating_sub(if view.chrome { EDITOR_CHROME } else { 0 }),
+        );
+        if inner.is_empty() {
+            return;
+        }
+        let rows = layout::rows(self.text(), self.width, self.symbols, &self.draft.atoms);
+        let (y, x) = layout::position(&rows, self.cursor(), self.width, self.draft.upstream);
+        let x = u16::try_from(x).unwrap_or(u16::MAX);
+        let y = u16::try_from(y.saturating_sub(self.offset)).unwrap_or(u16::MAX);
+        if x < inner.width && y < inner.height {
+            frame.render_widget(
+                Paragraph::new(label(text)).style(view.presentation.faded()),
+                Rect::new(inner.x + x, inner.y + y, inner.width - x, 1),
+            );
+        }
+    }
     pub(super) fn view(
         &mut self,
         frame: &mut Frame<'_>,

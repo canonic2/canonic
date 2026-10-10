@@ -30,6 +30,10 @@ pub enum Intent {
     Quit,
     /// Execute a host command by stable identity.
     Command(String),
+    /// A later Composer Enter invoked a command with its typed argument text.
+    CommandWithArguments { id: String, arguments: String },
+    /// Tab requested another attempt for failed completion sources.
+    RetryCompletion(super::CompletionRequest),
     /// Launch the host's configured editor with a versioned ticket.
     Editor(super::EditorRequest),
     /// Persist a snapshot; acknowledge this exact ticket with `acknowledge_save`.
@@ -177,6 +181,9 @@ impl Composer {
         self.notify("Queued · sent one per turn · up edits");
     }
     pub(super) fn take_visible_draft(&mut self) -> StoredDraft {
+        self.completion = None;
+        self.inserted_command = None;
+        self.inserted_hint = None;
         StoredDraft {
             editor: std::mem::replace(&mut self.editor, Editor::new(self.limit)),
             mode: self.input_mode,
@@ -185,6 +192,9 @@ impl Composer {
         }
     }
     pub(super) fn install_draft(&mut self, draft: StoredDraft) {
+        self.completion = None;
+        self.inserted_command = None;
+        self.inserted_hint = None;
         self.editor = draft.editor;
         self.input_mode = draft.mode;
     }
@@ -322,8 +332,7 @@ impl Composer {
     }
     pub(super) fn lifecycle_input(&mut self, event: &Event) -> Route {
         if self.completion.is_some() {
-            self.completion_input(event);
-            return Route::Consumed(None);
+            return Route::Consumed(self.completion_input(event));
         }
         if self.list.is_some() {
             self.list_input(event);

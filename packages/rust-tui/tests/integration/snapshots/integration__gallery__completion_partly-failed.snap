@@ -1,0 +1,32 @@
+---
+source: tests/integration/gallery.rs
+expression: text
+---
+Canonic TUI · Component gallery
+
+acme · 00:38
+Rebased onto main: 4 commits, no conflicts.
+Working tree is clean. Nothing pushed.
+
+
+
+
+commands ──────────────────────────────────────────────────── 31
+  /handoff       copy a summary for another agent         recent
+  /code-review   review the diff for regressions         project
+  /commit        commit scoped changes after checks      project
+  /fix-checks    restore failing checks                  project
+  /clear         local host command                     built-in
+  /compact       local host command                     built-in
+  /model         local host command                     built-in
+! release-tools: 3 commands failed to load
+────────────────────────────────────────────────────── ↓ 24 more
+↑↓ choose · tab / enter inserts · esc closes
+message ────────────────────────────────────────────────────────
+/
+
+
+──────────────────────────────────────────── orbit-api#276 ~chat
+↑↓ choose · tab / enter inserts · esc closes
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · C

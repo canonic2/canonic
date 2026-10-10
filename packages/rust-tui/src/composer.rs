@@ -106,6 +106,8 @@ pub struct Composer {
     history_origins: std::collections::BTreeMap<String, String>,
     completion_items: Vec<CompletionItem>,
     completion: Option<completion::Completion>,
+    inserted_hint: Option<(String, String)>,
+    inserted_command: Option<(String, String)>,
     rewind: Option<Version>,
     queue: Vec<lifecycle::QueuedDraft>,
     editing_queue: Option<Identity>,
@@ -155,6 +157,8 @@ impl Composer {
             history_origins: std::collections::BTreeMap::new(),
             completion_items: Vec::new(),
             completion: None,
+            inserted_hint: None,
+            inserted_command: None,
             rewind: None,
             queue: Vec::new(),
             editing_queue: None,
@@ -198,6 +202,16 @@ impl Composer {
         self.editor.notify(&message);
     }
     fn advance(&mut self) {
+        self.inserted_hint = None;
+        if self.inserted_command.as_ref().is_some_and(|(_, name)| {
+            self.editor
+                .text()
+                .strip_prefix('/')
+                .and_then(|s| s.split_whitespace().next())
+                != Some(name.as_str())
+        }) {
+            self.inserted_command = None;
+        }
         self.save_due = Some(self.now + Duration::from_millis(500));
         self.returned = None;
         if let Some(next) = self.version.revision.checked_add(1) {
@@ -214,6 +228,8 @@ impl Composer {
     /// Returns whether the editor truncated the supplied text.
     pub fn set_text(&mut self, text: &str) -> bool {
         self.restore_draft();
+        self.completion = None;
+        self.inserted_command = None;
         let cut = self.editor.set_text(text);
         self.advance();
         cut
@@ -234,6 +250,8 @@ impl Composer {
         self.conflict = None;
         self.list = None;
         self.completion = None;
+        self.inserted_hint = None;
+        self.inserted_command = None;
         self.save_ticket = None;
         self.arm = None;
         self.leader = None;
@@ -275,6 +293,9 @@ impl Composer {
 
     /// Fix the submitted text and clear the editor immediately; one operation may be pending.
     pub fn submit(&mut self) -> Option<Submission> {
+        self.submit_with_commands(true)
+    }
+    fn submit_with_commands(&mut self, commands: bool) -> Option<Submission> {
         if matches!(self.mode, BoxMode::Locked { .. }) {
             return None;
         }
@@ -286,6 +307,9 @@ impl Composer {
             return None;
         }
         if self.prepare_enter() {
+            return None;
+        }
+        if commands && self.invoke_command() {
             return None;
         }
         if self.history_browsing && matches!(self.mode, BoxMode::History { .. }) {
@@ -406,7 +430,10 @@ impl Composer {
         }
         match &self.state {
             State::Rejected { reason, .. } => format!("Not sent · {reason} · draft kept"),
-            State::Pending(_) | State::Accepted | State::Ready => String::new(),
+            State::Pending(_) | State::Accepted | State::Ready => self
+                .inserted_hint
+                .as_ref()
+                .map_or_else(String::new, |(hint, _)| hint.clone()),
         }
     }
 
@@ -419,11 +446,17 @@ impl Composer {
         focused: bool,
     ) {
         self.render_mode(frame, area, view, focused);
+        if focused && let Some((_, placeholder)) = &self.inserted_hint {
+            self.editor.render_ghost(frame, area, view, placeholder);
+        }
     }
     /// Advance editor notices and undo grouping using the host clock.
     pub fn tick(&mut self, elapsed: Duration) {
         self.now = self.now.saturating_add(elapsed);
         self.editor.tick(elapsed);
+        if let Some(completion) = &mut self.completion {
+            completion.menu.tick(elapsed);
+        }
         self.lifecycle_tick(elapsed);
     }
 }

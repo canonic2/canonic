@@ -67,5 +67,5 @@ empty sources, custom help, binding conflicts and pending leader sequences.
 ## Remaining gaps
 
 Native visual acceptance remains pending in [Gate 2c](../human-testing.md#gate-2c--commands-and-bindings).
-Source loading/opening and standalone Completion Menu integration remain their
-owning host/component work.
+Source discovery and command execution belong to hosts. The standalone
+[Completion Menu](completion-menu.md) owns insertion and source-result generations.

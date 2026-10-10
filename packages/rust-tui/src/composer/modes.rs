@@ -66,6 +66,8 @@ impl Composer {
         }
         self.restore_draft();
         self.editor = editor;
+        self.completion = None;
+        self.inserted_command = None;
         self.advance();
         true
     }
@@ -112,6 +114,9 @@ impl Composer {
         self.mode = BoxMode::Locked {
             editor: crate::text::clean(editor, 64, false),
         };
+        self.completion = None;
+        self.inserted_hint = None;
+        self.inserted_command = None;
         true
     }
 

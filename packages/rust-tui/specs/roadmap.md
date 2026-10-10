@@ -10,9 +10,9 @@ commands are implemented; dialog timing remains separate. Composer implements
 its full local workflow: submission, queue, history, stash, chips, completion,
 saved-state codec, external-editor conflicts and foreground terminal handoff.
 Consumers own actual execution, durable storage and clipboard integration.
-The next standalone component is the **Completion menu (autocomplete)**: reusable
-query/result selection for slash commands and file references, building on the
-composer's existing shared-picker integration.
+Completion Menu implements reusable source-aware queries, insertion, streaming,
+retry and its dedicated gallery. The next component is **Chat (conversation
+view)**: rich identified transcript content, streaming, navigation and inspection.
 
 ## Delivery scope and phase order
 

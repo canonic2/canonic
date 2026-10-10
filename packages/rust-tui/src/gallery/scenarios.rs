@@ -40,13 +40,14 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 6] = [
+pub(super) const COMPONENTS: [Component; 7] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
     Component::Dialog,
     Component::Commands,
     Component::Composer,
+    Component::CompletionMenu,
 ];
 
 pub(super) fn index(component: Component) -> usize {
@@ -57,6 +58,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::Dialog => 3,
         Component::Commands => 4,
         Component::Composer => 5,
+        Component::CompletionMenu => 6,
     }
 }
 
@@ -89,6 +91,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::Dialog => &DIALOG,
         Component::Commands => &COMMANDS,
         Component::Composer => &COMPOSER,
+        Component::CompletionMenu => &COMPLETION,
     }
 }
 
@@ -100,6 +103,7 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::Dialog => "dialog",
         Component::Commands => "commands",
         Component::Composer => "composer",
+        Component::CompletionMenu => "completion-menu",
     }
 }
 
@@ -111,9 +115,27 @@ pub(super) fn board(component: Component) -> &'static str {
         Component::Dialog => "design/dialog/README.md · States",
         Component::Commands => "design/commands-and-bindings/README.md · States / / list",
         Component::Composer => "design/composer/README.md · States / The ↑ key",
+        Component::CompletionMenu => "design/completion-menu/README.md · States / Keys & behavior",
     }
 }
 
+const COMPLETION: [Scenario; 15] = [
+    live!("main", 0),
+    live!("files", 1),
+    live!("loading", 2),
+    live!("still-loading", 3),
+    live!("no-match-command", 4),
+    live!("no-match-file", 5),
+    live!("error", 6),
+    live!("partly-failed", 7),
+    live!("disabled", 8),
+    live!("command-inserted", 9),
+    live!("file-inserted", 10),
+    live!("narrow", 11),
+    live!("long-description", 12),
+    live!("mixed-sources", 13),
+    live!("doesnt-open", 14),
+];
 const PICKER: [Scenario; 18] = [
     live!("main", 0),
     live!("details", 1),

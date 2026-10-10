@@ -16,7 +16,7 @@ make -C packages/rust-tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, or **Composer**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, or **Completion Menu**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its
@@ -45,6 +45,12 @@ F5 accepts or ends a turn, F6 refuses/fails, F11 returns editor text and F12
 restores saved state with the queue paused. See [usage](docs/usage.md#composer-workflows)
 and the [public implementation contract](specs/components/composer.md).
 
+Completion Menu has 15 interactive states for commands/files, streaming, failure,
+retry, disabled candidates and insertion. Tab and Enter insert; a later Enter
+invokes a known command or submits the message. Its pure reusable API owns ranking,
+source tickets and fixed-height rendering; hosts own discovery and I/O. See
+[usage](docs/usage.md#completion-menu) and its [contract](specs/components/completion-menu.md).
+
 The editor uses full-width text between title/footer rules, with semantic color
 and cell tokens. F2 cycles its twelve design states; F4 cycles color profiles.
 Use `--colors none --ascii` for attribute-only ASCII chrome or
@@ -62,6 +68,7 @@ cd packages/rust-tui
 cargo run --locked --features gallery -- --list
 cargo run --locked --features gallery -- --component chat
 cargo run --locked --features gallery -- --component composer --scenario sending
+cargo run --locked --features gallery -- --component completion-menu --scenario main
 make check
 make coverage
 ```

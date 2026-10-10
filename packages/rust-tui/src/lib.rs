@@ -11,6 +11,7 @@
 
 pub mod chat;
 pub mod commands;
+pub mod completion;
 pub mod composer;
 pub mod dialog;
 pub mod editor;

@@ -24,6 +24,26 @@ commit is not human acceptance. Tests found in source are not a new test run.
 These records were carried forward during the specification reorganization;
 Markdown changes do not rerun or refresh Rust engineering evidence.
 
+## Completion Menu engineering record — 2026-10-10
+
+`make -C packages/rust-tui check` passed formatting, strict Clippy, all 132 tests,
+two doctests, API documentation and dependency auditing. Dedicated behavioral
+and property checks cover matching/ranking, disabled navigation, generation
+rejection, streaming order/selection, debounce/loading/timeout, retry, guesses,
+insertion budgets and editor token boundaries. The native macOS PTY trace covers
+insert-then-invoke, argument delivery, source retry, resize, quit, cooked input and
+exact terminal restoration. Gallery checks render all 15 states at tiny and
+standard sizes and assert a fixed dock, display-only argument hints and back
+navigation. Main, narrow, long-description and partial-failure layouts have
+reviewed render snapshots; the semantic-color main view was inspected visually.
+
+`make -C packages/rust-tui build` passed the release library/gallery build.
+Gallery-disabled nextest passed all 104 tests. Gate, Shield and Drone passed
+offline compilation checks with their optional `tui` feature using disposable
+manifests; their workspace lockfiles remained byte-for-byte unchanged.
+Human visual acceptance, native Linux/Windows acceptance and real consumer source
+discovery/execution remain separate from these local engineering results.
+
 ## Composer engineering record — 2026-10-10
 
 Engineering verification on 2026-10-10: `make check` passed all 114 tests,

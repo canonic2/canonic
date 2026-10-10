@@ -3,6 +3,9 @@
 mod commands;
 #[cfg(feature = "gallery")]
 mod commands_terminal;
+mod completion;
+#[cfg(feature = "gallery")]
+mod completion_terminal;
 mod components;
 mod composer;
 mod composer_host;

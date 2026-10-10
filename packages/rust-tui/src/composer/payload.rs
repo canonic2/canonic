@@ -100,7 +100,10 @@ impl Composer {
             return true;
         }
         if self.input_mode == InputMode::Message && matches!(key.code, KeyCode::Char('/' | '@')) {
-            let cursor = self.editor.cursor();
+            let cursor = self
+                .editor
+                .selection()
+                .map_or(self.editor.cursor(), |range| range.start);
             let boundary =
                 cursor == 0 || self.editor.text()[..cursor].ends_with(char::is_whitespace);
             if (key.code == KeyCode::Char('/') && cursor == 0)
@@ -118,6 +121,22 @@ impl Composer {
                 });
                 return true;
             }
+        }
+        if self.input_mode == InputMode::Shell && matches!(key.code, KeyCode::Char('/' | '~')) {
+            let before = &self.editor.text()[..self.editor.cursor()];
+            let word = before
+                .split_whitespace()
+                .next_back()
+                .filter(|_| !before.ends_with(char::is_whitespace))
+                .unwrap_or("");
+            if word.contains(['/', '~']) || key.code == KeyCode::Char('~') && !word.is_empty() {
+                return false;
+            }
+            if self.editor.update(event) == Outcome::Changed {
+                self.advance();
+                self.open_completion(super::CompletionKind::File);
+            }
+            return true;
         }
         false
     }

@@ -175,7 +175,9 @@ never occur inside composer state.
 
 The [Completion Menu contract](completion-menu.md) owns typed slash/file
 queries, result tickets, insertion and input precedence. Composer owns the draft
-revision and routes command selection into host intents or its built-in stash list.
+revision and inserts selected suggestions. Only a subsequent Enter invokes the
+host command or opens its built-in stash list. Command argument text is preserved
+in `Intent::CommandWithArguments`; argument-free commands retain `Intent::Command`.
 
 ### Saved state and external-editor host boundary
 
@@ -278,8 +280,9 @@ token is RGB #495F81, indexed 60 and faint blue in ANSI 16. The draft line is
 surface and muted label; a chip at the caret uses selection fill and bold accent,
 with payload size on the rule. The rule adds ↑/↓ more when editor rows are hidden.
 
-History, stash and completion reuse the option picker above the dock, up to nine
-rows high. Filtering, paging and resize belong to that picker. Stash drops retain
+History and stash reuse the option picker above the dock, up to nine rows high.
+Completion uses its dedicated menu with up to eight body rows and two rules;
+filtering, streaming and geometry belong to that menu. Stash drops retain
 the opening height. Editor conflicts use the shared centered dialog chrome:
 the question names both versions, 1 selects editor text, 2 selects box text,
 Enter confirms the highlighted version, and Esc keeps the box. The other version
@@ -338,5 +341,5 @@ Executed results are recorded in [Verification](../verification.md#composer-engi
 Consumer execution, clipboard formats, durable storage and native Linux/Windows
 or IME integration require host acceptance. The complete Composer human review
 is tracked in [Gate 3a](../human-testing.md#gate-3a--submission-lifecycle); recorded
-engineering results do not imply that gate passed. Standalone completion is
-tracked in the [Completion Menu spec](completion-menu.md#remaining-gaps).
+engineering results do not imply that gate passed. Completion's independent
+contract is tracked in the [Completion Menu spec](completion-menu.md).

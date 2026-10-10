@@ -75,6 +75,35 @@ make -C packages/rust-tui run CARGO_FLAGS="-- --component composer --scenario ma
    pickers retains their selection/search/scroll. Cycle F4 and resize to 40
    columns; dashed recall must remain readable in NO_COLOR and ASCII.
 
+## Completion Menu review
+
+Engineering and human acceptance are separate. Start with:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component completion-menu --scenario main"
+```
+
+1. Type `rev`, move with Up/Down and insert with Enter or Tab. The menu closes
+   with `/review ` in the box, without a sent turn or invocation. Type a number
+   and press Enter again: the local host reports the command and argument.
+2. Open `files`, insert a path and keep editing. The next Enter sends the message.
+   Check `no-match-command` Enter sends literal text; `no-match-file` Tab takes
+   the explicit closest guess and Enter sends the original token instead.
+3. Check `loading` and `still-loading`: the dock stays put while results arrive.
+   Open `error` and Tab to retry; the draft survives. `partly-failed` keeps good
+   results with a nonselectable warning. Disabled rows show reasons and are skipped.
+4. Check `command-inserted` faded argument help is not editable payload. Move
+   within a token, then outside it; Escape preserves text, and ordinary subsequent
+   typing does not reopen the same token. Paste stays data. Open `doesnt-open`.
+5. Check `long-description`, `mixed-sources`, `narrow` and all four profiles;
+   resize below 30 columns. One selected band remains readable, descriptions
+   expand within the same body height and fallback chrome retains meaning.
+6. Escape/F10 back through both pickers; searches, selections and scroll positions
+   survive. Quit with Ctrl-C and verify normal shell input is restored.
+
+Status: implementation and engineering verification complete; human visual review
+pending. No consumer rollout or commit is implied by this review.
+
 ## Gate 3b.1 — box modes and protected draft
 
 ```sh
@@ -506,7 +535,8 @@ commands/bindings separately; that does not accept this timing gap.
 | 2b | 2b.1 engineering passed; 2b.2 unstarted | Fallback visual review pending | Explicit checkpoint: private `4c6260d`, public `05857ee`; timing and inline transition remain pending |
 | 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
 | Composer | Complete local workflow and native host adapters implemented; current engineering checks recorded above | Native visual review remains separate | Review complete component; commit only when requested |
-| 4–13 | Other capabilities retain their documented gaps | Not presented | Complete components in dependency order |
+| Completion Menu | Complete reusable component, Composer integration and 15 interactive states; [engineering record](verification.md#completion-menu-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
+| 5–13 | Other capabilities retain their documented gaps | Not presented | Complete components in dependency order |
 
 Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs

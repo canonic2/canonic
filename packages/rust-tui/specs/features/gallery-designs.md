@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 134 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 149 named entries, plus
 four main-view presentation profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -23,7 +23,8 @@ not a claim that every specified state is implemented or visually accepted.
 | [Option picker](../components/option-picker.md#picker-contract) | main/default, details, disabled, danger, filter, no-match, scrolled, multi, groups, loading, narrow, done; supplemental empty/error; inline placement, centered dialog, full-screen host | Native inline terminal ownership; inline placement currently runs inside the gallery's alternate screen |
 | [Editor](../components/editor.md#editor-workflow) | main/focused, blurred, empty, wrap, selection, unicode, scrolled, pasted, undo, near-limit, limit, paste-cut; supplemental modal focus isolation | Dedicated composer-host and growing prompt-host fixtures. Composer input is already available through the composer main view, and dialog prompts through dialog. Foreground editor host adapter is verified separately |
 | [Dialog](../components/dialog.md#official-dialog-design) | main/prompt, multi-line, confirm, notice, nested/nest, replace, remove, scroll; supplemental locked, outside, removed-return, error, rename; late-result rejection | Timed waiting presentation. `late` exercises stale ticket rejection but does not reproduce the required live busy activity |
-| [Commands](../components/command-palette.md#commands-completion-and-help) | main/palette, filter, filter-key, unavailable, no-match, keys, keys-custom, conflict, pending, pending-hints, pending-miss; supplemental empty | Standalone autocomplete component; composer slash/file routing is implemented |
+| [Commands](../components/command-palette.md#commands-completion-and-help) | main/palette, filter, filter-key, unavailable, no-match, keys, keys-custom, conflict, pending, pending-hints, pending-miss; supplemental empty | Native human acceptance remains separate |
+| [Completion Menu](../components/completion-menu.md) | main, files, loading, still-loading, no-match-command, no-match-file, error, partly-failed, disabled, command-inserted, file-inserted, narrow, long-description, mixed-sources, doesnt-open | Real discovery/execution belongs to hosts; human visual acceptance remains separate |
 | [Composer](../components/composer.md) | 59 runnable entries: submission/refusal, four box modes, queue/edit/remove/pause/restart, history/search/earlier sessions, stash/swap/drop, editor/return/error/conflict, paste/image/hidden controls, shell/output, commands/files/email, clearing/rewind/quit and keys | Real agent, clipboard and durable-storage integration belongs to consumer hosts; native human visual acceptance stays separate |
 | [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | main, empty, streaming, error, disconnected, long | actions-off, handoff, sessions, pane, anchored-dock, answer, welcome. Current transcript fixtures do not establish rich content, activity, browser, lens or transcript-anchor acceptance |
 

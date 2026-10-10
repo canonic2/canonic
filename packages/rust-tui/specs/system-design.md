@@ -44,6 +44,7 @@ entry points need an explicit compatibility plan when contracts change.
 | `selection` | Logical text ranges and hit mapping | Sanitized copy payload; anchor/extent | Shared module proposed; Editor selection implemented |
 | `editor` | Text, limits, edit commands, paste, dimensions | Text/cursor/selection changes; undo/redo, visual cursor goal | Implemented |
 | `composer` | Editor, history/stash/references, completion, capabilities | Submit/query/stash/editor intents; draft and pending metadata | Implemented |
+| `completion` | Host source snapshots, query generations and elapsed time | Ranked suggestions, insert/close/retry actions, fixed-height view | Implemented |
 | `content` | Plain/Markdown/code/diff blocks and policy | Rows, hit/source mapping, link intent; per-instance derived cache | Proposed |
 | `conversation` | Stable message/part projection and revisions | Search/jump/copy/page intents; viewport/expansion/search/selection | Proposed; bounded plain projection in Chat |
 | `activity` | Tool/run/progress projection, clock tick | Open/expand/cancel intents; presentation, no actual tasks | Proposed; plain host status in Chat |

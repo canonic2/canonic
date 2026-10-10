@@ -2,44 +2,90 @@
 
 ## Purpose
 
-Offer host-supplied command or file candidates for typed prefixes, preserve the
-draft during loading/failure and accept one result without also sending.
+Suggest host-supplied commands, files and tokens above an editable draft. Selecting
+a suggestion inserts text. Execution and submission belong to a later host Enter.
 
 ## Current status
 
-Status: slash and file completion are implemented inside Composer through
-[completion routing](../../src/composer/completion.rs) and the shared option picker.
-A standalone public completion component and gallery component entry remain
-pending. This contract records the existing integrated behavior; standalone
-extraction needs its own design, API and acceptance.
+Status: implemented as [Menu](../../src/completion.rs), with dedicated ranking and
+view modules, Composer token routing and 15 interactive gallery states. Human
+visual acceptance remains separate from engineering verification.
 
 ## Behavior and state transitions
 
 ### Composer integration
 
-Typing / at byte zero opens host command candidates. Enter emits a stable
-command ID; Tab completes its text without executing. The built-in stash command
-opens the stash picker. Typing @ at a word boundary opens file candidates;
-Enter/Tab inserts `@path ` as plain editable text and never also sends. @ inside
-an email/word is ordinary text. Supplied candidates use the shared fuzzy picker; touched files win equal-score
-ties, and disabled rows cannot be confirmed. Hosts supply repository scope.
-Inserted @path tokens use the information color while remaining ordinary text.
+Typed / at byte zero opens commands; @ at the start or after whitespace opens
+files. Shell paths use file candidates. Paste never opens a menu. Escape closes
+and keeps the draft; that token stays dismissed until a new trigger is typed.
+Cursor navigation closes only when it leaves the active token. Deleting its
+trigger or adding a separating space closes. Embedded slashes/emails stay text.
+
+Tab and Enter insert the selected candidate with a trailing space; neither runs
+a command nor sends. Disabled rows are skipped. With no selectable match, Enter
+passes to Composer to send literal text. A host-supplied closest file guess is
+explicit and only Tab inserts it. Replacements exceeding the editor budget keep
+both draft and menu. A later Enter on a known slash command emits its host command
+intent; /stash opens the stash list then. Inserted @paths remain editable text.
+
+Up/Down and Ctrl-P/N skip disabled entries without wrapping. Page keys move by the
+visible body height. Ranking is prefix, word-start, then fuzzy subsequence;
+recency breaks ties. Only names highlight matches. Stable IDs preserve selection
+across streaming batches; additions append below existing results for that query.
 
 `CompletionRequest` identifies an opening, draft revision, kind and query.
 `complete` accepts only current results. Editing the query creates a new ticket;
 closing/resetting invalidates it. Late/error/empty results cannot choose a stale
-item. Error text stays in the picker; the draft survives. Candidate IDs must be
+item. Error text stays in the menu; the draft survives. Candidate IDs must be
 unique within each kind, and the source is bounded to 5,000 rows.
 
-Word deletion, undo/redo, selection and navigation bindings close completion
-before editing the box, so the picker query cannot drift from its visible text.
+`Menu::take_request` debounces for 60 ms, loading appears after 150 ms, and five
+seconds without results produces a retryable timeout. Partial results remain
+selectable. All-source failure shows an error; partial failure adds a nonselectable
+warning naming sources and reasons. Tab retries with a new generation. Stale,
+foreign, closed and duplicate finished-source responses are rejected atomically.
 
 ## Implementation design
 
-The menu grows above the fixed Composer dock to at most nine rows. Opening
-height remains stable while filtering, clamped to available space. Disabled,
-empty, loading and error rows follow the option picker contract. Escape closes
-the menu before other Composer cancellation; paste cannot open it.
+The dedicated state machine owns ranking, selection, source progress and injected
+time. The body opens at up to eight rows (five at 40 columns and below) and never shrinks
+while filtering. Rules display counts, remaining rows and source progress. The
+fixed dock stays in place. Names use accent, descriptions dim, tags right; the
+selected band uses selection fill and bold accent, with reverse without color.
+Only the selected description expands, to at most three lines within the same
+height; the 40-column view keeps descriptions to one shortened line. Tags drop
+before descriptions; below 30 columns only names remain. Names
+retain full data, clipping at grapheme boundaries when physically too wide.
+Key help belongs to the host's keys row outside the menu. Optional command
+argument help and faded placeholders are visual props, never inserted payload.
+
+`Candidate` contains a stable ID, display name, insertion, description, tag,
+disabled reason, hidden flag, recency and optional argument hints. `Menu::new` validates one to
+64 source IDs and cached rows. `set_query` invalidates the opaque `Request`;
+`Batch` replaces one source's accumulated rows atomically, with scanned/total
+progress, a completion flag or error. IDs are unique across sources, with 5,000
+retained candidates total. IDs/source names are at most 256 bytes, names/queries/
+descriptions 4 KiB and insertions 16 KiB; display text is sanitized and insertion
+controls rejected. `tick` consumes explicit elapsed time. `update` returns one
+`Action`: unhandled editor input, insertion data, close, literal Enter or retry.
+The host closes only after successful insertion, retaining the menu on no-fit.
+Partial warnings expose `failures` and `retry_failed` for host details/retry UI;
+Tab with a selected result continues to insert that result. Retry retains good
+sources and resets only failures. Rendering caches its page size and offset;
+it never changes the host's caret.
+
+Composer's legacy `CompletionItem`/`complete` API wraps a single `host` source.
+Composer source insertions omit the leading `/` or `@`; Composer adds the trigger
+and trailing space. Shell source insertions are complete path strings. Touched
+file fixtures use `edited`; recent commands use `recent`.
+`set_completion_sources`, `complete_source`, `set_completion_guess` and
+`retry_completion_sources` expose named sources. `completion_due` polls a
+debounced request; `Intent::RetryCompletion` requests retry I/O. A subsequent
+Enter emits `Command(id)` or `CommandWithArguments { id, arguments }`, preserving
+typed arguments. Acceptance registers a source-provided command's stable identity
+for that subsequent invocation, even when labels repeat. Removing/disabling that
+selected identity before invocation preserves the draft with an unavailable
+notice. Hosts still validate availability at execution.
 [Command Palette](command-palette.md) uses invocation rather than
 file insertion; its keyboard help shares host descriptors.
 
@@ -47,21 +93,26 @@ file insertion; its keyboard help shares host descriptors.
 
 Hosts own command availability, repository discovery and asynchronous queries.
 [Composer](composer.md) owns draft revision, opening/closing the current route
-and command intents. [Option Picker](option-picker.md) owns filtering, list
-navigation and geometry. Supplied completion results must identify their request.
+and command intents. The standalone menu owns filtering, list navigation and
+geometry. Hosts own discovery, recency, source scope, closest guesses and retry
+I/O. Supplied results identify both request and source. No component reads the
+filesystem or executes commands.
 
 ## Acceptance criteria
 
 - **E-06:** Completion tickets reject stale results; accepting consumes once and
-  never also sends a message or invokes a file.
+  never also sends or invokes. Verify ranking, disabled navigation, pages,
+  debounce/loading/timeout, streaming selection, retry, guesses, cursor boundaries,
+  paste, editor budgets, Unicode and all color profiles.
 
 Cross-component descriptor consistency is owned by
 [Command Palette D-03](command-palette.md#acceptance-criteria).
 
-Composer integration and gallery tests provide evidence for the current route.
-They do not establish a standalone component API or standalone gallery entry.
+Gallery coverage includes commands, files, loading, partial loading, both no-match
+cases, error, partial failure, disabled, both inserted states, narrow, long
+description, mixed sources and non-trigger text.
 
 ## Remaining gaps
 
-A standalone public component API, its complete design and independent gallery
-entry remain pending. Current evidence applies to the integrated Composer route.
+Real discovery and execution are host responsibilities; gallery sources are local
+simulations.

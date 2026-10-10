@@ -24,6 +24,7 @@ Full application operations appear below to establish host ownership.
 | [Dialogs](../src/dialog.rs) | Slice 2b awaits human gate: generic caller bodies, bounded stack, top-only dispatch, return focus repair, unique tickets, replacement/clear records, close policy and clamped shared-rule view |
 | [Chat](../src/chat.rs) | Plain role/text, append only to last message, status string; 100 messages, 64 KiB each, 64 KiB composer draft; submission snapshots await host acknowledgement |
 | [Composer](../src/composer.rs) | Complete component: submission tickets, FIFO held edits/pause, history/search, stash/drop undo, lossless chips, shell/completion, autosave codec and editor conflicts; host executes/persists |
+| [Completion Menu](../src/completion.rs) | Standalone ranking, source tickets/progress/streaming, insertion and retry; Composer token routing and 15 interactive gallery states; host discovers/executes |
 | [Editor](../src/editor.rs) / [Focus](../src/focus.rs) | Slice 1 functional gate passed; redesign awaits renewed gate: word-wrapped source rows, selection, one-transaction paste with whole-grapheme cutting, grouped undo; independent focus orders and modal return scopes |
 | Chat viewport | Grapheme/cell wrapping, follow/manual, five-row paging; `u16` row offset clamped during render; no stable anchors, IDs, structured parts or virtualization |
 | [Text](../src/text.rs) | Removes controls except allowed newlines, bounds UTF-8 by scalars, grapheme wrapping, narrow replacement; strips ESC rather than parsing complete escape sequences |

@@ -1,6 +1,7 @@
 //! Composes reusable views into a local gallery using simulated product activity.
 
 mod commands;
+mod completion;
 mod composer;
 mod dialog_body;
 mod dialogs;
@@ -107,6 +108,8 @@ pub enum Component {
     Commands,
     /// Draft submission with delayed host acceptance and rejection.
     Composer,
+    /// Focus-preserving command and file suggestions.
+    CompletionMenu,
 }
 
 #[derive(Clone, Copy)]
@@ -118,6 +121,7 @@ enum Screen {
     Dialog,
     Commands,
     Composer,
+    CompletionMenu,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -155,8 +159,9 @@ pub struct Gallery {
     dialogs: dialogs::DialogDemo,
     commands: commands::CommandDemo,
     composer: composer::ComposerDemo,
-    scenarios: [Picker; 6],
-    scenario_viewports: [ListState; 6],
+    completion: completion::CompletionDemo,
+    scenarios: [Picker; 7],
+    scenario_viewports: [ListState; 7],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -177,6 +182,7 @@ impl Gallery {
             Screen::Dialog => Some(Component::Dialog),
             Screen::Commands => Some(Component::Commands),
             Screen::Composer => Some(Component::Composer),
+            Screen::CompletionMenu => Some(Component::CompletionMenu),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -324,8 +330,15 @@ impl Gallery {
                 self.composer = composer::ComposerDemo::scenario(fixture);
                 Screen::Composer
             }
+            Component::CompletionMenu => {
+                self.completion = completion::CompletionDemo::scenario(fixture);
+                Screen::CompletionMenu
+            }
         };
-        if !matches!(component, Component::Chat | Component::Composer) {
+        if !matches!(
+            component,
+            Component::Chat | Component::Composer | Component::CompletionMenu
+        ) {
             for _ in 0..fixture {
                 self.fixture_event(
                     component,
@@ -356,6 +369,9 @@ impl Gallery {
                 self.composer.update(event);
             }
             Component::Chat => self.update_chat(event),
+            Component::CompletionMenu => {
+                self.completion.update(event);
+            }
         }
     }
 
@@ -373,6 +389,7 @@ impl Gallery {
                     "Dialogs".into(),
                     "Commands and bindings".into(),
                     "Composer".into(),
+                    "Completion Menu".into(),
                 ],
                 Some(0),
             ),
@@ -387,6 +404,7 @@ impl Gallery {
             dialogs: dialogs::DialogDemo::new(),
             commands: commands::CommandDemo::new(),
             composer: composer::ComposerDemo::new(),
+            completion: completion::CompletionDemo::scenario(0),
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -407,6 +425,7 @@ impl Gallery {
             Screen::Dialog => "dialog",
             Screen::Commands => "commands",
             Screen::Composer => "composer",
+            Screen::CompletionMenu => "completion-menu",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -443,6 +462,11 @@ impl Gallery {
     #[must_use]
     pub fn composer_input(&self, index: usize) -> Option<&str> {
         self.composer.input(index)
+    }
+    /// Independent draft in the Completion Menu host.
+    #[must_use]
+    pub fn completion_input(&self) -> &str {
+        self.completion.input()
     }
 
     fn reset_chat(&mut self) {
@@ -497,6 +521,7 @@ impl Gallery {
         self.dialogs.tick(elapsed);
         self.commands.tick(elapsed);
         self.composer.tick(elapsed);
+        self.completion.tick(elapsed);
         self.chat.tick(elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.chat.append(&fragment);
@@ -513,6 +538,9 @@ impl Gallery {
         }
         if matches!(self.screen, Screen::Composer) && self.composer.update(event) {
             return self.composer.should_quit();
+        }
+        if matches!(self.screen, Screen::CompletionMenu) && self.completion.update(event) {
+            return false;
         }
         if matches!(self.screen, Screen::Commands) && self.commands.update(event) {
             return false;
@@ -573,6 +601,7 @@ impl Gallery {
             | Screen::Dialog
             | Screen::Commands
             | Screen::Composer
+            | Screen::CompletionMenu
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -653,6 +682,7 @@ impl Gallery {
             Screen::Dialog => self.dialogs.render(frame, body, self.theme),
             Screen::Commands => self.commands.render(frame, body, self.theme),
             Screen::Composer => self.composer.render(frame, body, self.theme),
+            Screen::CompletionMenu => self.completion.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(
@@ -703,7 +733,7 @@ impl Gallery {
 pub fn run(cli: &Cli) -> Result<()> {
     if cli.list {
         println!(
-            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings\ncomposer Composer"
+            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings\ncomposer Composer\ncompletion-menu Completion Menu"
         );
         for component in scenarios::COMPONENTS {
             println!(

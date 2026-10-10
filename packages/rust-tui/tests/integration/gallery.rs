@@ -234,6 +234,56 @@ fn scenario_profiles_bound_the_stage_and_use_requested_color_and_symbols() {
 }
 
 #[test]
+fn completion_states_keep_the_dock_fixed_and_argument_hints_out_of_the_draft() {
+    let mut gallery = Gallery::new();
+    let mut terminal = Terminal::new(TestBackend::new(64, 28)).unwrap();
+    let mut dock = None;
+    for id in [
+        "main",
+        "files",
+        "loading",
+        "still-loading",
+        "no-match-command",
+        "no-match-file",
+        "error",
+        "partly-failed",
+        "disabled",
+        "command-inserted",
+        "file-inserted",
+        "narrow",
+        "long-description",
+        "mixed-sources",
+        "doesnt-open",
+    ] {
+        gallery
+            .open_scenario(Component::CompletionMenu, id)
+            .unwrap();
+        terminal.draw(|f| gallery.render(f)).unwrap();
+        let text = super::components::dump(terminal.backend().buffer());
+        let message = text
+            .lines()
+            .position(|line| line.starts_with("message "))
+            .unwrap();
+        assert_eq!(*dock.get_or_insert(message), message, "{id}");
+        if id == "command-inserted" {
+            assert!(text.contains("/review <pr>"));
+            assert_eq!(gallery.completion_input(), "/review ");
+        }
+        if matches!(id, "main" | "narrow" | "long-description" | "partly-failed") {
+            insta::assert_snapshot!(format!("completion_{id}"), text);
+        }
+    }
+    gallery
+        .open_scenario(Component::CompletionMenu, "main")
+        .unwrap();
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "completion-menu");
+    assert_eq!(gallery.completion_input(), "/");
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "scenarios");
+}
+
+#[test]
 fn listed_scenarios_open_and_render_at_small_sizes_without_a_terminal() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("tui-gallery"))
         .arg("--list")
@@ -249,6 +299,7 @@ fn listed_scenarios_open_and_render_at_small_sizes_without_a_terminal() {
         ("dialog", Component::Dialog),
         ("commands", Component::Commands),
         ("composer", Component::Composer),
+        ("completion-menu", Component::CompletionMenu),
     ] {
         let section = text.split(&format!("\n{name} scenarios (")).nth(1).unwrap();
         for line in section

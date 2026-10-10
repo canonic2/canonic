@@ -10,7 +10,7 @@ implementation design details without referencing private design files.
 | [Dialog](dialog.md) | Stack caller-owned bodies with isolated input and restored focus | Foundations implemented; timing requirements pending |
 | [Command Palette](command-palette.md) | Search host commands and shared keyboard help | Implemented |
 | [Composer](composer.md) | Session draft, submission, queue, history, stash and editor handoff | Implemented reusable component |
-| [Completion Menu](completion-menu.md) | Complete typed command/file prefixes from host candidates | Implemented inside Composer; standalone component pending |
+| [Completion Menu](completion-menu.md) | Complete typed command/file prefixes from host candidates | Standalone state/view, Composer integration and 15 gallery states implemented |
 | [Chat](chat.md) | Compose transcript and Composer with scrolling and delivery state | Plain bounded host implemented; rich conversation targets pending |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
@@ -47,5 +47,5 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Dialog](dialog.md) | Defined; timing targets explicit | Partial: timing/inline transitions pending | Foundations implemented; timing pending | Recorded for foundations | Fallback visual review pending |
 | [Command Palette](command-palette.md) | Defined palette/help contract | Defined current views | Implemented | Recorded for current implementation | Pending |
 | [Composer](composer.md) | Defined complete local workflow | Defined layout/states/fallbacks | Implemented reusable workflow | [Recorded](../verification.md#composer-engineering-record--2026-10-10) | Complete component review pending |
-| [Completion Menu](completion-menu.md) | Integrated contract defined; standalone API pending | Integrated view defined; standalone pending | Integrated route implemented; standalone pending | Recorded through Composer; standalone pending | Standalone review not presented |
+| [Completion Menu](completion-menu.md) | Defined complete source/insertion contract | Defined layout/states/fallbacks | Standalone component and Composer integration implemented | [Recorded](../verification.md#completion-menu-engineering-record--2026-10-10) | Complete component review pending |
 | [Chat](chat.md) | Plain scope defined; rich targets proposed | Plain host defined; rich target decisions pending | Plain projection implemented; rich targets pending | Recorded for plain host; rich targets pending | Foundation accepted; rich targets not presented |

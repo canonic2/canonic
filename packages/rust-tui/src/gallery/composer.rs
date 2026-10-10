@@ -376,6 +376,10 @@ impl ComposerDemo {
                     self.note = "Host stop requested · queue paused".into();
                 }
                 Intent::Command(id) => self.note = format!("Host command: {id}"),
+                Intent::CommandWithArguments { id, arguments } => {
+                    self.note = format!("Host command: {id} {arguments}");
+                }
+                Intent::RetryCompletion(_) => self.note = "Completion retry requested".into(),
                 Intent::Background => self.note = "Host shell background requested".into(),
                 Intent::ClipboardImage => {
                     self.chat

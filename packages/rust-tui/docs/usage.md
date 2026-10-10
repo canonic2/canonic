@@ -38,7 +38,7 @@ provide source paths/lines and execute inspection or invocation intents.
 Construct replacements before swapping the active map, advance dispatch with the
 host clock, reset on scope changes, and recheck availability before execution.
 Modified Enter, repeats, releases and paste never invoke commands. Slash insertion
-and completion are a separate roadmap slice.
+belongs to [Completion Menu](#completion-menu); a later Composer Enter invokes it.
 
 ## Gallery
 
@@ -160,7 +160,7 @@ removes the edited copy into the stash. Errors and stopping pause delivery;
 Ctrl-X Enter resumes it. Restart restores queues paused.
 
 Ctrl-X s stashes a draft; Ctrl-X u restores or swaps with the newest stash.
-Type `/stash` and Enter to open the list: Enter restores, d drops, u undoes until
+Type `/stash`, Enter to insert, then Enter to open the list: Enter restores, d drops, u undoes until
 closing. The stash holds 50 entries and reports eviction of the oldest.
 Ctrl-X e requests an external editor. F11 simulates its return in this gallery;
 a changed box opens a two-version conflict dialog and stashes the unused version.
@@ -168,8 +168,9 @@ F1 opens key help; Ctrl-V requests a host clipboard image.
 
 Long/multiline paste becomes an atomic chip with its full payload preserved.
 Pasted prefixes never execute. Typed ! in an empty box enters shell mode;
-typed / opens commands and @ at a word boundary opens files. Enter selects a
-command ID; Tab completes its text. File selection inserts plain `@path ` text.
+typed / opens commands and @ at a word boundary opens files. Tab and Enter insert
+the selected suggestion; a later Enter invokes the command or sends the message.
+File selection inserts plain `@path ` text.
 The host supplies candidates and performs execution, clipboard and file work.
 
 Escape follows the local cancellation ladder: close overlay, restore recall,
@@ -372,3 +373,41 @@ Submission clears the box immediately; acknowledgement preserves fresh edits.
 `TerminalSession` is an optional host helper
 for one full-screen event loop; inline integrations can own their own runtime.
 Never acquire another terminal session for a nested picker.
+
+## Completion Menu
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component completion-menu --scenario main"
+```
+
+The scenario picker offers all 15 menu states, plus `narrow-40`, `ansi16`,
+`no-color` and `ascii`. Up/Down or Ctrl-P/N select enabled rows; page keys move a
+menu height without wrapping. Tab and Enter insert with a trailing space. Nothing
+runs or sends until a later Composer Enter. `command-inserted` demonstrates an
+argument hint: the faded `<pr>` is display-only. `file-inserted` remains editable.
+
+Typing filters the current token. Left/Right/Home/End move the box cursor; leaving
+the token closes the menu. Escape keeps the draft and dismisses that token.
+Paste never opens suggestions. A new typed trigger can open another menu.
+`loading` and `still-loading` finish locally after three seconds; `error` retries
+on Tab without changing the draft. With no selectable match, Enter sends literal
+text. `no-match-file` offers an explicit closest guess that only Tab inserts.
+Partial-source errors keep good results selectable. F2 cycles states, F10 opens
+scenarios and Esc returns after local dismissal. Ctrl-C quits this component.
+
+For standalone use, construct `completion::Menu` with named sources and validated
+`Candidate` values. Send editor-owned query changes through `set_query`, tick the
+host clock, and poll `take_request` after the 60 ms debounce. Apply each source's
+accumulated `Batch` using that exact opaque request. Loading appears after 150 ms;
+five seconds without results yields a retryable timeout. Finished sources reject
+duplicate batches. Close only after successfully applying `Action::Insert` to the
+editor; a failed budget check should preserve the menu. `Action::PassEnter` lets
+the host handle literal submission. Rendering keeps focus and the host cursor.
+
+Composer provides `set_completions` for cached command/file rows and
+`completion_request`/`complete` for a single host source. Named asynchronous
+sources use `set_completion_sources`, `completion_due`, `complete_source`,
+`set_completion_guess` and `retry_completion_sources`. Hosts handle
+`Intent::RetryCompletion` with discovery I/O. A later Enter emits `Command(id)` or
+`CommandWithArguments { id, arguments }`; hosts validate availability and execute.
+Completion insertion never performs execution, filesystem or clipboard access.

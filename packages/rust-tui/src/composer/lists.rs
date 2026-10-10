@@ -255,11 +255,27 @@ impl Composer {
     /// Requested height grows upward without changing the message dock's height.
     #[must_use]
     pub fn above_height(&self) -> u16 {
-        if self.list.is_some() || self.completion.is_some() {
+        if let Some(completion) = &self.completion {
+            completion.menu.height(u16::MAX)
+        } else if self.list.is_some() {
             9
         } else {
             u16::try_from(self.queue.len().min(3) + usize::from(self.queue.len() > 3)).unwrap_or(4)
         }
+    }
+    /// Requested above-dock height adapted to the host's available width.
+    #[must_use]
+    pub fn above_height_for(&self, width: u16) -> u16 {
+        self.completion
+            .as_ref()
+            .map_or_else(|| self.above_height(), |c| c.menu.height(width))
+    }
+    /// Contextual key status adapted to a host's available width.
+    #[must_use]
+    pub fn footer_hint_for(&self, width: u16) -> &str {
+        self.completion
+            .as_ref()
+            .map_or_else(|| self.footer_hint(), |c| c.menu.hint_for(width))
     }
     /// Contextual key status below the dock, including the active picker or box mode.
     #[must_use]
@@ -268,11 +284,7 @@ impl Composer {
             return "1 editor · 2 box · enter chooses · esc keeps box";
         }
         if let Some(completion) = &self.completion {
-            return if completion.kind == super::CompletionKind::File {
-                "tab inserts · enter inserts · esc closes"
-            } else {
-                "tab completes · enter runs command · esc closes"
-            };
+            return completion.menu.hint();
         }
         if let Some(list) = &self.list {
             return match list.kind {
@@ -296,6 +308,9 @@ impl Composer {
             super::BoxMode::Queued { .. } => "enter saves · esc keeps as was · ctrl+d removes",
             super::BoxMode::History { .. } => "↑↓ older/newer · enter sends again · esc your draft",
             super::BoxMode::Locked { .. } => "editing outside · ctrl+c cancels waiting",
+            super::BoxMode::Draft if self.command_ready() => {
+                "actions on · enter runs command · F1 keys"
+            }
             super::BoxMode::Draft if self.is_busy() => "actions on · enter queues · esc stops",
             super::BoxMode::Draft if self.input_mode == super::InputMode::Shell => {
                 "enter runs · backspace leaves"

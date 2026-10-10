@@ -289,7 +289,7 @@ impl Chat {
         );
         let [transcript, above] = Layout::vertical([
             Constraint::Min(0),
-            Constraint::Length(self.input.above_height()),
+            Constraint::Length(self.input.above_height_for(area.width)),
         ])
         .areas(transcript);
         self.input.render_above(frame, above, theme);
@@ -363,7 +363,7 @@ impl Chat {
             true,
         );
         frame.render_widget(
-            Paragraph::new(self.input_hint(theme)).style(theme.muted()),
+            Paragraph::new(self.input_hint(theme, hints.width)).style(theme.muted()),
             hints,
         );
         self.input.render_overlay(frame, area, theme);
@@ -379,17 +379,19 @@ impl Chat {
             }
         };
         frame.render_widget(
-            Paragraph::new(
+            Paragraph::new(if self.input.completion_menu().is_some() {
+                self.input_hint(theme, activity.width)
+            } else {
                 self.input
                     .status()
-                    .replace(" · ", theme.symbols.separator()),
-            )
+                    .replace(" · ", theme.symbols.separator())
+            })
             .style(activity_style),
             activity,
         );
     }
-    fn input_hint(&self, theme: Presentation) -> String {
-        let hint = self.input.footer_hint();
+    fn input_hint(&self, theme: Presentation, width: u16) -> String {
+        let hint = self.input.footer_hint_for(width);
         hint.replace(" · ", theme.symbols.separator())
             .replace(
                 "↑↓",

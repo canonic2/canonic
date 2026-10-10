@@ -9,7 +9,7 @@ the coverage map identifies which states are runnable.
 The component picker opens a searchable scenario picker before the component's
 scenario. Esc walks back through picker levels; Composer uses F10 to leave its
 scenario because Esc performs local cancellation, recall and clearing. F10 toggles
-between the current scenario and its picker. The six components have direct CLI
+between the current scenario and its picker. The seven components have direct CLI
 `--scenario` access and headless listings from one gallery-owned registry.
 Selecting a fixture resets its owning component. Returning with F10 retains
 the current draft and focus; simulated updates pause while browsing.
@@ -35,6 +35,17 @@ The fixture returns invocation/source-inspection intents without executing
 commands or opening files. Behavioral and PTY tests verify isolation, layout,
 remaps and restoration. [Gate 2c](../human-testing.md#gate-2c--commands-and-bindings)
 owns human acceptance. Composer also integrates typed slash/file completion.
+
+## Implemented Completion Menu composition
+
+The standalone menu is composed through Composer's public token/source APIs with
+a fixed Chat dock. Fifteen interactive scenarios cover the complete state
+contract, with four main-view profiles. Local sources simulate asynchronous
+progress, partial failures and retry; inserted commands require another Enter
+for invocation. Native terminal traces verify that accepting never also sends,
+retry preserves the token and exiting restores terminal attributes. Public
+specifications include the narrowed layout and behavior contract independently
+of private design assets.
 
 ## Implemented dialog composition
 
