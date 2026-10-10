@@ -107,7 +107,7 @@ enabled editor's configuration and the hook to Claude Code's
 `.claude/settings.json` and Codex's `.codex/hooks.json`. Its configuration
 docs cover the generated entries.
 
-The [Shield hook specification](../../../private/shield/specs/hooks.md) defines
+The [Shield interception specification](../../../private/shield/specs/features/agent-interception.md) defines
 generation, runtime protocols, approval, and agent coverage. Codex requires
 review and trust of new or changed hook definitions before they can run.
 
