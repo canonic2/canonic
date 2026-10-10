@@ -11,6 +11,7 @@ pub(super) enum EditKind {
     Typing,
     Newline,
     Paste,
+    Replace,
     Delete,
     Backspace,
 }
@@ -21,6 +22,7 @@ impl EditKind {
             Self::Typing => "typing",
             Self::Newline => "newline",
             Self::Paste => "paste",
+            Self::Replace => "replacement",
             Self::Delete | Self::Backspace => "deletion",
         }
     }
@@ -32,12 +34,13 @@ pub(super) struct Snapshot {
     pub offset: usize,
 }
 
+#[derive(Clone)]
 struct Entry {
     snapshot: Snapshot,
     kind: EditKind,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct History {
     undo: VecDeque<Entry>,
     redo: VecDeque<Entry>,
@@ -56,7 +59,10 @@ impl History {
         selected: bool,
     ) {
         let grouped = !selected
-            && !matches!(kind, EditKind::Paste | EditKind::Newline)
+            && !matches!(
+                kind,
+                EditKind::Paste | EditKind::Newline | EditKind::Replace
+            )
             && self.group.is_some_and(|(previous, at)| {
                 previous == kind && now.saturating_sub(at) < GROUP_PAUSE
             });
@@ -67,7 +73,11 @@ impl History {
             self.undo.push_back(Entry { snapshot, kind });
         }
         self.redo.clear();
-        self.group = if matches!(kind, EditKind::Paste | EditKind::Newline) || selected {
+        self.group = if matches!(
+            kind,
+            EditKind::Paste | EditKind::Newline | EditKind::Replace
+        ) || selected
+        {
             None
         } else {
             Some((kind, now))

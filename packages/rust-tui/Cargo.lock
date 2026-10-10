@@ -153,6 +153,7 @@ dependencies = [
  "predicates",
  "proptest",
  "ratatui",
+ "rustix",
  "unicode-segmentation",
  "unicode-width",
 ]

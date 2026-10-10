@@ -1,7 +1,7 @@
 # Terminal ownership, compatibility and presentation
 
 Status: foundation lease exists; inline mode, explicit error reporting and wider
-compatibility are proposed. [Inventory](inventory.md) qualifies existing cleanup.
+compatibility are proposed. [Inventory](../inventory.md) qualifies existing cleanup.
 
 ## One terminal owner
 
@@ -40,7 +40,7 @@ temporary rows according to an explicit host policy, then returns the cursor to
 where ordinary output resumes. Window shrink and scrolling must not overwrite
 unrelated preceding output; if safe anchoring is unavailable, use host plain fallback.
 
-Chat dialogs follow the [dialog panel contract](dialogs.md#official-dialog-design):
+Chat dialogs follow the [dialog panel contract](../components/dialog.md#official-dialog-design):
 temporarily enter an alternate screen, redraw the visible conversation tail there,
 and return on close. This transition remains pending the inline adapter.
 
@@ -53,8 +53,13 @@ layouts in scrollback are outside that first slice.
 
 ## Suspension and asynchronous lifecycle
 
-Runtime offers explicit suspend/resume transitions for an external editor or
-host-requested job control. Suspend flushes draw state, releases owned modes and
+`TerminalSession::close` reports restoration failures. `handoff` consumes the
+lease, releases modes before a foreground host callback and reacquires afterward;
+operation and reacquisition results remain separate. Release failure skips the
+callback. Unix restoration preserves the original termios settings. The owned
+PTY test verifies a cooked editor callback, raw reacquisition and final restored
+shell input. General suspend/resume and host job-control transitions remain
+separate runtime requirements. Suspend flushes draw state, releases owned modes and
 marks lease unavailable for rendering. Host owns launch/signals/child wait.
 Resume checks terminal/capabilities, reacquires modes, measures size and forces
 redraw. Resume failure returns an error and leaves a clean noninteractive state;
@@ -79,7 +84,7 @@ Host keeps original content separately if it needs archival fidelity.
 
 Editor drafts retain controls for editing and host validation. Their renderer
 uses printable control pictures or ASCII hex labels rather than raw controls;
-it never replays escape effects. See [Presentation](presentation.md).
+it never replays escape effects. See [Presentation](../presentation.md).
 
 Text bounds maintain valid UTF-8 and grapheme boundaries. Layout measures terminal
 cells, handles combining marks/CJK/emoji/zero-width sequences, and uses replacement

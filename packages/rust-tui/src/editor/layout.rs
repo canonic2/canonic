@@ -10,6 +10,7 @@ pub(super) struct Glyph {
     pub display: String,
     pub cells: usize,
     pub control: bool,
+    pub atom: bool,
 }
 pub(super) struct Row {
     pub start: usize,
@@ -28,7 +29,15 @@ impl Row {
         self.end
     }
 }
-fn display(grapheme: &str, column: usize, symbols: Symbols) -> String {
+fn display(
+    grapheme: &str,
+    column: usize,
+    symbols: Symbols,
+    atoms: &std::collections::BTreeMap<char, super::InlineAtom>,
+) -> String {
+    if let Some(atom) = grapheme.chars().next().and_then(|c| atoms.get(&c)) {
+        return atom.label.clone();
+    }
     if grapheme == "\t" {
         return " ".repeat(TAB_STOP - column % TAB_STOP);
     }
@@ -61,7 +70,30 @@ fn push(rows: &mut Vec<Row>, row: &mut Row, start: usize) {
         },
     ));
 }
-pub(super) fn rows(text: &str, width: u16, symbols: Symbols) -> Vec<Row> {
+// Unicode word boundaries can split a grapheme (for example a prepend character
+// followed by whitespace). Merge those segments before deriving cursor rows.
+fn segments(text: &str) -> Vec<(usize, &str)> {
+    let ends: Vec<_> = text
+        .grapheme_indices(true)
+        .map(|(i, g)| i + g.len())
+        .collect();
+    let mut start = 0;
+    let mut segments = Vec::new();
+    for (index, word) in text.split_word_bound_indices() {
+        let end = index + word.len();
+        if ends.binary_search(&end).is_ok() {
+            segments.push((start, &text[start..end]));
+            start = end;
+        }
+    }
+    segments
+}
+pub(super) fn rows(
+    text: &str,
+    width: u16,
+    symbols: Symbols,
+    atoms: &std::collections::BTreeMap<char, super::InlineAtom>,
+) -> Vec<Row> {
     let width = usize::from(width).max(1);
     let mut rows = Vec::new();
     let mut row = Row {
@@ -70,10 +102,10 @@ pub(super) fn rows(text: &str, width: u16, symbols: Symbols) -> Vec<Row> {
         glyphs: Vec::new(),
     };
     let mut used = 0;
-    for (segment_start, segment) in text.split_word_bound_indices() {
+    for (segment_start, segment) in segments(text) {
         let segment_cells: usize = segment
             .graphemes(true)
-            .map(|g| display(g, 0, symbols).width())
+            .map(|g| display(g, 0, symbols, atoms).width())
             .sum();
         if !segment.chars().all(char::is_whitespace)
             && segment_cells <= width
@@ -91,18 +123,25 @@ pub(super) fn rows(text: &str, width: u16, symbols: Symbols) -> Vec<Row> {
                 used = 0;
                 continue;
             }
-            let mut displayed = display(grapheme, used, symbols);
+            let mut displayed = display(grapheme, used, symbols, atoms);
             let mut cells = displayed.width();
             if used + cells > width && !row.glyphs.is_empty() {
                 push(&mut rows, &mut row, start);
                 used = 0;
-                displayed = display(grapheme, 0, symbols);
+                displayed = display(grapheme, 0, symbols, atoms);
                 cells = displayed.width();
             }
             if cells > width {
                 if grapheme == "\t" {
                     displayed = " ".repeat(width);
                     cells = width;
+                } else if grapheme
+                    .chars()
+                    .next()
+                    .is_some_and(|c| atoms.contains_key(&c))
+                {
+                    displayed = displayed.chars().take(width).collect();
+                    cells = displayed.width();
                 } else {
                     displayed = if symbols == Symbols::Ascii {
                         "?"
@@ -119,6 +158,10 @@ pub(super) fn rows(text: &str, width: u16, symbols: Symbols) -> Vec<Row> {
                 display: displayed,
                 cells,
                 control: grapheme.chars().any(char::is_control),
+                atom: grapheme
+                    .chars()
+                    .next()
+                    .is_some_and(|c| atoms.contains_key(&c)),
             });
             row.end = end;
             used += cells;

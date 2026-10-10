@@ -1,18 +1,103 @@
 # Human testing gates
 
-Status: workflow requested on **2026-10-09**. Foundation human testing passed.
-Slice 1 functional testing passed; the supplied editor/design-system redesign
-reopens its human gate. The user explicitly requested a scoped commit on
-2026-10-09 after visible newline/color checks. Remaining redesign gate actions
-have not been reported as passed. Slice 1 redesign is committed; the user
-authorized advancing on 2026-10-09. Slice 2a rich picker is human accepted and
-committed; subsequent picker visual review reopened the bounded follow-up below.
-Slice 2b.1 dialog visual shell is implemented, awaiting its human gate;
-2b.2 arrival/removal timing and slices 3–13 remain unstarted. Slice 2c is implemented
-after the user's 2026-10-10 advancement request, awaiting its own human gate.
-[Roadmap](roadmap.md) owns
-the acceptance criteria and architecture dependency groups; this topic owns
-their smaller delivery units and the human acceptance procedure.
+Status: complete components are the delivery unit, as requested on 2026-10-10.
+The historical gates below retain their other component acceptance records.
+Composer implements its complete local workflow; host execution, storage keys,
+clipboard formats and native human visual acceptance remain consumer checkpoints.
+
+## Delivery contract
+
+Each complete component or explicitly bounded feature is a delivery unit;
+numbered gates below are its review checklists. The cycle is:
+
+1. Implement that component or feature with standalone gallery scenarios and the relevant
+   composed screen. Preserve unrelated work and consumer behavior.
+2. Run appropriate automated gates, inspect the diff and report actual results.
+3. Provide exact runnable commands, gallery entry/scenario names, effective keys,
+   numbered actions and expected visible results. The commands must work in the
+   implementation being handed over. Mark any unavailable host checks explicitly.
+4. Stop for the user's pass/fail confirmation. Automated tests do not substitute
+   for the applicable human gate. Ask for the failing step/observed behavior if feedback is unclear.
+5. If a step fails, fix the current delivery unit and present updated verification; do
+   not move to another delivery unit or commit a knowingly failed result.
+6. Commit only when explicitly requested or authorized; use the commit skill,
+   rerun checks when changes require it, and report hashes for the reviewed scope
+   in the owning repositories. Commit authorization does not imply human acceptance.
+   Nothing is pushed automatically.
+
+One confirmation accepts only the demonstrated scope on the user's reported
+terminal. New material changes after confirmation reopen the affected gate.
+If engineering checks fail, the commit skill's failure handling applies; human
+acceptance does not waive a failing check. Maintain human review status here and
+record commit IDs after acceptance, without claiming untested platform coverage.
+
+Use `make -C packages/rust-tui run` from the repository root for human tests.
+Catalog/scenario labels for slices 2–13 are intended deliverables. At each
+handoff, replace intended labels/keys with the actual
+implemented controls. Prefer one command with catalog navigation over requiring
+the user to know Cargo/toolchain options. Never instruct the user to run a
+nonexistent fixture flag. Automated checks and owned PTY tests remain the
+implementation agent's responsibility.
+
+## Gate 3a — submission lifecycle
+
+Run from the repository root:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component composer --scenario main"
+```
+
+1. Send text: the box clears immediately, a fixed `you · 20:10 · sending` turn
+   appears with dim delivery, and ordinary sending has no yellow activity row.
+   Edit the new draft; F5 accepts without changing it. F6 refusal restores an
+   untouched draft or stashes the refused copy beside newer text. F8 is ignored.
+2. Enter while busy: messages queue. F5 first accepts, then ends a successful
+   turn and sends one eligible item. Open `edit-queued`: Enter saves that slot,
+   Esc keeps its original, Ctrl-D stashes the edited copy. `queue-stopped` and
+   `queue-paused` wait for Ctrl-X Enter. F12 restores a paused queue.
+3. Ctrl-X s stashes; Ctrl-X u restores/swaps, then swaps back. `/stash` opens
+   the list; d drops and u undoes until closing. Check `stash-empty`, `stash-drop`
+   and `stash-swap`. Fifty-first insertion reports oldest-entry eviction.
+4. Inspect `paste-chip`, `paste-selected`, `image-chip` and `hidden-characters`.
+   Chips move/delete/undo atomically. First Enter removes hidden format controls
+   without sending; joined emoji remain intact. Pasted !, / and @ never execute.
+5. Inspect `shell`, `shell-output`, `file-reference`, `file-inserted`, `slash`
+   and `email`. F3 expands shell output. File selection inserts editable text;
+   command selection emits its ID. F1 shows composer bindings.
+6. In `editor-open`, F11 returns text. In `editor-conflict`, choose 1 or 2,
+   Enter confirms; Esc keeps the box. The other version goes to stash. Empty/
+   failed returns preserve text. Late callbacks cannot replace a newer lifetime.
+7. Esc closes the nearest overlay/recall, cancels editor waiting or stops work
+   and pauses the queue. Idle Esc twice clears text or recalls a rewind copy;
+   rewind emits only when sending. Ctrl-C clears idle text, then twice on empty
+   requests quit. Resize does not cancel an armed confirmation.
+8. F10 opens scenarios; F10 returns with the current draft intact. Esc through
+   pickers retains their selection/search/scroll. Cycle F4 and resize to 40
+   columns; dashed recall must remain readable in NO_COLOR and ASCII.
+
+## Gate 3b.1 — box modes and protected draft
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component composer --scenario box-history"
+```
+
+The rule says `history 3 of 12`. Up shows entry 4; Down shows entry 3. Down past
+newest or Esc restores the exact unsent draft and cursor. Up in draft edits lines,
+then reaches byte zero; the next Up recalls queue/history. Typing in a history
+copy adopts it and stashes the set-aside draft. Enter sends a copy; acceptance
+moves it to the top without duplication. `history-search` recalls without
+sending; `history-earlier-session` displays host-supplied origin labels.
+
+Engineering tests cover the full lifecycle, saved-state encoding/validation,
+process temp-file permissions/cleanup and native Unix terminal release/reacquire.
+TestBackend renders all registered scenarios and presentation profiles at bounded
+sizes. Native human visual acceptance is not inferred from these checks. Gallery
+storage, shell execution and clipboard responses are deterministic simulations;
+consumer integrations must verify their real host callbacks and persistence.
+
+The dated engineering summary is recorded in
+[Verification](verification.md#composer-engineering-record--2026-10-10).
+These steps request human acceptance of the demonstrated component scope.
 
 ## Gate 2c — commands and bindings
 
@@ -20,7 +105,7 @@ Implemented; human acceptance pending. This gate does not accept the remaining
 dialog timing or inline chat screen-transition work.
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component commands --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component commands --scenario main --colors truecolor"
 ```
 
 1. The palette sits directly above the live yellow activity row and message box.
@@ -45,10 +130,11 @@ make -C packages/rust-tui run CARGO_FLAGS="-- --component commands --colors true
    heights; optional details disappear before labels/keys. F4 checks all color
    fallbacks. Modified Enter never confirms a search result.
 
-Report pass/fail by step before committing. The local commands-and-bindings HTML
-boards and PDF supplied the visual reference. Ctrl-P docking and F1 full-screen
+Report pass/fail by step before committing. The
+[command contract](components/command-palette.md#commands-completion-and-help) defines behavior. Ctrl-P docking and F1 full-screen
 placement follow the user's explicit 2026-10-10 decision. Source loading/opening
-remain host boundaries; slash insertion remains slice 4. The native visual gate
+remain host boundaries; Composer slash/file routing follows the
+[Completion Menu contract](components/completion-menu.md). The native visual gate
 is pending even when rendered-buffer and PTY checks pass.
 
 Engineering on 2026-10-10: `make check` passed formatting, strict Clippy,
@@ -59,40 +145,10 @@ refinements passed their rendered regressions, strict Clippy and release rebuild
 Shield's locked optional TUI compilation passed; Drone's workspace lockfile is
 out of date, so its optional TUI compilation used a disposable manifest/lockfile
 copy and passed without editing workspace files. Palette/keys snapshots
-were inspected against the supplied boards; Markdown targets and scoped diff
+were inspected; Markdown targets and scoped diff
 checks passed. Native visual acceptance and Linux/Windows remain unverified.
 
-## Delivery contract
 
-Each numbered slice is a complete cycle:
-
-1. Implement that slice with standalone gallery scenarios and the relevant
-   composed screen. Preserve unrelated work and consumer behavior.
-2. Run appropriate automated gates, inspect the diff and report actual results.
-3. Provide exact runnable commands, gallery entry/scenario names, effective keys,
-   numbered actions and expected visible results. The commands must work in the
-   implementation being handed over. Mark any unavailable host checks explicitly.
-4. Stop for the user's pass/fail confirmation. Automated tests do not substitute
-   for this gate. Ask for the failing step/observed behavior if feedback is unclear.
-5. If a step fails, fix the current slice and present updated verification; do
-   not move to another slice or commit a knowingly failed result.
-6. After explicit human acceptance, use the commit skill, rerun checks when
-   changes require it, commit the reviewed package scope in `private` and `public`,
-   report hashes, then begin the next slice. Nothing is pushed automatically.
-
-One confirmation accepts only the demonstrated slice on the user's reported
-terminal. New material changes after confirmation reopen the affected gate.
-If engineering checks fail, the commit skill's failure handling applies; human
-acceptance does not waive a failing check. Maintain the slice status here and
-record commit IDs after acceptance, without claiming untested platform coverage.
-
-Use `make -C packages/rust-tui run` from the repository root for human tests.
-Catalog/scenario labels for slices 2–13 are intended deliverables. At each
-handoff, replace intended labels/keys with the actual
-implemented controls. Prefer one command with catalog navigation over requiring
-the user to know Cargo/toolchain options. Never instruct the user to run a
-nonexistent fixture flag. Automated checks and owned PTY tests remain the
-implementation agent's responsibility.
 
 ## Slice sequence and human exit tests
 
@@ -108,7 +164,7 @@ below supplement those common checks. The exact keys are supplied when ready.
 | 2a | Rich picker / group 2 | Filter grouped/disabled rows; page and confirm stable identity; mark multiple rows; refresh and preserve the independent host draft | D-02; A-03/A-04 for this view |
 | 2b | Dialogs / group 2 | Open nested dialogs; Esc closes only top and restores focus; tiny resize and removed return target | D-01 |
 | 2c | Commands and bindings / group 2 | Search palette/help; one selection emits one intent; test remapped/pending bindings | D-03, I-02 |
-| 3 | Draft lifecycle, history and stash / group 2 | Submit with delayed acceptance/rejection, edit while pending and repeat Enter; no duplicate/lost draft. Recall history then restore unsent draft; stash/restore with overwrite/cancel/failure. Simulate external editor replacement conflict | E-04–E-05; native editor handoff deferred to slice 13 |
+| 3 | Draft lifecycle, history and stash / group 2 | Submit with delayed acceptance/rejection, edit while pending and repeat Enter; no duplicate/lost draft. Recall history then restore unsent draft; stash/restore with overwrite/cancel/failure. Simulate external editor replacement conflict | E-04–E-06; explicit foreground handoff implemented |
 | 4 | Completion and references / group 2 | Accept/dismiss command/context completion; no accidental submission. Change query/cursor during delayed results; stale results never insert. Add/edit/remove references and inspect payload summaries | E-06; completion contribution to D-03/A-03 |
 | 5 | Identified transcript and viewport / group 3 | Stream into multiple parts/tools while editing; scroll away, see unread, resume follow. Prepend history and resize while anchored; simulate eviction/stale update/error and inspect markers | C-01/C-03, I-03; long-content measurement contribution to C-06/G-05 |
 | 6 | Rich content, selection and search / group 3 | Inspect incomplete/final Markdown, code, links/tables and unknown parts; copy logical text and simulate clipboard failure. Search/jump/timeline, reveal scope, close and restore position | C-02/C-05, I-04; complete C-06/G-05 measurements for accepted content |
@@ -144,7 +200,7 @@ make -C packages/rust-tui run
    the highlight; Enter opens the chosen component.
 2. **Picker:** open Option picker; its default is Continue without this server.
    Press 2 to choose Use all project servers; the fixture reports `Selected all`.
-   Esc returns to catalog. Reopen: default/query reset. F2 cycles design states;
+   Esc returns to scenarios; Esc again returns to catalog. Reopen: default/query reset. F2 cycles design states;
    empty choices cannot confirm. Gate 2a below covers the expanded picker.
 3. **Chat submission:** open Full-screen chat. Type `hello`, Enter; your message
    appears and the simulated response streams. Type another draft while output
@@ -160,7 +216,7 @@ make -C packages/rust-tui run
 7. **Scrolling:** switch to long text; PageUp/PageDown scroll, End follows latest
    output. Current paging is five rows; stable reflow anchors are a later slice.
 8. **Presentation and exit:** Ctrl-T toggles dark/light. Resize narrow then wider;
-   view stays usable within current clipping limits. Esc returns to catalog,
+   view stays usable within current clipping limits. Esc returns to scenarios; Esc again returns to catalog,
    then Esc exits. Rerun and exit with Ctrl-C. Shell input, echo and cursor should
    work afterward.
 
@@ -215,10 +271,10 @@ make -C packages/rust-tui run
 Explicit profiles from the repository root:
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors ansi256"
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors truecolor"
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors truecolor --light"
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors none --ascii"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors ansi256"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors truecolor --light"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors none --ascii"
 ```
 
 The user confirmed cyan chrome and actual fixture line breaks on 2026-10-09,
@@ -237,7 +293,7 @@ Linux/Windows or modified-key encoding is inferred from pure tests.
 From the repository root, in iTerm2 for RGB:
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --scenario main --colors truecolor"
 ```
 
 1. **Default:** three choices occupy five rows, without side borders or a filter.
@@ -253,7 +309,7 @@ make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors trueco
 3. **Filter:** reach filter (four F2 presses from default). Ctrl-G then paste
    `example29`: one result has detail `updated 29 hours ago`; Enter reports
    `Selected branch-29`. Repeat with Ctrl-Z/Ctrl-Y undo/redo. Digits edit the query.
-   Esc clears it first while retaining picker height; Esc again returns to catalog.
+   Esc clears it first while retaining picker height; Esc again returns to scenarios, then Esc returns to catalog.
    No-match displays its own message and cannot select in single mode.
 4. **Multiple:** reach multi (seven F2 presses from default). One row is marked.
    Space toggles the highlighted mark; Alt-A toggles matching enabled rows. Type
@@ -275,7 +331,7 @@ make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors trueco
    ordinary shell input/echo/cursor work.
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors none --ascii"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --scenario main --colors none --ascii"
 ```
 
 Report **pass** or **fail**, with the step and observed behavior for failures.
@@ -320,7 +376,7 @@ iTerm2's [Colors documentation](https://iterm2.com/documentation-preferences-pro
 describes this override. Terminal preferences have not been modified.
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --scenario main --colors truecolor"
 ```
 
 The confirmed shell-only reproduction was:
@@ -348,7 +404,7 @@ edge padding/contrast behavior remains subject to this visual check.
 
 ### Gate 2b.1 — visual shell and composition
 
-The official [Dialog design](../design/dialog/dialog.html) is implemented for
+The [dialog panel contract](components/dialog.md#official-dialog-design) is implemented for
 centered panels, content-driven height, fill/inset fields, faded background, action
 footers, title trails and boxed ANSI 16/no-color fallback. Human acceptance is
 pending. Typing-aware arrival and timed removal notices belong to the separate
@@ -376,7 +432,7 @@ duplicate physical key reporting was not reproduced on a native iTerm2 surface.
 From the repository root, in iTerm2 for RGB:
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --scenario main --colors truecolor"
 ```
 
 1. **Panel:** the prompt centers over the screen, uses its content height and has
@@ -413,11 +469,11 @@ make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors trueco
    Ctrl-T changes RGB dark/light roles. Repeat with no-color/ASCII below.
    The previously demonstrated iTerm2 custom Bold color remains an accepted
    terminal-profile limitation; no settings change or app workaround is required.
-7. **Exit/reset:** close layers and Esc returns to catalog. Reopen resets fixtures.
+7. **Exit/reset:** close layers and Esc returns to scenarios; Esc again returns to catalog. Reopen resets fixtures.
    Ctrl-C exits even while nested; ordinary shell echo/input/cursor work.
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --colors none --ascii"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --scenario main --colors none --ascii"
 ```
 
 Report **pass** or **fail**, naming the step and observed behavior. Commit only
@@ -444,12 +500,13 @@ commands/bindings separately; that does not accept this timing gap.
 
 | Slice | Engineering | Human | Commit / next action |
 | --- | --- | --- | --- |
-| 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
+| 0 | Passed during foundation commit; recorded in verification | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
 | 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
 | 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: private `f3e7579`, public `17e53d5` |
 | 2b | 2b.1 engineering passed; 2b.2 unstarted | Fallback visual review pending | Explicit checkpoint: private `4c6260d`, public `05857ee`; timing and inline transition remain pending |
 | 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
-| 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
+| Composer | Complete local workflow and native host adapters implemented; current engineering checks recorded above | Native visual review remains separate | Review complete component; commit only when requested |
+| 4–13 | Other capabilities retain their documented gaps | Not presented | Complete components in dependency order |
 
 Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs

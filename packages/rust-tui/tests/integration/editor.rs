@@ -289,6 +289,21 @@ fn design_keys_move_by_visible_rows_and_delete_logical_line_ranges() {
     assert_eq!(editor.cursor(), 0);
 }
 
+#[test]
+fn word_layout_does_not_split_prepend_graphemes_at_whitespace() {
+    let mut editor = Editor::default();
+    editor.set_text("\u{11a84}\u{a0}");
+    press(&mut editor, KeyCode::Left);
+    press(&mut editor, KeyCode::Up);
+    assert_eq!(editor.cursor(), 0);
+    let mut terminal = Terminal::new(TestBackend::new(20, 5)).unwrap();
+    terminal
+        .draw(|frame| editor.render(frame, frame.area(), Theme::Dark, true))
+        .unwrap();
+    press(&mut editor, KeyCode::End);
+    assert_eq!(editor.cursor(), editor.text().len());
+}
+
 proptest! {
     #[test]
     fn arbitrary_unicode_and_navigation_keep_valid_grapheme_ranges(text in ".{0,80}", actions in prop::collection::vec(0_u8..9,0..120)) {

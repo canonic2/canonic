@@ -11,10 +11,10 @@ Canonic TUI · Component gallery
 │  Multiline editor                                            │
 │  Dialogs                                                     │
 │  Commands and bindings                                       │
-│                                                              │
+│  Composer                                                    │
 │                                                              │
 │                                                              │
 │Up/Down move · Enter select · Esc cancel                      │
 └──────────────────────────────────────────────────────────────┘
 
-Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · C

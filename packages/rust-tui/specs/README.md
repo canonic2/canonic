@@ -1,11 +1,13 @@
 # Rust TUI specifications
 
-These internal specs describe a reusable terminal library and independent gallery.
-Implementation is authorized in bounded slices with **human testing before each
-commit and next slice**, requested on **2026-10-09**. Foundation contracts remain
-requirements. Expanded behavior and module contracts are a target pending
-implementation and the roadmap's decisions; they are not shipped support or
-approved API signatures. Start delivery with [Human testing gates](human-testing.md).
+These public specifications describe the reusable terminal library and independent
+gallery. Each component is developed through its complete behavior, implementation
+layout, runnable scenarios and verification. Specification completeness, design
+resolution, functionality, engineering verification and human acceptance are
+independent checkpoints. Commits and
+consumer rollout require their own authorization.
+The [composer contract](components/composer.md) is the complete current implementation contract.
+Other topics identify implemented foundations and their remaining requirements.
 
 Start with [Product](product.md), then [Inventory](inventory.md). Each requirement
 has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](roadmap.md).
@@ -14,33 +16,48 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | --- | --- |
 | [Product and workflows](product.md) | Purpose, vocabulary, inline/full-screen journeys and consumer boundaries |
 | [Inventory and gaps](inventory.md) | Complete experience inventory and dated implementation evidence |
-| [Foundation architecture](architecture.md) | Existing ownership, runtime, fixtures, limits and acceptance |
-| [System design](system-design.md) | Proposed modules, public contracts, composition, dependencies and state ownership |
-| [Input and navigation](interaction.md) | Focus, routing, universal keyboard contract, terminal quirks, bindings, pointer behavior, scrolling, selection and copy |
-| [Composer and editing](composer.md) | Editor, draft lifecycle, history, stash, completion and references |
-| [Conversation and content](conversation.md) | Transcript, streaming, rich text, code, diffs, search and timeline |
-| [Activity and review](activity.md) | Tool/run states, permissions, questions and cancellation |
-| [Dialogs and browsing](dialogs.md) | Overlays, pickers, commands, sessions, trees, panels and notices |
-| [Terminal and presentation](terminal.md) | Lease, inline hosting, cleanup, compatibility, themes and accessibility |
-| [Presentation architecture](presentation.md) | Implemented semantic tokens, drawing primitives, editor view props and redesign decisions |
-| [Gallery and verification](gallery.md) | Isolated fixtures, composed screens and test evidence |
+| [Current architecture](architecture.md) | Implemented package/module map, composition and existing boundaries |
+| [System design](system-design.md) | Architectural rules, dependency direction, public-contract conventions and proposed capability owners |
+| [Components](components/README.md) | Editor, Option Picker, Dialog, Command Palette, Composer, Completion Menu and Chat |
+| [Features](features/README.md) | Gallery, scenario coverage, input/navigation, activity/review, browsing and terminal hosting |
+| [Chat and conversation content](components/chat.md) | Transcript composition and targets for streaming, rich text, code, diffs, search and timeline |
+| [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |
 | [Implementation plan](roadmap.md) | Dependency order, acceptance matrix, exit conditions and open decisions |
+| [Verification](verification.md) | Independent checkpoint definitions, dated engineering summary and evidence boundaries |
 | [Human testing gates](human-testing.md) | Smaller delivery slices, runnable acceptance steps, confirmation and commit workflow |
 | [Code quality](code-quality.md) | Existing Rust tooling and engineering gates |
 
-[Reader guides](../docs/README.md) describe implemented behavior. The baseline
-comes from source/test inspection, not a new test run. Tests present in source,
+[Reader guides](../docs/README.md) describe implemented behavior. Baseline
+inspections and dated executed results are qualified in [Verification](verification.md);
+reorganizing specs is not a new test run. Tests present in source,
 passing gates, native terminal acceptance and consumer rollout are distinct evidence.
 Optional dependency declarations establish neither integration nor application coverage.
 
-Slice 1 editor/focus implementation is ready for its separate
-[human testing gate](human-testing.md#gate-1--editor-and-focus). Automated results
-are recorded there. Slice 1 was explicitly committed and advancement authorized;
-slice 2a rich picker is accepted/committed. Dialogs (2b) await their
-[human gate](human-testing.md#gate-2b--dialogs). Slice 2c command palette/help and
-scoped bindings are implemented, awaiting their human gate; dialog timing stays
-pending. Subsequent slices remain unstarted.
+Editor/focus, rich picker, dialog foundations and commands have their recorded
+[human gates](human-testing.md). Composer implements submission, queue, history,
+stash, chips, completion, restart encoding and editor conflicts, including an
+explicit foreground editor adapter and terminal handoff. Its complete review
+steps are in [Composer acceptance](human-testing.md#gate-3a--submission-lifecycle).
+Dialog timing, rich conversation content and inline hosting remain separate work.
 
 Product execution, protocol translation, authentication, storage, policy and
 authority stay in consumers. No publication, distribution or product rollout is
 authorized by these specifications.
+
+## Specification ownership
+
+Root topics own package-wide scope, architectural rules, inventory, delivery and
+verification. `components/` owns reusable views; `features/` owns workflows that
+compose views or serve multiple components. Shared styling and terminal ownership
+stay explicit rather than becoming component-specific defaults.
+
+A component follows the [contract format](components/README.md#contract-format-and-ownership).
+A feature states its scope/status, workflow and participating components, host
+boundaries, failure/recovery behavior, acceptance and remaining decisions. Link
+owned requirements instead of copying them. Keep implementation design details
+in public specs; do not link private design files.
+
+The roadmap maps acceptance IDs to dependency order. Verification records executed
+evidence; human testing records reported acceptance. None of those topics changes
+the requirement owned by a component or feature. Current progress is summarized
+in [Component checkpoints](components/README.md#completeness-checkpoints).

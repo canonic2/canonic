@@ -61,6 +61,16 @@ impl Theme {
 }
 
 impl Presentation {
+    /// Solid draft rule, distinct from its brighter label.
+    #[must_use]
+    pub fn message_line(self) -> Style {
+        Self::foreground(self.tokens().line).add_modifier(Modifier::DIM)
+    }
+    /// `line-info` (#495F81 / indexed 60) for recalled content.
+    #[must_use]
+    pub fn info_line(self) -> Style {
+        Self::foreground(self.tokens().line_info).add_modifier(Modifier::DIM)
+    }
     /// Resolve the semantic palette for this profile.
     #[must_use]
     pub fn tokens(self) -> Colors {
@@ -125,6 +135,18 @@ impl Presentation {
                 ColorMode::TrueColor => Some(Color::Rgb(154, 156, 159)),
             },
             accent: roles[1],
+            line: match self.colors {
+                ColorMode::TrueColor => Some(Color::Rgb(46, 116, 121)),
+                ColorMode::Ansi256 => Some(Color::Indexed(30)),
+                ColorMode::Ansi16 => Some(Color::Cyan),
+                ColorMode::NoColor => None,
+            },
+            line_info: match self.colors {
+                ColorMode::TrueColor => Some(Color::Rgb(73, 95, 129)),
+                ColorMode::Ansi256 => Some(Color::Indexed(60)),
+                ColorMode::Ansi16 => Some(Color::Blue),
+                ColorMode::NoColor => None,
+            },
             success: roles[2],
             warning: roles[3],
             error: roles[4],

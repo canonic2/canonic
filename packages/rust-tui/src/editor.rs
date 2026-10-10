@@ -1,6 +1,8 @@
 //! Owns Unicode draft edits, transactions and viewport state; hosts own time and focus.
 
+mod atoms;
 mod history;
+pub use atoms::{Document, InlineAtom};
 mod input;
 mod layout;
 mod view;
@@ -35,17 +37,20 @@ pub enum Outcome {
 #[derive(Clone, Default)]
 struct Draft {
     text: String,
+    atoms: std::collections::BTreeMap<char, InlineAtom>,
     cursor: usize,
     anchor: Option<usize>,
     upstream: bool,
 }
 
+#[derive(Clone)]
 struct Notice {
     text: String,
     remaining: Duration,
 }
 
 /// An instance-local multiline editor with a bounded, grouped undo history.
+#[derive(Clone)]
 pub struct Editor {
     draft: Draft,
     history: History,
@@ -96,10 +101,22 @@ impl Editor {
     pub fn cursor(&self) -> usize {
         self.draft.cursor
     }
+    pub(crate) fn restore_cursor(&mut self, cursor: usize) -> bool {
+        if cursor > self.text().len() || self.boundary_after(cursor) != cursor {
+            return false;
+        }
+        self.move_to(cursor, false);
+        self.goal = None;
+        true
+    }
+    pub(crate) fn on_first_visual_row(&self) -> bool {
+        let rows = layout::rows(self.text(), self.width, self.symbols, &self.draft.atoms);
+        layout::position(&rows, self.cursor(), self.width, self.draft.upstream).0 == 0
+    }
     /// Number of visual rows using the same grapheme/control layout as rendering.
     #[must_use]
     pub fn visual_rows(&self, width: u16, symbols: Symbols) -> usize {
-        layout::rows(self.text(), width.max(1), symbols).len()
+        layout::rows(self.text(), width.max(1), symbols, &self.draft.atoms).len()
     }
     /// First visible visual row after the last render, for host scroll hints.
     #[must_use]
@@ -131,6 +148,7 @@ impl Editor {
         let end = Self::fitting_end(&normalized, self.limit);
         self.draft = Draft {
             text: normalized[..end].into(),
+            atoms: std::collections::BTreeMap::new(),
             cursor: end,
             anchor: None,
             upstream: false,
@@ -162,6 +180,9 @@ impl Editor {
             remaining: NOTICE_TIME,
         });
     }
+    pub(crate) fn notify(&mut self, text: &str) {
+        self.message(text.into());
+    }
     /// Advance the injected clock. Does not acquire timers or terminal resources.
     pub fn tick(&mut self, elapsed: Duration) {
         self.now = self.now.saturating_add(elapsed);
@@ -180,9 +201,29 @@ impl Editor {
         self.replace(text, EditKind::Paste)
     }
     fn replace(&mut self, text: &str, kind: EditKind) -> Outcome {
-        let text = layout::normalize(text);
+        let text: String = layout::normalize(text)
+            .chars()
+            .map(|c| {
+                if self.draft.atoms.contains_key(&c) {
+                    '\u{fffd}'
+                } else {
+                    c
+                }
+            })
+            .collect();
         let range = self.selection().unwrap_or(self.cursor()..self.cursor());
-        let budget = self.limit.saturating_sub(self.text().len() - range.len());
+        let removed = self.text()[range.clone()]
+            .chars()
+            .map(|c| {
+                self.draft
+                    .atoms
+                    .get(&c)
+                    .map_or(c.len_utf8(), |a| a.content.len())
+            })
+            .sum::<usize>();
+        let budget = self
+            .limit
+            .saturating_sub(self.draft.expanded_size() - removed);
         let end = Self::fitting_end(&text, budget);
         let dropped = text.len() - end;
         if end == 0 && !text.is_empty() {
@@ -202,6 +243,7 @@ impl Editor {
         self.history
             .record(snapshot, kind, self.now, !range.is_empty());
         self.draft.text.replace_range(range.clone(), &text[..end]);
+        self.draft.atoms.retain(|c, _| self.draft.text.contains(*c));
         self.draft.cursor = self.boundary_after(range.start + end);
         self.draft.upstream = false;
         self.draft.anchor = None;
@@ -294,12 +336,12 @@ impl Editor {
         }
     }
     fn visual_edge(&self, end: bool) -> usize {
-        let rows = layout::rows(self.text(), self.width, self.symbols);
+        let rows = layout::rows(self.text(), self.width, self.symbols, &self.draft.atoms);
         let (row, _) = layout::position(&rows, self.cursor(), self.width, self.draft.upstream);
         if end { rows[row].end } else { rows[row].start }
     }
     fn vertical(&mut self, down: bool, extend: bool, amount: usize) {
-        let rows = layout::rows(self.text(), self.width, self.symbols);
+        let rows = layout::rows(self.text(), self.width, self.symbols, &self.draft.atoms);
         let (row, column) = layout::position(&rows, self.cursor(), self.width, self.draft.upstream);
         let goal = *self.goal.get_or_insert(column);
         let target = if down {
@@ -319,6 +361,7 @@ impl Editor {
         self.history
             .record(snapshot, kind, self.now, self.selection().is_some());
         self.draft.text.replace_range(range.clone(), "");
+        self.draft.atoms.retain(|c, _| self.draft.text.contains(*c));
         self.draft.cursor = self.boundary_after(range.start);
         self.draft.upstream = false;
         self.draft.anchor = None;

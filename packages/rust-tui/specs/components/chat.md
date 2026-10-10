@@ -1,9 +1,22 @@
-# Conversation, content and inspection
+# Chat
 
-Status: proposed target. Plain bounded role/text rendering and last-message
-append are implemented; structured content and stable navigation are gaps.
+## Purpose
 
-## Transcript behavior
+Compose the conversation transcript and Composer while exposing scrolling,
+following and submitted-turn delivery state to a host.
+
+## Current status
+
+Status: the bounded plain-text conversation host is implemented. Rich content,
+identified part updates and stable transcript navigation below are proposed
+targets with remaining implementation gaps.
+
+## Behavior and state transitions
+
+The following rich-conversation requirements are proposed extensions of the
+implemented plain projection.
+
+### Transcript behavior
 
 Display user, assistant and host/system entries, each with stable message ID,
 revision, role label, optional timestamp/turn/run metadata and ordered part IDs.
@@ -30,7 +43,7 @@ Expansion/detail visibility is local presentation state by part ID, independent
 of whether a backend supplies those details. Timestamps, role names, reasoning
 and tool detail visibility are explicit view options, not persisted globals.
 
-## Rich content contract
+### Rich content contract
 
 Plain text remains the universal fallback. Markdown supports paragraphs, headings,
 emphasis, lists, quotations, rules, links, inline code, fenced code and bounded
@@ -53,12 +66,12 @@ patches, malformed input and long paths have explicit states. File/hunk navigati
 returns stable IDs. Applying/reverting/generating patches and choosing Git bases
 are host operations. No Git subprocess exists inside `content`.
 
-Tool bodies use the same code/diff/text contracts through [Activity](activity.md).
+Tool bodies use the same code/diff/text contracts through [Activity](../features/activity.md).
 Attachments show label/type/availability and optional open intent. Links use
 sanitized visible labels and explicit host opening; untrusted OSC hyperlinks are
 not replayed. Concealment and decoration remain reversible presentation options.
 
-## Bounded projection and performance
+### Bounded projection and performance
 
 Host retains authoritative history. Initial compatibility defaults remain 100
 messages/64 KiB each; target projection also bounds total bytes, part count,
@@ -70,9 +83,9 @@ retains viewport; paging failure provides retry without losing loaded rows.
 Requesting full export is host-owned and distinct from copying the loaded view.
 Caches invalidate affected part on update and widths on resize. Do not rewrap
 every retained message per animation frame. Proposed benchmarks and measurement
-conditions are in [Gallery](gallery.md); no speed claim is accepted yet.
+conditions are in [Gallery](../features/gallery.md); no speed claim is accepted yet.
 
-## Search and timeline
+### Search and timeline
 
 Loaded-transcript search matches sanitized semantic text, not borders. Default
 proposal: case-insensitive literal search with deterministic match ordering;
@@ -87,6 +100,30 @@ states and explicit scope; absence must not imply all history was searched.
 Timeline is a browser of supplied message/turn summaries, including latest-user,
 previous/next and direct jumps. Fork/undo/retry from a message are host intents
 with host capability/confirmation, not modifications to library history.
+
+## Implementation design
+
+### Implemented composition
+
+[Chat](../../src/chat.rs) owns a bounded transcript and composes
+[Composer](composer.md). The host supplies roles, timestamps, status
+and output, executes returned actions and acknowledges submission tickets.
+The default projection retains the newest 100 messages and at most 64 KiB per
+message; the Composer draft defaults to 64 KiB.
+
+`push`/`push_turn` add sanitized text; `append` updates the last message.
+`push_submission` projects an immutable user turn and `acknowledge_submission`
+updates its delivery suffix. Shell output updates by ticket and folds after
+20 lines. Alt-PageUp/PageDown scroll the transcript; Alt-End resumes following.
+`render_with` uses the framed host; `render_docked_with` composes an unframed
+conversation with the fixed Composer dock. Terminal ownership remains in the host.
+
+## Host boundary
+
+Hosts retain authoritative history, supply roles/timestamps/status/output,
+execute intents and acknowledge submission tickets. They own transport ordering,
+repository/session identity, execution and terminal acquisition. Composer owns
+draft lifecycle; Chat owns its bounded transcript projection and local scroll.
 
 ## Acceptance criteria
 
@@ -103,7 +140,11 @@ with host capability/confirmation, not modifications to library history.
 - **C-06:** Long-history measurements meet approved budgets with bounded projection
   and visible truncation; copy-loaded and host full-export are distinguished.
 
-## Open decisions
+## Remaining gaps
+
+Structured parts and identified concurrent updates, rich rendering, stable
+anchors, paging, search, timeline, selection and performance budgets remain
+target work. The existing plain Chat fixtures do not accept these requirements.
 
 Select Markdown/syntax dependencies under existing license/audit rules after a
 bounded prototype. Set table behavior, split-width threshold, projection budgets

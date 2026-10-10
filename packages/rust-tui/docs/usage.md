@@ -3,7 +3,7 @@
 ## Commands and keyboard help
 
 Open **Commands and bindings** in the catalog, or use
-`make -C packages/rust-tui run CARGO_FLAGS="-- --component commands"` from the
+`make -C packages/rust-tui run CARGO_FLAGS="-- --component commands --scenario main"` from the
 repository root. Ctrl-P opens the docked palette directly above the activity row
 and message box. F1 opens the full-screen keys view. Closing either preserves the
 message draft. F3 switches between the two projections.
@@ -43,10 +43,44 @@ and completion are a separate roadmap slice.
 ## Gallery
 
 Open the gallery with `make -C packages/rust-tui run`. It starts at the component
-selector. Arrow keys select a component; Enter opens it; Esc returns to the
-selector and Esc again exits. Ctrl-C exits from every view. Ctrl-T changes RGB
+picker. Select a component with Enter, then select a scenario with Enter.
+Esc returns from the scenario to its scenario picker, then to the component
+picker; Esc at the component picker exits. Component-specific dismissal (such
+as closing a dialog or clearing a selection) takes precedence. Ctrl-C exits
+from every view. Ctrl-T changes RGB
 dark/light tokens; F4 cycles ANSI 16, ANSI 256, RGB and no-color profiles.
 Body text uses the terminal's foreground/background in every profile.
+
+The scenario picker is searchable, with `main` first. Enter opens a fresh fixture.
+Both picker levels retain their search text, selection and scroll position when
+you return. Each component has its own remembered scenario picker. Resizing
+adjusts the viewport as needed to keep the selected item visible. This state
+lasts for the current gallery run.
+F10 opens the active component's scenario picker; pressing F10 again returns to
+the current scenario with its draft and cursor intact. `--component <name>` opens
+that component's scenario picker, and adding `--scenario <name>` opens a fixture
+directly. Simulation pauses while the picker is open. F2 cycles the working
+fixtures. Each component also offers `narrow-40`, `ansi16`, `no-color` and `ascii`
+profiles of its main view; F4 changes colors and Ctrl-T changes the theme.
+The narrow profile caps the component area at 40 columns inside the gallery.
+
+Entries marked `design pending` open a description of the intended behavior and
+its source board. They do not simulate a feature that is still awaiting
+implementation. Some working fixtures describe a remaining design gap beneath
+the component. The [design map](../specs/features/gallery-designs.md) records coverage.
+
+From the package directory, list or open named scenarios without cycling:
+
+```sh
+cargo run --locked --features gallery -- --list
+cargo run --locked --features gallery -- --component composer --scenario sending
+cargo run --locked --features gallery -- --component editor --scenario selection
+cargo run --locked --features gallery -- --component composer --scenario history
+```
+
+Unknown scenario names fail before entering terminal mode. `--scenario` requires
+`--component`. The design names `default`, `focused`, `prompt`, `palette` and
+`nest` are accepted aliases for their corresponding main or nested fixtures.
 
 The rich picker returns stable choice IDs. The default three-row fixture has no
 filter: arrows/Home/End/Page keys navigate and 1–3 immediately choose a row.
@@ -90,25 +124,94 @@ The host activity row uses warning color for `! needs you` and muted shortcut hi
 `ChoicePicker::height(width, view)` lets hosts place the compact view accurately.
 
 The chat fixture has a conversation, status, composer and keyboard hints. Type or
-paste; Enter submits to the simulator. Alt-Enter inserts a newline where the
-terminal supports that combination; Ctrl-J is the traditional-key fallback.
+paste; Enter submits a snapshot to the simulator, which acknowledges immediately.
+Shift-Enter and Alt-Enter insert a newline where the
+terminal reports the modifier; Ctrl-J is the traditional-key fallback.
 Pasted newlines also work. Backspace/Delete remove whole graphemes; arrows edit
 the draft. Alt-PageUp/Alt-PageDown scroll the transcript and Alt-End follows it.
-Plain PageUp/PageDown and End belong to the editor. Ctrl-X
-interrupts simulation. F2 cycles fixture states and resets the chat. No agent runs.
+Plain PageUp/PageDown and End belong to the editor. F2 cycles fixture states and resets the chat. No agent runs.
 
 For headless inventory use `cargo run --locked --features gallery -- --list`
 from the package. The interactive gallery refuses piped input/output before
 changing terminal modes.
 
+## Composer workflows
+
+Open **Composer**, or run from the repository root:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component composer --scenario main"
+```
+
+Enter fixes the sent turn and clears the box immediately. Its dim `sending`
+suffix disappears on acceptance. Fresh edits survive acknowledgements; refusal
+returns an untouched draft or stashes the refused copy beside newer text.
+One draft belongs to the session. The dock stays five rows high while lists and
+queue previews grow upward.
+
+Up edits visual lines first, then reaches the first line's start. The next Up
+recalls queued messages, then history. Dashed rules identify recalled content.
+Esc or Down past newest restores your exact draft and cursor. Editing a history
+copy stashes the set-aside draft. Ctrl-R searches history without sending.
+
+Enter while busy queues a message. A successful turn end sends one eligible
+entry. Enter in a queued edit saves its slot; Esc keeps the original; Ctrl-D
+removes the edited copy into the stash. Errors and stopping pause delivery;
+Ctrl-X Enter resumes it. Restart restores queues paused.
+
+Ctrl-X s stashes a draft; Ctrl-X u restores or swaps with the newest stash.
+Type `/stash` and Enter to open the list: Enter restores, d drops, u undoes until
+closing. The stash holds 50 entries and reports eviction of the oldest.
+Ctrl-X e requests an external editor. F11 simulates its return in this gallery;
+a changed box opens a two-version conflict dialog and stashes the unused version.
+F1 opens key help; Ctrl-V requests a host clipboard image.
+
+Long/multiline paste becomes an atomic chip with its full payload preserved.
+Pasted prefixes never execute. Typed ! in an empty box enters shell mode;
+typed / opens commands and @ at a word boundary opens files. Enter selects a
+command ID; Tab completes its text. File selection inserts plain `@path ` text.
+The host supplies candidates and performs execution, clipboard and file work.
+
+Escape follows the local cancellation ladder: close overlay, restore recall,
+cancel editor waiting, stop work and pause queue, or arm draft clearing/rewind.
+Repeat within 1.5 seconds to confirm. Ctrl-C clears idle text; on an empty idle
+box, Ctrl-C or Ctrl-D twice saves and requests quit. **F10** opens scenarios;
+F10 again returns with the current fixture intact. Picker search, selection and
+scroll position survive back navigation. F2 cycles all 57 distinct fixture
+states; aliases also appear in `--list`. F4 changes colors; Ctrl-T changes theme.
+
+Gallery host controls: F5 accepts a submission or successfully ends a turn;
+F6 refuses or fails it; F7 replaces the draft lifetime; F8 tests a stale response;
+F9 changes availability; F11 returns editor text; F12 restores a saved snapshot;
+F3 expands/collapses fixture shell output. Gallery storage and execution are
+simulated. The public [composer contract](../specs/components/composer.md) records the
+layout, state transitions, limits and host adapters.
+
+`Composer::update` returns an optional immutable `Submission`. Hosts project it
+with `Chat::push_submission`, then call `acknowledge_submission` with its exact
+ticket. Call `turn_ended` once per completed turn and project any returned queued
+submission. Host acceptance and turn completion are distinct callbacks.
+Drain `take_intents` for Save, Editor, Stop, Command, ClipboardImage and other
+host work. Advance `tick` with elapsed time for 500 ms autosave and confirmations.
+Save acknowledgements and editor/completion results require their current ticket;
+late results leave content unchanged.
+
+`SavedComposer::write_to/read_from` encode complete state on caller-owned streams;
+`restore_saved` validates before applying and never sends automatically. Hosts
+choose storage keys and finish the current Save before honoring Quit.
+`editor_command` resolves supplied VISUAL/EDITOR values; `run_editor` is an
+explicit foreground adapter using a private temporary file. Wrap foreground work
+in `TerminalSession::handoff` and handle operation and reacquisition errors.
+GUI scheduling, process cancellation and real agent integration remain host duties.
+
 ## Multiline editing and focus
 
 Open **Multiline editor** in the catalog, or run
-`cargo run --locked --features gallery -- --component editor` from the package.
+`cargo run --locked --features gallery -- --component editor --scenario main` from the package.
 Top and bottom editors have independent drafts; Tab/Shift-Tab switches focus.
 F3 opens a temporary editor modal. Only it receives typing/paste;
 Esc clears selection first, then closes it and restores the prior editor.
-Esc clears selection before returning to catalog too. Ctrl-C exits the gallery.
+Esc clears selection before returning to the scenario picker too. Ctrl-C exits the gallery.
 
 | Input | Behavior |
 | --- | --- |
@@ -164,7 +267,7 @@ no timer. Empty footer props use line/column and selection metadata.
 Open **Dialogs** from the catalog, or run from the repository root:
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component dialog --scenario main"
 ```
 
 F2 cycles prompt → nested → long → locked → outside → removed-return → error →
@@ -234,9 +337,9 @@ use `--colors ansi256` for the indexed palette when RGB is unavailable.
 An explicit `truecolor` option requests RGB output without verifying support.
 
 ```sh
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors truecolor"
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors truecolor --light"
-make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors none --ascii"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors truecolor --light"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --scenario main --colors none --ascii"
 ```
 
 Tokens cover body/dim/accent/success/warning/error/info, surface and selection;
@@ -263,7 +366,9 @@ assert_eq!(result, Action::Selected(1));
 
 The host dispatches events and renders components in its Ratatui frame. Components
 return actions; the host decides how to execute or reject them. `Chat::push`,
-`append`, `set_status` and `set_input` update display state. A rejected submission
-can be restored with `set_input`. `TerminalSession` is an optional host helper
+`append`, `set_status` and `set_input` update display state. `chat::Action::Submit`
+carries a `Submission`; acknowledge its ticket through `chat.composer_mut()`.
+Submission clears the box immediately; acknowledgement preserves fresh edits.
+`TerminalSession` is an optional host helper
 for one full-screen event loop; inline integrations can own their own runtime.
 Never acquire another terminal session for a nested picker.

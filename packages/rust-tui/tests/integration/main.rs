@@ -4,6 +4,11 @@ mod commands;
 #[cfg(feature = "gallery")]
 mod commands_terminal;
 mod components;
+mod composer;
+mod composer_host;
+#[cfg(feature = "gallery")]
+mod composer_terminal;
+mod composer_workflows;
 mod dialog;
 mod dialog_design;
 #[cfg(feature = "gallery")]

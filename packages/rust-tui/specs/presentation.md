@@ -3,10 +3,14 @@
 Status: design-system/editor redesign requested on **2026-10-09**. Implemented
 and awaiting the renewed human gate. Broader session/activity/diff mockups remain
 in their owning delivery slices. Slice 2a applies the supplied option-picker
-design, awaiting its own human gate. The supplied design references stay in the
-private repository; the implementation contains no copied session/project data.
+design, awaiting its own human gate. The implementation contains no copied
+session/project data.
 
 ## Ownership and composition
+
+This topic owns semantic tokens, drawing primitives and shared presentation
+fallbacks. Component specs own exact geometry and interactions; Architecture owns
+the current module map and System design owns dependency/public-contract rules.
 
 Use frontend-style ownership with terminal-native units. Semantic tokens own
 colors, symbols and cell dimensions. Primitives own reusable drawing contracts.
@@ -23,36 +27,18 @@ side borders. No runtime registry, browser CSS engine or shared product package
 is introduced. Extend these tokens/primitives as later accepted components need
 them, instead of implementing speculative screens.
 
-The editor separates [state](../src/editor.rs), [transactions](../src/editor/history.rs),
-[input](../src/editor/input.rs), [source-to-row layout](../src/editor/layout.rs)
-and [presentation](../src/editor/view.rs). `EditorView` supplies title,
-placeholder, footer and `Presentation`. Props never change the draft. `render`
-remains a convenience wrapper; `render_with` accepts explicit props. Chat and
-picker have equivalent profile-aware render entry points. A full-width editor
-contains title rule, text rows and footer rule. Hosts can supply a three-row
-single-text-row area, a fixed/fill area, or vary the area to implement growing
-height; no host-height policy lives inside the editor.
+Composer rules use separate semantic `line` and `line_info` colors. `line_info`
+is RGB #495F81, indexed 60 or ANSI blue; no-color uses faint attributes. Recall
+uses the Unicode dashed `┄` or ASCII `.` glyph, while drafts use solid `─` or `-`.
+The rule occupies the same row and width in every box mode.
 
-`EditorView.chrome=false` renders only text, used for a one-row picker query.
-`ChoicePicker` separates matching/state/input from compact rendering. `PickerView`
-supplies heading/source/context, maximum height and presentation. The view uses
-semantic styles, rules and cell tokens, reserves key/current/mark columns,
-aligns details, drops details first and truncates labels by grapheme. Opening
-height stays stable while filtering; groups count toward paging. The gallery
-owns placement and the independent draft, without another terminal loop.
-
-Picker visual follow-up on 2026-10-09: labels explicitly reset foreground and
-remove inherited dim styling; active enabled labels stay bold. The first blank
-cell and final cell have default backgrounds outside the band. Number keys
-occupy the middle cell of a three-cell block on every row, followed by one plain
-band cell before the label. Detail separation uses its own
-two-cell token, preserved before dropping the column. Gallery default placement
-docks the measured opening height above a persistent host activity row and
-message editor. Muted
-unselected keys and bold focused headings are retained; contiguous shortcut sets
-with two or more keys use a range, while disabled holes remain explicit. The
-host activity prefix uses the warning token, with muted hints. These visual
-changes reopen the picker gate independently of pending dialog acceptance.
+Component views use explicit props and profile-aware rendering. Their contracts
+own geometry, height policy, focus and state behavior:
+[Editor](components/editor.md#implementation-design),
+[Option Picker](components/option-picker.md#implementation-design),
+[Dialog](components/dialog.md#implementation-design),
+[Command Palette](components/command-palette.md#implementation-design) and
+[Composer](components/composer.md#implementation-design).
 
 Accepted terminal limitation (2026-10-09): the user's iTerm2 profile renders
 default-color bold text darker than ordinary text. A shell-only comparison
@@ -61,14 +47,10 @@ components retain default foreground and bold, with no terminal-setting change
 or application workaround. Emitted label/title styles are covered by native PTY
 tests in all four color modes.
 
-`dialog::Stack` adds caller-owned body composition. Its view measures content,
-places centered panels, fades visible background cells and
-reuses title/footer rules. Indexed/RGB modes fill the surface; ANSI 16/no-color
-use full boxes. Active headings use focus styles; only the top body renders and
-gets a focus target, with a parent title trail. Body rendering is delegated, so
-editor/picker styling stays in those components. Prompt fields use inset terminal
-backgrounds and grow to six rows. Tiny regions omit rules to preserve body space.
-Gallery inspection text is a local fixture, not a general renderer.
+Dialog bodies reuse shared rules, surfaces and focus styles. Their centered
+geometry, title trail, background fade and prompt growth are owned by the
+[Dialog contract](components/dialog.md#official-dialog-design). A body retains
+its own component presentation instead of inheriting separate dialog editing rules.
 
 ## Tokens and fallback behavior
 
@@ -102,35 +84,11 @@ probing is deferred; RGB polarity is explicit through
 `--light` or Ctrl-T. Diff tint roles, runtime profile negotiation, pointer copy,
 address routing and growing prompt composition remain later capabilities.
 
-## Editor decisions
+## Component contracts
 
-The editor contract follows the supplied redesign: word wrapping, visual-row
-Home/End and Ctrl-A/Ctrl-E, Ctrl-Shift-A select-all, previous-word Ctrl-W, logical
-line Ctrl-U/Ctrl-K, and viewport PageUp/PageDown. Ctrl-G is a select-all fallback
-because traditional terminals cannot distinguish Ctrl-Shift-A from Ctrl-A.
-Chat transcript navigation uses Alt-PageUp/PageDown and Alt-End; host wiring
-preserves editor bindings. No keyboard enhancement protocol is automatically
-enabled; modified-key availability is checked through the human gate.
-
-Input exceeding the byte budget retains its whole-grapheme prefix and reports
-dropped bytes. No-fit insertion preserves draft/selection. Paste is one undo
-transaction even when cut. Undo keeps 64 snapshots, including viewport offset;
-typing/deletion coalesces until an injected one-second pause, movement, selection
-replacement or paste. Whitespace ends typing groups. Host clock advancement
-expires edit notices/paste tint after three seconds; the next key also clears
-them. Limit state persists until an edit makes room; counter appears at 90%.
-
-CRLF/CR normalizes to LF; tabs remain stored and expand at four-cell stops.
-Other control characters remain stored and render as dim printable pictures or
-hex labels. Rendering never emits their raw escape/control bytes. Submission
-returns the original draft to the host, which owns execution and validation.
-This differs from transcript sanitation, whose fragmented-stream contract is
-still pending. Selection metadata counts graphemes and logical LF lines.
-
-The view shows scroll counts on the rules and keeps a row of caret context where
-height permits. Focus changes preserve state; inactive editors request no cursor
-and omit their ordinary footer. Very short areas prioritize rules and hide text
-and cursor if no text row remains.
+The [Editor contract](components/editor.md) owns editing behavior and its view
+requirements. Other component contracts are indexed under
+[Components](components/README.md).
 
 ## Verification
 

@@ -1,9 +1,29 @@
-# Independent gallery and verification
+# Independent gallery
+
+Status: the component/scenario browser and current compositions are implemented.
+Expanded fixture, inspection and performance requirements below remain targets;
+the coverage map identifies which states are runnable.
+
+## Implemented scenario browser
+
+The component picker opens a searchable scenario picker before the component's
+scenario. Esc walks back through picker levels; Composer uses F10 to leave its
+scenario because Esc performs local cancellation, recall and clearing. F10 toggles
+between the current scenario and its picker. The six components have direct CLI
+`--scenario` access and headless listings from one gallery-owned registry.
+Selecting a fixture resets its owning component. Returning with F10 retains
+the current draft and focus; simulated updates pause while browsing.
+Each picker retains its search, selection and viewport. Scenario pickers have
+independent state per component, and returning with Esc restores the prior view
+at the same size. Resize adapts the viewport to keep the selection visible.
+Pending states display their intended contract. The
+[scenario coverage map](gallery-designs.md) records component contracts, executable fixtures,
+partial coverage and presentation profiles.
 
 ## Implemented command composition
 
-Slice 2c follows the commands-and-bindings boards with one product placement
-override: Ctrl-P stays docked above the activity row/message editor, while F1
+Slice 2c uses the [command contract](../components/command-palette.md#commands-completion-and-help):
+Ctrl-P stays docked above the activity row/message editor, while F1
 fills the stage with keys. Twelve deterministic fixtures cover ranked search,
 key search, unavailable/no-match rows, scoped help, custom/conflicting remaps,
 pending sequences, delayed hints, mismatch feedback and an empty map. F3 switches
@@ -13,8 +33,8 @@ survives both views; the full-screen keys projection hides the dock.
 Sequence hints wait 400 ms and timeout after 3 seconds using the host clock.
 The fixture returns invocation/source-inspection intents without executing
 commands or opening files. Behavioral and PTY tests verify isolation, layout,
-remaps and restoration. [Gate 2c](human-testing.md#gate-2c--commands-and-bindings)
-owns human acceptance. Slash-list insertion remains slice 4.
+remaps and restoration. [Gate 2c](../human-testing.md#gate-2c--commands-and-bindings)
+owns human acceptance. Composer also integrates typed slash/file completion.
 
 ## Implemented dialog composition
 
@@ -24,7 +44,7 @@ multiline prompt and rename scenarios. Two background drafts and the dock compos
 survive modal edits. Dialogs use measured centered panels. Function-key controls demonstrate push/replace/clear,
 late ticket rejection and simulated outside routing. Bodies use public editor/
 picker APIs and fixture-owned inspection scrolling. Dialogs use one existing
-terminal owner; native mouse capture is not enabled. [Gate 2b](human-testing.md#gate-2b--dialogs)
+terminal owner; native mouse capture is not enabled. [Gate 2b](../human-testing.md#gate-2b--dialogs)
 owns human acceptance. Tests cover pure state, rendered geometry/snapshot and
 an owned native macOS PTY scenario. Arrival deferral and timed removal notices
 remain the separate 2b.2 gate.
@@ -38,29 +58,31 @@ dock/full-screen placement. Tab switches to an independent draft. The component
 returns intents; the gallery collapses confirmed output. The host reserves one
 activity row between picker and draft in every state, including `ready` after
 confirmation, so the composer keeps its position. No product operation
-or new terminal session runs. [Gate 2a](human-testing.md#gate-2a--rich-option-picker)
+or new terminal session runs. [Gate 2a](../human-testing.md#gate-2a--rich-option-picker)
 owns human acceptance. The broader expansion below remains proposed.
 
-Status: proposed expansion of the existing feature-gated gallery. Current fixtures
-and assertions are recorded in [Inventory](inventory.md). This specification
-defines future acceptance, not evidence that those tests already exist.
+Current fixtures and assertions are recorded in [Inventory](../inventory.md).
+The expansion below defines requirements; it does not establish that all future
+tests or controls exist.
 
 ## Development workflow
 
 `make -C packages/rust-tui run` remains the local entry point. Catalog contains
 every implemented reusable component and composed screen. Each entry identifies
 its public contract, named scenarios and supported interaction modes. Direct
-component/scenario entry and headless scenario listing are proposed additions
-to the existing `--component` and `--list` interfaces; update reader docs when
-implemented rather than advertising nonexistent options.
+component/scenario entry and headless scenario listing use `--component`,
+`--scenario` and `--list` from the same registry.
 
 Open a scenario with a deterministic initial projection, explicit clock, script
 of updates and simulated host acknowledgements. Reset returns exactly that state.
 Pause/step/advance permits reproduction of races; live playback never prevents
 typing. Inspect sanitized intents and their identity/revision in a fixture panel.
-The panel is gallery instrumentation, not mandatory product UI. Switching scenario
-or returning to catalog discards owned schedules, pending responses and local
-state. Reopening cannot replay a stale completion.
+The panel is gallery instrumentation, not mandatory product UI. Selecting a new
+scenario resets that fixture and invalidates its owned pending responses.
+Navigating back to its scenario picker retains the active fixture and pauses
+simulated updates. Returning with F10 resumes that fixture; it does not replay a
+completion from a replaced fixture. Picker navigation retains search/selection/
+viewport independently of fixture reset.
 
 Fixtures call the same public APIs as consumers. No parallel gallery-only widget
 implementation, real agent process, account, user settings, policy grant, product
@@ -108,6 +130,10 @@ Optional panels compose without importing the gallery or starting an event loop.
 
 ## Test boundaries
 
+This feature owns fixture/test requirements. Executed results and checkpoint
+interpretation belong to [Verification](../verification.md); human acceptance
+belongs to [Human testing](../human-testing.md).
+
 | Test layer | Meaningful evidence |
 | --- | --- |
 | State/action behavioral | Actual navigation/edit/submit/review traces, acknowledgement races, validation/errors, identity and focus isolation |
@@ -130,7 +156,7 @@ SIGKILL restoration is not an acceptance requirement. Windows native harness is
 a separate design/availability decision, not a Unix test enabled under emulation.
 
 Keep one integration binary under `tests/integration/`, adding area modules only
-when implemented. Unit tests cover pure internal boundaries. [Code quality](code-quality.md)
+when implemented. Unit tests cover pure internal boundaries. [Code quality](../code-quality.md)
 owns fmt/Clippy/nextest/doctest/docs/deny/build/coverage commands. PTY/signal tests
 require host access in an agent sandbox and process-heavy suites run separately.
 No additional framework or documentation-text tests are required by these specs.

@@ -21,6 +21,13 @@ terminal lifetime. gallery.rs owns fixture composition and the application loop;
 main.rs stays thin. All components accept caller-owned events and frames. Add a
 component to the gallery's selector and fixtures when it is implemented.
 
+`composer.rs` and its modules own submission, queue, history/stash, payloads,
+completion, autosave snapshots and editor conflicts. `editor/atoms.rs` carries
+lossless chips through transactions; `composer/codec.rs` encodes caller-owned
+streams. The foreground editor adapter is invoked explicitly by a host and
+wrapped in `TerminalSession::handoff`. `gallery/composer.rs` simulates those host
+ports with 59 named scenarios. See the [implementation contract](../specs/components/composer.md).
+
 `theme/tokens.rs` defines semantic color/symbol/cell contracts; `theme.rs`
 resolves profiles and reusable styles. `ui.rs` owns the labeled rule primitive.
 Views consume those tokens/primitives; palette literals stay out of components.

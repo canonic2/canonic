@@ -27,6 +27,14 @@ pub enum Symbols {
 }
 
 impl Symbols {
+    /// Recall rules remain distinct from draft rules even without color.
+    #[must_use]
+    pub const fn recall_rule(self) -> char {
+        match self {
+            Self::Unicode => '┄',
+            Self::Ascii => '.',
+        }
+    }
     /// One-cell rule character.
     #[must_use]
     pub const fn rule(self) -> char {
@@ -76,6 +84,10 @@ pub struct Colors {
     pub faded: Option<Color>,
     /// Focus and current identity.
     pub accent: Option<Color>,
+    /// Solid message rule, quieter than its heading.
+    pub line: Option<Color>,
+    /// Recalled content rule (`line-info`), distinct from bright reference text.
+    pub line_info: Option<Color>,
     /// Successful results.
     pub success: Option<Color>,
     /// Limits and attention.

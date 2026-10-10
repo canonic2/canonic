@@ -8,7 +8,7 @@ import fcntl,os,pty,re,select,struct,subprocess,sys,termios,time
 master,slave=pty.openpty()
 before=termios.tcgetattr(slave)
 fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',28,100,0,0))
-child=subprocess.Popen([sys.argv[1],'--component','commands','--colors','none'],stdin=slave,stdout=slave,stderr=slave,start_new_session=True)
+child=subprocess.Popen([sys.argv[1],'--component','commands','--scenario','main','--colors','none'],stdin=slave,stdout=slave,stderr=slave,start_new_session=True)
 output=b''
 def screen():
     cells=[[' ']*100 for _ in range(28)]

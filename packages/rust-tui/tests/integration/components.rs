@@ -81,17 +81,16 @@ fn chat_paste_multiline_graphemes_and_cancel_are_product_independent() {
     );
     chat.update(&key(KeyCode::Backspace));
     assert_eq!(chat.input(), "Hello\n");
-    assert_eq!(
-        chat.update(&key(KeyCode::Enter)),
-        chat::Action::Submit("Hello\n".into())
-    );
+    let chat::Action::Submit(submission) = chat.update(&key(KeyCode::Enter)) else {
+        panic!("expected submission");
+    };
+    assert_eq!(submission.text, "Hello\n");
+    assert!(chat.composer_mut().acknowledge(&submission.ticket, Ok(())));
     assert_eq!(chat.input(), "");
     chat.set_input("kept draft");
+    chat.composer_mut().set_working(true);
     assert_eq!(
-        chat.update(&Event::Key(KeyEvent::new(
-            KeyCode::Char('x'),
-            KeyModifiers::CONTROL
-        ))),
+        chat.update(&Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))),
         chat::Action::Cancel
     );
     assert_eq!(chat.input(), "kept draft");
@@ -104,8 +103,8 @@ fn history_and_input_are_bounded_and_control_sequences_are_not_rendered() {
         chat.push("Acme", "A message");
     }
     assert_eq!(chat.message_count(), 100);
-    chat.set_input(&"界".repeat(3000));
-    assert!(chat.input().len() <= 4096);
+    chat.set_input(&"界".repeat(30_000));
+    assert_eq!(chat.input().len(), 65_535);
     chat.set_input("hello\x1b[31m");
     assert!(chat.input().contains('\x1b'));
     let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();

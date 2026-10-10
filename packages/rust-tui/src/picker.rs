@@ -144,6 +144,17 @@ impl Picker {
 
     /// Render using explicit terminal color capabilities.
     pub fn render_with(&self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+        self.render_with_state(frame, area, theme, &mut ListState::default());
+    }
+
+    /// Render with a host-owned viewport that survives leaving and returning.
+    pub(crate) fn render_with_state(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: Presentation,
+        state: &mut ListState,
+    ) {
         let block = Block::bordered()
             .title(self.title.as_str())
             .style(theme.base());
@@ -169,7 +180,7 @@ impl Picker {
             let items = matches
                 .iter()
                 .map(|index| ListItem::new(self.choices[*index].as_str()));
-            let mut state = ListState::default().with_selected(
+            state.select(
                 self.selected
                     .and_then(|selected| matches.iter().position(|index| *index == selected)),
             );
@@ -178,7 +189,7 @@ impl Picker {
                     .highlight_symbol("> ")
                     .highlight_style(theme.surface().patch(theme.focus())),
                 list,
-                &mut state,
+                state,
             );
         }
         frame.render_widget(

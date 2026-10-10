@@ -3,7 +3,7 @@
 use assert_cmd::Command;
 use canonic_rust_tui::{
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
-    gallery::Gallery,
+    gallery::{Component, Gallery},
     ratatui::{Terminal, backend::TestBackend},
 };
 use predicates::prelude::*;
@@ -13,10 +13,330 @@ fn key(code: KeyCode) -> Event {
 }
 
 #[test]
+fn scenario_browser_preserves_draft_on_cancel_and_opens_live_workflows() {
+    let mut g = Gallery::new();
+    g.open_scenario(Component::Composer, "main").unwrap();
+    g.update(&Event::Paste("Unsent draft".into()));
+    g.update(&key(KeyCode::Left));
+    g.update(&key(KeyCode::Left));
+    g.update(&key(KeyCode::F(10)));
+    assert_eq!(g.current(), "scenarios");
+    g.update(&key(KeyCode::F(10)));
+    assert_eq!(g.current(), "composer");
+    assert_eq!(g.composer_input(0), Some("Unsent draft"));
+    g.update(&Event::Paste("!".into()));
+    assert_eq!(g.composer_input(0), Some("Unsent dra!ft"));
+    g.update(&key(KeyCode::F(10)));
+    g.update(&Event::Paste("up-key".into()));
+    g.update(&key(KeyCode::Enter));
+    assert_eq!(g.current(), "composer");
+    let mut t = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    let text = super::components::dump(t.backend().buffer());
+    assert!(text.contains("message"));
+    assert!(text.contains("and bump the app version"));
+    g.update(&key(KeyCode::F(10)));
+    for _ in 0..6 {
+        g.update(&key(KeyCode::Backspace));
+    }
+    g.update(&Event::Paste("sending".into()));
+    g.update(&key(KeyCode::Enter));
+    t.draw(|f| g.render(f)).unwrap();
+    let text = super::components::dump(t.backend().buffer());
+    assert!(text.contains("you · 20:10 · sending"));
+    assert!(text.contains("Run the digest tests too."));
+    assert_eq!(g.composer_input(0), Some(""));
+}
+
+fn picker_screen(gallery: &mut Gallery) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+    terminal.draw(|frame| gallery.render(frame)).unwrap();
+    super::components::dump(terminal.backend().buffer())
+}
+
+#[test]
+fn box_mode_fixture_escape_restores_draft_before_leaving_scenario() {
+    let mut gallery = Gallery::new();
+    gallery
+        .open_scenario(Component::Composer, "box-history")
+        .unwrap();
+    let recalled = picker_screen(&mut gallery);
+    assert!(recalled.contains("history ┄"));
+    assert!(recalled.contains("3 of 12"));
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "composer");
+    assert_eq!(
+        gallery.composer_input(0),
+        Some("and bump the app version\nthen tag a release candidate")
+    );
+    gallery.update(&Event::Paste("!".into()));
+    assert_eq!(
+        gallery.composer_input(0),
+        Some("and bump the app version\nthen tag a release candidat!e")
+    );
+    gallery.update(&key(KeyCode::F(10)));
+    assert_eq!(gallery.current(), "scenarios");
+}
+
+#[test]
+fn box_history_scenario_browses_real_entries_and_down_restores_the_original_cursor() {
+    let mut gallery = Gallery::new();
+    gallery
+        .open_scenario(Component::Composer, "box-history")
+        .unwrap();
+    gallery.update(&key(KeyCode::Up));
+    assert!(picker_screen(&mut gallery).contains("4 of 12"));
+    assert!(gallery.composer_input(0).unwrap().contains("2026-03-29"));
+    gallery.update(&key(KeyCode::Down));
+    assert!(picker_screen(&mut gallery).contains("3 of 12"));
+    for _ in 0..3 {
+        gallery.update(&key(KeyCode::Down));
+    }
+    assert_eq!(gallery.current(), "composer");
+    assert_eq!(
+        gallery.composer_input(0),
+        Some("and bump the app version\nthen tag a release candidate")
+    );
+    gallery.update(&Event::Paste("!".into()));
+    assert_eq!(
+        gallery.composer_input(0),
+        Some("and bump the app version\nthen tag a release candidat!e")
+    );
+}
+
+#[test]
+fn escape_restores_both_picker_viewports_and_component_specific_searches() {
+    let mut g = Gallery::new();
+    for _ in 0..5 {
+        g.update(&key(KeyCode::Down));
+    }
+    picker_screen(&mut g);
+    g.update(&key(KeyCode::Up));
+    let catalog = picker_screen(&mut g);
+    assert!(catalog.contains("> Commands and bindings"));
+    g.update(&key(KeyCode::Enter));
+    for _ in 0..10 {
+        g.update(&key(KeyCode::Down));
+    }
+    picker_screen(&mut g);
+    g.update(&key(KeyCode::Up));
+    let commands = picker_screen(&mut g);
+    assert!(commands.contains("> pending-hints"));
+    g.update(&key(KeyCode::Enter));
+    // The command dispatcher consumes Escape to cancel its pending sequence first.
+    for _ in 0..3 {
+        if g.current() == "scenarios" {
+            break;
+        }
+        g.update(&key(KeyCode::Esc));
+    }
+    assert_eq!(g.current(), "scenarios");
+    assert_eq!(picker_screen(&mut g), commands);
+    g.update(&key(KeyCode::Esc));
+    assert_eq!(picker_screen(&mut g), catalog);
+    g.update(&key(KeyCode::Down));
+    g.update(&key(KeyCode::Enter));
+    g.update(&Event::Paste("history".into()));
+    g.update(&key(KeyCode::Down));
+    let composer = picker_screen(&mut g);
+    assert!(composer.contains("Search: history"));
+    assert!(composer.contains("> history-search"));
+    g.update(&key(KeyCode::Enter));
+    assert_eq!(g.current(), "composer");
+    g.update(&key(KeyCode::Esc)); // close history search
+    g.update(&key(KeyCode::F(10)));
+    assert_eq!(picker_screen(&mut g), composer);
+    g.update(&key(KeyCode::Esc));
+    g.update(&key(KeyCode::Up));
+    g.update(&key(KeyCode::Enter));
+    assert_eq!(picker_screen(&mut g), commands);
+    g.update(&key(KeyCode::Esc));
+    g.update(&key(KeyCode::Down));
+    g.update(&key(KeyCode::Enter));
+    assert_eq!(picker_screen(&mut g), composer);
+}
+
+#[test]
+fn escape_retains_the_component_picker_search_and_selection() {
+    let mut g = Gallery::new();
+    g.update(&Event::Paste("editor".into()));
+    let before = picker_screen(&mut g);
+    assert!(before.contains("Search: editor"));
+    g.update(&key(KeyCode::Enter));
+    assert_eq!(g.current(), "scenarios");
+    g.update(&key(KeyCode::Esc));
+    assert_eq!(picker_screen(&mut g), before);
+    g.update(&key(KeyCode::Enter));
+    assert_eq!(g.current(), "scenarios");
+}
+
+#[test]
+fn named_lifecycle_fixtures_project_real_public_behavior() {
+    let mut g = Gallery::new();
+    let mut t = Terminal::new(TestBackend::new(100, 28)).unwrap();
+    for (id, draft, pending) in [
+        ("sending", "", true),
+        ("accepted", "", false),
+        ("refused", "Run the digest tests too.", false),
+        ("refused-kept", "And bump the app version.", false),
+    ] {
+        g.open_scenario(Component::Composer, id).unwrap();
+        assert_eq!(g.composer_input(0), Some(draft));
+        t.draw(|f| g.render(f)).unwrap();
+        let text = super::components::dump(t.backend().buffer());
+        assert_eq!(text.contains("20:10 · sending"), pending);
+    }
+    g.open_scenario(Component::Dialog, "replace").unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    assert!(super::components::dump(t.backend().buffer()).contains("Replacement prompt"));
+    g.open_scenario(Component::Dialog, "late").unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    assert!(super::components::dump(t.backend().buffer()).contains("Rejected stale result"));
+    g.open_scenario(Component::Dialog, "remove").unwrap();
+    assert_eq!(g.dialog_depth(), 0);
+}
+
+#[test]
+fn scenario_profiles_bound_the_stage_and_use_requested_color_and_symbols() {
+    use canonic_rust_tui::ratatui::style::Color;
+    let mut g = Gallery::new();
+    let mut t = Terminal::new(TestBackend::new(100, 28)).unwrap();
+    g.open_scenario(Component::Editor, "narrow-40").unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    for y in 2..26 {
+        for x in 40..100 {
+            assert_eq!(t.backend().buffer()[(x, y)].symbol(), " ");
+        }
+    }
+    g.open_scenario(Component::Editor, "ansi16").unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    assert!(
+        t.backend()
+            .buffer()
+            .content
+            .iter()
+            .any(|cell| cell.fg == Color::Cyan)
+    );
+    g.open_scenario(Component::Editor, "no-color").unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    assert!(
+        t.backend()
+            .buffer()
+            .content
+            .iter()
+            .all(|cell| cell.fg == Color::Reset && cell.bg == Color::Reset)
+    );
+    g.open_scenario(Component::Editor, "ascii").unwrap();
+    t.draw(|f| g.render(f)).unwrap();
+    let text = super::components::dump(t.backend().buffer());
+    assert!(!text.contains('─'));
+    assert!(text.contains("draft ---"));
+}
+
+#[test]
+fn listed_scenarios_open_and_render_at_small_sizes_without_a_terminal() {
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("tui-gallery"))
+        .arg("--list")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let mut g = Gallery::new();
+    for (name, component) in [
+        ("picker", Component::Picker),
+        ("chat", Component::Chat),
+        ("editor", Component::Editor),
+        ("dialog", Component::Dialog),
+        ("commands", Component::Commands),
+        ("composer", Component::Composer),
+    ] {
+        let section = text.split(&format!("\n{name} scenarios (")).nth(1).unwrap();
+        for line in section
+            .lines()
+            .skip(1)
+            .take_while(|line| line.starts_with("  "))
+        {
+            let id = line.split_whitespace().next().unwrap();
+            g.open_scenario(component, id).unwrap();
+            for (width, height) in [(0, 0), (20, 8), (64, 24)] {
+                let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
+                t.draw(|f| g.render(f)).unwrap();
+            }
+        }
+    }
+    g.open_scenario(Component::Composer, "main").unwrap();
+    g.update(&Event::Paste("Keep me".into()));
+    assert!(g.open_scenario(Component::Composer, "missing").is_err());
+    assert_eq!(g.composer_input(0), Some("Keep me"));
+    Command::new(assert_cmd::cargo::cargo_bin!("tui-gallery"))
+        .args(["--component", "composer", "--scenario", "missing"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unknown composer scenario"))
+        .stdout(predicate::str::contains("\x1b").not());
+}
+
+#[test]
+fn draft_fixture_delays_responses_preserves_new_edits_and_keeps_the_dock_stable() {
+    let mut gallery = Gallery::new();
+    gallery.open_scenario(Component::Composer, "main").unwrap();
+    assert_eq!(gallery.current(), "composer");
+    gallery.update(&Event::Paste("original".into()));
+    gallery.update(&key(KeyCode::Enter));
+    gallery.update(&key(KeyCode::Enter));
+    let mut terminal = Terminal::new(TestBackend::new(100, 28)).unwrap();
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let pending = super::components::dump(terminal.backend().buffer());
+    assert!(pending.contains("1 submission intents"));
+    assert!(pending.contains("you · 20:10 · sending"));
+    assert_eq!(gallery.composer_input(0), Some(""));
+    assert!(!pending.contains("Submission snapshot"));
+    assert!(!pending.contains("Draft 1"));
+    let message_row = pending
+        .lines()
+        .position(|r| r.starts_with("message "))
+        .unwrap();
+    gallery.update(&Event::Paste(" newer".into()));
+    gallery.update(&key(KeyCode::Tab));
+    assert_eq!(gallery.composer_input(0), Some(" newer"));
+    gallery.update(&key(KeyCode::F(5)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let accepted = super::components::dump(terminal.backend().buffer());
+    assert!(!accepted.contains("20:10 · sending"));
+    assert!(accepted.contains("you · 20:10"));
+    assert_eq!(
+        accepted.lines().position(|r| r.starts_with("message ")),
+        Some(message_row)
+    );
+    assert_eq!(gallery.composer_input(1), None);
+    gallery.update(&key(KeyCode::F(5))); // finish accepted turn
+    gallery.update(&key(KeyCode::Enter));
+    gallery.update(&key(KeyCode::F(6)));
+    gallery.update(&Event::Paste("retry".into()));
+    gallery.update(&key(KeyCode::Enter));
+    gallery.update(&key(KeyCode::F(8)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let stale = super::components::dump(terminal.backend().buffer());
+    assert!(stale.contains("Stale response ignored"));
+    assert!(stale.contains("you · 20:10 · sending"));
+    assert!(stale.contains("3 submission intents"));
+    gallery.update(&key(KeyCode::F(7)));
+    gallery.update(&key(KeyCode::F(8)));
+    assert_eq!(gallery.composer_input(0), Some("Replacement draft"));
+    for (width, height) in [(40, 12), (1, 1), (0, 0)] {
+        let mut tiny = Terminal::new(TestBackend::new(width, height)).unwrap();
+        tiny.draw(|f| gallery.render(f)).unwrap();
+    }
+    gallery.update(&key(KeyCode::Esc));
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.composer_input(0), Some(""));
+    assert_eq!(gallery.composer_input(1), None);
+}
+
+#[test]
 fn command_fixture_preserves_draft_and_replaces_effective_help_bindings() {
     let mut gallery = Gallery::new();
-    gallery.update(&Event::Paste("Commands".into()));
-    gallery.update(&key(KeyCode::Enter));
+    gallery.open_scenario(Component::Commands, "main").unwrap();
     assert_eq!(gallery.current(), "commands");
     let original = gallery.command_input().to_owned();
     gallery.update(&Event::Paste("/branch".into()));
@@ -50,8 +370,7 @@ fn command_fixture_preserves_draft_and_replaces_effective_help_bindings() {
 fn commands_dock_and_keys_fill_the_stage_without_losing_the_message_box() {
     for (width, height) in [(100, 30), (40, 30)] {
         let mut gallery = Gallery::new();
-        gallery.update(&Event::Paste("Commands".into()));
-        gallery.update(&key(KeyCode::Enter));
+        gallery.open_scenario(Component::Commands, "main").unwrap();
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         let mut expected_title = None;
         for _ in 0..3 {
@@ -96,8 +415,7 @@ fn commands_dock_and_keys_fill_the_stage_without_losing_the_message_box() {
 #[test]
 fn command_design_palette_and_keys_have_distinct_reviewable_projections() {
     let mut gallery = Gallery::new();
-    gallery.update(&Event::Paste("Commands".into()));
-    gallery.update(&key(KeyCode::Enter));
+    gallery.open_scenario(Component::Commands, "main").unwrap();
     let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
     terminal.draw(|f| gallery.render(f)).unwrap();
     insta::assert_snapshot!(
@@ -158,12 +476,21 @@ fn gallery_opens_at_the_selector_and_both_components_are_independent_fixtures() 
     assert!(text.contains("Option picker") && text.contains("Full-screen chat"));
     insta::assert_snapshot!("component_selector", text);
     gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.current(), "scenarios");
+    terminal.draw(|frame| gallery.render(frame)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("main · interactive"));
+    gallery.update(&key(KeyCode::Enter));
     assert_eq!(gallery.current(), "picker");
     gallery.update(&key(KeyCode::Enter));
     terminal.draw(|frame| gallery.render(frame)).unwrap();
     assert!(super::components::dump(terminal.backend().buffer()).contains("Selected skip"));
     gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "scenarios");
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "catalog");
     gallery.update(&key(KeyCode::Down));
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.current(), "scenarios");
     gallery.update(&key(KeyCode::Enter));
     assert_eq!(gallery.current(), "chat");
     gallery.update(&Event::Paste("hello".into()));
@@ -180,14 +507,15 @@ fn gallery_opens_at_the_selector_and_both_components_are_independent_fixtures() 
         terminal.draw(|frame| gallery.render(frame)).unwrap();
     }
     gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "scenarios");
+    gallery.update(&key(KeyCode::Esc));
     assert_eq!(gallery.current(), "catalog");
 }
 
 #[test]
 fn editor_fixture_routes_paste_to_focused_scope_and_resets_on_reopen() {
     let mut gallery = Gallery::new();
-    gallery.update(&Event::Paste("Multiline".into()));
-    gallery.update(&key(KeyCode::Enter));
+    gallery.open_scenario(Component::Editor, "main").unwrap();
     assert_eq!(gallery.current(), "editor");
     let first = gallery.editor_input(0).unwrap().to_owned();
     assert_eq!(first.lines().count(), 2);
@@ -224,7 +552,7 @@ fn editor_fixture_routes_paste_to_focused_scope_and_resets_on_reopen() {
         Some(format!("{second} restored").as_str())
     );
     gallery.update(&key(KeyCode::Esc));
-    assert_eq!(gallery.current(), "catalog");
+    assert_eq!(gallery.current(), "scenarios");
     gallery.update(&key(KeyCode::Enter));
     assert_eq!(gallery.current(), "editor");
     assert_eq!(gallery.editor_input(1), Some("Independent second draft"));
@@ -245,7 +573,7 @@ fn editor_fixture_routes_paste_to_focused_scope_and_resets_on_reopen() {
 #[test]
 fn rich_picker_fixtures_isolate_the_host_draft_and_reset_after_confirmation() {
     let mut gallery = Gallery::new();
-    gallery.update(&key(KeyCode::Enter));
+    gallery.open_scenario(Component::Picker, "main").unwrap();
     let original = gallery.picker_input().to_owned();
     gallery.update(&Event::Paste("ignored without a filter".into()));
     assert_eq!(gallery.picker_input(), original);
@@ -265,7 +593,7 @@ fn rich_picker_fixtures_isolate_the_host_draft_and_reset_after_confirmation() {
     gallery.update(&key(KeyCode::Esc));
     assert_eq!(gallery.current(), "picker");
     gallery.update(&key(KeyCode::Esc));
-    assert_eq!(gallery.current(), "catalog");
+    assert_eq!(gallery.current(), "scenarios");
     gallery.update(&key(KeyCode::Enter));
     assert_eq!(gallery.picker_input(), original);
     gallery.update(&key(KeyCode::Char('1')));
@@ -295,7 +623,7 @@ fn headless_listing_help_and_refusal_do_not_change_terminal_modes() {
 #[test]
 fn picker_dock_reserves_activity_across_fixtures_and_confirmation() {
     let mut g = Gallery::new();
-    g.update(&key(KeyCode::Enter));
+    g.open_scenario(Component::Picker, "main").unwrap();
     let mut t = Terminal::new(TestBackend::new(100, 28)).unwrap();
     let mut message_y = None;
     for step in 0..14 {
@@ -347,8 +675,7 @@ fn picker_dock_reserves_activity_across_fixtures_and_confirmation() {
 fn dialog_fixtures_preserve_host_drafts_and_reject_replaced_results() {
     let mut gallery = Gallery::new();
     let mut terminal = Terminal::new(TestBackend::new(100, 28)).unwrap();
-    gallery.update(&Event::Paste("Dialogs".into()));
-    gallery.update(&key(KeyCode::Enter));
+    gallery.open_scenario(Component::Dialog, "main").unwrap();
     assert_eq!(gallery.current(), "dialog");
     assert_eq!(gallery.dialog_depth(), 1);
     let first = gallery.dialog_input(0).unwrap().to_owned();
@@ -377,7 +704,7 @@ fn dialog_fixtures_preserve_host_drafts_and_reject_replaced_results() {
     gallery.update(&Event::Paste(" SECOND ONLY".into()));
     assert!(gallery.dialog_input(1).unwrap().ends_with(" SECOND ONLY"));
     gallery.update(&key(KeyCode::Esc));
-    assert_eq!(gallery.current(), "catalog");
+    assert_eq!(gallery.current(), "scenarios");
     gallery.update(&key(KeyCode::Enter));
     assert_eq!(gallery.dialog_input(0), Some(first.as_str()));
     // Long inspection scrolls within its body; Enter acknowledges only that layer.
@@ -393,8 +720,7 @@ fn dialog_fixtures_preserve_host_drafts_and_reject_replaced_results() {
 #[test]
 fn dialog_panel_keeps_dock_position_across_growth_nesting_and_replacement() {
     let mut g = Gallery::new();
-    g.update(&Event::Paste("Dialogs".into()));
-    g.update(&key(KeyCode::Enter));
+    g.open_scenario(Component::Dialog, "main").unwrap();
     // Default ANSI 16 -> indexed fill.
     g.update(&key(KeyCode::F(4)));
     let mut t = Terminal::new(TestBackend::new(100, 40)).unwrap();
@@ -462,8 +788,7 @@ fn dialog_message_label_is_darker_than_the_live_activity_hint() {
         (2, Color::Rgb(94, 96, 100), Color::Rgb(133, 135, 140)),
     ] {
         let mut gallery = Gallery::new();
-        gallery.update(&Event::Paste("Dialogs".into()));
-        gallery.update(&key(KeyCode::Enter));
+        gallery.open_scenario(Component::Dialog, "main").unwrap();
         for _ in 0..cycles {
             gallery.update(&key(KeyCode::F(4)));
         }
@@ -491,8 +816,7 @@ fn dialog_fallbacks_show_one_field_scroll_hint_without_reversed_host_bars() {
     use canonic_rust_tui::ratatui::style::{Color, Modifier};
     for cycles in [0, 3] {
         let mut gallery = Gallery::new();
-        gallery.update(&Event::Paste("Dialogs".into()));
-        gallery.update(&key(KeyCode::Enter));
+        gallery.open_scenario(Component::Dialog, "main").unwrap();
         for _ in 0..cycles {
             gallery.update(&key(KeyCode::F(4)));
         }
@@ -529,25 +853,49 @@ fn dialog_fallbacks_show_one_field_scroll_hint_without_reversed_host_bars() {
 }
 
 #[cfg(unix)]
-#[test]
-fn real_terminal_navigation_resize_and_ctrl_c_restore_terminal_state() {
-    let script = r"
+const GALLERY_PTY_SCRIPT: &str = r"
 import fcntl,os,pty,re,select,signal,struct,subprocess,sys,termios,time
 master,slave=pty.openpty()
 fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',28,100,0,0))
 before=termios.tcgetattr(slave)
 child=subprocess.Popen([sys.argv[1],'--colors','truecolor'],env={**os.environ,'NO_COLOR':'1'},stdin=slave,stdout=slave,stderr=slave,start_new_session=True)
 output=b''
+def screen():
+    cells=[[' ']*100 for _ in range(28)]
+    row=column=0
+    for match in re.finditer(r'\x1b\[[0-?]*[ -/]*[@-~]|.',output.decode(errors='replace'),re.S):
+        token=match.group()
+        if token.startswith('\x1b['):
+            args=token[2:-1];command=token[-1]
+            if args.startswith(('?', '>', '<')):continue
+            values=[int(v or 0) for v in args.split(';')]
+            if command in 'Hf':row=(values[0] or 1)-1;column=(values[1] if len(values)>1 else 1)-1
+            elif command=='G':column=(values[0] or 1)-1
+            elif command=='C':column+=values[0] or 1
+            elif command=='D':column-=values[0] or 1
+            elif command=='J' and values[0]==2:cells=[[' ']*100 for _ in range(28)]
+            elif command=='K' and 0<=row<28:
+                start=0 if values[0] in (1,2) else max(0,column)
+                end=min(100,column+1) if values[0]==1 else 100
+                for x in range(start,end):cells[row][x]=' '
+            continue
+        if token=='\r':column=0;continue
+        if token=='\n':row+=1;continue
+        if ord(token)<32:continue
+        if 0<=row<28 and 0<=column<100:cells[row][column]=token
+        column+=1
+    return '\n'.join(''.join(line) for line in cells).encode()
 def wait_for(text):
     global output
     deadline=time.monotonic()+10
-    # Differential rendering positions existing spaces with cursor commands.
-    def emitted_text():return re.sub(rb'\x1b\[[0-?]*[ -/]*[@-~]',b'',output).replace(b' ',b'')
-    while text.replace(b' ',b'') not in emitted_text():
-        assert time.monotonic()<deadline,output.decode(errors='replace')
+    while text not in screen():
+        assert child.poll() is None,output[-2000:]
+        assert time.monotonic()<deadline,(text,screen())
         if select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
 try:
     wait_for(b'Choose a component')
+    os.write(master,b'\r')
+    wait_for('picker · scenarios'.encode())
     os.write(master,b'\r')
     wait_for(b'Continue without this server')
     os.write(master,b'\r')
@@ -558,13 +906,23 @@ try:
     wait_for(b'updated 29 hours ago')
     os.write(master,b'\r')
     wait_for(b'Selected branch-29')
-    os.write(master,b'\x1b');time.sleep(0.1)
+    os.write(master,b'\x1b')
+    wait_for('picker · scenarios'.encode())
+    os.write(master,b'\x1b')
+    wait_for(b'Choose a component')
     os.write(master,b'\x1b[B\r')
+    wait_for('chat · scenarios'.encode())
+    os.write(master,b'\r')
     wait_for(b'Acme agent')
     os.write(master,b'hello\r')
     wait_for(b'Simulated response:')
-    os.write(master,b'\x1b');time.sleep(0.1)
+    os.write(master,b'\x1b')
+    wait_for('chat · scenarios'.encode())
+    os.write(master,b'\x1b')
+    wait_for(b'Choose a component')
     os.write(master,b'\x1b[B\r')
+    wait_for('editor · scenarios'.encode())
+    os.write(master,b'\r')
     wait_for(b'Independent second draft')
     os.write(master,b'\x07\x1b[200~PTY FIRST\r\nline two\x1b[201~')
     wait_for(b'PTY FIRST')
@@ -612,8 +970,12 @@ finally:
     if child.poll() is None:child.kill();child.wait()
     os.close(master);os.close(slave)
 ";
+
+#[cfg(unix)]
+#[test]
+fn real_terminal_navigation_resize_and_ctrl_c_restore_terminal_state() {
     let output = std::process::Command::new("python3")
-        .args(["-c", script])
+        .args(["-c", GALLERY_PTY_SCRIPT])
         .arg(assert_cmd::cargo::cargo_bin!("tui-gallery"))
         .output()
         .unwrap();

@@ -27,9 +27,37 @@ pub struct TerminalSession {
     paste: bool,
     #[cfg(unix)]
     keyboard: Option<KeyboardEnhancementFlags>,
+    #[cfg(unix)]
+    original: Option<rustix::termios::Termios>,
 }
 
 impl TerminalSession {
+    /// Release terminal modes, run a foreground host operation, then reacquire them.
+    /// Both results are returned so an operation error cannot hide a restoration error.
+    /// Terminal modes are restored before the callback, including on callback unwind.
+    pub fn handoff<T>(
+        self,
+        operation: impl FnOnce() -> io::Result<T>,
+    ) -> (io::Result<Self>, io::Result<T>) {
+        #[cfg(unix)]
+        let original = self.original.clone();
+        if let Err(error) = self.close() {
+            return (
+                Err(error),
+                Err(io::Error::other(
+                    "Terminal release failed; operation was not started",
+                )),
+            );
+        }
+        let result = operation();
+        let terminal = Self::open();
+        #[cfg(unix)]
+        let terminal = terminal.map(|mut terminal| {
+            terminal.original = original;
+            terminal
+        });
+        (terminal, result)
+    }
     /// Acquire an interactive terminal without changing noninteractive output.
     ///
     /// # Errors
@@ -53,7 +81,13 @@ impl TerminalSession {
             paste: false,
             #[cfg(unix)]
             keyboard: None,
+            #[cfg(unix)]
+            original: None,
         };
+        #[cfg(unix)]
+        {
+            session.original = Some(rustix::termios::tcgetattr(io::stdin())?);
+        }
         terminal::enable_raw_mode()?;
         session.raw = true;
         session.screen = true;
@@ -96,23 +130,55 @@ impl TerminalSession {
             Ok(None)
         }
     }
+    /// Explicitly restore the lease, reporting mode and output errors.
+    /// # Errors
+    /// Returns all observed terminal restoration failures; drop remains a fallback.
+    pub fn close(mut self) -> io::Result<()> {
+        self.restore()
+    }
+    fn restore(&mut self) -> io::Result<()> {
+        self.terminal = None;
+        let mut errors = Vec::new();
+        let mut record = |result: io::Result<()>| {
+            if let Err(error) = result {
+                errors.push(error.to_string());
+            }
+        };
+        #[cfg(unix)]
+        if self.keyboard.take().is_some() {
+            record(execute!(io::stdout(), PopKeyboardEnhancementFlags));
+        }
+        if std::mem::take(&mut self.paste) {
+            record(execute!(io::stdout(), DisableBracketedPaste));
+        }
+        if std::mem::take(&mut self.screen) {
+            record(execute!(io::stdout(), Show, LeaveAlternateScreen));
+        }
+        if std::mem::take(&mut self.raw) {
+            record(terminal::disable_raw_mode());
+        }
+        #[cfg(unix)]
+        if let Some(original) = self.original.take() {
+            record(
+                rustix::termios::tcsetattr(
+                    io::stdin(),
+                    rustix::termios::OptionalActions::Now,
+                    &original,
+                )
+                .map_err(Into::into),
+            );
+        }
+        ACTIVE.store(false, Ordering::Release);
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(io::Error::other(errors.join("; ")))
+        }
+    }
 }
 
 impl Drop for TerminalSession {
     fn drop(&mut self) {
-        #[cfg(unix)]
-        if self.keyboard.is_some() {
-            let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
-        }
-        if self.paste {
-            let _ = execute!(io::stdout(), DisableBracketedPaste);
-        }
-        if self.screen {
-            let _ = execute!(io::stdout(), Show, LeaveAlternateScreen);
-        }
-        if self.raw {
-            let _ = terminal::disable_raw_mode();
-        }
-        ACTIVE.store(false, Ordering::Release);
+        let _ = self.restore();
     }
 }

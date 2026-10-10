@@ -1,10 +1,12 @@
 //! Composes reusable views into a local gallery using simulated product activity.
 
 mod commands;
+mod composer;
 mod dialog_body;
 mod dialogs;
 mod editor;
 mod option_picker;
+mod scenarios;
 
 use crate::{
     chat::{self, Chat},
@@ -19,7 +21,7 @@ use crossterm::style::{Colored, force_color_output};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout},
-    widgets::Paragraph,
+    widgets::{ListState, Paragraph},
 };
 use std::time::{Duration, Instant};
 
@@ -34,9 +36,12 @@ pub struct Cli {
     /// List components without opening an interactive terminal.
     #[arg(long)]
     pub list: bool,
-    /// Open a component directly; otherwise start at the component selector.
+    /// Open a component's scenario picker; otherwise start at the component picker.
     #[arg(long, value_enum)]
     pub component: Option<Component>,
+    /// Open a named scenario; requires --component. Use --list to see names.
+    #[arg(long, requires = "component")]
+    pub scenario: Option<String>,
     /// Color capability; auto respects `NO_COLOR`, `COLORTERM` and `TERM`.
     #[arg(long, value_enum, default_value = "auto")]
     pub colors: ColorChoice,
@@ -100,8 +105,11 @@ pub enum Component {
     Dialog,
     /// Command palette, keyboard help and scoped shortcut sequences.
     Commands,
+    /// Draft submission with delayed host acceptance and rejection.
+    Composer,
 }
 
+#[derive(Clone, Copy)]
 enum Screen {
     Catalog,
     Picker,
@@ -109,6 +117,9 @@ enum Screen {
     Editor,
     Dialog,
     Commands,
+    Composer,
+    Scenarios(Component),
+    Design(Component, usize),
 }
 
 // The host's resolved presentation owns color policy while the gallery runs.
@@ -133,6 +144,7 @@ impl Drop for ColorOutput {
 pub struct Gallery {
     screen: Screen,
     catalog: Picker,
+    catalog_viewport: ListState,
     picker: option_picker::PickerDemo,
     chat: Chat,
     theme: Presentation,
@@ -142,6 +154,11 @@ pub struct Gallery {
     editor: editor::EditorDemo,
     dialogs: dialogs::DialogDemo,
     commands: commands::CommandDemo,
+    composer: composer::ComposerDemo,
+    scenarios: [Picker; 6],
+    scenario_viewports: [ListState; 6],
+    scenario_return: Screen,
+    preview_width: Option<u16>,
 }
 
 impl Default for Gallery {
@@ -151,6 +168,197 @@ impl Default for Gallery {
 }
 
 impl Gallery {
+    fn active_component(&self) -> Option<Component> {
+        match self.screen {
+            Screen::Catalog => None,
+            Screen::Picker => Some(Component::Picker),
+            Screen::Chat => Some(Component::Chat),
+            Screen::Editor => Some(Component::Editor),
+            Screen::Dialog => Some(Component::Dialog),
+            Screen::Commands => Some(Component::Commands),
+            Screen::Composer => Some(Component::Composer),
+            Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
+        }
+    }
+
+    fn navigate_scenarios(&mut self, event: &Event) -> bool {
+        if matches!(event, Event::Key(key) if key.code == KeyCode::F(10)) {
+            if matches!(event, Event::Key(key) if key.kind == KeyEventKind::Press)
+                && let Some(component) = self.active_component()
+                && !matches!(self.screen, Screen::Scenarios(_))
+            {
+                self.open_scenarios(component);
+            } else if matches!(event, Event::Key(key) if key.kind == KeyEventKind::Press)
+                && matches!(self.screen, Screen::Scenarios(_))
+            {
+                self.screen = self.scenario_return;
+                self.note.clear();
+            }
+            return true;
+        }
+        let Screen::Scenarios(component) = self.screen else {
+            return false;
+        };
+        if let Event::Key(key) = event {
+            if key.kind == KeyEventKind::Release {
+                return true;
+            }
+            if key.code == KeyCode::Esc {
+                self.screen = Screen::Catalog;
+                self.stream.clear();
+                self.note.clear();
+                return true;
+            }
+            if key.code == KeyCode::F(4)
+                || (key.modifiers.contains(KeyModifiers::CONTROL)
+                    && matches!(key.code, KeyCode::Char('c' | 't')))
+            {
+                return false;
+            }
+        }
+        if let picker::Action::Selected(index) =
+            self.scenarios[scenarios::index(component)].update(event)
+        {
+            let entries = scenarios::entries(component);
+            let id = entries.get(index).map_or_else(
+                || ["narrow-40", "ansi16", "no-color", "ascii"][index - entries.len()],
+                |entry| entry.id,
+            );
+            self.open_scenario(component, id)
+                .unwrap_or_else(|_| unreachable!("catalog IDs are valid"));
+        }
+        true
+    }
+
+    fn open_scenarios(&mut self, component: Component) {
+        self.scenario_return = self.screen;
+        self.screen = Screen::Scenarios(component);
+        self.note = scenarios::board(component).into();
+    }
+
+    /// Reset one component to a named design scenario or main-view profile.
+    /// Pending designs show their contract without simulating unsupported behavior.
+    ///
+    /// # Errors
+    /// Returns an error for an unknown scenario before changing gallery state.
+    pub fn open_scenario(&mut self, component: Component, id: &str) -> Result<()> {
+        let id = match (component, id) {
+            (Component::Picker, "default")
+            | (Component::Editor, "focused")
+            | (Component::Dialog, "prompt")
+            | (Component::Commands, "palette") => "main",
+            (Component::Dialog, "nest") => "nested",
+            _ => id,
+        };
+        let profile = ["narrow-40", "ansi16", "no-color", "ascii"]
+            .iter()
+            .position(|name| *name == id);
+        let index = if profile.is_some() {
+            0
+        } else {
+            scenarios::entries(component)
+                .iter()
+                .position(|entry| entry.id == id)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Unknown {} scenario: {id}. Use --list.",
+                        scenarios::name(component)
+                    )
+                })?
+        };
+        let entry = &scenarios::entries(component)[index];
+        self.stream.clear();
+        self.preview_width = None;
+        self.note = if matches!(component, Component::Composer) {
+            format!("composer / {id}")
+        } else if entry.detail == "Interactive fixture" {
+            String::new()
+        } else {
+            format!("{} / {} · {}", scenarios::name(component), id, entry.detail)
+        };
+        let Some(fixture) = entry.fixture else {
+            self.screen = Screen::Design(component, index);
+            return Ok(());
+        };
+        self.reset_component(component, fixture);
+        for code in entry.keys {
+            self.fixture_event(
+                component,
+                &Event::Key(crate::event::KeyEvent::new(*code, KeyModifiers::NONE)),
+            );
+        }
+        match profile {
+            Some(0) => self.preview_width = Some(40),
+            Some(1) => self.theme.colors = ColorMode::Ansi16,
+            Some(2) => self.theme.colors = ColorMode::NoColor,
+            Some(3) => self.theme.symbols = Symbols::Ascii,
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn reset_component(&mut self, component: Component, fixture: usize) {
+        self.screen = match component {
+            Component::Picker => {
+                self.picker = option_picker::PickerDemo::new();
+                Screen::Picker
+            }
+            Component::Chat => {
+                self.scenario = fixture;
+                self.reset_chat();
+                Screen::Chat
+            }
+            Component::Editor => {
+                self.editor = editor::EditorDemo::new();
+                Screen::Editor
+            }
+            Component::Dialog => {
+                self.dialogs = dialogs::DialogDemo::new();
+                Screen::Dialog
+            }
+            Component::Commands => {
+                self.commands = commands::CommandDemo::new();
+                Screen::Commands
+            }
+            Component::Composer => {
+                self.composer = composer::ComposerDemo::scenario(fixture);
+                Screen::Composer
+            }
+        };
+        if !matches!(component, Component::Chat | Component::Composer) {
+            for _ in 0..fixture {
+                self.fixture_event(
+                    component,
+                    &Event::Key(crate::event::KeyEvent::new(
+                        KeyCode::F(2),
+                        KeyModifiers::NONE,
+                    )),
+                );
+            }
+        }
+    }
+
+    fn fixture_event(&mut self, component: Component, event: &Event) {
+        match component {
+            Component::Picker => {
+                self.picker.update(event);
+            }
+            Component::Editor => {
+                self.editor.update(event);
+            }
+            Component::Dialog => {
+                self.dialogs.update(event);
+            }
+            Component::Commands => {
+                self.commands.update(event);
+            }
+            Component::Composer => {
+                self.composer.update(event);
+            }
+            Component::Chat => self.update_chat(event),
+        }
+    }
+
     /// Start at the component selector with safe local fixtures.
     #[must_use]
     pub fn new() -> Self {
@@ -164,9 +372,11 @@ impl Gallery {
                     "Multiline editor".into(),
                     "Dialogs".into(),
                     "Commands and bindings".into(),
+                    "Composer".into(),
                 ],
                 Some(0),
             ),
+            catalog_viewport: ListState::default(),
             picker: option_picker::PickerDemo::new(),
             chat: Chat::new(),
             theme: Presentation::default(),
@@ -176,6 +386,11 @@ impl Gallery {
             editor: editor::EditorDemo::new(),
             dialogs: dialogs::DialogDemo::new(),
             commands: commands::CommandDemo::new(),
+            composer: composer::ComposerDemo::new(),
+            scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
+            scenario_viewports: std::array::from_fn(|_| ListState::default()),
+            scenario_return: Screen::Catalog,
+            preview_width: None,
         };
         gallery.reset_chat();
         gallery
@@ -191,6 +406,9 @@ impl Gallery {
             Screen::Editor => "editor",
             Screen::Dialog => "dialog",
             Screen::Commands => "commands",
+            Screen::Composer => "composer",
+            Screen::Scenarios(_) => "scenarios",
+            Screen::Design(_, _) => "design",
         }
     }
 
@@ -219,6 +437,12 @@ impl Gallery {
     #[must_use]
     pub fn command_input(&self) -> &str {
         self.commands.input()
+    }
+
+    /// Independent draft in the delayed-acknowledgement fixture.
+    #[must_use]
+    pub fn composer_input(&self, index: usize) -> Option<&str> {
+        self.composer.input(index)
     }
 
     fn reset_chat(&mut self) {
@@ -265,10 +489,14 @@ impl Gallery {
     }
 
     fn tick_elapsed(&mut self, elapsed: Duration) {
+        if matches!(self.screen, Screen::Scenarios(_) | Screen::Design(_, _)) {
+            return;
+        }
         self.editor.tick(elapsed);
         self.picker.tick(elapsed);
         self.dialogs.tick(elapsed);
         self.commands.tick(elapsed);
+        self.composer.tick(elapsed);
         self.chat.tick(elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.chat.append(&fragment);
@@ -280,6 +508,12 @@ impl Gallery {
 
     /// Apply an input event. Returns true when the gallery should exit.
     pub fn update(&mut self, event: &Event) -> bool {
+        if self.navigate_scenarios(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::Composer) && self.composer.update(event) {
+            return self.composer.should_quit();
+        }
         if matches!(self.screen, Screen::Commands) && self.commands.update(event) {
             return false;
         }
@@ -314,9 +548,9 @@ impl Gallery {
                 if matches!(self.screen, Screen::Catalog) {
                     return true;
                 }
-                self.screen = Screen::Catalog;
-                self.stream.clear();
-                self.note.clear();
+                if let Some(component) = self.active_component() {
+                    self.open_scenarios(component);
+                }
                 return false;
             }
             if key.code == KeyCode::F(2) {
@@ -330,49 +564,47 @@ impl Gallery {
         match self.screen {
             Screen::Catalog => {
                 if let picker::Action::Selected(index) = self.catalog.update(event) {
-                    self.screen = match index {
-                        0 => Screen::Picker,
-                        1 => Screen::Chat,
-                        2 => Screen::Editor,
-                        3 => Screen::Dialog,
-                        _ => Screen::Commands,
-                    };
-                    self.editor = editor::EditorDemo::new();
-                    self.picker = option_picker::PickerDemo::new();
-                    self.dialogs = dialogs::DialogDemo::new();
-                    self.commands = commands::CommandDemo::new();
-                    if matches!(self.screen, Screen::Chat) {
-                        self.reset_chat();
-                    } else {
-                        self.stream.clear();
-                    }
+                    self.open_scenarios(scenarios::COMPONENTS[index]);
                 }
             }
-            Screen::Chat => match self.chat.update(event) {
-                chat::Action::Submit(text) => {
-                    if self.scenario == 4 {
-                        self.chat.set_input(&text);
-                        self.chat
-                            .set_status("Disconnected fixture · message not executed");
-                    } else if !self.stream.is_empty() {
-                        self.chat.set_input(&text);
-                        self.chat.set_status("Busy fixture · message not executed");
-                    } else {
-                        self.chat.push("You", &text);
-                        self.chat.push("Acme agent", "");
-                        self.stream = "Simulated response: your composer and conversation view work independently of an agent backend.".split_inclusive(' ').map(str::to_owned).collect();
-                        self.chat.set_status("Streaming fixture");
-                    }
-                }
-                chat::Action::Cancel => {
-                    self.stream.clear();
-                    self.chat.set_status("Interrupted fixture");
-                }
-                chat::Action::None => {}
-            },
-            Screen::Picker | Screen::Editor | Screen::Dialog | Screen::Commands => {}
+            Screen::Chat => self.update_chat(event),
+            Screen::Picker
+            | Screen::Editor
+            | Screen::Dialog
+            | Screen::Commands
+            | Screen::Composer
+            | Screen::Scenarios(_)
+            | Screen::Design(_, _) => {}
         }
         false
+    }
+
+    fn update_chat(&mut self, event: &Event) {
+        match self.chat.update(event) {
+            chat::Action::Submit(submission) => {
+                self.chat.push_submission(&submission, "20:10");
+                if self.scenario == 4 {
+                    self.chat
+                        .acknowledge_submission(&submission.ticket, Err("Disconnected"));
+                    self.chat
+                        .set_status("Disconnected fixture · message not executed");
+                } else if !self.stream.is_empty() {
+                    self.chat
+                        .acknowledge_submission(&submission.ticket, Err("Busy"));
+                    self.chat.set_status("Busy fixture · message not executed");
+                } else {
+                    self.chat.acknowledge_submission(&submission.ticket, Ok(()));
+                    self.chat.push("Acme agent", "");
+                    self.stream = "Simulated response: your composer and conversation view work independently of an agent backend.".split_inclusive(' ').map(str::to_owned).collect();
+                    self.chat.set_status("Streaming fixture");
+                }
+            }
+            chat::Action::Cancel => {
+                self.stream.clear();
+                self.chat.set_status("Interrupted fixture");
+            }
+            chat::Action::None => {}
+        }
     }
 
     fn next_colors(&mut self) {
@@ -391,24 +623,60 @@ impl Gallery {
             ratatui::widgets::Block::default().style(self.theme.base()),
             area,
         );
-        let [header, body, note, footer] = Layout::vertical([
+        let [header, mut body, note, footer] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Min(0),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
         .areas(area);
+        if !matches!(
+            self.screen,
+            Screen::Catalog | Screen::Scenarios(_) | Screen::Design(_, _)
+        ) {
+            body.width = self
+                .preview_width
+                .map_or(body.width, |width| width.min(body.width));
+        }
         frame.render_widget(
             Paragraph::new("Canonic TUI · Component gallery").style(self.theme.heading()),
             header,
         );
         match self.screen {
-            Screen::Catalog => self.catalog.render_with(frame, body, self.theme),
+            Screen::Catalog => {
+                self.catalog
+                    .render_with_state(frame, body, self.theme, &mut self.catalog_viewport);
+            }
             Screen::Picker => self.picker.render(frame, body, self.theme),
             Screen::Chat => self.chat.render_with(frame, body, self.theme),
             Screen::Editor => self.editor.render(frame, body, self.theme),
             Screen::Dialog => self.dialogs.render(frame, body, self.theme),
             Screen::Commands => self.commands.render(frame, body, self.theme),
+            Screen::Composer => self.composer.render(frame, body, self.theme),
+            Screen::Scenarios(component) => {
+                let index = scenarios::index(component);
+                self.scenarios[index].render_with_state(
+                    frame,
+                    body,
+                    self.theme,
+                    &mut self.scenario_viewports[index],
+                );
+            }
+            Screen::Design(component, index) => {
+                let scenario = &scenarios::entries(component)[index];
+                frame.render_widget(
+                    Paragraph::new(format!(
+                        "{} / {} · design pending\n\n{}\n\n{}\n\nEsc scenarios · Ctrl-C quit",
+                        scenarios::name(component),
+                        scenario.id,
+                        scenario.detail,
+                        scenarios::board(component)
+                    ))
+                    .wrap(ratatui::widgets::Wrap { trim: false })
+                    .style(self.theme.base()),
+                    body,
+                );
+            }
         }
         frame.render_widget(
             Paragraph::new(self.note.as_str()).style(self.theme.heading()),
@@ -416,7 +684,11 @@ impl Gallery {
         );
         frame.render_widget(
             Paragraph::new(
-                "Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F4 colors",
+                if matches!(self.screen, Screen::Composer) {
+                    "F10 scenarios · Esc local · Ctrl-C twice quits · F2 next · F4 colors · Ctrl-T theme"
+                } else {
+                    "Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme"
+                },
             )
             .style(self.theme.muted()),
             footer,
@@ -431,8 +703,28 @@ impl Gallery {
 pub fn run(cli: &Cli) -> Result<()> {
     if cli.list {
         println!(
-            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings"
+            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings\ncomposer Composer"
         );
+        for component in scenarios::COMPONENTS {
+            println!(
+                "\n{} scenarios ({})",
+                scenarios::name(component),
+                scenarios::board(component)
+            );
+            for entry in scenarios::entries(component) {
+                println!(
+                    "  {:<18} {} · {}",
+                    entry.id,
+                    if entry.fixture.is_some() {
+                        "interactive"
+                    } else {
+                        "design pending"
+                    },
+                    entry.detail
+                );
+            }
+            println!("  narrow-40 / ansi16 / no-color / ascii · main view profiles");
+        }
         return Ok(());
     }
     let mut gallery = Gallery::new();
@@ -446,23 +738,30 @@ pub fn run(cli: &Cli) -> Result<()> {
         },
     };
     if let Some(component) = cli.component {
-        gallery.screen = match component {
-            Component::Picker => Screen::Picker,
-            Component::Chat => Screen::Chat,
-            Component::Editor => Screen::Editor,
-            Component::Dialog => Screen::Dialog,
-            Component::Commands => Screen::Commands,
-        };
+        if let Some(scenario) = &cli.scenario {
+            gallery.open_scenario(component, scenario)?;
+        } else {
+            gallery.open_scenarios(component);
+        }
     }
     // Declared first so the terminal restores its colors before policy is restored.
     let _color_output = ColorOutput::acquire();
     let mut terminal = TerminalSession::open()?;
     let mut last_tick = Instant::now();
+    let input_clock = Instant::now();
+    let mut burst = crate::composer::PasteBurst::default();
     loop {
         terminal.draw(|frame| gallery.render(frame))?;
-        if let Some(event) = terminal.poll(Duration::from_millis(50))?
-            && gallery.update(&event)
-        {
+        let mut events = burst.flush_idle(input_clock.elapsed());
+        if let Some(event) = terminal.poll(Duration::from_millis(20))? {
+            if matches!(gallery.screen, Screen::Composer) && !gallery.composer.overlay_open() {
+                events.extend(burst.push(event, input_clock.elapsed()));
+            } else {
+                events.extend(burst.flush());
+                events.push(event);
+            }
+        }
+        if events.iter().any(|event| gallery.update(event)) {
             break;
         }
         if last_tick.elapsed() >= Duration::from_millis(80) {

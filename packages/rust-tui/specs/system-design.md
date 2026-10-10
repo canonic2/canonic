@@ -1,15 +1,12 @@
 # System design and module contracts
 
-Implemented dialog boundary (slice 2b, human gate pending): `Stack<B,T>` owns
-validated layers, unique opening tickets and shared focus scopes; caller bodies
-own input/rendering/scrolling. Hosts own work, cancel it from dismissal records,
-and render base views unfocused while open. `dispatch` reaches only the top body;
-`body_mut(ticket)` rejects non-active generations. General review/content bodies,
-commands and native pointer capture remain later contracts.
+This contract owns architectural rules, public-contract conventions and target
+capability boundaries. [Architecture](architecture.md) owns the current module
+map; [Presentation](presentation.md) owns shared styling/primitives. Component
+and feature contracts own their behaviors and acceptance criteria.
 
-Status: proposed decomposition. Names express intended owners, not existing
-exports or required exact Rust signatures. [Architecture](architecture.md) owns
-the existing foundation; [Inventory](inventory.md) records its limits.
+Implemented boundaries and proposed owners are distinguished below. Proposed
+names do not imply existing exports or approved exact Rust signatures.
 
 ## Dependency direction
 
@@ -23,7 +20,9 @@ host -> runtime -> Crossterm / Ratatui terminal
 components -> caller-supplied events and Ratatui frame/area
 ```
 
-Components never depend on runtime, gallery, products or agent adapters. Runtime
+Pure component state/input/rendering never depends on terminal acquisition,
+gallery, products or agent adapters. Explicit host adapters such as foreground
+editor execution are separate from those pure paths. Runtime
 knows terminal capabilities/leases, not conversation semantics. Host polls external
 activity and routes events. No global theme, focus tree, clipboard, session or
 clock exists. The existing process-local lease guard only prevents competing owners.
@@ -35,31 +34,31 @@ entry points need an explicit compatibility plan when contracts change.
 
 ## Independent owners
 
-| Proposed module | Public inputs and purpose | Outputs and owned state |
-| --- | --- | --- |
-| `input` | Scoped bindings, normalized events, explicit elapsed time | Consumed/unhandled plus action; pending sequence in dispatcher |
-| `focus` | Stable targets, visible/enabled state, modal scopes | Transitions; active target and return stack per composition |
-| `text` | Untrusted strings, byte/cell budgets, width/policy | Bounded sanitized text, truncation and source mapping; pure logic |
-| `theme` | Semantic palette and terminal profile | Immutable styles/fallbacks; no settings lookup |
-| `viewport` | Logical rows/anchors, rectangle, scroll/jump | Visible range, follow/unread, paging intent; position/cache |
-| `selection` | Logical text ranges and hit mapping | Sanitized copy payload; anchor/extent |
-| `editor` | Text, limits, edit commands, paste, dimensions | Text/cursor/selection changes; undo/redo, visual cursor goal |
-| `composer` | Editor, history/stash/references, completion, capabilities | Submit/query/stash/editor intents; draft and pending metadata |
-| `content` | Plain/Markdown/code/diff blocks and policy | Rows, hit/source mapping, link intent; per-instance derived cache |
-| `conversation` | Stable message/part projection and revisions | Search/jump/copy/page intents; viewport/expansion/search/selection |
-| `activity` | Tool/run/progress projection, clock tick | Open/expand/cancel intents; presentation, no actual tasks |
-| `review` | Versioned permission/confirmation/question and acknowledgements | Respond/dismiss intent; staged answers/pending/error state |
-| `picker` | Stable choices, groups, disabled reasons/default/filter | Choice/cancel/query intents; query/highlight/viewport |
-| `dialog` | Caller bodies, stack operations, size/close policy | Close/result/focus; overlay stack and return target |
-| `commands` | Host descriptors, enabled reasons and bindings | Invocation ID; palette/filter/help; no execution |
-| `browser` | Session/timeline/resource rows and loading state | Select/query/rename/delete/fork intents; local navigation |
-| `tree` | Hierarchical nodes and loading metadata | Expand/load/select intents; local focus/expanded set |
-| `status` | Summary groups/notices/time/preferences | Dismiss/retry/preference intents; notice/collapse state |
-| `chat` | Conversation/composer/activity/review/status and capabilities | Screen intents; layout/focus/screen-scoped presentation |
-| `runtime` | Explicit inline/full-screen mode/capabilities | Lease, frames/events, suspend/resume/close result; owned modes |
-| `gallery` | Fixture descriptions/scripted updates | Simulated results/evidence; clock/event log/fixture lifetime |
+| Capability owner | Public inputs and purpose | Outputs and owned state | Current implementation |
+| --- | --- | --- | --- |
+| `input` | Scoped bindings, normalized events, explicit elapsed time | Consumed/unhandled plus action; pending sequence in dispatcher | Bindings/event values implemented under commands; separate input module proposed |
+| `focus` | Stable targets, visible/enabled state, modal scopes | Transitions; active target and return stack per composition | Implemented |
+| `text` | Untrusted strings, byte/cell budgets, width/policy | Bounded sanitized text, truncation and source mapping; pure logic | Implemented private module; richer source mapping proposed |
+| `theme` | Semantic palette and terminal profile | Immutable styles/fallbacks; no settings lookup | Implemented |
+| `viewport` | Logical rows/anchors, rectangle, scroll/jump | Visible range, follow/unread, paging intent; position/cache | Shared module proposed; current components own local offsets |
+| `selection` | Logical text ranges and hit mapping | Sanitized copy payload; anchor/extent | Shared module proposed; Editor selection implemented |
+| `editor` | Text, limits, edit commands, paste, dimensions | Text/cursor/selection changes; undo/redo, visual cursor goal | Implemented |
+| `composer` | Editor, history/stash/references, completion, capabilities | Submit/query/stash/editor intents; draft and pending metadata | Implemented |
+| `content` | Plain/Markdown/code/diff blocks and policy | Rows, hit/source mapping, link intent; per-instance derived cache | Proposed |
+| `conversation` | Stable message/part projection and revisions | Search/jump/copy/page intents; viewport/expansion/search/selection | Proposed; bounded plain projection in Chat |
+| `activity` | Tool/run/progress projection, clock tick | Open/expand/cancel intents; presentation, no actual tasks | Proposed; plain host status in Chat |
+| `review` | Versioned permission/confirmation/question and acknowledgements | Respond/dismiss intent; staged answers/pending/error state | Proposed; reusable Dialog/Picker foundations exist |
+| `picker` | Stable choices, groups, disabled reasons/default/filter | Choice/cancel/query intents; query/highlight/viewport | Implemented |
+| `dialog` | Caller bodies, stack operations, size/close policy | Close/result/focus; overlay stack and return target | Foundations implemented; timing pending |
+| `commands` | Host descriptors, enabled reasons and bindings | Invocation ID; palette/filter/help; no execution | Implemented |
+| `browser` | Session/timeline/resource rows and loading state | Select/query/rename/delete/fork intents; local navigation | Proposed |
+| `tree` | Hierarchical nodes and loading metadata | Expand/load/select intents; local focus/expanded set | Proposed |
+| `status` | Summary groups/notices/time/preferences | Dismiss/retry/preference intents; notice/collapse state | Proposed; plain host labels exist |
+| `chat` | Conversation/composer/activity/review/status and capabilities | Screen intents; layout/focus/screen-scoped presentation | Plain composition implemented; richer composition proposed |
+| `runtime` | Explicit inline/full-screen mode/capabilities | Lease, frames/events, suspend/resume/close result; owned modes | Full-screen lease/handoff implemented; inline hosting pending |
+| `gallery` | Fixture descriptions/scripted updates | Simulated results/evidence; clock/event log/fixture lifetime | Implemented; expanded fixtures/measurements pending |
 
-These boundaries do not require nineteen modules in the first slice. Related
+The capability table does not mandate one module per row. Related
 row browsers stay together until their behavior warrants extraction. No widget
 inheritance tree, plugin registry or universal reactive state store is required.
 
@@ -98,9 +97,10 @@ hidden timers and makes the gallery deterministic.
 
 ## Migration boundary
 
-Extract editor behavior from `chat`, compose it back and retain current regressions.
-Introduce stable IDs before concurrent parts/targeted streams. Preserve or adapt
-original-index picker results explicitly. Do not make callers supply full
+Chat composes the extracted Editor through Composer; original-index picker
+compatibility remains available. Future capability migrations introduce stable
+IDs before concurrent parts/targeted streams and preserve or explicitly adapt
+existing consumer contracts. Do not make callers supply full
 application state. Every changed public API has docs/examples, gallery-off compile
 checks and each consumer's optional-feature check.
 

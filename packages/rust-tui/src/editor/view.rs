@@ -29,6 +29,8 @@ pub struct EditorView<'a> {
     pub presentation: Presentation,
     /// Draw title/footer rules; disable for a host-labeled inline input row.
     pub chrome: bool,
+    /// Emphasize plain @path tokens without changing text or payloads.
+    pub highlight_file_references: bool,
 }
 
 impl Default for EditorView<'_> {
@@ -39,6 +41,7 @@ impl Default for EditorView<'_> {
             footer: "",
             presentation: Presentation::default(),
             chrome: true,
+            highlight_file_references: false,
         }
     }
 }
@@ -70,7 +73,7 @@ impl Editor {
         self.width = inner.width.max(1);
         self.height = usize::from(inner.height);
         self.symbols = p.symbols;
-        let rows = layout::rows(self.text(), self.width, self.symbols);
+        let rows = layout::rows(self.text(), self.width, self.symbols, &self.draft.atoms);
         let (y, x) = layout::position(&rows, self.cursor(), self.width, self.draft.upstream);
         if focused && self.height > 0 {
             let context = CURSOR_CONTEXT.min(self.height.saturating_sub(1) / 2);
@@ -85,6 +88,7 @@ impl Editor {
             .offset
             .min(rows.len().saturating_sub(self.height.max(1)));
         let selection = self.selection();
+        let references = file_references(self.text(), view.highlight_file_references);
         let lines: Vec<_> = rows
             .iter()
             .skip(self.offset)
@@ -102,6 +106,16 @@ impl Editor {
                                 g.display.clone(),
                                 if selected {
                                     p.selection()
+                                } else if g.atom && focused && g.start == self.cursor() {
+                                    p.selection().patch(p.heading())
+                                } else if g.atom {
+                                    if p.tokens().surface.is_some() {
+                                        p.surface().patch(p.muted())
+                                    } else {
+                                        p.muted()
+                                    }
+                                } else if references.iter().any(|range| range.contains(&g.start)) {
+                                    p.tokens().info.map_or(p.base(), |color| p.base().fg(color))
                                 } else if g.control {
                                     p.muted()
                                 } else {
@@ -234,4 +248,25 @@ impl Editor {
             )
         })
     }
+}
+
+fn file_references(text: &str, enabled: bool) -> Vec<std::ops::Range<usize>> {
+    if !enabled {
+        return Vec::new();
+    }
+    text.match_indices('@')
+        .filter_map(|(start, _)| {
+            if start > 0
+                && !text[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(char::is_whitespace)
+            {
+                return None;
+            }
+            let tail = &text[start + 1..];
+            let end = start + 1 + tail.find(char::is_whitespace).unwrap_or(tail.len());
+            (end > start + 1).then_some(start..end)
+        })
+        .collect()
 }

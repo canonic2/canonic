@@ -1,6 +1,6 @@
 # Code quality
 
-Status: existing engineering baseline. [Gallery and verification](gallery.md)
+Status: existing engineering baseline. [Gallery and verification](features/gallery.md)
 specifies proposed behavioral evidence as components are implemented;
 [Delivery](roadmap.md) tracks criteria separately from engineering checks.
 

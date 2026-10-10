@@ -80,7 +80,12 @@ impl Editor {
                 self.goal = None;
             }
             KeyCode::Backspace | KeyCode::Delete => {
-                return self.delete(code == KeyCode::Delete, word);
+                let chip = !word
+                    && self.text()[self.cursor()..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| self.draft.atoms.contains_key(&c));
+                return self.delete(code == KeyCode::Delete || chip, word);
             }
             KeyCode::Char(c) if !word && !c.is_control() => {
                 return self.replace(&c.to_string(), EditKind::Typing);

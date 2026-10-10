@@ -24,7 +24,7 @@ card with the supplied label, state and available details.
 Collapsed cards show state and a bounded useful summary. Explicit expand opens
 detail without stealing the draft. Large output carries omitted counts/marker
 and inspection/paging intent; collapsed display does not destroy host output.
-Host-specialized bodies reuse [Content](conversation.md) contracts for shell
+Host-specialized bodies reuse [Content](../components/chat.md) contracts for shell
 output, reads, edits, searches, diagnostics and diffs. No tool-name switch that
 embeds an agent-specific argument schema belongs in the generic library.
 

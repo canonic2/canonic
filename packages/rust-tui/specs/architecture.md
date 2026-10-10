@@ -1,76 +1,51 @@
-# Shared terminal components and gallery — foundation
+# Current package architecture
 
-Slice 2a adds `ChoicePicker`: validated stable-ID choices, editor-backed query,
-single/multiple intents, status and compact rendering are separated under
-`src/picker/`. The original index-based `Picker` remains the catalog/compatibility
-API. Gallery placement/focus/refresh and independent draft ownership live in
-`gallery/option_picker.rs`; slice 2a is accepted/committed. Slice 2b introduces a
-generic dialog stack wrapping shared focus, with unique opening tickets and
-top-only dispatch. `dialog/view.rs` owns geometry/chrome; gallery composition
-supplies bodies and simulated host operations. Its human gate is pending.
+This is the implemented package/module map. [System design](system-design.md)
+owns architectural rules and proposed capability boundaries; component and
+feature specs own detailed behavior and limits. [Inventory](inventory.md)
+records implementation gaps; [Verification](verification.md) records evidence.
 
-Status: foundation contract and inspected baseline. The proposed expansion and
-module decomposition are in [System design](system-design.md). [Inventory](inventory.md)
-records current evidence; expanded behavior is specified separately by topic.
+## Package and consumers
 
-The requested basis is a reusable Rust library at packages/rust-tui with an
-interactive gallery for isolated development. Drone, Gate and Shield consume it
-through local path dependencies without publication. The library does not own
-agent sessions, Git state, policy, approvals or product persistence.
+`canonic-rust-tui` is an unpublished Rust library with an optional `gallery`
+feature and `tui-gallery` binary. Drone, Gate and Shield declare optional local
+path dependencies behind their `tui` features. There is no root Cargo workspace
+or registry publication pipeline. Dependency compilation is distinct from a
+consumer UI rollout.
 
-## Contracts
+## Implemented module map
 
-Components accept input and explicit state, render into caller-owned frames,
-and return product-independent actions. A picker selection never authorizes
-execution by itself. Hosts choose defaults, execute/reject actions and own
-application state. Importing the library has no terminal side effects.
+| Source | Current responsibility | Owning contract |
+| --- | --- | --- |
+| [editor](../src/editor.rs) | Unicode text, input, transactions, atomic payload markers, layout and view | [Editor](components/editor.md) |
+| [picker](../src/picker.rs) | Compatibility index picker and stable-ID ChoicePicker | [Option Picker](components/option-picker.md) |
+| [dialog](../src/dialog.rs) | Validated modal stack, opening tickets, top-only dispatch and measured chrome | [Dialog](components/dialog.md) |
+| [commands](../src/commands.rs) | Descriptors, search/help views, bindings and remaps | [Command Palette](components/command-palette.md) |
+| [composer](../src/composer.rs) | Draft/submission, queue, recall/stash, payloads, completion, saved state and editor conflicts | [Composer](components/composer.md), [Completion Menu](components/completion-menu.md) |
+| [chat](../src/chat.rs) | Bounded plain transcript, delivery/shell projection, scroll/follow and Composer composition | [Chat](components/chat.md) |
+| [focus](../src/focus.rs) | Instance-local target orders, modal scopes and return focus | [Input/navigation](features/interaction.md) |
+| [text](../src/text.rs), [theme](../src/theme.rs), [ui](../src/ui.rs) | Private sanitized text/wrapping, semantic presentation and shared rules | [Presentation](presentation.md) |
+| [runtime](../src/runtime.rs) | Interactive terminal lease, polling/drawing, explicit close and foreground handoff | [Terminal hosting](features/terminal.md) |
+| [gallery](../src/gallery.rs) | Deterministic component/scenario composition and host simulation | [Gallery](features/gallery.md) |
+| [lib.rs](../src/lib.rs), [main.rs](../src/main.rs) | Public exports/event-rendering types and gallery argument parsing/error reporting | [System design](system-design.md) |
 
-The runtime permits one full-screen terminal owner per process. Acquisition
-checks interactive stdin/stdout, enters raw mode/alternate screen and enables
-bracketed paste. Partial-startup cleanup and drop restore owned modes. Nested
-views use the same runtime; they never start a second event loop.
+## Composition and side effects
 
-The gallery defaults to a component selector. It composes the public picker and
-chat views with local Acme fixtures. It simulates activity and fixture failures
-without accounts, networks, product CLIs or settings changes. Input stays usable
-while streamed fixture output advances. Esc returns to the selector or exits
-there; Ctrl-C exits; Ctrl-T toggles themes; F2 changes fixtures.
+A consumer or gallery owns one terminal runtime and supplies events, frames,
+areas, focus, presentation and elapsed time to components. Chat composes Composer;
+Composer uses Editor, Option Picker and Dialog. Commands share descriptor/binding
+values with host dispatch. Detailed limits belong to the component specs.
 
-Cargo package canonic-rust-tui has publish=false. The gallery is feature-gated;
-consumer dependencies are optional behind each product's tui feature. Product
-headless paths retain their default graph and interfaces. No root workspace,
-dynamic plugin mechanism, registry publication or product UI rollout is added.
+Pure construction/update/render does not connect agents, execute commands, read
+clipboard contents or write product storage. Composer's explicit foreground
+editor adapter performs host-requested process/temp-file work; runtime owns the
+terminal handoff. Both boundaries are opt-in and independently report failures.
 
-## Implemented components and limits
+## Existing limitations
 
-- Picker: search, arrow navigation, safe caller defaults, original-index results,
-  explicit confirmation, cancellation and empty results. Search/labels are bounded
-  to 4 KiB and terminal control characters are stripped.
-- Chat: bounded history, status, transcript, automatic following/manual scrolling,
-  composer, pasted newlines, grapheme backspace, submission and cancellation actions.
-  Retains 100 messages of up to 64 KiB each and a 4 KiB composer. Visible text is
-  sanitized and wraps by grapheme cell width. Extremely narrow wide glyphs use a
-  replacement character. Hosts retain authoritative histories outside the view.
-- Editor: independent multiline editing, cursor/word/visual-line movement,
-  selection/replacement, normalized paste and 64 grouped undo transactions.
-  Oversized input retains its complete grapheme prefix and reports dropped bytes;
-  no-fit input preserves draft/selection. Full-width text uses labeled rules and
-  host-supplied props. Chat composes this public component.
-- Focus: caller-defined unique target order, modal scopes and surviving return
-  focus. Gallery supplies independent two-editor/modal and limit fixtures.
-- Terminal-native ANSI, indexed, dark/light RGB and no-color semantic tokens;
-  ASCII decorations and shared rule primitives. Tiny layouts clip safely.
-
-Command history, acknowledged submission, completion, Markdown, structured tool
-cards, mouse support and inline runtime helpers are
-future increments. The shared library does not connect Drone to its gallery.
-Forced signals, cross-process terminal ownership and Windows acceptance remain
-unverified; the process-local guard does not claim those guarantees.
-
-## Acceptance
-
-Verify state/actions and safety of defaults through public component tests;
-render multiple dimensions into TestBackend; review gallery snapshots with
-behavioral assertions. Exercise real PTYs for navigation, submission, resize and
-terminal restoration. Check each consumer with its tui feature and locked local
-dependency. Passing rendering tests alone does not prove real-terminal behavior.
+Standalone completion, rich identified conversation parts, structured activity
+and review, resource browsers, native inline hosting and broad platform acceptance
+remain separately tracked work. No current module map implies those targets exist.
+The terminal guard is process-local; it does not establish cross-process ownership
+or forced-signal recovery. See the [component checkpoints](components/README.md)
+and [feature index](features/README.md).
