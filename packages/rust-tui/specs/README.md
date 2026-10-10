@@ -1,10 +1,11 @@
 # Rust TUI specifications
 
 These internal specs describe a reusable terminal library and independent gallery.
-The scope requested on **2026-10-09** is research and specification, with no new
-component implementation. Foundation contracts remain requirements. Expanded
-behavior and module contracts are a **proposed target**, pending implementation
-and the roadmap's decisions; they are not shipped support or approved API signatures.
+Implementation is authorized in bounded slices with **human testing before each
+commit and next slice**, requested on **2026-10-09**. Foundation contracts remain
+requirements. Expanded behavior and module contracts are a target pending
+implementation and the roadmap's decisions; they are not shipped support or
+approved API signatures. Start delivery with [Human testing gates](human-testing.md).
 
 Start with [Product](product.md), then [Inventory](inventory.md). Each requirement
 has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](roadmap.md).
@@ -23,6 +24,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Terminal and presentation](terminal.md) | Lease, inline hosting, cleanup, compatibility, themes and accessibility |
 | [Gallery and verification](gallery.md) | Isolated fixtures, composed screens and test evidence |
 | [Implementation plan](roadmap.md) | Dependency order, acceptance matrix, exit conditions and open decisions |
+| [Human testing gates](human-testing.md) | Smaller delivery slices, runnable acceptance steps, confirmation and commit workflow |
 | [Code quality](code-quality.md) | Existing Rust tooling and engineering gates |
 
 [Reader guides](../docs/README.md) describe implemented behavior. The baseline

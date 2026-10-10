@@ -1,8 +1,11 @@
 # Implementation plan and acceptance
 
-Status: proposed on **2026-10-09**. This session delivers specifications only.
-No phase below is marked accepted by writing its requirements. Existing package
-foundation is inspected in [Inventory](inventory.md); fresh gates are not run.
+Status: phased implementation authorized on **2026-10-09**, with human testing
+required between delivery slices. No phase is accepted by writing requirements
+or passing automated checks alone. [Human testing gates](human-testing.md) owns
+the delivery sequence, user steps, expected results and confirmation record.
+The phase groups below retain their acceptance mapping; their smaller delivery
+slices each require an independent human gate.
 
 ## Delivery scope and phase order
 
@@ -104,6 +107,25 @@ it does not require every future component to exist before accepting a slice.
 | G-05 | Gallery: approved cold/warm/resize/memory/fairness measurements | 3, continuous |
 
 ## Acceptance procedure
+
+For every delivery slice: implement only that slice, run its engineering checks,
+provide the exact command and numbered human test steps, then stop. The user
+confirms whether the tested behavior works. A failed or ambiguous result keeps
+the slice open; investigate and fix that slice, rerun affected checks and present
+the revised test steps. Do not commit or begin another slice while its human
+gate is pending. After explicit confirmation, use the commit skill to commit
+only the reviewed Rust TUI scope in both owning repositories, then continue to
+the next slice. Do not push. User-reported platform limits remain visible rather
+than becoming assumed acceptance for other hosts.
+
+Foundation engineering checks passed during the scoped package commits
+`33fe70a` (private) and `2a6bc0f` (public): formatting, strict Clippy, ten
+all-feature nextest tests including the Unix PTY test, seven gallery-disabled
+tests, doctest, API docs, dependency audit, release build, consumer optional
+feature compilation and Markdown/diff checks. Dependency auditing reported
+allowed duplicate-version warnings. Foundation human acceptance passed on
+2026-10-09; the user deferred visual refinement. These results do not accept
+expanded capability contracts or establish visual design acceptance.
 
 Each slice records implemented criteria, named fixtures, commands/results and
 remaining limits. Run owning Rust gates from [Code quality](code-quality.md),
