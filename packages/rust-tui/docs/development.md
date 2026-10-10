@@ -37,6 +37,16 @@ Editor tests include rendered cursor/style checks, a reviewed snapshot, Unicode
 properties and history/limit behavior. The PTY test also exercises bracketed
 multiline paste, focus switching and modal input before resize/restoration.
 
+`picker/model.rs` owns validated choices, safe display fields and deterministic
+matching. `picker/choice.rs` owns selection/marks/query/status; its `input.rs`
+returns stable-ID intents and its `view.rs` owns compact geometry, groups and
+viewport hints. Filtering reuses `Editor` with `EditorView.chrome=false`.
+`gallery/option_picker.rs` owns fourteen fixtures, placement, focus and the
+independent host draft. Components perform no discovery, retries or execution.
+The original `Picker`/`Action` API stays intact for index-based callers/catalog.
+Rich picker tests cover identity refresh, disabled/danger defaults, query undo,
+hidden marks, physical-row paging, Unicode, narrow styles and a reviewed snapshot.
+
 State and rendering tests run without a terminal. TestBackend supplies terminal
 dimensions; insta captures the selector, with behavioral assertions alongside
 snapshots. Review generated snapshots with `cargo insta review`; do not accept

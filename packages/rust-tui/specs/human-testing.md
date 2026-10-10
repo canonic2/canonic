@@ -4,8 +4,10 @@ Status: workflow requested on **2026-10-09**. Foundation human testing passed.
 Slice 1 functional testing passed; the supplied editor/design-system redesign
 reopens its human gate. The user explicitly requested a scoped commit on
 2026-10-09 after visible newline/color checks. Remaining redesign gate actions
-have not been reported as passed. Slice 1 redesign is implemented;
-slices 2–13 remain unstarted. [Roadmap](roadmap.md) owns
+have not been reported as passed. Slice 1 redesign is committed; the user
+authorized advancing on 2026-10-09. Slice 2a rich picker is implemented pending
+human testing accepted on 2026-10-09 by the user's request to advance;
+slices 2b, 2c and 3–13 remain unstarted. [Roadmap](roadmap.md) owns
 the acceptance criteria and architecture dependency groups; this topic owns
 their smaller delivery units and the human acceptance procedure.
 
@@ -52,7 +54,9 @@ below supplement those common checks. The exact keys are supplied when ready.
 | --- | --- | --- | --- |
 | 0 | Foundation baseline | Run existing picker/chat, search/confirm/cancel, type during streaming, scroll/follow, cycle failures, resize and exit; use the checklist below | Existing behavior only; no expanded criteria accepted |
 | 1 | Editor and focus / group 1 | Open Editor; insert/delete in the middle, move/select Unicode and replace text, paste multiline, undo/redo, reach limit. Open two-editor/modal fixture: typing changes only focused editor; close restores focus. Edit chat while streaming | E-01–E-03; first I-01/I-05 and A-01/A-02 evidence |
-| 2 | Rich picker, dialogs and commands / group 2 | Filter grouped/disabled rows; page and confirm original identity. Open nested dialogs; Esc closes only top and restores focus. Search palette/help; one selection emits one intent. Test remapped/pending bindings | D-01–D-03, I-02; A-03/A-04 for these views |
+| 2a | Rich picker / group 2 | Filter grouped/disabled rows; page and confirm stable identity; mark multiple rows; refresh and preserve the independent host draft | D-02; A-03/A-04 for this view |
+| 2b | Dialogs / group 2 | Open nested dialogs; Esc closes only top and restores focus; tiny resize and removed return target | D-01 |
+| 2c | Commands and bindings / group 2 | Search palette/help; one selection emits one intent; test remapped/pending bindings | D-03, I-02 |
 | 3 | Draft lifecycle, history and stash / group 2 | Submit with delayed acceptance/rejection, edit while pending and repeat Enter; no duplicate/lost draft. Recall history then restore unsent draft; stash/restore with overwrite/cancel/failure. Simulate external editor replacement conflict | E-04–E-05; native editor handoff deferred to slice 13 |
 | 4 | Completion and references / group 2 | Accept/dismiss command/context completion; no accidental submission. Change query/cursor during delayed results; stale results never insert. Add/edit/remove references and inspect payload summaries | E-06; completion contribution to D-03/A-03 |
 | 5 | Identified transcript and viewport / group 3 | Stream into multiple parts/tools while editing; scroll away, see unread, resume follow. Prepend history and resize while anchored; simulate eviction/stale update/error and inspect markers | C-01/C-03, I-03; long-content measurement contribution to C-06/G-05 |
@@ -88,9 +92,9 @@ make -C packages/rust-tui run
 1. **Catalog:** verify Option picker and Full-screen chat appear. Arrows change
    the highlight; Enter opens the chosen component.
 2. **Picker:** open Option picker; its default is Continue without this server.
-   Type `all`; only Use all project servers should match. Enter confirms and the
-   fixture label reports original choice 2. Esc returns to catalog. Reopen:
-   default/query reset. F2 shows empty choices; Enter must not confirm anything.
+   Press 2 to choose Use all project servers; the fixture reports `Selected all`.
+   Esc returns to catalog. Reopen: default/query reset. F2 cycles design states;
+   empty choices cannot confirm. Gate 2a below covers the expanded picker.
 3. **Chat submission:** open Full-screen chat. Type `hello`, Enter; your message
    appears and the simulated response streams. Type another draft while output
    arrives; typing remains responsive. A busy rejected submit restores the draft.
@@ -174,16 +178,74 @@ Report **pass** or **fail**, with the step and observed behavior for a failure.
 The redesigned editor is a material change after functional acceptance, so its
 human gate is reopened by the delivery contract. The user's explicit scoped
 commit request authorizes recording this implementation; it does not establish
-acceptance of unreported test actions. Slice 2 remains unstarted. No native
+acceptance of unreported test actions. The user authorized slice 2a next. No native
 Linux/Windows or modified-key encoding is inferred from pure tests.
+
+## Gate 2a — rich option picker
+
+From the repository root, in iTerm2 for RGB:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors truecolor"
+```
+
+1. **Default:** three choices occupy five rows, without side borders or a filter.
+   Continue without this server is highlighted. Enter reports `Selected skip`
+   and collapses the result. Reopen and press 1: `Selected once` appears.
+   These are local results; no setting changes.
+2. **Rows:** F2 cycles default → details → disabled → danger → filter → no-match
+   → scrolled → multi → groups → loading → narrow → done → empty → error.
+   Details has context/source labels. Disabled skips row 2; pressing 2 is inert.
+   Danger starts on a safe row and requires explicit navigation to choose its
+   destructive row. F3 inspects without choosing. Loading/error/empty Enter is
+   inert. F2 continues cycling after confirmation.
+3. **Filter:** reach filter (four F2 presses from default). Ctrl-G then paste
+   `example29`: one result has detail `updated 29 hours ago`; Enter reports
+   `Selected branch-29`. Repeat with Ctrl-Z/Ctrl-Y undo/redo. Digits edit the query.
+   Esc clears it first while retaining picker height; Esc again returns to catalog.
+   No-match displays its own message and cannot select in single mode.
+4. **Multiple:** reach multi (seven F2 presses from default). One row is marked.
+   Space toggles the highlighted mark; Alt-A toggles matching enabled rows. Type
+   a filter: hidden marks remain included in the marked count. Enter reports
+   `Confirmed [...]` in source order, including hidden marks. An empty marked set
+   is valid explicit confirmation for this nonempty source.
+5. **Paging/refresh:** scrolled starts at the last of 31 rows. Home/End/Page keys
+   move without wrapping. Groups have dim headings that count in paging. Resize:
+   highlight stays visible; details disappear before labels truncate. F5 removes
+   the highlighted ID and chooses a surviving safe highlight without confirming.
+6. **Host separation:** Tab focuses the independent draft; type/paste and Ctrl-J
+   for a newline, then Tab back. Query edits affect only the filter. F2 preserves
+   the host draft. F6 cycles stage/dock/full-screen placement preserving picker
+   state. These are gallery controls within one terminal session, not an inline
+   terminal adapter or picker-owned focus behavior.
+7. **Presentation/exit:** F4 cycles profiles; Ctrl-T changes RGB polarity. Selected
+   keys reverse/bold, disabled rows dim, body uses terminal defaults. Test the
+   no-color/ASCII command below. Return/reopen resets fixtures; Ctrl-C exits and
+   ordinary shell input/echo/cursor work.
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component picker --colors none --ascii"
+```
+
+Report **pass** or **fail**, with the step and observed behavior for failures.
+No commit or dialog implementation follows until this gate passes.
+
+Slice 2a engineering: formatting, strict Clippy, 34 all-feature tests (including
+native macOS PTY), one doctest, API docs and dependency audit passed. The
+gallery-disabled library passed 29 tests; release build passed. Gate, Shield and
+Drone optional `tui` features compiled offline, with lockfiles restored byte-for-
+byte after temporary resolution. Reviewed the compact snapshot and six actual
+TestBackend style/geometry previews. Duplicate dependency warnings remain allowed
+by auditing. Native Linux/Windows and human modifier-key encoding are unverified.
 
 ## Acceptance record
 
 | Slice | Engineering | Human | Commit / next action |
 | --- | --- | --- | --- |
 | 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
-| 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Scoped commit explicitly requested on 2026-10-09; slice 2 unstarted |
-| 2–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
+| 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
+| 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Record scoped picker commit, then implement 2b |
+| 2b, 2c, 3–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
 
 Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs

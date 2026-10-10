@@ -1,7 +1,7 @@
 # Dialogs, commands and browsing
 
-Status: proposed target. Current picker/catalog provides simple single-choice
-search; reusable overlays, rich rows, command and session views are gaps.
+Status: rich picker implemented and human accepted in slice 2a. Dialogs,
+commands, sessions, trees and panels below remain proposed targets.
 
 ## Dialog composition
 
@@ -21,22 +21,41 @@ host action when available, rather than unexpectedly exiting the entire screen.
 
 ## Picker contract
 
-Richer choices have stable ID, label, description, category, optional secondary
-metadata, disabled reason and selected/current marker. Safe caller default or
-none is preserved. Filter supports deterministic substring initially; later fuzzy
-ranking must be documented with stable ties and highlighted matches. Changing
-query preserves surviving choice ID; otherwise highlights a permitted result
-according to explicit filter policy. Disabled results can remain visible for
-explanation but cannot confirm. Loading, empty source, no matches and failure
-are distinguishable.
+`ChoicePicker` accepts `Choice` values with stable ID, label, detail, group,
+disabled reason, danger and current flags. Duplicate IDs reject construction or
+refresh atomically. Default selection uses a supplied enabled non-danger ID,
+otherwise the first safe row. Filter changes preserve a surviving enabled ID,
+otherwise use the first safe ranked match. Refresh retains valid enabled marks
+and selection by ID. Host-supplied `Status` distinguishes ready/loading/error;
+empty source and no matches have separate messages. No retries or loading run.
+
+`Filter::Auto` enables filtering above seven choices; On/Off override it. The
+bounded 4 KiB query uses the editor's grapheme selection, paste and undo. Matching
+is a lowercased subsequence, ignoring query whitespace. Label matches rank before
+detail matches; score sums matched grapheme positions, with source order breaking
+ties. Whole matched graphemes are bold/underlined. This local algorithm owns no
+remote query generation or locale/normalization service.
 
 Arrows/page/Home/End move among enabled rows and keep highlight visible, including
-variable-height grouped rows. Search has grapheme editing, paste and a bounded
-query. Rich rows may open detail without confirming. Multi-selection is a separate
+group headers and single-line choice rows. Disabled rows remain explanatory but
+cannot be chosen. Danger rows are never implicit defaults. F3 returns `Inspect`
+without confirming. Multi-selection is a separate
 explicit mode with selected set and final submit; ordinary single-choice Enter
 must not change meaning because a consumer supplies many rows. Returned IDs refer
 to supplied data, never filtered positions. Compatibility adapters can retain
-current original-index results for static choices.
+current original-index results for static choices: the original `Picker`/`Action`
+API remains unchanged. Space toggles a mark; Alt-A toggles matching enabled rows.
+Hidden marks survive the query and final `Confirmed` IDs follow source order.
+With a nonempty source an empty marked set can confirm. Plain Enter press is the
+only final confirmation; repeated/modified Enter, paste and disabled shortcuts
+are inert. Esc clears a nonempty query before returning `Cancelled`.
+
+`PickerView` supplies title/source/context (up to three rows), maximum height
+(default nine) and presentation. Height derives from source content at opening
+and stays stable while filtering, clamped by host area. Details disappear before
+labels truncate at grapheme boundaries; group rows count toward paging. Hosts
+own placement and execute/recheck returned intents. This supports stage/dock/
+full-screen gallery placement; an inline terminal adapter remains slice 12.
 
 ## Commands, completion and help
 
@@ -112,6 +131,6 @@ sessions/files/models or contact services.
 
 ## Open decisions
 
-Fuzzy matching algorithm, row grouping defaults, responsive panel thresholds and
+Responsive panel thresholds and
 whether session navigation has a dedicated screen or dialog need gallery review.
 Keep host-provided command names out of generic public contracts.

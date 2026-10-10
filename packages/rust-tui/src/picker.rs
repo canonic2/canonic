@@ -1,5 +1,10 @@
 //! Owns searchable choice state and rendering, without performing selected actions.
 
+mod choice;
+mod model;
+pub use choice::{ChoicePicker, Intent, PickerView};
+pub use model::{Choice, DuplicateId, Filter, SelectionMode, Status};
+
 use crate::text::clean;
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},

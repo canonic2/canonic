@@ -6,10 +6,32 @@ selector and Esc again exits. Ctrl-C exits from every view. Ctrl-T changes RGB
 dark/light tokens; F4 cycles ANSI 16, ANSI 256, RGB and no-color profiles.
 Body text uses the terminal's foreground/background in every profile.
 
-Type to search in the picker; Enter returns an original choice index. Esc cancels.
-The example defaults to continuation without the server. Confirmation updates a
-fixture result label and does not change files. F2 opens an empty picker fixture;
-return to the selector and reopen to reset it.
+The rich picker returns stable choice IDs. The default three-row fixture has no
+filter: arrows/Home/End/Page keys navigate and 1–3 immediately choose a row.
+Enter confirms the highlighted row; disabled rows cannot be highlighted or chosen.
+Danger rows require explicit navigation and are never implicit defaults. F3
+returns an inspection intent without choosing. Confirmation updates a fixture
+result label and does not change files. Esc cancels; with a nonempty filter it
+clears that filter first. Paste never confirms.
+
+F2 cycles default → details → disabled → danger → filter → no-match → scrolled
+→ multi → groups → loading → narrow → done → empty → error. It resets the picker
+while preserving the independent host draft. F5 simulates a source refresh by
+removing the highlighted ID. F6 changes stage/dock/full-screen placement within
+the gallery's existing terminal session. Tab/Shift-Tab switches picker/draft
+focus; Ctrl-J inserts a draft newline. Return to catalog/reopen resets both.
+
+Filtering defaults on above seven choices; hosts can force it on/off. Type or
+paste into the filter; digits are query text when filtering is enabled. Ctrl-G
+selects the query; Ctrl-Z/Ctrl-Y undo/redo its editor transactions. Matching is a
+case-insensitive subsequence of the label or detail, ignoring query whitespace;
+matched graphemes are bold/underlined. A surviving enabled highlighted ID remains
+highlighted; otherwise the first safe ranked result is used. Multiple mode uses
+Space to toggle a mark and Alt-A to toggle all matching enabled rows. Hidden
+marks survive filtering; Enter returns the marked IDs in supplied order, including
+hidden marks. An empty marked set may be confirmed when the source is nonempty.
+Loading/error/empty sources cannot confirm. The compatibility `Picker`/`Action`
+API retains its original-index semantics and remains the catalog's implementation.
 
 The chat fixture has a conversation, status, composer and keyboard hints. Type or
 paste; Enter submits to the simulator. Alt-Enter inserts a newline where the
@@ -75,7 +97,8 @@ and owns validation/execution. Resize preserves text/caret; release events do no
 edit. Focus changes preserve the draft, selection and viewport. The terminal's
 cursor retains its own shape/blink; the library does not install a custom cursor.
 
-`EditorView` supplies title, placeholder, footer and `Presentation`. Edit notices
+`EditorView` supplies title, placeholder, footer and `Presentation`; `chrome=false`
+renders only its text area, as used by the picker's single-row filter. Edit notices
 temporarily override the footer, and pasted text is tinted until the next key or
 three seconds. Hosts call `Editor::tick(elapsed)` to advance time; the editor owns
 no timer. Empty footer props use line/column and selection metadata.

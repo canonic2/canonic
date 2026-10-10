@@ -27,6 +27,8 @@ pub struct EditorView<'a> {
     pub footer: &'a str,
     /// Resolved capability and palette inputs.
     pub presentation: Presentation,
+    /// Draw title/footer rules; disable for a host-labeled inline input row.
+    pub chrome: bool,
 }
 
 impl Default for EditorView<'_> {
@@ -36,6 +38,7 @@ impl Default for EditorView<'_> {
             placeholder: "",
             footer: "",
             presentation: Presentation::default(),
+            chrome: true,
         }
     }
 }
@@ -56,11 +59,13 @@ impl Editor {
         focused: bool,
     ) {
         let p = view.presentation;
+        let chrome = if view.chrome { EDITOR_CHROME } else { 0 };
         let inner = Rect::new(
             area.x,
-            area.y.saturating_add(u16::from(area.height > 0)),
+            area.y
+                .saturating_add(u16::from(view.chrome && area.height > 0)),
             area.width,
-            area.height.saturating_sub(EDITOR_CHROME),
+            area.height.saturating_sub(chrome),
         );
         self.width = inner.width.max(1);
         self.height = usize::from(inner.height);
@@ -115,7 +120,9 @@ impl Editor {
                 inner,
             );
         }
-        self.rules(frame, area, view, focused, rows.len());
+        if view.chrome {
+            self.rules(frame, area, view, focused, rows.len());
+        }
         if focused && !inner.is_empty() {
             frame.set_cursor_position((
                 inner.x + u16::try_from(x).unwrap_or(0).min(inner.width - 1),

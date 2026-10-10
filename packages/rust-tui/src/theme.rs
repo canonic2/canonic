@@ -155,6 +155,11 @@ impl Presentation {
     pub fn warning(self) -> Style {
         Self::foreground(self.tokens().warning).add_modifier(Modifier::BOLD)
     }
+    /// Failed or dangerous content, preserving defaults in no-color mode.
+    #[must_use]
+    pub fn error(self) -> Style {
+        Self::foreground(self.tokens().error)
+    }
     /// Selection tint or reverse fallback.
     #[must_use]
     pub fn selection(self) -> Style {

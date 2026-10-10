@@ -25,9 +25,7 @@ fn gallery_opens_at_the_selector_and_both_components_are_independent_fixtures() 
     assert_eq!(gallery.current(), "picker");
     gallery.update(&key(KeyCode::Enter));
     terminal.draw(|frame| gallery.render(frame)).unwrap();
-    assert!(
-        super::components::dump(terminal.backend().buffer()).contains("Selected original choice 3")
-    );
+    assert!(super::components::dump(terminal.backend().buffer()).contains("Selected skip"));
     gallery.update(&key(KeyCode::Esc));
     gallery.update(&key(KeyCode::Down));
     gallery.update(&key(KeyCode::Enter));
@@ -109,6 +107,37 @@ fn editor_fixture_routes_paste_to_focused_scope_and_resets_on_reopen() {
 }
 
 #[test]
+fn rich_picker_fixtures_isolate_the_host_draft_and_reset_after_confirmation() {
+    let mut gallery = Gallery::new();
+    gallery.update(&key(KeyCode::Enter));
+    let original = gallery.picker_input().to_owned();
+    gallery.update(&Event::Paste("ignored without a filter".into()));
+    assert_eq!(gallery.picker_input(), original);
+    gallery.update(&key(KeyCode::Tab));
+    gallery.update(&Event::Paste(" retained".into()));
+    let draft = gallery.picker_input().to_owned();
+    gallery.update(&key(KeyCode::Tab));
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    for _ in 0..14 {
+        terminal.draw(|f| gallery.render(f)).unwrap();
+        assert_eq!(gallery.picker_input(), draft);
+        gallery.update(&key(KeyCode::F(2)));
+    }
+    for _ in 0..4 {
+        gallery.update(&key(KeyCode::F(2)));
+    }
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "picker");
+    gallery.update(&key(KeyCode::Esc));
+    assert_eq!(gallery.current(), "catalog");
+    gallery.update(&key(KeyCode::Enter));
+    assert_eq!(gallery.picker_input(), original);
+    gallery.update(&key(KeyCode::Char('1')));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("Selected once"));
+}
+
+#[test]
 fn headless_listing_help_and_refusal_do_not_change_terminal_modes() {
     Command::new(assert_cmd::cargo::cargo_bin!("tui-gallery"))
         .arg("--list")
@@ -150,7 +179,13 @@ try:
     os.write(master,b'\r')
     wait_for(b'Continue without this server')
     os.write(master,b'\r')
-    wait_for(b'Selected original choice 3')
+    wait_for(b'Selected skip')
+    os.write(master,b'\x1bOQ'*4)
+    wait_for(b'switch branch')
+    os.write(master,b'\x07\x1b[200~example29\x1b[201~')
+    wait_for(b'updated 29 hours ago')
+    os.write(master,b'\r')
+    wait_for(b'Selected branch-29')
     os.write(master,b'\x1b');time.sleep(0.1)
     os.write(master,b'\x1b[B\r')
     wait_for(b'Acme agent')

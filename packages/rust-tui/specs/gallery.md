@@ -1,5 +1,15 @@
 # Independent gallery and verification
 
+## Implemented picker composition
+
+Slice 2a exposes fourteen resettable states: default, details, disabled, danger,
+filter, no-match, scrolled, multi, groups, loading, narrow, done, empty and error.
+F2 cycles states; F3 inspects, F5 simulates source refresh and F6 changes stage/
+dock/full-screen placement. Tab switches to an independent draft. The component
+returns intents; the gallery collapses confirmed output. No product operation
+or new terminal session runs. [Gate 2a](human-testing.md#gate-2a--rich-option-picker)
+owns human acceptance. The broader expansion below remains proposed.
+
 Status: proposed expansion of the existing feature-gated gallery. Current fixtures
 and assertions are recorded in [Inventory](inventory.md). This specification
 defines future acceptance, not evidence that those tests already exist.

@@ -2,7 +2,8 @@
 
 Status: design-system/editor redesign requested on **2026-10-09**. Implemented
 and awaiting the renewed human gate. Broader session/activity/diff mockups remain
-in their owning delivery slices. The supplied design references stay in the
+in their owning delivery slices. Slice 2a applies the supplied option-picker
+design, awaiting its own human gate. The supplied design references stay in the
 private repository; the implementation contains no copied session/project data.
 
 ## Ownership and composition
@@ -31,6 +32,14 @@ picker have equivalent profile-aware render entry points. A full-width editor
 contains title rule, text rows and footer rule. Hosts can supply a three-row
 single-text-row area, a fixed/fill area, or vary the area to implement growing
 height; no host-height policy lives inside the editor.
+
+`EditorView.chrome=false` renders only text, used for a one-row picker query.
+`ChoicePicker` separates matching/state/input from compact rendering. `PickerView`
+supplies heading/source/context, maximum height and presentation. The view uses
+semantic styles, rules and cell tokens, reserves key/current/mark columns,
+aligns details, drops details first and truncates labels by grapheme. Opening
+height stays stable while filtering; groups count toward paging. The gallery
+owns placement and the independent draft, without another terminal loop.
 
 ## Tokens and fallback behavior
 

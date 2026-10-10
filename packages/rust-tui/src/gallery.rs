@@ -1,6 +1,7 @@
 //! Composes reusable views into a local gallery using simulated product activity.
 
 mod editor;
+mod option_picker;
 
 use crate::{
     chat::{self, Chat},
@@ -123,7 +124,7 @@ impl Drop for ColorOutput {
 pub struct Gallery {
     screen: Screen,
     catalog: Picker,
-    picker: Picker,
+    picker: option_picker::PickerDemo,
     chat: Chat,
     theme: Presentation,
     note: String,
@@ -153,15 +154,7 @@ impl Gallery {
                 ],
                 Some(0),
             ),
-            picker: Picker::new(
-                "Option picker",
-                vec![
-                    "Use this server".into(),
-                    "Use all project servers".into(),
-                    "Continue without this server".into(),
-                ],
-                Some(2),
-            ),
+            picker: option_picker::PickerDemo::new(),
             chat: Chat::new(),
             theme: Presentation::default(),
             note: String::new(),
@@ -188,6 +181,11 @@ impl Gallery {
     #[must_use]
     pub fn editor_input(&self, index: usize) -> Option<&str> {
         self.editor.input(index)
+    }
+    /// Independent host draft in the rich picker fixture.
+    #[must_use]
+    pub fn picker_input(&self) -> &str {
+        self.picker.input()
     }
 
     fn reset_chat(&mut self) {
@@ -235,6 +233,7 @@ impl Gallery {
 
     fn tick_elapsed(&mut self, elapsed: Duration) {
         self.editor.tick(elapsed);
+        self.picker.tick(elapsed);
         self.chat.tick(elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.chat.append(&fragment);
@@ -247,6 +246,9 @@ impl Gallery {
     /// Apply an input event. Returns true when the gallery should exit.
     pub fn update(&mut self, event: &Event) -> bool {
         if matches!(self.screen, Screen::Editor) && self.editor.update(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::Picker) && self.picker.update(event) {
             return false;
         }
         if let Event::Key(key) = event {
@@ -280,8 +282,6 @@ impl Gallery {
                 if matches!(self.screen, Screen::Chat) {
                     self.scenario = (self.scenario + 1) % 6;
                     self.reset_chat();
-                } else if matches!(self.screen, Screen::Picker) {
-                    self.picker = Picker::new("Empty picker fixture", Vec::new(), None);
                 }
                 return false;
             }
@@ -295,28 +295,12 @@ impl Gallery {
                         _ => Screen::Editor,
                     };
                     self.editor = editor::EditorDemo::new();
-                    self.picker = Picker::new(
-                        "Option picker",
-                        vec![
-                            "Use this server".into(),
-                            "Use all project servers".into(),
-                            "Continue without this server".into(),
-                        ],
-                        Some(2),
-                    );
+                    self.picker = option_picker::PickerDemo::new();
                     if matches!(self.screen, Screen::Chat) {
                         self.reset_chat();
                     } else {
                         self.stream.clear();
                     }
-                }
-            }
-            Screen::Picker => {
-                if let picker::Action::Selected(index) = self.picker.update(event) {
-                    self.note = format!(
-                        "Selected original choice {} · fixture only; no settings changed",
-                        index + 1
-                    );
                 }
             }
             Screen::Chat => match self.chat.update(event) {
@@ -341,7 +325,7 @@ impl Gallery {
                 }
                 chat::Action::None => {}
             },
-            Screen::Editor => {}
+            Screen::Picker | Screen::Editor => {}
         }
         false
     }
@@ -375,7 +359,7 @@ impl Gallery {
         );
         match self.screen {
             Screen::Catalog => self.catalog.render_with(frame, body, self.theme),
-            Screen::Picker => self.picker.render_with(frame, body, self.theme),
+            Screen::Picker => self.picker.render(frame, body, self.theme),
             Screen::Chat => self.chat.render_with(frame, body, self.theme),
             Screen::Editor => self.editor.render(frame, body, self.theme),
         }

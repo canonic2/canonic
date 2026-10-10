@@ -53,6 +53,14 @@ impl Symbols {
             Self::Ascii => " | ",
         }
     }
+    /// Truncated-label marker.
+    #[must_use]
+    pub const fn ellipsis(self) -> char {
+        match self {
+            Self::Unicode => '⋯',
+            Self::Ascii => '.',
+        }
+    }
 }
 
 /// Semantic colors. `None` preserves the user's terminal color.
@@ -92,4 +100,8 @@ pub mod spacing {
     pub const TAB_STOP: usize = 4;
     /// Caret context rows.
     pub const CURSOR_CONTEXT: usize = 1;
+    /// Default maximum height for a compact picker, including chrome.
+    pub const PICKER_HEIGHT: u16 = 9;
+    /// Minimum useful second-column width before details disappear.
+    pub const PICKER_DETAIL: usize = 12;
 }

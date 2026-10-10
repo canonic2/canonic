@@ -13,11 +13,13 @@ make -C packages/rust-tui run
 
 The first screen selects **Option picker**, **Full-screen chat** or **Multiline editor**. Use arrows
 and Enter to open a component, Esc to return (or quit at the selector), Ctrl-C
-to quit and Ctrl-T to toggle dark/light themes. F2 shows the empty picker or
+to quit and Ctrl-T to toggle dark/light themes. F2 cycles picker design states or
 cycles chat fixtures: ready, empty, streaming, error, disconnected and long text.
 
-The picker supports typing/search, paste, arrow navigation and explicit Enter
-confirmation. The chat uses a multiline editor with cursor movement, selection,
+The compact picker returns stable choice IDs, with details, groups, disabled and
+danger rows, fuzzy filtering, paging and explicit single/multiple confirmation.
+F6 changes its gallery placement; Tab switches to an independent host draft.
+The chat uses a multiline editor with cursor movement, selection,
 paste, grouped undo/redo, Alt-Enter or Ctrl-J newline and Enter submission.
 Alt-PageUp/PageDown scroll the transcript; Alt-End follows
 output; Ctrl-X interrupts simulated activity. The gallery uses local fixture

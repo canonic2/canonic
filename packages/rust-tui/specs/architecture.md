@@ -1,5 +1,11 @@
 # Shared terminal components and gallery — foundation
 
+Slice 2a adds `ChoicePicker`: validated stable-ID choices, editor-backed query,
+single/multiple intents, status and compact rendering are separated under
+`src/picker/`. The original index-based `Picker` remains the catalog/compatibility
+API. Gallery placement/focus/refresh and independent draft ownership live in
+`gallery/option_picker.rs`; human acceptance is pending Gate 2a.
+
 Status: foundation contract and inspected baseline. The proposed expansion and
 module decomposition are in [System design](system-design.md). [Inventory](inventory.md)
 records current evidence; expanded behavior is specified separately by topic.
