@@ -3,7 +3,7 @@
 use crate::text::clean;
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
-    theme::Theme,
+    theme::{Presentation, Theme},
 };
 use ratatui::{
     Frame,
@@ -132,6 +132,11 @@ impl Picker {
 
     /// Render into a caller-owned frame and area.
     pub fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: Theme) {
+        self.render_with(frame, area, theme.presentation());
+    }
+
+    /// Render using explicit terminal color capabilities.
+    pub fn render_with(&self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         let block = Block::bordered()
             .title(self.title.as_str())
             .style(theme.base());
@@ -164,7 +169,7 @@ impl Picker {
             frame.render_stateful_widget(
                 List::new(items)
                     .highlight_symbol("> ")
-                    .highlight_style(theme.focus()),
+                    .highlight_style(theme.surface().patch(theme.focus())),
                 list,
                 &mut state,
             );

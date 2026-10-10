@@ -1,9 +1,10 @@
 //! Owns a bounded conversation view and basic composer; hosts own agent execution.
 
 use crate::{
+    editor::{Editor, EditorView},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     text::{clean, wrapped},
-    theme::Theme,
+    theme::{Presentation, Theme},
 };
 use ratatui::{
     Frame,
@@ -11,8 +12,6 @@ use ratatui::{
     text::Line,
     widgets::{Block, Paragraph},
 };
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 const INPUT_LIMIT: usize = 4096;
 const MESSAGE_LIMIT: usize = 65536;
@@ -34,10 +33,10 @@ struct Message {
     text: String,
 }
 
-/// Reusable full-screen conversation composition with a basic append-only editor.
+/// Reusable conversation composition with a bounded multiline editor.
 pub struct Chat {
     messages: Vec<Message>,
-    input: String,
+    input: Editor,
     status: String,
     scroll: u16,
     follow: bool,
@@ -47,7 +46,7 @@ impl Default for Chat {
     fn default() -> Self {
         Self {
             messages: Vec::new(),
-            input: String::new(),
+            input: Editor::new(INPUT_LIMIT),
             status: String::new(),
             scroll: 0,
             follow: true,
@@ -65,12 +64,21 @@ impl Chat {
     /// Composer contents, before submission.
     #[must_use]
     pub fn input(&self) -> &str {
-        &self.input
+        self.input.text()
     }
 
     /// Restore a host-rejected draft or provide a fixture, within the input limit.
     pub fn set_input(&mut self, text: &str) {
-        self.input = clean(text, INPUT_LIMIT, true);
+        self.input.set_text(text);
+    }
+
+    /// Dismiss only editor selection state, without cancelling or exiting chat.
+    /// Returns whether there was selection state to dismiss.
+    pub fn dismiss_selection(&mut self) -> bool {
+        self.input.update(&Event::Key(crate::event::KeyEvent::new(
+            KeyCode::Esc,
+            KeyModifiers::NONE,
+        ))) != crate::editor::Outcome::Unhandled
     }
 
     /// Number of retained messages (at most 100).
@@ -109,60 +117,46 @@ impl Chat {
     /// Translate input to a product-independent action. Paste never submits.
     pub fn update(&mut self, event: &Event) -> Action {
         match event {
-            Event::Paste(text) => self.input.push_str(&clean(
-                text,
-                INPUT_LIMIT.saturating_sub(self.input.len()),
-                true,
-            )),
             Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
                 KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     return Action::Cancel;
                 }
                 KeyCode::Enter
-                    if key
-                        .modifiers
-                        .intersects(KeyModifiers::ALT | KeyModifiers::SHIFT) =>
+                    if key.modifiers.is_empty()
+                        && key.kind == KeyEventKind::Press
+                        && !self.input.text().trim().is_empty() =>
                 {
-                    if self.input.len() < INPUT_LIMIT {
-                        self.input.push('\n');
-                    }
+                    let text = self.input.text().to_owned();
+                    self.input.set_text("");
+                    return Action::Submit(text);
                 }
-                KeyCode::Enter if !self.input.trim().is_empty() => {
-                    return Action::Submit(std::mem::take(&mut self.input));
-                }
-                KeyCode::Backspace => {
-                    if let Some((index, _)) = self.input.grapheme_indices(true).next_back() {
-                        self.input.truncate(index);
-                    }
-                }
-                KeyCode::Char(character)
-                    if !key
-                        .modifiers
-                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-                        && !character.is_control() =>
-                {
-                    if self.input.len() + character.len_utf8() <= INPUT_LIMIT {
-                        self.input.push(character);
-                    }
-                }
-                KeyCode::PageUp => {
+                KeyCode::PageUp if key.modifiers.contains(KeyModifiers::ALT) => {
                     self.follow = false;
                     self.scroll = self.scroll.saturating_sub(5);
                 }
-                KeyCode::PageDown => {
+                KeyCode::PageDown if key.modifiers.contains(KeyModifiers::ALT) => {
                     self.follow = false;
                     self.scroll = self.scroll.saturating_add(5);
                 }
-                KeyCode::End => self.follow = true,
-                _ => {}
+                KeyCode::End if key.modifiers.contains(KeyModifiers::ALT) => self.follow = true,
+                _ => {
+                    self.input.update(event);
+                }
             },
-            _ => {}
+            _ => {
+                self.input.update(event);
+            }
         }
         Action::None
     }
 
     /// Draw the composition. Transcript position follows output until manually scrolled.
     pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Theme) {
+        self.render_with(frame, area, theme.presentation());
+    }
+
+    /// Render with explicit terminal capabilities and design tokens.
+    pub fn render_with(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         let [status, transcript, composer, hints] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
@@ -204,41 +198,28 @@ impl Chat {
                 .style(theme.base()),
             transcript,
         );
-        let block = Block::bordered().title("Message");
-        let inner = block.inner(composer);
-        let mut rows = wrapped(&self.input, inner.width);
-        if rows
-            .last()
-            .is_some_and(|line| line.width() >= usize::from(inner.width).max(1))
-        {
-            rows.push(String::new());
-        }
-        let offset = rows.len().saturating_sub(usize::from(inner.height));
-        let cursor_x = rows.last().map_or(0, |line| line.width());
-        let cursor_y = rows.len().saturating_sub(offset + 1);
-        frame.render_widget(
-            Paragraph::new(
-                rows.into_iter()
-                    .skip(offset)
-                    .map(Line::raw)
-                    .collect::<Vec<_>>(),
-            )
-            .block(block)
-            .style(theme.base()),
+        self.input.render_with(
+            frame,
             composer,
+            EditorView {
+                title: "message",
+                placeholder: "Write a message",
+                presentation: theme,
+                ..EditorView::default()
+            },
+            true,
         );
-        if inner.width > 0 && inner.height > 0 {
-            frame.set_cursor_position((
-                inner.x + u16::try_from(cursor_x).unwrap_or(0).min(inner.width - 1),
-                inner.y + u16::try_from(cursor_y).unwrap_or(0).min(inner.height - 1),
-            ));
-        }
         frame.render_widget(
             Paragraph::new(
-                "Enter send · Alt-Enter newline · Ctrl-X interrupt · PgUp/PgDn scroll · End follow",
+                "Enter send · Ctrl-J newline · Ctrl-X interrupt · Alt-PgUp/PgDn scroll · Alt-End follow",
             )
             .style(theme.muted()),
             hints,
         );
+    }
+
+    /// Advance editor messages and undo timing from the host's clock.
+    pub fn tick(&mut self, elapsed: std::time::Duration) {
+        self.input.tick(elapsed);
     }
 }

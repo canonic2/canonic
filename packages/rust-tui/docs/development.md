@@ -21,10 +21,31 @@ terminal lifetime. gallery.rs owns fixture composition and the application loop;
 main.rs stays thin. All components accept caller-owned events and frames. Add a
 component to the gallery's selector and fixtures when it is implemented.
 
+`theme/tokens.rs` defines semantic color/symbol/cell contracts; `theme.rs`
+resolves profiles and reusable styles. `ui.rs` owns the labeled rule primitive.
+Views consume those tokens/primitives; palette literals stay out of components.
+
+`editor.rs` owns draft/selection/viewport state; `editor/history.rs` owns grouped
+transactions and `editor/input.rs` maps editor keys. `editor/layout.rs` derives
+word-wrapped source/cell rows and printable controls. `editor/view.rs` owns
+presentation and explicit host props. `Editor::tick` advances injected time;
+component code owns no timers, environment reads or terminal queries.
+`focus.rs` owns instance-local focus orders and modal return scopes; hosts dispatch
+input only to the active target. `gallery/editor.rs` composes those public APIs
+into twelve design states and a two-editor/modal fixture.
+Editor tests include rendered cursor/style checks, a reviewed snapshot, Unicode
+properties and history/limit behavior. The PTY test also exercises bracketed
+multiline paste, focus switching and modal input before resize/restoration.
+
 State and rendering tests run without a terminal. TestBackend supplies terminal
 dimensions; insta captures the selector, with behavioral assertions alongside
 snapshots. Review generated snapshots with `cargo insta review`; do not accept
 unexpected changes automatically. Property tests cover selection bounds.
+
+Presentation tests cover terminal-default colors, ANSI/indexed/RGB/no-color
+selection, ASCII, host labels/placeholder/footer, copy-safe rows and notice
+expiry. [Presentation architecture](../specs/presentation.md) documents these
+boundaries and the current design-system/editor scope.
 
 The Unix PTY integration test needs Python 3. It verifies selector navigation,
 picker confirmation, chat submission, resize, Ctrl-C and terminal mode restoration.
@@ -33,6 +54,11 @@ writing protected caches/agent outputs. Run process-heavy suites separately.
 The terminal guard also restores on Rust unwinding; forced termination and
 Windows terminal behavior need separate acceptance. Components remain useful in
 pure tests even when no real terminal is available.
+
+Crossterm uses its `use-dev-tty` polling backend. The macOS PTY regression showed
+pending input becoming unread after resize with the default backend; the polling
+backend passes resize, modal input, Ctrl-C and post-exit canonical line handling.
+This is native macOS evidence; Windows and Linux acceptance remain separate.
 
 The library emits no logs or terminal input on import. Gallery fixture errors are
 display-only; product logging stays with the host. Review Gate changes in both

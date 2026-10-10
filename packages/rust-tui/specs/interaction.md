@@ -1,7 +1,9 @@
 # Input, focus and navigation
 
-Status: proposed target. Current key handling is local to picker/chat/gallery;
-there is no shared focus or binding system. See [System design](system-design.md).
+Status: target contract. Slice 1 implements shared focus orders/modal return
+scopes and editor keys, pending human acceptance. A shared binding dispatcher,
+pointer interaction and configurable shortcuts remain proposed.
+See [System design](system-design.md).
 
 ## Intended behavior
 

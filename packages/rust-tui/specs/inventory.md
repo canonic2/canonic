@@ -4,7 +4,7 @@
 
 Baseline inspected on **2026-10-09**: [manifest](../Cargo.toml),
 [exports](../src/lib.rs), all source modules, [usage](../docs/usage.md),
-[development](../docs/development.md) and both integration test modules. Structure
+[development](../docs/development.md) and integration test modules. Structure
 and acceptance conventions follow [Gate](../../gate/specs/README.md) and
 [Shield](../../../private/shield/specs/README.md). This pass inspected source and
 assertions; it did not rerun Rust gates or establish fresh platform acceptance.
@@ -20,19 +20,24 @@ Full application operations appear below to establish host ownership.
 | Evidence | Observed behavior and qualification |
 | --- | --- |
 | [Picker](../src/picker.rs) | Single choice, original-index action, explicit default, case-insensitive substring search, arrows/Enter/Esc/Ctrl-C/paste; 128-byte title, 4 KiB labels/query; backspace removes a scalar rather than grapheme |
-| [Chat](../src/chat.rs) | Plain role/text, append only to last message, status string; 100 messages, 64 KiB each, 4 KiB draft; append-only composer, grapheme backspace, multiline paste; submit immediately clears and host may restore |
+| [Chat](../src/chat.rs) | Plain role/text, append only to last message, status string; 100 messages, 64 KiB each, 4 KiB editor draft; submit immediately clears and host may restore |
+| [Editor](../src/editor.rs) / [Focus](../src/focus.rs) | Slice 1 functional gate passed; redesign awaits renewed gate: word-wrapped source rows, selection, one-transaction paste with whole-grapheme cutting, grouped undo; independent focus orders and modal return scopes |
 | Chat viewport | Grapheme/cell wrapping, follow/manual, five-row paging; `u16` row offset clamped during render; no stable anchors, IDs, structured parts or virtualization |
 | [Text](../src/text.rs) | Removes controls except allowed newlines, bounds UTF-8 by scalars, grapheme wrapping, narrow replacement; strips ESC rather than parsing complete escape sequences |
-| [Theme](../src/theme.rs) | Dark/light, base/focus/muted only; no error/diff/syntax roles or capability profile |
+| [Theme](../src/theme.rs) | Semantic ANSI/indexed/RGB/no-color profiles and ASCII symbols; terminal-default body colors; tokens for dim/accent/success/warning/error/info/surface/selection; no rich syntax/diff rendering |
 | [Runtime](../src/runtime.rs) | TTY checks, process-local lease, raw/alternate/cursor/paste, startup guard/drop restoration attempts, synchronous draw/poll; no inline, explicit close result, suspend/resume or forced-signal handling |
-| [Gallery](../src/gallery.rs) | Selector/picker/chat; theme and fixture controls; deterministic stream queue; busy/disconnected restores draft; tool/error fixtures are plain text |
-| [Component tests](../tests/integration/components.rs) | Choice/default/cancel/search identity, paste/graphemes/bounds/control stripping, tiny rendering/focus style; property covers choice-index bounds |
+| [Gallery](../src/gallery.rs) | Selector/picker/chat/editor; two independent editors and modal, resettable Unicode/long/limit scenarios; deterministic stream queue; busy/disconnected restores draft; tool/error fixtures are plain text |
+| [Editor tests](../tests/integration/editor.rs) | Editing, bounds, selection, undo, focus removal/return, cursor/style, reviewed multiline snapshot and arbitrary Unicode properties |
+| [Component tests](../tests/integration/components.rs) | Choice/default/cancel/search identity, paste/graphemes/bounds/safe control display, tiny rendering/focus style; property covers choice-index bounds |
 | [Gallery tests](../tests/integration/gallery.rs) | Navigation/simulation, one selector snapshot, headless paths; Unix Python PTY assertions for navigation, submission, resize, Ctrl-C, raw and alternate-screen restoration |
 | Consumers | Optional dependencies in [Gate](../../gate/Cargo.toml), [Shield](../../../private/shield/Cargo.toml), [Drone](../../../private/drone/Cargo.toml); no library calls found in consumer source; this is dependency readiness |
 
-No per-chat-state reviewed snapshots, editor/rich-content properties, inline PTY
+No per-chat-state reviewed snapshots, rich-content properties, inline PTY
 suite or native Windows acceptance are present. Complete escape removal, stable
 scroll positions, large-history behavior and cleanup-error reporting remain gaps.
+Editor controls remain stored and render as safe pictures/hex; fragmented
+transcript sanitation remains pending. See [Gate 1](human-testing.md#gate-1--editor-and-focus)
+for the implemented slice and its separate human acceptance status.
 
 ## Complete experience inventory
 

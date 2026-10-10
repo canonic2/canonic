@@ -87,7 +87,14 @@ fn history_and_input_are_bounded_and_control_sequences_are_not_rendered() {
     chat.set_input(&"界".repeat(3000));
     assert!(chat.input().len() <= 4096);
     chat.set_input("hello\x1b[31m");
-    assert!(!chat.input().contains('\x1b'));
+    assert!(chat.input().contains('\x1b'));
+    let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
+    terminal
+        .draw(|frame| chat.render(frame, frame.area(), Theme::Dark))
+        .unwrap();
+    let rendered = dump(terminal.backend().buffer());
+    assert!(rendered.contains("hello␛[31m"));
+    assert!(!rendered.contains('\x1b'));
 }
 
 #[test]

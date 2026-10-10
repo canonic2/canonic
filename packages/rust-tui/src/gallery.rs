@@ -1,14 +1,17 @@
 //! Composes reusable views into a local gallery using simulated product activity.
 
+mod editor;
+
 use crate::{
     chat::{self, Chat},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     picker::{self, Picker},
     runtime::TerminalSession,
-    theme::Theme,
+    theme::{ColorMode, Presentation, Symbols, Theme},
 };
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
+use crossterm::style::{Colored, force_color_output};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout},
@@ -30,6 +33,54 @@ pub struct Cli {
     /// Open a component directly; otherwise start at the component selector.
     #[arg(long, value_enum)]
     pub component: Option<Component>,
+    /// Color capability; auto respects `NO_COLOR`, `COLORTERM` and `TERM`.
+    #[arg(long, value_enum, default_value = "auto")]
+    pub colors: ColorChoice,
+    /// Use ASCII decorations; preserves Unicode draft text.
+    #[arg(long)]
+    pub ascii: bool,
+    /// Use light RGB tokens; body colors remain terminal defaults.
+    #[arg(long)]
+    pub light: bool,
+}
+
+/// Explicit gallery color profiles.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ColorChoice {
+    /// Resolve host environment once before opening the terminal.
+    Auto,
+    /// Terminal-native sixteen-color palette.
+    Ansi16,
+    /// Indexed palette.
+    Ansi256,
+    /// RGB palette.
+    Truecolor,
+    /// Attributes only.
+    None,
+}
+
+impl ColorChoice {
+    fn resolve(self) -> ColorMode {
+        match self {
+            Self::Ansi16 => ColorMode::Ansi16,
+            Self::Ansi256 => ColorMode::Ansi256,
+            Self::Truecolor => ColorMode::TrueColor,
+            Self::None => ColorMode::NoColor,
+            Self::Auto => {
+                if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
+                    return ColorMode::NoColor;
+                }
+                let color = std::env::var("COLORTERM").unwrap_or_default();
+                if color == "truecolor" || color == "24bit" {
+                    ColorMode::TrueColor
+                } else if std::env::var("TERM").is_ok_and(|v| v.contains("256color")) {
+                    ColorMode::Ansi256
+                } else {
+                    ColorMode::Ansi16
+                }
+            }
+        }
+    }
 }
 
 /// Components available in the first-screen selector.
@@ -39,12 +90,33 @@ pub enum Component {
     Picker,
     /// Full-screen conversation and composer.
     Chat,
+    /// Multiline editors and modal focus isolation.
+    Editor,
 }
 
 enum Screen {
     Catalog,
     Picker,
     Chat,
+    Editor,
+}
+
+// The host's resolved presentation owns color policy while the gallery runs.
+// Crossterm otherwise independently suppresses explicit profiles under NO_COLOR.
+struct ColorOutput(bool);
+
+impl ColorOutput {
+    fn acquire() -> Self {
+        let previous = Colored::ansi_color_disabled_memoized();
+        force_color_output(true);
+        Self(previous)
+    }
+}
+
+impl Drop for ColorOutput {
+    fn drop(&mut self) {
+        force_color_output(!self.0);
+    }
 }
 
 /// Gallery state independent of a terminal, clock, agent or product executable.
@@ -53,10 +125,11 @@ pub struct Gallery {
     catalog: Picker,
     picker: Picker,
     chat: Chat,
-    theme: Theme,
+    theme: Presentation,
     note: String,
     scenario: usize,
     stream: std::collections::VecDeque<String>,
+    editor: editor::EditorDemo,
 }
 
 impl Default for Gallery {
@@ -73,7 +146,11 @@ impl Gallery {
             screen: Screen::Catalog,
             catalog: Picker::new(
                 "Choose a component",
-                vec!["Option picker".into(), "Full-screen chat".into()],
+                vec![
+                    "Option picker".into(),
+                    "Full-screen chat".into(),
+                    "Multiline editor".into(),
+                ],
                 Some(0),
             ),
             picker: Picker::new(
@@ -86,10 +163,11 @@ impl Gallery {
                 Some(2),
             ),
             chat: Chat::new(),
-            theme: Theme::Dark,
+            theme: Presentation::default(),
             note: String::new(),
             scenario: 0,
             stream: std::collections::VecDeque::new(),
+            editor: editor::EditorDemo::new(),
         };
         gallery.reset_chat();
         gallery
@@ -102,7 +180,14 @@ impl Gallery {
             Screen::Catalog => "catalog",
             Screen::Picker => "picker",
             Screen::Chat => "chat",
+            Screen::Editor => "editor",
         }
+    }
+
+    /// Inspect a draft in the independent editor fixture; invalid indices return none.
+    #[must_use]
+    pub fn editor_input(&self, index: usize) -> Option<&str> {
+        self.editor.input(index)
     }
 
     fn reset_chat(&mut self) {
@@ -145,6 +230,12 @@ impl Gallery {
 
     /// Advance one deterministic simulated streaming step.
     pub fn tick(&mut self) {
+        self.tick_elapsed(Duration::from_millis(80));
+    }
+
+    fn tick_elapsed(&mut self, elapsed: Duration) {
+        self.editor.tick(elapsed);
+        self.chat.tick(elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.chat.append(&fragment);
             if self.stream.is_empty() {
@@ -155,6 +246,9 @@ impl Gallery {
 
     /// Apply an input event. Returns true when the gallery should exit.
     pub fn update(&mut self, event: &Event) -> bool {
+        if matches!(self.screen, Screen::Editor) && self.editor.update(event) {
+            return false;
+        }
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Release {
                 return false;
@@ -163,10 +257,17 @@ impl Gallery {
                 return true;
             }
             if key.code == KeyCode::Char('t') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                self.theme = self.theme.toggled();
+                self.theme.theme = self.theme.theme.toggled();
+                return false;
+            }
+            if key.code == KeyCode::F(4) {
+                self.next_colors();
                 return false;
             }
             if key.code == KeyCode::Esc {
+                if matches!(self.screen, Screen::Chat) && self.chat.dismiss_selection() {
+                    return false;
+                }
                 if matches!(self.screen, Screen::Catalog) {
                     return true;
                 }
@@ -188,11 +289,12 @@ impl Gallery {
         match self.screen {
             Screen::Catalog => {
                 if let picker::Action::Selected(index) = self.catalog.update(event) {
-                    self.screen = if index == 0 {
-                        Screen::Picker
-                    } else {
-                        Screen::Chat
+                    self.screen = match index {
+                        0 => Screen::Picker,
+                        1 => Screen::Chat,
+                        _ => Screen::Editor,
                     };
+                    self.editor = editor::EditorDemo::new();
                     self.picker = Picker::new(
                         "Option picker",
                         vec![
@@ -202,7 +304,11 @@ impl Gallery {
                         ],
                         Some(2),
                     );
-                    self.reset_chat();
+                    if matches!(self.screen, Screen::Chat) {
+                        self.reset_chat();
+                    } else {
+                        self.stream.clear();
+                    }
                 }
             }
             Screen::Picker => {
@@ -235,8 +341,18 @@ impl Gallery {
                 }
                 chat::Action::None => {}
             },
+            Screen::Editor => {}
         }
         false
+    }
+
+    fn next_colors(&mut self) {
+        self.theme.colors = match self.theme.colors {
+            ColorMode::Ansi16 => ColorMode::Ansi256,
+            ColorMode::Ansi256 => ColorMode::TrueColor,
+            ColorMode::TrueColor => ColorMode::NoColor,
+            ColorMode::NoColor => ColorMode::Ansi16,
+        };
     }
 
     /// Render the active component using the same public views as consumers.
@@ -258,9 +374,10 @@ impl Gallery {
             header,
         );
         match self.screen {
-            Screen::Catalog => self.catalog.render(frame, body, self.theme),
-            Screen::Picker => self.picker.render(frame, body, self.theme),
-            Screen::Chat => self.chat.render(frame, body, self.theme),
+            Screen::Catalog => self.catalog.render_with(frame, body, self.theme),
+            Screen::Picker => self.picker.render_with(frame, body, self.theme),
+            Screen::Chat => self.chat.render_with(frame, body, self.theme),
+            Screen::Editor => self.editor.render(frame, body, self.theme),
         }
         frame.render_widget(
             Paragraph::new(self.note.as_str()).style(self.theme.focus()),
@@ -268,7 +385,7 @@ impl Gallery {
         );
         frame.render_widget(
             Paragraph::new(
-                "Esc back/quit · Ctrl-C quit · Ctrl-T theme · F2 next fixture · resize freely",
+                "Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F4 colors",
             )
             .style(self.theme.muted()),
             footer,
@@ -282,16 +399,28 @@ impl Gallery {
 /// Returns errors for noninteractive terminals or terminal I/O failures.
 pub fn run(cli: &Cli) -> Result<()> {
     if cli.list {
-        println!("picker  Option picker\nchat    Full-screen chat");
+        println!("picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor");
         return Ok(());
     }
     let mut gallery = Gallery::new();
+    gallery.theme = Presentation {
+        theme: if cli.light { Theme::Light } else { Theme::Dark },
+        colors: cli.colors.resolve(),
+        symbols: if cli.ascii {
+            Symbols::Ascii
+        } else {
+            Symbols::Unicode
+        },
+    };
     if let Some(component) = cli.component {
         gallery.screen = match component {
             Component::Picker => Screen::Picker,
             Component::Chat => Screen::Chat,
+            Component::Editor => Screen::Editor,
         };
     }
+    // Declared first so the terminal restores its colors before policy is restored.
+    let _color_output = ColorOutput::acquire();
     let mut terminal = TerminalSession::open()?;
     let mut last_tick = Instant::now();
     loop {
@@ -302,7 +431,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             break;
         }
         if last_tick.elapsed() >= Duration::from_millis(80) {
-            gallery.tick();
+            gallery.tick_elapsed(last_tick.elapsed());
             last_tick = Instant::now();
         }
     }

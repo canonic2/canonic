@@ -1,8 +1,11 @@
 # Human testing gates
 
 Status: workflow requested on **2026-10-09**. Foundation human testing passed.
-Visual refinement is deferred at the user's request; functional acceptance does
-not establish design acceptance. Implementation slices remain unstarted. [Roadmap](roadmap.md) owns
+Slice 1 functional testing passed; the supplied editor/design-system redesign
+reopens its human gate. The user explicitly requested a scoped commit on
+2026-10-09 after visible newline/color checks. Remaining redesign gate actions
+have not been reported as passed. Slice 1 redesign is implemented;
+slices 2–13 remain unstarted. [Roadmap](roadmap.md) owns
 the acceptance criteria and architecture dependency groups; this topic owns
 their smaller delivery units and the human acceptance procedure.
 
@@ -31,8 +34,8 @@ acceptance does not waive a failing check. Maintain the slice status here and
 record commit IDs after acceptance, without claiming untested platform coverage.
 
 Use `make -C packages/rust-tui run` from the repository root for human tests.
-Future catalog/scenario labels below are intended deliverables, not available
-commands today. At each handoff, replace intended labels/keys with the actual
+Catalog/scenario labels for slices 2–13 are intended deliverables. At each
+handoff, replace intended labels/keys with the actual
 implemented controls. Prefer one command with catalog navigation over requiring
 the user to know Cargo/toolchain options. Never instruct the user to run a
 nonexistent fixture flag. Automated checks and owned PTY tests remain the
@@ -112,9 +115,84 @@ required. Baseline failures are fixed before starting slice 1. The plan changes
 can be committed after this gate passes; the existing foundation commits remain
 unchanged.
 
+## Gate 1 — editor and focus
+
+From the repository root run:
+
+```sh
+make -C packages/rust-tui run
+```
+
+1. Open **Multiline editor**. Its text starts at column 0 between title/footer
+   rules, with no side borders. Tab changes focus: inactive text remains readable,
+   its rules/title dim and cursor/footer disappear. Return and confirm draft,
+   caret and selection survive. F3 modal traps input; Esc clears its selection
+   before closing and restores the previous target.
+2. Type words; Home/End and Ctrl-A/Ctrl-E move to the visible wrapped row ends.
+   Ctrl-G selects all (Ctrl-Shift-A also works where encoded distinctly).
+   Shift-arrows extends selection. Ctrl-W deletes a word; Ctrl-U/Ctrl-K deletes
+   to logical line start/end. Ctrl-J inserts newline; standalone Enter does too.
+3. Paste two lines; the footer confirms paste and text is tinted until the next
+   key or three seconds. Ctrl-Z undoes the complete paste; Ctrl-Y restores it.
+   Ctrl-minus/Ctrl-period are alternatives. Type a word quickly: one undo removes
+   the group. Pause over a second, type more and verify a separate undo step.
+4. F2 cycles focused → blurred → empty → wrap → selection → Unicode → scrolled
+   → pasted → undo → near-limit → limit → paste-cut → focused. Empty shows a dim
+   placeholder. Prose wraps by word, long tokens break at the edge. Unicode
+   movements/deletions keep accents/CJK/joined emoji whole. Scrolled shows more
+   counts on the rules; PageUp/PageDown moves by editor height. Resize narrow
+   then wide, preserving text and keeping a usable cursor where space permits.
+5. Near-limit shows a byte counter; limit refuses text that cannot fit. Paste-cut
+   retains the fitting grapheme prefix and reports discarded bytes. Undo recovers
+   the full original draft. In any fixture, Ctrl-G then paste a longer value:
+   replacement stays within the budget and one undo restores draft and selection.
+6. F4 cycles color profiles; test RGB only on a supporting terminal. RGB supports
+   Ctrl-T dark/light roles. The selection
+   is tinted in RGB/indexed and reversed in ANSI 16/no-color. Body colors follow
+   the terminal. Exit then run the explicit no-color/ASCII command below; rules
+   and metadata use ASCII while document Unicode remains intact.
+7. Return to catalog/reopen: fixture resets. Open **Full-screen chat**, F2 twice
+   for streaming; edit during output. Ctrl-J adds a newline, Enter submits when
+   idle. Alt-PageUp/PageDown and Alt-End navigate transcript; plain End/Page keys
+   navigate the editor. Resize and exit with Ctrl-C; ordinary shell echo/cursor
+   still work.
+
+Explicit profiles from the repository root:
+
+```sh
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors ansi256"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors truecolor"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors truecolor --light"
+make -C packages/rust-tui run CARGO_FLAGS="-- --component editor --colors none --ascii"
+```
+
+The user confirmed cyan chrome and actual fixture line breaks on 2026-10-09,
+and supplied an iTerm2 screenshot showing colored focused chrome. These checks
+cover the visible fixes; the other Gate 1 actions remain pending.
+
+Report **pass** or **fail**, with the step and observed behavior for a failure.
+The redesigned editor is a material change after functional acceptance, so its
+human gate is reopened by the delivery contract. The user's explicit scoped
+commit request authorizes recording this implementation; it does not establish
+acceptance of unreported test actions. Slice 2 remains unstarted. No native
+Linux/Windows or modified-key encoding is inferred from pure tests.
+
 ## Acceptance record
 
 | Slice | Engineering | Human | Commit / next action |
 | --- | --- | --- | --- |
-| 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Commit gated plan, then implement slice 1 |
-| 1–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
+| 0 | Passed during foundation commit; recorded in roadmap | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
+| 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Scoped commit explicitly requested on 2026-10-09; slice 2 unstarted |
+| 2–13 | Not started | Not presented | Implement in sequence after previous accepted commit |
+
+Slice 1 engineering: `make -C packages/rust-tui check` passed formatting, strict
+Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs
+and dependency auditing. `cargo nextest run --locked --no-default-features`
+passed 21 library tests; `make -C packages/rust-tui build` passed release build.
+Gate/Shield/Drone `cargo check --offline --features tui` passed with temporary
+lock resolution; their existing lockfiles were restored byte-for-byte to keep
+this slice scoped to Rust TUI. Consumers need lock resolution when adopting the
+polling backend dependency; this is compilation evidence, not a product rollout.
+Auditing allows duplicate hashbrown/syn/thiserror versions. Markdown link and
+both repositories' diff checks passed. Native Linux/Windows and human modifier
+key encodings remain unverified.

@@ -1,0 +1,11 @@
+---
+source: tests/integration/editor.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+draft ──────────────────
+first
+second
+
+
+
+──── 1 selected · ln 2:2

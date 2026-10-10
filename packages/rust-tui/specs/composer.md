@@ -1,6 +1,9 @@
 # Composer and editing
 
-Status: proposed target. The append-only implementation remains the
+Status: target contract. Slice 1 implements bounded Unicode editing, selection,
+paste and undo/redo. Functional Gate 1 passed; the supplied editor/design-system
+redesign reopens human acceptance before commit. Draft lifecycle, persistence,
+completion and references remain proposed. The implementation baseline is the
 [baseline](inventory.md). `editor` owns generic text interaction; `composer`
 adds draft/history/reference/submit behavior without an agent dependency.
 
@@ -10,7 +13,7 @@ Typing inserts at the caret or replaces a selection. Left/right and backspace/
 delete move/remove whole graphemes. Word movement/deletion has a documented
 Unicode-aware boundary policy; punctuation is not assumed to be ASCII words.
 Up/down move by rendered visual line, retaining a preferred cell column; logical
-line start/end and buffer start/end are distinct actions. A selection can extend
+row start/end and buffer start/end are distinct actions. A selection can extend
 by grapheme, word, line or buffer; select-all and replacement are explicit.
 
 Multiline insertion, cursor visibility and scrolling work at narrow sizes and
@@ -20,7 +23,7 @@ Only focused enabled editors request the terminal cursor.
 
 Undo/redo reverses actual edit transactions, including replaced selections and
 references whose ranges are affected. Paste is one transaction. Adjacent typing
-may coalesce under explicit transaction boundaries; navigation, paste, selection
+coalesces within a one-second injected pause, ending after whitespace; navigation, paste, selection
 replacement and host replacement break coalescing. A new edit after undo clears
 redo. Submission is not an edit undo that restores a sent message; draft history
 handles recall separately. Bound undo memory and make discarded history observable
@@ -31,13 +34,15 @@ to tests. Text buffers contain valid UTF-8 and logical LF newlines.
 Normalize CRLF then remaining CR to LF. Bracketed paste is an atomic input event,
 never Enter submission, slash execution or shell execution. Pasted tab treatment
 is explicit (proposed: retain tab in draft, expand to four-cell stops for display).
-Sanitize display controls according to [Terminal](terminal.md); preserve ordinary
+Render stored draft controls as printable pictures/hex labels according to
+[Presentation](presentation.md); sanitize transcript streams according to
+[Terminal](terminal.md). Preserve ordinary
 Unicode. Typing and paste respect byte limits without cutting UTF-8/graphemes.
 
 Default initial draft budget remains 4 KiB for compatibility. Proposed configurable
-limits must be validated, with visible truncation/refusal and no partially replaced
-selection on a rejected edit. Prefer rejecting an oversized atomic replacement;
-an explicitly chosen truncate policy returns retained/dropped counts. Large paste
+limits have visible truncation/refusal. Input retains the whole-grapheme prefix
+that fits and reports dropped bytes; no-fit insertion preserves selection/draft.
+The prefix replacement remains one undo transaction. Large paste
 summary is a later capability: full text remains in an explicit draft part within
 host-approved limits and expands for inspection. A summary never hides what will
 be submitted or loses content during copy/undo.

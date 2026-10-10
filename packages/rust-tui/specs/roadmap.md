@@ -164,9 +164,9 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 
 ## Remaining gap summary
 
-Current library has simple picker/chat, semantic dark/light styling and a lease.
-The largest gaps are reusable editing/focus, identified transcript updates and
+Current library has picker/chat, reusable multiline editing/focus, semantic
+dark/light styling and a lease. Slice 1 implementation awaits its human gate.
+The largest gaps are identified transcript updates and
 anchors, rich content, acknowledged draft/run/review lifecycle, browsers/overlays,
 inline mode and broad native acceptance. Gallery and tests need to grow with each
-capability. The first slice deliberately establishes editing/focus before that
-expansion; it performs no new product integration.
+capability. The editor/focus slice performs no new product integration.

@@ -18,7 +18,8 @@ required-features = ["gallery"]
 
 [dependencies]
 anyhow = "1.0"
-crossterm = "0.29"
+# The polling backend preserves input readiness across macOS PTY resizes.
+crossterm = { version = "0.29", features = ["use-dev-tty"] }
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm", "layout-cache"] }
 unicode-width = "0.2"
 unicode-segmentation = "1.13"

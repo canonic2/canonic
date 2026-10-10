@@ -10,12 +10,15 @@
 //! ```
 
 pub mod chat;
+pub mod editor;
+pub mod focus;
 #[cfg(feature = "gallery")]
 pub mod gallery;
 pub mod picker;
 pub mod runtime;
 mod text;
 pub mod theme;
+pub mod ui;
 
 // Keep event and rendering types consistent for local consumers.
 pub use crossterm::event;

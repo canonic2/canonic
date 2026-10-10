@@ -1,0 +1,95 @@
+//! Owns semantic color, symbol and cell tokens independently of components.
+
+use ratatui::style::Color;
+
+/// Host-supplied terminal color capability.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ColorMode {
+    /// Follow the terminal's sixteen color slots and default body colors.
+    #[default]
+    Ansi16,
+    /// Indexed palette.
+    Ansi256,
+    /// RGB palette.
+    TrueColor,
+    /// Attributes only, without color overrides.
+    NoColor,
+}
+
+/// Decoration alphabet; document text is never transliterated.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Symbols {
+    /// Unicode rules and arrows.
+    #[default]
+    Unicode,
+    /// ASCII rules and direction words.
+    Ascii,
+}
+
+impl Symbols {
+    /// One-cell rule character.
+    #[must_use]
+    pub const fn rule(self) -> char {
+        match self {
+            Self::Unicode => '─',
+            Self::Ascii => '-',
+        }
+    }
+    /// Scroll direction.
+    #[must_use]
+    pub const fn more(self, above: bool) -> &'static str {
+        match (self, above) {
+            (Self::Unicode, true) => "↑",
+            (Self::Unicode, false) => "↓",
+            (Self::Ascii, true) => "up",
+            (Self::Ascii, false) => "down",
+        }
+    }
+    /// Metadata separator.
+    #[must_use]
+    pub const fn separator(self) -> &'static str {
+        match self {
+            Self::Unicode => " · ",
+            Self::Ascii => " | ",
+        }
+    }
+}
+
+/// Semantic colors. `None` preserves the user's terminal color.
+#[derive(Clone, Copy, Debug)]
+pub struct Colors {
+    /// Body text.
+    pub foreground: Option<Color>,
+    /// Body background.
+    pub background: Option<Color>,
+    /// Secondary text and inactive rules.
+    pub dim: Option<Color>,
+    /// Focus and current identity.
+    pub accent: Option<Color>,
+    /// Successful results.
+    pub success: Option<Color>,
+    /// Limits and attention.
+    pub warning: Option<Color>,
+    /// Failed results.
+    pub error: Option<Color>,
+    /// Paths and references.
+    pub info: Option<Color>,
+    /// Selected list row background; reverse when absent.
+    pub surface: Option<Color>,
+    /// Editor selection background; reverse when absent.
+    pub selection: Option<Color>,
+}
+
+/// Shared dimensions, measured in terminal cells.
+pub mod spacing {
+    /// Body indentation.
+    pub const INDENT: u16 = 2;
+    /// Gap between independent views.
+    pub const GAP: u16 = 1;
+    /// Editor title/footer rows.
+    pub const EDITOR_CHROME: u16 = 2;
+    /// Tab stops.
+    pub const TAB_STOP: usize = 4;
+    /// Caret context rows.
+    pub const CURSOR_CONTEXT: usize = 1;
+}

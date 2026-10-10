@@ -11,16 +11,22 @@ From the repository root:
 make -C packages/rust-tui run
 ```
 
-The first screen selects **Option picker** or **Full-screen chat**. Use arrows
+The first screen selects **Option picker**, **Full-screen chat** or **Multiline editor**. Use arrows
 and Enter to open a component, Esc to return (or quit at the selector), Ctrl-C
 to quit and Ctrl-T to toggle dark/light themes. F2 shows the empty picker or
 cycles chat fixtures: ready, empty, streaming, error, disconnected and long text.
 
 The picker supports typing/search, paste, arrow navigation and explicit Enter
-confirmation. The chat has a basic composer with paste, grapheme backspace,
-Alt-Enter newline and Enter submission. PageUp/PageDown scroll; End follows
+confirmation. The chat uses a multiline editor with cursor movement, selection,
+paste, grouped undo/redo, Alt-Enter or Ctrl-J newline and Enter submission.
+Alt-PageUp/PageDown scroll the transcript; Alt-End follows
 output; Ctrl-X interrupts simulated activity. The gallery uses local fixture
 data, with no AI account, policy enforcement, Git operation or saved approval.
+
+The editor uses full-width text between title/footer rules, with semantic color
+and cell tokens. F2 cycles its twelve design states; F4 cycles color profiles.
+Use `--colors none --ascii` for attribute-only ASCII chrome or
+`--colors truecolor --light` for light RGB roles. Body colors follow the terminal.
 
 ```sh
 cd packages/rust-tui

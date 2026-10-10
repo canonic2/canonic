@@ -42,10 +42,18 @@ dynamic plugin mechanism, registry publication or product UI rollout is added.
   Retains 100 messages of up to 64 KiB each and a 4 KiB composer. Visible text is
   sanitized and wraps by grapheme cell width. Extremely narrow wide glyphs use a
   replacement character. Hosts retain authoritative histories outside the view.
-- Dark/light semantic themes; tiny-terminal layouts are clipped by Ratatui.
+- Editor: independent multiline editing, cursor/word/visual-line movement,
+  selection/replacement, normalized paste and 64 grouped undo transactions.
+  Oversized input retains its complete grapheme prefix and reports dropped bytes;
+  no-fit input preserves draft/selection. Full-width text uses labeled rules and
+  host-supplied props. Chat composes this public component.
+- Focus: caller-defined unique target order, modal scopes and surviving return
+  focus. Gallery supplies independent two-editor/modal and limit fixtures.
+- Terminal-native ANSI, indexed, dark/light RGB and no-color semantic tokens;
+  ASCII decorations and shared rule primitives. Tiny layouts clip safely.
 
-The composer is append-only. Cursor navigation, selection, undo, command history,
-Markdown, structured tool cards, mouse support and inline runtime helpers are
+Command history, acknowledged submission, completion, Markdown, structured tool
+cards, mouse support and inline runtime helpers are
 future increments. The shared library does not connect Drone to its gallery.
 Forced signals, cross-process terminal ownership and Windows acceptance remain
 unverified; the process-local guard does not claim those guarantees.

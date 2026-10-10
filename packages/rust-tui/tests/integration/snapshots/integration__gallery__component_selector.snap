@@ -8,7 +8,7 @@ Canonic TUI · Component gallery
 │Search:                                                       │
 │> Option picker                                               │
 │  Full-screen chat                                            │
-│                                                              │
+│  Multiline editor                                            │
 │                                                              │
 │                                                              │
 │                                                              │
@@ -17,4 +17,4 @@ Canonic TUI · Component gallery
 │Up/Down move · Enter select · Esc cancel                      │
 └──────────────────────────────────────────────────────────────┘
 
-Esc back/quit · Ctrl-C quit · Ctrl-T theme · F2 next fixture · r
+Esc back/quit · Ctrl-C quit · Ctrl-T dark/light · F2 fixture · F

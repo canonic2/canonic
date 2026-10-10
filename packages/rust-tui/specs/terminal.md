@@ -63,12 +63,16 @@ Logs go through host facilities; direct writes during a lease cannot corrupt fra
 
 ## Text and Unicode
 
-Parse/remove complete ANSI/OSC/DCS/control sequences at the display boundary,
+For transcript content, parse/remove complete ANSI/OSC/DCS/control sequences at the display boundary,
 including fragmented input across a host-supplied streaming normalization context.
 Stripping ESC alone can leave misleading remnants. Do not replay hyperlinks,
 clipboard, title changes, bells or cursor movement from content. Stateful sanitation
 is scoped per stream/part and reset on replacement, never shared globally.
 Host keeps original content separately if it needs archival fidelity.
+
+Editor drafts retain controls for editing and host validation. Their renderer
+uses printable control pictures or ASCII hex labels rather than raw controls;
+it never replays escape effects. See [Presentation](presentation.md).
 
 Text bounds maintain valid UTF-8 and grapheme boundaries. Layout measures terminal
 cells, handles combining marks/CJK/emoji/zero-width sequences, and uses replacement

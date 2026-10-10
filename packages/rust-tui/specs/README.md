@@ -22,6 +22,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Activity and review](activity.md) | Tool/run states, permissions, questions and cancellation |
 | [Dialogs and browsing](dialogs.md) | Overlays, pickers, commands, sessions, trees, panels and notices |
 | [Terminal and presentation](terminal.md) | Lease, inline hosting, cleanup, compatibility, themes and accessibility |
+| [Presentation architecture](presentation.md) | Implemented semantic tokens, drawing primitives, editor view props and redesign decisions |
 | [Gallery and verification](gallery.md) | Isolated fixtures, composed screens and test evidence |
 | [Implementation plan](roadmap.md) | Dependency order, acceptance matrix, exit conditions and open decisions |
 | [Human testing gates](human-testing.md) | Smaller delivery slices, runnable acceptance steps, confirmation and commit workflow |
@@ -31,6 +32,10 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 comes from source/test inspection, not a new test run. Tests present in source,
 passing gates, native terminal acceptance and consumer rollout are distinct evidence.
 Optional dependency declarations establish neither integration nor application coverage.
+
+Slice 1 editor/focus implementation is ready for its separate
+[human testing gate](human-testing.md#gate-1--editor-and-focus). Automated results
+are recorded there; subsequent slices remain unstarted.
 
 Product execution, protocol translation, authentication, storage, policy and
 authority stay in consumers. No publication, distribution or product rollout is
