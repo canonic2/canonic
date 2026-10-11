@@ -23,7 +23,7 @@ consumer UI rollout.
 | [commands](../src/commands.rs) | Descriptors, search/help views, bindings and remaps | [Command Palette](components/command-palette.md) |
 | [completion](../src/completion.rs) | Ranked source snapshots, opaque queries, selection, progress/retry and fixed-height view | [Completion Menu](components/completion-menu.md) |
 | [composer](../src/composer.rs) | Draft/submission, queue, recall/stash, payloads, completion, saved state and editor conflicts | [Composer](components/composer.md), [Completion Menu](components/completion-menu.md) |
-| [chat](../src/chat.rs) | Bounded plain transcript, delivery/shell projection, scroll/follow and Composer composition | [Chat](components/chat.md) |
+| [chat](../src/chat.rs) | Identified rich transcript, revision/resync contracts, cached layout, anchors, loaded search/selection and fixed Composer | [Chat](components/chat.md) |
 | [focus](../src/focus.rs) | Instance-local target orders, modal scopes and return focus | [Input/navigation](features/interaction.md) |
 | [text](../src/text.rs), [theme](../src/theme.rs), [ui](../src/ui.rs) | Private sanitized text/wrapping, semantic presentation and shared rules | [Presentation](presentation.md) |
 | [runtime](../src/runtime.rs) | Interactive terminal lease, polling/drawing, explicit close and foreground handoff | [Terminal hosting](features/terminal.md) |
@@ -44,8 +44,7 @@ terminal handoff. Both boundaries are opt-in and independently report failures.
 
 ## Existing limitations
 
-Rich identified conversation parts, structured activity
-and review, resource browsers, native inline hosting and broad platform acceptance
+Structured activity and review, resource browsers, native inline hosting and broad platform acceptance
 remain separately tracked work. No current module map implies those targets exist.
 The terminal guard is process-local; it does not establish cross-process ownership
 or forced-signal recovery. See the [component checkpoints](components/README.md)

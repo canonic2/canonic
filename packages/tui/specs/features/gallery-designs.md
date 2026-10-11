@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 149 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 187 named entries, plus
 four main-view presentation profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -26,7 +26,7 @@ not a claim that every specified state is implemented or visually accepted.
 | [Commands](../components/command-palette.md#commands-completion-and-help) | main/palette, filter, filter-key, unavailable, no-match, keys, keys-custom, conflict, pending, pending-hints, pending-miss; supplemental empty | Native human acceptance remains separate |
 | [Completion Menu](../components/completion-menu.md) | main, files, loading, still-loading, no-match-command, no-match-file, error, partly-failed, disabled, command-inserted, file-inserted, narrow, long-description, mixed-sources, doesnt-open | Real discovery/execution belongs to hosts; human visual acceptance remains separate |
 | [Composer](../components/composer.md) | 59 runnable entries: submission/refusal, four box modes, queue/edit/remove/pause/restart, history/search/earlier sessions, stash/swap/drop, editor/return/error/conflict, paste/image/hidden controls, shell/output, commands/files/email, clearing/rewind/quit and keys | Real agent, clipboard and durable-storage integration belongs to consumer hosts; native human visual acceptance stays separate |
-| [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | main, empty, streaming, error, disconnected, long | actions-off, handoff, sessions, pane, anchored-dock, answer, welcome. Current transcript fixtures do not establish rich content, activity, browser, lens or transcript-anchor acceptance |
+| [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | 51 interactive entries: answer/welcome/pane/actions-off, identified streaming/delivery/stop/resync, prose/code/tables/diffs/attachments/reasoning, follow/unread/paging/reflow, search and selection/copy/open | Reusable activity/review, sessions and standalone inspection belong to their own components. Host effects are simulated; human acceptance is separate |
 
 Every component offers `narrow-40`, `ansi16`, `no-color`, and `ascii` main-view
 profiles. These cover narrow and color variants without duplicating

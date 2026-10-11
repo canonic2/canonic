@@ -1,0 +1,34 @@
+---
+source: tests/integration/chat.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+you · 00:40
+  so what's left on #276 after the server side?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+! api#reindex needs you · ctrl+g
+message ────────────────────────────────────────────────────────
+Write a message
+
+
+───────────────────────────────────────────────── worker#retries
+actions on · enter sends · F1 keys
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · C

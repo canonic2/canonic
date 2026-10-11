@@ -1,0 +1,44 @@
+---
+source: tests/integration/chat.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+
+acme · 00:40 · 38s
+  read     src/digest/settings.ts ↗
+  search   "X-Timezone" · 4 matches in 3 files
+
+  What's left
+
+  The server already stores the timezone, but the app never sends it, so both digests go out at 09:
+  00 UTC. Profile sync already sends X-Timezone; the digest calls should too.
+
+  · send the header on both digest calls, as in the profile client ↗
+  · drop the old offset table: zone names are enough
+  · add a test for each call
+
+  ts · src/profile/api.ts · 168 ────────────────────────────────────────────────────────────────────
+  headers: {
+    'X-Timezone': user.timezone, // the digest calls skip this
+  },
+
+  call           timezone  tests
+  ─────────────  ────────  ─────
+  profile sync   yes           4
+  daily digest   no            –
+  weekly digest  no            –
+
+  Add the header to both digest calls.
+  ✓ done · 38s
+
+
+ready
+message ────────────────────────────────────────────────────────────────────────────────────────────
+Write a message
+
+
+──────────────────────────────────────────────────────────────────────────────── orbit-api#276 ~chat
+actions on · enter sends · F1 keys
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

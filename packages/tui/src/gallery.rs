@@ -3,6 +3,7 @@
 mod commands;
 mod completion;
 mod composer;
+mod conversation;
 mod dialog_body;
 mod dialogs;
 mod editor;
@@ -10,7 +11,6 @@ mod option_picker;
 mod scenarios;
 
 use crate::{
-    chat::{self, Chat},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     picker::{self, Picker},
     runtime::TerminalSession,
@@ -150,11 +150,10 @@ pub struct Gallery {
     catalog: Picker,
     catalog_viewport: ListState,
     picker: option_picker::PickerDemo,
-    chat: Chat,
+    chat: conversation::ChatDemo,
     theme: Presentation,
     note: String,
     scenario: usize,
-    stream: std::collections::VecDeque<String>,
     editor: editor::EditorDemo,
     dialogs: dialogs::DialogDemo,
     commands: commands::CommandDemo,
@@ -211,7 +210,6 @@ impl Gallery {
             }
             if key.code == KeyCode::Esc {
                 self.screen = Screen::Catalog;
-                self.stream.clear();
                 self.note.clear();
                 return true;
             }
@@ -273,7 +271,6 @@ impl Gallery {
                 })?
         };
         let entry = &scenarios::entries(component)[index];
-        self.stream.clear();
         self.preview_width = None;
         self.note = if matches!(component, Component::Composer) {
             format!("composer / {id}")
@@ -298,7 +295,13 @@ impl Gallery {
             Some(1) => self.theme.colors = ColorMode::Ansi16,
             Some(2) => self.theme.colors = ColorMode::NoColor,
             Some(3) => self.theme.symbols = Symbols::Ascii,
-            _ => {}
+            _ => {
+                self.preview_width = match (component, id) {
+                    (Component::Chat, "narrow") => Some(40),
+                    (Component::Chat, "pane") => Some(64),
+                    _ => None,
+                };
+            }
         }
         Ok(())
     }
@@ -395,11 +398,10 @@ impl Gallery {
             ),
             catalog_viewport: ListState::default(),
             picker: option_picker::PickerDemo::new(),
-            chat: Chat::new(),
+            chat: conversation::ChatDemo::new(0),
             theme: Presentation::default(),
             note: String::new(),
             scenario: 0,
-            stream: std::collections::VecDeque::new(),
             editor: editor::EditorDemo::new(),
             dialogs: dialogs::DialogDemo::new(),
             commands: commands::CommandDemo::new(),
@@ -468,43 +470,14 @@ impl Gallery {
     pub fn completion_input(&self) -> &str {
         self.completion.input()
     }
+    /// Composer draft in the Chat scenario, preserved while searching/selecting.
+    #[must_use]
+    pub fn chat_input(&self) -> &str {
+        self.chat.input()
+    }
 
     fn reset_chat(&mut self) {
-        self.chat = Chat::new();
-        self.stream.clear();
-        match self.scenario {
-            1 => self.chat.set_status("Empty conversation"),
-            2 => {
-                self.chat.push("Acme agent", "");
-                self.stream = "This is simulated streaming output. Type while it arrives, or press Ctrl-X to interrupt.".split_inclusive(' ').map(str::to_owned).collect();
-                self.chat.set_status("Streaming fixture");
-            }
-            3 => {
-                self.chat.push(
-                    "Activity",
-                    "Simulated tool failure: example.com could not be reached.",
-                );
-                self.chat.set_status("Error fixture");
-            }
-            4 => {
-                self.chat
-                    .push("Activity", "The simulated agent connection is unavailable.");
-                self.chat.set_status("Disconnected fixture");
-            }
-            5 => {
-                self.chat.push(
-                    "Acme agent",
-                    &"Line: Resize, scroll, and inspect wrapping.\n".repeat(150),
-                );
-                self.chat.set_status("Long transcript fixture");
-            }
-            _ => {
-                self.chat.push("Acme agent", "Welcome to the full-screen chat component. This is a local simulation; no AI account is used.");
-                self.chat
-                    .push("Tool activity", "example_lookup completed · example.com");
-                self.chat.set_status("Ready fixture");
-            }
-        }
+        self.chat = conversation::ChatDemo::new(self.scenario);
     }
 
     /// Advance one deterministic simulated streaming step.
@@ -523,17 +496,14 @@ impl Gallery {
         self.composer.tick(elapsed);
         self.completion.tick(elapsed);
         self.chat.tick(elapsed);
-        if let Some(fragment) = self.stream.pop_front() {
-            self.chat.append(&fragment);
-            if self.stream.is_empty() {
-                self.chat.set_status("Ready fixture");
-            }
-        }
     }
 
     /// Apply an input event. Returns true when the gallery should exit.
     pub fn update(&mut self, event: &Event) -> bool {
         if self.navigate_scenarios(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::Chat) && self.chat.update(event) {
             return false;
         }
         if matches!(self.screen, Screen::Composer) && self.composer.update(event) {
@@ -570,9 +540,6 @@ impl Gallery {
                 return false;
             }
             if key.code == KeyCode::Esc {
-                if matches!(self.screen, Screen::Chat) && self.chat.dismiss_selection() {
-                    return false;
-                }
                 if matches!(self.screen, Screen::Catalog) {
                     return true;
                 }
@@ -583,7 +550,7 @@ impl Gallery {
             }
             if key.code == KeyCode::F(2) {
                 if matches!(self.screen, Screen::Chat) {
-                    self.scenario = (self.scenario + 1) % 6;
+                    self.scenario = (self.scenario + 1) % scenarios::entries(Component::Chat).len();
                     self.reset_chat();
                 }
                 return false;
@@ -609,31 +576,7 @@ impl Gallery {
     }
 
     fn update_chat(&mut self, event: &Event) {
-        match self.chat.update(event) {
-            chat::Action::Submit(submission) => {
-                self.chat.push_submission(&submission, "20:10");
-                if self.scenario == 4 {
-                    self.chat
-                        .acknowledge_submission(&submission.ticket, Err("Disconnected"));
-                    self.chat
-                        .set_status("Disconnected fixture · message not executed");
-                } else if !self.stream.is_empty() {
-                    self.chat
-                        .acknowledge_submission(&submission.ticket, Err("Busy"));
-                    self.chat.set_status("Busy fixture · message not executed");
-                } else {
-                    self.chat.acknowledge_submission(&submission.ticket, Ok(()));
-                    self.chat.push("Acme agent", "");
-                    self.stream = "Simulated response: your composer and conversation view work independently of an agent backend.".split_inclusive(' ').map(str::to_owned).collect();
-                    self.chat.set_status("Streaming fixture");
-                }
-            }
-            chat::Action::Cancel => {
-                self.stream.clear();
-                self.chat.set_status("Interrupted fixture");
-            }
-            chat::Action::None => {}
-        }
+        self.chat.update(event);
     }
 
     fn next_colors(&mut self) {
@@ -677,7 +620,7 @@ impl Gallery {
                     .render_with_state(frame, body, self.theme, &mut self.catalog_viewport);
             }
             Screen::Picker => self.picker.render(frame, body, self.theme),
-            Screen::Chat => self.chat.render_with(frame, body, self.theme),
+            Screen::Chat => self.chat.render(frame, body, self.theme),
             Screen::Editor => self.editor.render(frame, body, self.theme),
             Screen::Dialog => self.dialogs.render(frame, body, self.theme),
             Screen::Commands => self.commands.render(frame, body, self.theme),

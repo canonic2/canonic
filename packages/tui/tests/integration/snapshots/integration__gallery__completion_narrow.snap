@@ -5,10 +5,9 @@ expression: text
 Canonic TUI · Component gallery
 
 acme · 00:38
-Rebased onto main: 4 commits, no conflic
-ts.
-Working tree is clean. Nothing pushed.
-
+  Rebased onto main: 4 commits, no
+  conflicts. Working tree is clean.
+  Nothing pushed.
 
 
 
@@ -21,6 +20,7 @@ commands ───────────────────────�
   /fix-checks    restore failing checks
   /clear         local host command
 ────────────────────────────── ↓ 29 more
+
 tab / enter inserts · esc closes
 message ────────────────────────────────
 /

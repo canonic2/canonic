@@ -226,14 +226,15 @@ impl Composer {
                 .map(|(i, entry)| {
                     ratatui::text::Line::styled(
                         format!(
-                            "{} {}  {}",
+                            "{} {}  {}{}",
                             if i == 0 { "queued" } else { "      " },
                             i + 1,
                             if entry.editing {
                                 "editing below".into()
                             } else {
                                 crate::text::clean(&entry.text, 256, false)
-                            }
+                            },
+                            if self.paused { " · paused" } else { "" }
                         ),
                         if entry.editing {
                             presentation.selection()

@@ -110,7 +110,7 @@ pub(super) fn name(component: Component) -> &'static str {
 pub(super) fn board(component: Component) -> &'static str {
     match component {
         Component::Picker => "design/option-picker/README.md · States / Hosts",
-        Component::Chat => "design/design-system/README.md · Screens / Dock",
+        Component::Chat => "design/chat/README.md · Turns / Content / Search / Selection",
         Component::Editor => "design/editor/README.md · States / Hosts",
         Component::Dialog => "design/dialog/README.md · States",
         Component::Commands => "design/commands-and-bindings/README.md · States / / list",
@@ -320,39 +320,56 @@ const COMPOSER: [Scenario; 59] = [
     live!("backslash-newline", 55),
     live!("keys", 56),
 ];
-const CHAT: [Scenario; 13] = [
+const CHAT: [Scenario; 51] = [
     live!("main", 0),
     live!("empty", 1),
     live!("streaming", 2),
     live!("error", 3),
     live!("disconnected", 4),
     live!("long", 5),
-    planned!(
-        "actions-off",
-        "Design-system screen 02: activity log with actions disabled; structured activity rendering is pending."
-    ),
-    planned!(
-        "handoff",
-        "Screen 03: handoff lens with references and summary; lens routing is pending."
-    ),
-    planned!(
-        "sessions",
-        "Screen 04: session browser and preserved per-session state; browser implementation is pending."
-    ),
-    planned!(
-        "pane",
-        "Screen 05: conversation in a pane with narrow fallbacks; dedicated composed pane fixture is pending."
-    ),
-    planned!(
-        "anchored-dock",
-        "Screen 06: retain the transcript anchor while the dock remains fixed and overlays stream. Full anchor and overlay composition is pending."
-    ),
-    planned!(
-        "answer",
-        "Screen 07: structured final answer, code, tool output and completion status. Rich content and activity components are pending."
-    ),
-    planned!(
-        "welcome",
-        "Screen 08: session welcome with contextual hints. Dedicated welcome composition is pending."
-    ),
+    live!("actions-off", 6),
+    live!("pane", 7),
+    live!("answer", 8),
+    live!("welcome", 9),
+    live!("turns", 10),
+    live!("delivery", 11),
+    live!("unfinished-markdown", 12),
+    live!("tools-between-text", 13),
+    live!("stopped", 14),
+    live!("resynced", 15),
+    live!("days", 16),
+    live!("older", 17),
+    live!("narrow", 18),
+    live!("prose", 19),
+    live!("headings-lists", 20),
+    live!("quote-rule", 21),
+    live!("code", 22),
+    live!("long-lines", 23),
+    live!("table", 24),
+    live!("table-wide", 25),
+    live!("diff", 26),
+    live!("attachments", 27),
+    live!("reasoning", 28),
+    live!("unknown-raw", 29),
+    live!("truncated", 30),
+    live!("follow", 31),
+    live!("reading-back", 32),
+    live!("unread", 33),
+    live!("back-to-latest", 34),
+    live!("earlier-loaded", 35),
+    live!("reflow", 36),
+    live!("search-open", 37),
+    live!("search-matches", 38),
+    live!("search-next", 39),
+    live!("search-folded", 40),
+    live!("search-no-match", 41),
+    live!("search-closed", 42),
+    live!("select", 43),
+    live!("select-code", 44),
+    live!("copied", 45),
+    live!("whole-message", 46),
+    live!("open-link", 47),
+    live!("mouse-selection", 48),
+    live!("screen-streaming", 49),
+    live!("anchored-dock", 50),
 ];

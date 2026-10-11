@@ -128,8 +128,22 @@ paste; Enter submits a snapshot to the simulator, which acknowledges immediately
 Shift-Enter and Alt-Enter insert a newline where the
 terminal reports the modifier; Ctrl-J is the traditional-key fallback.
 Pasted newlines also work. Backspace/Delete remove whole graphemes; arrows edit
-the draft. Alt-PageUp/Alt-PageDown scroll the transcript and Alt-End follows it.
-Plain PageUp/PageDown and End belong to the editor. F2 cycles fixture states and resets the chat. No agent runs.
+the draft. Alt-PageUp/Alt-PageDown move a visible transcript page; Alt-Up/Down
+move three rows. Alt-Home goes to the oldest loaded row; press again to load
+simulated earlier history. Alt-End follows latest output. Manual reading keeps
+a source anchor through resize and shows unread above the fixed dock.
+Ctrl-F searches loaded content: Up/Down move matches, Esc restores the old view,
+Enter keeps the match. Ctrl-X V selects blocks: Up/Down move, Shift extends,
+M selects the message, Y copies Markdown, C copies code, O opens/inspects and
+Enter folds. Copy/open are simulated and acknowledged locally. Ctrl-X T toggles
+timestamps; Ctrl-X R requests retry on a failed reply. Plain editor keys still
+belong to Composer. F2 cycles 51 fixtures; F5–F9 simulate host events. No agent runs.
+
+```sh
+make -C packages/tui run CARGO_FLAGS="-- --component chat --scenario answer"
+make -C packages/tui run CARGO_FLAGS="-- --component chat --scenario search-folded"
+make -C packages/tui run CARGO_FLAGS="-- --component chat --scenario select-code --colors none --ascii"
+```
 
 For headless inventory use `cargo run --locked --features gallery -- --list`
 from the package. The interactive gallery refuses piped input/output before
@@ -367,7 +381,10 @@ assert_eq!(result, Action::Selected(1));
 
 The host dispatches events and renders components in its Ratatui frame. Components
 return actions; the host decides how to execute or reject them. `Chat::push`,
-`append`, `set_status` and `set_input` update display state. `chat::Action::Submit`
+`append`, `set_status` and `set_input` support plain hosts. Rich hosts use
+`push_record`, revision-addressed `apply`, `resynchronize`, `finish_turn` and
+`take_intents`; acknowledge copy/open and complete opaque paging requests.
+Drain Composer intents separately for saving, commands and external editor work. `chat::Action::Submit`
 carries a `Submission`; acknowledge its ticket through `chat.composer_mut()`.
 Submission clears the box immediately; acknowledgement preserves fresh edits.
 `TerminalSession` is an optional host helper

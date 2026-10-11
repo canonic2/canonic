@@ -91,6 +91,7 @@ Busy includes an accepted running turn and an unacknowledged submission.
 Enter queues complete draft records in FIFO order and clears the box. A queue
 holds at most 128 entries; reaching capacity refuses the new item and retains
 its draft with a notice. Queue rows show at most three entries, then `+N more`.
+Paused entries keep a dim `· paused` label even when another activity notice is shown.
 Positions renumber after sending/removal. An entry being edited says
 `editing below`; scheduling identifies it by stable identity, not its number.
 

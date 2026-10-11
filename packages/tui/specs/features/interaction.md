@@ -5,6 +5,11 @@ scopes and editor keys. Slice 2c implements scoped command maps and validated
 shortcut sequences; its human gate is pending. Pointer interaction remains proposed.
 See [System design](../system-design.md).
 
+Chat implements logical transcript anchors, loaded search and semantic block
+selection/copy with instance-scoped host acknowledgements. It composes one
+Composer and returns focus/draft/caret after local Escape. Native terminal mouse
+selection remains available; Chat does not acquire pointer capture.
+
 Slice 2b implements modal dispatch through `dialog::Stack`, wrapping existing
 focus scopes. Only the top body handles input; Tab traps within that scope and
 Escape clears a body's local selection/query before closing one layer. Outside

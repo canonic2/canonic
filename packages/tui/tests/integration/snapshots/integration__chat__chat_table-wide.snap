@@ -1,0 +1,28 @@
+---
+source: tests/integration/chat.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+  run · p95
+  profile sync · timezone yes · tests 4
+  · owner sam · last run 20:01 · p95 120
+  ms
+  daily digest · timezone no · tests – ·
+  owner sam · last run 09:00 · p95 340
+  ms
+  weekly digest · timezone no · tests –
+  · owner sam · last run 09:00 · p95 310
+  ms
+  ✓ done · 38s
+
+
+ready
+message ────────────────────────────────
+Write a message
+
+
+──────────────────── orbit-api#276 ~chat
+actions on · enter sends · F1 keys
+
+Esc back · Ctrl-C quit · F10 scenarios ·

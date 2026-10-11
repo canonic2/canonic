@@ -1,0 +1,36 @@
+---
+source: tests/integration/chat.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+you · 00:40
+  so what's left on #276 after the server side?
+
+acme · 00:40 · 38s
+  ▾ thought for 12s
+    The timezone header is set per call, so the shared client doesn't help. Both call sites need it.
+
+  Both digest calls build their own headers, so each needs the line.
+  ✓ done · 38s
+
+
+
+
+
+
+
+
+
+
+
+
+find timezone                         1 of 1 · opened to show a match · 2 loaded messages
+message ────────────────────────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+──────────────────────────────────────────────────────────────────────────────── orbit-api#276 ~chat
+↑↓ prev/next · enter stay here · esc back
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

@@ -11,7 +11,7 @@ implementation design details without referencing private design files.
 | [Command Palette](command-palette.md) | Search host commands and shared keyboard help | Implemented |
 | [Composer](composer.md) | Session draft, submission, queue, history, stash and editor handoff | Implemented reusable component |
 | [Completion Menu](completion-menu.md) | Complete typed command/file prefixes from host candidates | Standalone state/view, Composer integration and 15 gallery states implemented |
-| [Chat](chat.md) | Compose transcript and Composer with scrolling and delivery state | Plain bounded host implemented; rich conversation targets pending |
+| [Chat](chat.md) | Rich transcript, identified streaming, search, selection and fixed Composer dock | Implemented with 51 interactive scenarios |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
 Session browsers, trees, panels and notices are proposed in
@@ -48,4 +48,4 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Command Palette](command-palette.md) | Defined palette/help contract | Defined current views | Implemented | Recorded for current implementation | Pending |
 | [Composer](composer.md) | Defined complete local workflow | Defined layout/states/fallbacks | Implemented reusable workflow | [Recorded](../verification.md#composer-engineering-record--2026-10-10) | Complete component review pending |
 | [Completion Menu](completion-menu.md) | Defined complete source/insertion contract | Defined layout/states/fallbacks | Standalone component and Composer integration implemented | [Recorded](../verification.md#completion-menu-engineering-record--2026-10-10) | Complete component review pending |
-| [Chat](chat.md) | Plain scope defined; rich targets proposed | Plain host defined; rich target decisions pending | Plain projection implemented; rich targets pending | Recorded for plain host; rich targets pending | Foundation accepted; rich targets not presented |
+| [Chat](chat.md) | Defined complete local contract | Defined content/states/fallbacks | Implemented rich conversation workflow | [Recorded](../verification.md#chat-engineering-record--2026-10-10) | Complete component review pending |

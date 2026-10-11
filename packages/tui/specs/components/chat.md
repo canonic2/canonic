@@ -2,151 +2,189 @@
 
 ## Purpose
 
-Compose the conversation transcript and Composer while exposing scrolling,
-following and submitted-turn delivery state to a host.
+Present a bounded rich conversation above one fixed Composer. Hosts retain
+history and perform agent, storage, clipboard, opening and inspection operations.
 
 ## Current status
 
-Status: the bounded plain-text conversation host is implemented. Rich content,
-identified part updates and stable transcript navigation below are proposed
-targets with remaining implementation gaps.
+The reusable component and 51 interactive gallery scenarios are implemented.
+The gallery acknowledges simulated host effects; it does not connect an agent
+or use the OS clipboard. Engineering evidence is in
+[Verification](../verification.md#chat-engineering-record--2026-10-10).
+Human visual acceptance and consumer UI integration are separate checkpoints.
 
 ## Behavior and state transitions
 
-The following rich-conversation requirements are proposed extensions of the
-implemented plain projection.
+### Turns and identified updates
 
-### Transcript behavior
+Turn contains stable ID, role (User, Assistant, Note), display label, optional
+timestamp/day/duration, end state and ordered Parts. Each part has its own ID,
+revision and Content. Notes have no header. Immutable user submissions show dim
+sending until the exact Composer ticket is accepted; refusal shows the reason
+while Composer protects the independent draft.
 
-Display user, assistant and host/system entries, each with stable message ID,
-revision, role label, optional timestamp/turn/run metadata and ordered part IDs.
-Parts include plain/rich text, code, supplied reasoning/summary, tool reference,
-attachment summary, diff and boundary/status marker. Unknown parts render a
-labeled generic representation. UI cannot fabricate reasoning, token usage or
-tool success; host determines available content and metadata.
+Update addresses a Conversation token, message, part, expected revision and
+next revision. Append/Replace are atomic; foreign conversations are ignored.
+Missing targets and revision mismatches return a resync Request without changing
+content. Resync must preserve parts/revisions and precede intervening progress.
+Acceptance shows a dim reloaded notice. Duplicate/stale callbacks are inert.
 
-Completed and active entries coexist. A live part can be appended/replaced without
-rebuilding its neighbors' state. Streaming updates identify conversation, message,
-part and revision/generation. Host adapter owns transport order/deduplication;
-UI validates snapshot/update revision. An invalid/out-of-order patch yields a
-resync outcome without corrupting rendered content. Interleaved tools and text
-update their own targets. Append to the last message alone is insufficient.
+Live assistant output has an accent marker at the last part's text edge. Done
+shows a green check and supplied elapsed label. Stopped preserves partial content
+with a dim cross/reason. Failed preserves content and offers Ctrl-X R when the
+host enables retry; retry emits a request and the host starts a new reply.
+Ended turns cannot accept part updates or a different outcome. All clock labels,
+reasoning, execution outcomes and capabilities come from the host.
 
-Streaming incomplete Markdown is rendered as readable provisional text/block
-content. Completing a fence, list or table may reflow that part, but keeps manual
-viewport/selection at a logical anchor. Render is deterministic at a given
-snapshot/time. Streaming never hijacks focus or submits typed input.
+### Rich content and visual implementation
 
-Follow shows latest output until explicit manual navigation. New activity while
-inspection is paused increments an unread indicator; follow action clears it.
-Expansion/detail visibility is local presentation state by part ID, independent
-of whether a backend supplies those details. Timestamps, role names, reasoning
-and tool detail visibility are explicit view options, not persisted globals.
+Body text is indented two cells and wraps to available width, capped at 100 prose
+cells. User headers are bold terminal foreground; assistant headers accent bold;
+metadata is dim. Day boundaries survive hiding timestamps. Blank rows separate
+turns and blocks. Code/table/diff layouts use the available width.
 
-### Rich content contract
+CommonMark supports paragraphs, headings, emphasis, nested/ordered lists, quotes,
+rules, links, inline/fenced code and tables. H1/H2 are accent bold; H3 and table
+headers are bold. Quotes have a quiet vertical bar; rules cap at 20 cells.
+Strikethrough stays literal. Raw HTML is muted literal text. Terminal controls,
+including fragmented escape sequences, become visible text. Incomplete Markdown
+is readable and only its changed part is reparsed.
 
-Plain text remains the universal fallback. Markdown supports paragraphs, headings,
-emphasis, lists, quotations, rules, links, inline code, fenced code and bounded
-tables. Unsupported/invalid constructs show readable text without terminal side
-effects. Raw HTML is text or omitted with a marker; no browser interpretation.
-Terminal width constrains wrapping. Wide tables offer a scrollable inspection
-view or labeled fallback rather than silently hiding columns.
+Code has a quiet language/file/start-line rule, four-cell tab stops and a wrap
+marker. Local lexical styling covers Rust, JavaScript, TypeScript, Python, shell
+and JSON; unknown languages stay plain. Code copy preserves tabs/newlines;
+Markdown copy preserves fences. Decorations never enter copy. Nothing executes
+and no grammars are fetched.
 
-Code blocks show an optional supplied language, lines and copy action. Syntax
-styling is a presentation concern with plain fallback on missing language/parser.
-It must not run code, fetch grammars during render or require a compiler. Wrapped
-display retains original lines for copy. Tabs have deterministic cell stops.
-Line numbers/decorations never enter copy payload by accident.
+Tables align columns, right-align numeric values and have no vertical borders.
+Below 50 cells wide or when the table cannot fit, labeled records keep every
+loaded column. O requests full loaded table inspection. Diffs preview the first
+unified hunk with line numbers and addition/deletion signs, then remaining-hunk
+count; O requests the full loaded patch. Search temporarily reveals hidden hunks.
+Malformed/binary/no-hunk patches have a labeled raw fallback.
 
-Diff viewer accepts host-supplied files/hunks/old-new ranges and line kinds. Unified
-mode works at narrow width; split mode is optional above a measured readable
-threshold. Width shrink switches to unified while preserving file/hunk anchor.
-Added/deleted labels/signs work without color. No-final-newline, binary/unavailable
-patches, malformed input and long paths have explicit states. File/hunk navigation
-returns stable IDs. Applying/reverting/generating patches and choosing Git bases
-are host operations. No Git subprocess exists inside `content`.
+Generic tool parts show supplied verb/target/summary and folded output. Reasoning
+is host-supplied and folded initially. Enter in block selection toggles folds.
+Attachments show name/size/availability and optional open target. Unknown kinds
+have a readable label. Opening rejects controls and unsupported schemes and is
+always a host intent.
 
-Tool bodies use the same code/diff/text contracts through [Activity](../features/activity.md).
-Attachments show label/type/availability and optional open intent. Links use
-sanitized visible labels and explicit host opening; untrusted OSC hyperlinks are
-not replayed. Concealment and decoration remain reversible presentation options.
+### Navigation, follow and paging
 
-### Bounded projection and performance
+| Key | Behavior |
+| --- | --- |
+| Alt-PageUp / Alt-PageDown | Move one visible transcript page |
+| Alt-Up / Alt-Down | Move three rows |
+| Alt-Home | Oldest loaded row; again requests earlier history |
+| Alt-End | Resume following; request latest if newer history is unloaded |
+| Ctrl-F | Search loaded content |
+| Ctrl-X V | Select conversation blocks |
+| Ctrl-X T | Toggle timestamps |
+| Ctrl-X R | Request retry when available |
 
-Host retains authoritative history. Initial compatibility defaults remain 100
-messages/64 KiB each; target projection also bounds total bytes, part count,
-layout cache and visible-row work. Changing limits is explicit and shows omitted
-content markers. Truncation is never portrayed as the complete message.
+Plain editing/navigation remains Composer-owned. Manual navigation saves a
+message/part/source-offset anchor across resize, prepend and updates. Eviction
+shows loss explicitly. The unread row is reserved above activity, keeping the
+dock fixed: live output shows new output; ended messages show a count.
+Sending or Alt-End resumes follow and clears unread.
 
-Older-history paging returns a request tied to anchor/generation. Prepending
-retains viewport; paging failure provides retry without losing loaded rows.
-Requesting full export is host-owned and distinct from copying the loaded view.
-Caches invalidate affected part on update and widths on resize. Do not rewrap
-every retained message per animation frame. Proposed benchmarks and measurement
-conditions are in [Gallery](../features/gallery.md); no speed claim is accepted yet.
+Earlier/Latest requests are opaque, instance-scoped and single-use. One paging
+request can be pending; failure retains loaded content and allows retry. Hosts
+supply remaining-history counts and authoritative windows; Chat loads no storage.
 
-### Search and timeline
+### Search and selection
 
-Loaded-transcript search matches sanitized semantic text, not borders. Default
-proposal: case-insensitive literal search with deterministic match ordering;
-regex is deferred. Expose loaded-only scope, query, count and current match.
-Next/previous match wrap with visible indication and jump by message/part/range.
-Collapsed matches can reveal their block; closing search restores prior viewport
-unless user explicitly retains the jump. Revision updates recompute affected
-matches and keep logical match identity where possible.
+Ctrl-F focuses a separate Editor in the activity row, dims Composer and preserves
+its draft/caret/selection/undo. Search is literal, Unicode case-insensitive and
+loaded-only. Formatting markers, line numbers and generated chrome do not match.
+Up/Down and Ctrl-P/N move through matches and wrap with a notice. The current
+match uses selection/accent; others underline. Matching folds/hunks temporarily
+open with a notice. Esc restores the old anchor; Enter keeps the match position.
+Both restore Composer and refold temporary expansions.
 
-Host-supplied unloaded-history search has request generations/loading/error
-states and explicit scope; absence must not imply all history was searched.
-Timeline is a browser of supplied message/turn summaries, including latest-user,
-previous/next and direct jumps. Fork/undo/retry from a message are host intents
-with host capability/confirmation, not modifications to library history.
+Ctrl-X V starts at the newest block. Up/Down move by block; Shift extends;
+M selects a whole message; Y requests original Markdown; C requests code source;
+O opens a supplied link/file/attachment or requests table/diff inspection.
+A margin marker identifies the range without changing source. Enter toggles
+folds. Esc resumes following only when selection began while following.
+
+Copy/Open/Inspect wait for explicit host acknowledgement. Success shows a dim
+notice with copy kind/line count; failure keeps selection with a retryable reason.
+Foreign, duplicate and stale completions are ignored. There are no OSC clipboard
+or hyperlink writes and no mouse capture; native terminal selection remains usable.
+
+### Welcome, narrow layouts and profiles
+
+Welcome uses host title/context/recent summaries/suggestions and disappears with
+the first turn. Session browsing is host-owned. Tiny areas clamp; hints give way
+to content. ANSI16 code avoids filled backgrounds; inline code uses underline
+where no surface exists. NO_COLOR uses reverse selection and signs/labels.
+ASCII replaces generated decoration only and preserves Unicode source.
+Reduced motion keeps the same content and navigation.
+
+### Bounds and performance
+
+| Resource | Limit and visible behavior |
+| --- | --- |
+| Loaded turns | 100; evicted history counts remain explicit |
+| Content per turn | 64 KiB after sanitation; omitted bytes/lines labeled |
+| Parts per turn | 128; extra parts labeled |
+| Parsed blocks per turn | 1,024; extra blocks labeled |
+| Tables | 64 columns, 1,024 rows, 8,192 cells per turn; omissions labeled |
+| Display rows | 2,048 per part; 32,768 cached total; omissions labeled |
+| Wrapped-row allocations | Estimated 8 MiB; source/parse storage separate |
+| Search matches | 4,096; limited result scope explicit |
+
+Allocation prioritizes the manual anchor or newest output while following.
+Source/parse storage is bounded by the turn/part/content limits. Metrics expose
+parses, layouts, cached rows and estimated wrapped bytes. Unchanged frames reuse
+parse/geometry; part updates invalidate that part, resize invalidates wrapping,
+and color changes require no parsing. Measurement is evidence, not a portable
+frame-time guarantee.
 
 ## Implementation design
 
-### Implemented composition
+[Chat](../../src/chat.rs) owns records, opaque requests and cache state. Submodules
+separate content parsing, lexical styling, color-neutral layout, transcript
+chrome, interaction and rendering. Blocks retain original Markdown separately
+from semantic search text and generated runs. Rows carry source anchors and
+optional display-to-source maps.
 
-[Chat](../../src/chat.rs) owns a bounded transcript and composes
-[Composer](composer.md). The host supplies roles, timestamps, status
-and output, executes returned actions and acknowledges submission tickets.
-The default projection retains the newest 100 messages and at most 64 KiB per
-message; the Composer draft defaults to 64 KiB.
+render_with frames the host; render_docked_with renders the fixed dock. Both
+consume supplied Frame, Rect and Presentation without acquiring a terminal.
+update returns compatible Action::Submit/Cancel; take_intents drains Chat work.
+Hosts separately drain composer_mut().take_intents().
 
-`push`/`push_turn` add sanitized text; `append` updates the last message.
-`push_submission` projects an immutable user turn and `acknowledge_submission`
-updates its delivery suffix. Shell output updates by ticket and folds after
-20 lines. Alt-PageUp/PageDown scroll the transcript; Alt-End resumes following.
-`render_with` uses the framed host; `render_docked_with` composes an unframed
-conversation with the fixed Composer dock. Terminal ownership remains in the host.
+Compatibility push/push_turn/append remain. Rich adapters use push_record, apply,
+resynchronize, finish_turn, complete_earlier/complete_latest and acknowledge.
+reset_transcript invalidates Chat tickets/view state while keeping Composer.
 
 ## Host boundary
 
-Hosts retain authoritative history, supply roles/timestamps/status/output,
-execute intents and acknowledge submission tickets. They own transport ordering,
-repository/session identity, execution and terminal acquisition. Composer owns
-draft lifecycle; Chat owns its bounded transcript projection and local scroll.
+Hosts supply authoritative IDs/revisions, formatted time, content/capabilities
+and history windows. They execute retry, cancellation, clipboard, opening,
+inspection, saving and external-editor handoff. Composer owns its one draft,
+submission, history, queue and stash. Actions availability is a display label
+and grants no authority. The gallery's actions-off review choices are a local
+host projection; reusable permission reviews belong to Tool Call Card.
 
 ## Acceptance criteria
 
-- **C-01:** Interleaved identified updates reach the correct part; invalid/stale
-  revisions request resync and cannot change another conversation.
-- **C-02:** Provisional/final rich text, code, tables and unknown parts remain
-  readable at narrow sizes; safe plain fallback and semantic copy are verified.
-- **C-03:** Follow/unread, expansion, reflow, paging/prepend/error/eviction maintain
-  logical position or visible loss; update caches remain instance-scoped/bounded.
-- **C-04:** Unified/split diffs preserve file/hunk anchor and line identity through
-  resize; malformed/binary/no-newline cases stay inspectable without Git effects.
-- **C-05:** Search/timeline jumps use stable IDs, expose scope/no-match/loading,
-  and reject stale results; close restores the documented prior position.
-- **C-06:** Long-history measurements meet approved budgets with bounded projection
-  and visible truncation; copy-loaded and host full-export are distinguished.
+- **C-01:** Interleaved updates/resync reject stale/foreign results without changing
+  immutable submissions or newer progress.
+- **C-02:** Rich/provisional content, narrow tables and safe fallbacks are readable;
+  Markdown/code copy retains source rather than decoration.
+- **C-03:** Follow/unread/reflow/paging/error/eviction preserve position or show loss;
+  the dock and instance caches remain bounded and stable.
+- **C-04:** Unified previews, hidden-hunk search and full-inspection intents retain
+  supplied patch content without Git effects; malformed patches remain readable.
+- **C-05:** Loaded semantic search/block navigation expose scope, restore draft/
+  anchor and require generation-safe host acknowledgements.
+- **C-06:** Long-history measurements record cold/warm work and cache bounds;
+  omissions are explicit and full-history/export remains host-owned.
 
 ## Remaining gaps
 
-Structured parts and identified concurrent updates, rich rendering, stable
-anchors, paging, search, timeline, selection and performance budgets remain
-target work. The existing plain Chat fixtures do not accept these requirements.
-
-Select Markdown/syntax dependencies under existing license/audit rules after a
-bounded prototype. Set table behavior, split-width threshold, projection budgets
-and search normalization using realistic gallery evidence. Rich rendering does
-not require semantic duplication of host session/storage models.
+Human acceptance, consumer integration and broader native coverage are separate.
+Unloaded-history search, session browsers, split diff viewers, real host adapters
+and reusable permission reviews belong to their own components/hosts.

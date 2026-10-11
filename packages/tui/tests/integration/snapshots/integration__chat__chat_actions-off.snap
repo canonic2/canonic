@@ -1,0 +1,34 @@
+---
+source: tests/integration/chat.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+
+acme · 00:40
+  Keeping microseconds restores the order. The same-second test from the review comes next.
+
+  edit     apps/backend/WebhookQueue.php · +2 −1 · logged
+  @@ -43,1 +43,2 @@
+    43 − received_at: startOfSecond()
+    43 + // Keep microseconds
+    44 + received_at: immutableNow()
+
+  actions off ────────────────
+  This edit was logged, not applied.
+
+  a apply this edit (simulation)
+  A turn actions on (simulation)
+  e inspect first
+  n skip with your note
+
+
+! needs you · a A e n · esc later
+message ────────────────────────────────────────────────────────────────────────────────────────────
+type a note to send with your choice
+
+
+──────────────────────────────────────────────────────────────────────────────── orbit-api#276 ~chat
+actions off · enter sends · F1 keys
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

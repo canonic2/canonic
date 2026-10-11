@@ -11,8 +11,10 @@ its full local workflow: submission, queue, history, stash, chips, completion,
 saved-state codec, external-editor conflicts and foreground terminal handoff.
 Consumers own actual execution, durable storage and clipboard integration.
 Completion Menu implements reusable source-aware queries, insertion, streaming,
-retry and its dedicated gallery. The next component is **Chat (conversation
-view)**: rich identified transcript content, streaming, navigation and inspection.
+retry and its dedicated gallery. Chat implements identified rich content,
+streaming/resync, anchors/paging, search, selection/copy and 51 scenarios.
+The next component is **Tool Call Card**: supplied tool activity/output and
+explicit human review, with host-owned execution and permission policy.
 
 ## Delivery scope and phase order
 
@@ -29,7 +31,7 @@ than module file count. Maintain [foundation contracts](architecture.md) through
 | 2 — Draft and transient interaction | Versioned submit acknowledgement, history/stash, completion/reference contract; richer picker/dialog/palette/help; depends on 1 | E-04–E-06, D-01–D-03, I-02, A-03–A-04; simulated host errors/races |
 | 3 — Transcript projection and content | Stable message/part IDs, targeted updates, logical viewport, bounded layout/cache, rich text/code, search/timeline/selection; depends on 1–2 | C-01–C-03, C-05–C-06, I-03–I-04; measured long stream/edit fixture |
 | 4 — Activity and human review | Generic tools/progress/cancel acknowledgements; permission/question forms, queues/stale handling; depends on 2–3 | R-01–R-05, P-02; composed stream/edit/review/recovery acceptance |
-| 5 — Browsing and inspection | Session/resource browsers, trees, status/notices, code/diff inspection; depends on 2–4 | D-04–D-06, C-04; composed content/sidebar/session scenarios |
+| 5 — Browsing and inspection | Session/resource browsers, trees, status/notices, code/diff inspection; depends on 2–4 | D-04–D-06, composed content/sidebar/session scenarios |
 | 6 — Inline and native runtime | Inline region adapter, explicit close errors, suspend/resume/editor handoff, native compatibility campaign; shares picker/review from 2/4 | T-01–T-03, T-06, P-01; normal-output preservation and native evidence |
 
 Terminal sanitation and theme/capability work (**T-04–T-05**) advance alongside
@@ -72,8 +74,8 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | C-01 | [Chat](components/chat.md#acceptance-criteria): interleaved/stale identified updates | 3 |
 | C-02 | [Chat](components/chat.md#acceptance-criteria): provisional rich text/code/table/unknown fallback | 3 |
 | C-03 | [Chat](components/chat.md#acceptance-criteria): follow/unread/reflow/paging/cache bounds | 3 |
-| C-04 | [Chat](components/chat.md#acceptance-criteria): diffs and file/hunk identity through resize | 5 |
-| C-05 | [Chat](components/chat.md#acceptance-criteria): search scope/timeline/stale result restoration | 3 |
+| C-04 | [Chat](components/chat.md#acceptance-criteria): unified patch preview, hidden-hunk search and full-inspection intent | 3 |
+| C-05 | [Chat](components/chat.md#acceptance-criteria): loaded search/block navigation and stale acknowledgement restoration | 3 |
 | C-06 | [Chat](components/chat.md#acceptance-criteria): long projection measurements and explicit omissions | 3, continuous |
 | R-01 | [Activity](features/activity.md#acceptance-criteria): concurrent tool/run/connection states | 4 |
 | R-02 | [Activity](features/activity.md#acceptance-criteria): cancel request and host completion/interrupt races | 4 |
@@ -115,10 +117,10 @@ library completion or dependency compilation alone does not establish that.
 | Decision | Proposed starting point / evidence needed | Needed before |
 | --- | --- | --- |
 | Public signatures and compatibility | Concrete value/update/action types, adapters for existing APIs; compile examples | Each affected slice |
-| Rich projection/cache limits | Current component limits are specified; approve total/part/cache bounds using pathological transcript measurements | Phase 3 |
+| Broader projection/cache policy | Chat's bounded source/part/block/row/cache contracts and pathological tests are implemented; full export remains host-owned | Broader content/inspection scope |
 | Pointer defaults and native key encodings | Scoped keyboard/leader rules are specified; establish pointer defaults and unverified terminal encodings | Pointer/native acceptance |
-| Rich renderer/syntax dependencies | Bounded prototype, readable fallback, license/deny review; no network in render | Phase 3 |
-| Search normalization/table/split width | Literal loaded-only default; Unicode/table/diff fixtures before broader policy | Phases 3 and 5 |
+| Standalone inspection dependencies | Chat uses audited CommonMark parsing and local lexical styling; independent code/diff viewers need their own contract | Phase 5 |
+| Unloaded search and split diff policy | Chat implements loaded Unicode literal search, table records below 50 columns and unified preview; broader browsing is separate | Phase 5 |
 | Review panel versus overlay | Preserve draft and inspect details at 40×12; host-supplied scope/close/queue policy | Phase 4 |
 | Inline anchoring/output result | Short bounded region, safe fallback on unsupported cursor behavior; PTY surrounding-text evidence | Phase 6 |
 | Native Windows harness/IME/assistive matrix | Native runner/emulator and explicit testing conditions; separate unsupported states | Phase 6 claims |
@@ -131,8 +133,8 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 
 ## Remaining gap summary
 
-The next standalone component is Completion Menu. Dialog arrival/removal timing,
-rich identified Chat content and anchors, structured activity/review, browsers,
+The next standalone component is Tool Call Card. Dialog arrival/removal timing,
+structured activity/review, browsers,
 inline hosting and broad native acceptance remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),

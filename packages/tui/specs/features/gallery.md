@@ -47,6 +47,18 @@ retry preserves the token and exiting restores terminal attributes. Public
 specifications include the narrowed layout and behavior contract independently
 of private design assets.
 
+## Implemented Chat composition
+
+Chat has 51 interactive scenarios covering welcome, answer, streaming, delivery,
+stopped/failed/resynced turns, narrow/color profiles, rich content, unread/follow,
+earlier paging/reflow, loaded search and block selection/copy/open. F5 appends or
+accepts delivery, F6 fails, F7 stops, F8 resyncs and F9 fails earlier loading.
+Host operations are deterministic simulations using Chat's public request APIs.
+Search/select Escape restores Composer before Escape returns to the picker;
+F10 leaves and returns with draft/caret/view state intact. No mouse capture is
+enabled. Six Chat snapshots and native Unix search/copy/resize tests cover this
+composition; [Chat](../components/chat.md) owns its bounds and interaction contract.
+
 ## Implemented dialog composition
 
 Slice 2b has prompt, nested choice/prompt, long inspection, locked Escape,

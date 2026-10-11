@@ -1,0 +1,34 @@
+---
+source: tests/integration/chat.rs
+expression: "super::components::dump(terminal.backend().buffer())"
+---
+Canonic TUI · Component gallery
+
+  client ↗
+  · drop the old offset table: zone names are enough
+  · add a test for each call
+
+▌  ts · src/profile/api.ts · 168 ───────────────────────────────
+▌ headers: {
+▌   'X-Timezone': user.timezone, // the digest calls skip this
+▌ },
+
+  call           timezone  tests
+  ─────────────  ────────  ─────
+  profile sync   yes           4
+  daily digest   no            –
+  weekly digest  no            –
+
+  Add the header to both digest calls.
+  ✓ done · 38s
+
+
+select · ↑↓ moves by block
+message ────────────────────────────────────────────────────────
+and bump the app version
+
+
+──────────────────────────────────────────── orbit-api#276 ~chat
+↑↓ block · y copy · c code · o open · esc done
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · C

@@ -1,411 +1,803 @@
-//! Owns a bounded conversation view and basic composer; hosts own agent execution.
+//! Owns a bounded identified transcript and Composer; hosts own all external work.
+
+mod content;
+mod interaction;
+mod layout;
+mod model;
+mod syntax;
+mod transcript;
+mod view;
 
 use crate::{
-    composer::{Composer, Identity, State, Submission},
-    editor::EditorView,
-    event::{Event, KeyCode, KeyEventKind, KeyModifiers},
-    text::{clean, wrapped},
-    theme::{Presentation, Theme},
+    composer::{Composer, Identity, Submission},
+    editor::Editor,
 };
-use ratatui::{
-    Frame,
-    layout::{Constraint, Layout, Rect},
-    style::Modifier,
-    text::{Line, Span},
-    widgets::{Block, Paragraph},
+use layout::{BlockId, Cached, Located};
+pub use model::{
+    Anchor, Change, Content, Conversation, End, Intent, Metrics, Mode, Part, Request, Role, Turn,
+    Update, Updated, Welcome,
+};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+    time::Duration,
 };
 
-const INPUT_LIMIT: usize = 65_536;
-const MESSAGE_LIMIT: usize = 65536;
+const MESSAGE_LIMIT: usize = 65_536;
 const HISTORY_LIMIT: usize = 100;
+const PART_LIMIT: usize = 128;
 
-/// Interaction returned to the host application.
+/// Composer actions remain compatible with plain hosts. Drain Chat intents separately.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Action {
-    /// No product operation was requested.
+    /// No submission or cancellation.
     None,
-    /// Submit this snapshot; the host must acknowledge its ticket through the composer.
+    /// Fixed submission snapshot; acknowledge its opaque Composer ticket.
     Submit(Submission),
-    /// Request cancellation of the active operation.
+    /// Request cancellation; the host supplies the stopped reply outcome.
     Cancel,
 }
 
-struct Message {
-    role: String,
-    text: String,
-    timestamp: Option<String>,
+struct Record {
+    turn: Turn,
     delivery: Option<(Identity, Option<String>)>,
     shell: Option<(Identity, bool)>,
+    fixed: bool,
+    omitted: HashMap<String, (usize, usize)>,
+    table_omitted: HashMap<String, usize>,
+    reloaded: bool,
 }
-
-impl Message {
-    fn visible_text(&self) -> String {
-        use std::fmt::Write;
-        if self.shell.as_ref().is_none_or(|(_, expanded)| *expanded) {
-            return self.text.clone();
+impl Record {
+    fn new(mut turn: Turn) -> Self {
+        turn.label = model::label(&turn.label);
+        turn.timestamp = model::label(&turn.timestamp);
+        turn.day = model::label(&turn.day);
+        turn.duration = model::label(&turn.duration);
+        match &mut turn.end {
+            End::Done(s) | End::Stopped(s) | End::Failed(s) => *s = model::label(s),
+            End::Live | End::Quiet => {}
         }
-        let count = self.text.lines().count();
-        let mut text = self.text.lines().take(20).collect::<Vec<_>>().join("\n");
-        if count > 20 {
-            let _ = write!(text, "\n+{} more lines", count - 20);
+        let excess = turn.parts.len().saturating_sub(PART_LIMIT);
+        turn.parts.truncate(PART_LIMIT);
+        let fixed = turn.role == Role::User;
+        let mut result = Self {
+            turn,
+            delivery: None,
+            shell: None,
+            fixed,
+            omitted: HashMap::new(),
+            table_omitted: HashMap::new(),
+            reloaded: false,
+        };
+        if excess > 0 {
+            result.omitted.insert(String::new(), (excess, 0));
         }
-        text
+        result.bound();
+        result
+    }
+    fn bound(&mut self) {
+        let mut remaining = MESSAGE_LIMIT;
+        let mut cells = 8192;
+        for part in &mut self.turn.parts {
+            let dropped = part.content.bound_structure(&mut cells);
+            if dropped > 0 {
+                *self.table_omitted.entry(part.id.clone()).or_default() += dropped;
+            }
+            let original = part.content.bound(remaining);
+            part.content.sanitize();
+            let missing = part.content.bound(remaining);
+            remaining = remaining.saturating_sub(part.content.bytes());
+            if missing.0 > 0 || original.0 > 0 {
+                let entry = self.omitted.entry(part.id.clone()).or_default();
+                entry.0 += missing.0 + original.0;
+                entry.1 += missing.1 + original.1;
+            }
+        }
     }
 }
-
-/// Reusable conversation composition with a bounded multiline editor.
-pub struct Chat {
-    messages: Vec<Message>,
-    input: Composer,
-    status: String,
-    scroll: u16,
-    follow: bool,
+struct Search {
+    editor: Editor,
+    saved: Option<Anchor>,
+    saved_follow: bool,
+    matches: Vec<Match>,
+    current: usize,
+    wrapped: bool,
+    temporary: BTreeSet<(String, String)>,
+    cached: HashMap<(String, String), (u64, usize, Vec<Match>)>,
+    query: String,
+    limited: bool,
+}
+#[derive(Clone, PartialEq, Eq)]
+struct Match {
+    block: BlockId,
+    start: usize,
+    end: usize,
+}
+struct Selection {
+    first: BlockId,
+    last: BlockId,
+    whole: bool,
+    was_following: bool,
+}
+struct Pending {
+    request: Request,
+    label: String,
+    latest: bool,
+}
+struct Resync {
+    message: String,
+    versions: Vec<(String, u64)>,
+    end: Option<End>,
+}
+enum Page {
+    Loading(Request),
+    Failed(String),
 }
 
+/// Full conversation composition. No terminal lease, transport, clock or clipboard I/O.
+pub struct Chat {
+    messages: Vec<Record>,
+    input: Composer,
+    status: String,
+    footer: String,
+    conversation: Conversation,
+    serial: u64,
+    next_message: u64,
+    cache: HashMap<(String, String), Cached>,
+    rows: Vec<Located>,
+    metrics: Metrics,
+    scroll: usize,
+    height: usize,
+    width: u16,
+    follow: bool,
+    anchor: Option<Anchor>,
+    unread: BTreeSet<String>,
+    earlier: usize,
+    newer: usize,
+    page: Option<Page>,
+    loaded_boundary: Option<String>,
+    home: Option<Anchor>,
+    search: Option<Search>,
+    selection: Option<Selection>,
+    expanded: BTreeSet<(String, String)>,
+    now: Duration,
+    leader: Option<Duration>,
+    notice: Option<(String, Duration)>,
+    intents: Vec<Intent>,
+    pending: Option<Pending>,
+    resync: HashMap<u64, Resync>,
+    timestamps: bool,
+    retry: bool,
+    actions: &'static str,
+    welcome: Welcome,
+}
 impl Default for Chat {
     fn default() -> Self {
         Self {
-            messages: Vec::new(),
-            input: Composer::new(INPUT_LIMIT),
+            messages: vec![],
+            input: Composer::new(MESSAGE_LIMIT),
             status: String::new(),
+            footer: String::new(),
+            conversation: Conversation(Arc::new(())),
+            serial: 0,
+            next_message: 0,
+            cache: HashMap::new(),
+            rows: vec![],
+            metrics: Metrics::default(),
             scroll: 0,
+            height: 1,
+            width: 80,
             follow: true,
+            anchor: None,
+            unread: BTreeSet::new(),
+            earlier: 0,
+            newer: 0,
+            page: None,
+            loaded_boundary: None,
+            home: None,
+            search: None,
+            selection: None,
+            expanded: BTreeSet::new(),
+            now: Duration::ZERO,
+            leader: None,
+            notice: None,
+            intents: vec![],
+            pending: None,
+            resync: HashMap::new(),
+            timestamps: true,
+            retry: false,
+            actions: "on",
+            welcome: Welcome::default(),
         }
     }
 }
-
 impl Chat {
-    /// Create an empty conversation view with automatic transcript following.
+    /// Empty conversation with automatic following and a 64 KiB Composer.
+    ///
+    /// ```
+    /// use canonic_tui::chat::{Chat, Change, Role, Turn, Update, Updated};
+    /// let mut chat = Chat::new();
+    /// chat.push_record(Turn::new("reply", Role::Assistant, "acme", "Hello"));
+    /// assert_eq!(chat.apply(Update {
+    ///     conversation: chat.conversation(), message: "reply".into(), part: "body".into(),
+    ///     expected: 0, revision: 1, change: Change::Append(" world".into()),
+    /// }), Updated::Applied);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Composer contents, before submission.
+    /// Host-supplied display label only; this never changes execution authority.
+    pub fn set_actions_available(&mut self, available: bool) {
+        self.actions = if available { "on" } else { "off" };
+    }
+    /// Identity used to validate addressed part updates.
+    #[must_use]
+    pub fn conversation(&self) -> Conversation {
+        self.conversation.clone()
+    }
+    /// Reset transcript, requests and view state for another conversation, keeping the draft.
+    pub fn reset_transcript(&mut self) {
+        let input = std::mem::replace(&mut self.input, Composer::new(MESSAGE_LIMIT));
+        *self = Self::default();
+        self.input = input;
+    }
+    /// Inspect draft contents.
     #[must_use]
     pub fn input(&self) -> &str {
         self.input.editor().text()
     }
-
-    /// Explicitly replace the draft within its lifetime, preserving any pending snapshot.
+    /// Explicitly replace only the Composer draft.
     pub fn set_input(&mut self, text: &str) {
         self.input.set_text(text);
     }
-
-    /// Draft lifecycle owner; hosts acknowledge returned submission tickets here.
+    /// Draft lifecycle owner; Composer intents are drained independently.
     pub fn composer_mut(&mut self) -> &mut Composer {
         &mut self.input
     }
-
-    /// Inspect the independent draft lifecycle without mutating it.
+    /// Inspect draft lifecycle.
     #[must_use]
     pub fn composer(&self) -> &Composer {
         &self.input
     }
-
-    /// Dismiss only editor selection state, without cancelling or exiting chat.
-    /// Returns whether there was selection state to dismiss.
-    pub fn dismiss_selection(&mut self) -> bool {
-        let selected = self.input.editor().selection().is_some();
-        self.input.update(&Event::Key(crate::event::KeyEvent::new(
-            KeyCode::Esc,
-            KeyModifiers::NONE,
-        )));
-        selected
-    }
-
-    /// Number of retained messages (at most 100).
+    /// Number of loaded messages, at most 100.
     #[must_use]
     pub fn message_count(&self) -> usize {
         self.messages.len()
     }
-
-    /// Update the host-provided activity/connection label.
-    pub fn set_status(&mut self, status: &str) {
-        self.status = clean(status, 256, false);
+    /// Counts outside the bounded loaded window (earlier, newer).
+    #[must_use]
+    pub fn history_counts(&self) -> (usize, usize) {
+        (self.earlier, self.newer)
     }
-
-    /// Add a message, retaining the newest 100 and at most 64 KiB per message.
-    pub fn push(&mut self, role: &str, text: &str) {
-        if self.messages.len() == HISTORY_LIMIT {
-            self.messages.remove(0);
+    /// Inspect a loaded host turn by stable ID.
+    #[must_use]
+    pub fn turn(&self, id: &str) -> Option<&Turn> {
+        self.messages
+            .iter()
+            .find(|m| m.turn.id == id)
+            .map(|m| &m.turn)
+    }
+    /// Current focus owner.
+    #[must_use]
+    pub fn mode(&self) -> Mode {
+        if self.search.is_some() {
+            Mode::Search
+        } else if self.selection.is_some() {
+            Mode::Select
+        } else {
+            Mode::Compose
         }
-        self.messages.push(Message {
-            role: clean(role, 128, false),
-            text: clean(text, MESSAGE_LIMIT, true),
-            timestamp: None,
-            delivery: None,
-            shell: None,
-        });
     }
-
-    /// Add a normal host turn with a dim display timestamp.
+    /// Whether the transcript automatically follows live output.
+    #[must_use]
+    pub fn following(&self) -> bool {
+        self.follow
+    }
+    /// New/changed messages since manual inspection began.
+    #[must_use]
+    pub fn unread_count(&self) -> usize {
+        self.unread.len()
+    }
+    /// Logical first visible line, updated by render and navigation.
+    #[must_use]
+    pub fn viewport_anchor(&self) -> Option<&Anchor> {
+        self.anchor.as_ref()
+    }
+    /// Instance scoped part parsing and layout counters.
+    #[must_use]
+    pub fn metrics(&self) -> Metrics {
+        self.metrics
+    }
+    /// Search query, empty outside search.
+    #[must_use]
+    pub fn query(&self) -> &str {
+        self.search.as_ref().map_or("", |s| s.editor.text())
+    }
+    /// (one-based current match, total); zero current means no match.
+    #[must_use]
+    pub fn search_position(&self) -> (usize, usize) {
+        self.search.as_ref().map_or((0, 0), |s| {
+            (
+                if s.matches.is_empty() {
+                    0
+                } else {
+                    s.current + 1
+                },
+                s.matches.len(),
+            )
+        })
+    }
+    /// Host activity label, bounded and sanitized.
+    pub fn set_status(&mut self, status: &str) {
+        self.status = model::label(status);
+    }
+    /// Host session/address metadata on the lower Composer rule.
+    pub fn set_footer(&mut self, footer: &str) {
+        self.footer = model::label(footer);
+    }
+    /// Empty session context; no filesystem/session enumeration occurs here.
+    pub fn set_welcome(&mut self, mut welcome: Welcome) {
+        welcome.title = model::label(&welcome.title);
+        welcome.context = model::label(&welcome.context);
+        welcome.recent.truncate(10);
+        welcome.suggestions.truncate(10);
+        for s in welcome.recent.iter_mut().chain(&mut welcome.suggestions) {
+            *s = model::label(s);
+        }
+        self.welcome = welcome;
+    }
+    /// Enable retry intent only when the host can perform it.
+    pub fn set_retry_available(&mut self, available: bool) {
+        self.retry = available;
+    }
+    /// Supply the count of authoritative history preceding the loaded window.
+    pub fn set_earlier_count(&mut self, count: usize) {
+        self.earlier = count;
+    }
+    /// Explicit timestamps option. Day separators remain visible.
+    pub fn set_timestamps(&mut self, visible: bool) {
+        self.timestamps = visible;
+    }
+    /// Add an identified initial turn. Duplicate/invalid identities are rejected atomically.
+    pub fn push_record(&mut self, turn: Turn) -> bool {
+        if !valid_turn(&turn) || self.messages.iter().any(|m| m.turn.id == turn.id) {
+            return false;
+        }
+        if !self.follow {
+            self.unread.insert(turn.id.clone());
+        }
+        self.messages.push(Record::new(turn));
+        if self.messages.len() > HISTORY_LIMIT {
+            self.messages.remove(0);
+            self.earlier = self.earlier.saturating_add(1);
+        }
+        self.prune();
+        self.refresh();
+        true
+    }
+    /// Plain compatibility projection with generated stable IDs; add rich host parts through `push_record`.
+    pub fn push(&mut self, role: &str, text: &str) {
+        self.next_message = self.next_message.saturating_add(1);
+        while self
+            .messages
+            .iter()
+            .any(|m| m.turn.id == format!("local-{}", self.next_message))
+        {
+            self.next_message = self.next_message.saturating_add(1);
+        }
+        let id = format!("local-{}", self.next_message);
+        let speaker = if role == "you" {
+            Role::User
+        } else if role == "Activity" {
+            Role::Note
+        } else {
+            Role::Assistant
+        };
+        let mut turn = Turn::new(&id, speaker, role, text);
+        // Compatibility plain turns do not claim a host completion outcome.
+        turn.end = End::Quiet;
+        self.push_record(turn);
+    }
+    /// Plain turn with a supplied display timestamp.
     pub fn push_turn(&mut self, role: &str, text: &str, timestamp: &str) {
         self.push(role, text);
         if let Some(message) = self.messages.last_mut() {
-            message.timestamp = Some(clean(timestamp, 32, false));
+            message.turn.timestamp = model::label(timestamp);
         }
     }
-
-    /// Project a fixed submitted turn with a host-supplied display timestamp.
-    /// Execution and transport time remain host-owned.
+    /// Project an immutable submission; a later editor change cannot change this turn.
     pub fn push_submission(&mut self, submission: &Submission, timestamp: &str) {
         let shell = submission.mode == crate::composer::InputMode::Shell;
         self.push(if shell { "shell" } else { "you" }, &submission.text);
         if let Some(message) = self.messages.last_mut() {
             if shell {
-                message.role = clean(&format!("$ {}", submission.text), 128, false);
-                message.text.clear();
+                message.turn.label = model::label(&format!("$ {}", submission.text));
+                message.turn.parts[0].content = Content::Code {
+                    text: String::new(),
+                    language: "sh".into(),
+                    file: String::new(),
+                    line: None,
+                };
                 message.shell = Some((submission.ticket.clone(), false));
             }
-            message.timestamp = Some(clean(timestamp, 32, false));
+            message.turn.timestamp = model::label(timestamp);
+            message.fixed = true;
             message.delivery = Some((submission.ticket.clone(), None));
+            self.cache.remove(&(message.turn.id.clone(), "body".into()));
         }
     }
-
-    /// Acknowledge the pending intent and update its turn, preserving the fresh draft.
-    /// Returns false for a stale or foreign response without changing the transcript.
+    /// Update delivery only for an accepted Composer ticket. Rejection preserves the fresh draft.
     pub fn acknowledge_submission(&mut self, ticket: &Identity, result: Result<(), &str>) -> bool {
         if !self.input.acknowledge(ticket, result) {
             return false;
         }
-        for message in &mut self.messages {
-            if message
-                .delivery
-                .as_ref()
-                .is_some_and(|(id, _)| id == ticket)
-            {
-                message.delivery = result
-                    .err()
-                    .map(|reason| (ticket.clone(), Some(clean(reason, 256, false))));
-                break;
-            }
+        if let Some(message) = self
+            .messages
+            .iter_mut()
+            .find(|m| m.delivery.as_ref().is_some_and(|(id, _)| id == ticket))
+        {
+            message.delivery = result
+                .err()
+                .map(|reason| (ticket.clone(), Some(model::label(reason))));
         }
         true
     }
-    /// Replace host shell output for its exact turn; retain up to 64 KiB, collapsed at 20 lines.
+    /// Replace only the addressed shell output, retaining its 20-line folded preview.
     pub fn set_shell_output(&mut self, ticket: &Identity, output: &str) -> bool {
         let Some(message) = self
             .messages
             .iter_mut()
-            .find(|message| message.shell.as_ref().is_some_and(|(id, _)| id == ticket))
+            .find(|m| m.shell.as_ref().is_some_and(|(id, _)| id == ticket))
         else {
             return false;
         };
-        message.text = clean(output, MESSAGE_LIMIT, true);
+        if let Some(text) = message.turn.parts[0].content.text_mut() {
+            *text = output.into();
+        }
+        message.turn.parts[0].revision = message.turn.parts[0].revision.saturating_add(1);
+        message.omitted.remove("body");
+        message.bound();
+        self.refresh();
         true
     }
-    /// Expand/collapse an existing shell output turn without executing anything.
+    /// Toggle a shell preview without executing it.
     pub fn toggle_shell_output(&mut self, ticket: &Identity) -> bool {
-        let Some((_, expanded)) = self
+        let Some(message) = self
             .messages
             .iter_mut()
-            .filter_map(|message| message.shell.as_mut())
-            .find(|(id, _)| id == ticket)
+            .find(|m| m.shell.as_ref().is_some_and(|(id, _)| id == ticket))
         else {
+            return false;
+        };
+        let Some((_, expanded)) = &mut message.shell else {
             return false;
         };
         *expanded = !*expanded;
+        self.cache.remove(&(message.turn.id.clone(), "body".into()));
+        self.refresh();
         true
     }
-
-    /// Append to the latest host message, skipping fixed submitted user turns.
+    /// Compatibility append skips all fixed submitted turns, even after acceptance.
     pub fn append(&mut self, text: &str) {
-        if let Some(message) = self
+        let Some(message) = self
+            .messages
+            .iter()
+            .rev()
+            .find(|m| !m.fixed && m.turn.timestamp.is_empty())
+        else {
+            return;
+        };
+        let Some(part) = message.turn.parts.last() else {
+            return;
+        };
+        let update = Update {
+            conversation: self.conversation(),
+            message: message.turn.id.clone(),
+            part: part.id.clone(),
+            expected: part.revision,
+            revision: part.revision.saturating_add(1),
+            change: Change::Append(text.into()),
+        };
+        self.apply(update);
+    }
+    /// Apply an exact part revision. Foreign/stale data cannot alter another turn.
+    pub fn apply(&mut self, update: Update) -> Updated {
+        if update.conversation != self.conversation {
+            return Updated::Foreign;
+        }
+        let target = self.messages.iter_mut().find(|m| {
+            m.turn.id == update.message && !m.fixed && matches!(m.turn.end, End::Live | End::Quiet)
+        });
+        if let Some(message) = target
+            && let Some(part) = message.turn.parts.iter_mut().find(|p| {
+                p.id == update.part
+                    && p.revision == update.expected
+                    && update.expected.checked_add(1) == Some(update.revision)
+            })
+        {
+            let accepted = match update.change {
+                Change::Replace(content) => {
+                    part.content = content;
+                    message.omitted.remove(&part.id);
+                    true
+                }
+                Change::Append(text) => part.content.text_mut().is_some_and(|content| {
+                    content.push_str(&text);
+                    true
+                }),
+            };
+            if accepted {
+                part.revision = update.revision;
+                message.bound();
+                if !self.follow {
+                    self.unread.insert(update.message);
+                }
+                self.refresh();
+                return Updated::Applied;
+            }
+        }
+        let request = self.request();
+        if self.resync.len() >= PART_LIMIT {
+            self.resync.clear();
+        }
+        let record = self.turn(&update.message);
+        let versions = record.map_or_else(Vec::new, |t| {
+            t.parts.iter().map(|p| (p.id.clone(), p.revision)).collect()
+        });
+        let end = record.map(|t| t.end.clone());
+        self.resync.insert(
+            request.number,
+            Resync {
+                message: update.message,
+                versions,
+                end,
+            },
+        );
+        Updated::Resync(request)
+    }
+    /// Complete the exact resync request with a whole addressed reply snapshot.
+    pub fn resynchronize(&mut self, request: &Request, turn: Turn) -> bool {
+        if request.conversation != self.conversation || !valid_turn(&turn) {
+            return false;
+        }
+        let Some(pending) = self.resync.get(&request.number) else {
+            return false;
+        };
+        if turn.id != pending.message {
+            return false;
+        }
+        let index = self
+            .messages
+            .iter()
+            .position(|m| m.turn.id == turn.id && !m.fixed);
+        if let Some(index) = index {
+            let current = &self.messages[index].turn;
+            if Some(&current.end) != pending.end.as_ref()
+                || (!matches!(current.end, End::Live | End::Quiet) && turn.end != current.end)
+                || current
+                    .parts
+                    .iter()
+                    .map(|p| (p.id.clone(), p.revision))
+                    .collect::<Vec<_>>()
+                    != pending.versions
+                || current.parts.iter().any(|p| {
+                    turn.parts
+                        .iter()
+                        .find(|new| new.id == p.id)
+                        .is_none_or(|new| new.revision < p.revision)
+                })
+            {
+                return false;
+            }
+        } else if pending.end.is_some() || self.messages.iter().any(|m| m.turn.id == turn.id) {
+            return false;
+        }
+        self.resync.retain(|_, pending| pending.message != turn.id);
+        self.cache.retain(|(message, _), _| message != &turn.id);
+        if !self.follow {
+            self.unread.insert(turn.id.clone());
+        }
+        let mut record = Record::new(turn);
+        record.reloaded = true;
+        if let Some(index) = index {
+            self.messages[index] = record;
+        } else {
+            self.messages.push(record);
+            if self.messages.len() > HISTORY_LIMIT {
+                self.messages.remove(0);
+                self.earlier += 1;
+            }
+        }
+        self.prune();
+        self.refresh();
+        true
+    }
+    /// Host outcome for an existing reply; partial content remains intact.
+    pub fn end_turn(&mut self, message: &str, mut end: End) -> bool {
+        let Some(record) = self
             .messages
             .iter_mut()
-            .rev()
-            .find(|message| message.timestamp.is_none())
-        {
-            message.text.push_str(&clean(
-                text,
-                MESSAGE_LIMIT.saturating_sub(message.text.len()),
-                true,
-            ));
+            .find(|m| m.turn.id == message && !m.fixed)
+        else {
+            return false;
+        };
+        match &mut end {
+            End::Done(s) | End::Stopped(s) | End::Failed(s) => *s = model::label(s),
+            End::Live | End::Quiet => {}
         }
-    }
-
-    /// Translate input to a product-independent action. Paste never submits.
-    pub fn update(&mut self, event: &Event) -> Action {
-        match event {
-            Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
-                KeyCode::PageUp if key.modifiers.contains(KeyModifiers::ALT) => {
-                    self.follow = false;
-                    self.scroll = self.scroll.saturating_sub(5);
-                }
-                KeyCode::PageDown if key.modifiers.contains(KeyModifiers::ALT) => {
-                    self.follow = false;
-                    self.scroll = self.scroll.saturating_add(5);
-                }
-                KeyCode::End if key.modifiers.contains(KeyModifiers::ALT) => self.follow = true,
-                _ => {
-                    if let Some(submission) = self.input.update(event) {
-                        return Action::Submit(submission);
-                    }
-                }
-            },
-            _ => {
-                self.input.update(event);
-            }
+        if !matches!(record.turn.end, End::Live | End::Quiet) {
+            return record.turn.end == end;
         }
-        if self.input.take_stop() {
-            Action::Cancel
-        } else {
-            Action::None
+        record.turn.end = end;
+        true
+    }
+    /// Finish a host reply with an explicit elapsed label, retaining all partial content.
+    pub fn finish_turn(&mut self, message: &str, end: End, duration: &str) -> bool {
+        if !self.end_turn(message, end) {
+            return false;
         }
+        if let Some(record) = self.messages.iter_mut().find(|m| m.turn.id == message) {
+            record.turn.duration = model::label(duration);
+        }
+        true
     }
-
-    /// Draw the composition. Transcript position follows output until manually scrolled.
-    pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Theme) {
-        self.render_with(frame, area, theme.presentation());
+    /// Drain host work requested by navigation/selection; submission uses `Action`.
+    pub fn take_intents(&mut self) -> Vec<Intent> {
+        std::mem::take(&mut self.intents)
     }
-
-    /// Render with explicit terminal capabilities and design tokens.
-    pub fn render_with(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
-        self.render_composition(frame, area, theme, true);
+    /// Acknowledge a copy/open/inspection/retry. Stale completions do nothing.
+    pub fn acknowledge(&mut self, request: &Request, result: Result<&str, &str>) -> bool {
+        if self.pending.as_ref().is_none_or(|p| &p.request != request) {
+            return false;
+        }
+        if self.pending.as_ref().is_some_and(|p| p.latest) && result.is_ok() {
+            return false;
+        }
+        let Some(pending) = self.pending.take() else {
+            return false;
+        };
+        self.say(&match result {
+            Ok("") => pending.label,
+            Ok(label) => model::label(label),
+            Err(reason) => format!("failed · {}", model::label(reason)),
+        });
+        true
     }
-    /// Render an unframed conversation with a fixed composer dock and host footer.
-    pub fn render_docked_with(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
-        self.render_composition(frame, area, theme, false);
-    }
-    fn render_composition(
+    /// Resolve older-history loading. Duplicate IDs or a stale request leave rows untouched.
+    pub fn complete_earlier(
         &mut self,
-        frame: &mut Frame<'_>,
-        area: Rect,
-        theme: Presentation,
-        framed: bool,
-    ) {
-        let [status, transcript, activity, composer, hints] = Layout::vertical([
-            Constraint::Length(u16::from(framed)),
-            Constraint::Min(0),
-            Constraint::Length(1),
-            Constraint::Length(5),
-            Constraint::Length(1),
-        ])
-        .areas(area);
-        frame.render_widget(
-            Paragraph::new(format!("Chat · {}", self.status)).style(theme.focus()),
-            status,
-        );
-        let [transcript, above] = Layout::vertical([
-            Constraint::Min(0),
-            Constraint::Length(self.input.above_height_for(area.width)),
-        ])
-        .areas(transcript);
-        self.input.render_above(frame, above, theme);
-        let block = if framed {
-            Block::bordered().title("Conversation")
-        } else {
-            Block::default()
-        };
-        let inner = block.inner(transcript);
-        let mut lines = Vec::new();
-        for message in &self.messages {
-            let role_style = if message.timestamp.is_some() {
-                theme.base().add_modifier(Modifier::BOLD)
-            } else {
-                theme.focus()
-            };
-            let mut header = vec![Span::styled(message.role.clone(), role_style)];
-            if let Some(time) = &message.timestamp {
-                header.push(Span::styled(
-                    format!("{}{}", theme.symbols.separator(), time),
-                    theme.muted().add_modifier(Modifier::DIM),
-                ));
-            }
-            if let Some((_, reason)) = &message.delivery {
-                header.push(Span::styled(
-                    format!(
-                        "{}{}",
-                        theme.symbols.separator(),
-                        reason.as_ref().map_or_else(
-                            || "sending".into(),
-                            |reason| format!("not sent · {reason}")
-                        )
-                    ),
-                    if reason.is_none() {
-                        theme.muted().add_modifier(Modifier::DIM)
-                    } else {
-                        theme.error()
-                    },
-                ));
-            }
-            lines.push(Line::from(header));
-            let output = message.visible_text();
-            lines.extend(wrapped(&output, inner.width).into_iter().map(Line::raw));
-            lines.push(Line::raw(""));
+        request: &Request,
+        result: Result<Vec<Turn>, &str>,
+        remaining: usize,
+    ) -> bool {
+        if !matches!(&self.page, Some(Page::Loading(id)) if id == request) {
+            return false;
         }
-        let maximum = u16::try_from(lines.len().saturating_sub(usize::from(inner.height)))
-            .unwrap_or(u16::MAX);
-        self.scroll = if self.follow {
-            maximum
-        } else {
-            self.scroll.min(maximum)
-        };
-        frame.render_widget(
-            Paragraph::new(lines)
-                .block(block)
-                .scroll((self.scroll, 0))
-                .style(theme.base()),
-            transcript,
-        );
-        self.render_activity(frame, activity, theme);
-        self.input.render_with(
-            frame,
-            composer,
-            EditorView {
-                title: "message",
-                placeholder: "Write a message",
-                presentation: theme,
-                footer: if framed { "" } else { &self.status },
-                ..EditorView::default()
-            },
-            true,
-        );
-        frame.render_widget(
-            Paragraph::new(self.input_hint(theme, hints.width)).style(theme.muted()),
-            hints,
-        );
-        self.input.render_overlay(frame, area, theme);
-    }
-
-    fn render_activity(&self, frame: &mut Frame<'_>, activity: Rect, theme: Presentation) {
-        let activity_style = if self.input.queue_paused() && !self.input.queue().is_empty() {
-            theme.warning()
-        } else {
-            match self.input.state() {
-                State::Rejected { .. } => theme.error(),
-                State::Pending(_) | State::Accepted | State::Ready => theme.muted(),
+        let turns = match result {
+            Ok(turns) => turns,
+            Err(reason) => {
+                self.page = Some(Page::Failed(model::label(reason)));
+                return true;
             }
         };
-        frame.render_widget(
-            Paragraph::new(if self.input.completion_menu().is_some() {
-                self.input_hint(theme, activity.width)
-            } else {
-                self.input
-                    .status()
-                    .replace(" · ", theme.symbols.separator())
-            })
-            .style(activity_style),
-            activity,
-        );
+        let mut ids: BTreeSet<_> = self.messages.iter().map(|m| m.turn.id.clone()).collect();
+        if turns.len() > HISTORY_LIMIT
+            || turns
+                .iter()
+                .any(|t| !valid_turn(t) || !ids.insert(t.id.clone()))
+        {
+            self.page = Some(Page::Failed("invalid history snapshot".into()));
+            return false;
+        }
+        let boundary = self.messages.first().map(|m| m.turn.id.clone());
+        let mut earlier: Vec<_> = turns.into_iter().map(Record::new).collect();
+        earlier.append(&mut self.messages);
+        let removed = earlier.len().saturating_sub(HISTORY_LIMIT);
+        earlier.truncate(HISTORY_LIMIT);
+        self.messages = earlier;
+        self.newer = self.newer.saturating_add(removed);
+        self.earlier = remaining;
+        self.loaded_boundary = boundary;
+        self.page = None;
+        self.prune();
+        self.refresh();
+        true
     }
-    fn input_hint(&self, theme: Presentation, width: u16) -> String {
-        let hint = self.input.footer_hint_for(width);
-        hint.replace(" · ", theme.symbols.separator())
-            .replace(
-                "↑↓",
-                if theme.symbols == crate::theme::Symbols::Ascii {
-                    "up/down"
-                } else {
-                    "↑↓"
-                },
-            )
-            .replace('↑', theme.symbols.more(true))
+    /// Resolve the newest-window request after browsing a bounded earlier page.
+    pub fn complete_latest(&mut self, request: &Request, turns: Vec<Turn>, earlier: usize) -> bool {
+        if self
+            .pending
+            .as_ref()
+            .is_none_or(|p| !p.latest || &p.request != request)
+            || turns.len() > HISTORY_LIMIT
+        {
+            return false;
+        }
+        let mut ids = BTreeSet::new();
+        if turns
+            .iter()
+            .any(|t| !valid_turn(t) || !ids.insert(t.id.clone()))
+        {
+            return false;
+        }
+        self.pending = None;
+        self.messages = turns.into_iter().map(Record::new).collect();
+        self.cache.clear();
+        self.newer = 0;
+        self.earlier = earlier;
+        self.loaded_boundary = None;
+        self.resume();
+        self.refresh();
+        true
     }
-
-    /// Advance editor messages and undo timing from the host's clock.
-    pub fn tick(&mut self, elapsed: std::time::Duration) {
+    /// Jump to a supplied loaded position. Missing/unloaded identities leave the view intact.
+    pub fn jump(&mut self, anchor: Anchor) -> bool {
+        if !self.messages.iter().any(|m| {
+            m.turn.id == anchor.message
+                && (anchor.part.is_empty() || m.turn.parts.iter().any(|p| p.id == anchor.part))
+        }) {
+            return false;
+        }
+        self.follow = false;
+        self.anchor = Some(anchor);
+        self.refresh();
+        true
+    }
+    /// Advance notices, leader expiry and Composer using the host's elapsed clock.
+    pub fn tick(&mut self, elapsed: Duration) {
+        self.now = self.now.saturating_add(elapsed);
         self.input.tick(elapsed);
+        if self.leader.is_some_and(|due| self.now >= due) {
+            self.leader = None;
+        }
+        if self
+            .notice
+            .as_ref()
+            .is_some_and(|(_, due)| self.now >= *due)
+        {
+            self.notice = None;
+        }
     }
+    fn request(&mut self) -> Request {
+        self.serial = self.serial.saturating_add(1);
+        Request {
+            conversation: self.conversation(),
+            number: self.serial,
+        }
+    }
+    fn say(&mut self, text: &str) {
+        self.notice = Some((model::label(text), self.now + Duration::from_secs(3)));
+    }
+    fn resume(&mut self) {
+        self.follow = true;
+        self.unread.clear();
+        self.anchor = None;
+    }
+    fn prune(&mut self) {
+        self.cache.retain(|(message, part), _| {
+            self.messages
+                .iter()
+                .any(|m| &m.turn.id == message && m.turn.parts.iter().any(|p| &p.id == part))
+        });
+        self.expanded.retain(|(message, part)| {
+            self.messages
+                .iter()
+                .any(|m| &m.turn.id == message && m.turn.parts.iter().any(|p| &p.id == part))
+        });
+        self.unread
+            .retain(|id| self.messages.iter().any(|m| &m.turn.id == id));
+    }
+}
+fn valid_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 128 && !id.chars().any(char::is_control)
+}
+fn valid_turn(turn: &Turn) -> bool {
+    let mut ids = BTreeSet::new();
+    valid_id(&turn.id)
+        && turn
+            .parts
+            .iter()
+            .take(PART_LIMIT)
+            .all(|p| valid_id(&p.id) && ids.insert(&p.id))
 }

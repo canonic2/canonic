@@ -1,5 +1,8 @@
 //! Verifies reusable components, gallery fixtures and real terminal restoration.
 
+mod chat;
+#[cfg(feature = "gallery")]
+mod chat_terminal;
 mod commands;
 #[cfg(feature = "gallery")]
 mod commands_terminal;

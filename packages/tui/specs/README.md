@@ -20,7 +20,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [System design](system-design.md) | Architectural rules, dependency direction, public-contract conventions and proposed capability owners |
 | [Components](components/README.md) | Editor, Option Picker, Dialog, Command Palette, Composer, Completion Menu and Chat |
 | [Features](features/README.md) | Gallery, scenario coverage, input/navigation, activity/review, browsing and terminal hosting |
-| [Chat and conversation content](components/chat.md) | Transcript composition and targets for streaming, rich text, code, diffs, search and timeline |
+| [Chat and conversation content](components/chat.md) | Identified streaming, rich text/code/tables/diffs, anchors, loaded search and block selection |
 | [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |
 | [Implementation plan](roadmap.md) | Dependency order, acceptance matrix, exit conditions and open decisions |
 | [Verification](verification.md) | Independent checkpoint definitions, dated engineering summary and evidence boundaries |

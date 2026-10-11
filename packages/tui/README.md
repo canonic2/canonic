@@ -34,8 +34,10 @@ danger rows, fuzzy filtering, paging and explicit single/multiple confirmation.
 F6 changes its gallery placement; Tab switches to an independent host draft.
 The chat uses a multiline editor with cursor movement, selection,
 paste, grouped undo/redo, Shift-Enter, Alt-Enter or Ctrl-J newline and Enter submission.
-Alt-PageUp/PageDown scroll the transcript; Alt-End follows
-output; Esc stops active composer work. The gallery uses local fixture
+Alt-PageUp/PageDown scroll the transcript; Alt-End follows output. Ctrl-F searches
+loaded content; Ctrl-X V selects blocks for Markdown/code copy and opening;
+Ctrl-X T toggles timestamps. Chat supports identified rich parts, stable anchors,
+unread and host-owned paging; Esc stops active composer work. The gallery uses local fixture
 data, with no AI account, policy enforcement, Git operation or saved approval.
 
 Composer includes immediate submission/acknowledgement, one-per-turn queues,

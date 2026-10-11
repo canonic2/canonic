@@ -525,6 +525,29 @@ Ctrl-G opening, and a three-second host removal reason. Provide deterministic
 waiting/removal fixtures and a separate human gate. The user authorized starting
 commands/bindings separately; that does not accept this timing gap.
 
+## Chat review — complete local conversation
+
+Run `make -C packages/tui run CARGO_FLAGS="-- --component chat --scenario answer"`.
+Review the product content without counting gallery title/F-key rows.
+
+1. Compare answer, streaming, actions-off, welcome and pane scenarios. Check
+   header metadata, body indentation, content/folds and the fixed dock.
+2. Type a draft, move the caret, open search with Ctrl-F, search timezone,
+   navigate matches and Esc. Type again: caret and draft must be restored.
+3. Ctrl-X V selects blocks; navigate to code and press C. Check the simulated
+   copy notice. Y copies Markdown; O requests supplied content inspection.
+4. In long, Alt-Home twice loads earlier history. F9 shows a retryable failure;
+   Alt-End follows again. Resize while reading and compare the source anchor.
+5. In streaming, Enter queues a message; Esc stops and pauses the queue.
+   Ctrl-X Enter resumes explicitly. New output while reading shows unread
+   without moving Composer. F6 preserves failed partial output; Ctrl-X R retries.
+6. Check narrow-40, ansi16, no-color and ascii, including Unicode source,
+   copied code, visible signs and native terminal selection.
+
+Engineering evidence does not record human visual acceptance. The real host
+owns clipboard, opening, history storage and agent execution; this review uses
+the gallery's local acknowledgements.
+
 ## Acceptance record
 
 | Slice | Engineering | Human | Commit / next action |
@@ -536,6 +559,7 @@ commands/bindings separately; that does not accept this timing gap.
 | 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
 | Composer | Complete local workflow and native host adapters implemented; current engineering checks recorded above | Native visual review remains separate | Review complete component; commit only when requested |
 | Completion Menu | Complete reusable component, Composer integration and 15 interactive states; [engineering record](verification.md#completion-menu-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
+| Chat | Rich component and 51 interactive states; [engineering record](verification.md#chat-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
 | 5–13 | Other capabilities retain their documented gaps | Not presented | Complete components in dependency order |
 
 Slice 1 engineering: `make -C packages/tui check` passed formatting, strict
