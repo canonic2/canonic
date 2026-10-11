@@ -133,6 +133,33 @@ fn subsequence(text: &str, query: &[char]) -> Option<(usize, Vec<Range<usize>>)>
     None
 }
 
+fn ranked_match(text: &str, query: &[char]) -> Option<(usize, Vec<Range<usize>>)> {
+    let (_, fallback) = subsequence(text, query)?;
+    for (byte, _) in text.grapheme_indices(true) {
+        if byte > 0
+            && text[..byte]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_alphanumeric)
+        {
+            continue;
+        }
+        let Some((_, mut ranges)) = subsequence(&text[byte..], query) else {
+            continue;
+        };
+        if ranges.first().is_some_and(|r| r.start == 0)
+            && ranges.windows(2).all(|pair| pair[0].end == pair[1].start)
+        {
+            for range in &mut ranges {
+                range.start += byte;
+                range.end += byte;
+            }
+            return Some((usize::from(byte > 0), ranges));
+        }
+    }
+    Some((2, fallback))
+}
+
 pub(super) fn matches(choices: &[Choice], query: &str) -> Vec<Match> {
     let query: Vec<_> = query
         .chars()
@@ -143,10 +170,10 @@ pub(super) fn matches(choices: &[Choice], query: &str) -> Vec<Match> {
     for (index, choice) in choices.iter().enumerate() {
         let candidate = if query.is_empty() {
             Some((0, false, Vec::new(), Vec::new()))
-        } else if let Some((score, ranges)) = subsequence(&choice.label, &query) {
+        } else if let Some((score, ranges)) = ranked_match(&choice.label, &query) {
             Some((score, false, ranges, Vec::new()))
         } else {
-            subsequence(&choice.detail, &query)
+            ranked_match(&choice.detail, &query)
                 .map(|(score, ranges)| (score, true, Vec::new(), ranges))
         };
         if let Some((score, detail_only, label, detail)) = candidate {

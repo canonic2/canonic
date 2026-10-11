@@ -158,7 +158,7 @@ fn prose_wraps_by_word_and_ascii_control_display_never_emits_controls() {
         .draw(|frame| editor.render_with(frame, frame.area(), view, true))
         .unwrap();
     let text = super::components::dump(terminal.backend().buffer());
-    assert!(text.contains("abc<1B>[31m"));
+    assert!(text.contains("abc^[[31m"));
     assert!(text.is_ascii());
     assert!(!text.contains('\x1b'));
     assert!(editor.text().contains('\x1b'));

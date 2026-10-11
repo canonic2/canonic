@@ -9,6 +9,7 @@ mod dialogs;
 mod editor;
 mod option_picker;
 mod scenarios;
+mod tool_cards;
 
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -110,6 +111,8 @@ pub enum Component {
     Composer,
     /// Focus-preserving command and file suggestions.
     CompletionMenu,
+    /// Identified tool activity, output, concurrency and acknowledged effects.
+    ToolCallCard,
 }
 
 #[derive(Clone, Copy)]
@@ -122,6 +125,7 @@ enum Screen {
     Commands,
     Composer,
     CompletionMenu,
+    ToolCallCard,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -159,8 +163,10 @@ pub struct Gallery {
     commands: commands::CommandDemo,
     composer: composer::ComposerDemo,
     completion: completion::CompletionDemo,
-    scenarios: [Picker; 7],
-    scenario_viewports: [ListState; 7],
+    tools: tool_cards::ToolDemo,
+    tool_scenario: usize,
+    scenarios: [Picker; 8],
+    scenario_viewports: [ListState; 8],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -182,6 +188,7 @@ impl Gallery {
             Screen::Commands => Some(Component::Commands),
             Screen::Composer => Some(Component::Composer),
             Screen::CompletionMenu => Some(Component::CompletionMenu),
+            Screen::ToolCallCard => Some(Component::ToolCallCard),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -225,7 +232,7 @@ impl Gallery {
         {
             let entries = scenarios::entries(component);
             let id = entries.get(index).map_or_else(
-                || ["narrow-40", "ansi16", "no-color", "ascii"][index - entries.len()],
+                || scenarios::PROFILES[index - entries.len()],
                 |entry| entry.id,
             );
             self.open_scenario(component, id)
@@ -254,9 +261,7 @@ impl Gallery {
             (Component::Dialog, "nest") => "nested",
             _ => id,
         };
-        let profile = ["narrow-40", "ansi16", "no-color", "ascii"]
-            .iter()
-            .position(|name| *name == id);
+        let profile = scenarios::PROFILES.iter().position(|name| *name == id);
         let index = if profile.is_some() {
             0
         } else {
@@ -284,6 +289,19 @@ impl Gallery {
             return Ok(());
         };
         self.reset_component(component, fixture);
+        if matches!(component, Component::ToolCallCard) {
+            self.preview_width = if matches!(fixture, 28..=30) {
+                Some(40)
+            } else {
+                None
+            };
+            if fixture == 31 {
+                self.theme.colors = ColorMode::Ansi16;
+            }
+            if matches!(fixture, 32 | 33) {
+                self.theme.colors = ColorMode::NoColor;
+            }
+        }
         for code in entry.keys {
             self.fixture_event(
                 component,
@@ -293,17 +311,77 @@ impl Gallery {
         match profile {
             Some(0) => self.preview_width = Some(40),
             Some(1) => self.theme.colors = ColorMode::Ansi16,
-            Some(2) => self.theme.colors = ColorMode::NoColor,
+            Some(2) => {
+                self.theme.colors = ColorMode::NoColor;
+                self.theme.symbols = Symbols::Unicode;
+            }
             Some(3) => self.theme.symbols = Symbols::Ascii,
+            Some(4) => {
+                self.theme.colors = ColorMode::TrueColor;
+                self.theme.theme = Theme::Light;
+                self.theme.symbols = Symbols::Unicode;
+            }
+            Some(5) => {
+                self.theme.colors = ColorMode::TrueColor;
+                self.theme.theme = Theme::Dark;
+                self.theme.symbols = Symbols::Unicode;
+            }
+            Some(6) => self.theme.colors = ColorMode::Ansi256,
+            Some(7) => {
+                self.theme.colors = ColorMode::NoColor;
+                self.theme.symbols = Symbols::Ascii;
+            }
             _ => {
                 self.preview_width = match (component, id) {
-                    (Component::Chat, "narrow") => Some(40),
+                    (Component::Chat, "narrow" | "search-narrow-ascii") => Some(40),
                     (Component::Chat, "pane") => Some(64),
+                    (Component::ToolCallCard, "narrow" | "narrow-diff" | "narrow-failed") => {
+                        Some(40)
+                    }
                     _ => None,
                 };
+                self.apply_chat_profile(component, id);
+                self.apply_tool_profile(component, id);
             }
         }
+        self.apply_fixture_profile(component);
         Ok(())
+    }
+
+    fn apply_tool_profile(&mut self, component: Component, id: &str) {
+        if matches!(component, Component::ToolCallCard) {
+            if id == "card-ascii" {
+                self.theme.symbols = Symbols::Ascii;
+            }
+            if matches!(id, "card-light" | "child-light-selected") {
+                self.theme.theme = Theme::Light;
+                self.theme.colors = ColorMode::TrueColor;
+            }
+        }
+    }
+
+    fn apply_chat_profile(&mut self, component: Component, id: &str) {
+        if matches!(component, Component::Chat) {
+            match id {
+                "search-ansi16" => self.theme.colors = ColorMode::Ansi16,
+                "search-no-color" => self.theme.colors = ColorMode::NoColor,
+                "search-narrow-ascii" => self.theme.symbols = Symbols::Ascii,
+                _ => {}
+            }
+        }
+    }
+
+    fn apply_fixture_profile(&mut self, component: Component) {
+        let presentation = match component {
+            Component::Composer => self.composer.take_presentation(),
+            Component::Commands => self.commands.take_presentation(self.theme),
+            Component::CompletionMenu => self.completion.take_presentation(self.theme),
+            Component::Dialog => self.dialogs.take_presentation(self.theme),
+            _ => None,
+        };
+        if let Some(presentation) = presentation {
+            self.theme = presentation;
+        }
     }
 
     fn reset_component(&mut self, component: Component, fixture: usize) {
@@ -337,10 +415,18 @@ impl Gallery {
                 self.completion = completion::CompletionDemo::scenario(fixture);
                 Screen::CompletionMenu
             }
+            Component::ToolCallCard => {
+                self.tool_scenario = fixture;
+                self.tools = tool_cards::ToolDemo::new(fixture);
+                Screen::ToolCallCard
+            }
         };
         if !matches!(
             component,
-            Component::Chat | Component::Composer | Component::CompletionMenu
+            Component::Chat
+                | Component::Composer
+                | Component::CompletionMenu
+                | Component::ToolCallCard
         ) {
             for _ in 0..fixture {
                 self.fixture_event(
@@ -375,6 +461,9 @@ impl Gallery {
             Component::CompletionMenu => {
                 self.completion.update(event);
             }
+            Component::ToolCallCard => {
+                self.tools.update(event);
+            }
         }
     }
 
@@ -393,6 +482,7 @@ impl Gallery {
                     "Commands and bindings".into(),
                     "Composer".into(),
                     "Completion Menu".into(),
+                    "Tool Call Card".into(),
                 ],
                 Some(0),
             ),
@@ -407,6 +497,8 @@ impl Gallery {
             commands: commands::CommandDemo::new(),
             composer: composer::ComposerDemo::new(),
             completion: completion::CompletionDemo::scenario(0),
+            tools: tool_cards::ToolDemo::new(0),
+            tool_scenario: 0,
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -428,6 +520,7 @@ impl Gallery {
             Screen::Commands => "commands",
             Screen::Composer => "composer",
             Screen::CompletionMenu => "completion-menu",
+            Screen::ToolCallCard => "tool-call-card",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -467,13 +560,18 @@ impl Gallery {
     }
     /// Independent draft in the Completion Menu host.
     #[must_use]
-    pub fn completion_input(&self) -> &str {
+    pub fn completion_input(&self) -> String {
         self.completion.input()
     }
     /// Composer draft in the Chat scenario, preserved while searching/selecting.
     #[must_use]
     pub fn chat_input(&self) -> &str {
         self.chat.input()
+    }
+    /// Composer draft preserved by Tool Call Card selection and details.
+    #[must_use]
+    pub fn tool_input(&self) -> &str {
+        self.tools.input()
     }
 
     fn reset_chat(&mut self) {
@@ -496,6 +594,9 @@ impl Gallery {
         self.composer.tick(elapsed);
         self.completion.tick(elapsed);
         self.chat.tick(elapsed);
+        if matches!(self.screen, Screen::ToolCallCard) {
+            self.tools.tick(elapsed);
+        }
     }
 
     /// Apply an input event. Returns true when the gallery should exit.
@@ -506,13 +607,19 @@ impl Gallery {
         if matches!(self.screen, Screen::Chat) && self.chat.update(event) {
             return false;
         }
+        if matches!(self.screen, Screen::ToolCallCard) && self.tools.update(event) {
+            return false;
+        }
         if matches!(self.screen, Screen::Composer) && self.composer.update(event) {
+            self.apply_fixture_profile(Component::Composer);
             return self.composer.should_quit();
         }
         if matches!(self.screen, Screen::CompletionMenu) && self.completion.update(event) {
+            self.apply_fixture_profile(Component::CompletionMenu);
             return false;
         }
         if matches!(self.screen, Screen::Commands) && self.commands.update(event) {
+            self.apply_fixture_profile(Component::Commands);
             return false;
         }
         if matches!(self.screen, Screen::Editor) && self.editor.update(event) {
@@ -522,6 +629,7 @@ impl Gallery {
             return false;
         }
         if matches!(self.screen, Screen::Dialog) && self.dialogs.update(event) {
+            self.apply_fixture_profile(Component::Dialog);
             return false;
         }
         if let Event::Key(key) = event {
@@ -549,6 +657,11 @@ impl Gallery {
                 return false;
             }
             if key.code == KeyCode::F(2) {
+                if matches!(self.screen, Screen::ToolCallCard) {
+                    self.tool_scenario = (self.tool_scenario + 1)
+                        % scenarios::entries(Component::ToolCallCard).len();
+                    self.tools = tool_cards::ToolDemo::new(self.tool_scenario);
+                }
                 if matches!(self.screen, Screen::Chat) {
                     self.scenario = (self.scenario + 1) % scenarios::entries(Component::Chat).len();
                     self.reset_chat();
@@ -569,6 +682,7 @@ impl Gallery {
             | Screen::Commands
             | Screen::Composer
             | Screen::CompletionMenu
+            | Screen::ToolCallCard
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -626,6 +740,7 @@ impl Gallery {
             Screen::Commands => self.commands.render(frame, body, self.theme),
             Screen::Composer => self.composer.render(frame, body, self.theme),
             Screen::CompletionMenu => self.completion.render(frame, body, self.theme),
+            Screen::ToolCallCard => self.tools.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(
@@ -676,7 +791,7 @@ impl Gallery {
 pub fn run(cli: &Cli) -> Result<()> {
     if cli.list {
         println!(
-            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings\ncomposer Composer\ncompletion-menu Completion Menu"
+            "picker  Option picker\nchat    Full-screen chat\neditor  Multiline editor\ndialog  Dialogs\ncommands Commands and bindings\ncomposer Composer\ncompletion-menu Completion Menu\ntool-call-card Tool Call Card"
         );
         for component in scenarios::COMPONENTS {
             println!(
@@ -696,7 +811,7 @@ pub fn run(cli: &Cli) -> Result<()> {
                     entry.detail
                 );
             }
-            println!("  narrow-40 / ansi16 / no-color / ascii · main view profiles");
+            println!("  {} · main view profiles", scenarios::PROFILES.join(" / "));
         }
         return Ok(());
     }

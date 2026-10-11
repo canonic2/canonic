@@ -18,12 +18,10 @@ pub enum InputMode {
 /// Host operations emitted by explicit interaction or the autosave clock.
 #[derive(Clone, Debug)]
 pub enum Intent {
-    /// Stop the running work; the queue has already been paused.
-    Stop,
-    /// Finish the current step before processing a manually sent queued message.
-    InterruptAfterStep,
-    /// Detach running shell work; the host retains process ownership.
-    Background,
+    /// Identified stop, interrupt-after-step or background request; host acknowledgement required.
+    Work(super::WorkRequest),
+    /// Stop waiting for this editor return; host editor/process ownership is unchanged.
+    EditorCancelled(Identity),
     /// Ask the host to read a clipboard image, then call `insert_image_with_size`.
     ClipboardImage,
     /// Quit after persisting `saved()`; never discard a draft.
@@ -90,11 +88,31 @@ impl Composer {
     /// Read host execution availability, including an unacknowledged submission.
     #[must_use]
     pub fn is_busy(&self) -> bool {
-        self.working || matches!(self.state, State::Pending(_))
+        self.working || self.work_request.is_some() || matches!(self.state, State::Pending(_))
     }
     /// Host reports whether an accepted turn is running.
     pub fn set_working(&mut self, working: bool) {
+        if working && !self.working {
+            self.working_elapsed = Duration::ZERO;
+        }
         self.working = working;
+        if !working {
+            self.work_request = None;
+            self.intents
+                .retain(|intent| !matches!(intent, Intent::Work(_)));
+        }
+    }
+    /// Host elapsed duration for accepted foreground work; repaint ticks do not infer it.
+    pub fn set_working_elapsed(&mut self, elapsed: Duration) {
+        self.working_elapsed = elapsed;
+    }
+    /// Keep activity dots static while host-reported elapsed time continues to change.
+    pub fn set_reduced_motion(&mut self, reduced: bool) {
+        self.motion = if reduced {
+            super::work::Motion::Reduced
+        } else {
+            super::work::Motion::Animated
+        };
     }
     /// A paused queue requires explicit Ctrl-X Enter to resume sending.
     #[must_use]
@@ -120,6 +138,9 @@ impl Composer {
     /// A completed turn sends one eligible queued entry, or pauses on failure.
     pub fn turn_ended(&mut self, success: bool) -> Option<Submission> {
         self.working = false;
+        self.work_request = None;
+        self.intents
+            .retain(|intent| !matches!(intent, Intent::Work(_)));
         if !success {
             self.paused = true;
             self.advance();
@@ -134,18 +155,25 @@ impl Composer {
     }
     /// Explicitly send one queued message; hosts stop current work after its step.
     pub fn send_next_now(&mut self) -> Option<Submission> {
-        if matches!(self.state, State::Pending(_)) {
+        if self.work_request.is_some() {
+            return None;
+        }
+        if let State::Pending(submission) = &self.state {
+            self.resume_waiting = Some(submission.ticket.clone());
             self.notify("Waiting for sending acknowledgement");
             return None;
         }
         if self.working {
-            self.intents.push(Intent::InterruptAfterStep);
+            if !self.queue.is_empty() {
+                self.request_work(super::WorkAction::InterruptAfterStep);
+            }
+            return None;
         }
         self.working = false;
         self.paused = false;
         self.send_next()
     }
-    fn send_next(&mut self) -> Option<Submission> {
+    pub(super) fn send_next(&mut self) -> Option<Submission> {
         if self.blocked.is_some() || matches!(self.state, State::Pending(_)) {
             return None;
         }
@@ -169,7 +197,7 @@ impl Composer {
     }
     pub(super) fn enqueue(&mut self) {
         if self.queue.len() >= 128 {
-            self.notify("Queue full · draft kept");
+            self.notify("! Queue full · 128 waiting · draft kept");
             return;
         }
         let draft = self.take_visible_draft();
@@ -274,7 +302,11 @@ impl Composer {
             return;
         };
         if self.editor.text().trim().is_empty() {
-            self.remove_queued();
+            let original = self.queue.remove(index).draft;
+            self.push_stash(original);
+            self.restore_draft();
+            self.advance();
+            self.notify("Empty edit removed · original stashed");
             return;
         }
         let editor = self.editor.clone();
@@ -318,7 +350,6 @@ impl Composer {
     pub(super) fn lifecycle_tick(&mut self, elapsed: Duration) {
         if self.leader.is_some_and(|due| self.now >= due) {
             self.leader = None;
-            self.notify("ctrl+x sequence expired");
         }
         if self.arm.is_some_and(|(_, due)| self.now >= due) {
             self.arm = None;
@@ -381,8 +412,15 @@ impl Composer {
                     None
                 }
                 (KeyCode::Enter, KeyModifiers::NONE) => self.send_next_now(),
+                (KeyCode::Esc, KeyModifiers::NONE) => None,
                 _ => {
-                    self.notify("Unrecognized ctrl+x sequence");
+                    self.notify(&format!(
+                        "Unrecognized ctrl+x sequence · {}",
+                        match key.code {
+                            KeyCode::Char(c) => c.to_string(),
+                            _ => format!("{:?}", key.code),
+                        }
+                    ));
                     None
                 }
             });
@@ -443,19 +481,12 @@ impl Composer {
         if let Some(index) = self
             .intents
             .iter()
-            .position(|intent| matches!(intent, Intent::Stop))
+            .position(|intent| matches!(intent, Intent::Work(request) if request.action == super::WorkAction::Stop))
         {
             self.intents.remove(index);
             true
         } else {
             false
-        }
-    }
-    fn background_shell(&mut self) {
-        if self.input_mode == InputMode::Shell && self.is_busy() {
-            self.intents.push(Intent::Background);
-        } else {
-            self.notify("No running shell command to background");
         }
     }
     fn cancel_key(&mut self, ctrl_c: bool) {
@@ -466,24 +497,20 @@ impl Composer {
             self.cancel_editor();
             return;
         }
-        if self.is_busy() {
-            self.working = false;
-            self.paused = true;
-            self.intents.push(Intent::Stop);
-            self.advance();
-            self.notify("Queue paused · stopped · draft kept");
-            return;
-        }
-        if self.input_mode == InputMode::Shell {
-            self.input_mode = InputMode::Message;
-            self.advance();
-            return;
-        }
         if !ctrl_c && self.editor.selection().is_some() {
             self.editor.update(&Event::Key(crate::event::KeyEvent::new(
                 KeyCode::Esc,
                 KeyModifiers::NONE,
             )));
+            return;
+        }
+        if self.is_busy() {
+            self.request_work(super::WorkAction::Stop);
+            return;
+        }
+        if self.input_mode == InputMode::Shell {
+            self.input_mode = InputMode::Message;
+            self.advance();
             return;
         }
         if !self.editor.text().is_empty() {

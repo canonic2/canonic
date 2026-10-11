@@ -2,7 +2,7 @@
 
 use super::{BoxMode, Composer, InputMode};
 use crate::{
-    editor::{InlineAtom, Outcome},
+    editor::{AtomKind, InlineAtom, Outcome},
     event::{Event, KeyCode, KeyEventKind},
 };
 
@@ -32,10 +32,11 @@ impl Composer {
             .document()
             .atoms
             .values()
-            .filter(|a| a.reference.is_some())
+            .filter(|a| a.kind == AtomKind::Image)
             .count()
             + 1;
         let changed = self.editor.insert_atom(InlineAtom {
+            kind: AtomKind::Image,
             label: dimensions.map_or_else(
                 || format!("[image {number}]"),
                 |(width, height)| format!("[image {number} · {width}×{height}]"),
@@ -61,10 +62,11 @@ impl Composer {
                     .document()
                     .atoms
                     .values()
-                    .filter(|a| a.reference.is_none())
+                    .filter(|a| a.kind == AtomKind::Paste)
                     .count()
                     + 1;
                 if self.editor.insert_atom(InlineAtom {
+                    kind: AtomKind::Paste,
                     label: format!("[paste {number} · {lines} lines]"),
                     content: text.replace("\r\n", "\n").replace('\r', "\n"),
                     reference: None,
@@ -175,7 +177,7 @@ impl Composer {
         for atom in original
             .atoms
             .values()
-            .filter(|atom| atom.reference.is_some())
+            .filter(|atom| matches!(atom.kind, AtomKind::Image | AtomKind::File))
         {
             if !document.text.contains(&atom.content) {
                 continue;

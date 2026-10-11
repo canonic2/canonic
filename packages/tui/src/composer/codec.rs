@@ -1,13 +1,13 @@
 //! Versioned, bounded storage encoding; callers own paths, atomic writes and permissions.
 
 use super::{InputMode, SavedComposer, SavedDraft};
-use crate::editor::{Document, InlineAtom};
+use crate::editor::{AtomKind, Document, InlineAtom};
 use std::{
     collections::BTreeMap,
     io::{self, Read, Write},
 };
 
-const MAGIC: &[u8] = b"CANONIC-COMPOSER\x01";
+const MAGIC: &[u8] = b"CANONIC-COMPOSER\x02";
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "Invalid composer snapshot")
 }
@@ -31,6 +31,11 @@ fn atoms(output: &mut impl Write, values: &BTreeMap<char, InlineAtom>) -> io::Re
         output.write_all(&u32::from(*marker).to_le_bytes())?;
         string(output, &atom.label)?;
         string(output, &atom.content)?;
+        output.write_all(&[match atom.kind {
+            AtomKind::Paste => 0,
+            AtomKind::Image => 1,
+            AtomKind::File => 2,
+        }])?;
         output.write_all(&[u8::from(atom.reference.is_some())])?;
         if let Some(reference) = &atom.reference {
             string(output, reference)?;
@@ -64,6 +69,7 @@ struct Decoder<'a, R> {
     input: &'a mut R,
     limit: usize,
     remaining: usize,
+    schema: u8,
 }
 impl<R: Read> Decoder<'_, R> {
     fn flag(&mut self) -> io::Result<bool> {
@@ -107,6 +113,18 @@ impl<R: Read> Decoder<'_, R> {
             let marker = char::from_u32(u32::from_le_bytes(bytes)).ok_or_else(invalid)?;
             let label = self.string(256)?;
             let content = self.string(self.limit)?;
+            let kind = if self.schema == 2 {
+                let mut byte = [0];
+                self.input.read_exact(&mut byte)?;
+                Some(match byte[0] {
+                    0 => AtomKind::Paste,
+                    1 => AtomKind::Image,
+                    2 => AtomKind::File,
+                    _ => return Err(invalid()),
+                })
+            } else {
+                None
+            };
             let reference = if self.flag()? {
                 Some(self.string(4096)?)
             } else {
@@ -116,6 +134,11 @@ impl<R: Read> Decoder<'_, R> {
                 .insert(
                     marker,
                     InlineAtom {
+                        kind: kind.unwrap_or(if reference.is_some() {
+                            AtomKind::Image
+                        } else {
+                            AtomKind::Paste
+                        }),
                         label,
                         content,
                         reference,
@@ -183,7 +206,7 @@ impl<R: Read> Decoder<'_, R> {
 }
 
 impl SavedComposer {
-    /// Encode schema version 1 to a caller-owned sink. No paths are opened.
+    /// Encode schema version 2 to a caller-owned sink. No paths are opened.
     /// # Errors
     /// Returns write errors or unrepresentable length errors.
     pub fn write_to(&self, output: &mut impl Write) -> io::Result<()> {
@@ -209,14 +232,15 @@ impl SavedComposer {
         optional(output, self.queued_edit.as_ref())?;
         optional(output, self.editor_return.as_ref())
     }
-    /// Decode bounded schema version 1, then validate with `Composer::restore_saved`.
+    /// Decode bounded schema 1 or 2, then validate with `Composer::restore_saved`.
     /// The host supplies the same editor limit used by its composer.
     /// # Errors
     /// Rejects unknown schemas, truncated data, invalid UTF-8 and excessive lengths/counts.
     pub fn read_from(input: &mut impl Read, limit: usize) -> io::Result<Self> {
         let mut magic = vec![0; MAGIC.len()];
         input.read_exact(&mut magic)?;
-        if magic != MAGIC {
+        let schema = magic[MAGIC.len() - 1];
+        if magic[..MAGIC.len() - 1] != MAGIC[..MAGIC.len() - 1] || !matches!(schema, 1 | 2) {
             return Err(invalid());
         }
         if limit > 1_048_576 {
@@ -226,6 +250,7 @@ impl SavedComposer {
             input,
             limit,
             remaining: 268_435_456,
+            schema,
         };
         Ok(Self {
             draft: decoder.draft()?,

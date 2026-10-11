@@ -7,10 +7,10 @@ history and perform agent, storage, clipboard, opening and inspection operations
 
 ## Current status
 
-The reusable component and 51 interactive gallery scenarios are implemented.
+The reusable component and 76 interactive gallery scenarios are implemented.
 The gallery acknowledges simulated host effects; it does not connect an agent
 or use the OS clipboard. Engineering evidence is in
-[Verification](../verification.md#chat-engineering-record--2026-10-10).
+[Verification](../verification.md#chat-alignment-engineering-record--2026-10-11).
 Human visual acceptance and consumer UI integration are separate checkpoints.
 
 ## Behavior and state transitions
@@ -19,7 +19,8 @@ Human visual acceptance and consumer UI integration are separate checkpoints.
 
 Turn contains stable ID, role (User, Assistant, Note), display label, optional
 timestamp/day/duration, end state and ordered Parts. Each part has its own ID,
-revision and Content. Notes have no header. Immutable user submissions show dim
+revision and Content. Notes are one muted line without a header or body indent.
+Immutable user submissions show dim
 sending until the exact Composer ticket is accepted; refusal shows the reason
 while Composer protects the independent draft.
 
@@ -31,7 +32,7 @@ Acceptance shows a dim reloaded notice. Duplicate/stale callbacks are inert.
 
 Live assistant output has an accent marker at the last part's text edge. Done
 shows a green check and supplied elapsed label. Stopped preserves partial content
-with a dim cross/reason. Failed preserves content and offers Ctrl-X R when the
+with a dim `– stopped` and reason. Failed preserves content and offers Ctrl-X R when the
 host enables retry; retry emits a request and the host starts a new reply.
 Ended turns cannot accept part updates or a different outcome. All clock labels,
 reasoning, execution outcomes and capabilities come from the host.
@@ -63,8 +64,30 @@ unified hunk with line numbers and addition/deletion signs, then remaining-hunk
 count; O requests the full loaded patch. Search temporarily reveals hidden hunks.
 Malformed/binary/no-hunk patches have a labeled raw fallback.
 
-Generic tool parts show supplied verb/target/summary and folded output. Reasoning
-is host-supplied and folded initially. Enter in block selection toggles folds.
+Generic tool parts show supplied verb/target/summary and folded output. The
+reusable [Tool Call Card](tool-call-card.md) has its own complete contract. Identified
+`ToolCard(Box<Call>)` and `ToolGroup(ToolGroup)` parts use its lifecycle, local
+expansion, ordered concurrent folding and capability-gated select actions.
+`Intent::Tool` carries message/part and a card ticket; `acknowledge_tool` resolves
+effects, while `complete_tool_retry` atomically inserts the accepted successor
+below its retained parent. Tool group member source slots remain stable when an
+earlier member grows or a retry is inserted. Loaded search can reveal a source
+line in the middle of a capped card without changing its persistent expansion.
+Groups accept host reordering while stable member slots retain selection and
+expansion. `open_tool_artifact` accepts a supplied artifact ID and emits an
+identified tool effect; child-task details emit the supplied task ID.
+
+Optional [Run Activity](run-activity.md) supplies the whole-run row above the dock
+and a separate connection marker at right on the status row. `begin_run` starts a
+distinct ID; `update_run` accepts newer host snapshots. Escape/Ctrl-C emit one
+`Intent::Run` cancel without clearing the draft, cursor or anchor. Enter keeps
+queueing while the host confirms. Completion wins a pending cancellation;
+`fail_run_cancel` reports a host reason and enables another attempt. Ctrl+G asks
+only for host-enabled options. Focused overlays, search and selection retain input
+precedence. A disconnected run stays unknown, with frozen tool observations;
+offline does not change a finished outcome. `End::Cancelled` and `End::Interrupted`
+are explicit host outcomes, distinct from stopped and failed.
+Reasoning is host-supplied and folded initially. Enter in block selection toggles folds.
 Attachments show name/size/availability and optional open target. Unknown kinds
 have a readable label. Opening rejects controls and unsupported schemes and is
 always a host intent.
@@ -89,7 +112,10 @@ dock fixed: live output shows new output; ended messages show a count.
 Sending or Alt-End resumes follow and clears unread.
 
 Earlier/Latest requests are opaque, instance-scoped and single-use. One paging
-request can be pending; failure retains loaded content and allows retry. Hosts
+request can be pending across both directions. While earlier loading is active,
+Alt-End cannot start latest loading, and vice versa. Loading and failure name
+the requested edge and retry key; eviction explicitly labels unloaded content.
+Failure retains loaded content, manual anchors and drafts and allows retry. Hosts
 supply remaining-history counts and authoritative windows; Chat loads no storage.
 
 ### Search and selection
@@ -108,8 +134,14 @@ O opens a supplied link/file/attachment or requests table/diff inspection.
 A margin marker identifies the range without changing source. Enter toggles
 folds. Esc resumes following only when selection began while following.
 
-Copy/Open/Inspect wait for explicit host acknowledgement. Success shows a dim
+Copy/Open/Inspect first show a pending activity naming copying, opening the supplied
+target, or requesting full content. Repeated keys emit nothing while pending;
+highlighting and navigation do not claim success. Success shows a dim
 notice with copy kind/line count; failure keeps selection with a retryable reason.
+Copy failure offers Y to retry. Unsupported/control-bearing links show a refusal
+and still retain their original Markdown for Y. O on a table or patch emits
+inspection with the stable message/part IDs and retained content; the host resolves
+its complete source when a displayed projection has been bounded.
 Foreign, duplicate and stale completions are ignored. There are no OSC clipboard
 or hyperlink writes and no mouse capture; native terminal selection remains usable.
 
@@ -117,7 +149,8 @@ or hyperlink writes and no mouse capture; native terminal selection remains usab
 
 Welcome uses host title/context/recent summaries/suggestions and disappears with
 the first turn. Session browsing is host-owned. Tiny areas clamp; hints give way
-to content. ANSI16 code avoids filled backgrounds; inline code uses underline
+to content. Suggestions have a host-source label above the command/file/key hints.
+ANSI16 code avoids filled backgrounds; inline code uses underline
 where no surface exists. NO_COLOR uses reverse selection and signs/labels.
 ASCII replaces generated decoration only and preserves Unicode source.
 Reduced motion keeps the same content and navigation.
@@ -166,7 +199,7 @@ and history windows. They execute retry, cancellation, clipboard, opening,
 inspection, saving and external-editor handoff. Composer owns its one draft,
 submission, history, queue and stash. Actions availability is a display label
 and grants no authority. The gallery's actions-off review choices are a local
-host projection; reusable permission reviews belong to Tool Call Card.
+host projection; reusable permission and question reviews are separate components.
 
 ## Acceptance criteria
 

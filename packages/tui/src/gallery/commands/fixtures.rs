@@ -9,7 +9,7 @@ use crate::{
     event::{KeyCode, KeyModifiers},
 };
 
-pub(super) const NAMES: [&str; 12] = [
+pub(super) const NAMES: [&str; 25] = [
     "palette",
     "filter",
     "filter-key",
@@ -22,6 +22,19 @@ pub(super) const NAMES: [&str; 12] = [
     "pending-hints",
     "pending-miss",
     "empty",
+    "empty-scope",
+    "keys-empty-scope",
+    "keys-no-match",
+    "unavailable-after-selection",
+    "alias",
+    "short-terminal",
+    "forty-columns",
+    "palette-no-color",
+    "palette-ascii",
+    "palette-light",
+    "keys-no-color",
+    "hints-light",
+    "slash",
 ];
 
 fn stroke(code: KeyCode, modifiers: KeyModifiers) -> Stroke {
@@ -195,14 +208,14 @@ fn descriptors(fixture: usize) -> Vec<Command> {
             KeyModifiers::SHIFT,
         )])];
     }
-    if fixture == 11 {
+    if matches!(fixture, 11 | 12) {
         commands.clear();
     }
     commands
 }
 fn overrides(remapped: bool, fixture: usize) -> Vec<Remap> {
     let mut changes = Vec::new();
-    if remapped && fixture != 11 {
+    if remapped && !matches!(fixture, 11 | 12) {
         changes.push(Remap {
             id: "palette".into(),
             bindings: vec![Binding(vec![ctrl('o')])],
@@ -225,7 +238,7 @@ fn overrides(remapped: bool, fixture: usize) -> Vec<Remap> {
             },
         });
     }
-    if fixture == 7 {
+    if matches!(fixture, 7 | 22) {
         changes.push(Remap {
             id: "theme".into(),
             bindings: vec![Binding(vec![ctrl('t')])],
@@ -246,7 +259,10 @@ fn overrides(remapped: bool, fixture: usize) -> Vec<Remap> {
     changes
 }
 pub(super) fn view(remapped: bool, fixture: usize) -> Commands {
-    let commands = descriptors(fixture);
+    let mut commands = descriptors(fixture);
+    if let Some(stop) = commands.iter_mut().find(|c| c.id == "stop") {
+        stop.aliases.push("kill".into());
+    }
     let changes = overrides(remapped, fixture);
     let mut view = Commands::remapped(commands, &changes).expect("valid fixture command map");
     let scopes: Vec<_> = view
@@ -270,15 +286,44 @@ pub(super) fn view(remapped: bool, fixture: usize) -> Commands {
             .collect::<Vec<_>>(),
     );
     view.set_recent(&["handoff", "lens"]);
-    view.set_keys(matches!(fixture, 5..=7));
+    view.set_scope_names(&["log view"]);
+    view.set_complete_key_map(true);
+    view.set_keys(matches!(fixture, 5..=7 | 13 | 14 | 22));
+    if fixture == 13 {
+        for _ in 0..4 {
+            view.update(&crate::event::Event::Key(crate::event::KeyEvent::new(
+                KeyCode::Tab,
+                KeyModifiers::NONE,
+            )));
+        }
+    }
     view.set_query(match fixture {
-        1 => "copy",
+        1 | 19 => "copy",
         2 => "ctrl+x",
-        3 => "stop",
+        3 | 15 => "stop",
         4 => "deploy",
         6 => "editor",
-        7 => "ctrl+t",
+        7 | 22 => "ctrl+t",
+        14 => "ctrl+q",
+        16 => "kill",
+        24 => "/branch",
         _ => "",
     });
     view
+}
+pub(super) fn profile(
+    fixture: usize,
+    mut p: crate::theme::Presentation,
+) -> crate::theme::Presentation {
+    use crate::theme::{ColorMode, Symbols, Theme};
+    match fixture {
+        19 | 22 => p.colors = ColorMode::NoColor,
+        20 => p.symbols = Symbols::Ascii,
+        21 | 23 => {
+            p.colors = ColorMode::TrueColor;
+            p.theme = Theme::Light;
+        }
+        _ => {}
+    }
+    p
 }

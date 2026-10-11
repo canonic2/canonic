@@ -9,7 +9,7 @@ the coverage map identifies which states are runnable.
 The component picker opens a searchable scenario picker before the component's
 scenario. Esc walks back through picker levels; Composer uses F10 to leave its
 scenario because Esc performs local cancellation, recall and clearing. F10 toggles
-between the current scenario and its picker. The seven components have direct CLI
+between the current scenario and its picker. Components have direct CLI
 `--scenario` access and headless listings from one gallery-owned registry.
 Selecting a fixture resets its owning component. Returning with F10 retains
 the current draft and focus; simulated updates pause while browsing.
@@ -23,10 +23,11 @@ partial coverage and presentation profiles.
 ## Implemented command composition
 
 Slice 2c uses the [command contract](../components/command-palette.md#commands-completion-and-help):
-Ctrl-P stays docked above the activity row/message editor, while F1
-fills the stage with keys. Twelve deterministic fixtures cover ranked search,
+Ctrl-P docks a horizontally centered palette above the activity row/message editor, while F1
+fills the stage with keys. Twenty-five deterministic fixtures cover ranked search,
 key search, unavailable/no-match rows, scoped help, custom/conflicting remaps,
-pending sequences, delayed hints, mismatch feedback and an empty map. F3 switches
+pending sequences, delayed hints, mismatch feedback, empty maps/scopes, host refusal,
+aliases and short/narrow/ASCII/light/NO_COLOR frames. F3 switches
 projection, F5 replaces bindings and F6 changes focus. The independent draft
 survives both views; the full-screen keys projection hides the dock.
 
@@ -40,7 +41,7 @@ owns human acceptance. Composer also integrates typed slash/file completion.
 
 The standalone menu is composed through Composer's public token/source APIs with
 a fixed Chat dock. Fifteen interactive scenarios cover the complete state
-contract, with four main-view profiles. Local sources simulate asynchronous
+contract, with eight main-view presentation/width profiles. Local sources simulate asynchronous
 progress, partial failures and retry; inserted commands require another Enter
 for invocation. Native terminal traces verify that accepting never also sends,
 retry preserves the token and exiting restores terminal attributes. Public

@@ -1,0 +1,46 @@
+---
+source: tests/integration/tool_card_gallery.rs
+expression: "screen(&mut gallery, 100, 42)"
+---
+Canonic TUI · Component gallery
+
+acme · 20:03
+▌ run      npm test -- digest                                                                     3s
+▌          → ✕ exit 1 · 2 of 14 failed
+▌        │ ✕ weekly digest › uses the user timezone
+▌        │   expected Europe/Lisbon, got UTC
+▌        │ ✕ daily digest › falls back to UTC
+▌          ⋯ 39 more lines · o shows all
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+select · ↑↓ moves by block
+message ────────────────────────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+──────────────────────────────────────────────────────────────────────────────── orbit-api#276 ~chat
+r retry · o details · y copy call · c copy output · enter expand · esc done
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

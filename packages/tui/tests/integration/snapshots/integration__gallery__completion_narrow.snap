@@ -13,6 +13,7 @@ acme · 00:38
 
 
 
+
 commands ──────────────────────────── 34
   /handoff       copy a summary for ano⋯
   /code-review   review the diff for re⋯
@@ -20,13 +21,12 @@ commands ───────────────────────�
   /fix-checks    restore failing checks
   /clear         local host command
 ────────────────────────────── ↓ 29 more
-
 tab / enter inserts · esc closes
 message ────────────────────────────────
 /
 
 
 ──────────────────── orbit-api#276 ~chat
-tab / enter inserts · esc closes
+enter sends · esc clears
 
 Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · C

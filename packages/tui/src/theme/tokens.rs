@@ -49,8 +49,8 @@ impl Symbols {
         match (self, above) {
             (Self::Unicode, true) => "↑",
             (Self::Unicode, false) => "↓",
-            (Self::Ascii, true) => "up",
-            (Self::Ascii, false) => "down",
+            (Self::Ascii, true) => "^",
+            (Self::Ascii, false) => "v",
         }
     }
     /// Metadata separator.
@@ -67,6 +67,14 @@ impl Symbols {
         match self {
             Self::Unicode => '⋯',
             Self::Ascii => '.',
+        }
+    }
+    /// Full truncation marker; ASCII uses three dots rather than a Unicode glyph.
+    #[must_use]
+    pub const fn ellipsis_text(self) -> &'static str {
+        match self {
+            Self::Unicode => "⋯",
+            Self::Ascii => "...",
         }
     }
 }

@@ -1,0 +1,46 @@
+---
+source: tests/integration/tool_card_gallery.rs
+expression: "screen(&mut gallery, 100, 42)"
+---
+Canonic TUI · Component gallery
+
+acme · 20:03
+  run      npm run build                                                                         41s
+         │ transforming (0) src/digest/render.tsx
+         │ transforming (1) src/digest/render.tsx
+         │ transforming (2) src/digest/render.tsx
+         │ transforming (3) src/digest/render.tsx
+         │ transforming (4) src/digest/render.tsx
+         │ transforming (5) src/digest/render.tsx
+         │ transforming (6) src/digest/render.tsx
+         │ transforming (7) src/digest/render.tsx
+         │ transforming (8) src/digest/render.tsx
+         │ transforming (9) src/digest/render.tsx
+           ⋯ 1184 more lines · o shows all
+         │ transforming (1194) src/digest/render.tsx
+         │ transforming (1195) src/digest/render.tsx
+         │ transforming (1196) src/digest/render.tsx
+         │ transforming (1197) src/digest/render.tsx
+         │ transforming (1198) src/digest/render.tsx
+         │ transforming (1199) src/digest/render.tsx
+         │ transforming (1200) src/digest/render.tsx
+         │ transforming (1201) src/digest/render.tsx
+         │ transforming (1202) src/digest/render.tsx
+         │ transforming (1203) src/digest/render.tsx
+           → ✓ built · 1,204 lines
+
+
+
+
+
+
+
+select · ↑↓ moves by block
+message ────────────────────────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+──────────────────────────────────────────────────────────────────────────────── orbit-api#276 ~chat
+o details · y copy call · c copy output · enter collapse · esc done
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

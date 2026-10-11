@@ -1,7 +1,7 @@
 //! Builds cached logical transcript rows and renders a fixed Composer dock.
 
 use super::{
-    Anchor, Chat, Page,
+    Anchor, Chat, Page, PendingKind,
     content::{self, Ink},
     layout::{self, Cached, Located, Row},
     model::{End, Mode},
@@ -42,6 +42,25 @@ impl Chat {
         self.capture_anchor();
     }
     fn parse_parts(&mut self) {
+        let changed: Vec<_> = self
+            .messages
+            .iter()
+            .flat_map(|m| {
+                m.turn.parts.iter().map(|p| {
+                    (
+                        (m.turn.id.clone(), p.id.clone()),
+                        p.revision,
+                        p.content.clone(),
+                    )
+                })
+            })
+            .filter(|(key, revision, _)| {
+                self.cache.get(key).is_none_or(|c| c.revision != *revision)
+            })
+            .collect();
+        for (key, _, content) in changed {
+            self.sync_tools(&key, &content);
+        }
         for message in &self.messages {
             let mut budget = 1024usize;
             for part in &message.turn.parts {
@@ -50,7 +69,10 @@ impl Chat {
                     budget = budget.saturating_sub(cache.blocks.len());
                     continue;
                 }
-                let blocks = content::blocks(&part.content, budget);
+                let mut blocks = content::blocks(&part.content, budget);
+                if let Some(view) = self.tools.get(&key) {
+                    view.anchor_blocks(&mut blocks);
+                }
                 budget = budget.saturating_sub(blocks.len());
                 self.metrics.parses += 1;
                 self.cache.insert(
@@ -95,37 +117,48 @@ impl Chat {
                     continue;
                 };
                 if cache.width != self.width
+                    || (self.tools.contains_key(&key) && self.search.is_some())
                     || cache.expanded != expanded
                     || cache.rows.len() > remaining
                     || cache.bytes > bytes
                     || (cache.memory_limited && bytes > cache.budget)
                 {
-                    let mut rows = layout::layout(
-                        &cache.blocks,
-                        &message.turn.id,
-                        &part.id,
-                        self.width,
-                        expanded,
-                        remaining,
-                    );
-                    if let Some((_, false)) = &message.shell
-                        && rows.len() > 21
+                    let mut rows = if let Some(view) = self.tools.get(&key) {
+                        view.rows(
+                            &cache.blocks,
+                            (&message.turn.id, &part.id),
+                            self.width,
+                            self.tool_symbols,
+                            expanded,
+                            self.search
+                                .as_ref()
+                                .and_then(|s| s.matches.get(s.current))
+                                .filter(|m| {
+                                    m.block.message == message.turn.id && m.block.part == part.id
+                                })
+                                .map(|m| m.start),
+                        )
+                    } else if message.shell.as_ref().is_some_and(|(_, open)| !open)
+                        && !expanded
+                        && let Some(preview) = layout::shell_preview(
+                            &cache.blocks,
+                            &message.turn.id,
+                            &part.id,
+                            self.width,
+                        )
                     {
-                        let missing = rows.len() - 21;
-                        rows.truncate(21);
-                        rows.push(Row::plain(
-                            Anchor {
-                                message: message.turn.id.clone(),
-                                part: part.id.clone(),
-                                offset: 0,
-                            },
-                            format!("  +{missing} more lines"),
-                            Ink {
-                                muted: true,
-                                ..Ink::default()
-                            },
-                        ));
-                    }
+                        preview
+                    } else {
+                        layout::layout(
+                            &cache.blocks,
+                            &message.turn.id,
+                            &part.id,
+                            self.width,
+                            expanded,
+                            remaining,
+                        )
+                    };
+                    cap_rows(&mut rows, remaining, &message.turn.id, &part.id);
                     let mut used = 0;
                     let before = rows.len();
                     rows.retain(|row| {
@@ -190,13 +223,31 @@ impl Chat {
                     },
                 ));
             }
+            if !self.welcome.suggestions.is_empty() {
+                self.own_row(Row::plain(
+                    Anchor::default(),
+                    "Suggested · from host".into(),
+                    Ink {
+                        muted: true,
+                        ..Ink::default()
+                    },
+                ));
+            }
             for text in self.welcome.suggestions.clone() {
                 self.own_row(Row::plain(
                     Anchor::default(),
-                    format!("  Try: {text}"),
+                    format!("  {text}"),
                     Ink::default(),
                 ));
             }
+            self.own_row(Row::plain(
+                Anchor::default(),
+                "Try: / commands · @ files · F1 keys".into(),
+                Ink {
+                    muted: true,
+                    ..Ink::default()
+                },
+            ));
         }
     }
     pub(super) fn maximum(&self) -> usize {
@@ -241,10 +292,11 @@ impl Chat {
         theme: Presentation,
         framed: bool,
     ) {
-        let [status, transcript, unread, activity, composer, hints] = Layout::vertical([
+        let [status, transcript, unread, above, activity, composer, hints] = Layout::vertical([
             Constraint::Length(u16::from(framed)),
             Constraint::Min(0),
             Constraint::Length(1),
+            Constraint::Length(self.input.above_height_for(area.width)),
             Constraint::Length(1),
             Constraint::Length(5),
             Constraint::Length(1),
@@ -254,11 +306,6 @@ impl Chat {
             Paragraph::new(format!("Chat · {}", self.status)).style(theme.heading()),
             status,
         );
-        let [transcript, above] = Layout::vertical([
-            Constraint::Min(0),
-            Constraint::Length(self.input.above_height_for(area.width)),
-        ])
-        .areas(transcript);
         self.input.render_above(frame, above, theme);
         let block = if framed {
             Block::bordered().title("Conversation")
@@ -267,6 +314,14 @@ impl Chat {
         };
         let inner = block.inner(transcript);
         self.width = inner.width;
+        if self.tool_symbols != theme.symbols {
+            self.tool_symbols = theme.symbols;
+            for (key, cache) in &mut self.cache {
+                if self.tools.contains_key(key) {
+                    cache.width = 0;
+                }
+            }
+        }
         self.height = usize::from(inner.height).max(1);
         self.refresh();
         frame.render_widget(block, transcript);
@@ -310,20 +365,53 @@ impl Chat {
             );
         }
         let hint = match self.mode() {
-            Mode::Search => if self.query().is_empty() { "esc closes".into() } else { "↑↓ prev/next · enter stay here · esc back".into() },
-            Mode::Select => match hints.width {
+            Mode::Search => if self.query().is_empty() { "esc closes".into() } else if hints.width < 50 { "esc back · ↑↓ match · enter stay".into() } else { "↑↓ prev/next · enter stay here · esc back".into() },
+            Mode::Select if self.pending.as_ref().is_some_and(|p| matches!(p.kind, PendingKind::Copy)) => "esc done · copy pending".into(),
+            Mode::Select => self.tool_hint().unwrap_or_else(|| match hints.width {
                 0..=49 => "↑↓ block · y copy · esc done",
                 50..=89 => "↑↓ block · y copy · c code · o open · esc done",
                 _ => "↑↓ block · shift+↑↓ extend · m message · y copy · c code · o open · enter fold · esc done",
-            }.into(),
+            }.into()),
             Mode::Compose => self.input.footer_hint_for(hints.width).replace(
                 "actions on", &format!("actions {}", self.actions)),
         };
-        frame.render_widget(
-            Paragraph::new(alphabet(&hint, theme)).style(theme.muted()),
-            hints,
-        );
+        self.render_run_hints(frame, hints, theme, &hint);
         self.input.render_overlay(frame, area, theme);
+        if let Some(chooser) = &mut self.artifacts {
+            chooser.render(frame, area, activity, theme);
+        }
+    }
+    fn render_run_hints(
+        &self,
+        frame: &mut Frame<'_>,
+        hints: Rect,
+        theme: Presentation,
+        hint: &str,
+    ) {
+        let mut connection = self
+            .run
+            .as_ref()
+            .map_or_else(String::new, |run| run.connection_label(theme.symbols));
+        if hints.width < 50 {
+            connection = connection.replace(" · retry in ", " · retry ");
+        }
+        let [hint_area, connection_area] = Layout::horizontal([
+            Constraint::Min(0),
+            Constraint::Length(
+                u16::try_from(connection.chars().count())
+                    .unwrap_or(u16::MAX)
+                    .min(hints.width / 2),
+            ),
+        ])
+        .areas(hints);
+        frame.render_widget(
+            Paragraph::new(connection).style(theme.muted()),
+            connection_area,
+        );
+        frame.render_widget(
+            Paragraph::new(alphabet(hint, theme)).style(theme.muted()),
+            hint_area,
+        );
     }
     fn render_unread(&self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         let text = match &self.page {
@@ -331,6 +419,17 @@ impl Chat {
             Some(Page::Failed(reason)) => {
                 format!("could not load earlier · {reason} · alt+home retry")
             }
+            None if self
+                .pending
+                .as_ref()
+                .is_some_and(|p| matches!(p.kind, PendingKind::Latest)) =>
+            {
+                "loading newer messages…".into()
+            }
+            None if self.newer_failure.is_some() => format!(
+                "alt+end retry · could not load newer · {}",
+                self.newer_failure.as_deref().unwrap_or_default()
+            ),
             None if !self.unread.is_empty() => {
                 if self
                     .messages
@@ -355,7 +454,7 @@ impl Chat {
         };
         frame.render_widget(Paragraph::new(alphabet(&text, theme)).style(style), area);
     }
-    fn render_activity(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+    fn render_search(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         if let Some(search) = &mut self.search {
             let count = search.matches.len();
             let scope = format!(
@@ -413,22 +512,33 @@ impl Chat {
                 Paragraph::new(format!(" {position}")).style(theme.muted()),
                 metadata,
             );
+        }
+    }
+    fn render_activity(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+        if self.search.is_some() {
+            self.render_search(frame, area, theme);
             return;
         }
-        let text = if let Some((notice, _)) = &self.notice {
+        let text = if let Some(pending) = &self.pending {
+            pending.kind.waiting()
+        } else if let Some((notice, _)) = &self.notice {
             notice.clone()
-        } else if self.pending.is_some() {
-            "waiting for host…".into()
         } else if self.selection.is_some() {
             "select · ↑↓ moves by block".into()
         } else if self.leader.is_some() {
-            "ctrl+x · v select · t timestamps · r retry".into()
-        } else if self.input.completion_menu().is_some() {
-            self.input.footer_hint_for(area.width).into()
-        } else if self.input.is_busy() && self.input.queue().is_empty() && !self.status.is_empty() {
-            self.status.clone()
+            format!(
+                "ctrl+x · v select · t timestamps{}",
+                if self.retry { " · r retry" } else { "" }
+            )
+        } else if let Some(hint) = self.input.completion_hint_for(area.width) {
+            hint.into()
+        } else if self.run.is_some() {
+            self.render_run_activity(frame, area, theme);
+            return;
         } else if !self.input.status().is_empty() {
-            self.input.status()
+            self.input.status_for(area.width)
+        } else if matches!(self.input.state(), State::Pending(_)) {
+            String::new()
         } else {
             self.status.clone()
         };
@@ -436,7 +546,9 @@ impl Chat {
             || text.starts_with('!')
         {
             theme.warning()
-        } else if matches!(self.input.state(), State::Rejected { .. }) || text.starts_with("failed")
+        } else if matches!(self.input.state(), State::Rejected { .. })
+            || text.starts_with("failed")
+            || text.starts_with('✕')
         {
             theme.error()
         } else if text.starts_with('✓') {
@@ -452,6 +564,34 @@ impl Chat {
         };
         frame.render_widget(Paragraph::new(alphabet(&text, theme)).style(style), area);
     }
+    pub(crate) fn render_run_activity(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: Presentation,
+    ) {
+        let Some(run) = &self.run else {
+            return;
+        };
+        let count = self.input.queue().len();
+        if count == 0 {
+            run.render_with(frame, area, theme);
+            return;
+        }
+        let suffix = format!(" · {count} queued");
+        let suffix_width = u16::try_from(suffix.len())
+            .unwrap_or(u16::MAX)
+            .min(area.width / 2);
+        let run_area = Rect {
+            width: area.width.saturating_sub(suffix_width),
+            ..area
+        };
+        run.render_with(frame, run_area, theme);
+        frame.render_widget(
+            Paragraph::new(suffix).style(theme.muted()),
+            Rect::new(run_area.right(), area.y, suffix_width, area.height),
+        );
+    }
     fn render_row(&self, row: &Row, theme: Presentation) -> Line<'static> {
         let selected = row.block.as_ref().is_some_and(|id| self.selected(id))
             || (row.header
@@ -459,7 +599,11 @@ impl Chat {
                     .selection
                     .as_ref()
                     .is_some_and(|s| s.whole && s.last.message == row.anchor.message));
-        let prefix = if selected {
+        let tool = self
+            .tools
+            .contains_key(&(row.anchor.message.clone(), row.anchor.part.clone()));
+        let reversed_head = selected && tool && theme.colors == ColorMode::NoColor && row.header;
+        let prefix = if selected && !(tool && theme.colors == ColorMode::NoColor) {
             if row.prefix.starts_with("  ") {
                 format!("▌{}", &row.prefix[1..])
             } else {
@@ -480,8 +624,15 @@ impl Chat {
         let mut displayed = 0;
         for run in &row.runs {
             let mut style = ink_style(run.ink, theme);
+            if reversed_head {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
             if row.surface && theme.tokens().surface.is_some() {
                 style = theme.surface().patch(style);
+            }
+            if selected && tool && matches!(theme.colors, ColorMode::TrueColor | ColorMode::Ansi256)
+            {
+                style = style.bg(theme.tokens().selection.expect("color profile selection"));
             }
             for grapheme in run.text.graphemes(true) {
                 let source = row
@@ -502,6 +653,11 @@ impl Chat {
                         {
                             glyph_style = if i == search.current {
                                 theme.selection().patch(theme.accent())
+                            } else if matches!(
+                                theme.colors,
+                                crate::theme::ColorMode::Ansi16 | crate::theme::ColorMode::NoColor
+                            ) {
+                                glyph_style.add_modifier(Modifier::UNDERLINED)
                             } else {
                                 theme.surface().add_modifier(Modifier::UNDERLINED)
                             };
@@ -510,7 +666,9 @@ impl Chat {
                     }
                 }
                 spans.push(Span::styled(
-                    if run.generated {
+                    if grapheme == "␛" && theme.symbols == Symbols::Ascii {
+                        "^[".into()
+                    } else if run.generated && !tool {
                         alphabet(grapheme, theme)
                     } else {
                         grapheme.into()
@@ -521,7 +679,33 @@ impl Chat {
                 displayed += grapheme.len();
             }
         }
-        Line::from(spans)
+        let line = Line::from(spans);
+        if selected && tool && matches!(theme.colors, ColorMode::TrueColor | ColorMode::Ansi256) {
+            line.style(theme.selection())
+        } else {
+            line
+        }
+    }
+}
+
+fn cap_rows(rows: &mut Vec<Row>, remaining: usize, message: &str, part: &str) {
+    let limit = remaining.min(layout::PART_ROWS);
+    if rows.len() > limit {
+        rows.truncate(limit.saturating_sub(1));
+        if limit > 0 {
+            rows.push(Row::plain(
+                Anchor {
+                    message: message.into(),
+                    part: part.into(),
+                    offset: 0,
+                },
+                "  ⋯ tool display rows not shown · layout limit".into(),
+                Ink {
+                    muted: true,
+                    ..Ink::default()
+                },
+            ));
+        }
     }
 }
 
@@ -548,6 +732,9 @@ fn ink_style(ink: Ink, theme: Presentation) -> Style {
     }
     if ink.error {
         style = theme.error();
+    }
+    if ink.warning {
+        style = theme.warning();
     }
     if ink.bold {
         style = style.add_modifier(Modifier::BOLD);
@@ -587,6 +774,6 @@ fn alphabet(text: &str, theme: Presentation) -> String {
         .replace(['⋯', '…'], "...")
         .replace('↑', "up")
         .replace('↓', "down")
-        .replace('−', "-")
+        .replace(['−', '–'], "-")
         .replace('·', "/")
 }

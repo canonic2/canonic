@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 7] = [
+pub(super) const COMPONENTS: [Component; 8] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -48,6 +48,18 @@ pub(super) const COMPONENTS: [Component; 7] = [
     Component::Commands,
     Component::Composer,
     Component::CompletionMenu,
+    Component::ToolCallCard,
+];
+
+pub(super) const PROFILES: [&str; 8] = [
+    "narrow-40",
+    "ansi16",
+    "no-color",
+    "ascii",
+    "light",
+    "truecolor-dark",
+    "ansi256",
+    "no-color-ascii",
 ];
 
 pub(super) fn index(component: Component) -> usize {
@@ -59,6 +71,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::Commands => 4,
         Component::Composer => 5,
         Component::CompletionMenu => 6,
+        Component::ToolCallCard => 7,
     }
 }
 
@@ -77,9 +90,7 @@ pub(super) fn picker(component: Component) -> Picker {
             )
         })
         .collect();
-    names.extend(
-        ["narrow-40", "ansi16", "no-color", "ascii"].map(|id| format!("{id} · main view profile")),
-    );
+    names.extend(PROFILES.map(|id| format!("{id} · main view profile")));
     Picker::new(format!("{} · scenarios", name(component)), names, Some(0))
 }
 
@@ -92,6 +103,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::Commands => &COMMANDS,
         Component::Composer => &COMPOSER,
         Component::CompletionMenu => &COMPLETION,
+        Component::ToolCallCard => &TOOL_CARDS,
     }
 }
 
@@ -104,6 +116,7 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::Commands => "commands",
         Component::Composer => "composer",
         Component::CompletionMenu => "completion-menu",
+        Component::ToolCallCard => "tool-call-card",
     }
 }
 
@@ -116,10 +129,93 @@ pub(super) fn board(component: Component) -> &'static str {
         Component::Commands => "design/commands-and-bindings/README.md · States / / list",
         Component::Composer => "design/composer/README.md · States / The ↑ key",
         Component::CompletionMenu => "design/completion-menu/README.md · States / Keys & behavior",
+        Component::ToolCallCard => "Tool Call Card · States / Actions / Concurrency / Fallbacks",
     }
 }
 
-const COMPLETION: [Scenario; 15] = [
+const TOOL_CARDS: [Scenario; 79] = [
+    live!("main", 0),
+    live!("queued", 1),
+    live!("running", 2),
+    live!("streaming", 3),
+    live!("waiting", 4),
+    live!("waiting-lock", 5),
+    live!("failed", 6),
+    live!("cancelled", 7),
+    live!("text", 8),
+    live!("code", 9),
+    live!("diff", 10),
+    live!("large-output", 11),
+    live!("unknown", 12),
+    live!("completed", 13),
+    live!("selected", 14),
+    live!("expanded", 15),
+    live!("failed-selected", 16),
+    live!("retried", 17),
+    live!("details", 18),
+    live!("copied", 19),
+    live!("three-at-once", 20),
+    live!("out-of-order", 21),
+    live!("all-done", 22),
+    live!("all-succeeded", 23),
+    live!("many-at-once", 24),
+    live!("streaming-large", 25),
+    live!("expanded-capped", 26),
+    live!("not-shown", 27),
+    live!("narrow", 28),
+    live!("narrow-diff", 29),
+    live!("narrow-failed", 30),
+    live!("palette-16", 31),
+    live!("without-color", 32),
+    live!("without-color-diff", 33),
+    live!("actions-off", 34),
+    live!("copy-failed", 35),
+    live!("details-failed", 36),
+    live!("retry-refused", 37),
+    live!("no-ack", 38),
+    live!("stale-ack", 39),
+    live!("delayed-ack", 40),
+    live!("unsafe-output", 41),
+    live!("empty-output", 42),
+    live!("large-line", 43),
+    live!("proposed", 44),
+    live!("interrupted-no-result", 45),
+    live!("progress-total", 46),
+    live!("progress-unknown", 47),
+    live!("redacted", 48),
+    live!("sanitized", 49),
+    live!("artifacts", 50),
+    live!("child-task", 51),
+    live!("child-task-selected", 52),
+    live!("before-reorder", 53),
+    live!("after-reorder", 54),
+    live!("no-details", 55),
+    live!("card-ascii", 56),
+    live!("card-light", 57),
+    live!("child-light-selected", 58),
+    live!("run-idle", 59),
+    live!("run-preparing", 60),
+    live!("run-running", 61),
+    live!("run-waiting", 62),
+    live!("run-completed", 63),
+    live!("run-failed", 64),
+    live!("run-interrupted", 65),
+    live!("tool-failed-connected", 66),
+    live!("run-disconnected", 67),
+    live!("run-reconnected", 68),
+    live!("run-offline-idle", 69),
+    live!("run-cancelling", 70),
+    live!("cancel-already-asked", 71),
+    live!("run-cancelled", 72),
+    live!("completion-wins", 73),
+    live!("cancel-no-ack", 74),
+    live!("cancel-host-options", 75),
+    live!("next-run-clean", 76),
+    live!("run-reduced-motion", 77),
+    live!("run-waiting-input", 78),
+];
+
+const COMPLETION: [Scenario; 30] = [
     live!("main", 0),
     live!("files", 1),
     live!("loading", 2),
@@ -135,8 +231,23 @@ const COMPLETION: [Scenario; 15] = [
     live!("long-description", 12),
     live!("mixed-sources", 13),
     live!("doesnt-open", 14),
+    live!("timeout", 15),
+    live!("under-thirty-columns", 16),
+    live!("shell-path", 17),
+    live!("shell-path-inserted", 18),
+    live!("dismissed-still-typing", 19),
+    live!("new-trigger", 20),
+    live!("cursor-leaves-word", 21),
+    live!("pasted-slash", 22),
+    live!("replacement-too-long", 23),
+    live!("removed-before-enter", 24),
+    live!("wide-name-clipped", 25),
+    live!("menu-no-color", 26),
+    live!("menu-ascii", 27),
+    live!("menu-light", 28),
+    live!("alias", 29),
 ];
-const PICKER: [Scenario; 18] = [
+const PICKER: [Scenario; 20] = [
     live!("main", 0),
     live!("details", 1),
     live!("disabled", 2),
@@ -151,6 +262,8 @@ const PICKER: [Scenario; 18] = [
     live!("done", 11),
     live!("empty", 12),
     live!("error", 13),
+    live!("maximum", 14),
+    live!("minimum", 15),
     live!(
         "inline",
         0,
@@ -174,7 +287,7 @@ const PICKER: [Scenario; 18] = [
         "Own a bounded region in the primary screen and preserve surrounding shell output. Terminal slice pending."
     ),
 ];
-const EDITOR: [Scenario; 16] = [
+const EDITOR: [Scenario; 29] = [
     live!("main", 0),
     live!("blurred", 1),
     live!("empty", 2),
@@ -187,6 +300,19 @@ const EDITOR: [Scenario; 16] = [
     live!("near-limit", 9),
     live!("limit", 10),
     live!("paste-cut", 11),
+    live!("kill-ring", 12),
+    live!("word-parts", 13),
+    live!("line-kills", 14),
+    live!("typed-refused", 15),
+    live!("blurred-scrolled", 16),
+    live!("blurred-limit", 17),
+    live!("tiny-3", 18),
+    live!("tiny-2", 19),
+    live!("tiny-1", 20),
+    live!("paste-refused-whole", 21),
+    live!("chip-cap", 22),
+    live!("control-characters", 23),
+    live!("typed-cut", 24),
     live!(
         "modal",
         0,
@@ -206,7 +332,7 @@ const EDITOR: [Scenario; 16] = [
         "Suspend the terminal for an external editor, then restore it. Process handoff is pending."
     ),
 ];
-const DIALOG: [Scenario; 15] = [
+const DIALOG: [Scenario; 36] = [
     live!("main", 0),
     live!("nested", 1),
     live!("scroll", 2),
@@ -234,14 +360,32 @@ const DIALOG: [Scenario; 15] = [
         "late",
         0,
         &[KeyCode::F(6), KeyCode::F(7)],
-        "Stale-result rejection is interactive; the design's timed waiting presentation remains pending."
+        "Stale-result rejection keeps the replaced opening inert."
     ),
-    planned!(
-        "waiting",
-        "Keep a dialog busy while the host checks a source; show the live waiting activity and support cancellation. Timed dialog presentation is pending."
-    ),
+    live!("waiting", 11),
+    live!("key-guard", 12),
+    live!("away", 13),
+    live!("close-armed", 14),
+    live!("cleared", 15),
+    live!("child-removed", 16),
+    live!("locked-escape", 17),
+    live!("outside-kept", 18),
+    live!("inside-error", 19),
+    live!("picker-filter", 20),
+    live!("filter-cleared", 21),
+    live!("tiny-content", 22),
+    live!("tall-panel", 23),
+    live!("dialog-ascii", 24),
+    live!("dialog-light", 25),
+    live!("danger-armed", 26),
+    live!("danger-expired", 27),
+    live!("type-name", 28),
+    live!("type-name-ready", 29),
+    live!("letters-type", 30),
+    live!("result", 31),
+    live!("arrival-queue", 32),
 ];
-const COMMANDS: [Scenario; 13] = [
+const COMMANDS: [Scenario; 25] = [
     live!("main", 0),
     live!("filter", 1),
     live!("filter-key", 2),
@@ -254,12 +398,21 @@ const COMMANDS: [Scenario; 13] = [
     live!("pending-hints", 9),
     live!("pending-miss", 10),
     live!("empty", 11),
-    planned!(
-        "slash",
-        "Typing / at the start of the message box opens the command list. Dismissal retains the draft, and execution emits a command ID. Slash routing is pending."
-    ),
+    live!("empty-scope", 12),
+    live!("keys-empty-scope", 13),
+    live!("keys-no-match", 14),
+    live!("unavailable-after-selection", 15),
+    live!("alias", 16),
+    live!("short-terminal", 17),
+    live!("forty-columns", 18),
+    live!("palette-no-color", 19),
+    live!("palette-ascii", 20),
+    live!("palette-light", 21),
+    live!("keys-no-color", 22),
+    live!("hints-light", 23),
+    live!("slash", 24),
 ];
-const COMPOSER: [Scenario; 59] = [
+const COMPOSER: [Scenario; 99] = [
     live!("main", 0),
     live!("sending", 1),
     live!("refused", 2),
@@ -319,8 +472,48 @@ const COMPOSER: [Scenario; 59] = [
     live!("returned", 54),
     live!("backslash-newline", 55),
     live!("keys", 56),
+    live!("queue-full", 57),
+    live!("queue-saved-blank", 58),
+    live!("queue-resumed", 59),
+    live!("queue-resume-waits", 60),
+    live!("refused-with-queue", 61),
+    live!("restore-failed", 62),
+    live!("save-failed", 63),
+    live!("stash-full", 64),
+    live!("stash-swap-back", 65),
+    live!("editor-not-set", 66),
+    live!("editor-too-large", 67),
+    live!("editor-read-failed", 68),
+    live!("editor-stopped-waiting", 69),
+    live!("editor-late-return", 70),
+    live!("editor-chips-returned", 71),
+    live!("shell-output-expanded", 72),
+    live!("shell-queued", 73),
+    live!("shell-background-requested", 74),
+    live!("shell-backgrounded", 75),
+    live!("shell-history", 76),
+    live!("leader-waiting", 77),
+    live!("leader-unknown", 78),
+    live!("command-arguments", 79),
+    live!("command-running", 80),
+    live!("taller-than-box", 81),
+    live!("selection-cleared", 82),
+    live!("two-images-and-paste", 83),
+    live!("image-without-dimensions", 84),
+    live!("queue-forty-columns", 85),
+    live!("queue-ansi16", 86),
+    live!("queue-no-color", 87),
+    live!("queue-ascii", 88),
+    live!("conflict-ansi16", 89),
+    live!("composer-light", 90),
+    live!("cancelling", 91),
+    live!("cancel-failed", 92),
+    live!("history-search-no-match", 93),
+    live!("history-search-picked", 94),
+    live!("queue-into-history", 95),
+    live!("queue-held-at-turn-end", 96),
 ];
-const CHAT: [Scenario; 51] = [
+const CHAT: [Scenario; 76] = [
     live!("main", 0),
     live!("empty", 1),
     live!("streaming", 2),
@@ -372,4 +565,29 @@ const CHAT: [Scenario; 51] = [
     live!("mouse-selection", 48),
     live!("screen-streaming", 49),
     live!("anchored-dock", 50),
+    live!("copy-pending", 51),
+    live!("copy-failed", 52),
+    live!("copy-markdown-confirmed", 53),
+    live!("link-pending", 54),
+    live!("link-refused", 55),
+    live!("link-confirmed", 56),
+    live!("table-inspection-pending", 57),
+    live!("inspection-failed", 58),
+    live!("patch-inspection-pending", 59),
+    live!("earlier-loading", 60),
+    live!("earlier-failed", 61),
+    live!("newer-loading", 62),
+    live!("newer-failed", 63),
+    live!("newer-restored", 64),
+    live!("retry-unavailable", 65),
+    live!("timestamps-hidden", 66),
+    live!("quiet-note", 67),
+    live!("reasoning-unavailable", 68),
+    live!("attachment-unknown", 69),
+    live!("raw-control-unicode", 70),
+    live!("source-limit", 71),
+    live!("search-ansi16", 72),
+    live!("search-no-color", 73),
+    live!("search-narrow-ascii", 74),
+    live!("host-suggestions", 75),
 ];

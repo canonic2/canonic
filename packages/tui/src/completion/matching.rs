@@ -45,8 +45,19 @@ impl Menu {
             .enumerate()
             .filter(|(_, row)| !row.hidden)
             .filter_map(|(i, row)| {
-                matched(&row.name, &self.request.query)
-                    .map(|(rank, _)| (rank, std::cmp::Reverse(row.recency), i))
+                let name = matched(&row.name, &self.request.query).map(|(rank, _)| rank);
+                let rank = if name.is_some_and(|rank| rank < 2) {
+                    name
+                } else if row
+                    .aliases
+                    .iter()
+                    .any(|alias| matched(alias, &self.request.query).is_some())
+                {
+                    Some(2)
+                } else {
+                    name.map(|_| 3)
+                };
+                rank.map(|rank| (rank, std::cmp::Reverse(row.recency), i))
             })
             .collect();
         ranked.sort_by_key(|entry| *entry);

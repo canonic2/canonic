@@ -12,18 +12,18 @@ acme · 20:05
 
   ✓ done · 34s
 
-commands ──────────────────────────────────────────────────────────────────────────────────────── 31
-filter type a command or a key
-recent
-  copy handoff        summary and references for another agent                             ctrl+x h
-  switch lens         chat, diff, log, handoff                                             ctrl+x l
-session
-  actions on or off   apply edits and commands, or only log them                           ctrl+x a
-  copy reference      this session's address                                               ctrl+x y
-  stop session        draft and history are kept                                           ctrl+x k
-  open in $EDITOR     long message, your editor                                            ctrl+x e
-  export chat         copy the chat as Markdown
-────────────────────────────────────────────────────────────────── ↓ 24 more · enter run · esc close
+              ┌commands ────────────────────────────────────────────────────────── 31┐
+              │filter type a command or a key                                        │
+              │recent                                                                │
+              │  copy handoff        summary and references f⋯              ctrl+x h │
+              │  switch lens         chat, diff, log, handoff               ctrl+x l │
+              │session                                                               │
+              │  actions on or off   apply edits and commands⋯              ctrl+x a │
+              │  copy reference      this session's address                 ctrl+x y │
+              │  stop session        draft and history are ke⋯              ctrl+x k │
+              │  open in $EDITOR     long message, your editor              ctrl+x e │
+              │  export chat         copy the chat as Markdown                       │
+              └──────────────────────────────────── ↓ 24 more · enter run · esc close┘
 ! commands · esc closes it
 message ────────────────────────────────────────────────────────────────────────────────────────────
 and bump the app version

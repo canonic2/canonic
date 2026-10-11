@@ -126,6 +126,77 @@ pub(super) fn layout(
     }
     rows
 }
+
+/// Fold logical shell lines before row budgeting, retaining the real tail and source offsets.
+pub(super) fn shell_preview(
+    blocks: &[Block],
+    message: &str,
+    part: &str,
+    width: u16,
+) -> Option<Vec<Row>> {
+    let block = blocks.first()?;
+    if !matches!(block.kind, Kind::Code { .. }) {
+        return None;
+    }
+    let source = block.semantic();
+    let starts: Vec<_> = std::iter::once(0)
+        .chain(source.match_indices('\n').map(|(i, _)| i + 1))
+        .filter(|start| *start < source.len())
+        .collect();
+    if starts.len() <= 20 {
+        return None;
+    }
+    let head_end = starts[3].saturating_sub(1);
+    let tail_start = starts[starts.len() - 2];
+    let id = BlockId {
+        message: message.into(),
+        part: part.into(),
+        start: block.start,
+    };
+    let mut head = block.clone();
+    head.runs = crop_runs(&block.runs, 0..head_end);
+    let mut tail = block.clone();
+    tail.runs = crop_runs(&block.runs, tail_start..source.len());
+    let mut rows = block_rows(&head, &id, width.max(1), false);
+    rows.push(decoration(
+        &id,
+        format!(
+            "  – {} lines folded · ctrl+x v then enter shows all",
+            starts.len() - 5
+        ),
+        muted(),
+    ));
+    for mut row in block_rows(&tail, &id, width.max(1), false)
+        .into_iter()
+        .skip(1)
+    {
+        row.anchor.offset = row.anchor.offset.saturating_add(tail_start);
+        if let Some(map) = &mut row.map {
+            for offset in map {
+                *offset = offset.saturating_add(tail_start);
+            }
+        }
+        rows.push(row);
+    }
+    Some(rows)
+}
+
+fn crop_runs(runs: &[Run], range: std::ops::Range<usize>) -> Vec<Run> {
+    let mut offset = 0;
+    runs.iter()
+        .filter_map(|run| {
+            let end = offset + run.text.len();
+            let start = range.start.max(offset);
+            let stop = range.end.min(end);
+            let slice = (start < stop).then(|| Run {
+                text: run.text[start - offset..stop - offset].into(),
+                ..run.clone()
+            });
+            offset = end;
+            slice
+        })
+        .collect()
+}
 fn muted() -> Ink {
     Ink {
         muted: true,
@@ -148,6 +219,7 @@ fn decoration(id: &BlockId, text: String, ink: Ink) -> Row {
 fn block_rows(block: &Block, id: &BlockId, width: u16, expanded: bool) -> Vec<Row> {
     let width = usize::from(width).max(1);
     match &block.kind {
+        Kind::Tool { .. } | Kind::ToolGroup => vec![], // Owned by the reusable tool projection.
         Kind::Code {
             language,
             file,

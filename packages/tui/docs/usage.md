@@ -4,16 +4,19 @@
 
 Open **Commands and bindings** in the catalog, or use
 `make -C packages/tui run CARGO_FLAGS="-- --component commands --scenario main"` from the
-repository root. Ctrl-P opens the docked palette directly above the activity row
+repository root. Ctrl-P opens a docked palette centered horizontally above the activity row
 and message box. F1 opens the full-screen keys view. Closing either preserves the
 message draft. F3 switches between the two projections.
 
 The palette shows recent commands first, then groups. Its plain filter searches
 labels, descriptions, aliases such as `/branch`, and effective keys. Exact keys
-rank first. Filtering hides group headings; digits enter the filter. Enter
+rank first, followed by prefixes, word starts, aliases and fuzzy matches, with
+recent commands breaking ties. Filtering hides group headings; digits enter the filter. Enter
 returns one enabled command ID; the gallery records the intent without executing
 an operation. Esc clears the filter first, then closes. Optional descriptions
-are omitted on narrow screens. Keys remain in their own right-aligned column.
+are omitted on narrow screens, with the selected description below its row at
+40 columns. Unavailable reasons replace the right-aligned key. Opening height
+stays fixed during filtering and clamps above the message box.
 
 The keys view groups by host-supplied scope, displays effective shortcuts on the
 left, and shows selected custom bindings' defaults, source locations and conflicts.
@@ -28,7 +31,9 @@ an unmatched continuation shows feedback for 3 seconds. Neither mismatches nor
 paste reach the message draft. F6 changes focus and cancels pending input.
 F2 cycles palette, text filter, key filter, unavailable, no-match, keys, custom
 keys, conflict, pending, delayed hints, mismatch and empty fixtures. F4 cycles
-color profiles. Ctrl-C always exits.
+color profiles. Additional fixtures cover empty scopes, host refusal, alias,
+short terminals and profiles. While the palette/help is open, Ctrl-C arms then
+closes it without quitting; a subsequent Ctrl-C at the host exits.
 
 Hosts supply `commands::Command` descriptors to `Commands` and
 `commands::bindings::Dispatcher`. `Commands::remapped` resolves ordered host-loaded
@@ -46,8 +51,10 @@ Open the gallery with `make -C packages/tui run`. It starts at the component
 picker. Select a component with Enter, then select a scenario with Enter.
 Esc returns from the scenario to its scenario picker, then to the component
 picker; Esc at the component picker exits. Component-specific dismissal (such
-as closing a dialog or clearing a selection) takes precedence. Ctrl-C exits
-from every view. Ctrl-T changes RGB
+as closing a dialog or clearing a selection) takes precedence. Ctrl-C arms then
+closes an open dialog; during a run it requests cancellation. When the active
+component yields Ctrl-C to the gallery, it exits. Composer has its own quit arming.
+Ctrl-T changes RGB
 dark/light tokens; F4 cycles ANSI 16, ANSI 256, RGB and no-color profiles.
 Body text uses the terminal's foreground/background in every profile.
 
@@ -60,7 +67,8 @@ F10 opens the active component's scenario picker; pressing F10 again returns to
 the current scenario with its draft and cursor intact. `--component <name>` opens
 that component's scenario picker, and adding `--scenario <name>` opens a fixture
 directly. Simulation pauses while the picker is open. F2 cycles the working
-fixtures. Each component also offers `narrow-40`, `ansi16`, `no-color` and `ascii`
+fixtures. Each component also offers `narrow-40`, `ansi16`, `no-color`, `ascii`,
+`light`, `truecolor-dark`, `ansi256` and `no-color-ascii`
 profiles of its main view; F4 changes colors and Ctrl-T changes the theme.
 The narrow profile caps the component area at 40 columns inside the gallery.
 
@@ -86,13 +94,16 @@ The rich picker returns stable choice IDs. The default three-row fixture has no
 filter: arrows/Home/End/Page keys navigate and 1–3 immediately choose a row.
 Plain Enter confirms the highlighted row; modified, repeated or released Enter
 never confirms. Disabled rows cannot be highlighted or chosen.
-Danger rows require explicit navigation and are never implicit defaults. F3
-returns an inspection intent without choosing. Confirmation updates a fixture
+Danger rows require explicit navigation and are never implicit defaults or
+pre-marks. F3 returns an inspection intent when the host enables a detail view.
+Confirmation updates a fixture
 result label and does not change files. Esc cancels; with a nonempty filter it
-clears that filter first. Paste never confirms.
+clears that filter first. Cancellation remains visible until another Esc returns
+to navigation. Paste never confirms.
 
 F2 cycles default → details → disabled → danger → filter → no-match → scrolled
-→ multi → groups → loading → narrow → done → empty → error. It resets the picker
+→ multi → groups → loading → narrow → done → empty → error → maximum → minimum.
+It resets the picker
 while preserving the independent host draft. F5 simulates a source refresh by
 removing the highlighted ID. F6 changes stage/dock/full-screen placement within
 the gallery's existing terminal session. Default placement docks the measured
@@ -104,13 +115,18 @@ focus; Ctrl-J inserts a draft newline. Return to catalog/reopen resets both.
 
 Filtering defaults on above seven choices; hosts can force it on/off. Type or
 paste into the filter; digits are query text when filtering is enabled. Ctrl-G
-selects the query; Ctrl-Z/Ctrl-Y undo/redo its editor transactions. Matching is a
-case-insensitive subsequence of the label or detail, ignoring query whitespace;
+selects the query; Ctrl-Z/Alt-Z undo/redo its editor transactions. Matching is a
+case-insensitive subsequence of the label or detail, ignoring query whitespace.
+Label matches rank before detail-only matches, then prefix, word start and fuzzy;
+source order breaks ties. The
 matched graphemes are bold/underlined. A surviving enabled highlighted ID remains
 highlighted; otherwise the first safe ranked result is used. Multiple mode uses
 Space to toggle a mark and Alt-A to toggle all matching enabled rows. Hidden
 marks survive filtering; Enter returns the marked IDs in supplied order, including
 hidden marks. An empty marked set may be confirmed when the source is nonempty.
+Hosts use `set_selection_limits` for a minimum/maximum; unmarked rows remain
+reachable at the maximum. `notice()` reports why a bound prevented a change.
+Danger rows are never pre-marked but explicit Alt-A includes them.
 Loading/error/empty sources cannot confirm. The compatibility `Picker`/`Action`
 API retains its original-index semantics and remains the catalog's implementation.
 
@@ -137,7 +153,10 @@ Enter keeps the match. Ctrl-X V selects blocks: Up/Down move, Shift extends,
 M selects the message, Y copies Markdown, C copies code, O opens/inspects and
 Enter folds. Copy/open are simulated and acknowledged locally. Ctrl-X T toggles
 timestamps; Ctrl-X R requests retry on a failed reply. Plain editor keys still
-belong to Composer. F2 cycles 51 fixtures; F5–F9 simulate host events. No agent runs.
+belong to Composer. F2 cycles 76 fixtures; F5–F9 simulate host events. Delayed
+copy/open/inspection and paging fixtures use F5 to acknowledge success and F6
+to refuse the outstanding request. Retrying emits a fresh identified request;
+selection, the draft and its caret survive host failure. No agent runs.
 
 ```sh
 make -C packages/tui run CARGO_FLAGS="-- --component chat --scenario answer"
@@ -184,7 +203,9 @@ Long/multiline paste becomes an atomic chip with its full payload preserved.
 Pasted prefixes never execute. Typed ! in an empty box enters shell mode;
 typed / opens commands and @ at a word boundary opens files. Tab and Enter insert
 the selected suggestion; a later Enter invokes the command or sends the message.
-File selection inserts plain `@path ` text.
+File selection inserts an atomic `@path` reference followed by a space. One
+Backspace removes the reference; undo restores its full path and host ID. Shell
+paths stay editable text. Saved documents distinguish paste, image and file kinds.
 The host supplies candidates and performs execution, clipboard and file work.
 
 Escape follows the local cancellation ladder: close overlay, restore recall,
@@ -192,11 +213,12 @@ cancel editor waiting, stop work and pause queue, or arm draft clearing/rewind.
 Repeat within 1.5 seconds to confirm. Ctrl-C clears idle text; on an empty idle
 box, Ctrl-C or Ctrl-D twice saves and requests quit. **F10** opens scenarios;
 F10 again returns with the current fixture intact. Picker search, selection and
-scroll position survive back navigation. F2 cycles all 57 distinct fixture
+scroll position survive back navigation. F2 cycles all 97 distinct fixture
 states; aliases also appear in `--list`. F4 changes colors; Ctrl-T changes theme.
 
-Gallery host controls: F5 accepts a submission or successfully ends a turn;
-F6 refuses or fails it; F7 replaces the draft lifetime; F8 tests a stale response;
+Gallery host controls: F5 accepts a submission, confirms a pending work control
+or successfully ends a turn; F6 refuses or fails it. Cancellation and background
+requests remain pending until that simulated host response. F7 replaces the draft lifetime; F8 tests a stale response;
 F9 changes availability; F11 returns editor text; F12 restores a saved snapshot;
 F3 expands/collapses fixture shell output. Gallery storage and execution are
 simulated. The public [composer contract](../specs/components/composer.md) records the
@@ -206,13 +228,29 @@ layout, state transitions, limits and host adapters.
 with `Chat::push_submission`, then call `acknowledge_submission` with its exact
 ticket. Call `turn_ended` once per completed turn and project any returned queued
 submission. Host acceptance and turn completion are distinct callbacks.
-Drain `take_intents` for Save, Editor, Stop, Command, ClipboardImage and other
+Drain `take_intents` for Save, Editor, identified Work, Command, ClipboardImage and other
 host work. Advance `tick` with elapsed time for 500 ms autosave and confirmations.
+`WorkRequest` identifies Stop, InterruptAfterStep or Background. Keep foreground
+work active until `acknowledge_work` consumes that exact ticket; project its
+optional queued submission once. Cancellation failure preserves the draft and
+permits a new attempt. Authoritative turn completion invalidates pending controls.
+Without Run Activity, `Chat::update` exposes a stop through the compatibility
+`Action::Cancel`; obtain its retained identified request from
+`composer().work_request()` and acknowledge it after the host responds. A standalone
+Composer emits `Intent::Work` directly. With Run Activity installed, Chat emits its
+identified run-cancellation intent instead.
+After background acknowledgement, `finish_background` consumes the same identified
+command's eventual completion. Hosts supply elapsed work time with
+`set_working_elapsed`; `set_reduced_motion` freezes dots without freezing seconds.
+`EditorCancelled` means stop waiting for that return; the host still owns its editor.
 Save acknowledgements and editor/completion results require their current ticket;
 late results leave content unchanged.
 
 `SavedComposer::write_to/read_from` encode complete state on caller-owned streams;
-`restore_saved` validates before applying and never sends automatically. Hosts
+`restore_saved` validates before applying and never sends automatically. Schema 2
+retains typed file references, and decoding accepts schema 1 paste/image snapshots.
+Report read/decode failures with `report_restore_failure`; failed writes retry
+after five seconds while preserving memory. Hosts
 choose storage keys and finish the current Save before honoring Quit.
 `editor_command` resolves supplied VISUAL/EDITOR values; `run_editor` is an
 explicit foreground adapter using a private temporary file. Wrap foreground work
@@ -232,26 +270,32 @@ Esc clears selection before returning to the scenario picker too. Ctrl-C exits t
 | --- | --- |
 | Left/Right, Backspace/Delete | Move/remove a grapheme |
 | Ctrl-Left/Right or Alt-Left/Right | Move to Unicode word boundaries |
-| Ctrl-Backspace/Delete or Alt-Backspace/Delete | Delete to a word boundary |
+| Ctrl-Backspace/Delete or Alt-Delete | Delete to a word boundary |
 | Up/Down | Move by visual wrapped line, retaining preferred column |
 | Home/End, Ctrl-A/Ctrl-E | Visual wrapped row start/end |
 | Ctrl-Home/End | Draft start/end |
 | PageUp/PageDown | Move one editor viewport |
 | Shift plus movement | Extend selection; typing/paste replaces it |
 | Ctrl-Shift-A or Ctrl-G | Select all; Ctrl-G works with traditional terminal encodings |
-| Ctrl-W, Alt-Backspace | Delete previous word |
-| Ctrl-U/Ctrl-K | Delete to logical line start/end |
+| Ctrl-W | Kill back through the preceding non-whitespace span |
+| Alt-Backspace / Alt-D | Kill previous word part / next word |
+| Ctrl-U/Ctrl-K | Kill to logical line start/end; repeat at the edge joins lines |
 | Ctrl-Z or Ctrl-minus | Undo one transaction; paste is one transaction |
-| Ctrl-Y or Ctrl-period | Redo; a new edit clears redo |
-| Enter | Newline in standalone editor; submit in chat |
-| Alt-Enter, Shift-Enter, Ctrl-Enter or Ctrl-J | Newline where terminal encoding supports it |
+| Ctrl-Shift-Z or Alt-Z | Redo; a new edit clears redo |
+| Ctrl-Y / Alt-Y | Yank newest kill / cycle the last ten kills |
+| Enter | Host submission; the gallery records a local result |
+| Ctrl-J | Newline in every multiline field |
+| Alt-Enter or Shift-Enter | Newline when terminal encoding reports the modifier |
 
 Host owns submission/focus; `Editor::update` leaves plain Enter
-unhandled. Gallery chooses newline in its standalone fixture. Neither editor
+unhandled. Gallery records submission in its standalone fixture. Neither editor
 nor focus state acquires modes. Clipboard I/O/persistent history remain host work.
 
 F2 cycles focused, blurred, empty, wrap, selection, Unicode, scrolled, pasted,
-undo, near-limit, limit and paste-cut. The limit fixtures use 120 bytes; ordinary
+undo, near-limit, limit, paste-cut, kill-ring, word-parts, line-kills and typed-refused.
+Additional fixtures cover blurred-scrolled, blurred-limit, tiny-3/2/1,
+paste-refused-whole, chip-cap, control-characters and typed-cut (an IME commit).
+The limit fixtures use 120 bytes; ordinary
 drafts use 4 KiB. The editor uses its full width with title/footer rules and no
 side borders. Prose wraps by word; longer words break at grapheme boundaries.
 Up/Down follows those rendered rows; logical line/column metadata counts graphemes.
@@ -286,7 +330,8 @@ make -C packages/tui run CARGO_FLAGS="-- --component dialog --scenario main"
 ```
 
 F2 cycles prompt → nested → long → locked → outside → removed-return → error →
-confirm → notice → prompt-long → rename.
+confirm → notice → prompt-long → rename, then the arrival, closure, confirmation
+and profile fixtures. F10 lists all 36 named scenarios.
 Prompt plain Enter returns local text. Shift-Enter, Alt-Enter and Ctrl-J add a
 newline; paste never submits. Unix terminal sessions request enhanced keyboard
 reporting and restore it on exit. Modified Enter requires the terminal to report
@@ -294,7 +339,7 @@ the modifier distinctly; Ctrl-J remains available with traditional key reporting
 Escape clears an editor selection before closing one layer. Tab/Shift-Tab stays
 inside the current modal scope. Nested starts with a picker above a parent draft;
 choosing returns only that picker's ID. Long inspection uses arrows/page/Home/End;
-Enter acknowledges. Locked ignores Escape; Enter returns its local prompt result.
+Enter acknowledges. Locked offers a safe Keep/No choice; Escape shows “answer to continue”.
 Error stays visible on Enter; F6 retries by replacing it with a prompt.
 
 F3 opens a child prompt. F5 removes background draft one's return target; closing
@@ -309,7 +354,8 @@ Two background drafts and the dock's independent message draft are read-only
 and faded while a modal is open. After closing/clearing, Tab switches between
 their surviving focus targets. F2 preserves drafts; return to catalog and reopen
 resets the fixture. The panel centers over the visible screen, at most 72 columns,
-with one column of side padding and a lighter surface. The dock keeps its position.
+and screen width minus four, with one column of side padding and a lighter surface.
+The dock keeps its position.
 Prompt fields grow to six rows before scrolling.
 Nested titles form a trail; only the top body is visible. Confirm defaults to
 keeping the draft; notice returns a local acknowledgement; rename demonstrates
@@ -322,8 +368,17 @@ only on the field's line. ANSI 16 hints use the default foreground with faint;
 no-color reverses only the focused field title, with plain background content.
 Below three rows the body uses all
 space without chrome. The visible activity row stays live while the rest of the
-dock fades; it remains in place after closure. Ctrl-C
-exits through the gallery's single terminal owner.
+dock fades; it remains in place after closure. In an open dialog Ctrl-C/Ctrl-D
+first arms closure, then closes only the top layer. Neither press quits.
+
+`waiting` keeps typed text in the dock until a one-second pause or Ctrl-G.
+`key-guard` ignores Enter/digits for the first 300 ms while other letters type.
+`away` simulates an attention request; it sends no real notification.
+`child-removed` restores its parent and shows a three-second reason.
+`danger-armed` requires a second deliberate Enter within three seconds;
+`danger-expired` requires arming again. Numbers only move to a danger choice.
+`type-name` requires the exact displayed name; paste never confirms.
+`inside-error` retains the editable field and corrective footer.
 
 For hosts, `dialog::Stack<B,T>` owns scopes and caller-supplied bodies. `dispatch`
 calls only the top handler, consumes Tab/release and outside pointer events, and
@@ -338,6 +393,17 @@ cells while open. `DialogView` supplies scope, message and action
 footers. `Stack::render_with` receives a body measurement and renderer, rendering
 only the top body with its focus target. The renderer may return a scroll hint
 for the title rule. Each body owns its scrolling and render/input contract.
+
+Use `Stack::new_timed` for the supplied host policies. Report actual background
+typing with `typed`, elapsed time with `tick`, and terminal focus with
+`set_terminal_focused`. `arrive` opens or queues at most sixteen roots in host order;
+`push` nests explicitly. `activity` supplies the live row, and `take_attention`
+returns identified notification requests for the host to consume.
+`remove`/`clear_with_reason` provide timed notices. `update_view` updates active
+failure labels without replacing the body. `DialogView::message_error` selects
+the error role. `Confirmation` qualifies irreversible or exact-name actions using
+injected time; the host supplies stable revision-specific action IDs, clears
+arming when selection/details change, and owns the resulting external effect.
 `Editor::visual_rows` measures wrapped field content; `ChoicePicker::render_list`
 renders choices inside host-owned dialog chrome.
 
@@ -397,7 +463,7 @@ Never acquire another terminal session for a nested picker.
 make -C packages/tui run CARGO_FLAGS="-- --component completion-menu --scenario main"
 ```
 
-The scenario picker offers all 15 menu states, plus `narrow-40`, `ansi16`,
+The scenario picker offers all 30 menu states, plus `narrow-40`, `ansi16`,
 `no-color` and `ascii`. Up/Down or Ctrl-P/N select enabled rows; page keys move a
 menu height without wrapping. Tab and Enter insert with a trailing space. Nothing
 runs or sends until a later Composer Enter. `command-inserted` demonstrates an
@@ -409,14 +475,23 @@ Paste never opens suggestions. A new typed trigger can open another menu.
 `loading` and `still-loading` finish locally after three seconds; `error` retries
 on Tab without changing the draft. With no selectable match, Enter sends literal
 text. `no-match-file` offers an explicit closest guess that only Tab inserts.
-Partial-source errors keep good results selectable. F2 cycles states, F10 opens
+Partial-source errors keep good results selectable. Alt-R retries only failed
+or timed-out sources, preserving good results and the draft. Ctrl-R opens
+Composer history search. Menu insertion keys appear above the draft; the footer
+keeps Composer's Enter behavior. `timeout` shows a warning distinct from source
+errors. `shell-path`, `replacement-too-long`, `removed-before-enter`,
+`wide-name-clipped` and the menu profiles exercise recovery and rendering.
+After `removed-before-enter` refuses invocation, the next explicit Enter sends
+the unchanged draft as literal text. F1 closes completion and opens Composer help.
+F2 cycles states, F10 opens
 scenarios and Esc returns after local dismissal. Ctrl-C quits this component.
 
 For standalone use, construct `completion::Menu` with named sources and validated
 `Candidate` values. Send editor-owned query changes through `set_query`, tick the
 host clock, and poll `take_request` after the 60 ms debounce. Apply each source's
 accumulated `Batch` using that exact opaque request. Loading appears after 150 ms;
-five seconds without results yields a retryable timeout. Finished sources reject
+five seconds without results yields a retryable warning reported by
+`timed_out_sources`; `failures` reports source errors separately. Finished sources reject
 duplicate batches. Close only after successfully applying `Action::Insert` to the
 editor; a failed budget check should preserve the menu. `Action::PassEnter` lets
 the host handle literal submission. Rendering keeps focus and the host cursor.
@@ -428,3 +503,71 @@ sources use `set_completion_sources`, `completion_due`, `complete_source`,
 `Intent::RetryCompletion` with discovery I/O. A later Enter emits `Command(id)` or
 `CommandWithArguments { id, arguments }`; hosts validate availability and execute.
 Completion insertion never performs execution, filesystem or clipboard access.
+`completion_hint_for` supplies the activity row; `footer_hint_for` supplies
+Composer help below the dock. Candidate aliases are bounded and rank after name
+prefix/word matches; tags are host-provided `kind · source` labels.
+
+## Tool Call Card
+
+```sh
+make -C packages/tui run CARGO_FLAGS="-- --component tool-call-card --scenario main"
+make -C packages/tui run CARGO_FLAGS="-- --component tool-call-card --scenario many-at-once --colors none --ascii"
+```
+
+The picker offers 79 scenarios and eight standard main-view profiles. Cards
+present proposed, queued, running, waiting, cancelling, completed, failed,
+interrupted and cancelled work using host
+summaries. Failed cards show three initial error lines; text previews show the
+last three. Enter expansion shows the first ten and last ten, with hidden counts.
+Concurrent groups preserve host order and fold completed successes; failures stay
+visible. Narrow cards retain filenames, wrap error/diff lines and drop numbers.
+
+Typing stays in Composer. Ctrl-X V enters Chat selection; arrows choose a card
+or group. Enter expands/collapses. `o` requests details, `r` requests a retry for
+enabled failed/cancelled cards, `y` copies call and retained output, and `c` copies
+output only. Hints show available actions. Escape closes details/selection first;
+in Compose it stops the whole working turn. F10 returns to scenarios without
+resetting the draft, caret or card selection.
+
+The deterministic gallery acknowledges simulated effects. Details opens a full
+retained-output view: arrows/page/Home/End scroll, `/` searches literally, `n`
+finds next and `y` simulates copy-all. Escape returns to the same card. F5 steps
+queued/waiting/running work, F6 fails active calls, F8 grows output and F7 resolves
+held effects. The copy-failed/details-failed/retry-refused scenarios report host
+refusal; no-ack keeps requests pending, and stale-ack rejects an obsolete ticket.
+No clipboard, agent, process execution or permission grant occurs.
+
+Host snapshots may include measured `Progress`, sixteen identified `Artifact`
+links and a `ChildTask` with ten latest-call lines. Only a supplied total produces
+a progress bar. Child details emit `Effect::OpenTask`; deliberate artifact commands
+emit `Effect::OpenArtifact`. `Chat::open_tool_artifact` routes a supplied artifact
+ID through the same capability and acknowledgement checks. The gallery's selected
+artifact card uses `a` to choose a link and opens deterministic local inspection.
+Groups accept host reordering while expansion and selection follow call IDs.
+
+Attach whole-run state with `Chat::begin_run(run_activity::Snapshot)` and supply
+newer revisions through `update_run`. Drain `Intent::Run` for cancel/options
+requests. Escape and Ctrl-C send one identified cancel while the draft stays
+editable and Enter keeps queueing. Report cancellation with a final snapshot;
+`fail_run_cancel` supplies a host failure and allows another deliberate request.
+Completion clears a pending cancel without relabelling it cancelled. Connection
+comes through `set_run_connection` and never implies a run outcome. The run gallery
+holds cancellation until F7 confirms, F5 completes first or F6 reports failure;
+F8 toggles connection. `set_run_reduced_motion` keeps working dots static while
+the host supplies elapsed seconds.
+
+For library use, construct `tool_call_card::Call` and `ToolCallCard`, dispatch
+`Command` only from the selected focus scope, render into the caller's frame and
+tick elapsed time. `replace` accepts newer revisions of the same call and keeps
+local expansion. Effects carry call ID, revision and opaque `Ticket`; call
+`acknowledge` only after the host effect finishes. Retry acceptance requires a new
+call ID, preserving the original. `ToolGroupCard` composes ordered calls.
+
+For Chat, put `Content::ToolCard(Box::new(call))` or `Content::ToolGroup(group)` in
+identified parts and apply versioned snapshots. Drain `Intent::Tool`; resolve
+copy/details/refusal with `acknowledge_tool`. `complete_tool_retry` consumes the
+matching pending ticket and atomically inserts the accepted successor below its
+parent. The host still validates execution/authority and owns full output.
+Chat retains its 64 KiB per-turn source limit; omitted bytes are disclosed and
+Details lets a real host fetch the complete source. See the
+[public contract](../specs/components/tool-call-card.md).

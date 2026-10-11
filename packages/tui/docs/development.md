@@ -21,12 +21,23 @@ terminal lifetime. gallery.rs owns fixture composition and the application loop;
 main.rs stays thin. All components accept caller-owned events and frames. Add a
 component to the gallery's selector and fixtures when it is implemented.
 
+`tool_call_card.rs` owns call/group state and opaque effects; its model/view
+submodules hold safe snapshots and bounded semantic row projection. Chat's tools
+adapter owns message/part routing and stable group-member anchors. The dedicated
+gallery host simulates retry, clipboard and searchable output inspection. Its
+77 states and tests exercise lifecycle, concurrent folding, output coalescing,
+stale tickets, draft preservation, responsive profiles and Unix PTY restoration.
+`run_activity.rs` owns whole-run snapshots, cancellation deduplication and opaque
+host effects. Chat's run adapter preserves the draft and routes independent
+connection status. The gallery holds cancellation until F7 acknowledges it,
+F5 completes first or F6 reports a cancellation failure.
+
 `composer.rs` and its modules own submission, queue, history/stash, payloads,
 completion, autosave snapshots and editor conflicts. `editor/atoms.rs` carries
 lossless chips through transactions; `composer/codec.rs` encodes caller-owned
 streams. The foreground editor adapter is invoked explicitly by a host and
 wrapped in `TerminalSession::handoff`. `gallery/composer.rs` simulates those host
-ports with 59 named scenarios. See the [implementation contract](../specs/components/composer.md).
+ports with 99 named scenarios. See the [implementation contract](../specs/components/composer.md).
 
 `theme/tokens.rs` defines semantic color/symbol/cell contracts; `theme.rs`
 resolves profiles and reusable styles. `ui.rs` owns the labeled rule primitive.
@@ -60,7 +71,9 @@ scope logic. `dialog/view.rs` owns measured centered panels, background
 fading, surface/box fallbacks and shared-rule chrome.
 Bodies receive caller frames/events and own their state/scrolling. Stack dispatch
 never sends unhandled modal events to background views; hosts cancel work from
-returned dismissal records. `gallery/dialogs.rs` composes eleven scenarios and
+returned dismissal records. `dialog/timing.rs` owns injected arrival/guard/notices
+and attention intents; `dialog/confirmation.rs` owns local caution qualification.
+`gallery/dialogs.rs` composes 36 named scenarios and
 three independent base drafts, including a fixed dock composer;
 `gallery/dialog_body.rs` supplies editors, choice
 pickers and a fixture-only read-only text body. A general content renderer is a
@@ -76,7 +89,8 @@ keys projections. `commands/view.rs` renders command columns using shared tokens
 and rules; `commands/bindings.rs` validates dispatch and explicit pending timing.
 `commands/remaps.rs` resolves ordered overrides with retained conflict/source
 evidence. Hosts supply scope maps, load bindings and execute returned intents.
-`gallery/commands.rs` owns docked palette/full-screen keys composition and delayed
+`gallery/commands.rs` owns docked palette/full-screen keys composition, timed
+Dialog input policy and delayed
 hint strips; its fixtures supply deterministic commands and remaps. Tests cover
 reserved/conflicting maps, source inspection, scoped search, key spelling, 400 ms
 hints, 3-second timeout, draft isolation and reviewed palette/keys snapshots.

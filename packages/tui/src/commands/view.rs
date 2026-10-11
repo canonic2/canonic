@@ -35,12 +35,12 @@ fn clip(text: &str, budget: usize, p: Presentation) -> String {
     }
     let mut s = String::new();
     for g in text.graphemes(true) {
-        if s.width() + g.width() >= budget {
+        if s.width() + g.width() > budget.saturating_sub(p.symbols.ellipsis_text().width()) {
             break;
         }
         s.push_str(g);
     }
-    s.push(p.symbols.ellipsis());
+    s.extend(p.symbols.ellipsis_text().chars().take(budget));
     s
 }
 fn highlighted(text: &str, query: &str, style: Style) -> Vec<Span<'static>> {
@@ -64,6 +64,35 @@ fn highlighted(text: &str, query: &str, style: Style) -> Vec<Span<'static>> {
         .collect()
 }
 impl Commands {
+    fn matched_alias(&self, i: usize) -> Option<&str> {
+        let query = self.query().to_lowercase();
+        (!query.is_empty() && self.search_rank(&self.entries[i], &query) == Some(3))
+            .then(|| {
+                self.entries[i]
+                    .aliases
+                    .iter()
+                    .find(|a| matches(a, &query))
+                    .map(String::as_str)
+            })
+            .flatten()
+    }
+    fn right_text(&self, i: usize, p: Presentation) -> String {
+        let c = &self.entries[i];
+        c.disabled.as_ref().map_or_else(
+            || {
+                c.bindings
+                    .first()
+                    .map_or(String::new(), super::Binding::label)
+            },
+            |reason| {
+                if p.colors == crate::theme::ColorMode::NoColor {
+                    format!("[-] {reason}")
+                } else {
+                    reason.clone()
+                }
+            },
+        )
+    }
     pub(super) fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         let mut previous = String::new();
@@ -96,11 +125,67 @@ impl Commands {
         rows
     }
     pub(super) fn draw(&mut self, frame: &mut Frame<'_>, area: Rect, view: PickerView<'_>) -> Rect {
-        let rows = self.rows();
-        if !self.keys {
-            self.opened_height
-                .get_or_insert(u16::try_from(rows.len().max(1) + 3).unwrap_or(u16::MAX));
+        let boxed = !self.keys
+            && area.width >= 3
+            && area.height >= 3
+            && matches!(
+                view.presentation.colors,
+                crate::theme::ColorMode::Ansi16 | crate::theme::ColorMode::NoColor
+            );
+        if !boxed {
+            return self.draw_content(frame, area, view);
         }
+        self.capture_height();
+        let panel = Rect::new(
+            area.x,
+            area.y,
+            area.width,
+            self.height(area.width - 2, view).min(area.height),
+        );
+        frame.render_widget(ratatui::widgets::Clear, panel);
+        frame.render_widget(
+            Block::default().style(
+                view.presentation.base().bg(view
+                    .presentation
+                    .tokens()
+                    .surface
+                    .unwrap_or(Color::Reset)),
+            ),
+            panel,
+        );
+        let inner = Rect::new(area.x + 1, area.y, area.width - 2, area.height);
+        let drawn = self.draw_content(frame, inner, view);
+        let used = Rect::new(area.x, area.y, area.width, drawn.height);
+        let ascii = view.presentation.symbols == crate::theme::Symbols::Ascii;
+        let sides = if ascii {
+            ["+", "+", "+", "+", "|"]
+        } else {
+            ["┌", "┐", "└", "┘", "│"]
+        };
+        if used.height >= 2 {
+            for y in used.y + 1..used.bottom() - 1 {
+                for x in [used.x, used.right() - 1] {
+                    frame.buffer_mut()[(x, y)]
+                        .set_symbol(sides[4])
+                        .set_style(view.presentation.accent());
+                }
+            }
+            for (x, y, symbol) in [
+                (used.x, used.y, sides[0]),
+                (used.right() - 1, used.y, sides[1]),
+                (used.x, used.bottom() - 1, sides[2]),
+                (used.right() - 1, used.bottom() - 1, sides[3]),
+            ] {
+                frame.buffer_mut()[(x, y)]
+                    .set_symbol(symbol)
+                    .set_style(view.presentation.accent());
+            }
+        }
+        used
+    }
+    fn draw_content(&mut self, frame: &mut Frame<'_>, area: Rect, view: PickerView<'_>) -> Rect {
+        self.capture_height();
+        let mut rows = self.rows();
         let used = Rect::new(
             area.x,
             area.y,
@@ -111,9 +196,31 @@ impl Commands {
             self.viewport = 0;
             return used;
         }
+        if used.height < 10 {
+            rows.retain(|r| !matches!(r, Row::Group(_)));
+        }
+        if !self.keys
+            && used.width <= 40
+            && let Some(selected) = self.selected
+            && let Some(at) = rows
+                .iter()
+                .position(|r| matches!(r, Row::Command(i) if *i == selected))
+        {
+            rows.insert(
+                at + 1,
+                Row::Detail(self.entries[selected].description.clone()),
+            );
+        }
         let p = view.presentation;
         frame.render_widget(ratatui::widgets::Clear, used);
-        frame.render_widget(Block::default().style(p.base()), used);
+        frame.render_widget(
+            Block::default().style(p.base().bg(if self.keys {
+                Color::Reset
+            } else {
+                p.tokens().surface.unwrap_or(Color::Reset)
+            })),
+            used,
+        );
         self.viewport = usize::from(used.height.saturating_sub(3));
         if let Some(at) = rows
             .iter()
@@ -152,12 +259,7 @@ impl Commands {
         );
         let body = Rect::new(used.x, used.y + 2, used.width, used.height - 3);
         if rows.is_empty() && body.height > 0 {
-            let text = if self.entries.is_empty() {
-                "No commands available.".into()
-            } else {
-                format!("No command matches \"{}\".", self.query())
-            };
-            frame.render_widget(Paragraph::new(text).style(p.muted()), body);
+            frame.render_widget(Paragraph::new(self.empty_text()).style(p.muted()), body);
         }
         for (line, row) in rows
             .iter()
@@ -183,6 +285,31 @@ impl Commands {
         }
         used
     }
+    fn empty_text(&self) -> String {
+        if self.keys && self.query().is_empty() && self.scope.is_some() {
+            format!(
+                "no keys in the {}\nit only scrolls · tab shows the next scope",
+                self.scope.as_deref().unwrap_or_default()
+            )
+        } else if self.entries.is_empty() {
+            "no commands here\nthis view has none · F1 lists every key".into()
+        } else if self.keys {
+            let hint = if self.complete_key_map
+                && self.scope.is_none()
+                && (self.query().contains('+') || self.query().starts_with('F'))
+            {
+                format!("{} is free in every scope", self.query())
+            } else {
+                "F1 lists every key".into()
+            };
+            format!("no key matches \"{}\"\n{hint}", self.query())
+        } else {
+            format!(
+                "no command matches \"{}\"\nF1 lists every key",
+                self.query()
+            )
+        }
+    }
     fn chrome(&self, frame: &mut Frame<'_>, area: Rect, p: Presentation, rows: &[Row]) {
         let count = if self.query().is_empty() && self.scope.is_none() {
             self.entries.len().to_string()
@@ -196,10 +323,12 @@ impl Commands {
             .flat_map(|m| {
                 m.conflicts
                     .iter()
-                    .map(|s| s.strip_prefix("ignored · ").unwrap_or(s))
+                    .map(|s| s.strip_prefix("overridden · ").unwrap_or(s))
             })
             .collect();
-        let count = if self.keys && self.query().is_empty() {
+        let count = if self.keys && self.scope.is_some() {
+            format!("{} · {count}", self.scope.as_deref().unwrap_or_default())
+        } else if self.keys && self.query().is_empty() {
             format!(
                 "{count}{}{}",
                 if custom > 0 {
@@ -237,10 +366,10 @@ impl Commands {
             .skip(self.offset + self.viewport)
             .filter(|r| matches!(r, Row::Command(_)))
             .count();
-        if below > 0 {
+        if below > 0 && area.width >= 50 {
             hints.push(format!("{} {below} more", p.symbols.more(false)));
         }
-        if self.keys {
+        if self.keys && area.width >= 50 {
             if self
                 .selected()
                 .is_some_and(|id| self.metadata.contains_key(id))
@@ -248,7 +377,7 @@ impl Commands {
                 hints.push("o open file".into());
             }
             hints.push("tab scope".into());
-        } else if self.selected.is_some() {
+        } else if !self.keys && self.selected.is_some() && area.width >= 50 {
             hints.push(
                 if area.width < 64 {
                     "enter"
@@ -281,7 +410,7 @@ impl Commands {
         let active = self.selected == Some(i);
         if active {
             frame.render_widget(
-                Block::default().style(p.surface()),
+                Block::default().style(p.selection()),
                 Rect::new(
                     area.x.saturating_add(1),
                     area.y,
@@ -291,7 +420,7 @@ impl Commands {
             );
         }
         let style = if c.disabled.is_some() {
-            p.muted()
+            p.disabled()
         } else {
             p.base().fg(Color::Reset).remove_modifier(Modifier::DIM)
         };
@@ -300,27 +429,21 @@ impl Commands {
         } else {
             style
         };
-        let key = c
-            .bindings
-            .first()
-            .map_or(String::new(), super::Binding::label);
+        let key = self.right_text(i, p);
         let available = usize::from(area.width.saturating_sub(3));
         let key_width = self
             .matches
             .iter()
-            .map(|i| {
-                self.entries[*i]
-                    .bindings
-                    .first()
-                    .map_or(0, |b| b.label().width())
-            })
+            .map(|i| self.right_text(*i, p).width())
             .max()
             .unwrap_or(0)
             .min(available / 2);
         let label_width = self
             .matches
             .iter()
-            .map(|i| self.entries[*i].label.width())
+            .map(|i| {
+                self.entries[*i].label.width() + self.matched_alias(*i).map_or(0, |a| a.width() + 1)
+            })
             .max()
             .unwrap_or(0)
             .min(available.saturating_sub(key_width + 2));
@@ -329,16 +452,27 @@ impl Commands {
             self.keys_row(frame, area, i, p, style);
             return;
         }
+        let alias = self
+            .matched_alias(i)
+            .map(|a| clip(a, label_width.saturating_sub(c.label.width() + 1), p));
         let label = clip(&c.label, label_width, p);
         spans.push(Span::raw(" "));
         spans.extend(highlighted(&label, self.query(), style));
+        let alias_width = alias
+            .as_ref()
+            .map_or(0, |a| if a.is_empty() { 0 } else { a.width() + 1 });
+        if let Some(alias) = alias
+            && !alias.is_empty()
+        {
+            spans.push(Span::styled(format!(" {alias}"), p.muted()));
+        }
         let details = available.saturating_sub(label_width + key_width + 4);
-        spans.push(Span::raw(
-            " ".repeat(label_width.saturating_sub(label.width()) + 2),
-        ));
+        spans.push(Span::raw(" ".repeat(
+            label_width.saturating_sub(label.width() + alias_width) + 2,
+        )));
         if details >= 12 {
             spans.extend(highlighted(
-                &clip(c.disabled.as_deref().unwrap_or(&c.description), details, p),
+                &clip(&c.description, details, p),
                 self.query(),
                 p.muted(),
             ));
@@ -374,8 +508,10 @@ impl Commands {
         let info = self.metadata.get(&c.id);
         let conflict = info.is_some_and(|m| !m.conflicts.is_empty());
         let status = if conflict {
-            if c.bindings.is_empty() {
+            if info.is_some_and(|m| m.conflicts.iter().any(|s| s.starts_with("ignored:"))) {
                 "ignored"
+            } else if c.bindings.is_empty() {
+                "overridden"
             } else {
                 "wins"
             }
@@ -394,11 +530,7 @@ impl Commands {
             .unwrap_or(0)
             .min(available / 2);
         let key_style = if conflict {
-            p.warning().add_modifier(if self.selected == Some(i) {
-                Modifier::BOLD
-            } else {
-                Modifier::empty()
-            })
+            p.warning().add_modifier(Modifier::BOLD)
         } else {
             style
         };
@@ -423,10 +555,30 @@ impl Commands {
             Paragraph::new(Line::from(spans)),
             Rect::new(area.x, area.y, area.width.saturating_sub(1), 1),
         );
-        if !status.is_empty() && usize::from(area.width) > status.len() + 1 {
-            let width = u16::try_from(status.len()).unwrap_or(0);
+        if !status.is_empty()
+            && usize::from(area.width)
+                > status.len()
+                    + 1
+                    + usize::from(conflict && p.colors == crate::theme::ColorMode::NoColor) * 2
+        {
+            let width = u16::try_from(
+                status.len()
+                    + usize::from(conflict && p.colors == crate::theme::ColorMode::NoColor) * 2,
+            )
+            .unwrap_or(0);
             frame.render_widget(
-                Paragraph::new(status).style(if conflict { p.warning() } else { p.muted() }),
+                Paragraph::new(
+                    if conflict && p.colors == crate::theme::ColorMode::NoColor {
+                        format!("! {status}")
+                    } else {
+                        status.into()
+                    },
+                )
+                .style(if conflict {
+                    p.warning().add_modifier(Modifier::BOLD)
+                } else {
+                    p.info()
+                }),
                 Rect::new(area.right() - width - 1, area.y, width, 1),
             );
         }

@@ -19,9 +19,11 @@ pub mod focus;
 #[cfg(feature = "gallery")]
 pub mod gallery;
 pub mod picker;
+pub mod run_activity;
 pub mod runtime;
 mod text;
 pub mod theme;
+pub mod tool_call_card;
 pub mod ui;
 
 // Keep event and rendering types consistent for local consumers.

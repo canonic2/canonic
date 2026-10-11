@@ -47,15 +47,16 @@ entry points need an explicit compatibility plan when contracts change.
 | `completion` | Host source snapshots, query generations and elapsed time | Ranked suggestions, insert/close/retry actions, fixed-height view | Implemented |
 | `content` | Plain/Markdown/code/diff blocks and policy | Rows, hit/source mapping, link intent; per-instance derived cache | Proposed |
 | `conversation` | Stable message/part projection and revisions | Search/jump/copy/page intents; viewport/expansion/search/selection | Proposed; bounded plain projection in Chat |
-| `activity` | Tool/run/progress projection, clock tick | Open/expand/cancel intents; presentation, no actual tasks | Proposed; plain host status in Chat |
+| `tool_call_card` | Identified calls/groups, lifecycle/output/capabilities and clock tick | Bounded previews, expansion and acknowledged copy/details/retry; no execution | Implemented standalone and composed by Chat |
+| `activity` | Identified run/progress projection, clock tick and independent connection | Run cancellation acknowledgements; no actual tasks | Run Activity implemented standalone and composed by Chat |
 | `review` | Versioned permission/confirmation/question and acknowledgements | Respond/dismiss intent; staged answers/pending/error state | Proposed; reusable Dialog/Picker foundations exist |
 | `picker` | Stable choices, groups, disabled reasons/default/filter | Choice/cancel/query intents; query/highlight/viewport | Implemented |
-| `dialog` | Caller bodies, stack operations, size/close policy | Close/result/focus; overlay stack and return target | Foundations implemented; timing pending |
+| `dialog` | Caller bodies, stack/size/close policy and injected time | Close/result/focus, arrival/guard/notices and attention intents | Reusable stack, timing and caution implemented; inline hosting separate |
 | `commands` | Host descriptors, enabled reasons and bindings | Invocation ID; palette/filter/help; no execution | Implemented |
 | `browser` | Session/timeline/resource rows and loading state | Select/query/rename/delete/fork intents; local navigation | Proposed |
 | `tree` | Hierarchical nodes and loading metadata | Expand/load/select intents; local focus/expanded set | Proposed |
 | `status` | Summary groups/notices/time/preferences | Dismiss/retry/preference intents; notice/collapse state | Proposed; plain host labels exist |
-| `chat` | Conversation/composer/activity/review/status and capabilities | Screen intents; layout/focus/screen-scoped presentation | Plain composition implemented; richer composition proposed |
+| `chat` | Conversation/composer/activity/review/status and capabilities | Screen intents; layout/focus/screen-scoped presentation | Rich transcript, Composer, cards and Run Activity implemented; reusable review composition pending |
 | `runtime` | Explicit inline/full-screen mode/capabilities | Lease, frames/events, suspend/resume/close result; owned modes | Full-screen lease/handoff implemented; inline hosting pending |
 | `gallery` | Fixture descriptions/scripted updates | Simulated results/evidence; clock/event log/fixture lifetime | Implemented; expanded fixtures/measurements pending |
 

@@ -38,6 +38,10 @@ pub struct ChoicePicker {
     offset: usize,
     viewport: usize,
     opened_height: Option<u16>,
+    minimum: usize,
+    maximum: Option<usize>,
+    inspect: bool,
+    notice: Option<String>,
 }
 
 impl ChoicePicker {
@@ -73,6 +77,10 @@ impl ChoicePicker {
             offset: 0,
             viewport: 1,
             opened_height: None,
+            minimum: 0,
+            maximum: None,
+            inspect: false,
+            notice: None,
         })
     }
 
@@ -85,6 +93,11 @@ impl ChoicePicker {
     #[must_use]
     pub fn query(&self) -> &str {
         self.query.text()
+    }
+    /// Local selection-bound feedback for a host-owned activity/status row.
+    #[must_use]
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
     }
     /// Read host-supplied rows for detail/refresh composition.
     #[must_use]
@@ -112,14 +125,37 @@ impl ChoicePicker {
             .map(|c| c.id.as_str())
             .collect()
     }
-    /// Set marks from host state, ignoring missing or disabled identities.
+    /// Set marks from host state, ignoring missing, disabled and dangerous identities.
     pub fn set_marked(&mut self, ids: &[&str]) {
         self.marked = self
             .choices
             .iter()
-            .filter(|c| c.disabled.is_none() && ids.contains(&c.id.as_str()))
+            .filter(|c| c.disabled.is_none() && !c.danger && ids.contains(&c.id.as_str()))
+            .take(self.maximum.unwrap_or(usize::MAX))
             .map(|c| c.id.clone())
             .collect();
+    }
+    /// Set host-owned multi-selection bounds. Empty confirmation is allowed by
+    /// default. Existing marks above a new maximum are trimmed in source order.
+    /// Returns false, without changing state, when the bounds conflict.
+    pub fn set_selection_limits(&mut self, minimum: usize, maximum: Option<usize>) -> bool {
+        if maximum.is_some_and(|maximum| minimum > maximum) {
+            return false;
+        }
+        self.minimum = minimum;
+        self.maximum = maximum;
+        let retained: HashSet<_> = self
+            .marked()
+            .into_iter()
+            .take(maximum.unwrap_or(usize::MAX))
+            .map(str::to_owned)
+            .collect();
+        self.marked = retained;
+        true
+    }
+    /// Enable the F3 inspection intent only when the host supplies a detail view.
+    pub fn set_inspect_available(&mut self, available: bool) {
+        self.inspect = available;
     }
     /// Replace the source status. No loading, retries or processes are started.
     pub fn set_status(&mut self, status: Status) {

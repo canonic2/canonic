@@ -1,4 +1,5 @@
 //! Local Completion Menu host exercising the public Composer/source contracts.
+mod extended;
 use crate::{
     chat::Chat,
     completion::{Batch, Candidate},
@@ -12,6 +13,7 @@ use std::time::Duration;
 pub(super) struct CompletionDemo {
     chat: Chat,
     scenario: usize,
+    presentation_pending: bool,
     age: Duration,
     note: String,
 }
@@ -107,9 +109,9 @@ fn candidate(item: &CompletionItem) -> Candidate {
     c.recency = u64::from(item.touched);
     c.tag = if item.touched {
         if item.kind == CompletionKind::File {
-            "edited"
+            "file · edited"
         } else {
-            "recent"
+            "skill · recent"
         }
     } else if item.kind == CompletionKind::File {
         ""
@@ -117,7 +119,7 @@ fn candidate(item: &CompletionItem) -> Candidate {
         item.value.as_str(),
         "code-review" | "commit" | "fix-checks" | "review" | "release-diff"
     ) {
-        "project"
+        "command · project"
     } else {
         ""
     }
@@ -125,10 +127,14 @@ fn candidate(item: &CompletionItem) -> Candidate {
     c
 }
 impl CompletionDemo {
+    pub(super) fn take_presentation(&mut self, p: Presentation) -> Option<Presentation> {
+        std::mem::take(&mut self.presentation_pending).then(|| extended::profile(self.scenario, p))
+    }
     pub(super) fn scenario(index: usize) -> Self {
         let mut demo = Self {
             chat: Chat::new(),
             scenario: index,
+            presentation_pending: true,
             age: Duration::ZERO,
             note: String::new(),
         };
@@ -153,6 +159,10 @@ impl CompletionDemo {
         }
         items.extend(files());
         demo.chat.composer_mut().set_completions(items);
+        if index >= 15 {
+            extended::prepare(&mut demo);
+            return demo;
+        }
         let (text, file) = match index {
             1 | 10 => ("set", true),
             2 | 6 => ("", true),
@@ -300,7 +310,7 @@ impl CompletionDemo {
         let end = if self.scenario == 7 { 31 } else { rows.len() };
         let mut builtins: Vec<_> = rows[4..end].iter().map(candidate).collect();
         for c in &mut builtins {
-            c.tag = "built-in".into();
+            c.tag.clear();
         }
         composer.complete_source(
             request,
@@ -313,7 +323,7 @@ impl CompletionDemo {
         );
         let skills = if self.scenario == 13 {
             let mut c = Candidate::new("skill-plan", "/plan-digest", "plan-digest");
-            c.tag = "skill".into();
+            c.tag = "skill · project".into();
             vec![c]
         } else {
             Vec::new()
@@ -337,7 +347,7 @@ impl CompletionDemo {
                 }
             } else {
                 let mut c = Candidate::new("release-note", "release-note", "release-note");
-                c.tag = "plugin".into();
+                c.tag = "plugin · release-tools".into();
                 Batch {
                     candidates: vec![c],
                     complete: true,
@@ -346,13 +356,13 @@ impl CompletionDemo {
             },
         );
     }
-    pub(super) fn input(&self) -> &str {
-        self.chat.input()
+    pub(super) fn input(&self) -> String {
+        self.chat.composer().editor().expanded_text()
     }
     pub(super) fn update(&mut self, event: &Event) -> bool {
         if matches!(event,Event::Key(k) if k.kind == KeyEventKind::Press && k.code == KeyCode::F(2))
         {
-            *self = Self::scenario((self.scenario + 1) % 15);
+            *self = Self::scenario((self.scenario + 1) % 30);
             return true;
         }
         if matches!(event,Event::Key(k) if matches!(k.code,KeyCode::F(4|10)) || k.modifiers == KeyModifiers::CONTROL && matches!(k.code,KeyCode::Char('c'|'t')))
@@ -379,18 +389,7 @@ impl CompletionDemo {
                     self.note = format!("Host invoked /{id} {arguments} after Composer Enter");
                 }
                 Intent::RetryCompletion(request) => {
-                    let rows = files().iter().map(candidate).collect();
-                    self.chat.composer_mut().complete_source(
-                        &request,
-                        "repository",
-                        Batch {
-                            candidates: rows,
-                            complete: true,
-                            total: Some(812),
-                            ..Batch::default()
-                        },
-                    );
-                    self.note = "Repository source retried successfully".into();
+                    self.retry(&request);
                 }
                 _ => {}
             }
@@ -421,10 +420,47 @@ impl CompletionDemo {
             );
         }
     }
+    fn retry(&mut self, request: &crate::composer::CompletionRequest) {
+        let sources = self
+            .chat
+            .composer()
+            .completion_menu()
+            .map_or(Vec::new(), |menu| {
+                menu.pending_sources()
+                    .iter()
+                    .map(|s| (*s).to_owned())
+                    .collect::<Vec<_>>()
+            });
+        for source in sources {
+            let candidates = if request.kind == CompletionKind::File {
+                files().iter().map(candidate).collect()
+            } else {
+                let mut row = Candidate::new("redeploy", "/redeploy", "redeploy");
+                row.tag = "plugin · release-tools".into();
+                vec![row]
+            };
+            if self.chat.composer_mut().complete_source(
+                request,
+                &source,
+                Batch {
+                    candidates,
+                    complete: true,
+                    ..Batch::default()
+                },
+            ) {
+                self.note = if source == "repository" {
+                    "Repository source retried successfully".into()
+                } else {
+                    format!("{source} source retried successfully")
+                };
+            }
+        }
+    }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, mut area: Rect, p: Presentation) {
         if self.scenario == 11 {
             area.width = area.width.min(40);
         }
+        extended::sizing(self.scenario, &mut area);
         self.chat.render_docked_with(frame, area, p);
         if !self.note.is_empty() && area.height > 0 {
             frame.render_widget(

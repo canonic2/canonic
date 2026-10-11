@@ -1,12 +1,13 @@
 //! Simulates host acknowledgements for one session draft without persistence or I/O.
 
+mod alignment;
 mod scenarios;
 
 use crate::{
     chat::Chat,
     composer::{
         CompletionItem, CompletionKind, EditorRequest, EditorResult, Identity, Intent,
-        SavedComposer, Submission,
+        SavedComposer, Submission, WorkRequest,
     },
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     theme::Presentation,
@@ -29,10 +30,17 @@ pub(super) struct ComposerDemo {
     saved: Option<SavedComposer>,
     editor: Option<EditorRequest>,
     quit: bool,
+    work: Option<WorkRequest>,
+    elapsed: Duration,
+    profile: Option<Presentation>,
+    width: Option<u16>,
 }
 
 impl ComposerDemo {
     pub(super) fn scenario(index: usize) -> Self {
+        if index >= 57 {
+            return Self::aligned(index);
+        }
         if index >= 29 {
             return Self::extended(index);
         }
@@ -233,12 +241,36 @@ impl ComposerDemo {
             saved: None,
             editor: None,
             quit: false,
+            work: None,
+            elapsed: Duration::ZERO,
+            profile: None,
+            width: None,
         }
     }
     pub(super) fn input(&self, index: usize) -> Option<&str> {
         (index == 0).then(|| self.chat.input())
     }
     fn resolve(&mut self, accepted: bool) {
+        if let Some(request) = self.work.take() {
+            let (_, submission) = self.chat.composer_mut().acknowledge_work(
+                &request.ticket,
+                if accepted {
+                    Ok(())
+                } else {
+                    Err("Simulated host control failure")
+                },
+            );
+            if let Some(submission) = submission {
+                self.sent(&submission);
+            }
+            self.note = if accepted {
+                "Host confirmed work control"
+            } else {
+                "Control failed; foreground work and draft retained"
+            }
+            .into();
+            return;
+        }
         let Some(ticket) = self.ticket.take() else {
             if let Some(submission) = self.chat.composer_mut().turn_ended(accepted) {
                 self.sent(&submission);
@@ -277,7 +309,7 @@ impl ComposerDemo {
                 return true;
             }
             match key.code {
-                KeyCode::F(2) => *self = Self::scenario((self.scenario + 1) % 57),
+                KeyCode::F(2) => *self = Self::scenario((self.scenario + 1) % 97),
                 KeyCode::F(3) => {
                     if let Some(ticket) = &self.previous {
                         self.chat.toggle_shell_output(ticket);
@@ -368,19 +400,18 @@ impl ComposerDemo {
                     self.note = "Simulated editor open · F11 returns text".into();
                 }
                 Intent::Quit => self.quit = true,
-                Intent::Stop | Intent::InterruptAfterStep => {
-                    if let Some(ticket) = self.ticket.take() {
-                        self.chat.acknowledge_submission(&ticket, Err("Cancelled"));
-                    }
-                    self.chat.composer_mut().set_working(false);
-                    self.note = "Host stop requested · queue paused".into();
+                Intent::Work(request) => {
+                    self.note = format!("Requested {:?} · F5 confirms · F6 fails", request.action);
+                    self.work = Some(request);
+                }
+                Intent::EditorCancelled(_) => {
+                    self.note = "Stopped waiting; simulated editor remains host-owned".into();
                 }
                 Intent::Command(id) => self.note = format!("Host command: {id}"),
                 Intent::CommandWithArguments { id, arguments } => {
                     self.note = format!("Host command: {id} {arguments}");
                 }
                 Intent::RetryCompletion(_) => self.note = "Completion retry requested".into(),
-                Intent::Background => self.note = "Host shell background requested".into(),
                 Intent::ClipboardImage => {
                     self.chat
                         .composer_mut()
@@ -396,11 +427,23 @@ impl ComposerDemo {
     pub(super) fn overlay_open(&self) -> bool {
         self.chat.composer().overlay_open()
     }
+    pub(super) fn take_presentation(&mut self) -> Option<Presentation> {
+        self.profile.take()
+    }
     pub(super) fn tick(&mut self, elapsed: Duration) {
+        if self.chat.composer().is_busy() {
+            self.elapsed = self.elapsed.saturating_add(elapsed);
+            self.chat.composer_mut().set_working_elapsed(self.elapsed);
+        }
         self.chat.tick(elapsed);
         self.host_intents();
     }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+        let theme = self.profile.unwrap_or(theme);
+        let area = Rect {
+            width: self.width.map_or(area.width, |width| width.min(area.width)),
+            ..area
+        };
         let [chat, note, controls] = Layout::vertical([
             Constraint::Min(0),
             Constraint::Length(1),

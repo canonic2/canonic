@@ -108,7 +108,7 @@ pub fn resolve(mut commands: Vec<Command>, changes: &[Remap]) -> Result<Effectiv
                     ignored: vec![],
                     custom: false,
                 });
-            loser.conflicts.push(format!("ignored · {note}"));
+            loser.conflicts.push(format!("overridden · {note}"));
             loser.ignored.extend(collisions.iter().cloned());
             command.bindings.retain(|b| !collisions.contains(b));
             if let Some(info) = metadata.get_mut(&change.id) {

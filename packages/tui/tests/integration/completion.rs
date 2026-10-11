@@ -44,6 +44,233 @@ fn ranking_prefers_prefix_then_word_start_then_fuzzy_with_recency_ties() {
 }
 
 #[test]
+fn aliases_rank_after_name_words_and_before_recent_fuzzy_matches() {
+    let mut alias = row("stop");
+    alias.aliases = vec!["kill".into()];
+    let mut fuzzy = row("k_i_l_l");
+    fuzzy.recency = 100;
+    let menu = ready(vec![fuzzy, alias, row("task kill"), row("killer")], "kill");
+    assert_eq!(names(&menu), ["killer", "task kill", "stop", "k_i_l_l"]);
+    let mut invalid = row("bad");
+    invalid.aliases = vec!["alias".into(); 17];
+    assert!(Menu::new("files", "", &["host"], vec![invalid]).is_err());
+}
+
+#[test]
+fn timeout_is_a_warning_and_alt_retry_preserves_good_sources_and_rejects_repeat() {
+    let mut menu = Menu::new("files", "", &["files"], Vec::new()).unwrap();
+    let stale = menu.request();
+    menu.tick(Duration::from_secs(5));
+    assert_eq!(menu.timed_out_sources(), ["files"]);
+    assert_eq!(menu.failures(), [] as [(&str, &str); 0]);
+    let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+    terminal
+        .draw(|f| menu.render(f, f.area(), Presentation::default()))
+        .unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(text.contains("! no reply from files after 5 s"));
+    assert!(text.contains("slow or stuck"));
+    let alt = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::ALT);
+    let Action::Retry(retry) = menu.update(&Event::Key(alt)) else {
+        panic!("retry")
+    };
+    assert_ne!(retry, stale);
+    assert!(!menu.complete(&stale, "files", Batch::default()));
+    assert_eq!(menu.timed_out_sources(), [] as [&str; 0]);
+    assert_eq!(menu.pending_sources(), ["files"]);
+    let mut menu = Menu::new("commands", "", &["good", "bad"], Vec::new()).unwrap();
+    let request = menu.request();
+    menu.complete(
+        &request,
+        "good",
+        Batch {
+            candidates: vec![row("usable")],
+            complete: true,
+            ..Batch::default()
+        },
+    );
+    menu.complete(
+        &request,
+        "bad",
+        Batch {
+            error: Some("offline".into()),
+            ..Batch::default()
+        },
+    );
+    assert!(matches!(menu.update(&key(KeyCode::Tab)), Action::Insert(c) if c.id == "usable"));
+    for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+        assert_eq!(
+            menu.update(&Event::Key(KeyEvent { kind, ..alt })),
+            Action::None
+        );
+        assert_eq!(menu.failures(), [("bad", "offline")]);
+    }
+    assert!(matches!(menu.update(&Event::Key(alt)), Action::Retry(_)));
+    assert_eq!(menu.pending_sources(), ["bad"]);
+    assert_eq!(menu.selected().unwrap().id, "usable");
+    assert_eq!(names(&menu), ["usable"]);
+}
+
+#[test]
+fn composer_alt_retry_and_control_history_are_distinct_routes_with_separate_hints() {
+    let mut composer = composer(256);
+    assert!(composer.set_history(vec!["previous message".into()]));
+    type_text(&mut composer, "/");
+    let request = composer.completion_request().unwrap();
+    assert!(composer.set_completion_sources(&request, &["good", "bad"]));
+    assert!(composer.complete_source(
+        &request,
+        "good",
+        Batch {
+            candidates: vec![Candidate::new("review", "/review", "review")],
+            complete: true,
+            ..Batch::default()
+        }
+    ));
+    assert!(composer.complete_source(
+        &request,
+        "bad",
+        Batch {
+            error: Some("offline".into()),
+            ..Batch::default()
+        }
+    ));
+    assert!(
+        composer
+            .completion_hint_for(80)
+            .unwrap()
+            .contains("alt+r retries")
+    );
+    assert!(!composer.footer_hint_for(80).contains("inserts"));
+    let cursor = composer.editor().cursor();
+    composer.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('r'),
+        KeyModifiers::ALT,
+    )));
+    assert!(matches!(
+        composer.take_intents().as_slice(),
+        [Intent::RetryCompletion(_)]
+    ));
+    assert_eq!(composer.editor().cursor(), cursor);
+    assert_eq!(composer.editor().text(), "/");
+    composer.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('r'),
+        KeyModifiers::CONTROL,
+    )));
+    assert!(composer.completion_menu().is_none());
+    assert!(composer.take_intents().is_empty());
+    assert!(composer.footer_hint().contains("enter recalls"));
+    composer.update(&key(KeyCode::Esc));
+    assert_eq!(composer.editor().text(), "/");
+    assert_eq!(composer.editor().cursor(), cursor);
+}
+
+#[test]
+fn no_match_names_the_route_and_f1_opens_help_without_submission() {
+    let mut menu = Menu::new("commands", "depoy", &["host"], Vec::new()).unwrap();
+    menu.complete(
+        &menu.request(),
+        "host",
+        Batch {
+            complete: true,
+            ..Batch::default()
+        },
+    );
+    let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+    terminal
+        .draw(|f| menu.render(f, f.area(), Presentation::default()))
+        .unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(text.contains("no command matches \"/depoy\""));
+    assert!(text.contains("F1 lists every key"));
+    let mut composer = composer(256);
+    type_text(&mut composer, "/depoy");
+    let cursor = composer.editor().cursor();
+    assert!(composer.update(&key(KeyCode::F(1))).is_none());
+    assert!(composer.completion_menu().is_none());
+    assert!(composer.footer_hint().contains("type filters"));
+    composer.update(&key(KeyCode::Esc));
+    assert_eq!(composer.editor().text(), "/depoy");
+    assert_eq!(composer.editor().cursor(), cursor);
+    assert!(composer.take_intents().is_empty());
+}
+
+#[test]
+fn narrow_disabled_reason_and_whole_grapheme_clipping_preserve_full_payloads() {
+    use canonic_tui::ratatui::style::Color;
+    use unicode_width::UnicodeWidthStr;
+    let mut disabled = row("/resume");
+    disabled.disabled = Some("needs network".into());
+    disabled.description = "description must yield to availability".into();
+    let mut menu = ready(vec![row("/review"), disabled], "");
+    let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
+    terminal
+        .draw(|f| {
+            menu.render(
+                f,
+                f.area(),
+                Presentation {
+                    colors: ColorMode::NoColor,
+                    ..Presentation::default()
+                },
+            );
+        })
+        .unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("[-] needs network"));
+    assert!(
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .all(|cell| cell.fg == Color::Reset && cell.bg == Color::Reset)
+    );
+    let path = "docs/設計/e\u{301}🦀/タイムゾーン設定.md";
+    let mut menu = ready(vec![Candidate::new("wide", path, path)], "設計");
+    let mut terminal = Terminal::new(TestBackend::new(20, 8)).unwrap();
+    terminal
+        .draw(|f| menu.render(f, f.area(), Presentation::default()))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let mut line = String::new();
+    let mut x = 0;
+    while x < 20 {
+        let symbol = buffer[(x, 6)].symbol();
+        line.push_str(symbol);
+        x += u16::try_from(symbol.width().max(1)).unwrap();
+    }
+    assert!(line.contains("docs/設計/e\u{301}🦀/タ⋯"), "{line:?}");
+    assert!(matches!(menu.update(&key(KeyCode::Tab)), Action::Insert(c) if c.insertion == path));
+}
+
+#[test]
+fn removed_command_refuses_once_then_literal_enter_cannot_invoke_a_duplicate_label() {
+    let mut composer = composer(256);
+    type_text(&mut composer, "/rev");
+    composer.update(&key(KeyCode::Tab));
+    assert!(composer.set_completions(vec![CompletionItem {
+        id: "different-command".into(),
+        value: "review".into(),
+        detail: String::new(),
+        kind: CompletionKind::Command,
+        disabled: None,
+        touched: false,
+    }]));
+    assert!(composer.update(&key(KeyCode::Enter)).is_none());
+    assert_eq!(composer.editor().text(), "/review ");
+    assert!(composer.take_intents().is_empty());
+    assert!(composer.footer_hint().contains("enter sends as text"));
+    let submission = composer
+        .update(&key(KeyCode::Enter))
+        .expect("explicit literal submission");
+    assert_eq!(submission.text, "/review ");
+    assert!(!composer.take_intents().iter().any(|intent| matches!(
+        intent,
+        Intent::Command(_) | Intent::CommandWithArguments { .. }
+    )));
+}
+
+#[test]
 fn navigation_skips_disabled_without_wrap_and_repeats_never_confirm() {
     let mut disabled = row("b");
     disabled.disabled = Some("offline".into());
@@ -261,7 +488,7 @@ fn cursor_inside_token_keeps_full_query_replaces_suffix_and_no_fit_keeps_menu() 
     existing.update(&key(KeyCode::Right));
     assert!(existing.overlay_open());
     existing.update(&key(KeyCode::Tab));
-    assert_eq!(existing.editor().text(), "@settings.ts tail");
+    assert_eq!(existing.editor().expanded_text(), "@settings.ts tail");
     let mut c = composer(256);
     type_text(&mut c, "@set");
     let req = c.completion_request().unwrap();
@@ -274,7 +501,7 @@ fn cursor_inside_token_keeps_full_query_replaces_suffix_and_no_fit_keeps_menu() 
     assert_eq!(c.completion_request().unwrap(), req);
     c.update(&key(KeyCode::Left));
     c.update(&key(KeyCode::Tab));
-    assert_eq!(c.editor().text(), "@settings.ts ");
+    assert_eq!(c.editor().expanded_text(), "@settings.ts ");
     let mut c = composer(4);
     type_text(&mut c, "@set");
     c.update(&key(KeyCode::Left));

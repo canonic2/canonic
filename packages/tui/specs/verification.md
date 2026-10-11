@@ -24,6 +24,216 @@ commit is not human acceptance. Tests found in source are not a new test run.
 These records were carried forward during the specification reorganization;
 Markdown changes do not rerun or refresh Rust engineering evidence.
 
+## Gallery profiles and Run Activity engineering record — 2026-10-11
+
+Scope: named Command Palette, Completion Menu and Dialog profiles apply once
+on fixture opening and allow subsequent F4/Ctrl-T switching. Compact waiting
+and failed cancellation preserve available action keys. Run fixtures inject
+elapsed host time, keep reduced-motion decoration static, and preserve readable
+Activity outside an options panel. Tool Call Card supplies 79 scenarios,
+including twenty Run Activity scenarios; the complete registry has 394 entries.
+
+Host `make -C packages/tui check` passed 236 tests, four doctests, formatting,
+strict Clippy, API documentation and dependency auditing. The release build
+passed; gallery-disabled nextest passed 186 tests. Behavioral rendering checks exercise component-body profile changes,
+disabled options, compact hints, advancing elapsed seconds and an uncovered
+Activity row. Existing native macOS PTY checks passed. Public local links and
+both repositories' whitespace and ownership checks passed. These changes add
+no public signatures; the recorded Composer consumer compilation remains
+applicable. This record preserves
+the distinction between engineering checks and pending human visual/platform
+acceptance; Question Form and Permission Review implementation remain pending.
+
+## Chat alignment engineering record — 2026-10-11
+
+Scope: 76 interactive Chat scenarios, operation-specific pending acknowledgements
+and failures, original Markdown copy, full table/patch inspection, serial paging
+across both directions, durable newer-load failure/retry, quiet notes, host
+suggestions and narrow/fallback search. The gallery retains paging and copy as
+independent simulated host requests rather than overwriting an outstanding ticket.
+
+Host `make -C packages/tui check` passed 233 tests, four doctests, formatting,
+strict Clippy, private-item API documentation and dependency auditing. The release
+library/gallery build passed; gallery-disabled nextest passed 185 tests. New
+behavioral tests cover duplicate/cross-direction paging, fresh retry identities,
+stale completion, pending action labels, refusal, source copy and draft retention.
+All added gallery states have meaningful rendering assertions, including delayed
+inspection and simultaneous earlier-loading/copy acknowledgement.
+
+Native macOS PTY checks passed, including delayed copy/link refusal, explicit
+retry and host confirmation, caret return, resize, cooked-mode input and exact
+terminal-attribute restoration. Existing search, selection, picker return, tool
+cards, dialogs and external-editor terminal checks also passed. Public local
+links resolved 401 references across 33 Markdown files before this evidence update;
+both Gate repositories passed whitespace and public/private ownership checks.
+These changes preserve Chat's public signatures; the consumer compilation evidence
+after Composer's expanded contracts remains applicable.
+
+Human visual acceptance, native Linux/Windows and real consumer clipboard,
+opening, inspection and storage execution remain pending. Question Form's public
+contract is written; its implementation is outside this verified Chat scope.
+
+## Design alignment engineering record — 2026-10-10
+
+Verified scope: shared profile changes, Editor kill/yank/limit/selection behavior,
+Option Picker ranking/bounds/refresh behavior, extended Tool Call Card metadata
+and states, reusable artifact selection, and whole-run cancellation/connection
+composition. Tool Call Card has 77 deterministic scenarios, including eighteen
+Run Activity scenarios. The full host `make -C packages/tui check` passed
+200 tests, four doctests, formatting, strict Clippy, private-item API documentation
+and dependency auditing. Existing native macOS PTY tests passed, including card
+details, draft/caret return, resize, picker navigation and terminal restoration.
+The release library/gallery build passed. Gallery-disabled nextest passed
+161 tests. The public documentation check resolved
+382 local links and anchors; both Gate repositories passed whitespace checks.
+Ownership checks place source/specs in public and design references in private.
+
+Six Run Activity tests cover single-use cancellation, completion races, retry,
+stale/foreign acknowledgement, disconnection, injected motion, draft/queue
+preservation and Escape selection priority. Extended card/gallery checks cover
+progress, safe escape markers, host reordering, child tasks, artifacts and all
+additional run states. Gate, Shield and Drone optional `tui` consumer compilation
+passed offline with disposable manifests after the expanded public APIs;
+workspace consumer lockfiles were preserved. This is compilation evidence, not
+consumer adapter execution.
+
+Human visual acceptance, native Linux/Windows and broader keyboard/assistive
+acceptance remain pending. Dialog timing, remaining handoff changes and the new
+Question Form/Permission Review are outside this verified implementation scope.
+
+## Dialog alignment engineering record — 2026-10-10
+
+Verified scope: timed arrival and FIFO ownership, the 300 ms key guard, app-owned
+two-press closure, attention intents, removal/replacement/clear notices, exact-name
+and timed irreversible confirmation, plus artifact/options host composition.
+The gallery supplies 36 named Dialog scenarios. Host `make -C packages/tui check`
+passed 205 tests, four doctests, formatting, strict Clippy, private-item API docs
+and dependency auditing. The release library/gallery build passed. A fresh
+gallery-disabled nextest run passed 165 tests. Gate, Shield and Drone optional
+TUI compilation passed offline with disposable manifests after the Dialog API
+changes; workspace lockfiles were preserved.
+
+The native macOS PTY test waits for observable guard expiry, closes one nested
+layer with two Ctrl-C presses without quitting, restores parent focus and verifies
+exact terminal attributes on exit. Behavioral coverage exercises queued-body
+ownership on clear, withdrawn arrivals, stale tickets and confirmation intent
+qualification. Gallery effects remain deterministic simulations. Human visual
+acceptance, native inline hosting and Linux/Windows acceptance remain pending.
+Later Command Palette and other handoff changes require their own verification.
+
+## Command Palette alignment engineering record — 2026-10-10
+
+Verified scope: prefix/word-start/alias ranking after exact effective keys,
+captured opening height, empty scopes and complete-key-map evidence, unavailable
+and conflict wording, bounded profile rendering and timed input in the gallery.
+The palette preserves its dock above the draft and centers horizontally at up to
+72 columns. All 25 scenarios exercise public command behavior with simulated
+host effects. Host `make -C packages/tui check` passed 210 tests, four doctests,
+formatting, strict Clippy, private-item API docs and dependency auditing.
+
+Native macOS PTY coverage verifies the opening guard, first Ctrl-C arming,
+second Ctrl-C closing without quitting, draft preservation and exact terminal
+restoration. Rendering coverage verifies that a boxed palette clears caller
+attributes inside its panel while preserving the surrounding backdrop. The
+release library/gallery build passed; gallery-disabled nextest passed 169 tests.
+The strengthened border assertion also passed a focused rerun. All 391 local
+links and anchors resolved; both repositories passed whitespace checks, and
+ownership checks preserve public source/specs and private design references.
+Gate and Drone optional TUI compilation passed using disposable manifests. Shield's
+current consumer tree fails independently in `src/policy/compiled.rs`: its
+`matches` and `work` helpers pass `Arc<PikeVM>` where `PikeVM` is expected.
+The refreshed disposable manifest includes current consumer dependencies;
+workspace sources and lockfiles remain untouched by this check. Human
+visual acceptance, host execution and Linux/Windows acceptance remain pending.
+
+## Completion Menu alignment engineering record — 2026-10-11
+
+Verified scope: alias ranking, captured opening height, distinct five-second
+timeout warnings, source labels, partial-source insertion and Alt-R retry,
+separate activity/footer hints, unavailable-command recovery and 30 interactive
+gallery scenarios. Ctrl-R retains Composer history search. Host
+`make -C packages/tui check` passed 217 tests, four doctests, formatting, strict
+Clippy, private-item API documentation and dependency auditing. The release
+library/gallery build passed; gallery-disabled nextest passed 175 tests.
+
+Behavioral coverage checks fresh retry identities, retained successful sources,
+stale and repeated events, F1 help without draft loss, command removal before
+invocation, byte-limit refusal, disabled reasons and whole-grapheme clipping.
+Four updated rendering snapshots were reviewed and accepted. Native macOS PTY
+coverage verifies Alt-R retry, Ctrl-R history search, draft preservation, picker
+return, resize and exact terminal restoration. Gallery host effects remain
+deterministic simulations.
+
+Gate, Shield and Drone optional TUI consumer compilation passed with refreshed
+disposable manifests. Drone's copied lockfile required offline resolution in the
+temporary directory before its locked check. Shield's earlier compilation blocker is resolved in its current tree;
+its existing unused-import warning is outside this TUI change. Consumer checks
+preserve workspace sources and lockfiles. The local documentation check resolved
+390 links and anchors across 32 Markdown files before adding this record's links.
+Both Gate repositories passed whitespace checks, and ownership checks preserve
+public source/specs and private design references. Human visual acceptance,
+native Linux/Windows and real consumer discovery/execution remain pending.
+
+## Composer alignment engineering record — 2026-10-11
+
+Verified scope: identified host-confirmed stop/interrupt/background controls,
+completion races, acceptance-aware queue resumption, original-payload recovery
+on blank queue saves, five-second failed-save retries, explicit restore failures,
+guarded editor conflicts, late editor results and undoable returns. Typed
+paste/image/file atoms survive recall, stashing, storage and unchanged external
+editor tokens. Schema 2 decoding retains compatibility with schema 1 snapshots.
+Chat keeps queue rows directly above one activity row and the fixed dock. Shell
+previews fold logical output after twenty lines, retaining the real first three
+and last two lines even beyond the layout budget; copying retains the full loaded
+source. The gallery has 99 named Composer entries covering 97 distinct initial
+states. Named presets allow live F4 color and Ctrl-T theme switching.
+
+Host `make -C packages/tui check` passed 227 tests, four doctests, formatting,
+strict Clippy, private-item API documentation and dependency auditing. All forty
+added Composer frames exercise live public APIs. Reviewed snapshots reflect
+the fixed queue/activity order, separate completion/draft hints and retained
+narrow Escape help. Native macOS PTY checks cover cancellation failure/retry,
+host confirmation, retained drafts/carets, completion retry/history routing,
+picker restoration, resize and exact terminal restoration.
+
+The release library/gallery build passed during this alignment. Gallery-disabled
+nextest passed 182 tests after the public work-control and typed-atom contracts.
+Gate, Shield and Drone compiled offline with optional `tui` using disposable
+manifests and the pinned package toolchain; workspace source and lockfiles were
+preserved. Offline dependency resolution was confined to temporary verification
+directories. Documentation links, ownership and both repository whitespace diffs
+passed. Human visual acceptance, native Linux/Windows, clipboard formats, IME
+coverage and real consumer storage/execution remain separate pending acceptance.
+
+## Tool Call Card engineering record — 2026-10-10
+
+Implemented scope: public lifecycle/output/group contracts, reusable cards and
+groups, Chat selection/anchors/search and identified copy/details/retry, plus
+44 deterministic gallery scenarios. `make -C packages/tui check` passed formatting,
+strict all-target/all-feature Clippy, 179 tests, four doctests, private-item API
+documentation and dependency auditing. Seventeen card/Chat behavioral tests cover
+lifecycle/revision guards, member updates, coalescing/final flush, exact omissions,
+source safety, preview/group folding, capability gating, identified effects,
+retry history, loaded search and draft/caret/anchor preservation. Four headless
+gallery tests exercise simulated effects and navigation; five reviewed rendering
+snapshots cover main, selected failure, capped expansion, narrow diff and NO_COLOR
+diff. The native macOS PTY workflow covers expansion, details search/copy, return
+to the draft cursor, picker return, resize, quit and exact terminal restoration.
+
+The release library/gallery build passed with `make -C packages/tui build`.
+Gallery-disabled nextest (`cargo nextest run --locked --no-default-features`)
+passed 143 tests. The final card regression rerun without gallery passed all
+seventeen card tests. Gate, Shield and Drone compiled offline with optional `tui`
+using disposable manifests/lockfiles; workspace lockfiles were not changed.
+Gate's existing timing/dead-code warnings remain outside this component's scope.
+All 374 local README/docs/spec links and anchors resolved. Public/private ownership
+and both repositories' whitespace checks passed; internal design work stayed private.
+
+Human visual acceptance, consumer execution/clipboard/permission adapters,
+native Linux/Windows and broader terminal/assistive acceptance remain pending.
+The [Tool Call Card review](human-testing.md#tool-call-card-review--complete-local-activity)
+provides runnable human steps. Dialog timing and Question Form are separate work.
+
 ## Completion Menu engineering record — 2026-10-10
 
 `make -C packages/tui check` passed formatting, strict Clippy, all 132 tests,

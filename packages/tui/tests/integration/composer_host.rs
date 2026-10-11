@@ -45,6 +45,36 @@ fn storage_round_trip_retains_pastes_and_rejects_truncation_and_unknown_schema()
 }
 
 #[test]
+fn schema_one_image_snapshot_remains_readable_with_typed_payloads() {
+    fn string(bytes: &mut Vec<u8>, text: &str) {
+        bytes.extend_from_slice(&(text.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(text.as_bytes());
+    }
+    let mut bytes = b"CANONIC-COMPOSER\x01".to_vec();
+    string(&mut bytes, "\u{e000}");
+    bytes.extend_from_slice(&3_u64.to_le_bytes());
+    bytes.push(0); // message mode
+    bytes.extend_from_slice(&0_u64.to_le_bytes()); // age
+    bytes.extend_from_slice(&1_u64.to_le_bytes()); // one atom
+    bytes.extend_from_slice(&0xe000_u32.to_le_bytes());
+    string(&mut bytes, "[image 1]");
+    string(&mut bytes, "[Image 1]");
+    bytes.push(1);
+    string(&mut bytes, "old-host-image");
+    for _ in 0..6 {
+        bytes.extend_from_slice(&0_u64.to_le_bytes());
+    }
+    bytes.extend_from_slice(&[0, 0, 0]); // absent recovery copies
+    let saved = SavedComposer::read_from(&mut bytes.as_slice(), 65_536).unwrap();
+    let atom = saved.draft.atoms.values().next().unwrap();
+    assert_eq!(atom.kind, canonic_tui::editor::AtomKind::Image);
+    assert_eq!(atom.reference.as_deref(), Some("old-host-image"));
+    let mut c = Composer::default();
+    assert!(c.restore_saved(&saved));
+    assert_eq!(c.editor().expanded_text(), "[Image 1]");
+}
+
+#[test]
 fn restart_protects_pending_submission_and_uncommitted_queued_edit() {
     use canonic_tui::event::{Event, KeyCode, KeyEvent, KeyModifiers};
     let enter = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));

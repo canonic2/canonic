@@ -38,6 +38,10 @@ pub enum End {
     Done(String),
     /// Cancellation with optional explanation.
     Stopped(String),
+    /// Host confirmed cancellation of this run.
+    Cancelled(String),
+    /// Host ended a run without a result, independent of cancellation or failure.
+    Interrupted(String),
     /// Failure with explanation; retry is a new host reply.
     Failed(String),
 }
@@ -104,6 +108,10 @@ impl Part {
 /// Content data, independent of transport, agent tools and terminal I/O.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Content {
+    /// Reusable identified tool lifecycle and safe textual output.
+    ToolCard(Box<crate::tool_call_card::Call>),
+    /// Overlapping calls in host start order with independent member state.
+    ToolGroup(crate::tool_call_card::ToolGroup),
     /// `CommonMark` with tables. Raw HTML and unsupported syntax stay readable.
     Markdown(String),
     /// Original source lines, optional language/file and starting line.
@@ -186,6 +194,14 @@ pub enum Updated {
 /// Explicit host work. Chat never opens files, retries agents or accesses a clipboard.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Intent {
+    /// Whole-run effect, independent of individual tool states and connectivity.
+    Run(crate::run_activity::Intent),
+    /// Tool effect, scoped to the loaded message/part and opaque card instance.
+    Tool {
+        message: String,
+        part: String,
+        intent: crate::tool_call_card::Intent,
+    },
     /// Copy clean semantic content; acknowledge actual clipboard success/failure.
     Copy {
         request: Request,
@@ -327,6 +343,12 @@ impl Content {
     }
     pub(super) fn sanitize(&mut self) {
         match self {
+            Self::ToolCard(call) => call.sanitize(),
+            Self::ToolGroup(group) => {
+                for call in &mut group.calls {
+                    call.sanitize();
+                }
+            }
             Self::Markdown(t) | Self::Status(t) => *t = safe(t),
             Self::Code {
                 text,
@@ -388,6 +410,15 @@ impl Content {
     }
     pub(super) fn bytes(&self) -> usize {
         match self {
+            Self::ToolCard(call) => call.bytes(),
+            Self::ToolGroup(group) => {
+                group.id.len()
+                    + group
+                        .calls
+                        .iter()
+                        .map(crate::tool_call_card::Call::bytes)
+                        .sum::<usize>()
+            }
             Self::Markdown(t) | Self::Status(t) => t.len(),
             Self::Code {
                 text,
@@ -431,6 +462,9 @@ impl Content {
         }
     }
     pub(super) fn bound(&mut self, budget: usize) -> (usize, usize) {
+        if matches!(self, Self::ToolCard(_) | Self::ToolGroup(_)) {
+            return self.bound_tools(budget);
+        }
         let before = self.bytes();
         let mut left = budget;
         let mut lines = 0;
@@ -444,6 +478,7 @@ impl Content {
             left = left.saturating_sub(end);
         };
         match self {
+            Self::ToolCard(_) | Self::ToolGroup(_) => unreachable!("bounded above"),
             Self::Markdown(t) | Self::Status(t) => cut(t),
             Self::Code {
                 text,
@@ -524,5 +559,22 @@ impl Content {
             }
         }
         (before.saturating_sub(self.bytes()), lines)
+    }
+    fn bound_tools(&mut self, budget: usize) -> (usize, usize) {
+        let before = self.bytes();
+        match self {
+            Self::ToolCard(call) => {
+                call.bound(budget);
+            }
+            Self::ToolGroup(group) => {
+                let mut left = budget.saturating_sub(group.id.len());
+                for call in &mut group.calls {
+                    call.bound(left);
+                    left = left.saturating_sub(call.bytes());
+                }
+            }
+            _ => {}
+        }
+        (before.saturating_sub(self.bytes()), 0)
     }
 }

@@ -62,18 +62,28 @@ make -C packages/tui run CARGO_FLAGS="-- --component composer --scenario main"
    Chips move/delete/undo atomically. First Enter removes hidden format controls
    without sending; joined emoji remain intact. Pasted !, / and @ never execute.
 5. Inspect `shell`, `shell-output`, `file-reference`, `file-inserted`, `slash`
-   and `email`. F3 expands shell output. File selection inserts editable text;
+   and `email`. F3 expands shell output. File selection inserts an atomic host reference;
    command selection emits its ID. F1 shows composer bindings.
 6. In `editor-open`, F11 returns text. In `editor-conflict`, choose 1 or 2,
    Enter confirms; Esc keeps the box. The other version goes to stash. Empty/
    failed returns preserve text. Late callbacks cannot replace a newer lifetime.
-7. Esc closes the nearest overlay/recall, cancels editor waiting or stops work
-   and pauses the queue. Idle Esc twice clears text or recalls a rewind copy;
+7. Esc closes the nearest overlay/recall or cancels editor waiting. During work,
+   Esc and Ctrl-C request one stop and pause the queue; the draft remains. In
+   `cancelling`, a repeated Esc emits nothing; F6 reports failure and Esc retries
+   with a fresh ticket. F5 confirms the stop. `shell-background-requested` also
+   waits for F5 before releasing the foreground. Idle Esc twice clears text or recalls a rewind copy;
    rewind emits only when sending. Ctrl-C clears idle text, then twice on empty
    requests quit. Resize does not cancel an armed confirmation.
 8. F10 opens scenarios; F10 returns with the current draft intact. Esc through
    pickers retains their selection/search/scroll. Cycle F4 and resize to 40
    columns; dashed recall must remain readable in NO_COLOR and ASCII.
+9. Review `queue-full`, `queue-saved-blank`, `queue-resume-waits`,
+   `queue-held-at-turn-end`, `restore-failed`, `save-failed`, `stash-full`,
+   `editor-too-large`, `editor-read-failed`, `editor-stopped-waiting` and
+   `editor-late-return`. Recovery preserves payload identities and the newer draft.
+   Failed autosave retries after five seconds; an empty queue save stashes the original.
+   In `queue-forty-columns`, queue rows sit directly above one activity row and
+   the dock; Escape stays visible. Check `leader-waiting` quietly expires after three seconds.
 
 ## Completion Menu review
 
@@ -91,18 +101,26 @@ make -C packages/tui run CARGO_FLAGS="-- --component completion-menu --scenario 
    the explicit closest guess and Enter sends the original token instead.
 3. Check `loading` and `still-loading`: the dock stays put while results arrive.
    Open `error` and Tab to retry; the draft survives. `partly-failed` keeps good
-   results with a nonselectable warning. Disabled rows show reasons and are skipped.
+   results with a nonselectable warning. Tab still inserts; Alt-R retries the failed
+   source and Ctrl-R opens history. `timeout` is a warning and rejects the old reply
+   after retry. Disabled rows show reasons and are skipped.
 4. Check `command-inserted` faded argument help is not editable payload. Move
    within a token, then outside it; Escape preserves text, and ordinary subsequent
    typing does not reopen the same token. Paste stays data. Open `doesnt-open`.
-5. Check `long-description`, `mixed-sources`, `narrow` and all four profiles;
+5. Check `long-description`, `mixed-sources`, `narrow`, `under-thirty-columns`,
+   `wide-name-clipped`, `menu-no-color`, `menu-ascii` and `menu-light`;
    resize below 30 columns. One selected band remains readable, descriptions
    expand within the same body height and fallback chrome retains meaning.
-6. Escape/F10 back through both pickers; searches, selections and scroll positions
+6. Check `shell-path` and its inserted state: plain path and trailing space with
+   no @ or chip. Check dismissed typing, new trigger, leaving the word and pasted
+   slash. `replacement-too-long` keeps the menu/draft with an activity notice;
+   `removed-before-enter` keeps the draft and emits no command or submission.
+   Menu keys appear in activity and the footer keeps Composer's Enter meaning.
+7. Escape/F10 back through both pickers; searches, selections and scroll positions
    survive. Quit with Ctrl-C and verify normal shell input is restored.
 
-Status: implementation and engineering verification complete; human visual review
-pending. No consumer rollout or commit is implied by this review.
+Status: expanded implementation complete; [engineering verification passed](verification.md#completion-menu-alignment-engineering-record--2026-10-11)
+and human visual review pending. No consumer rollout or commit is implied by this review.
 
 ## Gate 3b.1 — box modes and protected draft
 
@@ -125,13 +143,13 @@ storage, shell execution and clipboard responses are deterministic simulations;
 consumer integrations must verify their real host callbacks and persistence.
 
 The dated engineering summary is recorded in
-[Verification](verification.md#composer-engineering-record--2026-10-10).
+[Verification](verification.md#composer-alignment-engineering-record--2026-10-11).
 These steps request human acceptance of the demonstrated component scope.
 
 ## Gate 2c — commands and bindings
 
-Implemented; human acceptance pending. This gate does not accept the remaining
-dialog timing or inline chat screen-transition work.
+Implemented; human acceptance pending. This gate does not accept Dialog policies
+or inline chat screen transitions, which have their own scopes.
 
 ```sh
 make -C packages/tui run CARGO_FLAGS="-- --component commands --scenario main --colors truecolor"
@@ -145,7 +163,9 @@ make -C packages/tui run CARGO_FLAGS="-- --component commands --scenario main --
    Esc clears the query first, then closes. No-match has no Enter hint.
 3. F1 opens full-screen keys, hiding the dock. Search a key or label; Tab changes
    scope. Esc clears then closes, restoring the message box and its draft.
-   F3 switches between docked palette and full-screen keys.
+   F3 switches between docked palette and full-screen keys. Empty help scopes
+   remain reachable; searching `ctrl+q` reports its availability only for the
+   complete simulated host map.
 4. F5 remaps Ctrl-P to Ctrl-O; both views show the effective key. Close and use
    Ctrl-O to reopen. F2 cycles the custom/conflict fixtures: the selected row shows
    default keys and source/conflict details. `o` prints a source inspection intent.
@@ -154,10 +174,18 @@ make -C packages/tui run CARGO_FLAGS="-- --component commands --scenario main --
    wait 3 seconds: the strip disappears. Esc quietly cancels. Ctrl-X then `z`
    shows mismatch feedback for 3 seconds. Paste while pending never edits the draft.
 6. F6 changes focus and F5 replaces the map; both cancel pending input. Ctrl-C
-   exits even while pending. F2 cycles twelve design states, including empty,
+   exits at the host even while pending. With the palette/help open, the first
+   Ctrl-C arms closure and the second closes without quitting. F2 cycles 25 states, including empty,
    unavailable and no-match. Long lists page/scroll. Resize to 40 columns and short
    heights; optional details disappear before labels/keys. F4 checks all color
    fallbacks. Modified Enter never confirms a search result.
+7. Try `alias`, `slash`, `empty-scope`, `keys-empty-scope`, `keys-no-match`,
+   `unavailable-after-selection`, `short-terminal`, `forty-columns`,
+   `palette-no-color`, `palette-ascii`, `palette-light`, `keys-no-color` and
+   `hints-light` through F10. Filtering preserves opening height; host refusal
+   keeps the draft and shows its reason for three seconds. In NO_COLOR disabled
+   reasons include `[-]`, conflicts show `! wins`/`! overridden`, and selection
+   uses reverse video. Native visual acceptance remains pending.
 
 Report pass/fail by step before committing. The
 [command contract](components/command-palette.md#commands-completion-and-help) defines behavior. Ctrl-P docking and F1 full-screen
@@ -270,10 +298,10 @@ make -C packages/tui run
    before closing and restores the previous target.
 2. Type words; Home/End and Ctrl-A/Ctrl-E move to the visible wrapped row ends.
    Ctrl-G selects all (Ctrl-Shift-A also works where encoded distinctly).
-   Shift-arrows extends selection. Ctrl-W deletes a word; Ctrl-U/Ctrl-K deletes
+   Shift-arrows extends selection. Ctrl-W kills back to the previous space; Ctrl-U/Ctrl-K kills
    to logical line start/end. Ctrl-J inserts newline; standalone Enter does too.
 3. Paste two lines; the footer confirms paste and text is tinted until the next
-   key or three seconds. Ctrl-Z undoes the complete paste; Ctrl-Y restores it.
+   key or three seconds. Ctrl-Z undoes the complete paste; Alt-Z restores it.
    Ctrl-minus/Ctrl-period are alternatives. Type a word quickly: one undo removes
    the group. Pause over a second, type more and verify a separate undo step.
 4. F2 cycles focused → blurred → empty → wrap → selection → Unicode → scrolled
@@ -337,7 +365,7 @@ make -C packages/tui run CARGO_FLAGS="-- --component picker --scenario main --co
    inert. F2 continues cycling after confirmation.
 3. **Filter:** reach filter (four F2 presses from default). Ctrl-G then paste
    `example29`: one result has detail `updated 29 hours ago`; Enter reports
-   `Selected branch-29`. Repeat with Ctrl-Z/Ctrl-Y undo/redo. Digits edit the query.
+   `Selected branch-29`. Repeat with Ctrl-Z/Alt-Z undo/redo. Digits edit the query.
    Esc clears it first while retaining picker height; Esc again returns to scenarios, then Esc returns to catalog.
    No-match displays its own message and cannot select in single mode.
 4. **Multiple:** reach multi (seven F2 presses from default). One row is marked.
@@ -437,7 +465,7 @@ The [dialog panel contract](components/dialog.md#official-dialog-design) is impl
 centered panels, content-driven height, fill/inset fields, faded background, action
 footers, title trails and boxed ANSI 16/no-color fallback. Human acceptance is
 pending. Typing-aware arrival and timed removal notices belong to the separate
-2b.2 gate; passing this gate does not accept those unimplemented states.
+2b.2 gate; passing this gate does not accept its timing and caution behavior.
 
 The user rejected the first visual handoff on 2026-10-09 and supplied a revised
 contract: one centered panel in every view. The corrected panel is awaiting
@@ -474,7 +502,7 @@ make -C packages/tui run CARGO_FLAGS="-- --component dialog --scenario main --co
    adds a newline; Shift-Enter and Alt-Enter do too when distinctly encoded by the
    terminal. Plain Enter submits. The panel grows and recenters; the field stops growing at six rows
    and scrolls with its caret visible. Left/right cross the entire emoji in one
-   step without stopping on its second cell. Ctrl-Z/Ctrl-Y undo/redo the paste.
+   step without stopping on its second cell. Ctrl-Z/Alt-Z undo/redo the paste.
    Ctrl-G then Esc clears selection before a second Esc closes the layer.
 3. **Nested/lifecycle:** reopen with F3, edit its prompt, then F3 again. Only the
    child body displays; its title trail includes the parent. Esc restores the
@@ -519,11 +547,17 @@ allowed duplicate-version warnings.
 
 ### Gate 2b.2 — arrival and removal timing
 
-Unimplemented. After the visual gate is accepted and committed, add explicit
-host-clock arrival deferral within one second of typing, waiting activity with
-Ctrl-G opening, and a three-second host removal reason. Provide deterministic
-waiting/removal fixtures and a separate human gate. The user authorized starting
-commands/bindings separately; that does not accept this timing gap.
+Implemented reusable policies; human acceptance pending. Open Dialog `waiting`:
+type continuously, then pause for one second; the panel must preserve the draft.
+Reopen and press Ctrl-G to open immediately. In `key-guard`, Enter/digits cannot
+answer for 300 ms; letters still type. In `away`, inspect the simulated attention
+request and waiting duration. In `child-removed`, verify parent focus and the
+three-second reason. Ctrl-C/Ctrl-D must arm, then close one layer without quitting.
+In `danger-armed`, confirm only with a second Enter within three seconds; in
+`danger-expired`, Enter must arm again. In `type-name`, verify exact matching and
+that paste does not submit. Check `inside-error`, `tiny-content`, `tall-panel`,
+ASCII/light and ANSI 16/NO_COLOR profiles. Engineering results and native inline
+hosting remain independent of this human review.
 
 ## Chat review — complete local conversation
 
@@ -543,10 +577,45 @@ Review the product content without counting gallery title/F-key rows.
    without moving Composer. F6 preserves failed partial output; Ctrl-X R retries.
 6. Check narrow-40, ansi16, no-color and ascii, including Unicode source,
    copied code, visible signs and native terminal selection.
+7. Open copy-pending and link-pending. F6 refuses the effect; selection and
+   draft remain. Y/O requests again and F5 confirms. Table-inspection-pending
+   opens full content only after F5; Esc restores the draft. Earlier-loading and
+   newer-loading block duplicate/cross-direction requests; F6 retains a retry
+   hint and Alt-Home/Alt-End creates a fresh request. Inspect quiet-note,
+   timestamps-hidden, attachment-unknown and host-suggestions. Search-ansi16,
+   search-no-color and search-narrow-ascii retain match navigation and Esc.
 
 Engineering evidence does not record human visual acceptance. The real host
 owns clipboard, opening, history storage and agent execution; this review uses
 the gallery's local acknowledgements.
+
+## Tool Call Card review — complete local activity
+
+Run `make -C packages/tui run CARGO_FLAGS="-- --component tool-call-card --scenario main"`.
+
+1. Compare queued/running/waiting/completed/failed/cancelled, text/code/diff,
+   unknown and not-shown. Check words, duration, indentation and the fixed dock.
+2. Type a draft and move the caret. Ctrl-X V selects cards; arrows move blocks,
+   Enter expands/collapses, Y/C copy clean retained call/output and Escape returns.
+   Type again and confirm that the original caret and draft survive.
+3. In failed-selected, R adds a new retry below the dim folded original. Review
+   retry-refused, copy-failed and details-failed: failures do not invent success.
+4. In large-output, select and O for details. `/` searches `(700)`, N finds next,
+   Y simulates copy-all and Escape returns to the same card. Expanded-capped shows
+   first ten/last ten and an explicit 1,184-line omission marker.
+5. Review three-at-once, out-of-order, all-done, all-succeeded and many-at-once.
+   Each call stays in start order; failures remain visible and group Enter reveals
+   hidden members. Streaming-large and F8 grow output without growing its tail.
+6. Review narrow/narrow-diff/narrow-failed, palette-16, without-color,
+   without-color-diff and ascii. Check complete narrow durations, visible signs,
+   reversed no-color head, wrapping and capability-gated hints. Resize while selected.
+7. F10 and Escape return through pickers; confirm remembered query/selection/scroll.
+   No-ack holds effects; delayed-ack F7 succeeds; stale-ack F7 rejects the old result.
+
+This review is pending human acceptance. Engineering snapshots and macOS PTY tests
+provide separate evidence. Clipboard, execution and permissions remain host-owned;
+gallery effects are only local simulations. Dialog timing and broader platform
+acceptance remain independent work.
 
 ## Acceptance record
 
@@ -555,11 +624,12 @@ the gallery's local acknowledgements.
 | 0 | Passed during foundation commit; recorded in verification | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
 | 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
 | 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: private `f3e7579`, public `17e53d5` |
-| 2b | 2b.1 engineering passed; 2b.2 unstarted | Fallback visual review pending | Explicit checkpoint: private `4c6260d`, public `05857ee`; timing and inline transition remain pending |
+| 2b | Foundation engineering recorded; timed policies and 36 scenarios implemented | Expanded visual review pending | Foundation checkpoint: private `4c6260d`, public `05857ee`; new work uncommitted; native inline transition separate |
 | 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
 | Composer | Complete local workflow and native host adapters implemented; current engineering checks recorded above | Native visual review remains separate | Review complete component; commit only when requested |
-| Completion Menu | Complete reusable component, Composer integration and 15 interactive states; [engineering record](verification.md#completion-menu-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
+| Completion Menu | Reusable component, Composer integration and 30 interactive states; expanded engineering checks passed | Complete visual review pending | Review complete component; commit only when requested |
 | Chat | Rich component and 51 interactive states; [engineering record](verification.md#chat-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
+| Tool Call Card | Complete local cards/groups, Chat integration and 44 interactive states; [engineering record](verification.md#tool-call-card-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
 | 5–13 | Other capabilities retain their documented gaps | Not presented | Complete components in dependency order |
 
 Slice 1 engineering: `make -C packages/tui check` passed formatting, strict

@@ -26,21 +26,32 @@ empty source and no matches have separate messages. No retries or loading run.
 `Filter::Auto` enables filtering above seven choices; On/Off override it. The
 bounded 4 KiB query uses the editor's grapheme selection, paste and undo. Matching
 is a lowercased subsequence, ignoring query whitespace. Label matches rank before
-detail matches; score sums matched grapheme positions, with source order breaking
-ties. Whole matched graphemes are bold/underlined. This local algorithm owns no
+detail matches. Within each field, contiguous prefix matches rank first, then
+contiguous matches at a word start, then fuzzy subsequences. A word starts after
+a non-alphanumeric character; source order breaks ties within each class.
+Whole matched graphemes are bold/underlined. This local algorithm owns no
 remote query generation or locale/normalization service.
 
 Arrows/page/Home/End move among enabled rows and keep highlight visible, including
 group headers and single-line choice rows. Disabled rows remain explanatory but
-cannot be chosen. Danger rows are never implicit defaults. F3 returns `Inspect`
-without confirming. Multi-selection is a separate
+cannot be chosen. Danger rows are never implicit defaults or host pre-marks;
+explicit Space, digits and Alt-A can mark them. F3 returns `Inspect` only when
+the host enables an inspection view with `set_inspect_available`; its hint is
+visible only then. Multi-selection is a separate
 explicit mode with selected set and final submit; ordinary single-choice Enter
 must not change meaning because a consumer supplies many rows. Returned IDs refer
 to supplied data, never filtered positions. Compatibility adapters can retain
 current original-index results for static choices: the original `Picker`/`Action`
 API remains unchanged. Space toggles a mark; Alt-A toggles matching enabled rows.
 Hidden marks survive the query and final `Confirmed` IDs follow source order.
-With a nonempty source an empty marked set can confirm. Plain Enter press is the
+An empty marked set can confirm by default when the source contains choices.
+With an empty source, Enter is inert and only cancellation is offered.
+`set_selection_limits(minimum, maximum)` supplies host-owned constraints;
+conflicting bounds reject atomically. A changed maximum retains marks in source
+order up to that limit. At the maximum, unmarked rows fade but remain reachable
+and cannot gain a mark until one is removed. Below the minimum Enter emits no
+intent. Alt-A toggles matching enabled rows, including danger rows, adding only
+up to the maximum in ranked display order. Plain Enter press is the
 only final confirmation; repeated/modified Enter, paste and disabled shortcuts
 are inert. Esc clears a nonempty query before returning `Cancelled`.
 
@@ -62,6 +73,13 @@ semantic styles, rules and cell tokens, reserves key/current/mark columns,
 aligns details, drops details first and truncates labels by grapheme. Opening
 height stays stable while filtering; groups count toward paging. The gallery
 owns placement and the independent draft, without another terminal loop.
+
+Multiple-choice marks use ◉/○ in Unicode RGB/indexed profiles and `[x]`/`[ ]`
+in ANSI 16, NO_COLOR and ASCII. Disabled rows carry `[-]` in the mark/shortcut
+column and faded labels. NO_COLOR retains Unicode rules unless ASCII is selected
+separately. Below 50 columns, the footer retains only Esc's current meaning.
+The gallery retains a cancelled result as `→ cancelled`; hosts may supply their
+own wording without converting cancellation into a choice.
 
 Current picker presentation: labels explicitly reset foreground and
 remove inherited dim styling; active enabled labels stay bold. The first blank
@@ -86,6 +104,10 @@ Hosts supply choices, status and defaults, own placement/focus, refresh the
 source, and recheck/execute returned intents. The picker starts no asynchronous
 loading, remote search, filesystem operation or terminal loop. Its query editor
 follows the [Editor contract](editor.md).
+
+`notice()` exposes local bound feedback (`mark at least N` / `unmark one first`)
+for the host's activity/status row. The title counts marks, host maximum and
+hidden marks; neither feedback nor a highlighted row changes the confirmed set.
 
 ## Acceptance criteria
 

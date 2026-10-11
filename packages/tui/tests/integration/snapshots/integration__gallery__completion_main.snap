@@ -10,23 +10,23 @@ acme · 00:38
 
 
 
+
 commands ──────────────────────────────────────────────────── 34
-  /handoff       copy a summary for another agent         recent
-  /code-review   review the diff for regressions         project
-  /commit        commit scoped changes after checks      project
-  /fix-checks    restore failing checks                  project
+  /handoff       copy a summary for another       skill · recent
+                 agent
+  /code-review   review the diff for regress⋯  command · project
+  /commit        commit scoped changes after⋯  command · project
+  /fix-checks    restore failing checks        command · project
   /clear         local host command
   /compact       local host command
   /model         local host command
-  /resume        local host command
-────────────────────────────────────────────────────── ↓ 26 more
-
+────────────────────────────────────────────────────── ↓ 27 more
 ↑↓ choose · tab / enter inserts · esc closes
 message ────────────────────────────────────────────────────────
 /
 
 
 ──────────────────────────────────────────── orbit-api#276 ~chat
-↑↓ choose · tab / enter inserts · esc closes
+actions on · enter sends · F1 keys
 
 Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · C

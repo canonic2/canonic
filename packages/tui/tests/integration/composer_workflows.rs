@@ -82,7 +82,7 @@ fn completion_rejects_stale_results_and_loading_tab_without_losing_query() {
     assert!(c.overlay_open());
     assert!(c.complete(&current, Ok(vec![item])));
     c.update(&key(KeyCode::Tab));
-    assert_eq!(c.editor().text(), "@src/main.rs ");
+    assert_eq!(c.editor().expanded_text(), "@src/main.rs ");
     assert!(!c.overlay_open());
     assert!(!c.complete(&current, Err("late error")));
     assert!(c.take_intents().is_empty());
@@ -212,7 +212,9 @@ fn stopping_and_errors_pause_until_explicit_send_and_restart_never_sends() {
     c.update(&key(KeyCode::Esc));
     assert!(c.queue_paused());
     assert_eq!(c.editor().text(), "preserved");
-    assert!(c.take_intents().iter().any(|i| matches!(i, Intent::Stop)));
+    assert!(c.take_intents().iter().any(
+        |i| matches!(i, Intent::Work(r) if r.action == canonic_tui::composer::WorkAction::Stop)
+    ));
     assert!(c.turn_ended(true).is_none());
     let saved = c.saved();
     let mut restored = Composer::default();
@@ -228,6 +230,185 @@ fn stopping_and_errors_pause_until_explicit_send_and_restart_never_sends() {
     queued(&mut restored, "after error");
     assert!(restored.turn_ended(false).is_none());
     assert!(restored.queue_paused());
+}
+
+#[test]
+fn work_controls_wait_for_identified_acknowledgement_and_completion_wins() {
+    use canonic_tui::composer::WorkAction;
+    let mut c = Composer::default();
+    c.set_working(true);
+    queued(&mut c, "waiting");
+    c.set_text("draft preserved");
+    let checkpoint = c.checkpoint();
+    c.update(&ctrl('c'));
+    let request = c.work_request().unwrap().clone();
+    assert_eq!(request.action, WorkAction::Stop);
+    assert!(c.is_busy());
+    assert!(c.status().contains("cancelling"));
+    assert!(!c.status().contains("stopped"));
+    c.update(&key(KeyCode::Esc));
+    c.update(&ctrl('c'));
+    assert_eq!(c.take_intents().len(), 1);
+    assert_eq!(c.checkpoint(), checkpoint);
+    assert!(
+        c.acknowledge_work(&request.ticket, Err("host unavailable"))
+            .0
+    );
+    assert!(c.is_busy());
+    assert_eq!(c.checkpoint(), checkpoint);
+    c.update(&key(KeyCode::Esc));
+    let retry = c.work_request().unwrap().clone();
+    assert_ne!(retry.ticket, request.ticket);
+    assert!(!c.acknowledge_work(&request.ticket, Ok(())).0);
+    assert!(c.turn_ended(true).is_none());
+    assert!(!c.acknowledge_work(&retry.ticket, Ok(())).0);
+    assert_eq!(c.checkpoint(), checkpoint);
+    assert!(c.queue_paused());
+}
+
+#[test]
+fn interrupt_and_background_only_release_foreground_after_host_confirmation() {
+    use canonic_tui::composer::WorkAction;
+    let mut c = Composer::default();
+    c.set_working(true);
+    queued(&mut c, "one");
+    queued(&mut c, "two");
+    c.set_text("draft");
+    assert!(c.send_next_now().is_none());
+    let request = c.work_request().unwrap().clone();
+    assert_eq!(request.action, WorkAction::InterruptAfterStep);
+    assert_eq!(c.queue().len(), 2);
+    assert!(c.is_busy());
+    let (accepted, sent) = c.acknowledge_work(&request.ticket, Ok(()));
+    assert!(accepted);
+    assert_eq!(sent.unwrap().text, "one");
+    assert_eq!(c.queue().len(), 1);
+    assert_eq!(c.editor().text(), "draft");
+    assert!(!c.acknowledge_work(&request.ticket, Ok(())).0);
+
+    let mut shell = Composer::default();
+    shell.update(&key(KeyCode::Char('!')));
+    shell.set_working(true);
+    sequence(&mut shell, KeyCode::Char('b'));
+    let request = shell.work_request().unwrap().clone();
+    assert_eq!(request.action, WorkAction::Background);
+    assert!(shell.is_busy());
+    assert_eq!(shell.background_count(), 0);
+    assert!(shell.acknowledge_work(&request.ticket, Ok(())).0);
+    assert!(!shell.is_busy());
+    assert_eq!(shell.background_count(), 1);
+    assert!(shell.finish_background(&request.ticket));
+    assert!(!shell.finish_background(&request.ticket));
+}
+
+#[test]
+fn resume_waits_for_acceptance_and_requests_one_interrupt_before_sending() {
+    use canonic_tui::composer::WorkAction;
+    let mut c = Composer::default();
+    c.set_text("pending");
+    let first = c.submit().unwrap();
+    queued(&mut c, "one");
+    queued(&mut c, "two");
+    assert!(c.send_next_now().is_none());
+    assert!(c.status().contains("resuming"));
+    assert!(c.acknowledge(&first.ticket, Ok(())));
+    let work = c.work_request().unwrap().clone();
+    assert_eq!(work.action, WorkAction::InterruptAfterStep);
+    assert!(c.is_busy());
+    assert!(c.send_next_now().is_none());
+    let (accepted, submission) = c.acknowledge_work(&work.ticket, Ok(()));
+    assert!(accepted);
+    assert_eq!(submission.unwrap().text, "one");
+    assert_eq!(c.queue().len(), 1);
+}
+
+#[test]
+fn blank_queue_save_stashes_original_payload_and_editor_return_is_undoable() {
+    let mut c = Composer::default();
+    c.set_working(true);
+    c.insert_image("host-image");
+    assert!(c.update(&key(KeyCode::Enter)).is_none());
+    c.set_text("independent draft");
+    let checkpoint = c.checkpoint();
+    assert!(c.edit_queued(1));
+    c.update(&ctrl('g'));
+    c.update(&key(KeyCode::Backspace));
+    c.update(&key(KeyCode::Enter));
+    assert!(c.queue().is_empty());
+    assert_eq!(c.checkpoint(), checkpoint);
+    assert!(c.restore_stash(1));
+    assert_eq!(
+        c.editor()
+            .document()
+            .atoms
+            .values()
+            .next()
+            .unwrap()
+            .reference
+            .as_deref(),
+        Some("host-image")
+    );
+
+    let mut c = Composer::default();
+    c.set_text("original");
+    c.update(&key(KeyCode::Left));
+    let checkpoint = c.checkpoint();
+    let request = c.begin_editor("nvim").unwrap();
+    assert!(c.finish_editor(&request.ticket, EditorResult::Text("returned".into())));
+    c.update(&ctrl('z'));
+    assert_eq!(c.checkpoint(), checkpoint);
+    let request = c.begin_editor("nvim").unwrap();
+    c.update(&key(KeyCode::Esc));
+    assert!(matches!(
+        c.take_intents().last(),
+        Some(Intent::EditorCancelled(_))
+    ));
+    assert!(!c.finish_editor(&request.ticket, EditorResult::Text("late".into())));
+    assert_eq!(c.checkpoint(), checkpoint);
+    assert!(c.status().contains("ignored"));
+}
+
+#[test]
+fn file_completion_is_atomic_and_retains_host_identity_through_recovery() {
+    use canonic_tui::{composer::SavedComposer, editor::AtomKind};
+    let mut c = Composer::default();
+    c.set_completions(vec![CompletionItem {
+        id: "host-file-identity".into(),
+        value: "src/digest.rs".into(),
+        detail: String::new(),
+        kind: CompletionKind::File,
+        disabled: None,
+        touched: false,
+    }]);
+    c.update(&key(KeyCode::Char('@')));
+    c.update(&key(KeyCode::Tab));
+    let document = c.editor().document();
+    let atom = document.atoms.values().next().unwrap();
+    assert_eq!(atom.kind, AtomKind::File);
+    assert_eq!(atom.reference.as_deref(), Some("host-file-identity"));
+    assert_eq!(c.editor().expanded_text(), "@src/digest.rs ");
+    c.update(&key(KeyCode::Left));
+    c.update(&key(KeyCode::Backspace));
+    assert_eq!(c.editor().expanded_text(), " ");
+    c.update(&ctrl('z'));
+    assert_eq!(c.editor().document().atoms, document.atoms);
+    c.stash_draft();
+    let saved = c.saved();
+    let mut bytes = Vec::new();
+    saved.write_to(&mut bytes).unwrap();
+    let decoded = SavedComposer::read_from(&mut bytes.as_slice(), 65_536).unwrap();
+    assert_eq!(decoded, saved);
+    assert!(c.restore_saved(&decoded));
+    assert!(c.restore_stash(1));
+    let editor = c.begin_editor("nvim").unwrap();
+    assert!(c.finish_editor(&editor.ticket, EditorResult::Text(editor.text.clone())));
+    assert_eq!(c.editor().document().atoms.values().next().unwrap(), atom);
+    let sent = c.submit().unwrap();
+    assert_eq!(sent.text, "@src/digest.rs ");
+    assert_eq!(sent.document.atoms.values().next().unwrap(), atom);
+    assert!(c.acknowledge(&sent.ticket, Err("offline")));
+    assert_eq!(c.editor().document().atoms.values().next().unwrap(), atom);
+    assert_eq!(c.editor().expanded_text(), "@src/digest.rs ");
 }
 
 #[test]
@@ -326,6 +507,8 @@ fn autosave_debounces_edits_retries_failures_and_rejects_stale_acknowledgements(
     assert!(c.acknowledge_save(&ticket, Err("disk full")));
     assert_eq!(c.editor().text(), "newer");
     c.tick(Duration::from_millis(500));
+    assert!(c.take_intents().is_empty());
+    c.tick(Duration::from_millis(4500));
     let Intent::Save {
         ticket: newer,
         state,
@@ -354,7 +537,11 @@ fn editor_conflicts_stash_both_choices_and_cancellation_invalidates_returns() {
         c.set_text("newer");
         assert!(c.finish_editor(&request.ticket, EditorResult::Text("returned".into())));
         assert!(c.overlay_open());
+        c.tick(Duration::from_millis(300));
         c.update(&key(KeyCode::Char(if choose_editor { '1' } else { '2' })));
+        assert!(c.overlay_open());
+        assert_eq!(c.editor().text(), "newer");
+        c.update(&key(KeyCode::Enter));
         assert_eq!(
             c.editor().text(),
             if choose_editor { "returned" } else { "newer" }
@@ -439,7 +626,7 @@ fn completions_do_not_submit_email_is_plain_and_hidden_characters_require_second
     c.update(&key(KeyCode::Char('@')));
     assert!(c.overlay_open());
     assert!(c.update(&key(KeyCode::Enter)).is_none());
-    assert_eq!(c.editor().text(), "@src/digest.rs ");
+    assert_eq!(c.editor().expanded_text(), "@src/digest.rs ");
     assert!(!c.overlay_open());
     c.set_text("sam");
     c.update(&key(KeyCode::Char('@')));

@@ -212,7 +212,9 @@ impl Composer {
                 } else {
                     "message"
                 },
-                if self.input_mode == InputMode::Shell {
+                if self.input_mode == InputMode::Shell && self.background_count() > 0 {
+                    format!("{} running", self.background_count())
+                } else if self.input_mode == InputMode::Shell {
                     format!("runs in {}", self.repository_label)
                 } else {
                     self.draft_rule_hint(p.symbols)
@@ -231,7 +233,11 @@ impl Composer {
                 p.info_line(),
             ),
             BoxMode::History { position, total } => (
-                "history",
+                if self.input_mode == InputMode::Shell {
+                    "shell history"
+                } else {
+                    "history"
+                },
                 format!(
                     "{position} of {total}{}{}",
                     p.symbols.separator(),

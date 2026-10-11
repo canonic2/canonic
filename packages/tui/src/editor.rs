@@ -2,8 +2,9 @@
 
 mod atoms;
 mod history;
-pub use atoms::{Document, InlineAtom};
+pub use atoms::{AtomKind, Document, InlineAtom};
 mod input;
+mod kills;
 mod layout;
 mod view;
 
@@ -64,6 +65,9 @@ pub struct Editor {
     notice: Option<Notice>,
     flash: Option<Range<usize>>,
     now: Duration,
+    kills: std::collections::VecDeque<Document>,
+    yanked: Option<(Range<usize>, usize)>,
+    kill_group: Option<kills::Group>,
 }
 
 impl Default for Editor {
@@ -89,6 +93,9 @@ impl Editor {
             notice: None,
             flash: None,
             now: Duration::ZERO,
+            kills: std::collections::VecDeque::new(),
+            yanked: None,
+            kill_group: None,
         }
     }
     /// Current text, stored as UTF-8 with LF line endings.
@@ -144,6 +151,9 @@ impl Editor {
     /// Replace from the host, truncate at a whole grapheme and reset editor state.
     /// Returns true when text was truncated.
     pub fn set_text(&mut self, text: &str) -> bool {
+        self.kills.clear();
+        self.yanked = None;
+        self.kill_group = None;
         let normalized = layout::normalize(text);
         let end = Self::fitting_end(&normalized, self.limit);
         self.draft = Draft {
@@ -197,8 +207,19 @@ impl Editor {
     /// Insert a complete payload as one undo transaction. Never submits.
     /// Oversized input retains the prefix ending at the last whole grapheme that fits.
     pub fn insert(&mut self, text: &str) -> Outcome {
+        self.yanked = None;
+        self.kill_group = None;
         self.before_key();
         self.replace(text, EditKind::Paste)
+    }
+    /// Insert a host-reported text/IME commit with typing undo grouping.
+    /// Keeps a whole-grapheme prefix at the byte limit and reports dropped bytes.
+    /// Never interprets content as a submission or command.
+    pub fn insert_typed(&mut self, text: &str) -> Outcome {
+        self.yanked = None;
+        self.kill_group = None;
+        self.before_key();
+        self.replace(text, EditKind::Typing)
     }
     fn replace(&mut self, text: &str, kind: EditKind) -> Outcome {
         let text: String = layout::normalize(text)
@@ -229,9 +250,10 @@ impl Editor {
         if end == 0 && !text.is_empty() {
             self.rejected = true;
             self.message(format!(
-                "byte limit reached · {} / {} bytes",
+                "byte limit reached · {} / {} bytes · {} bytes left out",
                 self.text().len(),
-                self.limit
+                self.limit,
+                text.len()
             ));
             return Outcome::Rejected;
         }
@@ -262,6 +284,8 @@ impl Editor {
                     text[..end].split('\n').count()
                 )
             });
+        } else if dropped > 0 {
+            self.message(format!("text cut at limit · {dropped} bytes left out"));
         }
         if text[..end].ends_with(char::is_whitespace) {
             self.history.break_group();
@@ -403,7 +427,7 @@ impl Editor {
             "{} {} · {}",
             if redo { "redid" } else { "undid" },
             kind.label(),
-            if redo { "ctrl+z undo" } else { "ctrl+y redo" }
+            if redo { "ctrl+z undo" } else { "alt+z redo" }
         ));
         Outcome::Changed
     }

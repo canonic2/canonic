@@ -32,6 +32,7 @@ pub enum EditorResult {
 pub(super) struct Conflict {
     pub(super) returned: StoredDraft,
     selected: bool,
+    opened_at: std::time::Duration,
 }
 
 impl Composer {
@@ -57,6 +58,12 @@ impl Composer {
     }
     /// Resolve only the active editor ticket; empty/failing results keep the draft.
     pub fn finish_editor(&mut self, ticket: &Identity, result: EditorResult) -> bool {
+        if self.cancelled_editor.as_ref() == Some(ticket) {
+            self.cancelled_editor = None;
+            self.editor
+                .notify("Editor closed · ignored, you stopped waiting");
+            return false;
+        }
         let Some(request) = &self.external else {
             return false;
         };
@@ -70,14 +77,22 @@ impl Composer {
         match result {
             EditorResult::Cancelled => self.editor.notify("Editor cancelled · draft kept"),
             EditorResult::Failed(reason) => self.editor.notify(&format!(
-                "Editor failed · {} · draft kept",
+                "✕ Editor failed · {} · draft kept",
                 crate::text::clean(&reason, 256, false)
             )),
             EditorResult::Text(text) => {
                 let mut editor = Editor::new(self.limit);
-                if text.is_empty() || editor.set_text(&text) {
+                if text.is_empty() {
                     self.editor
-                        .notify("Empty or oversized editor result · draft kept");
+                        .notify("! Editor saved an empty file · draft unchanged");
+                    return true;
+                }
+                if editor.set_text(&text) {
+                    self.editor.notify(&format!(
+                        "✕ Editor returned {} bytes, limit {} · draft unchanged",
+                        text.len(),
+                        self.limit
+                    ));
                     return true;
                 }
                 Self::restore_editor_images(&mut editor, &document);
@@ -88,13 +103,15 @@ impl Composer {
                     age_seconds: 0,
                 };
                 if version == self.version {
-                    self.install_draft(returned);
+                    self.editor.replace_document(&returned.editor.document());
                     self.advance();
+                    self.returned = Some(self.version.clone());
                     self.editor.notify("Editor text restored");
                 } else {
                     self.conflict = Some(Conflict {
                         returned,
                         selected: true,
+                        opened_at: self.now,
                     });
                 }
             }
@@ -102,9 +119,11 @@ impl Composer {
         true
     }
     pub(super) fn cancel_editor(&mut self) {
-        self.external = None;
+        if let Some(request) = self.external.take() {
+            self.cancelled_editor = Some(request.ticket.clone());
+            self.intents.push(Intent::EditorCancelled(request.ticket));
+        }
         self.unlock();
-        self.intents.push(Intent::Stop);
         self.editor
             .notify("Stopped waiting for editor · draft kept");
     }
@@ -132,11 +151,25 @@ impl Composer {
         if key.kind != crate::event::KeyEventKind::Press || !key.modifiers.is_empty() {
             return;
         }
+        if matches!(key.code, KeyCode::Enter | KeyCode::Char('1' | '2'))
+            && self.conflict.as_ref().is_some_and(|conflict| {
+                self.now.saturating_sub(conflict.opened_at) < std::time::Duration::from_millis(300)
+            })
+        {
+            return;
+        }
         match key.code {
             KeyCode::Char('1') => {
-                self.resolve_editor_conflict(true);
+                if let Some(conflict) = &mut self.conflict {
+                    conflict.selected = true;
+                }
             }
-            KeyCode::Char('2') | KeyCode::Esc => {
+            KeyCode::Char('2') => {
+                if let Some(conflict) = &mut self.conflict {
+                    conflict.selected = false;
+                }
+            }
+            KeyCode::Esc => {
                 self.resolve_editor_conflict(false);
             }
             KeyCode::Up | KeyCode::Down | KeyCode::Tab => {
@@ -163,7 +196,7 @@ impl Composer {
             body: (), targets: vec![0], size: Size::default(), close: ClosePolicy::default(),
             view: DialogView { message: "The box changed while the editor was open. Which version goes in the box?".into(),
                 footer: "1 editor · 2 box · enter chooses · esc keeps box · other version is stashed".into(),
-                compact_footer: "1–2 choose · esc keeps box".into(), ..DialogView::default() },
+                compact_footer: "enter chooses · esc keeps box".into(), ..DialogView::default() },
         }).is_err() { return; }
         stack.render_with(
             frame,

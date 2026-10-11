@@ -20,6 +20,7 @@ pub(super) struct Ink {
     pub surface: bool,
     pub error: bool,
     pub success: bool,
+    pub warning: bool,
 }
 #[derive(Clone, Debug)]
 pub(super) struct Run {
@@ -29,6 +30,10 @@ pub(super) struct Run {
 }
 #[derive(Clone, Debug)]
 pub(super) enum Kind {
+    Tool {
+        id: String,
+    },
+    ToolGroup,
     Text,
     Quote,
     Rule,
@@ -80,6 +85,12 @@ impl Block {
         }
     }
     pub(super) fn code(&self) -> Option<String> {
+        if matches!(self.kind, Kind::Tool { .. }) {
+            return self
+                .markdown
+                .split_once('\n')
+                .map(|(_, output)| output.to_owned());
+        }
         matches!(self.kind, Kind::Code { .. }).then(|| self.semantic())
     }
 }
@@ -93,6 +104,14 @@ pub(super) fn blocks(content: &Content, budget: usize) -> Vec<Block> {
         ..Ink::default()
     };
     match content {
+        Content::ToolCard(call) => vec![Block::plain(
+            call.copy_text(),
+            Kind::Tool {
+                id: call.id.clone(),
+            },
+            muted,
+        )],
+        Content::ToolGroup(group) => tool_group_blocks(group, muted),
         Content::Markdown(text) => markdown(text, budget),
         Content::Code {
             text,
@@ -175,6 +194,27 @@ pub(super) fn blocks(content: &Content, budget: usize) -> Vec<Block> {
             muted,
         )],
     }
+}
+fn tool_group_blocks(group: &crate::tool_call_card::ToolGroup, muted: Ink) -> Vec<Block> {
+    let mut blocks = vec![Block::plain(
+        format!("{} at once", group.calls.len()),
+        Kind::ToolGroup,
+        muted,
+    )];
+    let mut start = blocks[0].semantic().len() + 1;
+    for call in &group.calls {
+        let mut block = Block::plain(
+            call.copy_text(),
+            Kind::Tool {
+                id: call.id.clone(),
+            },
+            muted,
+        );
+        block.start = start;
+        start += block.semantic().len() + 1;
+        blocks.push(block);
+    }
+    blocks
 }
 
 fn attachment(name: &str, size: &str, target: Option<&str>, unavailable: &str) -> Block {

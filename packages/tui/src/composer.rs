@@ -12,6 +12,7 @@ mod paste_burst;
 mod payload;
 pub use paste_burst::PasteBurst;
 mod saved;
+mod work;
 pub use completion::{CompletionItem, CompletionKind, CompletionRequest};
 pub use editor_host::{editor_command, run_editor};
 pub use handoff::{EditorRequest, EditorResult};
@@ -19,6 +20,7 @@ pub use history::HistoryEntry;
 pub use lifecycle::{InputMode, Intent, QueueSummary};
 pub use modes::{BoxMode, DraftCheckpoint};
 pub use saved::{SavedComposer, SavedDraft};
+pub use work::{WorkAction, WorkRequest};
 
 use crate::{
     editor::{Editor, EditorView, Outcome},
@@ -108,11 +110,17 @@ pub struct Composer {
     completion: Option<completion::Completion>,
     inserted_hint: Option<(String, String)>,
     inserted_command: Option<(String, String)>,
+    literal_command: Option<Version>,
     rewind: Option<Version>,
     queue: Vec<lifecycle::QueuedDraft>,
     editing_queue: Option<Identity>,
     working: bool,
+    working_elapsed: Duration,
+    motion: work::Motion,
+    work_request: Option<WorkRequest>,
+    background: Vec<Identity>,
     paused: bool,
+    resume_waiting: Option<Identity>,
     intents: Vec<Intent>,
     leader: Option<Duration>,
     now: Duration,
@@ -120,6 +128,7 @@ pub struct Composer {
     returned: Option<Version>,
     list: Option<lists::List>,
     external: Option<EditorRequest>,
+    cancelled_editor: Option<Identity>,
     conflict: Option<handoff::Conflict>,
     save_due: Option<Duration>,
     save_ticket: Option<(Identity, Version)>,
@@ -159,11 +168,17 @@ impl Composer {
             completion: None,
             inserted_hint: None,
             inserted_command: None,
+            literal_command: None,
             rewind: None,
             queue: Vec::new(),
             editing_queue: None,
             working: false,
+            working_elapsed: Duration::ZERO,
+            motion: work::Motion::Animated,
+            work_request: None,
+            background: Vec::new(),
             paused: false,
+            resume_waiting: None,
             intents: Vec::new(),
             leader: None,
             now: Duration::ZERO,
@@ -171,6 +186,7 @@ impl Composer {
             returned: None,
             list: None,
             external: None,
+            cancelled_editor: None,
             conflict: None,
             save_due: None,
             save_ticket: None,
@@ -202,6 +218,7 @@ impl Composer {
         self.editor.notify(&message);
     }
     fn advance(&mut self) {
+        self.literal_command = None;
         self.inserted_hint = None;
         if self.inserted_command.as_ref().is_some_and(|(_, name)| {
             self.editor
@@ -247,6 +264,7 @@ impl Composer {
         self.state = State::Ready;
         self.submitted_box = None;
         self.external = None;
+        self.cancelled_editor = None;
         self.conflict = None;
         self.list = None;
         self.completion = None;
@@ -256,6 +274,11 @@ impl Composer {
         self.arm = None;
         self.leader = None;
         self.rewind = None;
+        self.work_request = None;
+        self.intents
+            .retain(|intent| !matches!(intent, Intent::Work(_)));
+        self.background.clear();
+        self.resume_waiting = None;
         self.editor.set_text(text)
     }
 
@@ -401,12 +424,28 @@ impl Composer {
             }
         };
         self.submitted_box = None;
+        if self.resume_waiting.take().is_some() && result.is_ok() && !self.queue.is_empty() {
+            self.request_work(WorkAction::InterruptAfterStep);
+        }
         true
     }
 
     /// Lifecycle label suitable for a host's persistent activity row.
     #[must_use]
     pub fn status(&self) -> String {
+        if let Some(request) = &self.work_request {
+            return match request.action {
+                WorkAction::Stop => "cancelling… · draft kept".into(),
+                WorkAction::InterruptAfterStep => "waiting for current step · queue held".into(),
+                WorkAction::Background => "moving to background…".into(),
+            };
+        }
+        if self.resume_waiting.is_some() {
+            return "resuming · waiting for sending acknowledgement".into();
+        }
+        if self.leader.is_some() {
+            return "ctrl+x · s stash · u restore · e editor · b background · enter sends queued · esc cancels · 3s".into();
+        }
         if !matches!(self.state, State::Pending(_))
             && let Some(reason) = &self.blocked
         {
@@ -418,15 +457,28 @@ impl Composer {
         if matches!(self.mode, BoxMode::Locked { .. }) {
             return "Editing in external editor · ctrl+c cancels waiting".into();
         }
+        if self.working {
+            let dots = if self.motion == work::Motion::Reduced {
+                "···"
+            } else {
+                ["·  ", "·· ", "···"][(self.now.as_millis() / 140 % 3) as usize]
+            };
+            let prefix = format!(
+                "{dots} working · {}s · esc stops",
+                self.working_elapsed.as_secs()
+            );
+            return if self.queue.is_empty() {
+                prefix
+            } else {
+                format!("{prefix} · {} queued · up edits", self.queue.len())
+            };
+        }
         if !self.queue.is_empty() {
             return if self.paused {
                 "Queue paused · ctrl+x enter sends next".into()
             } else {
                 format!("{} queued · sent one per turn · up edits", self.queue.len())
             };
-        }
-        if self.working {
-            return "Working · esc stops".into();
         }
         match &self.state {
             State::Rejected { reason, .. } => format!("Not sent · {reason} · draft kept"),
@@ -435,6 +487,32 @@ impl Composer {
                 .as_ref()
                 .map_or_else(String::new, |(hint, _)| hint.clone()),
         }
+    }
+
+    /// Compact activity text preserves the local exit/cancel key at narrow widths.
+    #[must_use]
+    pub fn status_for(&self, width: u16) -> String {
+        if width >= 50 {
+            return self.status();
+        }
+        if let Some(request) = &self.work_request {
+            return match request.action {
+                WorkAction::Stop => "cancelling… · esc waits".into(),
+                WorkAction::InterruptAfterStep => "waiting for step · esc waits".into(),
+                WorkAction::Background => "backgrounding · esc waits".into(),
+            };
+        }
+        if self.leader.is_some() {
+            return "ctrl+x · esc cancels".into();
+        }
+        if self.working && self.editor.notice().is_none() {
+            return if self.queue.is_empty() {
+                "working · esc stops".into()
+            } else {
+                format!("working · {} queued · esc stops", self.queue.len())
+            };
+        }
+        self.status()
     }
 
     /// Render only the editor; the host owns layout and the activity row.

@@ -272,7 +272,7 @@ impl ChoicePicker {
         let active = self.selected.as_ref() == Some(&choice.id) && focused;
         if active {
             frame.render_widget(
-                Block::default().style(p.surface()),
+                Block::default().style(p.selection()),
                 Rect::new(
                     area.x.saturating_add(1),
                     area.y,
@@ -282,20 +282,7 @@ impl ChoicePicker {
             );
         }
         let (prefix, label_width, details) = columns;
-        let current = if choice.current { '*' } else { ' ' };
-        let key = if self.mode == SelectionMode::Multiple {
-            if self.marked.contains(&choice.id) {
-                format!("[x]{current}")
-            } else {
-                format!("[ ]{current}")
-            }
-        } else if self.filtering() {
-            current.to_string()
-        } else if m.index < 9 {
-            format!(" {}{current}", m.index + 1)
-        } else {
-            format!(" {current} ")
-        };
+        let key = self.row_mark(m, p);
         let key_style = if active {
             p.base()
                 .fg(Color::Reset)
@@ -306,29 +293,25 @@ impl ChoicePicker {
         } else {
             p.muted()
         };
-        let label_style = if choice.disabled.is_some() {
-            p.muted()
-        } else if choice.danger {
-            p.error()
-        } else {
-            p.base().fg(Color::Reset).remove_modifier(Modifier::DIM)
-        };
-        let label_style = if active {
-            label_style
-                .add_modifier(Modifier::BOLD)
-                .remove_modifier(Modifier::DIM)
-        } else {
-            label_style
-        };
+        let label_style = self.label_style(m, p, active);
         let budget = usize::from(area.width.saturating_sub(1)).saturating_sub(prefix);
-        let label = clip(
+        let label_text = availability_text(
             &choice.label,
+            choice.disabled.is_some() && !details && self.mode == SelectionMode::Single,
+            p,
+        );
+        let label = clip(
+            &label_text,
             if details { label_width } else { budget },
-            p.symbols.ellipsis(),
+            p.symbols.ellipsis_text(),
         );
         let mut spans = vec![
             Span::styled(
-                " ",
+                if active && p.symbols == crate::theme::Symbols::Ascii {
+                    ">"
+                } else {
+                    " "
+                },
                 p.base()
                     .fg(Color::Reset)
                     .bg(Color::Reset)
@@ -349,12 +332,16 @@ impl ChoicePicker {
             spans.push(Span::raw(
                 " ".repeat(label_width.saturating_sub(label.width()) + PICKER_GAP),
             ));
-            let detail = choice.disabled.as_deref().unwrap_or(&choice.detail);
+            let detail = availability_text(
+                choice.disabled.as_deref().unwrap_or(&choice.detail),
+                choice.disabled.is_some() && self.mode == SelectionMode::Single,
+                p,
+            );
             spans.extend(highlight(
                 &clip(
-                    detail,
+                    &detail,
                     budget.saturating_sub(label_width + PICKER_GAP),
-                    p.symbols.ellipsis(),
+                    p.symbols.ellipsis_text(),
                 ),
                 &m.detail,
                 p.muted(),
@@ -365,6 +352,54 @@ impl ChoicePicker {
             Paragraph::new(Line::from(spans)),
             Rect::new(area.x, area.y, area.width.saturating_sub(1), 1),
         );
+    }
+    fn label_style(&self, m: &Match, p: Presentation, active: bool) -> Style {
+        let choice = &self.choices[m.index];
+        let at_limit = !self.marked.contains(&choice.id)
+            && self.mode == SelectionMode::Multiple
+            && self
+                .maximum
+                .is_some_and(|maximum| self.marked.len() >= maximum);
+        let style = if choice.disabled.is_some() || at_limit {
+            p.disabled()
+        } else if choice.danger {
+            p.error()
+        } else {
+            p.base().fg(Color::Reset).remove_modifier(Modifier::DIM)
+        };
+        if active {
+            style
+                .add_modifier(Modifier::BOLD)
+                .remove_modifier(Modifier::DIM)
+        } else {
+            style
+        }
+    }
+    fn row_mark(&self, m: &Match, p: Presentation) -> String {
+        let choice = &self.choices[m.index];
+        let current = if choice.current { '*' } else { ' ' };
+        if choice.disabled.is_some() && self.mode == SelectionMode::Multiple {
+            return format!("[-]{current}");
+        }
+        if self.mode == SelectionMode::Multiple {
+            let marked = self.marked.contains(&choice.id);
+            let boxed = matches!(
+                p.colors,
+                crate::theme::ColorMode::Ansi16 | crate::theme::ColorMode::NoColor
+            ) || p.symbols == crate::theme::Symbols::Ascii;
+            return if boxed {
+                format!("[{}]{current}", if marked { 'x' } else { ' ' })
+            } else {
+                format!("{}  {current}", if marked { '◉' } else { '○' })
+            };
+        }
+        if self.filtering() {
+            current.to_string()
+        } else if m.index < 9 {
+            format!(" {}{current}", m.index + 1)
+        } else {
+            format!(" {current} ")
+        }
     }
     fn chrome(
         &self,
@@ -379,7 +414,7 @@ impl ChoicePicker {
         let above = if self.offset > 0 && self.status == Status::Ready {
             format!("{} {} more", p.symbols.more(true), self.offset)
         } else {
-            clean(view.source, 128, false)
+            self.source_metadata(view.source)
         };
         frame.render_widget(
             Rule {
@@ -425,9 +460,22 @@ impl ChoicePicker {
                     }
                     .to_owned(),
                 );
+                if self.inspect && self.selected.is_some() && area.width >= 50 {
+                    hints.push("F3 inspect".to_owned());
+                }
             } else {
                 hints.push("esc cancel".to_owned());
             }
+        }
+        if area.width < 50 && focused {
+            hints = vec![
+                if self.query().is_empty() {
+                    "esc cancel"
+                } else {
+                    "esc clears"
+                }
+                .into(),
+            ];
         }
         frame.render_widget(
             Rule {
@@ -438,6 +486,28 @@ impl ChoicePicker {
             },
             Rect::new(area.x, area.bottom() - 1, area.width, 1),
         );
+    }
+    fn source_metadata(&self, source: &str) -> String {
+        if self.mode != SelectionMode::Multiple {
+            return clean(source, 128, false);
+        }
+        let count = self.marked.len();
+        let hidden = self
+            .choices
+            .iter()
+            .enumerate()
+            .filter(|(index, choice)| {
+                self.marked.contains(&choice.id) && !self.matches.iter().any(|m| m.index == *index)
+            })
+            .count();
+        let label = self.maximum.map_or_else(
+            || format!("{count} marked"),
+            |max| format!("{count} of {max} marked"),
+        );
+        if hidden > 0 {
+            return format!("{label} · {hidden} hidden");
+        }
+        label
     }
     fn key_hints(&self, p: Presentation) -> String {
         let keys: Vec<_> = self
@@ -464,7 +534,18 @@ impl ChoicePicker {
     }
 }
 
-fn clip(text: &str, width: usize, marker: char) -> String {
+fn availability_text(text: &str, disabled: bool, p: Presentation) -> String {
+    if disabled
+        && (p.colors == crate::theme::ColorMode::NoColor
+            || p.symbols == crate::theme::Symbols::Ascii)
+    {
+        format!("[-] {text}")
+    } else {
+        text.to_owned()
+    }
+}
+
+fn clip(text: &str, width: usize, marker: &str) -> String {
     if text.width() <= width {
         return text.to_owned();
     }
@@ -474,13 +555,13 @@ fn clip(text: &str, width: usize, marker: char) -> String {
     let mut output = String::new();
     let mut cells = 0;
     for g in text.graphemes(true) {
-        if cells + g.width() >= width {
+        if cells + g.width() > width.saturating_sub(marker.width()) {
             break;
         }
         output.push_str(g);
         cells += g.width();
     }
-    output.push(marker);
+    output.extend(marker.chars().take(width));
     output
 }
 fn highlight(

@@ -46,6 +46,8 @@ fn display(
         .map(|c| {
             if !c.is_control() {
                 c.to_string()
+            } else if symbols == Symbols::Ascii && c == '\u{1b}' {
+                "^[".into()
             } else if symbols == Symbols::Unicode && (c <= '\u{1f}' || c == '\u{7f}') {
                 char::from_u32(if c == '\u{7f}' {
                     0x2421

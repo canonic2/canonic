@@ -18,12 +18,16 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Inventory and gaps](inventory.md) | Complete experience inventory and dated implementation evidence |
 | [Current architecture](architecture.md) | Implemented package/module map, composition and existing boundaries |
 | [System design](system-design.md) | Architectural rules, dependency direction, public-contract conventions and proposed capability owners |
-| [Components](components/README.md) | Editor, Option Picker, Dialog, Command Palette, Composer, Completion Menu and Chat |
+| [Components](components/README.md) | Editor, Option Picker, Dialog, Command Palette, Composer, Completion Menu, Chat and Tool Call Card |
+| [Tool Call Card](components/tool-call-card.md) | Tool lifecycle, textual previews, concurrency, selected actions and host acknowledgements |
+| [Run Activity](components/run-activity.md) | Whole-run state, cancellation acknowledgement races and independent connection status |
+| [Question Form](components/question-form.md) | Structured staged answers, review and identified host acceptance above Composer |
 | [Features](features/README.md) | Gallery, scenario coverage, input/navigation, activity/review, browsing and terminal hosting |
 | [Chat and conversation content](components/chat.md) | Identified streaming, rich text/code/tables/diffs, anchors, loaded search and block selection |
 | [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |
 | [Implementation plan](roadmap.md) | Dependency order, acceptance matrix, exit conditions and open decisions |
 | [Verification](verification.md) | Independent checkpoint definitions, dated engineering summary and evidence boundaries |
+| [Design alignment](design-alignment.md) | Current handoff implementation scope, remaining component work and open decisions |
 | [Human testing gates](human-testing.md) | Smaller delivery slices, runnable acceptance steps, confirmation and commit workflow |
 | [Code quality](code-quality.md) | Existing Rust tooling and engineering gates |
 
@@ -38,7 +42,8 @@ Editor/focus, rich picker, dialog foundations and commands have their recorded
 stash, chips, completion, restart encoding and editor conflicts, including an
 explicit foreground editor adapter and terminal handoff. Its complete review
 steps are in [Composer acceptance](human-testing.md#gate-3a--submission-lifecycle).
-Dialog timing, rich conversation content and inline hosting remain separate work.
+Timed Dialog policies and rich Chat content are implemented. Inline hosting,
+remaining design alignment and human visual acceptance remain separate work.
 
 Product execution, protocol translation, authentication, storage, policy and
 authority stay in consumers. No publication, distribution or product rollout is

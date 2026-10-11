@@ -1,6 +1,7 @@
 //! Composes caller-owned dialog bodies, host drafts and simulated late results.
 
 use super::dialog_body::Body;
+mod extended;
 use crate::{
     dialog::{ClosePolicy, Dialog, DialogView, Dispatch, Reason, Size, Stack, Ticket},
     editor::{Editor, EditorView, Outcome},
@@ -15,7 +16,7 @@ use ratatui::{
 };
 use std::fmt::Write;
 
-const NAMES: [&str; 11] = [
+const NAMES: [&str; 33] = [
     "prompt",
     "nested",
     "long",
@@ -27,12 +28,35 @@ const NAMES: [&str; 11] = [
     "notice",
     "prompt-long",
     "rename",
+    "waiting",
+    "key-guard",
+    "away",
+    "close-armed",
+    "cleared",
+    "child-removed",
+    "locked-escape",
+    "outside-kept",
+    "inside-error",
+    "picker-filter",
+    "filter-cleared",
+    "tiny-content",
+    "tall-panel",
+    "ascii",
+    "light",
+    "danger-armed",
+    "danger-expired",
+    "type-name",
+    "type-name-ready",
+    "letters-type",
+    "result",
+    "arrival-queue",
 ];
 pub(super) struct DialogDemo {
     drafts: [Editor; 2],
     composer: Editor,
     stack: Stack<Body, usize>,
     scenario: usize,
+    presentation_pending: bool,
     next: usize,
     pending: Option<Ticket>,
     note: String,
@@ -48,8 +72,10 @@ impl DialogDemo {
         let mut demo = Self {
             drafts,
             composer,
-            stack: Stack::new(vec![0, 1, 2]).unwrap_or_else(|_| unreachable!("distinct targets")),
+            stack: Stack::new_timed(vec![0, 1, 2])
+                .unwrap_or_else(|_| unreachable!("distinct targets")),
             scenario: 0,
+            presentation_pending: false,
             next: 10,
             pending: None,
             note: String::new(),
@@ -65,6 +91,7 @@ impl DialogDemo {
         self.stack.len()
     }
     pub(super) fn tick(&mut self, elapsed: std::time::Duration) {
+        self.stack.tick(elapsed);
         for draft in &mut self.drafts {
             draft.tick(elapsed);
         }
@@ -87,7 +114,8 @@ impl DialogDemo {
             view: DialogView {
                 footer: match &body {
                     Body::Prompt(_) => "enter done · ctrl+j newline · esc cancel",
-                    Body::Choices(_) => "1–2 · enter · esc keep",
+                    Body::Choices(_, _) => "1–2 · enter · esc keep",
+                    Body::Named { .. } => "enter delete · esc cancel",
                     Body::Text {
                         acknowledge: true, ..
                     } => "enter ok · esc cancel",
@@ -117,9 +145,15 @@ impl DialogDemo {
         }
     }
     fn reset(&mut self) {
+        self.presentation_pending = true;
         let _dismissed = self.stack.clear();
-        self.stack = Stack::new(vec![0, 1, 2]).unwrap_or_else(|_| unreachable!("distinct targets"));
+        self.stack =
+            Stack::new_timed(vec![0, 1, 2]).unwrap_or_else(|_| unreachable!("distinct targets"));
         self.note.clear();
+        if self.scenario >= 11 {
+            self.extended_reset();
+            return;
+        }
         match self.scenario {
             1 => {
                 self.open(
@@ -141,7 +175,7 @@ impl DialogDemo {
             ),
             3 | 4 => {
                 let mut dialog = self.dialog(
-                    Body::prompt("Enter returns this local result"),
+                    if self.scenario == 3 { Body::locked() } else { Body::prompt("Enter returns this local result") },
                     "Explicit close policy",
                 );
                 dialog.close = ClosePolicy {
@@ -149,7 +183,7 @@ impl DialogDemo {
                     outside_click: self.scenario == 4,
                 };
                 if self.scenario == 3 {
-                    dialog.view.footer = "enter done · ctrl+j newline".into();
+                    dialog.view.footer = "1–2 · enter pick · keep says no".into();
                     dialog.view.compact_footer = "enter".into();
                 }
                 self.pending = Some(
@@ -189,6 +223,8 @@ impl DialogDemo {
             self.stack.remove_target(&0);
             self.note = "Return target 0 removed; close returns to draft two".into();
         }
+        // Established fixtures start after arrival; dedicated guard fixtures cover opening.
+        self.stack.tick(std::time::Duration::from_millis(300));
     }
     fn dismissed(&mut self, id: &str, reason: Reason) {
         self.note = format!("Dismissed {id}: {reason:?} · no operation executed");
@@ -199,7 +235,8 @@ impl DialogDemo {
                 return true;
             }
             if key.modifiers.contains(KeyModifiers::CONTROL)
-                && matches!(key.code, KeyCode::Char('c' | 't'))
+                && (key.code == KeyCode::Char('t')
+                    || key.code == KeyCode::Char('c') && self.stack.is_empty())
             {
                 return false;
             }
@@ -288,6 +325,11 @@ impl DialogDemo {
         true
     }
     fn background(&mut self, event: &Event) -> bool {
+        if matches!(event, Event::Paste(_))
+            || matches!(event, Event::Key(key) if matches!(key.code, KeyCode::Char(_)) && !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && key.kind != KeyEventKind::Release)
+        {
+            self.stack.typed();
+        }
         if let Event::Key(key) = event
             && matches!(key.code, KeyCode::Tab | KeyCode::BackTab)
         {
@@ -307,7 +349,34 @@ impl DialogDemo {
         }
         !matches!(event,Event::Key(key) if key.code==KeyCode::Esc)
     }
+    pub(super) fn take_presentation(&mut self, p: Presentation) -> Option<Presentation> {
+        std::mem::take(&mut self.presentation_pending).then_some(match self.scenario {
+            24 => Presentation {
+                symbols: crate::theme::Symbols::Ascii,
+                ..p
+            },
+            25 => Presentation {
+                colors: crate::theme::ColorMode::TrueColor,
+                theme: crate::theme::Theme::Light,
+                ..p
+            },
+            _ => p,
+        })
+    }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
+        if self.scenario == 22 {
+            self.viewport = Rect::new(area.x, area.y, area.width, area.height.min(2));
+            self.stack.render_with(
+                frame,
+                self.viewport,
+                p,
+                |body, width, boxed| body.height(width, boxed, p),
+                |body, frame, area, target, boxed| {
+                    body.render(frame, area, p, target.is_some(), boxed)
+                },
+            );
+            return;
+        }
         let dock_y = area
             .bottom()
             .saturating_sub(crate::theme::tokens::spacing::DIALOG_DOCK_HEIGHT + 2)
@@ -374,6 +443,29 @@ impl DialogDemo {
     }
     fn render_activity(&self, frame: &mut Frame<'_>, area: Rect, dock_y: u16, p: Presentation) {
         if dock_y < area.bottom() {
+            if let Some(activity) = self.stack.ticket().and_then(|ticket| {
+                // Body lookup is active-opening scoped; no asynchronous work occurs here.
+                self.stack.body(ticket).and_then(Body::activity)
+            }) {
+                frame.render_widget(
+                    Paragraph::new(activity).style(p.warning()),
+                    Rect::new(area.x, dock_y, area.width, 1),
+                );
+                return;
+            }
+            let timed = self.stack.activity();
+            if self.stack.waiting_len() > 0
+                || timed != "ready"
+                    && !timed.starts_with("! dialog · esc")
+                    && !timed.contains("of ")
+                    && !timed.contains("pick one")
+            {
+                frame.render_widget(
+                    Paragraph::new(timed).style(p.warning()),
+                    Rect::new(area.x, dock_y, area.width, 1),
+                );
+                return;
+            }
             let (status, hint) = if self.stack.is_empty() {
                 ("ready".to_owned(), String::new())
             } else if self.stack.len() > 1 {

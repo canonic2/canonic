@@ -42,6 +42,8 @@ pub struct Commands {
     recent: Vec<String>,
     scopes: HashMap<String, String>,
     scope: Option<String>,
+    scope_names: Vec<String>,
+    complete_key_map: bool,
     keys: bool,
     offset: usize,
     viewport: usize,
@@ -70,6 +72,8 @@ impl Commands {
             recent: vec![],
             scopes: HashMap::new(),
             scope: None,
+            scope_names: vec![],
+            complete_key_map: false,
             keys: false,
             offset: 0,
             viewport: 1,
@@ -108,6 +112,17 @@ impl Commands {
         self.scope = None;
         self.refilter();
     }
+    /// Supply additional keyboard-help scopes, including scopes with no commands.
+    pub fn set_scope_names(&mut self, scopes: &[&str]) {
+        self.scope_names = scopes.iter().map(|s| clean(s, 128, false)).collect();
+        self.scope = None;
+        self.refilter();
+    }
+    /// Assert the supplied map covers every host scope before displaying free-key evidence.
+    /// Defaults to false; a local map cannot establish global shortcut availability.
+    pub fn set_complete_key_map(&mut self, complete: bool) {
+        self.complete_key_map = complete;
+    }
     /// Supply recent IDs first; at most three appear in the recent group.
     pub fn set_recent(&mut self, ids: &[&str]) {
         self.recent = ids.iter().take(3).map(|id| (*id).to_owned()).collect();
@@ -135,10 +150,7 @@ impl Commands {
     }
     /// Set a bounded filter without invocation.
     pub fn set_query(&mut self, query: &str) {
-        if !self.keys && self.opened_height.is_none() {
-            self.opened_height =
-                Some(u16::try_from(self.rows().len().max(1) + 3).unwrap_or(u16::MAX));
-        }
+        self.capture_height();
         self.query.set_text(&clean(query, 4096, false));
         self.selected = None;
         self.refilter();
@@ -166,12 +178,26 @@ impl Commands {
     fn search_rank(&self, c: &Command, q: &str) -> Option<u8> {
         if q.is_empty() || c.bindings.iter().any(|b| b.label().to_lowercase() == q) {
             Some(0)
-        } else if c
-            .bindings
-            .iter()
-            .any(|b| b.label().to_lowercase().starts_with(q))
+        } else if c.label.to_lowercase().starts_with(q)
+            || c.bindings
+                .iter()
+                .any(|b| b.label().to_lowercase().starts_with(q))
         {
             Some(1)
+        } else if c
+            .label
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|word| word.starts_with(q))
+        {
+            Some(2)
+        } else if c.aliases.iter().any(|a| view::matches(a, q)) {
+            Some(3)
+        } else if view::matches(&c.label, q)
+            || view::matches(&c.description, q)
+            || c.disabled.as_ref().is_some_and(|d| view::matches(d, q))
+        {
+            Some(4)
         } else if self.keys
             && self.metadata.get(&c.id).is_some_and(|m| {
                 m.ignored
@@ -179,13 +205,7 @@ impl Commands {
                     .any(|b| b.label().to_lowercase().contains(q))
             })
         {
-            Some(2)
-        } else if view::matches(&c.label, q) || c.aliases.iter().any(|a| view::matches(a, q)) {
-            Some(3)
-        } else if view::matches(&c.description, q)
-            || c.disabled.as_ref().is_some_and(|d| view::matches(d, q))
-        {
-            Some(4)
+            Some(5)
         } else {
             None
         }
@@ -254,7 +274,7 @@ impl Commands {
             }
             a.1.cmp(&b.1)
                 .then_with(|| {
-                    if !q.is_empty() && a.1 <= 2 {
+                    if a.1 == 1 && a.3.starts_with(&q) && b.3.starts_with(&q) {
                         a.3.cmp(&b.3)
                     } else {
                         a.2.cmp(&b.2)
@@ -302,6 +322,7 @@ impl Commands {
     }
     /// Apply one event. Keys-screen `o` returns Inspect for the binding source.
     pub fn update(&mut self, event: &Event) -> Intent {
+        self.capture_height();
         if let Event::Key(k) = event {
             if k.kind == KeyEventKind::Release {
                 return Intent::None;
@@ -372,6 +393,7 @@ impl Commands {
         let mut scopes: Vec<_> = (0..self.entries.len())
             .map(|i| self.group(i).to_owned())
             .collect();
+        scopes.extend(self.scope_names.iter().cloned());
         scopes.sort_by(|a, b| (a != "everywhere", a).cmp(&(b != "everywhere", b)));
         scopes.dedup();
         let next = self
@@ -393,8 +415,14 @@ impl Commands {
             return view.max_height;
         }
         self.opened_height
-            .unwrap_or_else(|| u16::try_from(self.rows().len().max(1) + 3).unwrap_or(u16::MAX))
+            .unwrap_or_else(|| u16::try_from(self.rows().len().max(5) + 3).unwrap_or(u16::MAX))
             .min(view.max_height)
+    }
+    fn capture_height(&mut self) {
+        if !self.keys && self.opened_height.is_none() {
+            self.opened_height =
+                Some(u16::try_from(self.rows().len().max(5) + 3).unwrap_or(u16::MAX));
+        }
     }
 }
 /// Invalid effective map; construction leaves existing views untouched.

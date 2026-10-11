@@ -4,8 +4,8 @@ expression: text
 ---
 
 
-+ parent dial > child dialog +
-|child                       |
-|                            |
-|                            |
-+ --------------- esc cancel +
+  + parent  > child dialog +
+  |child                   |
+  |                        |
+  |                        |
+  + ----------- esc cancel +

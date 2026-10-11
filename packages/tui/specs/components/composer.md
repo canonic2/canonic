@@ -11,8 +11,10 @@ details needed to build the public component independently.
 
 ## Current status
 
-The complete reusable local workflow and explicit foreground-editor host adapter
-are implemented. Gallery responses remain deterministic simulations. Engineering
+The reusable local workflow and explicit foreground-editor host adapter are
+implemented, including host-confirmed work controls, recovery details and
+99 gallery scenarios. Expanded engineering checks passed. Gallery responses
+remain deterministic simulations. Engineering
 results and human acceptance are separate in [Verification](../verification.md).
 
 ## Behavior and state transitions
@@ -100,12 +102,24 @@ not batch the queue. A held edit is skipped; later eligible entries may send.
 Enter saves the edited copy into its original slot and returns to the session
 draft. Escape discards the edit and keeps the original. Ctrl-D removes the slot,
 stashes the edited copy, and restores the session draft. A blank saved edit is
-removed into the stash.
+removed into the stash, retaining the original queued document when the saved
+edit is blank.
 
-A failed turn, refusal or stop pauses delivery. Later successful turn-end
+A failed turn, refusal or stop request pauses delivery. A stop emits an identified
+work request once and shows `cancelling…`; the draft and busy state remain until
+the host acknowledges it. Repeated stop keys do nothing while pending. A failed
+acknowledgement keeps work active, explains the failure and permits a fresh request.
+An authoritative turn end wins over a pending control request, invalidating its
+ticket. The UI never labels work cancelled before host confirmation.
+Later successful turn-end
 callbacks do not resume it. Ctrl-X Enter explicitly resumes and sends one.
 If a submission still awaits acknowledgement, manual delivery waits for that
-response. Restart always restores the queue paused and emits no submission.
+response. Interrupt-after-step and background requests likewise carry opaque
+tickets; neither releases foreground work before host acknowledgement. Successful
+interrupt acknowledgement sends exactly one eligible queue entry. Background
+acknowledgement releases the foreground box and retains an identified running
+entry until the host reports its completion. Restart restores the queue paused
+and emits no submission or work control.
 
 ### History and stash
 
@@ -142,6 +156,14 @@ CRLF/CR to LF. A paste of more than three lines or 800 characters becomes
 `[paste N · L lines]`; its complete content remains attached to one atomic
 editor marker. A chip is one cursor step, backspace and undo transaction.
 Ordinary short paste is a single text transaction.
+
+Selecting an @file in message mode inserts an atomic file reference and a trailing
+space. Its visible label is the path prefixed with @; its expanded text preserves
+that full path and its opaque host candidate ID travels in the document. It takes
+one cursor step and one delete/undo transaction. Shell path insertion stays plain
+editable text. Payload kinds distinguish paste, image and file so numbering,
+external editing and host attachment handling cannot confuse them. Unchanged
+file tokens retain their references on editor return; edited tokens become text.
 
 `insert_image` accepts an opaque clipboard attachment ID from the host. Image
 chips are numbered separately; optional dimensions appear in the label. The host owns clipboard decoding, dimensions,
@@ -185,6 +207,9 @@ in `Intent::CommandWithArguments`; argument-free commands retain `Intent::Comman
 Changes schedule a Save intent after 500 milliseconds through the injected clock.
 Cursor movement also schedules a save. Hosts drain intents and acknowledge the
 exact save ticket. Failed writes keep all in-memory content and schedule a retry.
+The failure notice names the reason and five-second retry delay. Later edits keep
+the current in-memory snapshot authoritative. `report_restore_failure` reports
+host read/decode failures without replacing a live draft or changing stored data.
 Quit emits a current Save snapshot before Quit; hosts finish that write before
 closing. Repository history/stash and session draft/queue are scoped by the
 host's storage key, not a process-global singleton.
@@ -194,7 +219,8 @@ documents/origins and stash. It also protects pending submission, partial queued
 edit and unresolved editor-return copies. `write_to/read_from` provide bounded,
 versioned binary encoding on caller-owned streams. Decoding limits the configured
 editor size to 1 MiB and aggregate string allocation to 256 MiB. The header is
-`CANONIC-COMPOSER` plus schema byte 1; lengths are little-endian u64. Unknown
+`CANONIC-COMPOSER` plus schema byte 2; lengths are little-endian u64. The decoder
+also accepts schema 1, deriving paste/image kinds from its attachment flag. Unknown
 schema, invalid UTF-8, excessive counts and truncation fail visibly. The host
 owns private file permissions, atomic replace, repository/session keys and I/O.
 
@@ -228,9 +254,9 @@ returns. Neither version is silently overwritten.
 | Source | Responsibility |
 | --- | --- |
 | [composer.rs](../../src/composer.rs) | Draft lifetime/revision, submission tickets and acknowledgement recovery |
-| [lifecycle](../../src/composer/lifecycle.rs), [modes](../../src/composer/modes.rs) | FIFO queue, held edits, stash, cancellation/leader bindings and box rules |
+| [lifecycle](../../src/composer/lifecycle.rs), [work](../../src/composer/work.rs), [modes](../../src/composer/modes.rs) | FIFO queue, held edits, stash, identified work acknowledgements, cancellation/leader bindings and box rules |
 | [history](../../src/composer/history.rs), [lists](../../src/composer/lists.rs) | Repository recall, origin labels, search/stash/key pickers and drop undo |
-| [payload](../../src/composer/payload.rs), [editor atoms](../../src/editor/atoms.rs) | Lossless atomic text/image chips and hidden-control cleanup |
+| [payload](../../src/composer/payload.rs), [editor atoms](../../src/editor/atoms.rs) | Lossless typed paste/image/file chips and hidden-control cleanup |
 | [completion](../../src/composer/completion.rs), [paste burst](../../src/composer/paste_burst.rs) | Typed-prefix queries/results and optional unbracketed-paste decoding |
 | [saved](../../src/composer/saved.rs), [codec](../../src/composer/codec.rs) | Debounced snapshots, validation, recovery copies and bounded stream encoding |
 | [handoff](../../src/composer/handoff.rs), [editor host](../../src/composer/editor_host.rs) | Editor ticket/conflict state and explicit foreground process adapter |
@@ -276,7 +302,7 @@ and a sanitized reason; ordinary sending has no yellow activity row.
 The draft rule's right hint prioritizes armed cancellation, `↑ history` at byte
 zero, returned text, then stash count. Zero stash count is hidden. Recall uses
 Unicode `┄`; ASCII uses dots instead of the draft's hyphens. The `line-info`
-token is RGB #495F81, indexed 60 and faint blue in ANSI 16. The draft line is
+token is RGB #495F81, indexed 60 and plain blue in ANSI 16. The draft line is
 #2E7479 in RGB. NO_COLOR retains the solid/dashed distinction. Chips use a quiet
 surface and muted label; a chip at the caret uses selection fill and bold accent,
 with payload size on the rule. The rule adds ↑/↓ more when editor rows are hidden.
@@ -289,6 +315,7 @@ the question names both versions, 1 selects editor text, 2 selects box text,
 Enter confirms the highlighted version, and Esc keeps the box. The other version
 always goes to the stash. The dialog uses surface fills in RGB/indexed modes and
 boxes in ANSI 16/NO_COLOR; the background fades without moving the dock.
+Numbers only highlight a version; Enter confirms after the 300 ms opening guard.
 
 `Chat::render_docked_with` composes the unframed conversation and fixed dock.
 `render_with` retains the framed Chat host. A custom host calls
@@ -302,6 +329,10 @@ execution, clipboard decoding, attachment lifetime and durable storage. They
 acknowledge exact submission/save tickets and scope stored records explicitly.
 Foreground editor execution and terminal handoff are opt-in host adapters;
 ordinary Composer update/render does not run processes or acquire a terminal.
+Chat's compatibility `Action::Cancel` consumes the standalone stop intent but
+retains `Composer::work_request()` for the host's exact acknowledgement. Installed
+Run Activity owns Chat's whole-run cancellation route instead; a stop must not
+dispatch through both contracts.
 
 ## Acceptance criteria
 
@@ -312,8 +343,12 @@ and Escape fixtures exercise the same public component APIs. F5 accepts or ends
 a turn, F6 refuses or fails it, F7 resets draft lifetime, F8 sends a stale response,
 F9 changes availability, F11 returns simulated editor text and F12 restores saved
 state. F3 expands/collapses shell output. These harness controls are outside component
-layout acceptance. There are 59 named composer entries, including aliases,
-covering 57 distinct initial states plus four main-view presentation profiles.
+layout acceptance. There are 99 named composer entries, including aliases,
+covering 97 distinct initial states plus eight main-view presentation/width profiles.
+Additional recovery frames cover queue capacity/blank saves/resumption,
+refusal with queued work, restore/save/stash failures, editor configuration/read/
+size/late-return cases, shell folding/queue/background/history, leaders,
+commands, payload kinds, selection priority and rendering profiles.
 
 Shared editing, paste transactions and text/cursor bounds are owned by
 [Editor E-01–E-03](editor.md#acceptance-criteria). Composer additionally verifies
@@ -335,7 +370,7 @@ checks and native human visual acceptance are distinct. Consumer rollout,
 native Linux/Windows terminals, clipboard formats, IME composition and real
 agent/shell integration require their owning host's acceptance.
 
-Executed results are recorded in [Verification](../verification.md#composer-engineering-record--2026-10-10).
+Executed results are recorded in [Verification](../verification.md#composer-alignment-engineering-record--2026-10-11).
 
 ## Remaining gaps
 

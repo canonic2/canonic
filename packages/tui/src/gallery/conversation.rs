@@ -1,5 +1,7 @@
 //! Exercises every Chat board with a deterministic host and acknowledged local effects.
 
+mod alignment;
+
 use crate::{
     chat::{
         Action, Change, Chat, Content, End, Intent, Mode, Part, Role, Turn, Update, Updated,
@@ -25,6 +27,7 @@ pub(super) struct ChatDemo {
     inspection: Option<(String, usize)>,
     elapsed: Duration,
     pending_delivery: Option<crate::composer::Identity>,
+    held_effects: VecDeque<Intent>,
 }
 impl ChatDemo {
     pub(super) fn new(scenario: usize) -> Self {
@@ -37,6 +40,7 @@ impl ChatDemo {
             inspection: None,
             elapsed: Duration::ZERO,
             pending_delivery: None,
+            held_effects: VecDeque::new(),
         };
         demo.chat.set_status("ready");
         demo.chat.set_footer("orbit-api#276 ~chat");
@@ -79,6 +83,9 @@ impl ChatDemo {
             demo.seed();
         }
         demo.configure();
+        if scenario >= 51 {
+            demo.configure_alignment();
+        }
         demo.chat.set_actions_available(scenario != 6);
         demo
     }
@@ -430,6 +437,7 @@ impl ChatDemo {
     pub(super) fn tick(&mut self, elapsed: Duration) {
         self.chat.tick(elapsed);
         self.elapsed += elapsed;
+        self.chat.composer_mut().set_working_elapsed(self.elapsed);
         if let Some(fragment) = self.stream.pop_front() {
             self.append(&fragment);
             if self.stream.is_empty() {
@@ -475,67 +483,98 @@ impl ChatDemo {
     fn effects(&mut self) {
         self.composer_effects();
         for intent in self.chat.take_intents() {
-            match intent {
-                Intent::Copy { request, .. } | Intent::Open { request, .. } => {
-                    self.chat.acknowledge(&request, Ok(""));
-                }
-                Intent::Inspect {
-                    request, content, ..
-                } => {
-                    let text = match content {
-                        Content::Markdown(text)
-                        | Content::Diff { patch: text, .. }
-                        | Content::Code { text, .. } => text,
-                        Content::Table { headers, rows } => format!(
-                            "{}\n{}",
-                            headers.join(" | "),
-                            rows.iter()
-                                .map(|r| r.join(" | "))
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        ),
-                        _ => format!("{content:?}"),
-                    };
-                    self.inspection = Some((text, 0));
-                    self.chat.acknowledge(&request, Ok(""));
-                }
-                Intent::Earlier { request, .. } => {
-                    let mut turn = Turn::new(
-                        &format!("earlier-{}", self.serial),
-                        Role::User,
-                        "you",
-                        "Earlier session: keep the timezone and test both digest calls.",
-                    );
-                    self.serial += 1;
-                    turn.end = End::Quiet;
-                    turn.day = "yesterday".into();
-                    let remaining = self.chat.history_counts().0.saturating_sub(1);
-                    self.chat
-                        .complete_earlier(&request, Ok(vec![turn]), remaining);
-                }
-                Intent::Latest { request } => {
-                    let mut turn = Turn::new(
-                        "newest",
-                        Role::Assistant,
-                        "acme",
-                        "Newest loaded window restored.",
-                    );
-                    turn.end = End::Done("34s".into());
-                    self.chat.complete_latest(&request, vec![turn], 340);
-                }
-                Intent::Retry { request, .. } => {
-                    self.chat
-                        .acknowledge(&request, Ok("retry started · failed reply kept"));
-                    self.serial += 1;
-                    self.live = format!("retry-{}", self.serial);
-                    self.chat
-                        .push_record(Turn::new(&self.live, Role::Assistant, "acme", ""));
-                    self.chat.composer_mut().set_working(true);
-                    self.stream = "Both calls now send the timezone. Retrying starts a new reply."
-                        .split_inclusive(' ')
-                        .map(str::to_owned)
-                        .collect();
-                }
+            if self.scenario >= 51
+                && matches!(
+                    intent,
+                    Intent::Copy { .. }
+                        | Intent::Open { .. }
+                        | Intent::Inspect { .. }
+                        | Intent::Earlier { .. }
+                        | Intent::Latest { .. }
+                        | Intent::Retry { .. }
+                )
+            {
+                self.held_effects.push_back(intent);
+            } else {
+                self.resolve_effect(intent);
+            }
+        }
+    }
+    fn resolve_effect(&mut self, intent: Intent) {
+        match intent {
+            Intent::Run(_) => {}
+            Intent::Tool {
+                message,
+                part,
+                intent,
+            } => {
+                self.chat.acknowledge_tool(
+                    &message,
+                    &part,
+                    &intent.call,
+                    &intent.ticket,
+                    Err("tool effects use the Tool Call Card gallery host"),
+                );
+            }
+            Intent::Copy { request, .. } | Intent::Open { request, .. } => {
+                self.chat.acknowledge(&request, Ok(""));
+            }
+            Intent::Inspect {
+                request, content, ..
+            } => {
+                let text = match content {
+                    Content::Markdown(text)
+                    | Content::Diff { patch: text, .. }
+                    | Content::Code { text, .. } => text,
+                    Content::Table { headers, rows } => format!(
+                        "{}\n{}",
+                        headers.join(" | "),
+                        rows.iter()
+                            .map(|r| r.join(" | "))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    ),
+                    _ => format!("{content:?}"),
+                };
+                self.inspection = Some((text, 0));
+                self.chat.acknowledge(&request, Ok(""));
+            }
+            Intent::Earlier { request, .. } => {
+                let mut turn = Turn::new(
+                    &format!("earlier-{}", self.serial),
+                    Role::User,
+                    "you",
+                    "Earlier session: keep the timezone and test both digest calls.",
+                );
+                self.serial += 1;
+                turn.end = End::Quiet;
+                turn.day = "yesterday".into();
+                let remaining = self.chat.history_counts().0.saturating_sub(1);
+                self.chat
+                    .complete_earlier(&request, Ok(vec![turn]), remaining);
+            }
+            Intent::Latest { request } => {
+                let mut turn = Turn::new(
+                    "newest",
+                    Role::Assistant,
+                    "acme",
+                    "Newest loaded window restored.",
+                );
+                turn.end = End::Done("34s".into());
+                self.chat.complete_latest(&request, vec![turn], 340);
+            }
+            Intent::Retry { request, .. } => {
+                self.chat
+                    .acknowledge(&request, Ok("retry started · failed reply kept"));
+                self.serial += 1;
+                self.live = format!("retry-{}", self.serial);
+                self.chat
+                    .push_record(Turn::new(&self.live, Role::Assistant, "acme", ""));
+                self.chat.composer_mut().set_working(true);
+                self.stream = "Both calls now send the timezone. Retrying starts a new reply."
+                    .split_inclusive(' ')
+                    .map(str::to_owned)
+                    .collect();
             }
         }
     }
@@ -555,8 +594,17 @@ impl ChatDemo {
                     self.chat
                         .push("host", &format!("/{id} invoked · local simulation"));
                 }
-                ComposerIntent::Background => {
-                    self.chat.set_status("backgrounded · local simulation");
+                ComposerIntent::Work(request) => {
+                    let (_, submission) = self
+                        .chat
+                        .composer_mut()
+                        .acknowledge_work(&request.ticket, Ok(()));
+                    if let Some(submission) = submission {
+                        self.chat.push_submission(&submission, "20:10");
+                        self.pending_delivery = Some(submission.ticket);
+                    }
+                    self.chat
+                        .set_status("work control confirmed · local simulation");
                 }
                 ComposerIntent::Rewind => {
                     self.chat.set_status("rewind requested · local simulation");
@@ -567,13 +615,21 @@ impl ChatDemo {
                 ComposerIntent::RetryCompletion(_) => {
                     self.chat.set_status("cached fixture completion");
                 }
-                ComposerIntent::Stop
-                | ComposerIntent::InterruptAfterStep
-                | ComposerIntent::Quit => {}
+                ComposerIntent::EditorCancelled(_) | ComposerIntent::Quit => {}
             }
         }
     }
     fn control(&mut self, code: KeyCode) {
+        if matches!(code, KeyCode::F(5 | 6))
+            && let Some(intent) = self.held_effects.pop_front()
+        {
+            if code == KeyCode::F(5) {
+                self.resolve_effect(intent);
+            } else {
+                self.fail_effect(intent);
+            }
+            return;
+        }
         match code {
             KeyCode::F(5) => {
                 if let Some(ticket) = self.pending_delivery.take() {

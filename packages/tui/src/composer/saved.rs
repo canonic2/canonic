@@ -34,6 +34,14 @@ pub struct SavedComposer {
 }
 
 impl Composer {
+    /// Report a host read/decode failure without changing the current draft or storage.
+    /// A fresh session remains empty; a live draft is never erased by a failed restore.
+    pub fn report_restore_failure(&mut self, reason: &str) {
+        self.editor.notify(&format!(
+            "✕ Saved draft could not be read · {}",
+            crate::text::clean(reason, 256, false)
+        ));
+    }
     /// Snapshot everything required to resume. A recall copy never replaces the draft.
     #[must_use]
     pub fn saved(&self) -> SavedComposer {
@@ -225,10 +233,10 @@ impl Composer {
         self.save_ticket = None;
         if let Err(reason) = result {
             self.editor.notify(&format!(
-                "Autosave failed · {} · text kept",
+                "Draft not saved · {} · retrying in 5s · text kept",
                 crate::text::clean(reason, 256, false)
             ));
-            self.save_due = Some(self.now + Duration::from_millis(500));
+            self.save_due = Some(self.now + Duration::from_secs(5));
         } else if changed {
             self.save_due = Some(self.now + Duration::from_millis(500));
         }

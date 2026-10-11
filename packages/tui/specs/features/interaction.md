@@ -48,7 +48,7 @@ terminal reporting across every component and host adapter.
 
 ## Keyboard contract and terminal quirks
 
-Agreed on 2026-10-10. This is a hard rule across the library, gallery and consumer
+This is a hard rule across the library, gallery and consumer
 adapters, including chat composers and dialog prompts. A host may choose plain
 Enter's action; it may not redefine modified Enter as submission.
 
@@ -57,7 +57,7 @@ Enter's action; it may not redefine modified Enter as submission.
 | Shift-Enter | Insert a newline | Never confirm or activate |
 | Alt-Enter | Insert a newline | Never confirm or activate |
 | Ctrl-J | Insert a newline; traditional-terminal fallback | No implicit confirmation |
-| Plain Enter press | Host-defined: submit in chat/prompt, newline in standalone editor | Explicit confirmation of a valid enabled selection |
+| Plain Enter press | Host submission, including standalone and tall prompt fields | Explicit confirmation of a valid enabled selection |
 | Modified Enter repeat/release | Release never edits; repeat never submits | Never confirm or activate |
 | Paste | Insert the supplied text, normalizing CRLF/CR to LF | Never confirm or activate |
 
@@ -74,6 +74,7 @@ terminal owner requests enhanced keyboard reporting on supported hosts, preserve
 the reported modifiers, and restores the previous reporting state on every exit.
 Components neither acquire keyboard modes nor infer missing modifiers from timing.
 Ctrl-J remains a documented newline path when modifiers cannot be reported.
+Redo uses Ctrl-Shift-Z or Alt-Z; Ctrl-Y yanks from the focused editor's kill ring.
 Do not require a terminal-settings change as the default product workflow or
 claim a physical shortcut is supported solely because synthetic events pass.
 

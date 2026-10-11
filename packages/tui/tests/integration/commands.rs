@@ -242,3 +242,203 @@ fn alias_search_and_effective_help_emit_only_unmodified_press_intents() {
         Intent::Selected("rename".into())
     );
 }
+
+#[test]
+fn search_classes_precede_recency_and_typing_before_draw_keeps_opening_height() {
+    use canonic_tui::picker::PickerView;
+    let mut entries = Vec::new();
+    for (id, label, alias) in [
+        ("fuzzy", "keep old logs", ""),
+        ("alias", "stop session", "kill"),
+        ("word", "please kill session", ""),
+        ("prefix", "kill session", ""),
+        ("exact", "shortcut", ""),
+    ] {
+        let mut c = commands().remove(0);
+        c.id = id.into();
+        c.label = label.into();
+        c.description.clear();
+        c.aliases = vec![alias.into()];
+        c.bindings.clear();
+        entries.push(c);
+    }
+    entries[4].bindings = vec![Binding(vec![Stroke::new(
+        KeyCode::Char('k'),
+        KeyModifiers::CONTROL,
+    )])];
+    let mut view = Commands::new(entries).unwrap();
+    view.set_recent(&["alias", "fuzzy"]);
+    let opening = view.height(
+        72,
+        PickerView {
+            max_height: 30,
+            ..PickerView::default()
+        },
+    );
+    view.update(&Event::Paste("kill".into()));
+    assert_eq!(
+        view.height(
+            72,
+            PickerView {
+                max_height: 30,
+                ..PickerView::default()
+            }
+        ),
+        opening
+    );
+    assert_eq!(view.selected(), Some("prefix"));
+    view.update(&Event::Key(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::NONE,
+    )));
+    assert_eq!(view.selected(), Some("word"));
+    view.update(&Event::Key(KeyEvent::new(
+        KeyCode::Down,
+        KeyModifiers::NONE,
+    )));
+    assert_eq!(view.selected(), Some("alias"));
+    view.set_query("ctrl+k");
+    assert_eq!(view.selected(), Some("exact"));
+    view.set_query("");
+    assert_eq!(view.selected(), Some("alias"));
+}
+
+#[test]
+fn empty_scopes_and_free_key_evidence_are_explicit_host_contracts() {
+    use canonic_tui::{
+        picker::PickerView,
+        ratatui::{Terminal, backend::TestBackend},
+    };
+    let mut view = Commands::new(commands()).unwrap();
+    view.set_scope_names(&["log view"]);
+    view.set_keys(true);
+    let mut terminal = Terminal::new(TestBackend::new(72, 12)).unwrap();
+    view.set_query("ctrl+q");
+    terminal
+        .draw(|f| {
+            view.render(f, f.area(), PickerView::default());
+        })
+        .unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(text.contains("no key matches"));
+    assert!(!text.contains("free in every scope"));
+    view.set_complete_key_map(true);
+    terminal
+        .draw(|f| {
+            view.render(f, f.area(), PickerView::default());
+        })
+        .unwrap();
+    assert!(
+        super::components::dump(terminal.backend().buffer())
+            .contains("ctrl+q is free in every scope")
+    );
+    view.set_query("");
+    for _ in 0..2 {
+        view.update(&Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)));
+    }
+    assert_eq!(view.match_count(), 0);
+    terminal
+        .draw(|f| {
+            view.render(f, f.area(), PickerView::default());
+        })
+        .unwrap();
+    assert!(
+        super::components::dump(terminal.backend().buffer()).contains("no keys in the log view")
+    );
+    assert_eq!(
+        view.update(&Event::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE
+        ))),
+        Intent::None
+    );
+}
+
+#[test]
+fn unavailable_reason_replaces_the_key_and_attribute_only_output_marks_it() {
+    use canonic_tui::{
+        picker::PickerView,
+        ratatui::{Terminal, backend::TestBackend},
+        theme::{ColorMode, Presentation},
+    };
+    let mut entries = commands();
+    entries[0].disabled = Some("offline".into());
+    let mut view = Commands::new(entries).unwrap();
+    view.set_query("ctrl+k");
+    assert_eq!(view.match_count(), 1);
+    assert!(view.selected().is_none());
+    let mut terminal = Terminal::new(TestBackend::new(72, 12)).unwrap();
+    terminal
+        .draw(|f| {
+            view.render(
+                f,
+                f.area(),
+                PickerView {
+                    presentation: Presentation {
+                        colors: ColorMode::NoColor,
+                        ..Presentation::default()
+                    },
+                    max_height: 12,
+                    ..PickerView::default()
+                },
+            );
+        })
+        .unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    let row = text
+        .lines()
+        .find(|line| line.contains("rename branch"))
+        .unwrap();
+    assert!(row.contains("[-] offline"));
+    assert!(!row.contains("ctrl+k"));
+    assert_eq!(view.update(&key_event(KeyCode::Enter)), Intent::None);
+}
+fn key_event(code: KeyCode) -> Event {
+    Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
+}
+
+#[test]
+fn boxed_palette_clears_backdrop_attributes_inside_its_panel() {
+    use canonic_tui::{
+        picker::PickerView,
+        ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Modifier, widgets::Block},
+        theme::{ColorMode, Presentation},
+    };
+    for colors in [ColorMode::Ansi16, ColorMode::NoColor] {
+        let presentation = Presentation {
+            colors,
+            ..Presentation::default()
+        };
+        let mut commands = Commands::new(commands()).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| {
+                frame.render_widget(
+                    Block::default().style(presentation.base().add_modifier(Modifier::DIM)),
+                    frame.area(),
+                );
+                commands.render(
+                    frame,
+                    Rect::new(4, 2, 72, 12),
+                    PickerView {
+                        presentation,
+                        max_height: 12,
+                        ..PickerView::default()
+                    },
+                );
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert!(buffer[(0, 0)].modifier.contains(Modifier::DIM));
+        assert!(
+            !buffer[(4, 2)]
+                .modifier
+                .intersects(Modifier::DIM | Modifier::REVERSED)
+        );
+        assert!(
+            !buffer[(75, 3)]
+                .modifier
+                .intersects(Modifier::DIM | Modifier::REVERSED)
+        );
+    }
+}

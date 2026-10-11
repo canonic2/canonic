@@ -17,11 +17,12 @@ make -C packages/tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, **Composer**, or **Completion Menu**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, or **Tool Call Card**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its
-empty idle box quits. Ctrl-C quits other components. Ctrl-T toggles themes.
+empty idle box quits. Open dialogs arm Ctrl-C before closing one layer; busy Chat
+uses Ctrl-C to request cancellation. Ctrl-C quits other idle components. Ctrl-T toggles themes.
 F10 opens the active component's scenarios. F2 cycles working fixtures.
 Returning to a picker retains its search, selection and scroll position;
 scenario picker state is remembered separately for each component.
@@ -43,19 +44,28 @@ data, with no AI account, policy enforcement, Git operation or saved approval.
 Composer includes immediate submission/acknowledgement, one-per-turn queues,
 editor-first Up recall, searchable history, stash swaps/drop undo, autosave
 snapshots, paste/image chips, shell mode, slash/file completion and external-editor
-conflicts. The gallery has 59 named composer scenarios with simulated host work.
+conflicts. The gallery has 99 named composer scenarios with simulated host work.
 F5 accepts or ends a turn, F6 refuses/fails, F11 returns editor text and F12
 restores saved state with the queue paused. See [usage](docs/usage.md#composer-workflows)
 and the [public implementation contract](specs/components/composer.md).
 
-Completion Menu has 15 interactive states for commands/files, streaming, failure,
+Completion Menu has 30 interactive states for commands/files, streaming, failure,
 retry, disabled candidates and insertion. Tab and Enter insert; a later Enter
 invokes a known command or submits the message. Its pure reusable API owns ranking,
 source tickets and fixed-height rendering; hosts own discovery and I/O. See
 [usage](docs/usage.md#completion-menu) and its [contract](specs/components/completion-menu.md).
 
+Tool Call Card supplies nine lifecycle states, text/code/diff previews, ordered
+concurrent groups, coalesced streaming and identified copy/details/retry effects.
+Its 79 gallery scenarios run inside Chat with an independent Composer draft,
+including twenty run activity and cancellation scenarios.
+Ctrl-X V selects cards; Enter expands, `o` opens searchable full-output details,
+`r` requests a new retry card, and `y`/`c` copy call/output in the local simulation.
+See [usage](docs/usage.md#tool-call-card) and its [contract](specs/components/tool-call-card.md).
+
 The editor uses full-width text between title/footer rules, with semantic color
-and cell tokens. F2 cycles its twelve design states; F4 cycles color profiles.
+and cell tokens. F2 cycles its twenty-five working states; F4 cycles color profiles.
+Ctrl-Y yanks and Alt-Y cycles ten local kills; Ctrl-Shift-Z or Alt-Z redoes.
 Use `--colors none --ascii` for attribute-only ASCII chrome or
 `--colors truecolor --light` for light RGB roles. Body colors follow the terminal.
 
@@ -65,6 +75,11 @@ focus; replacement/clear invalidate result tickets. F2 cycles dialog fixtures,
 F3 nests a prompt and F6 replaces the current layer. Dialogs center over faded
 content and the fixed dock. Indexed/RGB surfaces contain inset
 fields; ANSI 16/no-color use boxes. No host operation executes.
+
+Timed dialogs defer arrivals while typing, guard Enter/digits for 300 ms and arm
+Ctrl-C closure before closing one layer. Irreversible choices require a second
+Enter within three seconds; named confirmations require exact input. The 36
+named scenarios simulate notifications, queues and host removal without external effects.
 
 ```sh
 cd packages/tui

@@ -49,12 +49,19 @@ try:
     os.write(master,b'\r');wait_for('Prompt result: LINE ONELINE TWOLINE THREELINE FOURLINE FIVE')
     os.write(master,b'\x1bOR');wait_for('nested prompt')
     os.write(master,b'\x07\x1b[200~PARENT ALPHA 42\x1b[201~\x1bOR');wait_for('nested prompt')
-    os.write(master,b'\x07\x1b[200~CHILD OMEGA 93\x1b[201~\r');wait_for('Prompt result: CHILD OMEGA 93')
+    os.write(master,b'\x07\x1b[200~CHILD OMEGA 93\x1b[201~');wait_for('CHILD OMEGA 93')
+    wait_for('! dialog 2 of 2 · esc goes back')
+    os.write(master,b'\r');wait_for('Prompt result: CHILD OMEGA 93')
     wait_for('PARENT ALPHA 42')
+    wait_for('! dialog · esc closes it')
     os.write(master,b'\r');wait_for('Prompt result: PARENT ALPHA 42')
     wait_for('Background draft one');wait_for('Background draft two')
     os.write(master,b'\x1bOR');wait_for('nested prompt')
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',8,15,0,0));os.kill(child.pid,signal.SIGWINCH)
+    os.write(master,b'\x03')
+    time.sleep(0.1);assert child.poll() is None,'first ctrl+c must arm closure'
+    os.write(master,b'\x03')
+    time.sleep(0.1);assert child.poll() is None,'second ctrl+c closes the dialog without quitting'
     os.write(master,b'\x03')
     deadline=time.monotonic()+5
     while child.poll() is None:

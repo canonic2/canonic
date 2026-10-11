@@ -69,7 +69,12 @@ impl Presentation {
     /// `line-info` (#495F81 / indexed 60) for recalled content.
     #[must_use]
     pub fn info_line(self) -> Style {
-        Self::foreground(self.tokens().line_info).add_modifier(Modifier::DIM)
+        let style = Self::foreground(self.tokens().line_info);
+        if self.colors == ColorMode::Ansi16 {
+            style
+        } else {
+            style.add_modifier(Modifier::DIM)
+        }
     }
     /// Resolve the semantic palette for this profile.
     #[must_use]
@@ -87,30 +92,30 @@ impl Presentation {
                 None,
             ],
             ColorMode::Ansi256 => {
-                [245, 80, 114, 179, 174, 111, 236, 23].map(|n| Some(Color::Indexed(n)))
+                [245, 80, 114, 179, 210, 111, 235, 23].map(|n| Some(Color::Indexed(n)))
             }
             ColorMode::TrueColor => {
                 let rgb = if self.theme == Theme::Dark {
                     [
                         0x0085_878c_u32,
-                        0x0056_c2c9,
-                        0x007f_c17a,
-                        0x00e3_be6a,
-                        0x00e5_737a,
-                        0x007a_a7e8,
-                        0x001c_1e22,
-                        0x002b_4f57,
+                        0x005c_cfd6,
+                        0x0086_c77f,
+                        0x00eb_c56b,
+                        0x00ec_7b82,
+                        0x0082_aeef,
+                        0x001c_1f24,
+                        0x0016_3236,
                     ]
                 } else {
                     [
                         0x006b_6e73_u32,
-                        0x000e_7c86,
+                        0x0012_7c83,
                         0x002e_7d32,
                         0x008a_6100,
                         0x00b3_261e,
                         0x0025_57b8,
                         0x00ee_eeea,
-                        0x00cc_e5e7,
+                        0x00d5_eef0,
                     ]
                 };
                 rgb.map(|n| {
@@ -178,9 +183,19 @@ impl Presentation {
         if self.colors == ColorMode::NoColor {
             self.base()
         } else if self.colors == ColorMode::Ansi16 {
-            Self::foreground(self.tokens().faded).add_modifier(Modifier::DIM)
+            self.muted()
         } else {
             Self::foreground(self.tokens().faded)
+        }
+    }
+    /// Unavailable controls use faded styling; hosts retain a textual disabled
+    /// marker so availability remains explicit without color.
+    #[must_use]
+    pub fn disabled(self) -> Style {
+        if self.colors == ColorMode::Ansi16 {
+            self.muted()
+        } else {
+            self.faded()
         }
     }
     /// Accent without emphasis.
@@ -214,6 +229,11 @@ impl Presentation {
     #[must_use]
     pub fn error(self) -> Style {
         Self::foreground(self.tokens().error)
+    }
+    /// Informational controls and source metadata, including plain ANSI 16 blue.
+    #[must_use]
+    pub fn info(self) -> Style {
+        Self::foreground(self.tokens().info)
     }
     /// Selection tint or reverse fallback.
     #[must_use]

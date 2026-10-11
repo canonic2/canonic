@@ -6,15 +6,19 @@ component, as requested on 2026-10-10. Human visual acceptance and explicit comm
 authorization remain separate from passing tests.
 
 Editor/focus and rich picker have recorded acceptance. Dialog foundations and
-commands are implemented; dialog timing remains separate. Composer implements
+commands are implemented; Dialog supplies timed arrival and caution policies. Composer implements
 its full local workflow: submission, queue, history, stash, chips, completion,
 saved-state codec, external-editor conflicts and foreground terminal handoff.
 Consumers own actual execution, durable storage and clipboard integration.
 Completion Menu implements reusable source-aware queries, insertion, streaming,
 retry and its dedicated gallery. Chat implements identified rich content,
-streaming/resync, anchors/paging, search, selection/copy and 51 scenarios.
-The next component is **Tool Call Card**: supplied tool activity/output and
-explicit human review, with host-owned execution and permission policy.
+streaming/resync, anchors/paging, search, selection/copy and 76 scenarios.
+Tool Call Card implements identified activity/output, ordered groups and selected
+copy/details/retry with host-owned execution. Its 79 gallery scenarios include
+progress, child tasks/artifacts, host reorder and whole-run cancellation races.
+Question Form and Permission Review designs are available; their implementations
+remain next in the component sequence. Session Browser is the next design-team
+handoff. Permission policy, native inline hosting and broader acceptance remain separate.
 
 ## Delivery scope and phase order
 
@@ -78,13 +82,18 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | C-05 | [Chat](components/chat.md#acceptance-criteria): loaded search/block navigation and stale acknowledgement restoration | 3 |
 | C-06 | [Chat](components/chat.md#acceptance-criteria): long projection measurements and explicit omissions | 3, continuous |
 | R-01 | [Activity](features/activity.md#acceptance-criteria): concurrent tool/run/connection states | 4 |
+| TC-01–TC-05 | [Tool Call Card](components/tool-call-card.md#acceptance-criteria): lifecycle, concurrency/output, focus/effects, gallery/native and engineering evidence | 4 |
+| RUN-1–RUN-7 | [Run Activity](components/run-activity.md#acceptance-criteria): host snapshots, cancellation races, retry, connectivity, motion and options | 4 |
 | R-02 | [Activity](features/activity.md#acceptance-criteria): cancel request and host completion/interrupt races | 4 |
 | R-03 | [Activity](features/activity.md#acceptance-criteria): exact review identity/no implicit affirmative/expiry | 4 |
 | R-04 | [Activity](features/activity.md#acceptance-criteria): single/multi/typed question staged/reviewed response | 4 |
 | R-05 | [Activity](features/activity.md#acceptance-criteria): queued/stale review isolation and no authority effects | 4 |
 | D-01 | [Dialog](components/dialog.md): topmost input/focus/generation/resize | 2 |
+| DG-02–DG-05 | [Dialog](components/dialog.md#acceptance-criteria): timed arrival/guard, app closure, notices/attention and caution qualification | 2 |
 | D-02 | [Option Picker](components/option-picker.md): identity/loading/disabled/index adapter | 2 |
 | D-03 | [Command Palette](components/command-palette.md): palette/help/completion consistency | 2 |
+| CP-02–CP-04 | [Command Palette](components/command-palette.md#acceptance-criteria): ranking/recency, captured height, unavailable/alias feedback and effective scoped help | 2 |
+| CM-02–CM-04 | [Completion Menu](components/completion-menu.md#acceptance-criteria): alias ranking, source warning/retry, fixed height and dock/status separation | 2 |
 | D-04 | [Browsing](features/browsing.md): session search/actions/races without storage | 5 |
 | D-05 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): safe lazy tree navigation without host I/O | 5 |
 | D-06 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): responsive statuses/notices/unknown/clock | 5 |
@@ -133,8 +142,8 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 
 ## Remaining gap summary
 
-The next standalone component is Tool Call Card. Dialog arrival/removal timing,
-structured activity/review, browsers,
+Question Form and Permission Review await implementation. Session Browser is the
+next design-team handoff. Review queue composition, browsers,
 inline hosting and broad native acceptance remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),

@@ -27,6 +27,8 @@ use std::{sync::Arc, time::Duration};
 pub struct Candidate {
     pub id: String,
     pub name: String,
+    /// Searchable spellings ranked after name prefix and word-start matches.
+    pub aliases: Vec<String>,
     pub insertion: String,
     pub description: String,
     pub tag: String,
@@ -47,6 +49,7 @@ impl Candidate {
         Self {
             id: id.into(),
             name: name.into(),
+            aliases: Vec::new(),
             insertion: insertion.into(),
             description: String::new(),
             tag: String::new(),
@@ -85,6 +88,7 @@ pub struct Batch {
 struct Source {
     id: String,
     batch: Batch,
+    timed_out: bool,
 }
 
 /// Input disposition. The host performs insertion or retries; no I/O occurs here.
@@ -152,6 +156,7 @@ impl Menu {
                 .map(|id| Source {
                     id: clean(id, 256, false),
                     batch: Batch::default(),
+                    timed_out: false,
                 })
                 .collect(),
             body_rows: u16::try_from(rows.len().clamp(1, 8)).unwrap_or(8),
@@ -200,6 +205,7 @@ impl Menu {
         self.guess = None;
         for source in &mut self.sources {
             source.batch = Batch::default();
+            source.timed_out = false;
         }
         self.rank(false);
     }
@@ -261,7 +267,7 @@ impl Menu {
             for source in &mut self.sources {
                 if !source.batch.complete {
                     source.batch.complete = true;
-                    source.batch.error = Some("Timed out after 5 seconds".into());
+                    source.timed_out = true;
                 }
             }
         }
@@ -275,6 +281,7 @@ impl Menu {
         self.request.identity = Arc::new(());
         for source in &mut self.sources {
             source.batch = Batch::default();
+            source.timed_out = false;
         }
         self.elapsed = Duration::ZERO;
         self.dispatched = false;
@@ -316,6 +323,15 @@ impl Menu {
             .filter_map(|s| s.batch.error.as_deref().map(|error| (s.id.as_str(), error)))
             .collect()
     }
+    /// Sources with no reply after five seconds; timeout is distinct from failure.
+    #[must_use]
+    pub fn timed_out_sources(&self) -> Vec<&str> {
+        self.sources
+            .iter()
+            .filter(|s| s.timed_out)
+            .map(|s| s.id.as_str())
+            .collect()
+    }
     /// Explicit host retry for a partial-source warning; only failed sources reset.
     pub fn retry_failed(&mut self) -> Option<Request> {
         if !self.open || !self.failed() {
@@ -329,7 +345,11 @@ impl Menu {
     #[must_use]
     pub fn hint(&self) -> &'static str {
         if self.selected().is_some() {
-            "↑↓ choose · tab / enter inserts · esc closes"
+            if self.failed() {
+                "tab / enter inserts · alt+r retries · esc closes"
+            } else {
+                "↑↓ choose · tab / enter inserts · esc closes"
+            }
         } else if self.failed() {
             "tab retries · enter sends as text · esc closes"
         } else if self.guess.is_some() {
@@ -341,6 +361,28 @@ impl Menu {
     /// Compact help; the full keyboard contract remains unchanged.
     #[must_use]
     pub fn hint_for(&self, width: u16) -> &'static str {
+        if self.selected().is_none() && width < 60 {
+            return if self.failed() {
+                if width < 24 {
+                    "tab retries · esc"
+                } else {
+                    "tab retries · esc closes"
+                }
+            } else if self.guess.is_some() {
+                if width < 24 {
+                    "tab closest · esc"
+                } else {
+                    "tab closest · esc closes"
+                }
+            } else if width < 24 {
+                "enter sends · esc"
+            } else {
+                "enter sends · esc closes"
+            };
+        }
+        if self.selected().is_some() && self.failed() && width >= 50 {
+            return "tab inserts · alt+r retries · esc closes";
+        }
         if self.selected().is_some() && width < 60 {
             if width < 24 {
                 "tab inserts · esc"
@@ -362,7 +404,9 @@ impl Menu {
         self.sources.iter().all(|s| s.batch.error.is_some())
     }
     fn failed(&self) -> bool {
-        self.sources.iter().any(|s| s.batch.error.is_some())
+        self.sources
+            .iter()
+            .any(|s| s.batch.error.is_some() || s.timed_out)
     }
     /// Consume menu keys. Ordinary editing remains the host's responsibility.
     pub fn update(&mut self, event: &Event) -> Action {
@@ -377,6 +421,13 @@ impl Menu {
         }
         let plain = key.modifiers.is_empty();
         let control = key.modifiers == KeyModifiers::CONTROL;
+        if key.modifiers == KeyModifiers::ALT && key.code == KeyCode::Char('r') {
+            return if key.kind == KeyEventKind::Press && self.failed() {
+                self.retry()
+            } else {
+                Action::None
+            };
+        }
         if control && key.code == KeyCode::Char('c') {
             return Action::Close;
         }
@@ -417,8 +468,9 @@ impl Menu {
     fn retry(&mut self) -> Action {
         self.request.identity = Arc::new(());
         for source in &mut self.sources {
-            if source.batch.error.take().is_some() {
+            if source.batch.error.take().is_some() || source.timed_out {
                 source.batch.complete = false;
+                source.timed_out = false;
             }
         }
         self.elapsed = Duration::ZERO;
@@ -456,6 +508,11 @@ fn validate(mut rows: Vec<Candidate>) -> Result<Vec<Candidate>, &'static str> {
             || !ids.insert(row.id.clone())
             || row.name.is_empty()
             || row.name.len() > 4096
+            || row.aliases.len() > 16
+            || row
+                .aliases
+                .iter()
+                .any(|alias| alias.is_empty() || alias.len() > 128)
             || row.insertion.is_empty()
             || row.insertion.len() > 16384
             || row.insertion.chars().any(char::is_control)
@@ -463,6 +520,12 @@ fn validate(mut rows: Vec<Candidate>) -> Result<Vec<Candidate>, &'static str> {
             return Err("Invalid candidate");
         }
         row.name = clean(&row.name, 4096, false);
+        for alias in &mut row.aliases {
+            *alias = clean(alias, 128, false);
+            if alias.is_empty() {
+                return Err("Invalid alias");
+            }
+        }
         if row.name.is_empty() {
             return Err("Invalid name");
         }

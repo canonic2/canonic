@@ -24,6 +24,8 @@ pub struct DialogView {
     pub scope: String,
     /// Optional explanation, wrapped to at most three rows.
     pub message: String,
+    /// Render the host's failure message with the semantic error role.
+    pub message_error: bool,
     /// Named actions, e.g. `enter rename · esc cancel`.
     pub footer: String,
     /// Abbreviated actions at narrow widths.
@@ -47,7 +49,15 @@ impl<B> Layer<B> {
     }
 }
 pub(super) fn outer(area: Rect, size: Size) -> Rect {
-    let width = area.width.min(size.width.clamp(1, DIALOG_WIDTH));
+    if area.height < 3 {
+        return area;
+    }
+    let width = area
+        .width
+        .saturating_sub(4)
+        .max(1)
+        .min(area.width)
+        .min(size.width.clamp(1, DIALOG_WIDTH));
     let limit = area
         .height
         .saturating_sub(DIALOG_PANEL_GAP)
@@ -140,9 +150,13 @@ impl<B, T: Clone + Eq> Stack<B, T> {
         let Some(layer) = self.layers.last_mut() else {
             return;
         };
-        let border = boxed(p);
+        let border = boxed(p) && viewport.height >= 3;
         let width = inset(outer(viewport, layer.size)).width;
-        let messages = message(&layer.view, width);
+        let messages = if viewport.height < 3 {
+            Vec::new()
+        } else {
+            message(&layer.view, width)
+        };
         layer.rendered_height = Some(
             measure(&layer.body, width, border)
                 .saturating_add(u16::try_from(messages.len()).unwrap_or(3))
@@ -181,7 +195,11 @@ impl<B, T: Clone + Eq> Stack<B, T> {
                     .collect::<Vec<_>>()
                     .join("\n"),
             )
-            .style(p.base()),
+            .style(if layer.view.message_error {
+                p.error().add_modifier(Modifier::BOLD)
+            } else {
+                p.base()
+            }),
             Rect::new(content.x, content.y, content.width, message_h),
         );
         let body_area = Rect::new(

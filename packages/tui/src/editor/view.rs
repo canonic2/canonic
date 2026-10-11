@@ -109,7 +109,11 @@ impl Editor {
         let rows = layout::rows(self.text(), self.width, self.symbols, &self.draft.atoms);
         let (y, x) = layout::position(&rows, self.cursor(), self.width, self.draft.upstream);
         if focused && self.height > 0 {
-            let context = CURSOR_CONTEXT.min(self.height.saturating_sub(1) / 2);
+            let context = if self.height >= 4 {
+                CURSOR_CONTEXT.min(1)
+            } else {
+                0
+            };
             if y < self.offset + context {
                 self.offset = y.saturating_sub(context);
             }
@@ -195,7 +199,9 @@ impl Editor {
         let p = view.presentation;
         let rule_style = if focused { p.accent() } else { p.muted() };
         let title_style = if focused { p.focus() } else { p.muted() };
-        let above = if self.offset > 0 {
+        let above = if self.height == 0 {
+            format!("{} lines", self.text().split('\n').count())
+        } else if self.offset > 0 {
             format!("{} {} more", p.symbols.more(true), self.offset)
         } else {
             String::new()
@@ -217,13 +223,30 @@ impl Editor {
         if below > 0 {
             metadata.push(format!("{} {below} more", p.symbols.more(false)));
         }
+        let bytes = self.draft.expanded_size();
+        let near_limit = self.limit > 0 && bytes >= self.limit - self.limit / 10;
         if focused {
             metadata.push(self.footer(view));
+        } else if self.rejected || near_limit {
+            metadata.push(format!("{bytes} / {} bytes", self.limit));
+        } else if let Some(selection) = self.selection() {
+            let selected = &self.text()[selection];
+            metadata.push(format!(
+                "{} selected{}{} lines",
+                selected.graphemes(true).count(),
+                p.symbols.separator(),
+                selected.split('\n').count()
+            ));
         }
-        let footer_style = if self.rejected
-            || (self.limit > 0 && self.text().len() >= self.limit - self.limit / 10)
-        {
-            p.warning()
+        let footer_style = if self.rejected || bytes >= self.limit {
+            p.error()
+        } else if near_limit {
+            let style = p.warning();
+            if focused {
+                style
+            } else {
+                style.remove_modifier(ratatui::style::Modifier::BOLD)
+            }
         } else {
             p.muted()
         };
@@ -249,12 +272,12 @@ impl Editor {
             return format!(
                 "byte limit reached{}{} / {} bytes",
                 view.presentation.symbols.separator(),
-                self.text().len(),
+                self.draft.expanded_size(),
                 self.limit
             );
         }
-        if self.limit > 0 && self.text().len() >= self.limit - self.limit / 10 {
-            return format!("{} / {} bytes", self.text().len(), self.limit);
+        if self.limit > 0 && self.draft.expanded_size() >= self.limit - self.limit / 10 {
+            return format!("{} / {} bytes", self.draft.expanded_size(), self.limit);
         }
         if !view.footer.is_empty() {
             return label(view.footer);
@@ -273,12 +296,21 @@ impl Editor {
             + 1;
         let position = format!("ln {line}:{column}");
         self.selection().map_or(position.clone(), |r| {
-            format!(
-                "{} selected{}{}",
-                self.text()[r].graphemes(true).count(),
+            let selected = &self.text()[r];
+            let lines = selected.split('\n').count();
+            let stats = format!(
+                "{} selected{}{} {}",
+                selected.graphemes(true).count(),
                 view.presentation.symbols.separator(),
-                position
-            )
+                lines,
+                if lines == 1 { "line" } else { "lines" }
+            );
+            let full = format!("{stats}{}{position}", view.presentation.symbols.separator());
+            if unicode_width::UnicodeWidthStr::width(full.as_str()) <= usize::from(self.width) {
+                full
+            } else {
+                stats
+            }
         })
     }
 }

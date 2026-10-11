@@ -21,7 +21,7 @@ pub struct CompletionRequest {
     pub kind: CompletionKind,
     pub query: String,
 }
-/// A host candidate; file values are plain editable text.
+/// A host candidate; message files become references, shell paths remain text.
 #[derive(Clone, Debug)]
 pub struct CompletionItem {
     pub id: String,
@@ -58,9 +58,9 @@ fn candidates(items: &[CompletionItem], kind: CompletionKind) -> Vec<Candidate> 
             c.recency = u64::from(item.touched);
             if item.touched {
                 c.tag = if kind == CompletionKind::File {
-                    "edited"
+                    "file · edited"
                 } else {
-                    "recent"
+                    "command · recent"
                 }
                 .into();
             }
@@ -113,6 +113,8 @@ impl Composer {
         if let Ok(mut menu) = Menu::new(
             if kind == CompletionKind::Command {
                 "commands"
+            } else if self.input_mode == super::InputMode::Shell {
+                "paths"
             } else {
                 "files"
             },
@@ -176,9 +178,31 @@ impl Composer {
         let kind = c.kind;
         let old_cursor = self.editor.cursor();
         self.editor.restore_cursor(end);
-        let outcome = self
-            .editor
-            .replace_before_cursor(end - start, &format!("{prefix}{} ", candidate.insertion));
+        let outcome = if kind == CompletionKind::File && !prefix.is_empty() {
+            let mut document = self.editor.document();
+            if let Some(marker) = ('\u{e000}'..='\u{f8ff}').find(|c| !document.text.contains(*c)) {
+                document
+                    .text
+                    .replace_range(start..end, &format!("{marker} "));
+                document.cursor = start + marker.len_utf8() + 1;
+                document.atoms.retain(|c, _| document.text.contains(*c));
+                document.atoms.insert(
+                    marker,
+                    crate::editor::InlineAtom {
+                        kind: crate::editor::AtomKind::File,
+                        label: crate::text::clean(&format!("@{}", candidate.insertion), 256, false),
+                        content: format!("@{}", candidate.insertion),
+                        reference: Some(candidate.id.clone()),
+                    },
+                );
+                self.editor.replace_document(&document)
+            } else {
+                crate::editor::Outcome::Rejected
+            }
+        } else {
+            self.editor
+                .replace_before_cursor(end - start, &format!("{prefix}{} ", candidate.insertion))
+        };
         if outcome == crate::editor::Outcome::Changed {
             if kind == CompletionKind::Command {
                 let item = CompletionItem {
@@ -227,9 +251,17 @@ impl Composer {
             }
         } else {
             self.editor.restore_cursor(old_cursor);
+            self.editor
+                .notify("! doesn't fit · the message is at its byte limit");
         }
     }
     fn edit_completion(&mut self, event: &Event) {
+        if matches!(event, Event::Key(k) if k.kind == KeyEventKind::Press && k.code == KeyCode::F(1) && k.modifiers.is_empty())
+        {
+            self.completion = None;
+            self.update(event);
+            return;
+        }
         // Destructive/selection/undo operations close first; ordinary cursor movement
         // inside the token preserves the query and its request identity.
         if matches!(event, Event::Paste(_))
@@ -318,6 +350,8 @@ impl Composer {
         let Ok(menu) = Menu::new(
             if request.kind == CompletionKind::Command {
                 "commands"
+            } else if self.input_mode == super::InputMode::Shell {
+                "paths"
             } else {
                 "files"
             },
@@ -464,6 +498,9 @@ impl Composer {
         }
     }
     pub(super) fn invoke_command(&mut self) -> bool {
+        if self.literal_command.as_ref() == Some(&self.version) {
+            return false;
+        }
         if self.input_mode != super::InputMode::Message
             || !matches!(self.mode, super::BoxMode::Draft)
             || self.blocked.is_some()
@@ -490,6 +527,7 @@ impl Composer {
         });
         if chosen.is_some() && item.is_none_or(|i| i.disabled.is_some()) {
             self.editor.notify("Command unavailable · draft kept");
+            self.literal_command = Some(self.version.clone());
             return true;
         }
         let Some(item) = item.filter(|i| i.disabled.is_none()) else {
@@ -516,6 +554,9 @@ impl Composer {
         true
     }
     pub(super) fn command_ready(&self) -> bool {
+        if self.literal_command.as_ref() == Some(&self.version) {
+            return false;
+        }
         self.inserted_command.is_some()
             || self.input_mode == super::InputMode::Message
                 && self

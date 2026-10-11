@@ -28,6 +28,91 @@ fn picker(filter: Filter, mode: SelectionMode) -> ChoicePicker {
 }
 
 #[test]
+fn ranking_uses_match_classes_and_preserves_source_order_for_ties() {
+    let mut detail = Choice::new("detail", "Other");
+    detail.detail = "deploy".into();
+    let rows = vec![
+        detail,
+        Choice::new("fuzzy", "distant elephant path"),
+        Choice::new("word", "Run deploy"),
+        Choice::new("prefix", "Deploy now"),
+        Choice::new("prefix-two", "Deployment"),
+    ];
+    let mut p = ChoicePicker::new(rows, None, SelectionMode::Single, Filter::On).unwrap();
+    p.set_query("dep");
+    p.update(&key(KeyCode::Home));
+    for id in ["prefix", "prefix-two", "word", "fuzzy", "detail"] {
+        assert_eq!(p.selected(), Some(id));
+        p.update(&key(KeyCode::Down));
+    }
+}
+
+#[test]
+fn host_bounds_allow_empty_and_keep_unmarked_rows_reachable_at_maximum() {
+    let mut rows = choices();
+    rows[0].danger = true;
+    let mut p = ChoicePicker::new(rows, None, SelectionMode::Multiple, Filter::Off).unwrap();
+    p.set_marked(&["id-0"]);
+    assert_eq!(p.marked(), [] as [&str; 0]);
+    assert_eq!(p.update(&key(KeyCode::Enter)), Intent::Confirmed(vec![]));
+    assert!(p.set_selection_limits(1, Some(2)));
+    assert!(!p.set_selection_limits(3, Some(2)));
+    assert_eq!(p.update(&key(KeyCode::Enter)), Intent::None);
+    assert_eq!(p.notice(), Some("mark at least 1"));
+    p.update(&Event::Key(KeyEvent::new(
+        KeyCode::Char('a'),
+        KeyModifiers::ALT,
+    )));
+    assert_eq!(p.marked(), vec!["id-0", "id-1"]);
+    p.update(&key(KeyCode::End));
+    assert_eq!(p.selected(), Some("id-2"));
+    p.update(&key(KeyCode::Char(' ')));
+    assert_eq!(p.marked(), vec!["id-0", "id-1"]);
+    assert_eq!(p.notice(), Some("unmark one first"));
+    assert!(p.set_selection_limits(0, Some(1)));
+    assert_eq!(p.marked(), vec!["id-0"]);
+    p.replace_choices(vec![]).unwrap();
+    assert_eq!(p.update(&key(KeyCode::Enter)), Intent::None);
+}
+
+#[test]
+fn multi_marks_and_disabled_rows_remain_explicit_in_every_profile() {
+    for (colors, symbols, mark) in [
+        (ColorMode::TrueColor, Symbols::Unicode, "◉"),
+        (ColorMode::Ansi16, Symbols::Unicode, "[x]"),
+        (ColorMode::NoColor, Symbols::Unicode, "[x]"),
+        (ColorMode::TrueColor, Symbols::Ascii, "[x]"),
+    ] {
+        let mut rows = choices();
+        rows[1].disabled = Some("unavailable".into());
+        let mut p = ChoicePicker::new(rows, None, SelectionMode::Multiple, Filter::Off).unwrap();
+        p.set_marked(&["id-0"]);
+        let mut terminal = Terminal::new(TestBackend::new(64, 9)).unwrap();
+        terminal
+            .draw(|f| {
+                p.render(
+                    f,
+                    f.area(),
+                    PickerView {
+                        presentation: Presentation {
+                            colors,
+                            symbols,
+                            ..Presentation::default()
+                        },
+                        ..PickerView::default()
+                    },
+                    true,
+                );
+            })
+            .unwrap();
+        let output = super::components::dump(terminal.backend().buffer());
+        assert!(output.contains(mark), "{output}");
+        assert!(output.contains("[-]"), "{output}");
+        assert!(!output.contains("F3 inspect"));
+    }
+}
+
+#[test]
 fn disabled_danger_and_duplicate_rows_have_safe_identity_contracts() {
     let mut rows = choices();
     rows[0].danger = true;
@@ -166,6 +251,8 @@ fn non_ready_empty_and_repeat_events_never_confirm_or_leak_into_query() {
         ))),
         Intent::None
     );
+    assert_eq!(p.update(&key(KeyCode::F(3))), Intent::None);
+    p.set_inspect_available(true);
     assert_eq!(
         p.update(&key(KeyCode::F(3))),
         Intent::Inspect("id-2".into())
@@ -198,7 +285,7 @@ fn compact_rendering_keeps_height_and_label_columns_without_side_borders() {
     assert_eq!(buffer[(5, 3)].symbol(), "G");
     assert_eq!(buffer[(0, 3)].bg, Color::Reset);
     assert!(!buffer[(0, 3)].modifier.contains(Modifier::REVERSED));
-    assert_eq!(Some(buffer[(2, 3)].bg), presentation.tokens().surface);
+    assert_eq!(Some(buffer[(2, 3)].bg), presentation.tokens().selection);
     assert!(buffer[(1, 3)].modifier.contains(Modifier::REVERSED));
     for row in 1..=3 {
         assert_eq!(buffer[(1, row)].symbol(), " ");

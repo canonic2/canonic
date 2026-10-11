@@ -1,6 +1,10 @@
 //! Owns modal stack generations, scoped focus and dismissal; bodies stay caller-owned.
 
+mod confirmation;
+mod timing;
 mod view;
+pub use confirmation::{Caution, Confirmation, Decision};
+pub use timing::{Arrival, Attention};
 pub use view::DialogView;
 
 use crate::{
@@ -121,6 +125,8 @@ pub enum Invalid {
     DepthLimit,
     /// Replacement requires an open layer.
     Empty,
+    /// Sixteen asynchronous arrivals are already waiting.
+    QueueLimit,
 }
 impl fmt::Display for Invalid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -143,6 +149,7 @@ pub enum Dispatch<B> {
 pub struct Stack<B, T> {
     layers: Vec<Layer<B>>,
     focus: Focus<T>,
+    timing: Option<timing::Timing<B, T>>,
 }
 impl<B, T: Clone + Eq> Stack<B, T> {
     /// Create the base focus order.
@@ -152,6 +159,7 @@ impl<B, T: Clone + Eq> Stack<B, T> {
         Ok(Self {
             layers: Vec::new(),
             focus: Focus::new(targets).ok_or(Invalid::DuplicateTarget)?,
+            timing: None,
         })
     }
     /// Current target; only the top scope is active.
@@ -177,6 +185,12 @@ impl<B, T: Clone + Eq> Stack<B, T> {
     pub fn is_empty(&self) -> bool {
         self.layers.is_empty()
     }
+    #[cfg(feature = "gallery")]
+    pub(crate) fn panel_area(&self, viewport: Rect) -> Option<Rect> {
+        self.layers
+            .last()
+            .map(|layer| view::outer(viewport, layer.geometry()))
+    }
     /// Current opening identity; clone it when starting host work.
     #[must_use]
     pub fn ticket(&self) -> Option<&Ticket> {
@@ -198,6 +212,13 @@ impl<B, T: Clone + Eq> Stack<B, T> {
             .last_mut()
             .filter(|l| &l.ticket == ticket)
             .map(|l| &mut l.body)
+    }
+    /// Read only the active opening; obscured/stale/foreign tickets are inert.
+    pub fn body(&self, ticket: &Ticket) -> Option<&B> {
+        self.layers
+            .last()
+            .filter(|layer| &layer.ticket == ticket)
+            .map(|layer| &layer.body)
     }
     fn validate(&self, dialog: &Dialog<B, T>, replace: bool) -> Result<(), Invalid> {
         if replace && self.is_empty() {
@@ -229,6 +250,7 @@ impl<B, T: Clone + Eq> Stack<B, T> {
             view: dialog.view.sanitized(),
             rendered_height: None,
         });
+        self.opened(&ticket);
         ticket
     }
     /// Open a layer without changing parent body state.
@@ -241,6 +263,7 @@ impl<B, T: Clone + Eq> Stack<B, T> {
     fn pop(&mut self, reason: Reason) -> Option<Dismissed<B>> {
         let layer = self.layers.pop()?;
         self.focus.pop();
+        self.returned();
         Some(Dismissed {
             id: layer.id,
             ticket: layer.ticket,
@@ -260,14 +283,32 @@ impl<B, T: Clone + Eq> Stack<B, T> {
     /// Same validation as push; empty stacks cannot replace.
     pub fn replace(&mut self, dialog: Dialog<B, T>) -> Result<(Ticket, Dismissed<B>), Invalid> {
         self.validate(&dialog, true)?;
+        let title = self
+            .layers
+            .last()
+            .map(|layer| layer.title.clone())
+            .unwrap_or_default();
         let old = self.pop(Reason::Replaced).ok_or(Invalid::Empty)?;
-        Ok((self.insert(dialog), old))
+        let ticket = self.insert(dialog);
+        self.notice(&format!("! dialog · replaced {title}"));
+        Ok((ticket, old))
     }
     /// Clear top to bottom, returning all bodies for host cancellation/cleanup.
     pub fn clear(&mut self) -> Vec<Dismissed<B>> {
         let mut closed = Vec::new();
         while let Some(layer) = self.pop(Reason::Cleared) {
             closed.push(layer);
+        }
+        if let Some(timing) = &mut self.timing {
+            for waiting in timing.queue.drain(..) {
+                closed.push(Dismissed {
+                    id: waiting.id,
+                    ticket: Ticket(Arc::new(())),
+                    reason: Reason::Cleared,
+                    body: waiting.body,
+                });
+            }
+            timing.notice = None;
         }
         closed
     }
@@ -280,6 +321,9 @@ impl<B, T: Clone + Eq> Stack<B, T> {
         area: Rect,
         handler: impl FnOnce(&mut B, Option<&T>, &Event) -> bool,
     ) -> Dispatch<B> {
+        if let Some(result) = self.timed_dispatch(event) {
+            return result;
+        }
         let Some(layer) = self.layers.last_mut() else {
             return Dispatch::Background;
         };
@@ -306,8 +350,15 @@ impl<B, T: Clone + Eq> Stack<B, T> {
             return Dispatch::Consumed;
         }
         let consumed = handler(&mut layer.body, self.focus.active(), event);
+        let escape = layer.close.escape;
         if !consumed
-            && layer.close.escape
+            && !escape
+            && matches!(event, Event::Key(key) if key.code == KeyCode::Esc && key.kind == KeyEventKind::Press)
+        {
+            self.notice("! answer to continue");
+        }
+        if !consumed
+            && escape
             && matches!(event,Event::Key(key) if key.code==KeyCode::Esc && key.kind==KeyEventKind::Press)
         {
             return self

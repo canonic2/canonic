@@ -28,7 +28,7 @@ is introduced. Extend these tokens/primitives as later accepted components need
 them, instead of implementing speculative screens.
 
 Composer rules use separate semantic `line` and `line_info` colors. `line_info`
-is RGB #495F81, indexed 60 or ANSI blue; no-color uses faint attributes. Recall
+is RGB #495F81, indexed 60 or plain ANSI blue without faint; no-color uses faint attributes. Recall
 uses the Unicode dashed `┄` or ASCII `.` glyph, while drafts use solid `─` or `-`.
 The rule occupies the same row and width in every box mode.
 

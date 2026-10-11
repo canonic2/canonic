@@ -19,6 +19,34 @@ pub(super) struct EditorDemo {
     note: String,
 }
 
+fn binding_fixture(editor: &mut Editor, scenario: usize) -> &'static str {
+    let key = |code, modifiers| Event::Key(crate::event::KeyEvent::new(code, modifiers));
+    match scenario {
+        12 => {
+            editor.set_text("First kill");
+            editor.update(&key(KeyCode::Char('u'), KeyModifiers::CONTROL));
+            editor.insert("Second kill");
+            editor.update(&key(KeyCode::Char('u'), KeyModifiers::CONTROL));
+            editor.update(&key(KeyCode::Char('y'), KeyModifiers::CONTROL));
+            "kill-ring · alt+y cycles"
+        }
+        13 => {
+            editor.set_text("getHTTPHeader42 snake_case.path");
+            "word-parts · alt+backspace / alt+d / ctrl+w"
+        }
+        14 => {
+            editor.set_text("First line\nSecond line");
+            "line-kills · repeat ctrl+u / ctrl+k to join"
+        }
+        _ => {
+            *editor = Editor::new(3);
+            editor.set_text("ab");
+            editor.update(&key(KeyCode::Char('界'), KeyModifiers::NONE));
+            "typed-refused"
+        }
+    }
+}
+
 impl EditorDemo {
     pub(super) fn new() -> Self {
         // Fixed distinct fixture IDs; this constructor cannot fail.
@@ -39,7 +67,7 @@ impl EditorDemo {
         self.focus =
             Focus::new(vec![0, 1]).unwrap_or_else(|| unreachable!("fixture IDs are unique"));
         let first = &mut self.editors[0];
-        first.set_text("Edit this draft in the middle.\nEnter or Ctrl-J inserts a newline.");
+        first.set_text("Edit this draft in the middle.\nEnter submits; Ctrl-J inserts a newline.");
         let name = match self.scenario {
             1 => {
                 self.focus.advance(false);
@@ -116,9 +144,14 @@ impl EditorDemo {
                 first.insert(&"界".repeat(80));
                 "paste-cut"
             }
+            12..=15 => binding_fixture(first, self.scenario),
+            16..=24 => edge_fixture(first, self.scenario),
             _ => "focused",
         };
         self.editors[1].set_text("Independent second draft");
+        if matches!(self.scenario, 16 | 17) {
+            self.focus.advance(false);
+        }
         self.note = format!("#editor:{name} · Tab focus · F3 modal · F2 next fixture · F4 colors");
     }
 
@@ -163,16 +196,18 @@ impl EditorDemo {
                     return true;
                 }
                 KeyCode::F(2) => {
-                    self.scenario = (self.scenario + 1) % 12;
+                    self.scenario = (self.scenario + 1) % 25;
                     self.reset();
                     return true;
                 }
                 KeyCode::Enter if key.modifiers.is_empty() => {
-                    if let Some(index) = self.focus.active().copied() {
-                        self.editors[index].update(&Event::Key(crate::event::KeyEvent::new(
-                            KeyCode::Char('j'),
-                            KeyModifiers::CONTROL,
-                        )));
+                    if key.kind == KeyEventKind::Press
+                        && let Some(index) = self.focus.active().copied()
+                    {
+                        self.note = format!(
+                            "Submitted {} bytes · local simulation",
+                            self.editors[index].expanded_text().len()
+                        );
                     }
                     return true;
                 }
@@ -196,6 +231,18 @@ impl EditorDemo {
             Constraint::Length(2),
         ])
         .areas(area);
+        let first = if matches!(self.scenario, 18..=20) {
+            Rect::new(
+                first.x,
+                first.y,
+                first.width,
+                first
+                    .height
+                    .min(u16::try_from(21 - self.scenario).unwrap_or(1)),
+            )
+        } else {
+            first
+        };
         self.editors[0].render_with(
             frame,
             first,
@@ -244,6 +291,64 @@ impl EditorDemo {
                 },
                 true,
             );
+        }
+    }
+}
+
+fn edge_fixture(editor: &mut Editor, scenario: usize) -> &'static str {
+    match scenario {
+        16 => {
+            editor.set_text(&"Blurred draft retains its scroll position.\n".repeat(24));
+            // Seed an actual rendered viewport before transferring focus, using
+            // an in-memory terminal rather than acquiring the user's terminal.
+            let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(40, 8))
+                .unwrap_or_else(|_| unreachable!("in-memory fixture backend"));
+            terminal
+                .draw(|frame| editor.render_with(frame, frame.area(), EditorView::default(), true))
+                .unwrap_or_else(|_| unreachable!("in-memory fixture render"));
+            "blurred-scrolled"
+        }
+        17 => {
+            *editor = Editor::new(12);
+            editor.set_text("Full draft!!");
+            editor.insert("x");
+            "blurred-limit"
+        }
+        18..=20 => {
+            editor.set_text("First row\nSecond row\nThird row\nFourth row");
+            "tiny · draft preserved"
+        }
+        21 => {
+            *editor = Editor::new(3);
+            editor.set_text("ab");
+            editor.insert_atom(crate::editor::InlineAtom {
+                kind: crate::editor::AtomKind::Paste,
+                label: "[paste]".into(),
+                content: "界".into(),
+                reference: None,
+            });
+            "paste-refused-whole"
+        }
+        22 => {
+            editor.set_text("");
+            for _ in 0..=256 {
+                editor.insert_atom(crate::editor::InlineAtom {
+                    kind: crate::editor::AtomKind::Paste,
+                    label: "[chip]".into(),
+                    content: "fixture".into(),
+                    reference: None,
+                });
+            }
+            "chip-cap · 256 retained"
+        }
+        23 => {
+            editor.set_text("Controls stay display data: \u{85} \u{1b} \u{7f}");
+            "control-characters"
+        }
+        _ => {
+            *editor = Editor::new(7);
+            editor.insert_typed("抹茶ラテ");
+            "typed-cut · IME commit"
         }
     }
 }

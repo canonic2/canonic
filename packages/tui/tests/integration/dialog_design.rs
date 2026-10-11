@@ -30,6 +30,7 @@ fn layer() -> Dialog<Editor, u8> {
         },
         close: ClosePolicy::default(),
         view: DialogView {
+            message_error: false,
             scope: "example project".into(),
             message: "Renames the local example branch.".into(),
             footer: "enter rename · esc cancel".into(),

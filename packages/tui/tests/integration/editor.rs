@@ -20,6 +20,225 @@ fn press(editor: &mut Editor, code: KeyCode) {
 fn ctrl(editor: &mut Editor, c: char) {
     editor.update(&key(KeyCode::Char(c), KeyModifiers::CONTROL));
 }
+fn redo(editor: &mut Editor) {
+    editor.update(&key(KeyCode::Char('z'), KeyModifiers::ALT));
+}
+
+#[test]
+fn kill_ring_yank_cycle_is_bounded_atomic_and_instance_local() {
+    let mut editor = Editor::default();
+    for i in 0..11 {
+        editor.insert(&format!("kill{i}"));
+        ctrl(&mut editor, 'g');
+        ctrl(&mut editor, 'k');
+    }
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.text(), "kill10");
+    for i in (1..10).rev() {
+        editor.update(&key(KeyCode::Char('y'), KeyModifiers::ALT));
+        assert_eq!(editor.text(), format!("kill{i}"));
+    }
+    editor.update(&key(KeyCode::Char('y'), KeyModifiers::ALT));
+    assert_eq!(editor.text(), "kill10");
+    ctrl(&mut editor, 'z');
+    assert_eq!(editor.text(), "kill1");
+    editor.update(&key(
+        KeyCode::Char('Z'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(editor.text(), "kill10");
+    press(&mut editor, KeyCode::Left);
+    editor.update(&key(KeyCode::Char('y'), KeyModifiers::ALT));
+    assert_eq!(editor.text(), "kill10"); // Movement invalidates cycling.
+    let mut other = Editor::default();
+    ctrl(&mut other, 'y');
+    assert_eq!(other.text(), "");
+    editor.set_text("replacement");
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.text(), "replacement");
+}
+
+#[test]
+fn distinct_kill_boundaries_and_repeated_line_kills_join_logical_lines() {
+    let mut editor = Editor::default();
+    editor.set_text("path.with-punctuation");
+    ctrl(&mut editor, 'w');
+    assert_eq!(editor.text(), "");
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.text(), "path.with-punctuation");
+    editor.set_text("getHTTPHeader42");
+    for expected in ["getHTTPHeader", "getHTTP", "get", ""] {
+        editor.update(&key(KeyCode::Backspace, KeyModifiers::ALT));
+        assert_eq!(editor.text(), expected);
+    }
+    editor.set_text("one two");
+    press(&mut editor, KeyCode::Home);
+    editor.update(&key(KeyCode::Char('d'), KeyModifiers::ALT));
+    assert_eq!(editor.text(), " two");
+    editor.set_text("first\nsecond");
+    ctrl(&mut editor, 'u');
+    assert_eq!(editor.text(), "first\n");
+    ctrl(&mut editor, 'u');
+    assert_eq!(editor.text(), "first");
+    editor.set_text("first\nsecond");
+    press(&mut editor, KeyCode::Home);
+    ctrl(&mut editor, 'k');
+    assert_eq!(editor.text(), "first\n");
+    ctrl(&mut editor, 'k');
+    assert_eq!(editor.text(), "first\n"); // End of the draft has nothing to join.
+    editor.set_text("first\nsecond");
+    editor.update(&key(KeyCode::Home, KeyModifiers::CONTROL));
+    ctrl(&mut editor, 'k');
+    assert_eq!(editor.text(), "\nsecond");
+    ctrl(&mut editor, 'k');
+    assert_eq!(editor.text(), "second");
+}
+
+#[test]
+fn yank_preserves_chip_payloads_and_cuts_text_at_a_whole_grapheme() {
+    let mut editor = Editor::new(128);
+    editor.insert_atom(canonic_tui::editor::InlineAtom {
+        kind: canonic_tui::editor::AtomKind::Image,
+        label: "[attachment]".into(),
+        content: "complete payload".into(),
+        reference: Some("host-image-1".into()),
+    });
+    ctrl(&mut editor, 'u');
+    ctrl(&mut editor, 'y');
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.expanded_text(), "complete payloadcomplete payload");
+    assert_eq!(editor.document().atoms.len(), 2);
+    assert!(
+        editor
+            .document()
+            .atoms
+            .values()
+            .all(|a| a.reference.as_deref() == Some("host-image-1"))
+    );
+    let mut small = Editor::new(6);
+    small.set_text("abcdef");
+    ctrl(&mut small, 'u');
+    small.insert("z");
+    assert_eq!(
+        small.update(&key(KeyCode::Char('y'), KeyModifiers::CONTROL)),
+        Outcome::Changed
+    );
+    assert_eq!(small.text(), "zabcde");
+    assert!(small.notice().unwrap().contains("1 bytes left out"));
+    ctrl(&mut small, 'z');
+    assert_eq!(small.text(), "z");
+    ctrl(&mut small, 'z');
+    ctrl(&mut small, 'y');
+    assert_eq!(small.text(), "abcdef");
+}
+
+#[test]
+fn consecutive_kills_join_in_reading_order_and_pause_breaks_the_group() {
+    let mut editor = Editor::default();
+    editor.set_text("first\nsecond");
+    ctrl(&mut editor, 'u');
+    ctrl(&mut editor, 'u');
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.text(), "first\nsecond");
+    editor.set_text("first\nsecond");
+    editor.update(&key(KeyCode::Home, KeyModifiers::CONTROL));
+    ctrl(&mut editor, 'k');
+    ctrl(&mut editor, 'k');
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.text(), "first\nsecond");
+    editor.set_text("one two");
+    ctrl(&mut editor, 'w');
+    editor.tick(Duration::from_secs(1));
+    ctrl(&mut editor, 'w');
+    ctrl(&mut editor, 'y');
+    assert_eq!(editor.text(), "one ");
+    editor.update(&key(KeyCode::Char('y'), KeyModifiers::ALT));
+    assert_eq!(editor.text(), "two");
+}
+
+#[test]
+fn ime_commit_reports_exact_dropped_bytes_and_stays_one_typing_transaction() {
+    let mut editor = Editor::new(7);
+    assert_eq!(editor.insert_typed("抹茶ラテ"), Outcome::Changed);
+    assert_eq!(editor.text(), "抹茶");
+    assert!(editor.notice().unwrap().contains("6 bytes left out"));
+    ctrl(&mut editor, 'z');
+    assert_eq!(editor.text(), "");
+    redo(&mut editor);
+    assert_eq!(editor.text(), "抹茶");
+}
+
+#[test]
+fn chip_capacity_and_document_restore_count_payloads_instead_of_markers() {
+    use canonic_tui::editor::InlineAtom;
+    let mut editor = Editor::new(0);
+    let atom = InlineAtom {
+        kind: canonic_tui::editor::AtomKind::Image,
+        label: "[image]".into(),
+        content: String::new(),
+        reference: Some("host-image".into()),
+    };
+    for _ in 0..256 {
+        assert_eq!(editor.insert_atom(atom.clone()), Outcome::Changed);
+    }
+    let document = editor.document();
+    let mut restored = Editor::new(0);
+    assert!(restored.restore_document(&document));
+    assert_eq!(restored.document(), document);
+    assert_eq!(restored.insert_atom(atom.clone()), Outcome::Rejected);
+    assert_eq!(restored.document(), document);
+    ctrl(&mut restored, 'g');
+    assert_eq!(restored.insert_atom(atom), Outcome::Changed);
+    assert_eq!(restored.document().atoms.len(), 1);
+    ctrl(&mut restored, 'z');
+    assert_eq!(restored.document().atoms.len(), 256);
+    ctrl(&mut restored, 'k');
+    ctrl(&mut restored, 'y');
+    assert_eq!(restored.document().atoms.len(), 256);
+    let before = restored.document();
+    assert_eq!(
+        restored.update(&key(KeyCode::Char('y'), KeyModifiers::CONTROL)),
+        Outcome::Rejected
+    );
+    assert_eq!(restored.document(), before);
+}
+
+#[test]
+fn blurred_limit_and_tiny_hidden_counts_survive_focus_changes() {
+    use canonic_tui::{
+        editor::EditorView,
+        theme::{ColorMode, Presentation},
+    };
+    let mut editor = Editor::new(12);
+    editor.set_text("one\ntwo\nlast");
+    let mut terminal = Terminal::new(TestBackend::new(50, 5)).unwrap();
+    let view = EditorView {
+        presentation: Presentation {
+            colors: ColorMode::TrueColor,
+            ..Presentation::default()
+        },
+        ..EditorView::default()
+    };
+    terminal
+        .draw(|f| editor.render_with(f, f.area(), view, false))
+        .unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(text.contains("12 / 12 bytes"), "{text}");
+    assert_eq!(
+        terminal.backend().buffer()[(49, 4)].fg,
+        view.presentation.tokens().error.unwrap()
+    );
+    let cursor = editor.cursor();
+    for height in [1, 2] {
+        let mut terminal = Terminal::new(TestBackend::new(50, height)).unwrap();
+        terminal
+            .draw(|f| editor.render_with(f, f.area(), view, true))
+            .unwrap();
+        let text = super::components::dump(terminal.backend().buffer());
+        assert!(text.contains("3 lines"), "{text}");
+        assert_eq!(editor.cursor(), cursor);
+    }
+}
 
 #[test]
 fn edits_selection_and_undo_preserve_whole_graphemes_and_cursor() {
@@ -34,7 +253,7 @@ fn edits_selection_and_undo_preserve_whole_graphemes_and_cursor() {
     ctrl(&mut editor, 'z');
     assert_eq!(editor.text(), "a👩‍💻e\u{301}界");
     assert!(editor.selection().is_some());
-    ctrl(&mut editor, 'y');
+    redo(&mut editor);
     assert_eq!(editor.text(), "aXe\u{301}界");
     press(&mut editor, KeyCode::Delete);
     assert_eq!(editor.text(), "aX界");
@@ -43,7 +262,7 @@ fn edits_selection_and_undo_preserve_whole_graphemes_and_cursor() {
     ctrl(&mut editor, 'z');
     assert_eq!(editor.text(), "aX界");
     editor.insert("Y");
-    ctrl(&mut editor, 'y');
+    redo(&mut editor);
     assert_eq!(editor.text(), "aXY界");
 }
 
@@ -200,7 +419,7 @@ fn history_is_bounded_and_release_events_do_not_edit() {
     release.kind = KeyEventKind::Release;
     assert_eq!(editor.update(&Event::Key(release)), Outcome::Unhandled);
     for _ in 0..80 {
-        ctrl(&mut editor, 'y');
+        redo(&mut editor);
     }
     assert_eq!(editor.text(), "a".repeat(80));
 }
@@ -236,7 +455,7 @@ fn typing_groups_break_on_pause_navigation_space_and_paste() {
     }
     ctrl(&mut editor, 'z');
     assert_eq!(editor.text(), "hello ");
-    ctrl(&mut editor, 'y');
+    redo(&mut editor);
     editor.tick(Duration::from_secs(1));
     press(&mut editor, KeyCode::Char('!'));
     ctrl(&mut editor, 'z');
@@ -271,7 +490,7 @@ fn design_keys_move_by_visible_rows_and_delete_logical_line_ranges() {
     assert_eq!(editor.cursor(), 11);
     ctrl(&mut editor, 'u');
     assert_eq!(editor.text(), "\nnext");
-    ctrl(&mut editor, 'y'); // No redo without an undo.
+    redo(&mut editor); // No redo without an undo.
     ctrl(&mut editor, 'g');
     assert_eq!(editor.selection(), Some(0..5));
     press(&mut editor, KeyCode::Esc);
@@ -316,7 +535,7 @@ proptest! {
                 3 => {press(&mut editor,KeyCode::Delete);},
                 4 => {editor.insert("e\u{301}👩‍💻");},
                 5 => {ctrl(&mut editor,'z');},
-                6 => {ctrl(&mut editor,'y');},
+                6 => {redo(&mut editor);},
                 7 => {press(&mut editor,KeyCode::Up);},
                 _ => {press(&mut editor,KeyCode::Down);},
             }

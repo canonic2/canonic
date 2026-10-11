@@ -26,3 +26,7 @@ mod picker;
 #[cfg(feature = "gallery")]
 mod picker_terminal;
 mod presentation;
+mod run_activity;
+mod tool_call_card;
+#[cfg(feature = "gallery")]
+mod tool_card_gallery;

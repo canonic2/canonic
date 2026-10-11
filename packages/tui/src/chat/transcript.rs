@@ -54,7 +54,31 @@ pub(super) fn rows(chat: &Chat) -> Vec<Located> {
         if record.turn.role != Role::Note {
             add(&mut rows, header(record, anchor.clone(), chat.timestamps));
         }
-        parts(chat, record, &mut rows, &anchor);
+        if record.turn.role == Role::Note {
+            // Notes have one quiet line, while their original source remains copyable.
+            if let Some((source, text)) = record.turn.parts.iter().find_map(|part| {
+                chat.cache
+                    .get(&(record.turn.id.clone(), part.id.clone()))
+                    .and_then(|cache| cache.rows.first().zip(cache.blocks.first()))
+                    .map(|(row, block)| (row, block.markdown.lines().next().unwrap_or_default()))
+            }) {
+                let mut row = source.clone();
+                row.prefix.clear();
+                row.surface = false;
+                row.map = None;
+                row.runs = vec![Run {
+                    text: text.into(),
+                    generated: false,
+                    ink: Ink {
+                        muted: true,
+                        ..Ink::default()
+                    },
+                }];
+                add(&mut rows, row);
+            }
+        } else {
+            parts(chat, record, &mut rows, &anchor);
+        }
         if let Some((_, Some(reason))) = &record.delivery {
             add(
                 &mut rows,
@@ -143,11 +167,17 @@ fn header(record: &Record, anchor: Anchor, timestamps: bool) -> Row {
 fn parts(chat: &Chat, record: &Record, rows: &mut Vec<Located>, anchor: &Anchor) {
     for (index, part) in record.turn.parts.iter().enumerate() {
         if index > 0
-            && !(matches!(part.content, super::Content::Tool { .. })
-                && matches!(
-                    record.turn.parts[index - 1].content,
-                    super::Content::Tool { .. }
-                ))
+            && !(matches!(
+                part.content,
+                super::Content::Tool { .. }
+                    | super::Content::ToolCard(_)
+                    | super::Content::ToolGroup(_)
+            ) && matches!(
+                record.turn.parts[index - 1].content,
+                super::Content::Tool { .. }
+                    | super::Content::ToolCard(_)
+                    | super::Content::ToolGroup(_)
+            ))
         {
             add(
                 rows,
@@ -181,6 +211,10 @@ fn parts(chat: &Chat, record: &Record, rows: &mut Vec<Located>, anchor: &Anchor)
                 .collect();
             // The live marker sits at the last part's text edge without changing cached source.
             if matches!(record.turn.end, End::Live)
+                && !matches!(
+                    part.content,
+                    super::Content::ToolCard(_) | super::Content::ToolGroup(_)
+                )
                 && record.turn.role == Role::Assistant
                 && record.turn.parts.last().is_some_and(|p| p.id == part.id)
                 && let Some(last) = part_rows.last_mut()
@@ -272,9 +306,14 @@ fn ending(record: &Record, anchor: Anchor, retry: bool) -> Option<Row> {
                 ..Ink::default()
             },
         ),
-        End::Stopped(reason) => (
+        End::Stopped(reason) | End::Cancelled(reason) => (
             format!(
-                "  ✕ stopped{duration}{}",
+                "  – {}{duration}{}",
+                if matches!(record.turn.end, End::Cancelled(_)) {
+                    "cancelled"
+                } else {
+                    "stopped"
+                },
                 if reason.is_empty() {
                     String::new()
                 } else {
@@ -283,6 +322,13 @@ fn ending(record: &Record, anchor: Anchor, retry: bool) -> Option<Row> {
             ),
             Ink {
                 muted: true,
+                ..Ink::default()
+            },
+        ),
+        End::Interrupted(reason) => (
+            format!("  ! interrupted · {reason}{duration}"),
+            Ink {
+                warning: true,
                 ..Ink::default()
             },
         ),

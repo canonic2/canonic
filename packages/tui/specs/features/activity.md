@@ -1,21 +1,28 @@
 # Activity, review and cancellation
 
-Status: proposed target. Chat currently supplies a status string, plain activity
-messages and a generic cancel action; gallery simulates failures/interruption.
-Structured activity and pending human requests are separate capabilities.
+Status: [Tool Call Card](../components/tool-call-card.md) implements reusable
+identified activity/output, ordered concurrency, preview expansion and acknowledged
+copy/details/retry through Chat. [Run Activity](../components/run-activity.md)
+implements run progress, cancellation races and independent connection state.
+Pending human request forms remain proposed capabilities. Gallery effects are
+deterministic simulations.
 
 ## Tool and run activity
 
 Host supplies run ID/revision and explicit state: idle, preparing, running,
-waiting for input, cancelling, completed, interrupted, failed or disconnected.
+waiting for input, cancelling, cancelled, completed, interrupted, failed or disconnected.
 Connection and run state are independent: a completed tool error does not imply
 connection loss. Progress is determinate only when host supplies meaningful
 totals; otherwise show labeled activity/elapsed time. Unknown completion stays
 unknown. Animation is optional, uses supplied time and stops on leaving/dismissal.
 
-Tool cards accept stable call ID, title/category, safe argument summary, lifecycle,
-optional start/end/elapsed, related artifact IDs, text/code/diff output and error.
-States distinguish proposed/queued/running/waiting/completed/failed/cancelled;
+The [card contract](../components/tool-call-card.md) owns exact call states,
+rendering limits, transitions, selected keys and host acknowledgements.
+Reusable tool cards accept stable call ID, revision, verb/target, safe unknown-tool
+argument summary, lifecycle, supplied elapsed duration and text/code/diff output
+or an unavailable reason. The host summary supplies result/error interpretation;
+related artifact routing belongs to host composition.
+States distinguish queued/running/waiting/completed/failed/cancelled;
 absence of a result is not success. Redaction happens before the UI boundary;
 the library cannot infer which arguments contain credentials. It additionally
 sanitizes controls and bounds rendering. A missing/unknown tool gets a generic
@@ -28,14 +35,15 @@ Host-specialized bodies reuse [Content](../components/chat.md) contracts for she
 output, reads, edits, searches, diagnostics and diffs. No tool-name switch that
 embeds an agent-specific argument schema belongs in the generic library.
 
-Concurrent cards retain identities, expansion and anchor through reorder/update.
+Concurrent cards retain start order, identities, expansion and anchor through updates.
 Child task activity can refer to a supplied session/tree node and return open
 intent; orchestration and routing are host-owned. Failures display useful safe
 causes; retry returns an identified intent only if host enables it.
 
 ## Cancellation contract
 
-Interrupt returns `(conversation, run, revision)` once while pending. Preserve
+Interrupt emits a run/revision-scoped intent with an opaque attempt ticket once
+while pending. Chat additionally identifies the conversation. Preserve
 draft and transcript. Show cancelling until host acknowledges interruption,
 failure or completion. If completion wins the race, show completed and clear
 pending cancel; do not rewrite it as interrupted. If host reports cancellation
@@ -109,9 +117,15 @@ fixture state, with no grant file or product call.
 - **R-05:** Modal/queued/stale/error review states preserve background draft and
   valid return focus; gallery produces no authority or product side effects.
 
-## Unresolved decisions
+## Review placement
 
-Choose whether small review panels replace the composer region or open overlays
-by default, using narrow-screen evidence. Host chooses request queue priority,
-dismiss semantics and grant confirmation policy; library must support those
-explicit inputs without selecting product policy.
+Question and permission panels sit above the dock. The Composer dims while a
+panel owns focus and retains its full draft, cursor, selection and scroll.
+Requests arriving during typing remain in the activity row until a one-second
+pause or Ctrl-G. Their shared queue follows host order and shows additional
+waiting requests. These are specified requirements awaiting implementation.
+
+The host owns request order and authority. Permission dismissal is a distinct
+outcome from Deny/Skip; wider-scope choices require another confirmation quoting
+the host's exact scope. Single-question answers submit explicitly on choosing;
+multi-question answers pass through review, with required omissions shown there.

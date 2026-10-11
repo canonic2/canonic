@@ -44,17 +44,39 @@ Shared styles and primitives belong to [Presentation](../presentation.md).
 ### Implementation details
 
 The editor contract follows the supplied redesign: word wrapping, visual-row
-Home/End and Ctrl-A/Ctrl-E, Ctrl-Shift-A select-all, previous-word Ctrl-W, logical
+Home/End and Ctrl-A/Ctrl-E, Ctrl-Shift-A select-all, previous-space Ctrl-W, logical
 line Ctrl-U/Ctrl-K, and viewport PageUp/PageDown. Ctrl-G is a select-all fallback
 because traditional terminals cannot distinguish Ctrl-Shift-A from Ctrl-A.
 Chat transcript navigation uses Alt-PageUp/PageDown and Alt-End; host wiring
 preserves editor bindings. No keyboard enhancement protocol is automatically
 enabled; modified-key availability is checked through the human gate.
 
+Ctrl-W removes trailing whitespace and the preceding non-whitespace span.
+Alt-D kills through the next Unicode word end. Alt-Backspace or reported
+Ctrl-Backspace kills a preceding
+word part, recognizing separators, case transitions, acronym boundaries and
+letter/digit transitions without splitting graphemes. Ctrl-U/Ctrl-K kill to the
+logical line edge; pressing again at that edge removes the adjacent newline.
+These kills populate an instance-local ring of the last ten complete payloads.
+Consecutive kills in the same direction join in reading order until another
+action, a selection kill or a one-second pause starts a new entry.
+Ctrl-Y yanks the newest; Alt-Y replaces that yank with the next ring entry until
+another edit or movement. Yank preserves inline chips and opaque attachment IDs,
+is one undo transaction and retains the whole-grapheme prefix that fits the
+expanded-content byte budget. It never cuts a chip payload. Dropped bytes are
+reported; a no-fit yank preserves the draft and selection. Failed cycling
+preserves the displayed yank and permits cycling onward.
+Host reset clears the ring; it is not saved or shared between editor instances.
+Ctrl-Z undoes; Ctrl-Shift-Z or Alt-Z redoes. Plain Enter is a host submission
+action; Ctrl-J inserts a newline. Reported Shift/Alt-Enter may also insert one.
+
 Input exceeding the byte budget retains its whole-grapheme prefix and reports
 dropped bytes. No-fit insertion preserves draft/selection. Paste is one undo
-transaction even when cut. Undo keeps 64 snapshots, including viewport offset;
-typing/deletion coalesces until an injected one-second pause, movement, selection
+transaction even when cut.
+`insert_typed` accepts a host-reported text/IME commit with typing grouping;
+`insert` accepts paste with one independent undo transaction. Neither submits.
+Undo keeps 64 snapshots, including viewport offset; typing/deletion coalesces
+until an injected one-second pause, movement, selection
 replacement or paste. Whitespace ends typing groups. Host clock advancement
 expires edit notices/paste tint after three seconds; the next key also clears
 them. Limit state persists until an edit makes room; counter appears at 90%.
@@ -66,10 +88,14 @@ returns the original draft to the host, which owns execution and validation.
 This differs from transcript sanitation, whose fragmented-stream contract is
 still pending. Selection metadata counts graphemes and logical LF lines.
 
-The view shows scroll counts on the rules and keeps a row of caret context where
-height permits. Focus changes preserve state; inactive editors request no cursor
+The view shows scroll counts on the rules and keeps one row of caret context
+with at least four text rows. With three or fewer, it scrolls only at the edge.
+Selection metadata includes selected graphemes and LF line count; narrow footers
+omit caret position before clipping that count. Focus changes preserve state; inactive editors request no cursor
 and omit their ordinary footer. Very short areas prioritize rules and hide text
-and cursor if no text row remains.
+and cursor if no text row remains. One/two-row chrome reports the hidden logical
+line count on the title. Blurred editors retain scroll counts, selection counts
+and near/full-limit bytes; the full limit uses error styling without bold.
 
 ### Presentation ownership
 

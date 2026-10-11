@@ -14,9 +14,9 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-const NAMES: [&str; 14] = [
+const NAMES: [&str; 16] = [
     "default", "details", "disabled", "danger", "filter", "no-match", "scrolled", "multi",
-    "groups", "loading", "narrow", "done", "empty", "error",
+    "groups", "loading", "narrow", "done", "empty", "error", "maximum", "minimum",
 ];
 
 pub(super) struct PickerDemo {
@@ -113,7 +113,10 @@ impl PickerDemo {
             return true;
         }
         match self.picker.update(event) {
-            Intent::Cancelled => return false,
+            Intent::Cancelled => {
+                self.result = Some("→ cancelled".into());
+                self.note = "Cancelled · no selection confirmed".into();
+            }
             Intent::Selected(id) => {
                 self.note = format!("Selected {id} · fixture only; no settings changed");
                 self.result = Some(format!("github server -> {id}"));
@@ -225,7 +228,9 @@ impl PickerDemo {
     }
 
     fn render_activity(&self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
-        let status = if self.result.is_some() || self.scenario == 11 {
+        let status = if let Some(notice) = self.picker.notice() {
+            notice
+        } else if self.result.is_some() || self.scenario == 11 {
             "ready"
         } else if self.scenario == 9 {
             "reading supplied options"
@@ -296,7 +301,7 @@ fn fixture(scenario: usize) -> ChoicePicker {
         servers()
     };
     let mut filter = Filter::Auto;
-    let mode = if scenario == 7 {
+    let mode = if matches!(scenario, 7 | 14 | 15) {
         filter = Filter::On;
         SelectionMode::Multiple
     } else {
@@ -323,6 +328,7 @@ fn fixture(scenario: usize) -> ChoicePicker {
         filter,
     )
     .unwrap_or_else(|_| unreachable!("fixture IDs are unique"));
+    picker.set_inspect_available(true);
     match scenario {
         4 => picker.set_query("fix 27"),
         5 => picker.set_query("releaze"),
@@ -337,6 +343,13 @@ fn fixture(scenario: usize) -> ChoicePicker {
         13 => picker.set_status(Status::Error(
             "source unavailable; F5 retries locally".into(),
         )),
+        14 => {
+            picker.set_selection_limits(0, Some(1));
+            picker.set_marked(&["once"]);
+        }
+        15 => {
+            picker.set_selection_limits(1, None);
+        }
         _ => {}
     }
     picker

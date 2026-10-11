@@ -51,8 +51,15 @@ try:
     os.write(master,b'\t');wait_for(b'Repository source retried successfully',b'git ls-files exited 128')
     os.write(master,b'\r');wait_for(b'@src/digest/settings.ts',b'files ---')
     assert b'Literal message accepted' not in screen()
+    os.write(master,b'\x1b[21~');wait_for(b'completion-menu')
+    os.write(master,b'\x7f'*5+b'\x1b[200~partly-failed\x1b[201~\r')
+    wait_for(b'3 commands failed to load');wait_for(b'alt+r retries')
+    os.write(master,b'\x1br');wait_for(b'release-tools source retried successfully',b'failed to load')
+    assert b'/handoff' in screen()
+    os.write(master,b'\x12');wait_for(b'enter recalls')
+    os.write(master,b'\x1b');wait_for(b'actions on')
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',12,40,0,0))
-    os.write(master,b'\x03');child.wait(timeout=5);assert child.returncode==0
+    os.write(master,b'\x03\x03\x03');child.wait(timeout=5);assert child.returncode==0
     os.write(master,b'restored\r');assert select.select([slave],[],[],1)[0]
     assert os.read(slave,1024)==b'restored\n'
     assert termios.tcgetattr(slave)==before,(before,termios.tcgetattr(slave))

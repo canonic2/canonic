@@ -4,8 +4,17 @@ use super::{Draft, Editor, Outcome, history::EditKind};
 use std::collections::BTreeMap;
 
 /// An inline chip with a visible label and a complete host payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomKind {
+    Paste,
+    Image,
+    File,
+}
+
+/// An inline chip with a visible label and a complete host payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InlineAtom {
+    pub kind: AtomKind,
     pub label: String,
     pub content: String,
     /// Opaque host attachment identity; the component never reads image bytes.
@@ -73,7 +82,22 @@ impl Editor {
         {
             return false;
         }
-        let mut candidate = Self::new(self.limit);
+        let expanded: usize = document
+            .text
+            .chars()
+            .map(|c| {
+                document
+                    .atoms
+                    .get(&c)
+                    .map_or(c.len_utf8(), |a| a.content.len())
+            })
+            .sum();
+        if expanded > self.limit {
+            return false;
+        }
+        // Markers occupy three internal bytes even for an empty attachment
+        // payload; the draft budget applies to expanded host content.
+        let mut candidate = Self::new(self.limit.max(document.text.len()));
         if candidate.set_text(&document.text)
             || candidate.text() != document.text
             || !candidate.restore_cursor(document.cursor)
@@ -81,6 +105,7 @@ impl Editor {
             return false;
         }
         candidate.draft.atoms.clone_from(&document.atoms);
+        candidate.limit = self.limit;
         if candidate.expanded_text().len() > self.limit {
             return false;
         }
@@ -89,6 +114,8 @@ impl Editor {
     }
     /// Replace a validated document as one undoable transaction.
     pub fn replace_document(&mut self, document: &Document) -> Outcome {
+        self.yanked = None;
+        self.kill_group = None;
         let mut candidate = Self::new(self.limit);
         if !candidate.restore_document(document) {
             return Outcome::Rejected;
@@ -108,6 +135,8 @@ impl Editor {
     }
     /// Insert an entire chip as one undo transaction, or retain the original draft.
     pub fn insert_atom(&mut self, atom: InlineAtom) -> Outcome {
+        self.yanked = None;
+        self.kill_group = None;
         let range = self.selection().unwrap_or(self.cursor()..self.cursor());
         let removed: usize = self.text()[range.clone()]
             .chars()
@@ -118,15 +147,33 @@ impl Editor {
                     .map_or(c.len_utf8(), |a| a.content.len())
             })
             .sum();
-        if self.draft.atoms.len() >= 256
-            || atom.label.is_empty()
+        let retained = self
+            .draft
+            .atoms
+            .keys()
+            .filter(|c| !self.text()[range.clone()].contains(**c))
+            .count();
+        if retained >= 256 {
+            self.notify("not added · a draft holds 256 pasted blocks");
+            return Outcome::Rejected;
+        }
+        let available = self
+            .limit
+            .saturating_sub(self.draft.expanded_size() - removed);
+        if atom.content.len() > available {
+            self.message(format!(
+                "not added · paste is {} bytes, {available} bytes left",
+                atom.content.len()
+            ));
+            return Outcome::Rejected;
+        }
+        if atom.label.is_empty()
             || atom.label.len() > 256
             || atom.label.chars().any(char::is_control)
             || atom
                 .reference
                 .as_ref()
                 .is_some_and(|reference| reference.len() > 4096)
-            || self.expanded_text().len() - removed + atom.content.len() > self.limit
         {
             self.notify("Paste does not fit · draft kept");
             return Outcome::Rejected;

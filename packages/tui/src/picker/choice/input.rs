@@ -21,6 +21,7 @@ impl ChoicePicker {
         if key.kind == KeyEventKind::Release {
             return Intent::None;
         }
+        self.notice = None;
         if key.code == KeyCode::Esc {
             if self.status == Status::Ready && !self.query().is_empty() {
                 self.query.set_text("");
@@ -75,7 +76,7 @@ impl ChoicePicker {
                 self.mark_visible();
                 return Intent::None;
             }
-            KeyCode::F(3) if key.kind == KeyEventKind::Press => {
+            KeyCode::F(3) if self.inspect && key.kind == KeyEventKind::Press => {
                 return self.selected.clone().map_or(Intent::None, Intent::Inspect);
             }
             KeyCode::Char(c @ '1'..='9')
@@ -110,8 +111,16 @@ impl ChoicePicker {
     }
 
     fn toggle(&mut self, id: &str) {
-        if !self.marked.remove(id) {
+        if self.marked.remove(id) {
+            return;
+        }
+        if self
+            .maximum
+            .is_none_or(|maximum| self.marked.len() < maximum)
+        {
             self.marked.insert(id.to_owned());
+        } else {
+            self.notice = Some("unmark one first".into());
         }
     }
     fn mark_visible(&mut self) {
@@ -126,16 +135,23 @@ impl ChoicePicker {
         for id in ids {
             if remove {
                 self.marked.remove(&id);
-            } else {
+            } else if self
+                .maximum
+                .is_none_or(|maximum| self.marked.len() < maximum)
+            {
                 self.marked.insert(id);
             }
         }
     }
-    fn confirm(&self) -> Intent {
+    fn confirm(&mut self) -> Intent {
         if self.choices.is_empty() {
             return Intent::None;
         }
         if self.mode == SelectionMode::Multiple {
+            if self.marked.len() < self.minimum {
+                self.notice = Some(format!("mark at least {}", self.minimum));
+                return Intent::None;
+            }
             Intent::Confirmed(self.marked().into_iter().map(str::to_owned).collect())
         } else {
             self.selected.clone().map_or(Intent::None, Intent::Selected)

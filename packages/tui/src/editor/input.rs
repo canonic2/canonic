@@ -8,6 +8,12 @@ impl Editor {
         match event {
             Event::Paste(text) => self.insert(text),
             Event::Key(key) if key.kind != KeyEventKind::Release => {
+                if !kill_key(key.code, key.modifiers) {
+                    self.kill_group = None;
+                }
+                if !(key.code == KeyCode::Char('y') && key.modifiers == KeyModifiers::ALT) {
+                    self.yanked = None;
+                }
                 self.before_key();
                 self.key(key.code, key.modifiers)
             }
@@ -24,8 +30,19 @@ impl Editor {
                 self.draft.anchor = None;
                 self.history.break_group();
             }
-            KeyCode::Char('z' | '-') if ctrl => return self.history(extend),
-            KeyCode::Char('y' | '.') if ctrl => return self.history(true),
+            KeyCode::Char('z' | 'Z' | '-') if ctrl => return self.history(extend),
+            KeyCode::Char('z' | 'Z') if modifiers == KeyModifiers::ALT => {
+                return self.history(true);
+            }
+            KeyCode::Char('y') if modifiers == KeyModifiers::ALT => return self.yank(true),
+            KeyCode::Char('y') if ctrl => return self.yank(false),
+            KeyCode::Char('d') if modifiers == KeyModifiers::ALT => {
+                let cursor = self.cursor();
+                return self.kill(self.selection().unwrap_or(cursor..self.word_boundary(true)));
+            }
+            KeyCode::Backspace if word => {
+                return self.kill(self.selection().unwrap_or(self.word_part()..self.cursor()));
+            }
             KeyCode::Char('a') if ctrl && extend => {
                 self.move_to(0, false);
                 self.move_to(self.text().len(), true);
@@ -42,23 +59,21 @@ impl Editor {
                 self.draft.upstream = code == KeyCode::Char('e') && start < self.cursor();
                 self.goal = None;
             }
-            KeyCode::Char('w') if ctrl => return self.delete(false, true),
-            KeyCode::Char('u' | 'k') if ctrl => {
-                let cursor = self.cursor();
-                let end = if code == KeyCode::Char('k') {
-                    self.text()[cursor..]
-                        .find('\n')
-                        .map_or(self.text().len(), |i| cursor + i)
-                } else {
-                    self.text()[..cursor].rfind('\n').map_or(0, |i| i + 1)
-                };
-                return self.delete_range(
-                    self.selection().unwrap_or(cursor.min(end)..cursor.max(end)),
-                    EditKind::Delete,
+            KeyCode::Char('w') if ctrl => {
+                return self.kill(
+                    self.selection()
+                        .unwrap_or(self.space_boundary()..self.cursor()),
                 );
             }
+            KeyCode::Char('u' | 'k') if ctrl => {
+                return self.kill_line(code == KeyCode::Char('k'));
+            }
             KeyCode::Char('j') if ctrl => return self.replace("\n", EditKind::Newline),
-            KeyCode::Enter if word || extend => return self.replace("\n", EditKind::Newline),
+            KeyCode::Enter
+                if !ctrl && modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SHIFT) =>
+            {
+                return self.replace("\n", EditKind::Newline);
+            }
             KeyCode::Left | KeyCode::Right => self.horizontal(code == KeyCode::Right, word, extend),
             KeyCode::Up | KeyCode::Down => self.vertical(code == KeyCode::Down, extend, 1),
             KeyCode::PageUp | KeyCode::PageDown => {
@@ -94,4 +109,11 @@ impl Editor {
         }
         Outcome::Handled
     }
+}
+
+fn kill_key(code: KeyCode, modifiers: KeyModifiers) -> bool {
+    (modifiers.contains(KeyModifiers::CONTROL) && matches!(code, KeyCode::Char('u' | 'k' | 'w')))
+        || (modifiers.intersects(KeyModifiers::ALT | KeyModifiers::CONTROL)
+            && code == KeyCode::Backspace)
+        || (modifiers == KeyModifiers::ALT && code == KeyCode::Char('d'))
 }

@@ -49,6 +49,12 @@ try:
     os.write(master,b'\x1bOP')
     wait_for(b'everywhere')
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',12,40,0,0))
+    os.write(master,b'\x03')
+    wait_for(b'ctrl+c again closes it')
+    assert child.poll() is None
+    os.write(master,b'\x03')
+    wait_for(b'message ')
+    assert child.poll() is None
     os.write(master,b'\x03');child.wait(timeout=5)
     assert child.returncode==0
     os.write(master,b'restored\r')

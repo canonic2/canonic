@@ -1,6 +1,188 @@
 //! Verifies identified rich turns, local focus, semantic actions and bounded navigation.
 
 #[test]
+fn paging_is_serial_across_directions_and_newer_failure_retries_with_a_fresh_request() {
+    let mut chat = Chat::new();
+    chat.set_input("protected draft");
+    for n in 0..100 {
+        chat.push_record(Turn::new(
+            &format!("m-{n}"),
+            Role::Assistant,
+            "acme",
+            "body",
+        ));
+    }
+    chat.set_earlier_count(10);
+    draw(&mut chat, 80, 24);
+    chat.update(&alt(KeyCode::Home));
+    chat.update(&alt(KeyCode::Home));
+    let Intent::Earlier { request, .. } = chat.take_intents().pop().unwrap() else {
+        panic!("earlier")
+    };
+    chat.update(&alt(KeyCode::End));
+    assert_eq!(chat.take_intents(), [] as [Intent; 0]);
+    assert!(chat.complete_earlier(
+        &request,
+        Ok(vec![Turn::new("older", Role::User, "you", "old")]),
+        9
+    ));
+    chat.update(&alt(KeyCode::End));
+    let Intent::Latest { request } = chat.take_intents().pop().unwrap() else {
+        panic!("latest")
+    };
+    let anchor = chat.viewport_anchor().cloned();
+    chat.update(&alt(KeyCode::Home));
+    chat.update(&alt(KeyCode::Home));
+    chat.update(&alt(KeyCode::End));
+    assert_eq!(chat.take_intents(), [] as [Intent; 0]);
+    assert_eq!(chat.viewport_anchor(), anchor.as_ref());
+    assert!(draw(&mut chat, 80, 24).0.contains("loading newer messages"));
+    assert!(chat.acknowledge(&request, Err("offline")));
+    chat.tick(Duration::from_secs(10));
+    let failed = draw(&mut chat, 80, 24).0;
+    assert!(
+        failed.contains("alt+end retry · could not load newer · offline"),
+        "{failed}"
+    );
+    chat.update(&alt(KeyCode::End));
+    let Intent::Latest { request: retry } = chat.take_intents().pop().unwrap() else {
+        panic!("retry")
+    };
+    assert_ne!(retry, request);
+    assert!(!chat.complete_latest(&request, vec![], 0));
+    assert!(chat.complete_latest(
+        &retry,
+        vec![Turn::new("newest", Role::Assistant, "acme", "new")],
+        9
+    ));
+    assert!(chat.following());
+    assert!(!draw(&mut chat, 80, 24).0.contains("could not load newer"));
+    assert_eq!(chat.input(), "protected draft");
+}
+
+#[test]
+fn copy_and_open_show_operation_specific_pending_and_failure_before_success() {
+    let mut chat = Chat::new();
+    chat.push_record(Turn::new(
+        "reply",
+        Role::Assistant,
+        "acme",
+        "[reference](https://example.com/reference)",
+    ));
+    chat.set_input("protected draft");
+    draw(&mut chat, 80, 24);
+    chat.open_selection();
+    chat.update(&key(KeyCode::Char('y')));
+    let Intent::Copy { request, text, .. } = chat.take_intents().pop().unwrap() else {
+        panic!("copy")
+    };
+    assert_eq!(text, "[reference](https://example.com/reference)");
+    let pending = draw(&mut chat, 80, 24).0;
+    assert!(pending.contains("copying · waiting for host"));
+    assert!(pending.contains("esc done · copy pending"));
+    chat.update(&key(KeyCode::Char('y')));
+    assert_eq!(chat.take_intents(), [] as [Intent; 0]);
+    assert!(chat.acknowledge(&request, Err("clipboard refused")));
+    assert!(
+        draw(&mut chat, 80, 24)
+            .0
+            .contains("couldn't copy · clipboard refused")
+    );
+    chat.update(&key(KeyCode::Char('o')));
+    let Intent::Open { request, target } = chat.take_intents().pop().unwrap() else {
+        panic!("open")
+    };
+    assert_eq!(target, "https://example.com/reference");
+    let pending = draw(&mut chat, 100, 24).0;
+    assert!(
+        pending.contains("opening https://example.com/reference · waiting for host"),
+        "{pending}"
+    );
+    assert!(!pending.contains("clipboard refused"));
+    assert!(chat.acknowledge(&request, Err("scheme denied")));
+    assert!(
+        draw(&mut chat, 80, 24)
+            .0
+            .contains("not opened · scheme denied")
+    );
+    assert_eq!(chat.input(), "protected draft");
+}
+
+#[test]
+fn notes_are_one_muted_line_and_welcome_distinguishes_host_suggestions_from_keys() {
+    let mut chat = Chat::new();
+    chat.set_welcome(canonic_tui::chat::Welcome {
+        title: "canonic".into(),
+        context: "workspace".into(),
+        recent: vec![],
+        suggestions: vec!["check the queue".into()],
+    });
+    let welcome = draw(&mut chat, 80, 24).0;
+    assert!(welcome.contains("Suggested · from host"));
+    assert!(welcome.find("check the queue").unwrap() < welcome.find("Try: / commands").unwrap());
+    chat.push_record(Turn::new(
+        "note",
+        Role::Note,
+        "hidden header",
+        "– cancelled\nsecond line",
+    ));
+    let note = draw(&mut chat, 80, 24).0;
+    assert!(
+        note.lines().any(|line| line.starts_with("– cancelled")),
+        "{note}"
+    );
+    assert!(!note.contains("hidden header"));
+    assert!(!note.contains("second line"));
+}
+
+#[test]
+fn large_shell_preview_retains_real_tail_and_full_copy_without_touching_draft() {
+    let mut chat = Chat::new();
+    chat.composer_mut().update(&key(KeyCode::Char('!')));
+    chat.composer_mut()
+        .update(&Event::Paste("printf output".into()));
+    let submission = chat.composer_mut().update(&key(KeyCode::Enter)).unwrap();
+    chat.push_submission(&submission, "20:03");
+    assert!(chat.acknowledge_submission(&submission.ticket, Ok(())));
+    let source = (0..5000)
+        .map(|n| format!("output-{n:04}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(chat.set_shell_output(&submission.ticket, &source));
+    chat.set_input("protected draft");
+    let folded = draw(&mut chat, 80, 24).0;
+    for expected in [
+        "output-0000",
+        "output-0002",
+        "4995 lines folded",
+        "output-4998",
+        "output-4999",
+    ] {
+        assert!(folded.contains(expected), "{folded}");
+    }
+    assert!(!folded.contains("output-0003"));
+    chat.open_selection();
+    chat.update(&key(KeyCode::Char('y')));
+    let Intent::Copy { text, request, .. } = chat.take_intents().pop().unwrap() else {
+        panic!("shell copy");
+    };
+    assert_eq!(text, format!("```sh\n{source}\n```"));
+    assert!(chat.acknowledge(&request, Ok("")));
+    chat.update(&key(KeyCode::Char('c')));
+    let Intent::Copy { text, request, .. } = chat.take_intents().pop().unwrap() else {
+        panic!("shell code copy");
+    };
+    assert_eq!(text, source);
+    assert!(chat.acknowledge(&request, Ok("")));
+    chat.update(&key(KeyCode::Enter));
+    let expanded = draw(&mut chat, 80, 24).0;
+    assert!(!expanded.contains("4995 lines folded"));
+    chat.update(&key(KeyCode::Enter));
+    assert!(draw(&mut chat, 80, 24).0.contains("output-4999"));
+    assert_eq!(chat.composer().editor().text(), "protected draft");
+}
+
+#[test]
 fn diff_no_newline_markers_do_not_increment_lines_and_malformed_patches_stay_readable() {
     for (patch, expected) in [
         (
@@ -227,6 +409,96 @@ fn ascii_changes_only_decoration_and_unavailable_targets_never_open() {
     chat.open_selection();
     chat.update(&key(KeyCode::Char('o')));
     assert_eq!(chat.take_intents(), [] as [canonic_tui::chat::Intent; 0]);
+}
+
+#[test]
+#[cfg(feature = "gallery")]
+fn gallery_keeps_copy_and_earlier_loading_as_independent_host_requests() {
+    use canonic_tui::gallery::{Component, Gallery};
+    let mut gallery = Gallery::new();
+    gallery
+        .open_scenario(Component::Chat, "earlier-loading")
+        .unwrap();
+    gallery.update(&ctrl('x'));
+    gallery.update(&key(KeyCode::Char('v')));
+    gallery.update(&key(KeyCode::Char('y')));
+    let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(
+        text.contains("loading earlier messages") && text.contains("copying"),
+        "{text}"
+    );
+    gallery.update(&key(KeyCode::F(5)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(!text.contains("loading earlier messages"));
+    assert!(text.contains("copying"), "{text}");
+    gallery.update(&key(KeyCode::F(5)));
+    terminal.draw(|f| gallery.render(f)).unwrap();
+    assert!(super::components::dump(terminal.backend().buffer()).contains("copied Markdown"));
+    assert_eq!(gallery.chat_input(), "Independent draft · preserved caret");
+}
+
+#[test]
+#[cfg(feature = "gallery")]
+fn gallery_alignment_frames_exercise_delayed_effects_and_paging_recovery() {
+    use canonic_tui::gallery::{Component, Gallery};
+    for (scenario, expected) in [
+        ("copy-pending", "copying · waiting for host"),
+        ("copy-failed", "clipboard unavailable"),
+        ("copy-markdown-confirmed", "copied Markdown"),
+        ("link-pending", "opening https://example.com/reference"),
+        ("link-refused", "not opened"),
+        ("link-confirmed", "opened https://example.com/reference"),
+        ("table-inspection-pending", "requesting full content"),
+        ("inspection-failed", "full source unavailable"),
+        ("patch-inspection-pending", "requesting full content"),
+        ("earlier-loading", "loading earlier messages"),
+        ("earlier-failed", "could not load earlier"),
+        ("newer-loading", "loading newer messages"),
+        ("newer-failed", "could not load newer"),
+        ("newer-restored", "Newest loaded window restored"),
+        ("retry-unavailable", "transport disconnected"),
+        ("quiet-note", "– cancelled · question dismissed"),
+        ("reasoning-unavailable", "no reasoning text supplied"),
+        ("attachment-unknown", "unknown kind · unknown size"),
+        ("raw-control-unicode", "Unicode: 界"),
+        ("source-limit", "not shown"),
+        ("search-ansi16", "timezone"),
+        ("search-no-color", "timezone"),
+        ("search-narrow-ascii", "esc back"),
+        ("host-suggestions", "Suggested · from host"),
+    ] {
+        let mut gallery = Gallery::new();
+        gallery.open_scenario(Component::Chat, scenario).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+        terminal.draw(|f| gallery.render(f)).unwrap();
+        let text = super::components::dump(terminal.backend().buffer());
+        assert!(text.contains(expected), "{scenario}: {text}");
+        assert_eq!(gallery.chat_input(), "Independent draft · preserved caret");
+        if scenario == "copy-pending" {
+            gallery.update(&key(KeyCode::F(6)));
+            terminal.draw(|f| gallery.render(f)).unwrap();
+            assert!(super::components::dump(terminal.backend().buffer()).contains("couldn't copy"));
+            gallery.update(&key(KeyCode::Char('y')));
+            gallery.update(&key(KeyCode::F(5)));
+            terminal.draw(|f| gallery.render(f)).unwrap();
+            assert!(
+                super::components::dump(terminal.backend().buffer()).contains("copied Markdown")
+            );
+        }
+        if scenario == "table-inspection-pending" {
+            gallery.update(&key(KeyCode::F(5)));
+            terminal.draw(|f| gallery.render(f)).unwrap();
+            assert!(
+                super::components::dump(terminal.backend().buffer())
+                    .contains("Full loaded content")
+            );
+            gallery.update(&key(KeyCode::Esc));
+            assert_eq!(gallery.chat_input(), "Independent draft · preserved caret");
+        }
+    }
 }
 
 #[test]

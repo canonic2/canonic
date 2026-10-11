@@ -50,8 +50,13 @@ impl Composer {
                 ("Esc", "close · recall back · stop · arm clear or rewind"),
                 ("Ctrl-C", "stop · clear · twice to quit"),
                 ("Ctrl-D", "remove queued edit · delete · twice to quit"),
-                ("Ctrl-Z / Ctrl-Y", "undo / redo"),
+                ("Ctrl-Z / Ctrl-Shift-Z / Alt-Z", "undo / redo"),
+                ("Ctrl-Y / Alt-Y", "yank / cycle kills"),
                 ("! / @ / /", "shell / files / commands when typed"),
+                (
+                    "F1",
+                    "Composer keys · editor keys are in the Editor reference",
+                ),
             ]
             .into_iter()
             .enumerate()
@@ -226,13 +231,23 @@ impl Composer {
                 .map(|(i, entry)| {
                     ratatui::text::Line::styled(
                         format!(
-                            "{} {}  {}{}",
+                            "{} {}  {}{}{}{}",
                             if i == 0 { "queued" } else { "      " },
                             i + 1,
+                            if entry.mode == super::InputMode::Shell {
+                                "$ "
+                            } else {
+                                ""
+                            },
                             if entry.editing {
                                 "editing below".into()
                             } else {
                                 crate::text::clean(&entry.text, 256, false)
+                            },
+                            if entry.mode == super::InputMode::Shell {
+                                " · shell"
+                            } else {
+                                ""
                             },
                             if self.paused { " · paused" } else { "" }
                         ),
@@ -271,21 +286,56 @@ impl Composer {
             .as_ref()
             .map_or_else(|| self.above_height(), |c| c.menu.height(width))
     }
-    /// Contextual key status adapted to a host's available width.
+    /// Completion help for the activity row above the draft.
+    #[must_use]
+    pub fn completion_hint_for(&self, width: u16) -> Option<&str> {
+        self.completion.as_ref().map(|c| {
+            self.editor
+                .notice()
+                .unwrap_or_else(|| c.menu.hint_for(width))
+        })
+    }
+    /// Composer help below the dock; completion help uses the activity row.
     #[must_use]
     pub fn footer_hint_for(&self, width: u16) -> &str {
-        self.completion
-            .as_ref()
-            .map_or_else(|| self.footer_hint(), |c| c.menu.hint_for(width))
+        if width >= 50 {
+            return self.footer_hint();
+        }
+        if self.conflict.is_some() {
+            return "enter chooses · esc keeps box";
+        }
+        if let Some(list) = &self.list {
+            return match list.kind {
+                ListKind::History => "enter recalls · esc closes",
+                ListKind::Stash => "enter restores · esc closes",
+                ListKind::Keys => "esc closes",
+            };
+        }
+        if self.leader.is_some() {
+            return "esc cancels sequence";
+        }
+        if self.arm.is_some() {
+            return self.footer_hint();
+        }
+        match self.mode {
+            super::BoxMode::Queued { .. } => "enter saves · esc keeps",
+            super::BoxMode::History { .. } => "enter sends · esc your draft",
+            super::BoxMode::Locked { .. } => "esc stops waiting",
+            super::BoxMode::Draft if self.is_busy() => "enter queues · esc stops",
+            super::BoxMode::Draft if self.input_mode == super::InputMode::Shell => {
+                "enter runs · esc leaves"
+            }
+            super::BoxMode::Draft => "enter sends · esc clears",
+        }
     }
     /// Contextual key status below the dock, including the active picker or box mode.
     #[must_use]
     pub fn footer_hint(&self) -> &str {
+        if self.work_request.is_some() {
+            return "actions on · enter queues · esc already asked";
+        }
         if self.conflict.is_some() {
             return "1 editor · 2 box · enter chooses · esc keeps box";
-        }
-        if let Some(completion) = &self.completion {
-            return completion.menu.hint();
         }
         if let Some(list) = &self.list {
             return match list.kind {
@@ -295,7 +345,7 @@ impl Composer {
             };
         }
         if self.leader.is_some() {
-            return "s stash · u restore · e editor · enter send queued · b background";
+            return "actions on · esc cancels sequence";
         }
         if let Some((arm, _)) = self.arm {
             return match arm {
@@ -309,6 +359,9 @@ impl Composer {
             super::BoxMode::Queued { .. } => "enter saves · esc keeps as was · ctrl+d removes",
             super::BoxMode::History { .. } => "↑↓ older/newer · enter sends again · esc your draft",
             super::BoxMode::Locked { .. } => "editing outside · ctrl+c cancels waiting",
+            super::BoxMode::Draft if self.literal_command.as_ref() == Some(&self.version) => {
+                "actions on · enter sends as text · F1 keys"
+            }
             super::BoxMode::Draft if self.command_ready() => {
                 "actions on · enter runs command · F1 keys"
             }

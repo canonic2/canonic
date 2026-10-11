@@ -1,7 +1,7 @@
 //! Routes local focus, logical navigation and acknowledged semantic host intents.
 
 use super::{
-    Action, Anchor, Chat, Intent, Match, Page, Pending, Search, Selection,
+    Action, Anchor, Chat, Intent, Match, Page, Pending, PendingKind, Search, Selection,
     content::Kind,
     layout::BlockId,
     model::{End, Mode},
@@ -18,12 +18,21 @@ impl Chat {
         if matches!(event, Event::Key(k) if k.kind == KeyEventKind::Release) {
             return Action::None;
         }
+        if let Some(mut chooser) = self.artifacts.take() {
+            if chooser.update(self, event) {
+                self.artifacts = Some(chooser);
+            }
+            return Action::None;
+        }
         if self.search.is_some() {
             self.search_event(event);
             return Action::None;
         }
         if self.selection.is_some() {
             self.select_event(event);
+            return Action::None;
+        }
+        if self.run_event(event) {
             return Action::None;
         }
         if !self.input.overlay_open() && self.chat_key(event) {
@@ -41,6 +50,9 @@ impl Chat {
     }
     /// Dismiss only local search/select or Composer selection, for nested hosts' Escape routing.
     pub fn dismiss_selection(&mut self) -> bool {
+        if self.artifacts.take().is_some() {
+            return true;
+        }
         if self.search.is_some() {
             self.close_search(false);
             return true;
@@ -127,6 +139,9 @@ impl Chat {
         self.capture_anchor();
     }
     fn oldest(&mut self) {
+        if self.paging_pending() {
+            return;
+        }
         self.follow = false;
         if self.scroll > 0 || self.home.as_ref() != self.anchor.as_ref() || self.home.is_none() {
             self.scroll = 0;
@@ -138,6 +153,7 @@ impl Chat {
             return;
         }
         let request = self.request();
+        self.newer_failure = None;
         let before = self
             .messages
             .first()
@@ -146,22 +162,34 @@ impl Chat {
         self.intents.push(Intent::Earlier { request, before });
     }
     fn latest(&mut self) {
+        if self.paging_pending() {
+            return;
+        }
         self.home = None;
         if self.newer > 0 {
             if self.pending.is_some() {
                 return;
             }
             let request = self.request();
+            self.newer_failure = None;
+            self.page = None;
             self.pending = Some(Pending {
                 request: request.clone(),
                 label: "newest history loaded".into(),
-                latest: true,
+                kind: PendingKind::Latest,
             });
             self.intents.push(Intent::Latest { request });
         } else {
             self.resume();
             self.refresh();
         }
+    }
+    fn paging_pending(&self) -> bool {
+        matches!(self.page, Some(Page::Loading(_)))
+            || self
+                .pending
+                .as_ref()
+                .is_some_and(|p| matches!(p.kind, PendingKind::Latest))
     }
     fn retry_reply(&mut self) {
         if !self.retry {
@@ -175,7 +203,7 @@ impl Chat {
             .messages
             .iter()
             .rev()
-            .find(|m| matches!(m.turn.end, End::Failed(_)))
+            .find(|m| matches!(m.turn.end, End::Failed(_) | End::Interrupted(_)))
             .map(|m| m.turn.id.clone())
         else {
             self.say("no failed reply");
@@ -185,7 +213,7 @@ impl Chat {
         self.pending = Some(Pending {
             request: request.clone(),
             label: "retry requested".into(),
-            latest: false,
+            kind: PendingKind::Retry,
         });
         self.intents.push(Intent::Retry { request, message });
     }
@@ -303,7 +331,13 @@ impl Chat {
                             }
                             if cache.blocks.iter().any(|b| {
                                 b.start == found.block.start
-                                    && matches!(b.kind, Kind::Fold { .. } | Kind::Diff { .. })
+                                    && matches!(
+                                        b.kind,
+                                        Kind::Fold { .. }
+                                            | Kind::Diff { .. }
+                                            | Kind::Tool { .. }
+                                            | Kind::ToolGroup
+                                    )
                             }) {
                                 temporary.insert(key.clone());
                             }
@@ -390,6 +424,9 @@ impl Chat {
         }
     }
     fn select_event(&mut self, event: &Event) {
+        if self.tool_event(event) {
+            return;
+        }
         let Event::Key(key) = event else {
             return;
         };
@@ -426,11 +463,19 @@ impl Chat {
                         .get(&(m.turn.id.clone(), p.id.clone()))
                         .into_iter()
                         .flat_map(|c| {
-                            c.blocks.iter().map(|b| BlockId {
-                                message: m.turn.id.clone(),
-                                part: p.id.clone(),
-                                start: b.start,
-                            })
+                            c.blocks
+                                .iter()
+                                .filter(|b| {
+                                    !matches!(b.kind, Kind::Tool { .. } | Kind::ToolGroup)
+                                        || c.rows.iter().any(|r| {
+                                            r.block.as_ref().is_some_and(|id| id.start == b.start)
+                                        })
+                                })
+                                .map(|b| BlockId {
+                                    message: m.turn.id.clone(),
+                                    part: p.id.clone(),
+                                    start: b.start,
+                                })
                         })
                 })
             })
@@ -528,7 +573,7 @@ impl Chat {
         self.pending = Some(Pending {
             request: request.clone(),
             label: format!("✓ copied {kind} · {lines} lines"),
-            latest: false,
+            kind: PendingKind::Copy,
         });
         self.intents.push(Intent::Copy {
             request,
@@ -554,7 +599,7 @@ impl Chat {
             self.pending = Some(Pending {
                 request: request.clone(),
                 label: format!("→ opened {target}"),
-                latest: false,
+                kind: PendingKind::Open(target.clone()),
             });
             self.intents.push(Intent::Open { request, target });
         } else if inspection {
@@ -573,7 +618,7 @@ impl Chat {
                 self.pending = Some(Pending {
                     request: request.clone(),
                     label: "→ opened full content".into(),
-                    latest: false,
+                    kind: PendingKind::Inspect,
                 });
                 self.intents.push(Intent::Inspect {
                     request,
@@ -590,6 +635,16 @@ impl Chat {
         let Some(id) = self.selection.as_ref().map(|s| s.last.clone()) else {
             return;
         };
+        if let Some(ticket) = self
+            .messages
+            .iter()
+            .find(|message| message.turn.id == id.message)
+            .and_then(|message| message.shell.as_ref().map(|(ticket, _)| ticket.clone()))
+        {
+            self.toggle_shell_output(&ticket);
+            self.reveal_block(&id);
+            return;
+        }
         if !self
             .block(&id)
             .is_some_and(|b| matches!(b.kind, Kind::Fold { .. }))

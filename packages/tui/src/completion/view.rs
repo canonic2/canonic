@@ -36,6 +36,7 @@ impl Menu {
             height,
             ..area
         };
+        frame.render_widget(ratatui::widgets::Clear, area);
         frame.render_widget(Block::default().style(p.base()), area);
         self.page_rows = usize::from(height.saturating_sub(2)).max(1);
         self.render_rule(frame, Rect { height: 1, ..area }, p, false, 0);
@@ -73,7 +74,9 @@ impl Menu {
             .iter()
             .map(|s| s.batch.scanned)
             .fold(0, usize::saturating_add);
-        let count = if self.loading() {
+        let count = if !self.timed_out_sources().is_empty() {
+            "5 s".into()
+        } else if self.loading() {
             format!("{} so far", self.visible.len())
         } else if total > self.visible.len() {
             format!("{} of {total}", self.visible.len())
@@ -127,12 +130,17 @@ impl Menu {
         if area.is_empty() {
             return 0;
         }
-        let warning = self
+        let mut warnings = self
             .failures()
             .into_iter()
             .map(|(source, error)| format!("{source}: {error}"))
-            .collect::<Vec<_>>()
-            .join(" · ");
+            .collect::<Vec<_>>();
+        warnings.extend(
+            self.timed_out_sources()
+                .iter()
+                .map(|source| format!("no reply from {source} after 5 s")),
+        );
+        let warning = warnings.join(" · ");
         if self.visible.is_empty() {
             self.render_empty(frame, area, p, &warning);
             return 0;
@@ -207,6 +215,8 @@ impl Menu {
                     "✕"
                 }
             )
+        } else if !self.timed_out_sources().is_empty() {
+            format!("! {warning}\nthe source may be slow or stuck · tab retries")
         } else if self.loading() {
             format!(
                 "{} listing {}",
@@ -219,25 +229,44 @@ impl Menu {
             )
         } else if let Some(guess) = &self.guess {
             format!(
-                "No matches for {:?}\nclosest: {} · tab takes it",
-                self.request.query, guess.name
+                "{}\nclosest: {} · tab takes it",
+                self.no_match(),
+                guess.name
             )
         } else {
-            format!("No matches for {:?}", self.request.query)
+            let message = self.no_match();
+            if self.title == "commands" {
+                format!("{message}\nF1 lists every key")
+            } else {
+                message
+            }
         };
         frame.render_widget(
             Paragraph::new(text).style(if self.all_failed() {
                 p.error()
+            } else if !self.timed_out_sources().is_empty() {
+                p.warning()
             } else {
                 p.muted()
             }),
             area,
         );
-        if !warning.is_empty() && !self.all_failed() {
+        if !warning.is_empty() && !self.all_failed() && self.timed_out_sources().is_empty() {
             frame.render_widget(
                 Paragraph::new(format!("! {warning}")).style(p.warning()),
                 Rect::new(area.x, area.bottom() - 1, area.width, 1),
             );
+        }
+    }
+    fn no_match(&self) -> String {
+        match self.title.as_str() {
+            "commands" => format!(
+                "no command matches {:?}",
+                format!("/{}", self.request.query.trim_start_matches('/'))
+            ),
+            "files" => format!("no file matches {:?}", self.request.query),
+            "paths" => format!("no path matches {:?}", self.request.query),
+            _ => format!("no matches for {:?}", self.request.query),
         }
     }
 }
@@ -253,22 +282,40 @@ fn description(
     if width < 30 || available < 8 {
         return vec![String::new()];
     }
-    let tag = row.disabled.as_deref().unwrap_or(&row.tag);
+    let tag = tag(row, p);
     let tag_width = u16::try_from(tag.width() + 2).unwrap_or(u16::MAX);
-    let desc_width = if width >= 60 && available > tag_width.saturating_add(12) {
+    let show_tag = width >= 60 && available > tag_width.saturating_add(12);
+    let desc_width = if show_tag {
         available - tag_width
     } else {
         available
     };
+    let text = if row.disabled.is_some() && !show_tag {
+        tag.as_str()
+    } else {
+        &row.description
+    };
     if selected && width > 40 {
-        word_wrapped(&row.description, desc_width)
+        word_wrapped(text, desc_width)
     } else {
         vec![shorten(
-            row.description.lines().next().unwrap_or(""),
+            text.lines().next().unwrap_or(""),
             usize::from(desc_width),
             p,
         )]
     }
+}
+fn tag(row: &Candidate, p: Presentation) -> String {
+    row.disabled.as_deref().map_or_else(
+        || row.tag.clone(),
+        |reason| {
+            if p.colors == crate::theme::ColorMode::NoColor {
+                format!("[-] {reason}")
+            } else {
+                reason.into()
+            }
+        },
+    )
 }
 fn word_wrapped(text: &str, width: u16) -> Vec<String> {
     let mut rows = Vec::new();
@@ -302,6 +349,9 @@ fn shorten(text: &str, width: usize, p: Presentation) -> String {
     } else {
         "⋯"
     };
+    if width < suffix.width() {
+        return suffix.chars().take(width).collect();
+    }
     let mut clipped = String::new();
     for g in text.graphemes(true) {
         if clipped.width() + g.width() + suffix.width() > width {
@@ -328,17 +378,23 @@ fn draw_candidate(
     let band = if selected { p.selection() } else { p.base() };
     frame.render_widget(Block::default().style(band), Rect { height, ..area });
     let style = if row.disabled.is_some() {
-        p.muted()
+        p.disabled()
     } else if selected {
         p.accent().add_modifier(Modifier::BOLD)
     } else {
         p.accent()
     };
+    let indent = area.width.min(2);
+    let has_details = area.width >= 30 && area.width.saturating_sub(column) >= 8;
+    let marked =
+        row.disabled.is_some() && p.colors == crate::theme::ColorMode::NoColor && !has_details;
+    let name_budget = usize::from(area.width - indent).saturating_sub(if marked { 4 } else { 0 });
+    let clipped_name = shorten(&row.name, name_budget, p);
     let positions = matched(&row.name, query).map_or_else(Vec::new, |(_, positions)| positions);
     // Keep whole graphemes together even when highlighting case-folded matches.
     let mut char_index = 0;
     let name = Line::from(
-        row.name
+        clipped_name
             .graphemes(true)
             .map(|g| {
                 let highlight =
@@ -355,13 +411,19 @@ fn draw_candidate(
             })
             .collect::<Vec<_>>(),
     );
-    let indent = area.width.min(2);
+    let name = if marked {
+        let mut spans = vec![Span::styled("[-] ", style)];
+        spans.extend(name.spans);
+        Line::from(spans)
+    } else {
+        name
+    };
     frame.render_widget(
         Paragraph::new(name),
         Rect::new(area.x + indent, area.y, area.width - indent, 1),
     );
-    if area.width >= 30 && area.width.saturating_sub(column) >= 8 {
-        let tag = row.disabled.as_deref().unwrap_or(&row.tag);
+    if has_details {
+        let tag = tag(row, p);
         let tag_width = u16::try_from(tag.width() + 2).unwrap_or(u16::MAX);
         let available = area.width - column;
         let show_tag = area.width >= 60 && available > tag_width.saturating_add(12);

@@ -14,19 +14,36 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 187 named entries, plus
-four main-view presentation profiles per component. This is a contract coverage map,
+The registry is `src/gallery/scenarios.rs`. It contains 394 named entries, plus
+eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
 | Component / public contract | Interactive scenarios | States needing a dedicated implementation or fixture |
 | --- | --- | --- |
-| [Option picker](../components/option-picker.md#picker-contract) | main/default, details, disabled, danger, filter, no-match, scrolled, multi, groups, loading, narrow, done; supplemental empty/error; inline placement, centered dialog, full-screen host | Native inline terminal ownership; inline placement currently runs inside the gallery's alternate screen |
-| [Editor](../components/editor.md#editor-workflow) | main/focused, blurred, empty, wrap, selection, unicode, scrolled, pasted, undo, near-limit, limit, paste-cut; supplemental modal focus isolation | Dedicated composer-host and growing prompt-host fixtures. Composer input is already available through the composer main view, and dialog prompts through dialog. Foreground editor host adapter is verified separately |
-| [Dialog](../components/dialog.md#official-dialog-design) | main/prompt, multi-line, confirm, notice, nested/nest, replace, remove, scroll; supplemental locked, outside, removed-return, error, rename; late-result rejection | Timed waiting presentation. `late` exercises stale ticket rejection but does not reproduce the required live busy activity |
-| [Commands](../components/command-palette.md#commands-completion-and-help) | main/palette, filter, filter-key, unavailable, no-match, keys, keys-custom, conflict, pending, pending-hints, pending-miss; supplemental empty | Native human acceptance remains separate |
-| [Completion Menu](../components/completion-menu.md) | main, files, loading, still-loading, no-match-command, no-match-file, error, partly-failed, disabled, command-inserted, file-inserted, narrow, long-description, mixed-sources, doesnt-open | Real discovery/execution belongs to hosts; human visual acceptance remains separate |
-| [Composer](../components/composer.md) | 59 runnable entries: submission/refusal, four box modes, queue/edit/remove/pause/restart, history/search/earlier sessions, stash/swap/drop, editor/return/error/conflict, paste/image/hidden controls, shell/output, commands/files/email, clearing/rewind/quit and keys | Real agent, clipboard and durable-storage integration belongs to consumer hosts; native human visual acceptance stays separate |
-| [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | 51 interactive entries: answer/welcome/pane/actions-off, identified streaming/delivery/stop/resync, prose/code/tables/diffs/attachments/reasoning, follow/unread/paging/reflow, search and selection/copy/open | Reusable activity/review, sessions and standalone inspection belong to their own components. Host effects are simulated; human acceptance is separate |
+| [Option picker](../components/option-picker.md#picker-contract) | main/default, details, disabled, danger, filter, no-match, scrolled, multi, groups, loading, narrow, done, empty, error, maximum, minimum; inline placement, centered dialog, full-screen host | Native inline terminal ownership; inline placement currently runs inside the gallery's alternate screen |
+| [Editor](../components/editor.md#editor-workflow) | main/focused, blurred, empty, wrap, selection, unicode, scrolled, pasted, undo, near-limit, limit, paste-cut, kill-ring, word-parts, line-kills, typed-refused, blurred-scrolled, blurred-limit, tiny-3/2/1, paste-refused-whole, chip-cap, control-characters; modal focus isolation | Dedicated composer-host and growing prompt-host fixtures. Composer input is already available through the composer main view, and dialog prompts through dialog. Foreground editor host adapter is verified separately |
+| [Dialog](../components/dialog.md#official-dialog-design) | 36 named scenarios: panels/stack, timed arrival/guard/attention, locked/outside/error/filter handling, clear/removal, tiny/tall/profile states and irreversible/exact-name confirmation; `late` remains stale ticket rejection | Human visual acceptance and native inline-screen transitions |
+| [Commands](../components/command-palette.md#commands-completion-and-help) | 25 interactive frames: palette/filter/key/unavailable/empty, help/custom/conflicts, pending/hints/miss, empty scopes, help miss, host refusal, alias/slash search, short/40-column and palette/help/hints profiles | Slash insertion belongs to Composer; native human acceptance remains separate |
+| [Completion Menu](../components/completion-menu.md) | 30 interactive frames covering source progress/error/timeout/retry, insertion, token dismissal/reopening, refused/removed payloads, aliases, narrow/wide names and menu profiles | Real discovery/execution belongs to hosts; human visual acceptance remains separate |
+| [Composer](../components/composer.md) | 99 runnable entries: submission/refusal, four box modes, queue capacity/held/blank edit/pause/resume/restart, history/search, stash capacity/swap/drop, editor configuration/read/size/late return/conflict, typed paste/image/file payloads, shell folding/queue/background/history, commands, leaders, selection priority, clearing/rewind/quit and profiles | Real agent, clipboard and durable-storage integration belongs to consumer hosts; expanded engineering and human visual acceptance are tracked independently |
+| [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | 76 interactive entries: rich identified turns, streaming/delivery/stop/resync, bounded content, loaded search and selection, delayed copy/link/inspection acknowledgements, earlier/newer loading/failure/recovery, hidden timestamps, quiet notes, host suggestions and fallback profiles | Reusable review, sessions and standalone inspection belong to their own components. Host effects are simulated; human acceptance is separate |
+| [Tool Call Card](../components/tool-call-card.md) | 79 interactive entries: lifecycle/output, measured progress, child tasks/artifacts, redaction/controls, host reorder, selection/actions, concurrency/caps, profiles and twenty whole-run states, including reduced motion with advancing host seconds and generic input waiting | Human visual acceptance and real execution/clipboard/permission adapters stay separate |
+
+## Tool Call Card coverage
+
+| Contract area | Runnable scenarios |
+| --- | --- |
+| Anatomy, verbs and host placement | main, unknown, completed |
+| Lifecycle and bodies | queued, running, streaming, waiting, waiting-lock, failed, cancelled, text, code, diff, large-output, not-shown, empty-output |
+| Selected navigation and effects | selected, expanded, failed-selected, retried, details, copied, actions-off, copy-failed, details-failed, retry-refused, no-ack, stale-ack, delayed-ack |
+| Concurrent and growing output | three-at-once, out-of-order, all-done, all-succeeded, many-at-once, streaming-large, expanded-capped |
+| Responsive and safe text | narrow, narrow-diff, narrow-failed, palette-16, without-color, without-color-diff, unsafe-output, large-line; narrow-40/ansi16/no-color/ascii profiles |
+
+F5 steps queued/waiting → running → completed; F6 fails active calls; F8 appends
+eight output lines. Streaming scenarios grow on injected ticks. F7 completes
+pending effects; stale-ack first advances the snapshot and rejects the old ticket.
+Details uses `/` literal search, `n` next, `y` simulated copy-all and Escape return.
+All host effects stay inside the fixture and create no execution or grant.
 
 Every component offers `narrow-40`, `ansi16`, `no-color`, and `ascii` main-view
 profiles. These cover narrow and color variants without duplicating

@@ -8,8 +8,8 @@ Baseline inspected on **2026-10-09**: [manifest](../Cargo.toml),
 and acceptance conventions follow [Gate](../../gate/specs/README.md) and
 [Shield](../../../private/shield/specs/README.md). This pass inspected source and
 assertions; it did not rerun Rust gates or establish fresh platform acceptance.
-Chat implementation and test coverage were updated on 2026-10-10; executed checks
-are recorded separately in [Verification](verification.md#chat-engineering-record--2026-10-10).
+Chat implementation and test coverage were updated on 2026-10-11; executed checks
+are recorded separately in [Verification](verification.md#chat-alignment-engineering-record--2026-10-11).
 
 Inventory research included direct source/documentation inspection of terminal
 routes, prompt editing/completions, modal routing, permission/question flows,
@@ -23,16 +23,18 @@ Full application operations appear below to establish host ownership.
 | --- | --- |
 | [Picker](../src/picker.rs) | Single choice, original-index action, explicit default, case-insensitive substring search, arrows/Enter/Esc/Ctrl-C/paste; 128-byte title, 4 KiB labels/query; backspace removes a scalar rather than grapheme |
 | [Rich picker](../src/picker/choice.rs) | Slice 2a accepted/committed: stable IDs, disabled/danger/current rows, groups/details, editor-backed fuzzy filter, multiple marks, source refresh and compact view; compatibility picker stays intact |
-| [Dialogs](../src/dialog.rs) | Slice 2b awaits human gate: generic caller bodies, bounded stack, top-only dispatch, return focus repair, unique tickets, replacement/clear records, close policy and clamped shared-rule view |
+| [Dialogs](../src/dialog.rs) | Caller bodies, bounded stack, top-only routing, return focus/tickets, timed arrival/guard/notices, attention intents, caution policies and 36 named scenarios; human acceptance pending |
 | [Chat](../src/chat.rs) | Identified rich parts/revisions/resync, immutable submission delivery, semantic content/search/copy; 100 turns and 64 KiB per turn |
-| [Composer](../src/composer.rs) | Complete component: submission tickets, FIFO held edits/pause, history/search, stash/drop undo, lossless chips, shell/completion, autosave codec and editor conflicts; host executes/persists |
-| [Completion Menu](../src/completion.rs) | Standalone ranking, source tickets/progress/streaming, insertion and retry; Composer token routing and 15 interactive gallery states; host discovers/executes |
+| [Tool Call Card](../src/tool_call_card.rs) | Nine lifecycle states, text/code/diff/unavailable bodies, host progress/tasks/artifacts, coalesced previews, reorder by ID and acknowledged effects; 79 deterministic gallery scenarios |
+| [Run Activity](../src/run_activity.rs) | Whole-run state, single outstanding cancel, completion/failure races, independent offline status, 140 ms injected animation and Chat composition |
+| [Composer](../src/composer.rs) | Submission and work-control tickets with host acknowledgements; FIFO held edits/pause, history/search, stash/drop undo, typed paste/image/file atoms, shell/completion, backward-compatible autosave codec, editor conflicts and 99 gallery scenarios; host executes/persists |
+| [Completion Menu](../src/completion.rs) | Prefix/word/alias/fuzzy ranking, source tickets/progress/streaming, distinct timeout warnings and Alt-R retry; Composer token routing, separate menu/draft help and 30 interactive gallery states; host discovers/executes |
 | [Editor](../src/editor.rs) / [Focus](../src/focus.rs) | Slice 1 functional gate passed; redesign awaits renewed gate: word-wrapped source rows, selection, one-transaction paste with whole-grapheme cutting, grouped undo; independent focus orders and modal return scopes |
 | Chat viewport | Logical message/part/source anchors, usize navigation, follow/unread, opaque paging, cached visible row projection |
 | [Text](../src/text.rs) | Removes controls except allowed newlines, bounds UTF-8 by scalars, grapheme wrapping, narrow replacement; strips ESC rather than parsing complete escape sequences |
 | [Theme](../src/theme.rs) | Semantic ANSI/indexed/RGB/no-color profiles and ASCII decoration; terminal-default body colors and syntax/diff/selection styles resolved by Chat |
 | [Runtime](../src/runtime.rs) | TTY checks, process-local lease, raw/alternate/cursor/paste, startup guard/drop restoration attempts, synchronous draw/poll; explicit close errors and foreground handoff; exact Unix termios restoration; inline and forced-signal handling remain outside this adapter |
-| [Gallery](../src/gallery.rs) | Selector/picker/chat/editor; two independent editors and modal, resettable Unicode/long/limit scenarios; deterministic stream queue; busy/disconnected protects draft; 51 Chat scenarios exercise rich content and simulated host effects |
+| [Gallery](../src/gallery.rs) | Selector/picker/chat/editor; independent drafts, resettable Unicode/long/limit scenarios; deterministic stream queue; busy/disconnected protects draft; 76 Chat scenarios exercise rich content, delayed identified effects and serial paging recovery |
 | [Editor tests](../tests/integration/editor.rs) | Editing, bounds, selection, undo, focus removal/return, cursor/style, reviewed multiline snapshot and arbitrary Unicode properties |
 | [Rich picker tests](../tests/integration/picker.rs) | Identity/default/disabled refresh, hidden marks, query undo, status isolation, group paging, compact snapshot, Unicode/narrow styles and supplied-ID properties |
 | [Dialog tests](../tests/integration/dialog.rs) | Nested routing, selection-first Esc, return repair, stale/foreign tickets, atomic validation, outside pointer isolation, tiny geometry, snapshot and arbitrary stack changes |
@@ -43,13 +45,13 @@ Full application operations appear below to establish host ownership.
 Chat snapshots, Unicode properties and native Unix search/copy/resize workflows
 are present. Native Windows acceptance, inline hosting and full host adapters
 remain separate work.
-Editor controls remain stored and render as safe pictures/hex; fragmented
-transcript sanitation remains pending. See [Gate 1](human-testing.md#gate-1--editor-and-focus)
+Editor controls remain stored and render as safe pictures/hex; transcript controls
+are sanitized before rendering. See [Gate 1](human-testing.md#gate-1--editor-and-focus)
 for the editor and [Gate 2a](human-testing.md#gate-2a--rich-option-picker) for the
 rich picker. [Gate 2b](human-testing.md#gate-2b--dialogs) owns dialog acceptance.
-Its seven scenarios preserve two host drafts; a dedicated PTY test verifies
+Its 36 scenarios preserve host drafts; a dedicated PTY test verifies
 nested paste, parent preservation, resize and restored terminal modes. The
-picker's fourteen fixtures preserve an independent host draft while
+picker's sixteen local choice fixtures preserve an independent host draft while
 cycling stage/dock/full-screen placement. Engineering and human evidence remain
 separate.
 
@@ -72,7 +74,7 @@ separate.
 | Commands/aliases/skills | Completion/palette/help | Discovery/parsing/execution | Palette/help and Composer slash routing implemented; host supplies skills/discovery; [Command Palette](components/command-palette.md), [Completion Menu](components/completion-menu.md) |
 | Mentions/paths/directories/ranges | Query/result and token contracts | Filesystem/IDE search/context inclusion | File completion implemented; host supplies discovery; [Composer](components/composer.md) |
 | Shell entry mode | Host-defined mode label/submit | Execution/authorization | Implemented shell mode and separate recall; host executes; [Composer](components/composer.md) |
-| Tool calls/output/errors/diagnostics | Cards/expandable output/progress | Invocation/taxonomy/result meaning | Chat generic foldable projection implemented; reusable Tool Call Card pending; [Activity](features/activity.md) |
+| Tool calls/output/errors/diagnostics | Cards/expandable output/progress | Invocation/taxonomy/result meaning | Reusable cards/groups, supplied progress/tasks/artifacts, Chat selection, identified effects and bounded streaming; [Tool Call Card](components/tool-call-card.md), [Run Activity](components/run-activity.md), [Activity](features/activity.md) |
 | File changes/diffs/hunks | Code/diff viewer/resource tree | Diff/Git/snapshot/revert/apply | Implemented local projection; [Conversation](components/chat.md), [Browsing](features/browsing.md) |
 | Permission/trust/confirmation | Versioned review and safe choices | Identity/scope/expiry/grants/enforcement | Picker only; [Activity](features/activity.md) |
 | Single/multi/typed questions | Form and review | Delivery/schema/validation | Missing; [Activity](features/activity.md) |

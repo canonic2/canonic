@@ -7,6 +7,7 @@ use crate::{
         Commands,
         bindings::{Dispatcher, Outcome},
     },
+    dialog::{ClosePolicy, Dialog, DialogView, Reason, Size, Stack},
     editor::{Editor, EditorView},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     picker::{Intent, PickerView},
@@ -28,27 +29,55 @@ pub(super) struct CommandDemo {
     open: bool,
     remapped: bool,
     fixture: usize,
+    presentation_pending: bool,
     note: String,
     notice: Duration,
     recent: Vec<String>,
+    dialogs: Stack<(), u8>,
+    viewport: Rect,
 }
 impl CommandDemo {
+    pub(super) fn take_presentation(&mut self, p: Presentation) -> Option<Presentation> {
+        std::mem::take(&mut self.presentation_pending).then(|| fixtures::profile(self.fixture, p))
+    }
     pub(super) fn new() -> Self {
         let view = fixtures::view(false, 0);
         let dispatcher = Dispatcher::new(view.descriptors(), Duration::from_secs(3))
             .expect("valid fixture bindings");
         let mut draft = Editor::default();
         draft.set_text("and bump the app version");
-        Self {
+        let mut demo = Self {
             view,
             dispatcher,
             draft,
             open: true,
             remapped: false,
             fixture: 0,
+            presentation_pending: false,
             note: String::new(),
             notice: Duration::ZERO,
             recent: vec!["handoff".into(), "lens".into()],
+            dialogs: Stack::new_timed(vec![0]).expect("unique host target"),
+            viewport: Rect::default(),
+        };
+        demo.sync_dialog();
+        demo.dialogs.tick(Duration::from_millis(300));
+        demo
+    }
+    fn sync_dialog(&mut self) {
+        self.dialogs.clear();
+        if self.open {
+            self.dialogs
+                .push(Dialog {
+                    id: "commands".into(),
+                    title: "commands".into(),
+                    targets: vec![1],
+                    body: (),
+                    size: Size::default(),
+                    close: ClosePolicy::default(),
+                    view: DialogView::default(),
+                })
+                .expect("valid host dialog");
         }
     }
     fn rebuild(&mut self) {
@@ -59,14 +88,14 @@ impl CommandDemo {
             .expect("valid effective bindings");
         self.note.clear();
         self.notice = Duration::ZERO;
-        if matches!(self.fixture, 8..=10) {
+        if matches!(self.fixture, 8..=10 | 23) {
             self.open = false;
             self.dispatcher
                 .update(&Event::Key(crate::event::KeyEvent::new(
                     KeyCode::Char('x'),
                     KeyModifiers::CONTROL,
                 )));
-            if self.fixture == 9 {
+            if matches!(self.fixture, 9 | 23) {
                 self.dispatcher.tick(Duration::from_millis(400));
             }
             if self.fixture == 10 {
@@ -79,9 +108,17 @@ impl CommandDemo {
                 self.notice = Duration::from_secs(3);
             }
         }
+        if self.fixture == 15 {
+            self.open = false;
+            self.note = "! stop session didn't run · acme had already stopped".into();
+            self.notice = Duration::from_secs(3);
+        }
+        self.sync_dialog();
+        self.dialogs.tick(Duration::from_millis(300));
     }
     pub(super) fn tick(&mut self, elapsed: Duration) {
         self.draft.tick(elapsed);
+        self.dialogs.tick(elapsed);
         if self.dispatcher.tick(elapsed) {
             self.note.clear();
         }
@@ -99,11 +136,12 @@ impl CommandDemo {
         self.open = true;
         self.dispatcher.reset();
         self.note.clear();
+        self.sync_dialog();
     }
     pub(super) fn update(&mut self, event: &Event) -> bool {
         if let Event::Key(k) = event {
             if k.modifiers.contains(KeyModifiers::CONTROL)
-                && (k.code == KeyCode::Char('c')
+                && (k.code == KeyCode::Char('c') && !self.open
                     || (k.code == KeyCode::Char('t') && self.fixture != 7))
                 || k.code == KeyCode::F(4)
             {
@@ -117,6 +155,7 @@ impl CommandDemo {
                     }
                     KeyCode::F(2) => {
                         self.fixture = (self.fixture + 1) % fixtures::NAMES.len();
+                        self.presentation_pending = true;
                         self.open = true;
                         self.rebuild();
                         return true;
@@ -137,6 +176,7 @@ impl CommandDemo {
                         self.open = !self.open;
                         self.dispatcher.reset();
                         self.note.clear();
+                        self.sync_dialog();
                         return true;
                     }
                     KeyCode::Esc if !self.open && self.dispatcher.pending().is_empty() => {
@@ -154,29 +194,7 @@ impl CommandDemo {
             }
         }
         if self.open {
-            match self.view.update(event) {
-                Intent::Selected(id) => {
-                    self.open = false;
-                    self.dispatcher.reset();
-                    self.record_recent(&id);
-                    self.note = format!("intent: {id} · no operation executed");
-                    self.notice = Duration::from_secs(3);
-                }
-                Intent::Inspect(id) => {
-                    if let Some(info) = self.view.key_info(&id) {
-                        self.note = format!(
-                            "open source intent: {}:{}",
-                            info.origin.path, info.origin.line
-                        );
-                    }
-                }
-                Intent::Cancelled => {
-                    self.open = false;
-                    self.dispatcher.reset();
-                    self.note.clear();
-                }
-                _ => {}
-            }
+            self.update_overlay(event);
             return true;
         }
         match self.dispatcher.update(event) {
@@ -199,6 +217,46 @@ impl CommandDemo {
         }
         true
     }
+    fn update_overlay(&mut self, event: &Event) {
+        let mut intent = Intent::None;
+        self.dialogs.dispatch(event, self.viewport, |(), _, event| {
+            intent = self.view.update(event);
+            intent != Intent::Cancelled
+        });
+        if self.dialogs.is_empty() {
+            self.open = false;
+        }
+        match intent {
+            Intent::Selected(id) => {
+                self.open = false;
+                self.dispatcher.reset();
+                if self.fixture == 15 && id == "stop" {
+                    self.note = "! stop session didn't run · acme had already stopped".into();
+                } else {
+                    self.record_recent(&id);
+                    self.note = format!("intent: {id} · no operation executed");
+                }
+                self.notice = Duration::from_secs(3);
+                if let Some(ticket) = self.dialogs.ticket().cloned() {
+                    self.dialogs.close(&ticket, Reason::Submitted);
+                }
+            }
+            Intent::Inspect(id) => {
+                if let Some(info) = self.view.key_info(&id) {
+                    self.note = format!(
+                        "open source intent: {}:{}",
+                        info.origin.path, info.origin.line
+                    );
+                }
+            }
+            Intent::Cancelled => {
+                self.open = false;
+                self.dispatcher.reset();
+                self.note.clear();
+            }
+            _ => {}
+        }
+    }
     fn record_recent(&mut self, id: &str) {
         self.recent.retain(|old| old != id);
         self.recent.insert(0, id.into());
@@ -207,6 +265,8 @@ impl CommandDemo {
             .set_recent(&self.recent.iter().map(String::as_str).collect::<Vec<_>>());
     }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
+        self.viewport = area;
+        let area = self.stage(area);
         let [body, activity, draft, hints] = Layout::vertical([
             Constraint::Min(0),
             Constraint::Length(1),
@@ -215,6 +275,9 @@ impl CommandDemo {
         ])
         .areas(area);
         frame.render_widget(Paragraph::new("acme · 20:05\n  Both calls now send the app's language.\n\n  edit  example/account-deletion.rs   +6 −2 applied\n  run   example checks → 6 passed · 0.9s\n\n  ✓ done · 34s").style(p.muted()),body);
+        if self.open && !self.view.is_keys() && p.colors != crate::theme::ColorMode::NoColor {
+            frame.buffer_mut().set_style(area, p.faded());
+        }
         if self.open {
             let view = PickerView {
                 max_height: if self.view.is_keys() {
@@ -226,10 +289,15 @@ impl CommandDemo {
                 ..PickerView::default()
             };
             let height = self.view.height(body.width, view).min(body.height);
+            let width = if body.width <= 40 {
+                body.width
+            } else {
+                body.width.saturating_sub(4).min(72)
+            };
             let docked = Rect::new(
-                body.x,
+                body.x + body.width.saturating_sub(width) / 2,
                 body.bottom().saturating_sub(height),
-                body.width,
+                width,
                 height,
             );
             if self.view.is_keys() {
@@ -251,6 +319,8 @@ impl CommandDemo {
                     format!("{pending} … · esc cancels"),
                     p.muted(),
                 ))
+            } else if self.open && self.dialogs.activity() != "! dialog · esc closes it" {
+                Line::from(Span::styled(self.dialogs.activity(), p.warning()))
             } else if self.open {
                 Line::from(vec![
                     Span::styled(
@@ -289,7 +359,22 @@ impl CommandDemo {
                 !self.open && pending.is_empty(),
             );
         }
-        let note = if self.view.is_keys() && self.note.starts_with("open source intent:") {
+        self.scenario_footer(frame, hints, p);
+    }
+    fn stage(&self, area: Rect) -> Rect {
+        match self.fixture {
+            17 => Rect::new(area.x, area.y, area.width.min(64), area.height.min(12)),
+            18 => Rect::new(area.x, area.y, area.width.min(40), area.height),
+            _ => area,
+        }
+    }
+    fn scenario_footer(&self, frame: &mut Frame<'_>, hints: Rect, p: Presentation) {
+        let note = if self.open
+            && self.view.is_keys()
+            && self.dialogs.activity() != "! dialog · esc closes it"
+        {
+            self.dialogs.activity()
+        } else if self.view.is_keys() && self.note.starts_with("open source intent:") {
             self.note.clone()
         } else {
             format!(
@@ -314,6 +399,13 @@ impl CommandDemo {
         if area.is_empty() {
             return;
         }
+        frame.render_widget(
+            ratatui::widgets::Block::default().style(
+                p.base()
+                    .bg(p.tokens().surface.unwrap_or(ratatui::style::Color::Reset)),
+            ),
+            area,
+        );
         frame.render_widget(
             Rule {
                 left: Line::from(Span::styled(self.dispatcher.pending(), p.heading())),

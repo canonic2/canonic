@@ -1,0 +1,46 @@
+---
+source: tests/integration/tool_card_gallery.rs
+expression: "screen(&mut gallery, 100, 42)"
+---
+Canonic TUI · Component gallery
+
+acme · 20:03
+▌ edit settings.ts
+▌    │ @@ -18,2 +18,2 @@
+▌    │ −   json,
+▌    │ +   json, 'X-Timezone': user.time
+▌    │ ↩ zone,
+▌    │     tz,
+▌      → ✓ applied · +6 −2 · 2 h⋯ · 0.9s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+select · ↑↓ moves by block
+message ────────────────────────────────
+and bump the app version
+
+
+──────────────────── orbit-api#276 ~chat
+enter fold · o · y/c · esc
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

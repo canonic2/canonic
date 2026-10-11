@@ -29,6 +29,6 @@ workspace
             example command 02
             example command 03
 ────────────────────────────────────────────────────────────────── ↓ 13 more · tab scope · esc close
-#commands:palette · F2 fixture · F1 keys · F3 palette/keys · F5 remap · F6 focus
+! dialog · keys work in a moment
 
 Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

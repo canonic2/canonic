@@ -36,6 +36,207 @@ fn stack() -> Stack<Editor, u8> {
 }
 
 #[test]
+fn arrival_waits_for_a_pause_keeps_order_and_guards_only_confirmation_keys() {
+    use canonic_tui::dialog::Arrival;
+    use std::time::Duration;
+    let mut stack = Stack::new_timed(vec![0]).unwrap();
+    let area = Rect::new(0, 0, 80, 24);
+    stack.typed();
+    assert!(matches!(
+        stack.arrive(dialog("first", vec![1])).unwrap(),
+        Arrival::Waiting
+    ));
+    stack.arrive(dialog("second", vec![2])).unwrap();
+    assert_eq!(stack.waiting_len(), 2);
+    assert!(stack.activity().contains("first dialog · ctrl+g opens it"));
+    stack.tick(Duration::from_millis(999));
+    assert!(stack.is_empty());
+    stack.typed();
+    stack.tick(Duration::from_millis(999));
+    assert!(stack.is_empty());
+    stack.tick(Duration::from_millis(1));
+    let first = stack.ticket().unwrap().clone();
+    assert_eq!(stack.waiting_len(), 1);
+    for code in [KeyCode::Enter, KeyCode::Char('2')] {
+        assert!(matches!(
+            stack.dispatch(&key(code), area, |_, _, _| panic!("opening guard")),
+            Dispatch::Consumed
+        ));
+    }
+    stack.dispatch(&key(KeyCode::Char('y')), area, |body, _, event| {
+        body.update(event) != Outcome::Unhandled
+    });
+    assert_eq!(stack.body_mut(&first).unwrap().text(), "firsty");
+    stack.tick(Duration::from_millis(300));
+    stack.close(&first, Reason::Submitted).unwrap();
+    assert_eq!(stack.focused(), Some(&0));
+    stack.tick(Duration::ZERO);
+    let second = stack.ticket().unwrap().clone();
+    assert_eq!(stack.body_mut(&second).unwrap().text(), "second");
+    assert!(!stack.accepts(&first));
+}
+
+#[test]
+fn attention_notices_locked_escape_and_app_close_never_reach_the_body() {
+    use std::time::Duration;
+    let mut stack = Stack::new_timed(vec![0]).unwrap();
+    let area = Rect::new(0, 0, 80, 24);
+    stack.set_terminal_focused(false);
+    let parent = stack.push(dialog("parent", vec![1])).unwrap();
+    let attention = stack.take_attention();
+    assert_eq!(attention.len(), 1);
+    assert_eq!(attention[0].ticket, parent);
+    assert_eq!(attention[0].title, "! canonic · needs you");
+    assert!(stack.take_attention().is_empty());
+    stack.tick(Duration::from_secs(2));
+    assert!(stack.activity().contains("waiting for you · 2s"));
+    stack.set_terminal_focused(true);
+    let mut locked = dialog("locked", vec![2]);
+    locked.close.escape = false;
+    let child = stack.push(locked).unwrap();
+    stack.dispatch(&key(KeyCode::Esc), area, |_, _, _| false);
+    assert_eq!(stack.activity(), "! answer to continue");
+    let ctrl_c = Event::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    stack.dispatch(&ctrl_c, area, |_, _, _| {
+        panic!("app close belongs above the body")
+    });
+    assert!(stack.activity().contains("ctrl+c again closes it"));
+    let repeated = Event::Key(KeyEvent::new_with_kind(
+        KeyCode::Char('c'),
+        KeyModifiers::CONTROL,
+        KeyEventKind::Repeat,
+    ));
+    stack.dispatch(&repeated, area, |_, _, _| panic!("repeat cannot close"));
+    assert_eq!(stack.len(), 2);
+    assert!(matches!(
+        stack.dispatch(&ctrl_c, area, |_, _, _| panic!("app close")),
+        Dispatch::Dismissed(_)
+    ));
+    assert!(stack.accepts(&parent));
+    assert!(!stack.accepts(&child));
+    stack.remove(&parent, "answered elsewhere\x1b").unwrap();
+    assert_eq!(stack.activity(), "dialog closed · answered elsewhere");
+    stack.tick(Duration::from_secs(3));
+    assert_eq!(stack.activity(), "ready");
+}
+
+#[test]
+fn explicit_open_queue_bounds_replacement_and_error_updates_keep_tickets_scoped() {
+    use canonic_tui::dialog::DialogView;
+    let mut stack = Stack::new_timed(vec![0]).unwrap();
+    let area = Rect::new(0, 0, 80, 24);
+    stack.typed();
+    for i in 0..16 {
+        stack
+            .arrive(dialog(&format!("queued-{i}"), vec![1]))
+            .unwrap();
+    }
+    assert!(matches!(
+        stack.arrive(dialog("overflow", vec![1])),
+        Err(Invalid::QueueLimit)
+    ));
+    assert!(matches!(
+        stack.arrive(dialog("queued-0", vec![1])),
+        Err(Invalid::DuplicateId)
+    ));
+    let withdrawn = stack.withdraw_waiting("queued-15").unwrap();
+    assert_eq!(withdrawn.body.text(), "queued-15");
+    assert!(stack.withdraw_waiting("missing").is_none());
+    stack.arrive(withdrawn).unwrap();
+    let ctrl_g = Event::Key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    stack.dispatch(&ctrl_g, area, |_, _, _| {
+        panic!("waiting opens above background")
+    });
+    let ticket = stack.ticket().unwrap().clone();
+    assert!(stack.update_view(
+        &ticket,
+        DialogView {
+            message: "host failure".into(),
+            message_error: true,
+            footer: "enter retry · esc cancel".into(),
+            ..DialogView::default()
+        }
+    ));
+    assert_eq!(stack.body_mut(&ticket).unwrap().text(), "queued-0");
+    let (replacement, _) = stack.replace(dialog("replacement", vec![2])).unwrap();
+    assert!(stack.activity().contains("replaced queued-0 dialog"));
+    assert!(!stack.update_view(&ticket, DialogView::default()));
+    let closed = stack.clear();
+    assert_eq!(closed.len(), 16);
+    assert_eq!(closed[0].id, "replacement");
+    assert_eq!(closed[1].id, "queued-1");
+    assert_eq!(stack.waiting_len(), 0);
+    assert!(!stack.accepts(&replacement));
+    assert_eq!(stack.focused(), Some(&0));
+}
+
+#[test]
+fn irreversible_and_typed_confirmation_require_deliberate_current_actions() {
+    use canonic_tui::dialog::{Caution, Confirmation, Decision};
+    use std::time::Duration;
+    let mut confirm = Confirmation::default();
+    let enter = key(KeyCode::Enter);
+    assert_eq!(
+        confirm.update(
+            &key(KeyCode::Char('2')),
+            "delete",
+            &Caution::Irreversible,
+            ""
+        ),
+        Decision::None
+    );
+    assert_eq!(
+        confirm.update(
+            &Event::Paste("delete".into()),
+            "delete",
+            &Caution::Irreversible,
+            ""
+        ),
+        Decision::None
+    );
+    assert_eq!(
+        confirm.update(&enter, "delete-v1", &Caution::Irreversible, ""),
+        Decision::Armed
+    );
+    let repeat = Event::Key(KeyEvent::new_with_kind(
+        KeyCode::Enter,
+        KeyModifiers::NONE,
+        KeyEventKind::Repeat,
+    ));
+    assert_eq!(
+        confirm.update(&repeat, "delete-v1", &Caution::Irreversible, ""),
+        Decision::None
+    );
+    assert_eq!(
+        confirm.update(&enter, "delete-v2", &Caution::Irreversible, ""),
+        Decision::Armed
+    );
+    confirm.tick(Duration::from_secs(3));
+    assert_eq!(
+        confirm.update(&enter, "delete-v2", &Caution::Irreversible, ""),
+        Decision::Armed
+    );
+    confirm.tick(Duration::from_secs(2));
+    assert_eq!(
+        confirm.update(&enter, "delete-v2", &Caution::Irreversible, ""),
+        Decision::Confirm
+    );
+    let caution = Caution::TypeName("acme#22".into());
+    assert_eq!(
+        confirm.update(&enter, "delete", &caution, " acme#22"),
+        Decision::NameMismatch
+    );
+    assert_eq!(
+        confirm.update(&enter, "delete", &caution, "ACME#22"),
+        Decision::NameMismatch
+    );
+    assert_eq!(
+        confirm.update(&enter, "delete", &caution, "acme#22"),
+        Decision::Confirm
+    );
+}
+
+#[test]
 fn nested_routing_restores_surviving_focus_and_parent_draft() {
     let mut stack = stack();
     stack.advance(false);
@@ -259,7 +460,7 @@ fn rendering_uses_shared_rules_and_focus_only_for_top_even_at_tiny_sizes() {
     assert_eq!(targets, vec![Some(3)]);
     assert_eq!(
         stack.area(Rect::new(0, 0, 30, 9)),
-        Some(Rect::new(0, 2, 30, 5))
+        Some(Rect::new(2, 2, 26, 5))
     );
     let text = super::components::dump(terminal.backend().buffer());
     assert!(text.contains("child dialog"));

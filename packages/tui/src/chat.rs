@@ -1,10 +1,13 @@
 //! Owns a bounded identified transcript and Composer; hosts own all external work.
 
+mod artifacts;
 mod content;
 mod interaction;
 mod layout;
 mod model;
+mod run;
 mod syntax;
+mod tools;
 mod transcript;
 mod view;
 
@@ -54,7 +57,11 @@ impl Record {
         turn.day = model::label(&turn.day);
         turn.duration = model::label(&turn.duration);
         match &mut turn.end {
-            End::Done(s) | End::Stopped(s) | End::Failed(s) => *s = model::label(s),
+            End::Done(s)
+            | End::Stopped(s)
+            | End::Cancelled(s)
+            | End::Interrupted(s)
+            | End::Failed(s) => *s = model::label(s),
             End::Live | End::Quiet => {}
         }
         let excess = turn.parts.len().saturating_sub(PART_LIMIT);
@@ -122,7 +129,35 @@ struct Selection {
 struct Pending {
     request: Request,
     label: String,
-    latest: bool,
+    kind: PendingKind,
+}
+enum PendingKind {
+    Copy,
+    Open(String),
+    Inspect,
+    Retry,
+    Latest,
+}
+impl PendingKind {
+    fn waiting(&self) -> String {
+        match self {
+            Self::Copy => "copying · waiting for host…".into(),
+            Self::Open(target) => format!("opening {target} · waiting for host…"),
+            Self::Inspect => "requesting full content · waiting for host…".into(),
+            Self::Retry => "requesting retry · waiting for host…".into(),
+            Self::Latest => "loading newer messages…".into(),
+        }
+    }
+    fn failed(&self, reason: &str) -> String {
+        let action = match self {
+            Self::Copy => "couldn't copy",
+            Self::Open(_) => "not opened",
+            Self::Inspect => "couldn't open full content",
+            Self::Retry => "retry failed",
+            Self::Latest => "could not load newer",
+        };
+        format!("✕ {action} · {reason}")
+    }
 }
 struct Resync {
     message: String,
@@ -144,6 +179,8 @@ pub struct Chat {
     serial: u64,
     next_message: u64,
     cache: HashMap<(String, String), Cached>,
+    tools: HashMap<(String, String), tools::View>,
+    tool_symbols: crate::theme::Symbols,
     rows: Vec<Located>,
     metrics: Metrics,
     scroll: usize,
@@ -155,6 +192,7 @@ pub struct Chat {
     earlier: usize,
     newer: usize,
     page: Option<Page>,
+    newer_failure: Option<String>,
     loaded_boundary: Option<String>,
     home: Option<Anchor>,
     search: Option<Search>,
@@ -170,6 +208,8 @@ pub struct Chat {
     retry: bool,
     actions: &'static str,
     welcome: Welcome,
+    run: Option<crate::run_activity::RunActivity>,
+    artifacts: Option<artifacts::Chooser>,
 }
 impl Default for Chat {
     fn default() -> Self {
@@ -182,6 +222,8 @@ impl Default for Chat {
             serial: 0,
             next_message: 0,
             cache: HashMap::new(),
+            tools: HashMap::new(),
+            tool_symbols: crate::theme::Symbols::Unicode,
             rows: vec![],
             metrics: Metrics::default(),
             scroll: 0,
@@ -193,6 +235,7 @@ impl Default for Chat {
             earlier: 0,
             newer: 0,
             page: None,
+            newer_failure: None,
             loaded_boundary: None,
             home: None,
             search: None,
@@ -208,6 +251,8 @@ impl Default for Chat {
             retry: false,
             actions: "on",
             welcome: Welcome::default(),
+            run: None,
+            artifacts: None,
         }
     }
 }
@@ -506,8 +551,20 @@ impl Chat {
         if update.conversation != self.conversation {
             return Updated::Foreign;
         }
+        let valid_change = if let Change::Replace(content) = &update.change {
+            tools::valid(content)
+                && self
+                    .turn(&update.message)
+                    .and_then(|t| t.parts.iter().find(|p| p.id == update.part))
+                    .is_none_or(|p| tools::valid_change(&p.content, content))
+        } else {
+            true
+        };
         let target = self.messages.iter_mut().find(|m| {
-            m.turn.id == update.message && !m.fixed && matches!(m.turn.end, End::Live | End::Quiet)
+            valid_change
+                && m.turn.id == update.message
+                && !m.fixed
+                && matches!(m.turn.end, End::Live | End::Quiet)
         });
         if let Some(message) = target
             && let Some(part) = message.turn.parts.iter_mut().find(|p| {
@@ -623,7 +680,11 @@ impl Chat {
             return false;
         };
         match &mut end {
-            End::Done(s) | End::Stopped(s) | End::Failed(s) => *s = model::label(s),
+            End::Done(s)
+            | End::Stopped(s)
+            | End::Cancelled(s)
+            | End::Interrupted(s)
+            | End::Failed(s) => *s = model::label(s),
             End::Live | End::Quiet => {}
         }
         if !matches!(record.turn.end, End::Live | End::Quiet) {
@@ -651,17 +712,29 @@ impl Chat {
         if self.pending.as_ref().is_none_or(|p| &p.request != request) {
             return false;
         }
-        if self.pending.as_ref().is_some_and(|p| p.latest) && result.is_ok() {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|p| matches!(p.kind, PendingKind::Latest))
+            && result.is_ok()
+        {
             return false;
         }
         let Some(pending) = self.pending.take() else {
             return false;
         };
-        self.say(&match result {
+        let notice = match result {
             Ok("") => pending.label,
             Ok(label) => model::label(label),
-            Err(reason) => format!("failed · {}", model::label(reason)),
-        });
+            Err(reason) => {
+                let reason = model::label(reason);
+                if matches!(pending.kind, PendingKind::Latest) {
+                    self.newer_failure = Some(reason.clone());
+                }
+                pending.kind.failed(&reason)
+            }
+        };
+        self.say(&notice);
         true
     }
     /// Resolve older-history loading. Duplicate IDs or a stale request leave rows untouched.
@@ -709,7 +782,7 @@ impl Chat {
         if self
             .pending
             .as_ref()
-            .is_none_or(|p| !p.latest || &p.request != request)
+            .is_none_or(|p| !matches!(p.kind, PendingKind::Latest) || &p.request != request)
             || turns.len() > HISTORY_LIMIT
         {
             return false;
@@ -722,8 +795,10 @@ impl Chat {
             return false;
         }
         self.pending = None;
+        self.newer_failure = None;
         self.messages = turns.into_iter().map(Record::new).collect();
         self.cache.clear();
+        self.tools.clear();
         self.newer = 0;
         self.earlier = earlier;
         self.loaded_boundary = None;
@@ -748,6 +823,19 @@ impl Chat {
     pub fn tick(&mut self, elapsed: Duration) {
         self.now = self.now.saturating_add(elapsed);
         self.input.tick(elapsed);
+        if let Some(chooser) = &mut self.artifacts {
+            chooser.tick(elapsed);
+        }
+        if let Some(run) = &mut self.run {
+            run.tick(elapsed);
+        }
+        for (key, view) in &mut self.tools {
+            if view.tick(elapsed)
+                && let Some(cache) = self.cache.get_mut(key)
+            {
+                cache.width = 0;
+            }
+        }
         if self.leader.is_some_and(|due| self.now >= due) {
             self.leader = None;
         }
@@ -775,6 +863,11 @@ impl Chat {
         self.anchor = None;
     }
     fn prune(&mut self) {
+        self.tools.retain(|(message, part), _| {
+            self.messages
+                .iter()
+                .any(|m| &m.turn.id == message && m.turn.parts.iter().any(|p| &p.id == part))
+        });
         self.cache.retain(|(message, part), _| {
             self.messages
                 .iter()
@@ -799,5 +892,5 @@ fn valid_turn(turn: &Turn) -> bool {
             .parts
             .iter()
             .take(PART_LIMIT)
-            .all(|p| valid_id(&p.id) && ids.insert(&p.id))
+            .all(|p| valid_id(&p.id) && ids.insert(&p.id) && tools::valid(&p.content))
 }
