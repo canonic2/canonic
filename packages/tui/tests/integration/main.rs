@@ -22,6 +22,11 @@ mod dialog_terminal;
 mod editor;
 #[cfg(feature = "gallery")]
 mod gallery;
+mod inspection;
+#[cfg(feature = "gallery")]
+mod inspection_gallery;
+#[cfg(feature = "gallery")]
+mod inspection_terminal;
 #[cfg(feature = "gallery")]
 mod permission_gallery;
 mod permission_review;

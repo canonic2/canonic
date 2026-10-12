@@ -21,6 +21,8 @@ composition owns fixtures, scenario keys, stacking and the temporary modal.
 
 The [theme](../src/theme.rs) resolves ANSI 16, indexed, RGB and no-color styles
 from [tokens](../src/theme/tokens.rs). Components contain no palette literals.
+`Presentation::diff_line` and `diff_word` own addition/removal row and word
+tints, with signs and bold/underline fallbacks for limited color profiles.
 The [rule](../src/ui.rs) draws one horizontal row with independently styled
 left/right labels; metadata takes priority at narrow widths. It never draws
 side borders. No runtime registry, browser CSS engine or shared product package

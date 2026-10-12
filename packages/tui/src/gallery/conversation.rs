@@ -11,7 +11,7 @@ use crate::{
     event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     theme::Presentation,
 };
-use ratatui::{Frame, layout::Rect, widgets::Paragraph};
+use ratatui::{Frame, layout::Rect};
 use std::{collections::VecDeque, time::Duration};
 
 const ANSWER: &str = "## What's left\n\nThe server already stores the timezone, but the app never sends it, so both digests go out at 09:00 UTC. Profile sync already sends `X-Timezone`; the digest calls should too.\n\n- send the header on both digest calls, as in [the profile client](src/profile/api.ts:168)\n- drop the old offset table: zone names are enough\n- add a test for each call";
@@ -24,7 +24,7 @@ pub(super) struct ChatDemo {
     stream: VecDeque<String>,
     live: String,
     serial: usize,
-    inspection: Option<(String, usize)>,
+    inspection: Option<crate::inspection::Inspector>,
     elapsed: Duration,
     pending_delivery: Option<crate::composer::Identity>,
     held_effects: VecDeque<Intent>,
@@ -338,25 +338,38 @@ impl ChatDemo {
         self.chat.set_footer("worker#retries");
     }
     pub(super) fn update(&mut self, event: &Event) -> bool {
+        if let Some(viewer) = &mut self.inspection {
+            if matches!(event, Event::Key(k) if k.code==KeyCode::F(10) || k.modifiers.contains(KeyModifiers::CONTROL)&&matches!(k.code,KeyCode::Char('c'|'t')))
+            {
+                return false;
+            }
+            viewer.update(event);
+            for intent in viewer.take_intents() {
+                if let crate::inspection::Intent::Request(r) = intent {
+                    let result = match r.operation {
+                        crate::inspection::Operation::Copy { .. } => {
+                            crate::inspection::Outcome::Copied
+                        }
+                        crate::inspection::Operation::Editor { .. } => {
+                            crate::inspection::Outcome::Opened
+                        }
+                        crate::inspection::Operation::Load => crate::inspection::Outcome::Loaded(
+                            crate::inspection::State::Ready(crate::inspection::Content::Diff {
+                                patch: PATCH.into(),
+                                new_file: None,
+                            }),
+                        ),
+                    };
+                    let _ = viewer.complete(&r, result);
+                }
+            }
+            if !viewer.active() {
+                self.inspection = None;
+            }
+            return true;
+        }
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Release {
-                return true;
-            }
-            if self.inspection.is_some() {
-                match key.code {
-                    KeyCode::Esc => self.inspection = None,
-                    KeyCode::Up => {
-                        if let Some((_, y)) = &mut self.inspection {
-                            *y = y.saturating_sub(1);
-                        }
-                    }
-                    KeyCode::Down => {
-                        if let Some((_, y)) = &mut self.inspection {
-                            *y = y.saturating_add(1);
-                        }
-                    }
-                    _ => {}
-                }
                 return true;
             }
             if self.scenario == 6
@@ -364,7 +377,14 @@ impl ChatDemo {
                 && matches!(key.code, KeyCode::Char('a' | 'A' | 'e' | 'n'))
             {
                 if key.code == KeyCode::Char('e') {
-                    self.inspection = Some((PATCH.into(), 0));
+                    self.inspection = crate::inspection::Inspector::new(
+                        crate::inspection::Item::new("patch", "src/digest/settings.ts"),
+                        crate::inspection::State::Ready(crate::inspection::Content::Diff {
+                            patch: PATCH.into(),
+                            new_file: None,
+                        }),
+                    )
+                    .ok();
                 } else {
                     self.chat.set_status("choice recorded in local simulation");
                 }
@@ -521,24 +541,15 @@ impl ChatDemo {
             }
             Intent::Inspect {
                 request, content, ..
-            } => {
-                let text = match content {
-                    Content::Markdown(text)
-                    | Content::Diff { patch: text, .. }
-                    | Content::Code { text, .. } => text,
-                    Content::Table { headers, rows } => format!(
-                        "{}\n{}",
-                        headers.join(" | "),
-                        rows.iter()
-                            .map(|r| r.join(" | "))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    ),
-                    _ => format!("{content:?}"),
-                };
-                self.inspection = Some((text, 0));
-                self.chat.acknowledge(&request, Ok(""));
-            }
+            } => match super::inspection::from_chat("chat-content", content) {
+                Ok(viewer) => {
+                    self.inspection = Some(viewer);
+                    self.chat.acknowledge(&request, Ok(""));
+                }
+                Err(error) => {
+                    self.chat.acknowledge(&request, Err(&error.to_string()));
+                }
+            },
             Intent::Earlier { request, .. } => {
                 let mut turn = Turn::new(
                     &format!("earlier-{}", self.serial),
@@ -686,23 +697,10 @@ impl ChatDemo {
         }
     }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
-        self.chat.render_docked_with(frame, area, theme);
-        if let Some((text, offset)) = &self.inspection {
-            frame.render_widget(ratatui::widgets::Block::default().style(theme.base()), area);
-            let lines: Vec<_> = crate::text::wrapped(text, area.width)
-                .into_iter()
-                .skip(*offset)
-                .take(usize::from(area.height.saturating_sub(1)))
-                .collect();
-            frame.render_widget(Paragraph::new(lines.join("\n")).style(theme.base()), area);
-            frame.render_widget(
-                Paragraph::new("Full loaded content · ↑↓ scroll · esc back").style(theme.muted()),
-                Rect {
-                    y: area.bottom().saturating_sub(1),
-                    height: 1,
-                    ..area
-                },
-            );
+        if let Some(viewer) = &mut self.inspection {
+            viewer.render(frame, area, theme);
+        } else {
+            self.chat.render_docked_with(frame, area, theme);
         }
     }
 }

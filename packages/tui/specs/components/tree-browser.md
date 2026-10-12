@@ -100,7 +100,9 @@ Clocks are caller-injected; pending age updates with static reduced-motion glyph
 
 `tree_browser` owns validated data, folds, filtering, cursor, tickets and rendering;
 the gallery adapter supplies deterministic files/tasks and acknowledged results.
-It does not implement the separate Code/Diff Inspection capability.
+The file main view composes the separate
+[Code/Diff Inspection](code-diff-inspection.md) capability; task output retains
+its supplied Chat fixture.
 
 - **TB-01:** Ordered stable navigation, folding, filtered ancestors, refresh and
   removal preserve a valid visible cursor.

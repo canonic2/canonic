@@ -130,7 +130,10 @@ Both restore Composer and refold temporary expansions.
 
 Ctrl-X V starts at the newest block. Up/Down move by block; Shift extends;
 M selects a whole message; Y requests original Markdown; C requests code source;
-O opens a supplied link/file/attachment or requests table/diff inspection.
+O opens a supplied link/attachment or requests code/table/diff inspection.
+Code inspection retains the selected block's source, language, file and line
+metadata. The host chooses loading and composes the reusable
+[Code/Diff Inspector](code-diff-inspection.md) while retaining this Chat instance.
 A margin marker identifies the range without changing source. Enter toggles
 folds. Esc resumes following only when selection began while following.
 
@@ -139,7 +142,7 @@ target, or requesting full content. Repeated keys emit nothing while pending;
 highlighting and navigation do not claim success. Success shows a dim
 notice with copy kind/line count; failure keeps selection with a retryable reason.
 Copy failure offers Y to retry. Unsupported/control-bearing links show a refusal
-and still retain their original Markdown for Y. O on a table or patch emits
+and still retain their original Markdown for Y. O on code, a table or patch emits
 inspection with the stable message/part IDs and retained content; the host resolves
 its complete source when a displayed projection has been bounded.
 Foreign, duplicate and stale completions are ignored. There are no OSC clipboard

@@ -768,10 +768,12 @@ fn selection_copies_original_code_and_waits_for_a_real_host_acknowledgement() {
     assert!(draw(&mut chat, 80, 30).0.contains("copied code · 3 lines"));
     assert!(!chat.acknowledge(&request, Ok("duplicate")));
     chat.update(&key(KeyCode::Char('o')));
-    let Intent::Open { target, .. } = chat.take_intents().pop().unwrap() else {
-        panic!("file open");
+    let Intent::Inspect { content, .. } = chat.take_intents().pop().unwrap() else {
+        panic!("code inspection");
     };
-    assert_eq!(target, "src/profile/api.ts:168");
+    assert!(
+        matches!(content, Content::Code { file, line: Some(168), .. } if file=="src/profile/api.ts")
+    );
 }
 
 #[test]

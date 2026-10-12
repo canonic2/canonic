@@ -61,6 +61,49 @@ impl Theme {
 }
 
 impl Presentation {
+    /// Unified-diff row tint; limited profiles retain semantic signs and attributes.
+    #[must_use]
+    pub fn diff_line(self, added: bool) -> Style {
+        let color = match (self.colors, self.theme, added) {
+            (ColorMode::TrueColor, Theme::Dark, true) => Some(Color::Rgb(22, 51, 31)),
+            (ColorMode::TrueColor, Theme::Dark, false) => Some(Color::Rgb(59, 27, 33)),
+            (ColorMode::TrueColor, Theme::Light, true) => Some(Color::Rgb(223, 239, 222)),
+            (ColorMode::TrueColor, Theme::Light, false) => Some(Color::Rgb(246, 223, 223)),
+            (ColorMode::Ansi256, _, true) => Some(Color::Indexed(22)),
+            (ColorMode::Ansi256, _, false) => Some(Color::Indexed(52)),
+            _ => None,
+        };
+        color.map_or_else(
+            || {
+                Self::foreground(if added {
+                    self.tokens().success
+                } else {
+                    self.tokens().error
+                })
+            },
+            |c| self.base().bg(c),
+        )
+    }
+    /// Changed-word emphasis with stronger tints or bold/underline fallbacks.
+    #[must_use]
+    pub fn diff_word(self, added: bool) -> Style {
+        let color = match (self.colors, self.theme, added) {
+            (ColorMode::TrueColor, Theme::Dark, true) => Some(Color::Rgb(44, 85, 53)),
+            (ColorMode::TrueColor, Theme::Dark, false) => Some(Color::Rgb(103, 48, 57)),
+            (ColorMode::TrueColor, Theme::Light, true) => Some(Color::Rgb(189, 224, 185)),
+            (ColorMode::TrueColor, Theme::Light, false) => Some(Color::Rgb(235, 180, 182)),
+            (ColorMode::Ansi256, _, true) => Some(Color::Indexed(28)),
+            (ColorMode::Ansi256, _, false) => Some(Color::Indexed(88)),
+            _ => None,
+        };
+        color.map_or_else(
+            || {
+                self.base()
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+            },
+            |c| self.base().bg(c).add_modifier(Modifier::BOLD),
+        )
+    }
     /// Solid draft rule, distinct from its brighter label.
     #[must_use]
     pub fn message_line(self) -> Style {

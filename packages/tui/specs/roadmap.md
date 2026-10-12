@@ -24,6 +24,8 @@ Session Browser implements dedicated navigation/search/paging and acknowledged
 row actions with retained Chat instances and 72 live scenarios. Permission policy, native inline hosting and broader acceptance remain separate.
 Tree Browser supplies lazy files/tasks, stable folds, filtering with ancestors,
 acknowledged effects and 66 live scenarios; full engineering gates passed.
+Code/Diff Inspection supplies bounded code/unified patches, navigation, folds,
+loaded find, selection, identified copy/editor/load results and 51 live scenarios.
 
 ## Delivery scope and phase order
 
@@ -103,6 +105,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | CM-02–CM-04 | [Completion Menu](components/completion-menu.md#acceptance-criteria): alias ranking, source warning/retry, fixed height and dock/status separation | 2 |
 | D-04 / SB-01–SB-06 | [Session Browser](components/session-browser.md#implementation-ownership-and-acceptance): stable rows, search/actions/paging/races and Chat return without storage | 5 |
 | D-05 / TB-01–TB-05 | [Tree Browser](components/tree-browser.md#ownership-and-acceptance): lazy normalized trees, identity/folds/filter, host outcomes and responsive placement | 5 |
+| CI-01–CI-05 | [Code/Diff Inspection](components/code-diff-inspection.md#acceptance-criteria): bounded views, logical navigation/search/copy, exact effects and caller return | 5 |
 | D-06 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): responsive statuses/notices/unknown/clock | 5 |
 | T-01 | [Terminal](features/terminal.md#acceptance-criteria): lease/failure/close/drop/TTY cleanup | 6; foundation maintained |
 | T-02 | [Terminal](features/terminal.md#acceptance-criteria): inline surrounding output and full-screen return | 6 |
@@ -135,8 +138,8 @@ library completion or dependency compilation alone does not establish that.
 | Public signatures and compatibility | Concrete value/update/action types, adapters for existing APIs; compile examples | Each affected slice |
 | Broader projection/cache policy | Chat's bounded source/part/block/row/cache contracts and pathological tests are implemented; full export remains host-owned | Broader content/inspection scope |
 | Pointer defaults and native key encodings | Scoped keyboard/leader rules are specified; establish pointer defaults and unverified terminal encodings | Pointer/native acceptance |
-| Standalone inspection dependencies | Chat uses audited CommonMark parsing and local lexical styling; independent code/diff viewers need their own contract | Phase 5 |
-| Unloaded search and split diff policy | Chat implements loaded Unicode literal search, table records below 50 columns and unified preview; broader browsing is separate | Phase 5 |
+| Standalone inspection dependencies | Read-only code/unified diff uses existing Unicode, Editor, theme and frame contracts; no additional dependency | Phase 5 |
+| Unloaded search and split diff policy | Inspection uses loaded Unicode literal smart-case search and unified single-file views; missing context and split diff remain outside its scope | Implemented inspection scope |
 | Review panel versus overlay | Review components use the above-dock queue and local confirmation dialogs; broader placement changes need a new design decision | Future placement changes |
 | Inline anchoring/output result | Short bounded region, safe fallback on unsupported cursor behavior; PTY surrounding-text evidence | Phase 6 |
 | Native Windows harness/IME/assistive matrix | Native runner/emulator and explicit testing conditions; separate unsupported states | Phase 6 claims |
@@ -150,13 +153,13 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 ## Remaining gap summary
 
 Question Form, Permission Review and their shared above-dock queue are implemented.
-Session and Tree Browser are implemented; Code/Diff Inspection is the current design-team handoff. Other browsers,
+Session/Tree Browser and Code/Diff Inspection are implemented. Other browsers,
 inline hosting and broad native acceptance remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),
 and feature gaps in the [feature contracts](features/README.md).
 
-The bounded delivery continues with Code/Diff Inspection, status/inspection
-panels, inline terminal hosting and acceptance fixes. Additional browsers and
+The bounded delivery continues with status panels/notices, inline terminal
+hosting and acceptance fixes. Additional browsers and
 application features require a concrete consumer need rather than extending
 this component delivery indefinitely.

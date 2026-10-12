@@ -23,6 +23,7 @@ Human visual acceptance and consumer/platform acceptance remain independent.
 | Permission Review | Standalone contract, exact scopes, safe defaults, explicit confirmation/retry, inspection, mixed queue, Chat and 56 live scenarios | Human visual acceptance and real host authority adapters |
 | Session Browser | Dedicated screen, stable IDs, search/paging, row actions, safe deletion, retained Chat instances and 72 live scenarios | Human visual acceptance and real host storage/action adapters |
 | Tree Browser | Stable normalized files/tasks, folds, lazy children/paging, loaded filtering, acknowledged actions and 66 live scenarios; full engineering gates passed | Human visual acceptance and real host adapters |
+| Code/Diff Inspection | Read-only code/unified patch, navigation/folds/find/selection, exact host effects, caller return and 51 live scenarios | Human visual acceptance and real host adapters |
 | Terminal lifecycle | Existing alternate-screen runtime and PTY restoration | Inline result scrollback, plain-output/handoff/error/quit frames and wider platform acceptance |
 
 ## Open decisions
@@ -33,8 +34,8 @@ Keep existing routing/presentation until a decision changes the owning contract.
 
 ## Next design work
 
-Code/Diff Inspection is the next design-team handoff. Tree Browser covers
-file/diff resources and parent/child tasks; standalone inspection remains separate.
-The bounded remaining delivery is inspection, status panels, inline hosting and
+Status Panels & Notices is the next design-team handoff. Tree Browser covers
+file/diff resources and parent/child tasks; Code/Diff Inspection owns loaded views.
+The bounded remaining delivery is status panels, inline hosting and
 acceptance fixes. Additional browsers and application features wait for a consumer
 need; see the [roadmap](roadmap.md).

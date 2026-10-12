@@ -491,6 +491,44 @@ expanded capability contracts or establish visual design acceptance.
 - [Gallery coverage](features/gallery-designs.md) records executable scenarios
   and pending coverage; harness controls are outside product layout acceptance.
 
+## Code and diff inspection engineering record — 2026-10-12
+
+Scope: reusable read-only Inspector and deterministic Chat/tool/tree hosts on
+macOS x86_64, Rust 1.99.0. The focused run passed 18 tests, including native
+search/paste/copy failure-retry, Chat return, resize and exact terminal
+restoration. Source/control/Unicode/profile/tiny/selection/fold/host-race tests,
+all 51 live gallery scenarios and ten inspection snapshots were reviewed.
+
+Visual review found full Editor chrome hiding the one-row find field. Inline
+field rendering and a visible-text/cursor regression test passed before the
+complete gate run. Final results:
+
+- `make check`: formatting, strict Clippy, **343 tests**, **4 doctests**, private
+  API documentation and cargo-deny advisories/bans/licenses/sources passed.
+- `cargo nextest run --locked --no-default-features`: **278 tests** passed,
+  including native editor handoff. Native suites used host PTY access.
+- `make build`: release library/gallery passed; the release `--list` inventory
+  exposes all 51 inspection scenarios and eight additional profiles.
+- Gate and Shield `tui` feature compilation passed locked/offline in temporary
+  manifest/lock copies. Drone passed with offline lock resolution in its copy;
+  its existing working lock lacks the already-used Markdown dependencies.
+  All six original consumer manifests/locks remained byte-identical.
+- Source hashes remained unchanged through final validation. Both Gate
+  repositories' whitespace checks and 848 local file/anchor links passed.
+  The unrelated original staging remained byte-identical.
+
+Tests cover exact/foreign/duplicate/stale/wrong-kind acknowledgements, malformed
+patch/whole-file validation, numbered excerpts, folds/hidden copy/search,
+smart case and Unicode mapping, bounded dense matches, physical page overlap,
+selection changes during copy, control text, tiny rectangles and presentation
+profiles. Ten new inspection snapshots and the changed tree snapshot were
+reviewed. Native evidence covers search/paste/copy failure and retry, retained
+Chat selection/draft/caret, reopen position, resize and terminal restoration.
+
+Human visual acceptance, broader native hosts and actual product integration
+remain separate. No product loading/clipboard/editor/Git work, publication or
+consumer rollout is established by these library/fixture checks.
+
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation

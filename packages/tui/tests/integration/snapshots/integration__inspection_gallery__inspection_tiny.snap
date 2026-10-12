@@ -1,0 +1,30 @@
+---
+source: tests/integration/inspection_gallery.rs
+expression: "screen(&mut g, 80, 26)"
+---
+Canonic TUI · Component gallery
+
+settings.ts ────────
+@@ digestHeaders @@
+                 esc
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

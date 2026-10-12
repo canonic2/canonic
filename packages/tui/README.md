@@ -5,6 +5,11 @@ host-supplied descriptors, plus validated scoped shortcuts and leader sequences.
 See [usage](docs/usage.md#commands-and-keyboard-help).
 
 An unpublished Rust component library and local full-screen gallery for Canonic.
+Code/Diff Inspection supplies code and unified-patch views, logical navigation,
+folds, whole-file switching, loaded find, line selection and acknowledged
+copy/editor requests. Its 51 live scenarios include Chat/tree return with
+preserved caller state. See [usage](docs/usage.md#code-and-diff-inspection) and
+the [contract](specs/components/code-diff-inspection.md).
 The Cargo package is `canonic-tui`; Rust code imports it as `canonic_tui`.
 Drone and Shield use it through local Cargo path dependencies. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
@@ -42,7 +47,7 @@ make -C packages/tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, **Session Browser**, or **Tree Browser**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, **Session Browser**, **Tree Browser**, or **Code & diff inspection**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its

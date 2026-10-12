@@ -779,3 +779,42 @@ polling backend dependency; this is compilation evidence, not a product rollout.
 Auditing allows duplicate hashbrown/syn/thiserror versions. Markdown link and
 both repositories' diff checks passed. Native Linux/Windows and human modifier
 key encodings remain unverified.
+
+## Code and diff inspection review
+
+Engineering evidence is recorded separately in
+[verification](verification.md#code-and-diff-inspection-engineering-record--2026-10-12).
+Human visual acceptance is pending. Open:
+
+```sh
+cargo run --locked --features gallery -- --component code-diff-inspection --scenario main
+```
+
+1. Compare `main`, `code`, `deleted`, `renamed`, `folded` and `unfolded`.
+   Check numbers/signs, function headers, cursor bands, context counts, Enter
+   unfolding and first/last hunk feedback. Tab in `main` keeps the source line
+   when switching to the supplied whole file and back.
+2. In `long`/`wrapped`, move by line/page/end and sideways. Confirm two-row
+   overlap, long wrapped-line access and stable source position after resizing.
+   Use `:` with an existing line, past-end number and invalid input.
+3. In `find`, verify visible query and cursor, counts, case sensitivity with
+   capitals, Enter/n/N, no-match stability and hidden-fold reveal. Paste a query;
+   multiline paste and commands outside the field must not execute.
+4. In `selection`, extend through context and changes. `y` requests patch/text;
+   `c` omits removed rows. F6 failure retains selection/reason; retry and F5
+   success clears the original selection. Check editor pending/failure and
+   stale/foreign/duplicate results, with no actual external effects.
+5. Check loading/error/retry, binary/generated/too-large/partial states.
+   Loading permits return; only explicitly supplied partial content can be
+   shown. Its partial marker remains visible after subsequent operations.
+6. In `from-chat`, inspect and return to the same selected block/draft/caret.
+   Close selection, insert and undo a character, reopen the inspector and check
+   retained position. In `from-tree`, Tab/Escape returns focus to the same node.
+   F10 and F10 again preserve the active scenario state.
+7. Compare narrow code/diff, tiny, ANSI16/256, RGB dark/light, NO_COLOR, ASCII,
+   Unicode and controls. Escape must remain reachable/visible, line signs must
+   remain meaningful without color and source controls must remain text.
+
+No filesystem, clipboard, editor or Git operation is performed. Record visual
+findings against the component contract; tests alone do not establish native
+Windows/Linux, assistive input or actual consumer acceptance.

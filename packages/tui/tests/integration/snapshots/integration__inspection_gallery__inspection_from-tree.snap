@@ -1,0 +1,30 @@
+---
+source: tests/integration/inspection_gallery.rs
+expression: "screen(&mut g, 80, 26)"
+---
+Canonic TUI · Component gallery
+
+files ------------------ src/digest/settings.ts -------------- M +3 -1 | 2 hunks
+>  settings.ts           @@ -9,8 +9,9 @@ digestHeaders
+                            9   9   export function digestHeaders(user: User) {
+                           10  10     return {
+                           11  11       headers: {
+                           12     -       json,
+                               12 +       json,
+                               13 +       'X-Timezone': user.timezone,
+                           13  14       },
+                           14  15     }
+                           15  16   }
+                           16  17
+                         @@ -18,3 +19,4 @@ nextSend
+                           18  19   export function nextSend(user: User) {
+                           19     -   return atHour(s.hour, 0)
+                               20 +   const tz = user.timezone ?? 'UTC'
+                               21 +   return atHour(s.hour, offsetFor(tz))
+                           20  22   }
+settings.ts
+                         ------------------------ hunk 1 of 2 | ln 9 of 22 | 40%
+
+main view focused ------ up/down line | ] [ hunk | / find | : tab / esc to files
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

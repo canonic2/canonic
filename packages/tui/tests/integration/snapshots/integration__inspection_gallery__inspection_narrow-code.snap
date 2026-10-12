@@ -1,0 +1,30 @@
+---
+source: tests/integration/inspection_gallery.rs
+expression: "screen(&mut g, 80, 26)"
+---
+Canonic TUI · Component gallery
+
+settings.ts ─────── 22 lines · TypeScri⋯
+  1   // Acme digest settings
+  2   // Acme digest settings
+  3   // Acme digest settings
+  4   // Acme digest settings
+  5   // Acme digest settings
+  6   // Acme digest settings
+  7   // Acme digest settings
+  8   // Acme digest settings
+  9   export function digestHeaders(user
+     ↩: User) {
+ 10     return {
+ 11       headers: {
+ 12         json,
+ 13         'X-Timezone': user.timezone,
+ 14       },
+ 15     }
+ 16   }
+ 17
+──────────────────────── ln 1 of 22 · 4%
+
+/ find · : line         esc back to chat
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

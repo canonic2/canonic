@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 640 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 691 named entries, plus
 eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -37,8 +37,17 @@ refresh/removal/invalid topology, one-step folding and expansion, pending/open/
 action acknowledgements and stale/foreign replies. Full-screen/panel/medium/
 narrow/tiny layouts, retained Chat, palette entry, delayed work, full errors and
 profiles exercise the same reusable view. Eight shared profiles are additional.
-The neighboring main view is existing Chat with supplied fixture content;
-standalone Code/Diff Inspection remains separate. Human acceptance is pending.
+The neighboring file view uses Code/Diff Inspection; tasks retain their supplied
+Chat output fixture. Human acceptance is pending.
+
+## Code/Diff Inspection coverage
+
+51 live scenarios cover code/unified diff, empty/loading/error/retry, binary,
+generated/partial/deleted/renamed content, long lines, folds, hunk/line/whole-file
+navigation, find/smart case, selection, copy/editor results, stale/foreign/duplicate
+replies, Chat/tree return, narrow/tiny layouts, Unicode and controls. Eight shared
+profiles are additional. No real loading, clipboard/editor or Git work occurs.
+See the [contract](../components/code-diff-inspection.md).
 
 ## Session Browser coverage
 

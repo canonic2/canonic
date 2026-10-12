@@ -107,6 +107,9 @@ impl ToolDemo {
                 self.inspection = None;
             } else {
                 inspection.update(event);
+                if inspection.finished() {
+                    self.inspection = None;
+                }
             }
             return !matches!(event, Event::Key(k) if matches!(k.code, KeyCode::F(2 | 4 | 10)) || (matches!(k.code, KeyCode::Char('c' | 't')) && k.modifiers.contains(KeyModifiers::CONTROL)));
         }

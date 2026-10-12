@@ -18,6 +18,7 @@ implementation design details without referencing private design files.
 | [Permission Review](permission-review.md) | Deliberate identified choices, exact scopes, inspection, retry and host outcomes | Implemented with mixed queue, Chat and 56 scenarios; human acceptance pending |
 | [Session Browser](session-browser.md) | Stable session rows, local/remote search, acknowledged actions, paging and dedicated-screen return | Implemented with 72 live scenarios; human acceptance pending |
 | [Tree Browser](tree-browser.md) | Stable trees, lazy children/paging, filtering, acknowledged actions and host placement | Implemented with 66 live scenarios; human acceptance pending |
+| [Code/Diff Inspection](code-diff-inspection.md) | Read-only supplied code/patches, navigation, folds, find, selection, host effects and return | Reusable inspector and 51 live scenarios; human acceptance pending |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
 Session and tree browsers have standalone contracts. Panels and notices are proposed in
@@ -61,3 +62,4 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Permission Review](permission-review.md) | Defined complete review/host contract | Defined scopes/inspection/queue/profiles | Reusable review, mixed queue, Chat and 56 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |
 | [Session Browser](session-browser.md) | Complete host/view contract | Dedicated screen, actions, deletion and profiles defined | Reusable browser, Chat entry and 72 live scenarios | [Engineering verified](../verification.md#session-browser-engineering-record--2026-10-12) | Human visual review pending |
 | [Tree Browser](tree-browser.md) | Complete host/view contract | Files/tasks, placement, lifecycles and profiles defined | Reusable tree, Chat entry and 66 live scenarios | [Engineering verified](../verification.md#tree-browser-engineering-record--2026-10-12) | Human visual review pending |
+| [Code/Diff Inspection](code-diff-inspection.md) | Complete bounded read-only/host contract | Code/unified diff, navigation/search/copy/return and profiles defined | Reusable Inspector, Chat/tool/tree hosts and 51 live scenarios | [Engineering verified](../verification.md#code-and-diff-inspection-engineering-record--2026-10-12) | Human visual review pending |

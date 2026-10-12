@@ -1,0 +1,30 @@
+---
+source: tests/integration/inspection_gallery.rs
+expression: "screen(&mut g, 80, 26)"
+---
+Canonic TUI · Component gallery
+
+settings.ts ────────── M +3 -1 · 2 hunks
+@@ digestHeaders @@
+  export function digestHeaders(user: Us
+ ↩er) {
+    return {
+      headers: {
+−       json,
++       json,
++       'X-Timezone': user.timezone,
+      },
+    }
+  }
+
+@@ nextSend @@
+  export function nextSend(user: User) {
+−   return atHour(s.hour, 0)
++   const tz = user.timezone ?? 'UTC'
++   return atHour(s.hour, offsetFor(tz))
+  }
+───────── hunk 1 of 2 · ln 9 of 22 · 40%
+
+] [ hunk · / find       esc back to chat
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

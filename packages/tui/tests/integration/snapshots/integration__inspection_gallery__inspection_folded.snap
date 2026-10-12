@@ -1,0 +1,30 @@
+---
+source: tests/integration/inspection_gallery.rs
+expression: "screen(&mut g, 80, 26)"
+---
+Canonic TUI · Component gallery
+
+src/digest/settings.ts ─────────────────────────────────────── M +3 -1 · 1 hunks
+@@ -1,20 +1,20 @@ unchanged context
+   1   1   line-1 timezone
+   2   2   line-2 timezone
+   3   3   line-3 timezone
+⋯ 14 unchanged lines · enter shows them
+  18  18   line-18 timezone
+  19  19   line-19 timezone
+  20  20   line-20 timezone
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────── hunk 1 of 1 · ln 1 of 20 · 5%
+
+↑↓ line · ] [ hunk · / find · : line · v select · w wrap · tab  esc back to chat
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

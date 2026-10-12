@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 12] = [
+pub(super) const COMPONENTS: [Component; 13] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -53,6 +53,7 @@ pub(super) const COMPONENTS: [Component; 12] = [
     Component::PermissionReview,
     Component::SessionBrowser,
     Component::TreeBrowser,
+    Component::CodeDiffInspection,
 ];
 
 pub(super) const PROFILES: [&str; 8] = [
@@ -80,6 +81,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::PermissionReview => 9,
         Component::SessionBrowser => 10,
         Component::TreeBrowser => 11,
+        Component::CodeDiffInspection => 12,
     }
 }
 
@@ -116,6 +118,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::PermissionReview => &PERMISSIONS,
         Component::SessionBrowser => SESSIONS,
         Component::TreeBrowser => TREES,
+        Component::CodeDiffInspection => INSPECTION,
     }
 }
 
@@ -133,11 +136,15 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::PermissionReview => "permission-review",
         Component::SessionBrowser => "session-browser",
         Component::TreeBrowser => "tree-browser",
+        Component::CodeDiffInspection => "code-diff-inspection",
     }
 }
 
 pub(super) fn board(component: Component) -> &'static str {
     match component {
+        Component::CodeDiffInspection => {
+            "Code & diff inspection · Navigation / Find / Copy / Return / Profiles"
+        }
         Component::TreeBrowser => "Tree Browser · Files / Tasks / Loading / Navigation / Profiles",
         Component::SessionBrowser => {
             "Session Browser · Navigation / Search / Actions / Return / Profiles"
@@ -159,6 +166,59 @@ pub(super) fn board(component: Component) -> &'static str {
     }
 }
 
+const INSPECTION: &[Scenario] = &[
+    live!("main", 0),
+    live!("code", 1),
+    live!("diff", 2),
+    live!("empty", 3),
+    live!("loading", 4),
+    live!("load-error", 5),
+    live!("retrying", 6),
+    live!("binary", 7),
+    live!("generated", 8),
+    live!("too-large", 9),
+    live!("partial", 10),
+    live!("deleted", 11),
+    live!("renamed", 12),
+    live!("long", 13),
+    live!("folded", 14),
+    live!("unfolded", 15),
+    live!("next-hunk", 16),
+    live!("last-hunk", 17),
+    live!("go-to-line", 18),
+    live!("whole-file", 19),
+    live!("wrapped", 20),
+    live!("find", 21),
+    live!("next-match", 22),
+    live!("no-match", 23),
+    live!("smart-case", 24),
+    live!("selection", 25),
+    live!("copied-code", 26),
+    live!("copied-patch", 27),
+    live!("copy-failed", 28),
+    live!("editor-pending", 29),
+    live!("editor-failed", 30),
+    live!("stale-result", 31),
+    live!("foreign-result", 32),
+    live!("duplicate-result", 33),
+    live!("from-chat", 34),
+    live!("return-chat", 35),
+    live!("from-tree", 36),
+    live!("return-tree", 37),
+    live!("opening", 38),
+    live!("refused", 39),
+    live!("late-result", 40),
+    live!("reopen", 41),
+    live!("narrow", 42),
+    live!("narrow-code", 43),
+    live!("tiny", 44),
+    live!("ansi16", 45),
+    live!("no-color", 46),
+    live!("ascii", 47),
+    live!("light", 48),
+    live!("unicode", 49),
+    live!("controls", 50),
+];
 const QUESTIONS: [Scenario; 52] = [
     live!("main", 0),
     live!("single", 1),

@@ -2,7 +2,9 @@
 
 Status: [Session Browser](../components/session-browser.md) is implemented.
 [Tree Browser](../components/tree-browser.md) implements supplied lazy files/tasks.
-Other resource browsers and general content panels remain proposed. Reusable [Dialog](../components/dialog.md),
+[Code/Diff Inspection](../components/code-diff-inspection.md) supplies loaded
+read-only code/patches and acknowledged copy/editor effects. Other resource
+browsers and general status panels remain proposed. Reusable [Dialog](../components/dialog.md),
 [Option Picker](../components/option-picker.md) and
 [Command Palette](../components/command-palette.md) have their own component contracts.
 

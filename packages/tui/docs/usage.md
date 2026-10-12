@@ -726,3 +726,46 @@ demonstrate retained per-session state. All operations are fixture simulations.
 The [public contract](../specs/components/session-browser.md) owns limits and
 lifetime rules; [human review](../specs/human-testing.md#session-browser-review)
 remains a separate acceptance checkpoint.
+
+## Code and diff inspection
+
+Open `--component code-diff-inspection --scenario main` in the gallery.
+`from-chat` demonstrates a retained selected patch and independent draft;
+`from-tree` places inspection beside files. Escape cancels selection, clears
+find highlights, then returns to the caller. Tab returns to a tree panel;
+from Chat it switches a diff to the supplied whole new file at the same line.
+
+Up/Down move logical lines. PageUp/PageDown retain two screen rows of overlap;
+Home/End reach loaded ends. `]`/`[` visit hunks without wrapping. `:` opens
+go-to-line using new-side numbering, or old numbering for deletion. Left/Right
+scroll horizontally; `w` wraps. Narrow diffs wrap automatically and drop
+numbers. Enter reveals folded context. Three rows retain title, cursor line
+and Escape; smaller views retain the title.
+
+`/` opens literal find across loaded content, including folds. Queries with
+capitals are case-sensitive; others ignore case. Enter visits the first match
+and keeps highlights; `n`/`N` visit matches and reveal folds. `v` selects lines,
+`y` requests patch/text copy and `c` requests new-side code without removed
+lines, signs or numbers. Success clears the original selection; failure
+retains it with a reason. `e` asks for an editor when offered. `r` retries
+failed loading. Hosts perform and acknowledge work; the gallery simulates
+F5 success/F6 failure and F12 old results. F10 opens scenarios; F10 resumes.
+
+For embedding, create `inspection::Inspector` with an `Item` and explicit
+`State`, route events when focused, and render into your frame/area. Drain
+`Intent::Request` and return its exact cloned `Request` to `complete`.
+Load/copy/editor results are distinct. `replace` requires a newer revision for
+the same item. Stale, foreign and duplicate results do nothing. Retain the
+caller and restore it on `Intent::Returned`; return invalidates inspector
+requests without cancelling external work. `reopen` retains position. Hosts
+bound any multi-item cache.
+
+Supply `Content::Code`, `CodeAt` for a numbered excerpt, or a single-file
+unified `Diff` with optional complete new file. Missing context is never
+invented. Binary/generated/over-limit content uses `State::Unavailable` with
+a reason and optional bounded preview; Enter explicitly shows that part.
+Combined source is bounded to 4 MiB/20,000 lines, each line to 64 KiB, find to
+65,536 occurrences with visible feedback. Controls render as text. Copies use
+LF and ASCII patch signs; arbitrary selected patch lines are not guaranteed
+to apply independently. See the
+[public contract](../specs/components/code-diff-inspection.md).

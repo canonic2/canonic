@@ -611,8 +611,11 @@ impl Chat {
             return;
         };
         let target = block.open.clone();
-        let inspection = matches!(block.kind, Kind::Table { .. } | Kind::Diff { .. });
-        if let Some(target) = target {
+        let inspection = matches!(
+            block.kind,
+            Kind::Table { .. } | Kind::Diff { .. } | Kind::Code { .. }
+        );
+        if let Some(target) = target.filter(|_| !inspection) {
             let request = self.request();
             self.pending = Some(Pending {
                 request: request.clone(),
@@ -625,6 +628,18 @@ impl Chat {
                 Some(super::Content::Table {
                     headers: headers.clone(),
                     rows: rows.clone(),
+                })
+            } else if let Kind::Code {
+                language,
+                file,
+                line,
+            } = &block.kind
+            {
+                Some(super::Content::Code {
+                    text: block.semantic(),
+                    language: language.clone(),
+                    file: file.clone(),
+                    line: *line,
                 })
             } else {
                 self.turn(&id.message)

@@ -230,6 +230,7 @@ pub(super) struct TreeDemo {
     tree: TreeBrowser,
     chat: Chat,
     inspection: Chat,
+    file_inspection: Option<crate::inspection::Inspector>,
     requests: Vec<Request>,
     last: Option<Request>,
     palette: Option<ChoicePicker>,
@@ -410,6 +411,14 @@ impl TreeDemo {
             tree,
             chat,
             inspection: Self::inspection("settings", tasks),
+            file_inspection: if tasks {
+                None
+            } else {
+                Some(super::inspection::viewer(
+                    "settings",
+                    crate::inspection::Origin::Tree,
+                ))
+            },
             requests: vec![],
             last: None,
             palette: None,
@@ -567,8 +576,17 @@ impl TreeDemo {
         for intent in self.tree.take_intents() {
             match intent {
                 Intent::Request(r) => self.requests.push(r),
-                Intent::Returned => self.showing = false,
-                Intent::MainView => {}
+                Intent::Returned => {
+                    self.showing = false;
+                    if let Some(viewer) = &mut self.file_inspection {
+                        viewer.close();
+                    }
+                }
+                Intent::MainView => {
+                    if let Some(viewer) = &mut self.file_inspection {
+                        viewer.reopen(crate::inspection::Origin::Tree);
+                    }
+                }
                 Intent::Opened(id) => {
                     self.log = format!("host opened {id}");
                     let task = self
@@ -578,6 +596,14 @@ impl TreeDemo {
                         .iter()
                         .any(|n| n.id == id && n.kind == Kind::Task);
                     self.inspection = Self::inspection(&id, task);
+                    self.file_inspection = if task {
+                        None
+                    } else {
+                        Some(super::inspection::viewer(
+                            &id,
+                            crate::inspection::Origin::Tree,
+                        ))
+                    };
                 }
             }
         }
@@ -767,6 +793,9 @@ impl TreeDemo {
                 }
                 KeyCode::Tab if self.showing && !self.tree.focused() => {
                     self.tree.set_focused(true);
+                    if let Some(viewer) = &mut self.file_inspection {
+                        viewer.close();
+                    }
                     return true;
                 }
                 _ => {}
@@ -782,12 +811,38 @@ impl TreeDemo {
                 return false;
             }
             if self.showing {
-                self.inspection.update(event);
+                self.update_inspection(event);
             } else {
                 self.chat.update(event);
             }
             self.chat_intents();
             true
+        }
+    }
+    fn update_inspection(&mut self, event: &Event) {
+        if let Some(viewer) = &mut self.file_inspection {
+            viewer.update(event);
+            for intent in viewer.take_intents() {
+                if let crate::inspection::Intent::Request(r) = intent {
+                    let outcome = match r.operation {
+                        crate::inspection::Operation::Copy { .. } => {
+                            crate::inspection::Outcome::Copied
+                        }
+                        crate::inspection::Operation::Editor { .. } => {
+                            crate::inspection::Outcome::Opened
+                        }
+                        crate::inspection::Operation::Load => crate::inspection::Outcome::Loaded(
+                            crate::inspection::State::Ready(super::inspection::content()),
+                        ),
+                    };
+                    let _ = viewer.complete(&r, outcome);
+                }
+            }
+            if !viewer.active() {
+                self.tree.set_focused(true);
+            }
+        } else {
+            self.inspection.update(event);
         }
     }
     fn chat_intents(&mut self) {
@@ -808,6 +863,11 @@ impl TreeDemo {
         }
     }
     fn render_inspection(&mut self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
+        if let Some(viewer) = &mut self.file_inspection {
+            viewer.set_focused(!self.tree.focused());
+            viewer.render(frame, area, p);
+            return;
+        }
         if !self.tree.focused() {
             self.inspection.render_docked_with(frame, area, p);
             return;

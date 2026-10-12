@@ -13,6 +13,7 @@ use ratatui::{
 };
 
 pub(super) struct Inspection {
+    patch: Option<crate::inspection::Inspector>,
     title: String,
     text: String,
     row: usize,
@@ -27,6 +28,28 @@ pub(super) struct Inspection {
 impl Inspection {
     pub(super) fn new(call: &Call) -> Self {
         Self {
+            patch: if let crate::tool_call_card::Output::Diff(text) = &call.output {
+                let mut item = crate::inspection::Item::new(&call.id, &call.target);
+                item.summary.clone_from(&call.summary);
+                Some(
+                    crate::inspection::Inspector::new(
+                        item.clone(),
+                        crate::inspection::State::Ready(crate::inspection::Content::Diff {
+                            patch: text.clone(),
+                            new_file: None,
+                        }),
+                    )
+                    .unwrap_or_else(|error| {
+                        crate::inspection::Inspector::new(
+                            item,
+                            crate::inspection::State::Failed(error.to_string()),
+                        )
+                        .expect("bounded fixture")
+                    }),
+                )
+            } else {
+                None
+            },
             title: format!(
                 "orbit-api#276 · {} {} · {}",
                 call.verb, call.target, call.summary
@@ -43,9 +66,32 @@ impl Inspection {
         }
     }
     pub(super) fn searching(&self) -> bool {
-        self.searching
+        self.patch.is_some() || self.searching
+    }
+    pub(super) fn finished(&self) -> bool {
+        self.patch.as_ref().is_some_and(|v| !v.active())
     }
     pub(super) fn update(&mut self, event: &Event) {
+        if let Some(viewer) = &mut self.patch {
+            viewer.update(event);
+            for intent in viewer.take_intents() {
+                if let crate::inspection::Intent::Request(r) = intent {
+                    let outcome = match r.operation {
+                        crate::inspection::Operation::Copy { .. } => {
+                            crate::inspection::Outcome::Copied
+                        }
+                        crate::inspection::Operation::Editor { .. } => {
+                            crate::inspection::Outcome::Opened
+                        }
+                        crate::inspection::Operation::Load => crate::inspection::Outcome::Failed(
+                            "patch unavailable in this fixture".into(),
+                        ),
+                    };
+                    let _ = viewer.complete(&r, outcome);
+                }
+            }
+            return;
+        }
         if let Event::Key(k) = event {
             if k.kind != KeyEventKind::Press {
                 return;
@@ -117,6 +163,10 @@ impl Inspection {
         }
     }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+        if let Some(viewer) = &mut self.patch {
+            viewer.render(frame, area, theme);
+            return;
+        }
         let [title, body, notice, query, footer] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Min(0),

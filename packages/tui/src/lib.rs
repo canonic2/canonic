@@ -18,6 +18,7 @@ pub mod editor;
 pub mod focus;
 #[cfg(feature = "gallery")]
 pub mod gallery;
+pub mod inspection;
 pub mod permission_review;
 pub mod picker;
 pub mod question_form;
