@@ -522,7 +522,7 @@ impl ChatDemo {
     }
     fn resolve_effect(&mut self, intent: Intent) {
         match intent {
-            Intent::Run(_) | Intent::Sessions(_) | Intent::Files(_) => {}
+            Intent::Run(_) | Intent::Sessions(_) | Intent::Files(_) | Intent::Status { .. } => {}
             Intent::Tool {
                 message,
                 part,

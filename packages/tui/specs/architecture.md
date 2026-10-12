@@ -52,6 +52,7 @@ consumer UI rollout.
 | [session_browser](../src/session_browser.rs) | Dedicated conversation browsing, discovery/action tickets and safe deletion | [Session Browser](components/session-browser.md) |
 | [tree_browser](../src/tree_browser.rs) | Normalized forest, saved folds/filter, child discovery and acknowledged actions; model/input/view submodules | [Tree Browser](components/tree-browser.md) |
 | [inspection](../src/inspection.rs) | Bounded code/patch views, logical navigation/folds/find/selection and exact host results; model/input/view submodules | [Code/Diff Inspection](components/code-diff-inspection.md) |
+| [status_panels](../src/status_panels.rs) | Supplied sections, stable focus/folds, explicit expiry, notice priority and exact actions; model/input/view submodules | [Status Panels & Notices](components/status-panels-and-notices.md) |
 | [review_queue](../src/review_queue.rs) / [Chat reviews](../src/chat/reviews.rs) | Mixed host order, typing deferral, lifecycle isolation and saved viewport/receipts | [Permission Review queue](components/permission-review.md#shared-queue-and-chat-contract) |
 | [focus](../src/focus.rs) | Instance-local target orders, modal scopes and return focus | [Input/navigation](features/interaction.md) |
 | [text](../src/text.rs), [theme](../src/theme.rs), [ui](../src/ui.rs) | Private sanitized text/wrapping, semantic presentation and shared rules | [Presentation](presentation.md) |

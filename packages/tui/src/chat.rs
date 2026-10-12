@@ -216,6 +216,8 @@ pub struct Chat {
     review_serial: u64,
     sessions_available: Option<()>,
     files_available: Option<()>,
+    status_available: Option<()>,
+    status_chrome: Option<crate::status_panels::Chrome>,
 }
 impl Default for Chat {
     fn default() -> Self {
@@ -264,6 +266,8 @@ impl Default for Chat {
             review_serial: 0,
             sessions_available: None,
             files_available: None,
+            status_available: None,
+            status_chrome: None,
         }
     }
 }
@@ -294,6 +298,37 @@ impl Chat {
     /// Enable Ctrl-X F when the host provides a Tree Browser adapter.
     pub fn set_files_available(&mut self, available: bool) {
         self.files_available = available.then_some(());
+    }
+    /// Enable Ctrl-X I/N and notice Ctrl-G after existing review/run attention routing.
+    pub fn set_status_available(&mut self, available: bool) {
+        self.status_available = available.then_some(());
+    }
+    /// Derived labels only. The caller owns the actual section/notice lifecycle.
+    pub fn set_status_chrome(&mut self, chrome: Option<crate::status_panels::Chrome>) {
+        self.status_chrome = chrome.map(|mut c| {
+            c.summary = crate::text::clean(&c.summary, 4096, false);
+            c.activity = c
+                .activity
+                .map(|(s, t)| (crate::text::clean(&s, 4096, false), t));
+            c
+        });
+    }
+    /// Shared shortcut/palette entry; retain this Chat instance while showing the pane.
+    pub fn request_status(&mut self, entry: crate::status_panels::Entry) -> bool {
+        if self.status_available.is_none() {
+            return false;
+        }
+        if !self
+            .intents
+            .iter()
+            .any(|i| matches!(i,Intent::Status {entry:e,..} if *e==entry))
+        {
+            self.intents.push(Intent::Status {
+                conversation: self.conversation(),
+                entry,
+            });
+        }
+        true
     }
     /// Shared palette/shortcut entry; the host retains this Chat instance.
     pub fn request_files(&mut self) -> bool {

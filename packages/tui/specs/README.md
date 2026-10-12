@@ -26,6 +26,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Session Browser](components/session-browser.md) | Dedicated stable-ID navigation, identified discovery/actions and retained per-session Chat views |
 | [Tree Browser](components/tree-browser.md) | Stable trees, lazy children, ancestor filtering, acknowledged actions and caller placement |
 | [Code/Diff Inspection](components/code-diff-inspection.md) | Bounded code/patch views, loaded search, selection, host effects and caller return |
+| [Status Panels & Notices](components/status-panels-and-notices.md) | Supplied facts, responsive panes, explicit expiry and persistent acknowledged notice actions |
 | [Features](features/README.md) | Gallery, scenario coverage, input/navigation, activity/review, browsing and terminal hosting |
 | [Chat and conversation content](components/chat.md) | Identified streaming, rich text/code/tables/diffs, anchors, loaded search and block selection |
 | [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |

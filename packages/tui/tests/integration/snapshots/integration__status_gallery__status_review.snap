@@ -1,0 +1,44 @@
+---
+source: tests/integration/status_gallery.rs
+expression: "screen(&mut g, width, 40)"
+---
+Canonic TUI · Component gallery
+
+acme                                                                                              ▸ Context ────────────────── 42%
+  Sending the user's timezone with the digest now. Host facts and notices stay beside this        ▸ Cost ─────────────────── $0.42
+  conversation.▌                                                                                  ▸ To-dos ─────────────────── 1/3
+                                                                                                  ▸ Changed files ────────────── 2
+                                                                                                  ▸ Connections ────────────── 2/3
+                                                                                                  ▸ Child activity ───── 1 working
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+digest rollout ─────────────────────────────────────────────────────────────────────────── 1 of 3
+› users  ○ channels  ○ note  ○ review
+Who should get timezone-aware digests?
+  1 ○ Everyone
+  2 ○ Users with a timezone set  default
+  3 ○ New sign-ups only  needs a migration first
+  4 ○ Something else  your answer                                                                 ! 1 · ctrl+x i status ⋯
+─────────────────────────────────────────────────────────────────────────────────────────────────
+
+message ─────────────────────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────
+1–9 choose · enter choose · tab next · esc cancel
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

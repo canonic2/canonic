@@ -24,6 +24,7 @@ Human visual acceptance and consumer/platform acceptance remain independent.
 | Session Browser | Dedicated screen, stable IDs, search/paging, row actions, safe deletion, retained Chat instances and 72 live scenarios | Human visual acceptance and real host storage/action adapters |
 | Tree Browser | Stable normalized files/tasks, folds, lazy children/paging, loaded filtering, acknowledged actions and 66 live scenarios; full engineering gates passed | Human visual acceptance and real host adapters |
 | Code/Diff Inspection | Read-only code/unified patch, navigation/folds/find/selection, exact host effects, caller return and 51 live scenarios | Human visual acceptance and real host adapters |
+| Status Panels & Notices | Supplied sections/five states, responsive sidebar/Dialog, explicit clock, persistent errors, exact actions and 27 live scenarios | Human visual acceptance and real host adapters |
 | Terminal lifecycle | Existing alternate-screen runtime and PTY restoration | Inline result scrollback, plain-output/handoff/error/quit frames and wider platform acceptance |
 
 ## Open decisions
@@ -34,8 +35,8 @@ Keep existing routing/presentation until a decision changes the owning contract.
 
 ## Next design work
 
-Status Panels & Notices is the next design-team handoff. Tree Browser covers
+Status Panels & Notices has an implemented reusable view and gallery. Tree Browser covers
 file/diff resources and parent/child tasks; Code/Diff Inspection owns loaded views.
-The bounded remaining delivery is status panels, inline hosting and
+The bounded remaining delivery is inline hosting and
 acceptance fixes. Additional browsers and application features wait for a consumer
 need; see the [roadmap](roadmap.md).

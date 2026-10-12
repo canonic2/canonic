@@ -45,6 +45,11 @@ mod session_browser;
 mod session_gallery;
 #[cfg(feature = "gallery")]
 mod session_terminal;
+#[cfg(feature = "gallery")]
+mod status_gallery;
+mod status_panels;
+#[cfg(feature = "gallery")]
+mod status_terminal;
 mod tool_call_card;
 #[cfg(feature = "gallery")]
 mod tool_card_gallery;

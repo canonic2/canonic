@@ -198,6 +198,11 @@ pub enum Intent {
     Sessions(Conversation),
     /// Open the host's Tree Browser for this retained conversation.
     Files(Conversation),
+    /// Open host status/notices or invoke current notice attention; opt-in adapter.
+    Status {
+        conversation: Conversation,
+        entry: crate::status_panels::Entry,
+    },
     /// Whole-run effect, independent of individual tool states and connectivity.
     Run(crate::run_activity::Intent),
     /// Tool effect, scoped to the loaded message/part and opaque card instance.

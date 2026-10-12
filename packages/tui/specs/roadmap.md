@@ -106,6 +106,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | D-04 / SB-01–SB-06 | [Session Browser](components/session-browser.md#implementation-ownership-and-acceptance): stable rows, search/actions/paging/races and Chat return without storage | 5 |
 | D-05 / TB-01–TB-05 | [Tree Browser](components/tree-browser.md#ownership-and-acceptance): lazy normalized trees, identity/folds/filter, host outcomes and responsive placement | 5 |
 | CI-01–CI-05 | [Code/Diff Inspection](components/code-diff-inspection.md#acceptance-criteria): bounded views, logical navigation/search/copy, exact effects and caller return | 5 |
+| SP-01–SP-05 | [Status Panels & Notices](components/status-panels-and-notices.md#acceptance-criteria): supplied states/facts, exact effects, expiry/persistence, responsive focus/profiles and native restoration | 5 |
 | D-06 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): responsive statuses/notices/unknown/clock | 5 |
 | T-01 | [Terminal](features/terminal.md#acceptance-criteria): lease/failure/close/drop/TTY cleanup | 6; foundation maintained |
 | T-02 | [Terminal](features/terminal.md#acceptance-criteria): inline surrounding output and full-screen return | 6 |
@@ -159,7 +160,8 @@ submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),
 and feature gaps in the [feature contracts](features/README.md).
 
-The bounded delivery continues with status panels/notices, inline terminal
+Status Panels & Notices is implemented with responsive placement and explicit
+clock/action ownership. The bounded delivery continues with inline terminal
 hosting and acceptance fixes. Additional browsers and
 application features require a concrete consumer need rather than extending
 this component delivery indefinitely.

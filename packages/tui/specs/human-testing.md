@@ -818,3 +818,17 @@ cargo run --locked --features gallery -- --component code-diff-inspection --scen
 No filesystem, clipboard, editor or Git operation is performed. Record visual
 findings against the component contract; tests alone do not establish native
 Windows/Linux, assistive input or actual consumer acceptance.
+
+## Status Panels & Notices review
+
+Open `--component status-panels-and-notices --scenario main` at 130 columns.
+Review the 32-column sidebar, then Ctrl-X I, arrows/folds and Esc. Edit in the
+middle of the retained draft and verify caret/undo survive entry and return.
+Resize to 64 and 40 columns; inspect status and notices without obscuring the draft.
+
+Use Ctrl-X N, Enter, F6, retry and F5 to review action failure/recovery. D sets an
+error aside while its badge and list entry remain. F7 expires info/success; errors
+remain. Use `long-reason` and Alt-PageUp/PageDown, five state fixtures and ASCII,
+ANSI16, NO_COLOR, light and reduced-motion profiles. In `review`, notice arrivals
+must leave review Enter and Ctrl-G behavior intact. These steps await human visual
+acceptance; automated evidence is recorded in [verification](verification.md).

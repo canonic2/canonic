@@ -13,6 +13,7 @@ mod permissions;
 mod reviews;
 mod scenarios;
 mod sessions;
+mod status;
 mod tool_cards;
 mod trees;
 
@@ -127,6 +128,7 @@ pub enum Component {
     TreeBrowser,
     /// Read-only host-supplied code and unified patch inspection.
     CodeDiffInspection,
+    StatusPanelsAndNotices,
 }
 
 #[derive(Clone, Copy)]
@@ -146,6 +148,7 @@ enum Screen {
     SessionBrowser,
     TreeBrowser,
     CodeDiffInspection,
+    StatusPanelsAndNotices,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -190,8 +193,9 @@ pub struct Gallery {
     sessions: sessions::SessionDemo,
     trees: trees::TreeDemo,
     inspection: inspection::InspectionDemo,
-    scenarios: [Picker; 13],
-    scenario_viewports: [ListState; 13],
+    status: status::StatusDemo,
+    scenarios: [Picker; 14],
+    scenario_viewports: [ListState; 14],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -219,6 +223,7 @@ impl Gallery {
             Screen::SessionBrowser => Some(Component::SessionBrowser),
             Screen::TreeBrowser => Some(Component::TreeBrowser),
             Screen::CodeDiffInspection => Some(Component::CodeDiffInspection),
+            Screen::StatusPanelsAndNotices => Some(Component::StatusPanelsAndNotices),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -338,7 +343,10 @@ impl Gallery {
         }
         if matches!(
             component,
-            Component::SessionBrowser | Component::TreeBrowser | Component::CodeDiffInspection
+            Component::SessionBrowser
+                | Component::TreeBrowser
+                | Component::CodeDiffInspection
+                | Component::StatusPanelsAndNotices
         ) {
             match id {
                 "ansi16" => self.theme.colors = ColorMode::Ansi16,
@@ -382,7 +390,8 @@ impl Gallery {
             }
             _ => {
                 self.preview_width = match (component, id) {
-                    (Component::CodeDiffInspection, "narrow" | "narrow-code") => Some(40),
+                    (Component::CodeDiffInspection, "narrow" | "narrow-code")
+                    | (Component::StatusPanelsAndNotices, "narrow") => Some(40),
                     (Component::TreeBrowser, "narrow" | "narrow-filter")
                     | (Component::SessionBrowser, "narrow" | "narrow-search" | "narrow-delete")
                     | (Component::Chat, "narrow" | "search-narrow-ascii")
@@ -394,8 +403,14 @@ impl Gallery {
                     | (Component::ToolCallCard, "narrow" | "narrow-diff" | "narrow-failed") => {
                         Some(40)
                     }
-                    (Component::TreeBrowser, "medium") | (Component::Chat, "pane") => Some(64),
-                    (Component::QuestionForm | Component::PermissionReview, "tiny") => Some(12),
+                    (Component::StatusPanelsAndNotices | Component::TreeBrowser, "medium")
+                    | (Component::Chat, "pane") => Some(64),
+                    (
+                        Component::QuestionForm
+                        | Component::PermissionReview
+                        | Component::StatusPanelsAndNotices,
+                        "tiny",
+                    ) => Some(12),
                     _ => None,
                 };
                 self.apply_chat_profile(component, id);
@@ -494,6 +509,10 @@ impl Gallery {
                 self.inspection = inspection::InspectionDemo::new(fixture);
                 Screen::CodeDiffInspection
             }
+            Component::StatusPanelsAndNotices => {
+                self.status = status::StatusDemo::new(fixture);
+                Screen::StatusPanelsAndNotices
+            }
             Component::PermissionReview => {
                 self.permissions = permissions::PermissionDemo::new(fixture);
                 Screen::PermissionReview
@@ -510,6 +529,7 @@ impl Gallery {
                 | Component::SessionBrowser
                 | Component::TreeBrowser
                 | Component::CodeDiffInspection
+                | Component::StatusPanelsAndNotices
         ) {
             for _ in 0..fixture {
                 self.fixture_event(
@@ -562,6 +582,9 @@ impl Gallery {
             Component::CodeDiffInspection => {
                 self.inspection.update(event);
             }
+            Component::StatusPanelsAndNotices => {
+                self.status.update(event);
+            }
         }
     }
 
@@ -586,6 +609,7 @@ impl Gallery {
                     "Session Browser".into(),
                     "Tree Browser".into(),
                     "Code & diff inspection".into(),
+                    "Status Panels & Notices".into(),
                 ],
                 Some(0),
             ),
@@ -607,6 +631,7 @@ impl Gallery {
             sessions: sessions::SessionDemo::new(0),
             trees: trees::TreeDemo::new(0),
             inspection: inspection::InspectionDemo::new(0),
+            status: status::StatusDemo::new(0),
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -634,6 +659,7 @@ impl Gallery {
             Screen::SessionBrowser => "session-browser",
             Screen::TreeBrowser => "tree-browser",
             Screen::CodeDiffInspection => "code-diff-inspection",
+            Screen::StatusPanelsAndNotices => "status-panels-and-notices",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -699,6 +725,9 @@ impl Gallery {
     fn tick_elapsed(&mut self, elapsed: Duration) {
         if matches!(self.screen, Screen::Scenarios(_) | Screen::Design(_, _)) {
             return;
+        }
+        if matches!(self.screen, Screen::StatusPanelsAndNotices) {
+            self.status.tick(elapsed);
         }
         self.editor.tick(elapsed);
         self.picker.tick(elapsed);
@@ -816,6 +845,7 @@ impl Gallery {
             | Screen::SessionBrowser
             | Screen::TreeBrowser
             | Screen::CodeDiffInspection
+            | Screen::StatusPanelsAndNotices
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -829,6 +859,7 @@ impl Gallery {
             Screen::SessionBrowser => self.sessions.update(event),
             Screen::TreeBrowser => self.trees.update(event),
             Screen::CodeDiffInspection => self.inspection.update(event),
+            Screen::StatusPanelsAndNotices => self.status.update(event),
             _ => false,
         }
     }
@@ -890,6 +921,7 @@ impl Gallery {
             Screen::SessionBrowser => self.sessions.render(frame, body, self.theme),
             Screen::TreeBrowser => self.trees.render(frame, body, self.theme),
             Screen::CodeDiffInspection => self.inspection.render(frame, body, self.theme),
+            Screen::StatusPanelsAndNotices => self.status.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(

@@ -529,6 +529,41 @@ Human visual acceptance, broader native hosts and actual product integration
 remain separate. No product loading/clipboard/editor/Git work, publication or
 consumer rollout is established by these library/fixture checks.
 
+## Status Panels and Notices engineering record — 2026-10-12
+
+Implemented the [Status Panels & Notices contract](components/status-panels-and-notices.md):
+supplied section states/facts, stable identities/folds, exact action acknowledgements,
+explicit notice time, severity priority, set-aside errors and retained caller focus.
+The gallery exposes 27 live states plus eight shared profiles. Six snapshots were
+reviewed for sidebar, narrow status, notices, failure, ASCII and review placement.
+
+- `make check`: formatting, strict Clippy, **366 tests**, **4 doctests**, API docs
+  and dependency advisories/bans/licenses/sources passed.
+- `cargo nextest run --locked --no-default-features`: **297 tests** passed,
+  including native editor handoff. PTY suites ran with host access.
+- `make build`: release library/gallery passed. Release `--list` exposes all 27
+  status scenarios and eight profiles.
+- Gate and Shield optional `tui` compilation passed locked/offline with Rust 1.99
+  in disposable manifests pointing at their actual library and binary sources.
+  Drone passed after offline resolution of its existing missing Markdown
+  dependencies in the temporary lockfile. Original consumer manifests/locks
+  remained unchanged; this is compilation evidence, not product rollout.
+
+Twenty-three additional tests cover stable navigation/folds/removal, atomic invalid
+updates, exact/foreign/stale/duplicate acknowledgements, disabled and repeated
+actions, pending/failure expiry, monotonic clock properties, persistent set-aside
+errors, long reasons, clipping, profiles and caller caret restoration. Review/run
+and Composer overlays retain attention priority. A 12,000-line reason remains
+scrollable in a tiny viewport without allocating offscreen physical rows.
+The native Unix PTY exercises status/notice entry, action failure/retry/success,
+draft editing/undo, resize and exact terminal-mode restoration.
+
+Final Rust source hashes remained unchanged through validation.
+Both Gate repositories passed whitespace review; local Markdown
+links/anchors and the renamed private design indexes were checked. Human visual
+review, broader native platforms, inline hosting and real host adapters remain
+separate acceptance work.
+
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation

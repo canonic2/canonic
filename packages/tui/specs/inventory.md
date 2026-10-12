@@ -89,10 +89,10 @@ separate.
 | Session recent/pinned/rename/delete/resume | Stable row browser/confirmation | Persistence/destructive operations | Implemented reusable view; [Session Browser](components/session-browser.md) |
 | Parent/child/fork/move | Tree/navigation intents | Orchestration/workspace/session operations | Session fork/move and reusable lazy trees implemented; [Session Browser](components/session-browser.md), [Tree Browser](components/tree-browser.md) |
 | Model/provider/agent/mode/variant | Grouped browser/selection label | Discovery/auth/backend capabilities | Missing; [Browsing](features/browsing.md) |
-| Context/cost/todos/files/connections | Optional summary sections | Counting/pricing/execution/MCP/LSP probes | Status string; [Browsing](features/browsing.md) |
+| Context/cost/todos/files/connections | Optional summary sections | Counting/pricing/execution/MCP/LSP probes | Implemented reusable view; [Status Panels & Notices](components/status-panels-and-notices.md) |
 | Custom theme/default/no-color | Semantic palette/preview | Settings/discovery/persistence | Partial; [Terminal](features/terminal.md) |
 | Resize/Unicode/narrow/mouse | Source mapping/optional pointer routing | Terminal profile/capture selection | Partial; [Interaction](features/interaction.md), [Terminal](features/terminal.md) |
-| Notices/errors/loading/attention | Clocked notices/display | OS notifications/audio/telemetry | Status string; [Browsing](features/browsing.md) |
+| Notices/errors/loading/attention | Clocked notices/display | OS notifications/audio/telemetry | Implemented reusable view; [Status Panels & Notices](components/status-panels-and-notices.md) |
 | Debug/status/help | Inspection/help/cleanup errors | Logs/collection/redaction | Basic hints; [Browsing](features/browsing.md) |
 | Suspend/editor/title | Lease transitions/capability flags | Processes/signals/title policy | Foreground handoff implemented; job-control/title remain host work; [Terminal](features/terminal.md) |
 | Inline menus/review | Shared view/normal-screen adapter | CLI fallback/results | Missing; [Terminal](features/terminal.md) |

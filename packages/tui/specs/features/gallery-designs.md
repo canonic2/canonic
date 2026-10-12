@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 691 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 718 named entries, plus
 eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -155,3 +155,12 @@ checks exercise every listed scenario at zero, tiny and standard sizes, verify
 draft/cursor preservation, remembered picker state and presentation profiles.
 The complete composer acceptance record is in [Human testing](../human-testing.md#gate-3a--submission-lifecycle).
 Native human visual acceptance and consumer rollout remain separate evidence.
+
+## Status Panels & Notices coverage
+
+27 live states cover five section states, folds, warning context, queued notices,
+info/success, set-aside errors, pending/failure/resolution, expiry, disabled actions,
+long reasons, caller return, medium/narrow/tiny layouts, profiles and reviews.
+Eight shared profiles are additional. F5 acknowledges, F6 fails and F7 advances
+explicit fixture time. Human visual and real consumer acceptance are separate;
+see the [contract](../components/status-panels-and-notices.md).

@@ -285,6 +285,12 @@ impl Chat {
     pub fn render_docked_with(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         self.render_composition(frame, area, theme, false);
     }
+    fn composer_focused(&self) -> bool {
+        self.mode() == Mode::Compose
+            && self.reviews.active().is_none()
+            && !self.status_chrome.as_ref().is_some_and(|c| c.focused)
+    }
+
     fn render_composition(
         &mut self,
         frame: &mut Frame<'_>,
@@ -366,9 +372,9 @@ impl Chat {
                 },
                 ..EditorView::default()
             },
-            self.mode() == Mode::Compose && self.reviews.active().is_none(),
+            self.composer_focused(),
         );
-        if self.mode() != Mode::Compose || self.reviews.active().is_some() {
+        if !self.composer_focused() {
             frame.buffer_mut().set_style(
                 Rect::new(
                     composer.x,
@@ -409,6 +415,9 @@ impl Chat {
         }
     }
     fn focus_hint(&self, width: u16) -> String {
+        if self.status_chrome.as_ref().is_some_and(|c| c.focused) {
+            return "esc back · ctrl+x n notices".into();
+        }
         match self.mode() {
             Mode::Search => if self.query().is_empty() { "esc closes".into() } else if width < 50 { "esc back · ↑↓ match · enter stay".into() } else { "↑↓ prev/next · enter stay here · esc back".into() },
             Mode::Select if self.pending.as_ref().is_some_and(|p| matches!(p.kind, PendingKind::Copy)) => "esc done · copy pending".into(),
@@ -432,6 +441,15 @@ impl Chat {
             .run
             .as_ref()
             .map_or_else(String::new, |run| run.connection_label(theme.symbols));
+        if let Some(chrome) = &self.status_chrome
+            && self.reviews.active().is_none()
+        {
+            connection = if connection.is_empty() {
+                chrome.summary.clone()
+            } else {
+                format!("{} · {connection}", chrome.summary)
+            };
+        }
         if hints.width < 50 {
             connection = connection.replace(" · retry in ", " · retry ");
         }
@@ -557,6 +575,31 @@ impl Chat {
     fn render_activity(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         if self.search.is_some() {
             self.render_search(frame, area, theme);
+            return;
+        }
+        if self.pending.is_none()
+            && self.notice.is_none()
+            && self.selection.is_none()
+            && self.leader.is_none()
+            && self.reviews.active().is_none()
+            && self.input.completion_hint_for(area.width).is_none()
+            && let Some((text, severity)) = self
+                .status_chrome
+                .as_ref()
+                .and_then(|c| c.activity.as_ref())
+        {
+            let style = match severity {
+                crate::status_panels::Severity::Error => theme.error().add_modifier(Modifier::BOLD),
+                crate::status_panels::Severity::Warning => theme.warning(),
+                crate::status_panels::Severity::Success => theme
+                    .tokens()
+                    .success
+                    .map_or_else(ratatui::style::Style::default, |c| {
+                        ratatui::style::Style::default().fg(c)
+                    }),
+                crate::status_panels::Severity::Info => theme.muted(),
+            };
+            frame.render_widget(Paragraph::new(alphabet(text, theme)).style(style), area);
             return;
         }
         let text = if let Some(pending) = &self.pending {

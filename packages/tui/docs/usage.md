@@ -769,3 +769,32 @@ Combined source is bounded to 4 MiB/20,000 lines, each line to 64 KiB, find to
 LF and ASCII patch signs; arbitrary selected patch lines are not guaranteed
 to apply independently. See the
 [public contract](../specs/components/code-diff-inspection.md).
+
+## Status panels and notices
+
+Open `--component status-panels-and-notices --scenario main`. At 120+ columns the
+32-column sidebar shows supplied context/cost, to-dos, files, connections and
+child activity. Below 120, Ctrl-X I opens status over the retained Chat; below 50
+it uses full width. Ctrl-X N lists notices. Up/Down selects sections/rows;
+Left/Right folds/unfolds. Enter requests an offered action; R requests an offered
+error retry. Alt-PageUp/PageDown scrolls long selected details. Esc returns to the
+same draft and caret. Reviews retain input priority and fold optional sections.
+
+Info/success notices expire on supplied host time. Warnings stay until dismissed
+or resolved. D dismisses a selected notice; actionable errors are set aside and
+remain reachable through `! N` and the list. Ctrl-G requests current notice
+attention after review/run handling. F5 acknowledges a simulated action, F6
+fails it with a retry reason, and F7 advances ten seconds. Fixtures execute no
+real operation. The profile and `reduced-motion` fixtures use static glyphs.
+
+Consumers construct `status_panels::StatusPanels` from a validated `Snapshot`,
+render sections/notices into their own frame areas, call `advance(Duration)` for
+expiry and handle returned `Intent::Request`. Acknowledge the exact request with
+`complete(&request, Outcome)`; `Applied` accepts authoritative newer facts and
+`Failed` retains a retryable reason. Closing the pane preserves pending work.
+Changed records need newer revisions; stale/foreign/duplicate replies are inert.
+Enable Chat entry with `set_status_available(true)` and handle `Intent::Status`.
+Supply derived `Chrome` with `set_status_chrome` for summary/activity and composer
+focus styling. Retain the actual Chat object when entering another focus scope.
+See the [component contract](../specs/components/status-panels-and-notices.md)
+for limits, clock behavior and host ownership.

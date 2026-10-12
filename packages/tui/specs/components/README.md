@@ -19,10 +19,11 @@ implementation design details without referencing private design files.
 | [Session Browser](session-browser.md) | Stable session rows, local/remote search, acknowledged actions, paging and dedicated-screen return | Implemented with 72 live scenarios; human acceptance pending |
 | [Tree Browser](tree-browser.md) | Stable trees, lazy children/paging, filtering, acknowledged actions and host placement | Implemented with 66 live scenarios; human acceptance pending |
 | [Code/Diff Inspection](code-diff-inspection.md) | Read-only supplied code/patches, navigation, folds, find, selection, host effects and return | Reusable inspector and 51 live scenarios; human acceptance pending |
+| [Status Panels & Notices](status-panels-and-notices.md) | Supplied status sections, explicit expiry, persistent errors and acknowledged actions | Reusable component, Chat adapter and 27 live scenarios; human acceptance pending |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
-Session and tree browsers have standalone contracts. Panels and notices are proposed in
-[Browsing](../features/browsing.md). See the [specifications index](../README.md) for
+Session/tree browsers and status panels/notices have standalone contracts.
+See the [specifications index](../README.md) for
 package-wide contracts and [scenario coverage](../features/gallery-designs.md) for fixtures.
 
 ## Contract format and ownership
@@ -63,3 +64,4 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Session Browser](session-browser.md) | Complete host/view contract | Dedicated screen, actions, deletion and profiles defined | Reusable browser, Chat entry and 72 live scenarios | [Engineering verified](../verification.md#session-browser-engineering-record--2026-10-12) | Human visual review pending |
 | [Tree Browser](tree-browser.md) | Complete host/view contract | Files/tasks, placement, lifecycles and profiles defined | Reusable tree, Chat entry and 66 live scenarios | [Engineering verified](../verification.md#tree-browser-engineering-record--2026-10-12) | Human visual review pending |
 | [Code/Diff Inspection](code-diff-inspection.md) | Complete bounded read-only/host contract | Code/unified diff, navigation/search/copy/return and profiles defined | Reusable Inspector, Chat/tool/tree hosts and 51 live scenarios | [Engineering verified](../verification.md#code-and-diff-inspection-engineering-record--2026-10-12) | Human visual review pending |
+| [Status Panels & Notices](status-panels-and-notices.md) | Complete supplied-facts/clock/action contract | Five states, responsive placement, notice lifecycle and profiles defined | Reusable component, opt-in Chat and 27 live scenarios | [Engineering verified](../verification.md#status-panels-and-notices-engineering-record--2026-10-12) | Human visual review pending |

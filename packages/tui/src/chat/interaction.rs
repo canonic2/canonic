@@ -40,6 +40,12 @@ impl Chat {
         if self.run_event(event) {
             return Action::None;
         }
+        if matches!(event,Event::Key(k) if k.code==KeyCode::Char('g')&&k.modifiers==KeyModifiers::CONTROL&&k.kind==KeyEventKind::Press)
+            && !self.input.overlay_open()
+            && self.request_status(crate::status_panels::Entry::Attention)
+        {
+            return Action::None;
+        }
         if !self.input.overlay_open() && self.chat_key(event) {
             return Action::None;
         }
@@ -107,6 +113,14 @@ impl Chat {
                     }
                     KeyCode::Char('f') if self.files_available.is_some() => {
                         self.request_files();
+                        return true;
+                    }
+                    KeyCode::Char('i' | 'n') if self.status_available.is_some() => {
+                        self.request_status(if key.code == KeyCode::Char('i') {
+                            crate::status_panels::Entry::Status
+                        } else {
+                            crate::status_panels::Entry::Notices
+                        });
                         return true;
                     }
                     _ => {}

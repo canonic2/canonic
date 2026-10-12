@@ -1,0 +1,44 @@
+---
+source: tests/integration/status_gallery.rs
+expression: "screen(&mut g, width, 40)"
+---
+Canonic TUI · Component gallery
+
+acme
+  Sending the user's timezone with the digest now. Host facts and notices stay
+  beside this conversation.▌
+        ┌ Notices ──────────────────────────────────────────────────── ┐
+        │✕ Local connection failed                                     │
+        │! Context nearing limit                                       │
+        │✓ Changes saved                                               │
+        │i Session updated                                             │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │The host reported a disconnected local service. Retry reconnec│
+        │ts through the host.                                          │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │enter retry · d dismiss · alt+pg details              esc back│
+        └ ───────────────────────────────────────────────── esc cancel ┘
+
+
+
+
+✕ Local connection failed · ctrl+g retry · +3 more · ctrl+x n
+message ────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+────────────────────────────────────────────────────────────────────────────────
+esc back · ctrl+x n notices                                ctx 42% · $0.42 · ! 1
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

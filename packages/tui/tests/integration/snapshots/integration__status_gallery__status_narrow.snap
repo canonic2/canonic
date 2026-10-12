@@ -1,0 +1,44 @@
+---
+source: tests/integration/status_gallery.rs
+expression: "screen(&mut g, width, 40)"
+---
+Canonic TUI · Component gallery
+
+Status
+▾ Context ────────────────────────── 42%
+  ████░░░░░░
+  84k / 200k tokens
+▾ Cost ─────────────────────────── $0.42
+  session $0.42 · turn $0.08
+▾ To-dos ─────────────────────────── 1/3
+  ✓ Review design
+  ··· Implement status
+  ○ Verify handoff
+▾ Changed files ────────────────────── 2
+  M src/settings.ts
+  A tests/settings.ts
+▾ Connections ────────────────────── 2/3
+  ● Model · connected
+  ● Tools · connected
+  ✕ Local · disconnected
+▾ Child activity ───────────── 1 working
+  ··· Acme · working
+
+
+
+
+
+
+
+
+enter compact · alt+pg          esc back
+
+✕ Local connection failed · ctrl+g retry
+message ────────────────────────────────
+and bump the app version
+
+
+────────────────────────────────────────
+esc back · ctrl+x n notices      ! 1 42%
+
+Esc back · Ctrl-C quit · F10 scenarios ·

@@ -4,7 +4,9 @@ Status: [Session Browser](../components/session-browser.md) is implemented.
 [Tree Browser](../components/tree-browser.md) implements supplied lazy files/tasks.
 [Code/Diff Inspection](../components/code-diff-inspection.md) supplies loaded
 read-only code/patches and acknowledged copy/editor effects. Other resource
-browsers and general status panels remain proposed. Reusable [Dialog](../components/dialog.md),
+browsers remain proposed. [Status Panels & Notices](../components/status-panels-and-notices.md)
+implements supplied sections, explicit expiry and persistent notice actions.
+Reusable [Dialog](../components/dialog.md),
 [Option Picker](../components/option-picker.md) and
 [Command Palette](../components/command-palette.md) have their own component contracts.
 
@@ -51,7 +53,8 @@ must not load real sessions/files/models or contact services.
 
 ## Open decisions
 
-Responsive panel thresholds and
-inspection access for optional sections need gallery review. Session Browser uses
+Human visual acceptance of responsive status placement remains pending.
+The [status contract](../components/status-panels-and-notices.md) owns thresholds,
+keys and lifecycle requirements. Session Browser uses
 a dedicated screen, as specified in its component contract.
 Keep host-provided command names out of generic public contracts.

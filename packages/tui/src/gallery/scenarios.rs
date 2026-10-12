@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 13] = [
+pub(super) const COMPONENTS: [Component; 14] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -54,6 +54,7 @@ pub(super) const COMPONENTS: [Component; 13] = [
     Component::SessionBrowser,
     Component::TreeBrowser,
     Component::CodeDiffInspection,
+    Component::StatusPanelsAndNotices,
 ];
 
 pub(super) const PROFILES: [&str; 8] = [
@@ -82,6 +83,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::SessionBrowser => 10,
         Component::TreeBrowser => 11,
         Component::CodeDiffInspection => 12,
+        Component::StatusPanelsAndNotices => 13,
     }
 }
 
@@ -119,6 +121,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::SessionBrowser => SESSIONS,
         Component::TreeBrowser => TREES,
         Component::CodeDiffInspection => INSPECTION,
+        Component::StatusPanelsAndNotices => STATUS,
     }
 }
 
@@ -137,6 +140,7 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::SessionBrowser => "session-browser",
         Component::TreeBrowser => "tree-browser",
         Component::CodeDiffInspection => "code-diff-inspection",
+        Component::StatusPanelsAndNotices => "status-panels-and-notices",
     }
 }
 
@@ -144,6 +148,9 @@ pub(super) fn board(component: Component) -> &'static str {
     match component {
         Component::CodeDiffInspection => {
             "Code & diff inspection · Navigation / Find / Copy / Return / Profiles"
+        }
+        Component::StatusPanelsAndNotices => {
+            "Status Panels & Notices · Sections / Focus / Notices / Profiles"
         }
         Component::TreeBrowser => "Tree Browser · Files / Tasks / Loading / Navigation / Profiles",
         Component::SessionBrowser => {
@@ -934,4 +941,34 @@ const TREES: &[Scenario] = &[
     live!("no-color", 63),
     live!("light", 64),
     live!("reduced-motion", 65),
+];
+
+const STATUS: &[Scenario] = &[
+    live!("main", 0),
+    live!("unknown", 1),
+    live!("loading", 2),
+    live!("empty", 3),
+    live!("error", 4),
+    live!("folded", 5),
+    live!("warning", 6),
+    live!("notices", 7),
+    live!("info", 8),
+    live!("success", 9),
+    live!("set-aside", 10),
+    live!("pending", 11),
+    live!("action-failed", 12),
+    live!("resolved", 13),
+    live!("expired", 14),
+    live!("long-reason", 15),
+    live!("disabled", 16),
+    live!("return-chat", 17),
+    live!("medium", 18),
+    live!("narrow", 19),
+    live!("tiny", 20),
+    live!("ansi16", 21),
+    live!("no-color", 22),
+    live!("ascii", 23),
+    live!("light", 24),
+    live!("reduced-motion", 25),
+    live!("review", 26),
 ];
