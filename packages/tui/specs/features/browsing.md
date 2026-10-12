@@ -1,7 +1,8 @@
 # Browsing, panels and notices
 
 Status: [Session Browser](../components/session-browser.md) is implemented.
-Resource browsers, trees and general content panels remain proposed. Reusable [Dialog](../components/dialog.md),
+[Tree Browser](../components/tree-browser.md) implements supplied lazy files/tasks.
+Other resource browsers and general content panels remain proposed. Reusable [Dialog](../components/dialog.md),
 [Option Picker](../components/option-picker.md) and
 [Command Palette](../components/command-palette.md) have their own component contracts.
 
@@ -14,12 +15,10 @@ order; actual discovery, session storage and execution stay outside the library.
 Timeline browser reuses rows but its message IDs and jump behavior belong to
 [Conversation](../components/chat.md).
 
-Trees accept explicit nodes/parent relationships and child-load capability.
-Expand/collapse/navigation uses logical node IDs; unloaded children show loading
-or retry. Removing a focused descendant returns focus to surviving ancestor.
-Reject cycles/duplicate IDs safely. Keyboard can move to parent/first child and
-select without filesystem reads. File/diff trees and parent/child task trees use
-the same node contract; node metadata and actual operations remain host-specific.
+The [Tree Browser contract](../components/tree-browser.md) owns normalized
+parent relationships, saved folds, loaded filtering with ancestors, discovery,
+retry/paging, acknowledged actions and focus/return. Files, diff resources and
+tasks use the same node contract; data and actual operations remain host-specific.
 
 ## Status panels and notices
 

@@ -5,6 +5,30 @@ The historical gates below retain their other component acceptance records.
 Composer implements its complete local workflow; host execution, storage keys,
 clipboard formats and native human visual acceptance remain consumer checkpoints.
 
+## Tree Browser review
+
+Human acceptance is pending. Run the gallery with `--component tree-browser
+--scenario main` and review files/tasks, navigation, loading and profiles.
+
+1. Open and enter folders with separate Right presses; close and climb with
+   separate Left presses. Toggle with Space, expand with `*`, collapse with `-`.
+2. Filter `schedule`; confirm ancestors remain and Escape restores saved folds.
+   F8 must preserve the node by ID or cancel a materially stale action; F9 moves
+   selection to a surviving ancestor. `bad-data` warns without drawing loops.
+3. In `unloaded`, Right requests children; F6 fails, Right/Enter retries, F5 loads.
+   Move or collapse while waiting: a late reply caches children without reopening.
+   `paging` retains its page row while the host replies.
+4. Enter an enabled file/task, inspect pending wording, then F5/F6. Open marks
+   change only after acknowledgement. Disabled actions retain their reasons.
+5. Tab between panel/main view; resize through 100/64/40 columns. Check tiny,
+   deep paths, middle-cut extensions, long errors via Alt-PageDown, ASCII,
+   NO_COLOR and light profiles. Unfocused trees keep an outline.
+6. Escape from `full-screen` returns the original Chat draft/caret/undo. Ctrl-X F
+   and the F1 Files command reopen through the same host entry; F10 retains state.
+
+Record visual defects separately from engineering evidence. Native Windows,
+input methods, inline hosting and actual filesystem/agent adapters remain separate.
+
 ## Session Browser review
 
 Human visual acceptance remains pending. Run:

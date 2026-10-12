@@ -502,7 +502,7 @@ impl ChatDemo {
     }
     fn resolve_effect(&mut self, intent: Intent) {
         match intent {
-            Intent::Run(_) | Intent::Sessions(_) => {}
+            Intent::Run(_) | Intent::Sessions(_) | Intent::Files(_) => {}
             Intent::Tool {
                 message,
                 part,

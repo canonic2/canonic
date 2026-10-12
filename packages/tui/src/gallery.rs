@@ -13,6 +13,7 @@ mod reviews;
 mod scenarios;
 mod sessions;
 mod tool_cards;
+mod trees;
 
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -121,6 +122,8 @@ pub enum Component {
     PermissionReview,
     /// Dedicated host-owned conversation browser.
     SessionBrowser,
+    /// Lazy host-owned files, diff resources and task trees.
+    TreeBrowser,
 }
 
 #[derive(Clone, Copy)]
@@ -138,6 +141,7 @@ enum Screen {
     PermissionReview,
     /// Dedicated host-owned conversation browser.
     SessionBrowser,
+    TreeBrowser,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -180,8 +184,9 @@ pub struct Gallery {
     reviews: reviews::ReviewDemo,
     permissions: permissions::PermissionDemo,
     sessions: sessions::SessionDemo,
-    scenarios: [Picker; 11],
-    scenario_viewports: [ListState; 11],
+    trees: trees::TreeDemo,
+    scenarios: [Picker; 12],
+    scenario_viewports: [ListState; 12],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -207,6 +212,7 @@ impl Gallery {
             Screen::QuestionForm => Some(Component::QuestionForm),
             Screen::PermissionReview => Some(Component::PermissionReview),
             Screen::SessionBrowser => Some(Component::SessionBrowser),
+            Screen::TreeBrowser => Some(Component::TreeBrowser),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -324,7 +330,10 @@ impl Gallery {
                 self.theme.colors = ColorMode::NoColor;
             }
         }
-        if matches!(component, Component::SessionBrowser) {
+        if matches!(
+            component,
+            Component::SessionBrowser | Component::TreeBrowser
+        ) {
             match id {
                 "ansi16" => self.theme.colors = ColorMode::Ansi16,
                 "no-color" | "no-color-pending" => self.theme.colors = ColorMode::NoColor,
@@ -367,7 +376,8 @@ impl Gallery {
             }
             _ => {
                 self.preview_width = match (component, id) {
-                    (Component::SessionBrowser, "narrow" | "narrow-search" | "narrow-delete")
+                    (Component::TreeBrowser, "narrow" | "narrow-filter")
+                    | (Component::SessionBrowser, "narrow" | "narrow-search" | "narrow-delete")
                     | (Component::Chat, "narrow" | "search-narrow-ascii")
                     | (Component::QuestionForm, "narrow" | "narrow-review" | "narrow-field")
                     | (
@@ -377,7 +387,7 @@ impl Gallery {
                     | (Component::ToolCallCard, "narrow" | "narrow-diff" | "narrow-failed") => {
                         Some(40)
                     }
-                    (Component::Chat, "pane") => Some(64),
+                    (Component::TreeBrowser, "medium") | (Component::Chat, "pane") => Some(64),
                     (Component::QuestionForm | Component::PermissionReview, "tiny") => Some(12),
                     _ => None,
                 };
@@ -469,6 +479,10 @@ impl Gallery {
                 self.sessions = sessions::SessionDemo::new(fixture);
                 Screen::SessionBrowser
             }
+            Component::TreeBrowser => {
+                self.trees = trees::TreeDemo::new(fixture);
+                Screen::TreeBrowser
+            }
             Component::PermissionReview => {
                 self.permissions = permissions::PermissionDemo::new(fixture);
                 Screen::PermissionReview
@@ -483,6 +497,7 @@ impl Gallery {
                 | Component::QuestionForm
                 | Component::PermissionReview
                 | Component::SessionBrowser
+                | Component::TreeBrowser
         ) {
             for _ in 0..fixture {
                 self.fixture_event(
@@ -529,6 +544,9 @@ impl Gallery {
             Component::SessionBrowser => {
                 self.sessions.update(event);
             }
+            Component::TreeBrowser => {
+                self.trees.update(event);
+            }
         }
     }
 
@@ -551,6 +569,7 @@ impl Gallery {
                     "Question Form".into(),
                     "Permission Review".into(),
                     "Session Browser".into(),
+                    "Tree Browser".into(),
                 ],
                 Some(0),
             ),
@@ -570,6 +589,7 @@ impl Gallery {
             reviews: reviews::ReviewDemo::new(0),
             permissions: permissions::PermissionDemo::new(0),
             sessions: sessions::SessionDemo::new(0),
+            trees: trees::TreeDemo::new(0),
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -595,6 +615,7 @@ impl Gallery {
             Screen::QuestionForm => "question-form",
             Screen::PermissionReview => "permission-review",
             Screen::SessionBrowser => "session-browser",
+            Screen::TreeBrowser => "tree-browser",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -680,6 +701,9 @@ impl Gallery {
         if matches!(self.screen, Screen::SessionBrowser) {
             self.sessions.tick(elapsed);
         }
+        if matches!(self.screen, Screen::TreeBrowser) {
+            self.trees.tick(elapsed);
+        }
     }
 
     /// Apply an input event. Returns true when the gallery should exit.
@@ -693,13 +717,13 @@ impl Gallery {
         if matches!(self.screen, Screen::ToolCallCard) && self.tools.update(event) {
             return false;
         }
-        if matches!(self.screen, Screen::QuestionForm) && self.reviews.update(event) {
-            return false;
-        }
-        if matches!(self.screen, Screen::SessionBrowser) && self.sessions.update(event) {
-            return false;
-        }
-        if matches!(self.screen, Screen::PermissionReview) && self.permissions.update(event) {
+        if match self.screen {
+            Screen::QuestionForm => self.reviews.update(event),
+            Screen::PermissionReview => self.permissions.update(event),
+            Screen::SessionBrowser => self.sessions.update(event),
+            Screen::TreeBrowser => self.trees.update(event),
+            _ => false,
+        } {
             return false;
         }
         if matches!(self.screen, Screen::Composer) && self.composer.update(event) {
@@ -778,6 +802,7 @@ impl Gallery {
             | Screen::QuestionForm
             | Screen::PermissionReview
             | Screen::SessionBrowser
+            | Screen::TreeBrowser
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -839,6 +864,7 @@ impl Gallery {
             Screen::QuestionForm => self.reviews.render(frame, body, self.theme),
             Screen::PermissionReview => self.permissions.render(frame, body, self.theme),
             Screen::SessionBrowser => self.sessions.render(frame, body, self.theme),
+            Screen::TreeBrowser => self.trees.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(

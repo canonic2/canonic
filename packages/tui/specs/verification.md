@@ -24,6 +24,56 @@ commit is not human acceptance. Tests found in source are not a new test run.
 These records were carried forward during the specification reorganization;
 Markdown changes do not rerun or refresh Rust engineering evidence.
 
+## Tree Browser engineering record — 2026-10-12
+
+Scope: reusable supplied file/task forests, bounded topology normalization,
+stable cursor/folds, loaded ancestor filtering, lazy/root/paged discovery,
+identified primary/custom actions, caller-owned focus and responsive placement.
+Chat has opt-in Ctrl-X F and a shared Files palette entry. The gallery retains
+the original Chat separately from its inspection fixture and supplies 66 live
+scenarios; the registry now has 640 named states plus
+eight profiles for each of twelve components.
+
+Host `make -C packages/tui check` passed 327 tests and four doctests, formatting,
+strict Clippy, private-item API documentation and dependency auditing.
+Twenty-nine component tests cover navigation/filter/paste, refresh/removal/
+reparenting, topology/limits, lazy/root/page failure/retry, cascade/collapse,
+foreign/stale/duplicate/malformed/materially changed results, bounded concurrent
+requests, disabled actions, focus, all sixteen color/glyph/theme combinations,
+tiny rendering, extension-preserving clipping, per-row narrow status, full reasons,
+authoritative error recovery, retry bookkeeping cleanup and no-color attributes/
+ASCII pending chrome. Mixed physical-row paging, undiscovered capacity waiting,
+delivered attempt counts, capacity recovery and manual collapse during bulk
+expansion have direct regression coverage.
+Two gallery tests verify all 66 named states, eight inspected snapshots, F10
+retention, file/task panel focus, filter cursor ownership, delayed/no-ack behavior
+and Chat caret/undo/reading/Ctrl-X F. Inactive inspection is rendered through an
+in-memory backend; it never acquires a terminal or claims the active filter cursor.
+The macOS native PTY test
+verifies lazy loading/failure/retry, bracketed filter paste, Chat return/caret/undo,
+resize, scenario navigation, cooked input and exact terminal attributes after
+exit. The native check consumes restored cooked input before comparing attributes,
+as the existing terminal tests do; macOS can briefly set its pending-input flag.
+
+Gallery-disabled `cargo nextest run --locked --no-default-features` passed 265
+tests. The release library/gallery build passed. Gate and Shield optional `tui`
+compilation passed offline with locked disposable manifests. Drone's copied lock
+needed the existing TUI Markdown dependencies; offline resolution and compilation
+passed only in its disposable fixture. Original consumer manifests and lockfiles
+were unchanged; this is compilation compatibility, not consumer execution or a
+successful locked check against Drone's original lock.
+
+All 480 public local links/anchors resolved. Public/private whitespace checks,
+all final Rust source hashes, snapshot update state and unchanged existing staging
+were verified. New source/spec/test files belong to public only. Private design
+files and generated instructions were preserved.
+
+Human visual acceptance, native Windows/input methods, inline hosting and actual
+host filesystem/Git/task adapters remain separate. The adjacent gallery view is
+existing Chat with supplied inspection fixture content, not a standalone Code/Diff
+Inspection implementation. Use [Tree Browser review](human-testing.md#tree-browser-review).
+No commit, publication, installation or consumer rollout occurred.
+
 ## Session Browser engineering record — 2026-10-12
 
 Scope: reusable dedicated browser, stable host-ordered IDs/groups/parents,

@@ -29,6 +29,7 @@ pub mod session_browser;
 mod text;
 pub mod theme;
 pub mod tool_call_card;
+pub mod tree_browser;
 pub mod ui;
 
 // Keep event and rendering types consistent for local consumers.

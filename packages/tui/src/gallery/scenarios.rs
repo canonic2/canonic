@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 11] = [
+pub(super) const COMPONENTS: [Component; 12] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -52,6 +52,7 @@ pub(super) const COMPONENTS: [Component; 11] = [
     Component::QuestionForm,
     Component::PermissionReview,
     Component::SessionBrowser,
+    Component::TreeBrowser,
 ];
 
 pub(super) const PROFILES: [&str; 8] = [
@@ -78,6 +79,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::QuestionForm => 8,
         Component::PermissionReview => 9,
         Component::SessionBrowser => 10,
+        Component::TreeBrowser => 11,
     }
 }
 
@@ -113,6 +115,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::QuestionForm => &QUESTIONS,
         Component::PermissionReview => &PERMISSIONS,
         Component::SessionBrowser => SESSIONS,
+        Component::TreeBrowser => TREES,
     }
 }
 
@@ -129,11 +132,13 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::QuestionForm => "question-form",
         Component::PermissionReview => "permission-review",
         Component::SessionBrowser => "session-browser",
+        Component::TreeBrowser => "tree-browser",
     }
 }
 
 pub(super) fn board(component: Component) -> &'static str {
     match component {
+        Component::TreeBrowser => "Tree Browser · Files / Tasks / Loading / Navigation / Profiles",
         Component::SessionBrowser => {
             "Session Browser · Navigation / Search / Actions / Return / Profiles"
         }
@@ -800,4 +805,73 @@ const SESSIONS: &[Scenario] = &[
     live!("delete-disarmed", 69),
     live!("palette", 70),
     live!("queued-drafts", 71),
+];
+
+const TREES: &[Scenario] = &[
+    live!("main", 0),
+    live!("files", 1),
+    live!("tasks", 2),
+    live!("cursor-open", 3),
+    live!("unfocused", 4),
+    live!("long-names", 5),
+    live!("statuses", 6),
+    live!("disabled", 7),
+    live!("deep", 8),
+    live!("paging", 9),
+    live!("progress", 10),
+    live!("outcomes", 11),
+    live!("filter", 12),
+    live!("unloaded", 13),
+    live!("loading", 14),
+    live!("loaded", 15),
+    live!("empty", 16),
+    live!("load-failed", 17),
+    live!("retrying", 18),
+    live!("refreshed", 19),
+    live!("removed", 20),
+    live!("ancestor-removed", 21),
+    live!("bad-data", 22),
+    live!("root-loading", 23),
+    live!("root-failed", 24),
+    live!("root-retry", 25),
+    live!("open-folder", 26),
+    live!("first-child", 27),
+    live!("leaf-parent", 28),
+    live!("close-folder", 29),
+    live!("expand-all", 30),
+    live!("scroll", 31),
+    live!("toggle", 32),
+    live!("collapse-all", 33),
+    live!("filter-clear", 34),
+    live!("opening", 35),
+    live!("opened", 36),
+    live!("open-failed", 37),
+    live!("selecting", 38),
+    live!("actions", 39),
+    live!("stopping", 40),
+    live!("action-done", 41),
+    live!("action-failed", 42),
+    live!("stale-result", 43),
+    live!("foreign-result", 44),
+    live!("duplicate-result", 45),
+    live!("material-changed", 46),
+    live!("concurrent", 47),
+    live!("late-collapsed", 48),
+    live!("no-ack", 49),
+    live!("delayed", 50),
+    live!("full-screen", 51),
+    live!("panel", 52),
+    live!("medium", 53),
+    live!("narrow", 54),
+    live!("tiny", 55),
+    live!("before-chat", 56),
+    live!("returning", 57),
+    live!("palette", 58),
+    live!("narrow-filter", 59),
+    live!("long-error", 60),
+    live!("paste-isolated", 61),
+    live!("ascii", 62),
+    live!("no-color", 63),
+    live!("light", 64),
+    live!("reduced-motion", 65),
 ];

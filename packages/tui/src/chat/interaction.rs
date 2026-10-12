@@ -105,6 +105,10 @@ impl Chat {
                         self.request_sessions();
                         return true;
                     }
+                    KeyCode::Char('f') if self.files_available.is_some() => {
+                        self.request_files();
+                        return true;
+                    }
                     _ => {}
                 }
             }

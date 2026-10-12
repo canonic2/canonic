@@ -196,6 +196,8 @@ pub enum Updated {
 pub enum Intent {
     /// Open the host's dedicated Session Browser for this retained conversation.
     Sessions(Conversation),
+    /// Open the host's Tree Browser for this retained conversation.
+    Files(Conversation),
     /// Whole-run effect, independent of individual tool states and connectivity.
     Run(crate::run_activity::Intent),
     /// Tool effect, scoped to the loaded message/part and opaque card instance.

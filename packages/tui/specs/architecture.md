@@ -50,6 +50,7 @@ consumer UI rollout.
 | [question_form](../src/question_form.rs) | Structured answers, validation/review, partial cancellation and host receipts | [Question Form](components/question-form.md) |
 | [permission_review](../src/permission_review.rs) | Supplied scope/choices, inspection, deliberate confirmation and explicit retry | [Permission Review](components/permission-review.md) |
 | [session_browser](../src/session_browser.rs) | Dedicated conversation browsing, discovery/action tickets and safe deletion | [Session Browser](components/session-browser.md) |
+| [tree_browser](../src/tree_browser.rs) | Normalized forest, saved folds/filter, child discovery and acknowledged actions; model/input/view submodules | [Tree Browser](components/tree-browser.md) |
 | [review_queue](../src/review_queue.rs) / [Chat reviews](../src/chat/reviews.rs) | Mixed host order, typing deferral, lifecycle isolation and saved viewport/receipts | [Permission Review queue](components/permission-review.md#shared-queue-and-chat-contract) |
 | [focus](../src/focus.rs) | Instance-local target orders, modal scopes and return focus | [Input/navigation](features/interaction.md) |
 | [text](../src/text.rs), [theme](../src/theme.rs), [ui](../src/ui.rs) | Private sanitized text/wrapping, semantic presentation and shared rules | [Presentation](presentation.md) |

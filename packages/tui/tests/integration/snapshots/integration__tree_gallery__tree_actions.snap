@@ -1,0 +1,32 @@
+---
+source: tests/integration/tree_gallery.rs
+expression: "screen(&mut g, 100, 28)"
+---
+Canonic TUI · Component gallery
+
+tasks ──────────────────────────────────────────────────────────────────── orbit-api · host supplied
+▾ ··· Make digests timezone-aware                                                        3 of 4 · 4m
+│ ▾ ··· run tests                                                          12/40 · [###-------] · 1m
+│ │   ✓ read settings                                                                           0.2s
+│ │   ··· digest-schedule.test.ts                                                            running
+│ │   ○ digest-render.test.ts                                                                 queued
+│ │   ○ open pull request                                                                     queued
+                    choose ─────────────────────────────────────────────────────
+                      1  show task
+                      2  stop this task  x
+                      3  retry           only after it ends
+                    ─────────────────────────────────── 1–2 · enter · esc cancel
+
+
+
+
+
+
+
+
+digest-schedule.test.ts
+running
+retry unavailable: only after it ends
+enter choose · esc close menu ──────────────────────────────────────────────────────────────────────
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

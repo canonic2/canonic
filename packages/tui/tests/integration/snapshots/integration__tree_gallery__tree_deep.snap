@@ -1,0 +1,32 @@
+---
+source: tests/integration/tree_gallery.rs
+expression: "screen(&mut g, 100, 28)"
+---
+Canonic TUI · Component gallery
+
+files ──────────────────────────────────────────────────────────────────── orbit-api · host supplied
+│ │ ▾ level-0/
+│ │ │ ▾ level-1/
+│ │ │ │ ▾ level-2/
+⋯ ▾ level-3/
+⋯ │ ▾ level-4/
+⋯ │ │ ▾ level-5/
+⋯ │ │ │ ▾ level-6/
+⋯ │ │ │ │ ▾ level-7/
+⋯ ▾ level-8/
+⋯ │ ▾ level-9/
+⋯ │ │ ▾ level-10/
+⋯ │ │ │ ▾ level-11/
+⋯ │ │ │ │ ▾ level-12/
+⋯ ▾ level-13/
+⋯ │ ▾ level-14/
+⋯ │ │ ▾ level-15/
+⋯ │ │ │ ▾ level-16/
+⋯ │ │ │ │ ▾ level-17/
+⋯ · no children
+level-17
+
+
+←→ fold · / filter · esc back ────────────────────────────────────────────────────────────── ↑6 / ↓5
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

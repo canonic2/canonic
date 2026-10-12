@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 574 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 640 named entries, plus
 eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -28,6 +28,17 @@ not a claim that every specified state is implemented or visually accepted.
 | [Composer](../components/composer.md) | 99 runnable entries: submission/refusal, four box modes, queue capacity/held/blank edit/pause/resume/restart, history/search, stash capacity/swap/drop, editor configuration/read/size/late return/conflict, typed paste/image/file payloads, shell folding/queue/background/history, commands, leaders, selection priority, clearing/rewind/quit and profiles | Real agent, clipboard and durable-storage integration belongs to consumer hosts; expanded engineering and human visual acceptance are tracked independently |
 | [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | 76 interactive entries: rich identified turns, streaming/delivery/stop/resync, bounded content, loaded search and selection, delayed copy/link/inspection acknowledgements, earlier/newer loading/failure/recovery, hidden timestamps, quiet notes, host suggestions and fallback profiles | Reusable review, sessions and standalone inspection belong to their own components. Host effects are simulated; human acceptance is separate |
 | [Tool Call Card](../components/tool-call-card.md) | 79 interactive entries: lifecycle/output, measured progress, child tasks/artifacts, redaction/controls, host reorder, selection/actions, concurrency/caps, profiles and twenty whole-run states, including reduced motion with advancing host seconds and generic input waiting | Human visual acceptance and real execution/clipboard/permission adapters stay separate |
+
+## Tree Browser coverage
+
+66 live states cover file/task rows, open versus cursor, disabled actions,
+long/deep/paged data, loaded filtering, lazy discovery/root failure/retry,
+refresh/removal/invalid topology, one-step folding and expansion, pending/open/
+action acknowledgements and stale/foreign replies. Full-screen/panel/medium/
+narrow/tiny layouts, retained Chat, palette entry, delayed work, full errors and
+profiles exercise the same reusable view. Eight shared profiles are additional.
+The neighboring main view is existing Chat with supplied fixture content;
+standalone Code/Diff Inspection remains separate. Human acceptance is pending.
 
 ## Session Browser coverage
 

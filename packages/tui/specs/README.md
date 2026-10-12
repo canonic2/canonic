@@ -24,6 +24,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Question Form](components/question-form.md) | Structured staged answers, review and identified host acceptance above Composer |
 | [Permission Review](components/permission-review.md) | Deliberate choices, exact scopes, host acknowledgements, inspection and shared review queue |
 | [Session Browser](components/session-browser.md) | Dedicated stable-ID navigation, identified discovery/actions and retained per-session Chat views |
+| [Tree Browser](components/tree-browser.md) | Stable trees, lazy children, ancestor filtering, acknowledged actions and caller placement |
 | [Features](features/README.md) | Gallery, scenario coverage, input/navigation, activity/review, browsing and terminal hosting |
 | [Chat and conversation content](components/chat.md) | Identified streaming, rich text/code/tables/diffs, anchors, loaded search and block selection |
 | [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |

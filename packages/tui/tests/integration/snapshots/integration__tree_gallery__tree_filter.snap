@@ -1,0 +1,32 @@
+---
+source: tests/integration/tree_gallery.rs
+expression: "screen(&mut g, 100, 28)"
+---
+Canonic TUI · Component gallery
+
+files ──────────────────────────────────────────────────────────────────── orbit-api · host supplied
+sch
+▾ src/                                                                                     4 changed
+│ ▾ digest/                                                                                3 changed
+│ │   schedule.ts                                                                            M +3 -1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+schedule.ts
++3 -1
+
+type filter · ↑↓ move · esc clear ──────────────────────────────────────────────────────────────────
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

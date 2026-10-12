@@ -215,6 +215,7 @@ pub struct Chat {
     review_saved: Option<reviews::Saved>,
     review_serial: u64,
     sessions_available: Option<()>,
+    files_available: Option<()>,
 }
 impl Default for Chat {
     fn default() -> Self {
@@ -262,6 +263,7 @@ impl Default for Chat {
             review_saved: None,
             review_serial: 0,
             sessions_available: None,
+            files_available: None,
         }
     }
 }
@@ -288,6 +290,20 @@ impl Chat {
     /// Enable Ctrl-X O only when the host provides a Session Browser adapter.
     pub fn set_sessions_available(&mut self, available: bool) {
         self.sessions_available = available.then_some(());
+    }
+    /// Enable Ctrl-X F when the host provides a Tree Browser adapter.
+    pub fn set_files_available(&mut self, available: bool) {
+        self.files_available = available.then_some(());
+    }
+    /// Shared palette/shortcut entry; the host retains this Chat instance.
+    pub fn request_files(&mut self) -> bool {
+        if self.files_available.is_none() {
+            return false;
+        }
+        if !self.intents.iter().any(|i| matches!(i, Intent::Files(_))) {
+            self.intents.push(Intent::Files(self.conversation()));
+        }
+        true
     }
     /// Palette and shortcut entry point; never replaces or serializes this Chat.
     pub fn request_sessions(&mut self) -> bool {

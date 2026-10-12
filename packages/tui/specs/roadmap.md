@@ -22,6 +22,8 @@ Permission Review implements explicit choices, scope/destructive confirmation,
 inspection, host outcomes and the mixed queue with 56 live scenarios.
 Session Browser implements dedicated navigation/search/paging and acknowledged
 row actions with retained Chat instances and 72 live scenarios. Permission policy, native inline hosting and broader acceptance remain separate.
+Tree Browser supplies lazy files/tasks, stable folds, filtering with ancestors,
+acknowledged effects and 66 live scenarios; full engineering gates passed.
 
 ## Delivery scope and phase order
 
@@ -100,7 +102,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | CP-02–CP-04 | [Command Palette](components/command-palette.md#acceptance-criteria): ranking/recency, captured height, unavailable/alias feedback and effective scoped help | 2 |
 | CM-02–CM-04 | [Completion Menu](components/completion-menu.md#acceptance-criteria): alias ranking, source warning/retry, fixed height and dock/status separation | 2 |
 | D-04 / SB-01–SB-06 | [Session Browser](components/session-browser.md#implementation-ownership-and-acceptance): stable rows, search/actions/paging/races and Chat return without storage | 5 |
-| D-05 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): safe lazy tree navigation without host I/O | 5 |
+| D-05 / TB-01–TB-05 | [Tree Browser](components/tree-browser.md#ownership-and-acceptance): lazy normalized trees, identity/folds/filter, host outcomes and responsive placement | 5 |
 | D-06 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): responsive statuses/notices/unknown/clock | 5 |
 | T-01 | [Terminal](features/terminal.md#acceptance-criteria): lease/failure/close/drop/TTY cleanup | 6; foundation maintained |
 | T-02 | [Terminal](features/terminal.md#acceptance-criteria): inline surrounding output and full-screen return | 6 |
@@ -148,8 +150,13 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 ## Remaining gap summary
 
 Question Form, Permission Review and their shared above-dock queue are implemented.
-Session Browser is implemented; Tree Browser is the next design-team handoff. Other browsers,
+Session and Tree Browser are implemented; Code/Diff Inspection is the current design-team handoff. Other browsers,
 inline hosting and broad native acceptance remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),
 and feature gaps in the [feature contracts](features/README.md).
+
+The bounded delivery continues with Code/Diff Inspection, status/inspection
+panels, inline terminal hosting and acceptance fixes. Additional browsers and
+application features require a concrete consumer need rather than extending
+this component delivery indefinitely.

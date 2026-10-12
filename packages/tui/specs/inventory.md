@@ -29,6 +29,7 @@ Full application operations appear below to establish host ownership.
 | [Run Activity](../src/run_activity.rs) | Whole-run state, single outstanding cancel, completion/failure races, independent offline status, 140 ms injected animation and Chat composition |
 | [Question Form](../src/question_form.rs) / [Review Queue](../src/review_queue.rs) | Bounded structured descriptors, isolated Editor fields, staged validation/review, opaque acknowledgement tickets, explicit partial cancellation, expiry/copy and host-ordered Chat focus |
 | [Session Browser](../src/session_browser.rs) | Stable-ID host rows, local/remote search and paging, identified row actions, full safe delete confirmation, material races and retained Chat gallery instances |
+| [Tree Browser](../src/tree_browser.rs) | Normalized host forests, stable cursor/folds, loaded filtering, lazy/paged children and identified actions; caller-owned focus/placement |
 | [Permission Review](../src/permission_review.rs) | Safe defaults, numeric highlighting, explicit Enter/scope/destructive confirmation, loaded source search, exact response tickets, R retry, refusal and expiry/withdrawal/material races; mixed queue and Chat receipts |
 | [Composer](../src/composer.rs) | Submission and work-control tickets with host acknowledgements; FIFO held edits/pause, history/search, stash/drop undo, typed paste/image/file atoms, shell/completion, backward-compatible autosave codec, editor conflicts and 99 gallery scenarios; host executes/persists |
 | [Completion Menu](../src/completion.rs) | Prefix/word/alias/fuzzy ranking, source tickets/progress/streaming, distinct timeout warnings and Alt-R retry; Composer token routing, separate menu/draft help and 30 interactive gallery states; host discovers/executes |
@@ -85,7 +86,7 @@ separate.
 | Transcript search/timeline | Loaded search/jump browser | Unloaded search/paging | Chat loaded search/anchors/paging implemented; timeline browser separate; [Conversation](components/chat.md) |
 | Selection/copy/export | Logical ranges/payload intents | Clipboard/files/destination/privacy | Chat block/Markdown/code copy implemented; full export host-owned; [Interaction](features/interaction.md) |
 | Session recent/pinned/rename/delete/resume | Stable row browser/confirmation | Persistence/destructive operations | Implemented reusable view; [Session Browser](components/session-browser.md) |
-| Parent/child/fork/move | Tree/navigation intents | Orchestration/workspace/session operations | Session fork/move implemented; lazy trees proposed; [Session Browser](components/session-browser.md), [Browsing](features/browsing.md) |
+| Parent/child/fork/move | Tree/navigation intents | Orchestration/workspace/session operations | Session fork/move and reusable lazy trees implemented; [Session Browser](components/session-browser.md), [Tree Browser](components/tree-browser.md) |
 | Model/provider/agent/mode/variant | Grouped browser/selection label | Discovery/auth/backend capabilities | Missing; [Browsing](features/browsing.md) |
 | Context/cost/todos/files/connections | Optional summary sections | Counting/pricing/execution/MCP/LSP probes | Status string; [Browsing](features/browsing.md) |
 | Custom theme/default/no-color | Semantic palette/preview | Settings/discovery/persistence | Partial; [Terminal](features/terminal.md) |

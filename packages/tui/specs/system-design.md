@@ -54,7 +54,7 @@ entry points need an explicit compatibility plan when contracts change.
 | `dialog` | Caller bodies, stack/size/close policy and injected time | Close/result/focus, arrival/guard/notices and attention intents | Reusable stack, timing and caution implemented; inline hosting separate |
 | `commands` | Host descriptors, enabled reasons and bindings | Invocation ID; palette/filter/help; no execution | Implemented |
 | `browser` | Session/timeline/resource rows and loading state | Select/query/rename/delete/fork intents; local navigation | Proposed |
-| `tree` | Hierarchical nodes and loading metadata | Expand/load/select intents; local focus/expanded set | Proposed |
+| `tree_browser` | Normalized host forest and child/page metadata | Ticketed load/action results; local focus/folds/filter/cursor | Implemented reusable scope; see [Tree Browser](components/tree-browser.md) |
 | `status` | Summary groups/notices/time/preferences | Dismiss/retry/preference intents; notice/collapse state | Proposed; plain host labels exist |
 | `chat` | Conversation/composer/activity/review/status and capabilities | Screen intents; layout/focus/screen-scoped presentation | Rich transcript, Composer, cards and Run Activity implemented; reusable review composition pending |
 | `runtime` | Explicit inline/full-screen mode/capabilities | Lease, frames/events, suspend/resume/close result; owned modes | Full-screen lease/handoff implemented; inline hosting pending |

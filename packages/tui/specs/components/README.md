@@ -17,9 +17,10 @@ implementation design details without referencing private design files.
 | [Question Form](question-form.md) | Staged choices/text, review, cancellation, host acknowledgements and queued above-dock focus | Implemented with shared queue, Chat and 52 scenarios; human acceptance pending |
 | [Permission Review](permission-review.md) | Deliberate identified choices, exact scopes, inspection, retry and host outcomes | Implemented with mixed queue, Chat and 56 scenarios; human acceptance pending |
 | [Session Browser](session-browser.md) | Stable session rows, local/remote search, acknowledged actions, paging and dedicated-screen return | Implemented with 72 live scenarios; human acceptance pending |
+| [Tree Browser](tree-browser.md) | Stable trees, lazy children/paging, filtering, acknowledged actions and host placement | Implemented with 66 live scenarios; human acceptance pending |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
-Session browsers, trees, panels and notices are proposed in
+Session and tree browsers have standalone contracts. Panels and notices are proposed in
 [Browsing](../features/browsing.md). See the [specifications index](../README.md) for
 package-wide contracts and [scenario coverage](../features/gallery-designs.md) for fixtures.
 
@@ -59,3 +60,4 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Question Form](question-form.md) | Defined full structured answer contract | Defined review/field/cancellation/profiles | Reusable form, shared queue, Chat and 52 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |
 | [Permission Review](permission-review.md) | Defined complete review/host contract | Defined scopes/inspection/queue/profiles | Reusable review, mixed queue, Chat and 56 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |
 | [Session Browser](session-browser.md) | Complete host/view contract | Dedicated screen, actions, deletion and profiles defined | Reusable browser, Chat entry and 72 live scenarios | [Engineering verified](../verification.md#session-browser-engineering-record--2026-10-12) | Human visual review pending |
+| [Tree Browser](tree-browser.md) | Complete host/view contract | Files/tasks, placement, lifecycles and profiles defined | Reusable tree, Chat entry and 66 live scenarios | [Engineering verified](../verification.md#tree-browser-engineering-record--2026-10-12) | Human visual review pending |

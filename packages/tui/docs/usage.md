@@ -1,5 +1,33 @@
 # Usage
 
+## Tree Browser
+
+Run `cargo run --locked --features gallery -- --component tree-browser --scenario main`.
+Up/Down or Ctrl-P/Ctrl-N move. Right opens a folder, then enters its first child;
+Left closes it, then climbs. Space toggles in place; `*` opens the subtree and
+loads missing children; `-` closes the subtree. Home/End and PageUp/PageDown move
+through loaded rows. Slash filters loaded names while retaining their ancestors.
+Escape clears the filter, then returns to Chat or moves to the main pane.
+
+Enter invokes the host's primary Open/Select action, retries the selected failed
+load, or loads the next page. `a` opens the supplied actions; disabled choices
+retain reasons. Pending rows remain pending until a host response. F5 simulates
+success, F6/F7 failure/refusal, F8 material replacement, F9 removal and F12 an old
+result. These are fixtures; they never read files or execute actions.
+
+`main`/`panel` show a 34-column tree beside retained Chat at 100+ columns and
+24 columns at 60–99; below 60 the focused view fills the screen. Tab moves between
+panes. `full-screen` returns to Chat with Escape; Ctrl-X F reopens the tree when
+the host enables files. F1's Files command uses that same entry. Chat keeps its
+draft, caret, undo and reading state. F10 opens scenarios and returns without reset.
+
+Try `tasks`, `filter`, `loading`, `load-failed`, `paging`, `removed`, `bad-data`,
+`deep`, `long-names`, `narrow`, `tiny` and the shared color/ASCII profiles.
+Selected full names, disabled reasons and errors appear below the tree. Alt-PageUp
+and Alt-PageDown scroll these details. The caller controls placement, focus,
+snapshots and every request result; [Tree Browser](../specs/components/tree-browser.md)
+defines the reusable contract. Standalone Code/Diff Inspection is separate.
+
 ## Permission Review
 
 Open `cargo run --locked --features gallery -- --component permission-review --scenario main`.

@@ -43,3 +43,8 @@ mod session_terminal;
 mod tool_call_card;
 #[cfg(feature = "gallery")]
 mod tool_card_gallery;
+mod tree_browser;
+#[cfg(feature = "gallery")]
+mod tree_gallery;
+#[cfg(feature = "gallery")]
+mod tree_terminal;

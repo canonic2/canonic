@@ -18,6 +18,14 @@ palette command uses the same entry point. All discovery and storage stay with
 the host. See [Session Browser](specs/components/session-browser.md) and
 [usage](docs/usage.md#session-browser).
 
+Tree Browser navigates host-supplied files, diff resources and tasks with stable
+IDs, saved folds, ancestor filtering, lazy children, paging and acknowledged
+actions. Its 66 live scenarios compose full-screen and responsive panel placement
+with retained Chat. Ctrl-X F is available when the host enables the adapter.
+See [Tree Browser](specs/components/tree-browser.md) and
+[usage](docs/usage.md#tree-browser). Loading, inspection and execution stay with
+the host.
+
 Permission Review offers 56 deterministic scenarios. Numbers highlight; Enter
 confirms. Broader choices quote exact host scope in a second check on Back;
 destructive choices require two deliberate Enter presses within three seconds.
@@ -34,7 +42,7 @@ make -C packages/tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, or **Session Browser**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, **Session Browser**, or **Tree Browser**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its

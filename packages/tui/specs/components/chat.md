@@ -237,6 +237,14 @@ Human acceptance, consumer integration and broader native coverage are separate.
 Unloaded-history search, session browsers, split diff viewers and real host adapters
 remain separate capabilities.
 
+## Tree Browser host entry
+
+`set_files_available(true)` enables Ctrl-X F. `request_files()` is the shared
+palette entry and emits one undrained `Intent::Files(Conversation)`. It never
+changes the Composer, transcript or logical viewport. Hosts retain the Chat,
+show [Tree Browser](tree-browser.md), and restore it on return. Default is disabled;
+the view exposes no filesystem, Git, storage or inspection execution.
+
 ## Session Browser host entry
 
 `set_sessions_available(true)` enables Ctrl-X O. `request_sessions()` is the same

@@ -1,0 +1,32 @@
+---
+source: tests/integration/tree_gallery.rs
+expression: "screen(&mut g, 100, 28)"
+---
+Canonic TUI · Component gallery
+
+tasks ──────────────────────────── acme
+▾ ··· Make dig…e-aware 3 of 4 · 4m   Inspection fixture for task settings
+│ ▾ ··· run tests    12/40 · [###⋯
+│ │   ✓ read settings         0.2s   text ──────────────────────────────────────────────────────────
+│ │   ··· digest-s…test.ts running   12 / 40 tests
+│ │   ○ digest-re…r.test.ts queued   digest-settings.test.ts passed
+│ │   ○ open pull request   queued   digest-schedule.test.ts running▌
+
+
+
+
+
+
+
+
+
+
+
+                                   message ─────────────────────────────────────────────────────────
+                                   Write a message
+digest-schedule.test.ts
+running
+retry unavailable: only after it e ──────────────────────────────────── settings ~inspection fixture
+/ filter · esc back ────────────── actions on · enter sends · F1 keys
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme
