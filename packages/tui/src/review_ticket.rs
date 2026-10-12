@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-/// An opaque, single-use identity issued by one review operation.
+/// An opaque, single-use identity issued by one component operation.
 #[derive(Clone, Debug)]
 pub struct Ticket(Arc<()>);
 impl Ticket {

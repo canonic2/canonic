@@ -25,6 +25,7 @@ pub mod review_queue;
 mod review_ticket;
 pub mod run_activity;
 pub mod runtime;
+pub mod session_browser;
 mod text;
 pub mod theme;
 pub mod tool_call_card;

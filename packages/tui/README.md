@@ -10,6 +10,14 @@ Drone and Shield use it through local Cargo path dependencies. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
+Session Browser provides a dedicated screen over host-supplied conversations. Its
+72 live scenarios cover stable-ID navigation, local/remote search, paging,
+rename/fork/move/pin/delete, acknowledged results and returning to retained Chat
+instances. Ctrl-X O opens it when the host enables the adapter; the `sessions`
+palette command uses the same entry point. All discovery and storage stay with
+the host. See [Session Browser](specs/components/session-browser.md) and
+[usage](docs/usage.md#session-browser).
+
 Permission Review offers 56 deterministic scenarios. Numbers highlight; Enter
 confirms. Broader choices quote exact host scope in a second check on Back;
 destructive choices require two deliberate Enter presses within three seconds.
@@ -26,7 +34,7 @@ make -C packages/tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, or **Permission Review**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, or **Session Browser**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its

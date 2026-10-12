@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 10] = [
+pub(super) const COMPONENTS: [Component; 11] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -51,6 +51,7 @@ pub(super) const COMPONENTS: [Component; 10] = [
     Component::ToolCallCard,
     Component::QuestionForm,
     Component::PermissionReview,
+    Component::SessionBrowser,
 ];
 
 pub(super) const PROFILES: [&str; 8] = [
@@ -76,6 +77,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::ToolCallCard => 7,
         Component::QuestionForm => 8,
         Component::PermissionReview => 9,
+        Component::SessionBrowser => 10,
     }
 }
 
@@ -110,6 +112,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::ToolCallCard => &TOOL_CARDS,
         Component::QuestionForm => &QUESTIONS,
         Component::PermissionReview => &PERMISSIONS,
+        Component::SessionBrowser => SESSIONS,
     }
 }
 
@@ -125,11 +128,15 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::ToolCallCard => "tool-call-card",
         Component::QuestionForm => "question-form",
         Component::PermissionReview => "permission-review",
+        Component::SessionBrowser => "session-browser",
     }
 }
 
 pub(super) fn board(component: Component) -> &'static str {
     match component {
+        Component::SessionBrowser => {
+            "Session Browser · Navigation / Search / Actions / Return / Profiles"
+        }
         Component::Picker => "design/option-picker/README.md · States / Hosts",
         Component::Chat => "design/chat/README.md · Turns / Content / Search / Selection",
         Component::Editor => "design/editor/README.md · States / Hosts",
@@ -718,4 +725,79 @@ const PERMISSIONS: [Scenario; 56] = [
     live!("disabled", 53),
     live!("reduced-motion", 54),
     live!("scope-destructive", 55),
+];
+
+const SESSIONS: &[Scenario] = &[
+    live!("main", 0),
+    live!("current", 1),
+    live!("loading", 2),
+    live!("empty", 3),
+    live!("load-failed", 4),
+    live!("search", 5),
+    live!("search-all", 6),
+    live!("all-results", 7),
+    live!("no-matches", 8),
+    live!("refreshed", 9),
+    live!("removed", 10),
+    live!("long-list", 11),
+    live!("actions", 12),
+    live!("unavailable", 13),
+    live!("rename", 14),
+    live!("rename-pending", 15),
+    live!("rename-refused", 16),
+    live!("forked", 17),
+    live!("move", 18),
+    live!("pinned", 19),
+    live!("action-failed", 20),
+    live!("delete-confirm", 21),
+    live!("delete-armed", 22),
+    live!("deleting", 23),
+    live!("deleted", 24),
+    live!("delete-failed", 25),
+    live!("last-deleted", 26),
+    live!("narrow", 27),
+    live!("narrow-search", 28),
+    live!("narrow-delete", 29),
+    live!("medium", 30),
+    live!("ascii", 31),
+    live!("ansi16", 32),
+    live!("no-color", 33),
+    live!("light", 34),
+    live!("no-color-pending", 35),
+    live!("before-chat", 36),
+    live!("returning", 37),
+    live!("switched", 38),
+    live!("switch-back", 39),
+    live!("open-failed", 40),
+    live!("paging", 41),
+    live!("page-failed", 42),
+    live!("page-retry", 43),
+    live!("search-failed", 44),
+    live!("search-retry", 45),
+    live!("stale-search", 46),
+    live!("foreign-search", 47),
+    live!("stale-action", 48),
+    live!("foreign-action", 49),
+    live!("duplicate-result", 50),
+    live!("material-changed", 51),
+    live!("action-removed", 52),
+    live!("concurrent", 53),
+    live!("pending-return", 54),
+    live!("delayed", 55),
+    live!("no-ack", 56),
+    live!("long-title", 57),
+    live!("long-preview", 58),
+    live!("long-delete", 59),
+    live!("long-destinations", 60),
+    live!("rename-limit", 61),
+    live!("paste-isolated", 62),
+    live!("reduced-motion", 63),
+    live!("tiny", 64),
+    live!("short", 65),
+    live!("streaming", 66),
+    live!("rename-replaced", 67),
+    live!("delete-expired", 68),
+    live!("delete-disarmed", 69),
+    live!("palette", 70),
+    live!("queued-drafts", 71),
 ];

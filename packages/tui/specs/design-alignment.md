@@ -21,6 +21,7 @@ Human visual acceptance and consumer/platform acceptance remain independent.
 | Chat | Rich transcript, explicit pending/failure acknowledgements, serial paging/retry, quiet notes, host suggestions, fallback search and 76 interactive frames; expanded engineering checks passed | Human visual acceptance and real host adapters |
 | Question Form | Structured answers, validation, review, partial cancellation, identified host acknowledgements, expiry/copy, above-dock Chat and 52 live scenarios | Human visual acceptance and real host adapters |
 | Permission Review | Standalone contract, exact scopes, safe defaults, explicit confirmation/retry, inspection, mixed queue, Chat and 56 live scenarios | Human visual acceptance and real host authority adapters |
+| Session Browser | Dedicated screen, stable IDs, search/paging, row actions, safe deletion, retained Chat instances and 72 live scenarios | Human visual acceptance and real host storage/action adapters |
 | Terminal lifecycle | Existing alternate-screen runtime and PTY restoration | Inline result scrollback, plain-output/handoff/error/quit frames and wider platform acceptance |
 
 ## Open decisions
@@ -31,5 +32,6 @@ Keep existing routing/presentation until a decision changes the owning contract.
 
 ## Next design work
 
-Question Form and Permission Review are designed. Session Browser is the next
-design-team handoff in the [roadmap](roadmap.md); TUI development is not finished.
+Tree Browser is the next design-team handoff in the [roadmap](roadmap.md),
+covering file/diff and parent/child task navigation. Session Browser is implemented;
+TUI development is not finished.

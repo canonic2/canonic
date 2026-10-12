@@ -24,6 +24,48 @@ commit is not human acceptance. Tests found in source are not a new test run.
 These records were carried forward during the specification reorganization;
 Markdown changes do not rerun or refresh Rust engineering evidence.
 
+## Session Browser engineering record — 2026-10-12
+
+Scope: reusable dedicated browser, stable host-ordered IDs/groups/parents,
+local and remote search/paging, independently ticketed row operations, safe
+host-worded deletion and opt-in Chat entry. The gallery supplies 72 live scenarios,
+bringing the named registry to 574 entries plus eight profiles per component.
+Caller-owned Chat instances retain their documents, caret/selection, undo,
+queues and logical reading/unread state across return and actual open results.
+
+Final host `make -C packages/tui check` passed 295 tests, four doctests,
+formatting, strict Clippy, private-item API documentation and dependency auditing.
+The release library/gallery build passed. Gallery-disabled
+`cargo nextest run --locked --no-default-features` passed 236 tests.
+
+Twenty-five component tests cover atomic descriptor/material validation,
+stable selection/removal, title/message matching, query/discovery/paging races,
+explicit retries, concurrent/hidden rows, pending limits, failed rename drafts,
+action availability, precise scope hints, single-use/foreign/stale tickets and
+exact host-supplied results. Rendering covers every color/symbol/theme combination,
+tiny/narrow areas, complete deletion wording, ASCII fork markers and long data.
+Two gallery tests exercise all named states and retained F10 navigation; eight
+snapshots were inspected. The new native macOS PTY test verifies isolated search
+paste, destructive arming/paste disarming, failure, mid-draft caret/undo return,
+Ctrl-X O, resize, cooked input and exact terminal attributes after exit.
+Existing native terminal flows also passed in the full suite.
+
+Gate and Shield optional `tui` compilation passed offline with locked disposable
+manifests. Drone's copied lock required the existing TUI Markdown dependencies
+`pulldown-cmark` and `unicase`; resolution and compilation passed offline solely
+in its disposable fixture. Workspace consumer manifests and lockfiles remained
+unchanged. This establishes compilation compatibility, not consumer execution
+or a successful locked check against Drone's existing workspace lock.
+
+Public local links resolved 461 references before this evidence update. Public
+and private whitespace checks passed; all new source/spec/test files are excluded
+from private. Existing staging and private design repairs were preserved.
+No commit, publication, consumer rollout or Tree Browser implementation occurred.
+
+Human visual acceptance and broader native/platform acceptance remain pending.
+Use the [Session Browser review](human-testing.md#session-browser-review).
+Actual discovery, storage, session lifecycle and execution remain host-owned.
+
 ## Question Form and Permission Review engineering record — 2026-10-11
 
 Final scope: both reusable components, opaque single-use host acknowledgement

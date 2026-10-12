@@ -1,0 +1,32 @@
+---
+source: tests/integration/session_gallery.rs
+expression: "screen(&mut g, 100, 28)"
+---
+Canonic TUI · Component gallery
+
+sessions ------------------------------------------------------------------ 4 results · all sessions
+search dig
+pinned
+>  Digest timezone             acme-api #281       3 files changed             done           20:01
+recent
+   Stuck retries               acme-worker #88     run grep 409 logs/worker... working        3m
+archived
+   Digest retries draft        acme-api #281       3 files changed             done           Sep 2
+   Redigest weekly job         acme-api #281       3 files changed             done           Sep 2
+
+
+
+
+
+
+
+preview ----------------------------------------------------------------------------------- acme-api
+acme · 14:02
+The 409s come from two workers claiming the same job.
+I'm adding a lease check before retrying.
+run grep 409 logs/worker.log · running
+pasted 1 lines · ctrl+z undoes it
+----------------------------------------------------------------------------------------------------
+enter open | up/down move | esc leave search
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

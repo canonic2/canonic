@@ -35,6 +35,11 @@ mod review_gallery;
 #[cfg(feature = "gallery")]
 mod review_terminal;
 mod run_activity;
+mod session_browser;
+#[cfg(feature = "gallery")]
+mod session_gallery;
+#[cfg(feature = "gallery")]
+mod session_terminal;
 mod tool_call_card;
 #[cfg(feature = "gallery")]
 mod tool_card_gallery;

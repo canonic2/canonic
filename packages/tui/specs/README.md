@@ -18,11 +18,12 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Inventory and gaps](inventory.md) | Complete experience inventory and dated implementation evidence |
 | [Current architecture](architecture.md) | Implemented package/module map, composition and existing boundaries |
 | [System design](system-design.md) | Architectural rules, dependency direction, public-contract conventions and proposed capability owners |
-| [Components](components/README.md) | Editor, Option Picker, Dialog, Command Palette, Composer, Completion Menu, Chat and Tool Call Card |
+| [Components](components/README.md) | Reusable component contracts, checkpoints and host boundaries |
 | [Tool Call Card](components/tool-call-card.md) | Tool lifecycle, textual previews, concurrency, selected actions and host acknowledgements |
 | [Run Activity](components/run-activity.md) | Whole-run state, cancellation acknowledgement races and independent connection status |
 | [Question Form](components/question-form.md) | Structured staged answers, review and identified host acceptance above Composer |
 | [Permission Review](components/permission-review.md) | Deliberate choices, exact scopes, host acknowledgements, inspection and shared review queue |
+| [Session Browser](components/session-browser.md) | Dedicated stable-ID navigation, identified discovery/actions and retained per-session Chat views |
 | [Features](features/README.md) | Gallery, scenario coverage, input/navigation, activity/review, browsing and terminal hosting |
 | [Chat and conversation content](components/chat.md) | Identified streaming, rich text/code/tables/diffs, anchors, loaded search and block selection |
 | [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |

@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 502 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 574 named entries, plus
 eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -28,6 +28,25 @@ not a claim that every specified state is implemented or visually accepted.
 | [Composer](../components/composer.md) | 99 runnable entries: submission/refusal, four box modes, queue capacity/held/blank edit/pause/resume/restart, history/search, stash capacity/swap/drop, editor configuration/read/size/late return/conflict, typed paste/image/file payloads, shell folding/queue/background/history, commands, leaders, selection priority, clearing/rewind/quit and profiles | Real agent, clipboard and durable-storage integration belongs to consumer hosts; expanded engineering and human visual acceptance are tracked independently |
 | [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | 76 interactive entries: rich identified turns, streaming/delivery/stop/resync, bounded content, loaded search and selection, delayed copy/link/inspection acknowledgements, earlier/newer loading/failure/recovery, hidden timestamps, quiet notes, host suggestions and fallback profiles | Reusable review, sessions and standalone inspection belong to their own components. Host effects are simulated; human acceptance is separate |
 | [Tool Call Card](../components/tool-call-card.md) | 79 interactive entries: lifecycle/output, measured progress, child tasks/artifacts, redaction/controls, host reorder, selection/actions, concurrency/caps, profiles and twenty whole-run states, including reduced motion with advancing host seconds and generic input waiting | Human visual acceptance and real execution/clipboard/permission adapters stay separate |
+
+## Session Browser coverage
+
+72 live scenarios exercise default/current/forks/groups, loading/empty/load failure,
+loaded and remote search, no matches and explicit retries, refresh/removal, long
+lists and both loaded/remote paging. Action menus expose host availability; rename
+retains failed text, fork follows actual IDs, move uses supplied destinations and
+pin follows host order. Delete covers Keep, arming/disarming/expiry, pending,
+success, failure and last removal. Stale/foreign/duplicate results, concurrent
+rows, material changes and return during pending work are deterministic host
+simulations. Per-session Chat drafts, caret/anchors, queued messages, streaming,
+open failure, switching and palette entry remain live interactions.
+
+Long titles/previews/confirmation/destination lists and tiny/short/narrow profiles
+are selectable; the eight shared profiles apply independently. F5 succeeds,
+F6/F7 fail/refuse, F8 refreshes material, F9 removes the selected row and F12 tries
+an old result. Ctrl-X O opens from the retained Chat; F1 opens its simulated
+`sessions` palette command. Every effect is local fixture data, never real storage
+or session execution. See [human review](../human-testing.md#session-browser-review).
 
 ## Permission Review coverage
 

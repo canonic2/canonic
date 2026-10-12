@@ -101,6 +101,10 @@ impl Chat {
                         self.retry_reply();
                         return true;
                     }
+                    KeyCode::Char('o') if self.sessions_available.is_some() => {
+                        self.request_sessions();
+                        return true;
+                    }
                     _ => {}
                 }
             }

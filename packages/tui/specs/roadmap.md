@@ -20,8 +20,8 @@ Question Form implements staged answers, review, cancellation/partial delivery,
 host acknowledgement races and above-dock Chat with 52 live scenarios.
 Permission Review implements explicit choices, scope/destructive confirmation,
 inspection, host outcomes and the mixed queue with 56 live scenarios.
-Session Browser is the next design-team
-handoff. Permission policy, native inline hosting and broader acceptance remain separate.
+Session Browser implements dedicated navigation/search/paging and acknowledged
+row actions with retained Chat instances and 72 live scenarios. Permission policy, native inline hosting and broader acceptance remain separate.
 
 ## Delivery scope and phase order
 
@@ -99,7 +99,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | D-03 | [Command Palette](components/command-palette.md): palette/help/completion consistency | 2 |
 | CP-02–CP-04 | [Command Palette](components/command-palette.md#acceptance-criteria): ranking/recency, captured height, unavailable/alias feedback and effective scoped help | 2 |
 | CM-02–CM-04 | [Completion Menu](components/completion-menu.md#acceptance-criteria): alias ranking, source warning/retry, fixed height and dock/status separation | 2 |
-| D-04 | [Browsing](features/browsing.md): session search/actions/races without storage | 5 |
+| D-04 / SB-01–SB-06 | [Session Browser](components/session-browser.md#implementation-ownership-and-acceptance): stable rows, search/actions/paging/races and Chat return without storage | 5 |
 | D-05 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): safe lazy tree navigation without host I/O | 5 |
 | D-06 | [Browsing](features/browsing.md#gallery-fixtures-and-acceptance): responsive statuses/notices/unknown/clock | 5 |
 | T-01 | [Terminal](features/terminal.md#acceptance-criteria): lease/failure/close/drop/TTY cleanup | 6; foundation maintained |
@@ -135,7 +135,7 @@ library completion or dependency compilation alone does not establish that.
 | Pointer defaults and native key encodings | Scoped keyboard/leader rules are specified; establish pointer defaults and unverified terminal encodings | Pointer/native acceptance |
 | Standalone inspection dependencies | Chat uses audited CommonMark parsing and local lexical styling; independent code/diff viewers need their own contract | Phase 5 |
 | Unloaded search and split diff policy | Chat implements loaded Unicode literal search, table records below 50 columns and unified preview; broader browsing is separate | Phase 5 |
-| Review panel versus overlay | Preserve draft and inspect details at 40×12; host-supplied scope/close/queue policy | Phase 4 |
+| Review panel versus overlay | Review components use the above-dock queue and local confirmation dialogs; broader placement changes need a new design decision | Future placement changes |
 | Inline anchoring/output result | Short bounded region, safe fallback on unsupported cursor behavior; PTY surrounding-text evidence | Phase 6 |
 | Native Windows harness/IME/assistive matrix | Native runner/emulator and explicit testing conditions; separate unsupported states | Phase 6 claims |
 | Performance targets | Proposed gallery budgets require measured baseline and approval, not assumed guarantees | Phase 3 acceptance |
@@ -148,7 +148,7 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 ## Remaining gap summary
 
 Question Form, Permission Review and their shared above-dock queue are implemented.
-Session Browser is the next design-team handoff. Browsers,
+Session Browser is implemented; Tree Browser is the next design-team handoff. Other browsers,
 inline hosting and broad native acceptance remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),

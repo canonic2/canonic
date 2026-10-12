@@ -194,6 +194,8 @@ pub enum Updated {
 /// Explicit host work. Chat never opens files, retries agents or accesses a clipboard.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Intent {
+    /// Open the host's dedicated Session Browser for this retained conversation.
+    Sessions(Conversation),
     /// Whole-run effect, independent of individual tool states and connectivity.
     Run(crate::run_activity::Intent),
     /// Tool effect, scoped to the loaded message/part and opaque card instance.

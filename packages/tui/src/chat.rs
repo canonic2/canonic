@@ -214,6 +214,7 @@ pub struct Chat {
     reviews: crate::review_queue::ReviewQueue,
     review_saved: Option<reviews::Saved>,
     review_serial: u64,
+    sessions_available: Option<()>,
 }
 impl Default for Chat {
     fn default() -> Self {
@@ -260,6 +261,7 @@ impl Default for Chat {
             reviews: crate::review_queue::ReviewQueue::default(),
             review_saved: None,
             review_serial: 0,
+            sessions_available: None,
         }
     }
 }
@@ -282,6 +284,24 @@ impl Chat {
     /// Host-supplied display label only; this never changes execution authority.
     pub fn set_actions_available(&mut self, available: bool) {
         self.actions = if available { "on" } else { "off" };
+    }
+    /// Enable Ctrl-X O only when the host provides a Session Browser adapter.
+    pub fn set_sessions_available(&mut self, available: bool) {
+        self.sessions_available = available.then_some(());
+    }
+    /// Palette and shortcut entry point; never replaces or serializes this Chat.
+    pub fn request_sessions(&mut self) -> bool {
+        if self.sessions_available.is_none() {
+            return false;
+        }
+        if !self
+            .intents
+            .iter()
+            .any(|i| matches!(i, Intent::Sessions(_)))
+        {
+            self.intents.push(Intent::Sessions(self.conversation()));
+        }
+        true
     }
     /// Identity used to validate addressed part updates.
     #[must_use]

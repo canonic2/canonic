@@ -236,3 +236,15 @@ their acceptance/confirmation rules; Chat owns placement and viewport restoratio
 Human acceptance, consumer integration and broader native coverage are separate.
 Unloaded-history search, session browsers, split diff viewers and real host adapters
 remain separate capabilities.
+
+## Session Browser host entry
+
+`set_sessions_available(true)` enables Ctrl-X O. `request_sessions()` is the same
+entry for a host palette command named `sessions`; it emits one undrained
+`Intent::Sessions` carrying this conversation's identity. The adapter opens the
+[dedicated browser](session-browser.md), dispatches its input independently and
+keeps this exact Chat instance. Escape/current-row return restores it; an actual
+Open acknowledgement selects the destination's retained Chat instance. No
+transcript reset, Composer clone or saved-state codec is part of view switching.
+Background host updates can continue and unread output remains associated with
+its conversation. Review/selection/modal scopes retain their normal input priority.

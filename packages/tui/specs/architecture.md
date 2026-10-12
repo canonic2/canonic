@@ -13,6 +13,14 @@ deferral, reorder/withdrawal and single-drain intents. Chat's reviews adapter ow
 receipts and saved logical viewport/follow restoration; Composer remains the same
 instance. `gallery/reviews.rs` supplies deterministic acknowledgement simulations.
 
+`session_browser.rs` owns host snapshots, stable-ID navigation and isolated
+row/discovery request lifetimes. Its model validates resource bounds and material
+revisions; input composes Editor, Choice Picker and Dialog/Confirmation; view owns
+responsive rows, fixed loading/error feedback and the read-only preview. It shares
+the private opaque ticket primitive with reviews. Chat exposes an opt-in session
+entry intent; `gallery/sessions.rs` retains independent Chat instances, switches
+only after actual simulated acknowledgements and never performs session storage.
+
 This is the implemented package/module map. [System design](system-design.md)
 owns architectural rules and proposed capability boundaries; component and
 feature specs own detailed behavior and limits. [Inventory](inventory.md)
@@ -41,6 +49,7 @@ consumer UI rollout.
 | [run_activity](../src/run_activity.rs) | Host run snapshots, identified cancellation/options and independent transport indication | [Run Activity](components/run-activity.md) |
 | [question_form](../src/question_form.rs) | Structured answers, validation/review, partial cancellation and host receipts | [Question Form](components/question-form.md) |
 | [permission_review](../src/permission_review.rs) | Supplied scope/choices, inspection, deliberate confirmation and explicit retry | [Permission Review](components/permission-review.md) |
+| [session_browser](../src/session_browser.rs) | Dedicated conversation browsing, discovery/action tickets and safe deletion | [Session Browser](components/session-browser.md) |
 | [review_queue](../src/review_queue.rs) / [Chat reviews](../src/chat/reviews.rs) | Mixed host order, typing deferral, lifecycle isolation and saved viewport/receipts | [Permission Review queue](components/permission-review.md#shared-queue-and-chat-contract) |
 | [focus](../src/focus.rs) | Instance-local target orders, modal scopes and return focus | [Input/navigation](features/interaction.md) |
 | [text](../src/text.rs), [theme](../src/theme.rs), [ui](../src/ui.rs) | Private sanitized text/wrapping, semantic presentation and shared rules | [Presentation](presentation.md) |

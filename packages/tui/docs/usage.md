@@ -641,3 +641,60 @@ parent. The host still validates execution/authority and owns full output.
 Chat retains its 64 KiB per-turn source limit; omitted bytes are disclosed and
 Details lets a real host fetch the complete source. See the
 [public contract](../specs/components/tool-call-card.md).
+
+## Session Browser
+
+Open the dedicated-screen fixture:
+
+```sh
+make -C packages/tui run CARGO_FLAGS="-- --component session-browser --scenario main"
+```
+
+Up/Down, PageUp/PageDown and Home/End navigate host-ordered sessions. Enter opens
+an offered session after acknowledgement; Enter on the originating session
+returns to its Chat. Slash edits a literal loaded search. Titles appear before
+message-only matches, preserving host order within each set. Move to the final
+Search all row and press Enter to request remote results. Loaded matches stay
+usable while waiting. New queries invalidate older search and remote-page
+tickets. Escape stops a remote request, leaves the search field, clears the
+filter, then returns to Chat, one step at a time.
+
+A opens offered row actions, including readable disabled reasons. R renames in
+an Editor with the old title selected; Enter saves, Escape cancels. Over-limit
+text stays editable, and resource overflow or multiline paste is refused whole.
+F requests a fork, M chooses a host destination, and P requests pin/unpin.
+Pending rows are dimmed with a verb; other rows stay usable. Failure shows the
+host reason. A refused rename retains its typed draft for explicit save/retry.
+
+D opens full host deletion wording with Keep selected. Numbers highlight only.
+Choose Delete, then press Enter twice within three injected seconds. Movement,
+paste, expiry or changed material disarms it. PageUp/PageDown inspect long loss
+wording. Only a successful authoritative result removes the row.
+
+At 100 columns the browser shows activity and a read-only supplied preview;
+50–99 columns keep metadata columns, and narrower views use two lines per row.
+Escape remains visible, and the shared color/ASCII/light profiles apply.
+
+For a consumer, construct `session_browser::SessionBrowser` from a validated
+`Snapshot` and originating ID. Offer operations explicitly with `Offered`; a
+new `Session` offers none. Feed caller events/time/frames, drain `take_intents()`,
+and return exact requests to `complete()` or `complete_discovery()`. Successful
+row changes supply a valid newer whole snapshot; fork supplies its actual new
+ID, while Open returns `Intent::Opened` for the host to select a retained Chat.
+Malformed results keep the operation pending; stale/foreign/duplicate results
+are rejected. Material action/title/destination changes require higher row
+revisions, while presentation facts may refresh without cancelling work.
+
+`Chat::set_sessions_available(true)` enables Ctrl-X O. The host's `sessions`
+palette command calls `Chat::request_sessions()` and handles the same
+`chat::Intent::Sessions`. Keep each Chat instance, including its Composer and
+queue, instead of resetting or serializing it when changing screens. Returning
+or opening another session never acquires a terminal or creates storage.
+
+Gallery F5 succeeds, F6/F7 fail/refuse, F8 refreshes material, F9 removes the
+selected row and F12 delivers an old result. `before-chat` exposes Ctrl-X O;
+F1 opens the simulated palette. `queued-drafts`, `switch-back` and `streaming`
+demonstrate retained per-session state. All operations are fixture simulations.
+The [public contract](../specs/components/session-browser.md) owns limits and
+lifetime rules; [human review](../specs/human-testing.md#session-browser-review)
+remains a separate acceptance checkpoint.

@@ -5,6 +5,47 @@ The historical gates below retain their other component acceptance records.
 Composer implements its complete local workflow; host execution, storage keys,
 clipboard formats and native human visual acceptance remain consumer checkpoints.
 
+## Session Browser review
+
+Human visual acceptance remains pending. Run:
+
+```sh
+make -C packages/tui run CARGO_FLAGS="-- --component session-browser --scenario main"
+```
+
+1. Current marker, group headings and fork indentation are distinct from the
+   cursor. Enter on the current row returns to Chat. Ctrl-X O opens the dedicated
+   browser again; F1 from Chat offers the `sessions` palette command.
+2. Navigate, page and search. In `search`, title matches precede message matches;
+   Search all sends only on Enter. F5 returns remote results. End requests their
+   next page. F6 shows failure, and R (after leaving the query field) retries a
+   failed page. Changing the query invalidates old results.
+3. Inspect `loading`, `empty`, `load-failed`, `no-matches`, `refreshed`, `removed`
+   and `long-list`. Loading/errors stay visible while scrolling; cursor identity
+   survives refresh, and removal chooses the next/previous row with a reason.
+4. A discovers offered actions/reasons. R selects the original title; type,
+   paste, undo and cancel. `rename-limit` preserves over-limit text; save is
+   disabled. `rename-refused` retains the field and reason. F5 is required before
+   authoritative names, fork IDs, moved projects or pinned ordering change.
+5. D starts on Keep. 2 highlights Delete; Enter arms, another Enter sends.
+   Up/Down, paste, three seconds or material replacement disarm. F6 restores the
+   row and reason; D starts the full check again. Inspect `last-deleted` and use
+   PageDown in `long-delete` to read all host loss wording.
+6. Exercise `concurrent`, `pending-return`, `no-ack`, `delayed`, `material-changed`,
+   `action-removed` and the stale/foreign/duplicate fixtures. Other rows remain
+   usable while waiting; no view action creates a real session or grant.
+7. In `before-chat`, note the caret between the space and "the PR", then open
+   with Ctrl-X O, search and return. Insert and undo at the same caret. Check
+   `switched`, `switch-back`, `queued-drafts` and `streaming`; each Chat retains
+   its draft, queue, reading position and own unread output.
+8. Compare 40, 64 and 100 columns, tiny/short areas, long titles/previews and
+   destinations. Review all eight shared profiles, NO_COLOR pending/error text
+   and reduced motion. Escape and current actions stay reachable. F10 returns
+   through retained searchable scenario navigation without resetting an edit.
+
+Report the terminal, size and profiles reviewed. Engineering and automated native
+PTY checks do not establish human visual or wider platform acceptance.
+
 ## Permission Review
 
 Human visual acceptance remains pending. Run:

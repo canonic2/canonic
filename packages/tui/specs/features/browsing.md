@@ -1,22 +1,16 @@
 # Browsing, panels and notices
 
-Status: session/resource browsers, trees and general content panels remain
-proposed. Reusable [Dialog](../components/dialog.md),
+Status: [Session Browser](../components/session-browser.md) is implemented.
+Resource browsers, trees and general content panels remain proposed. Reusable [Dialog](../components/dialog.md),
 [Option Picker](../components/option-picker.md) and
 [Command Palette](../components/command-palette.md) have their own component contracts.
 
 ## Session and resource browsers
 
-Session browser accepts stable rows, title, safe metadata, current/recent/pinned
-flags, parent ID, loading/error state and available row actions. Local filtering
-and supplied remote-query intents are separate modes. Query generation prevents
-late search results replacing newer ones. Current selection survives refresh by
-ID; deletion/removal moves predictably to another permitted row or empty state.
-
-Select, rename, delete, fork, move and resume return typed intents. Destructive
-actions use host-supplied confirmation and stay pending until acknowledged;
-application error restores a usable list. Pinned/recent ordering and search scope
-are host-supplied. UI does not create sessions or adopt an agent's storage format.
+The [Session Browser contract](../components/session-browser.md) owns the
+implemented dedicated screen, stable rows, search/paging, row actions and
+acknowledgement races. It preserves caller-owned Chat instances and follows host
+order; actual discovery, session storage and execution stay outside the library.
 Timeline browser reuses rows but its message IDs and jump behavior belong to
 [Conversation](../components/chat.md).
 
@@ -57,5 +51,6 @@ must not load real sessions/files/models or contact services.
 ## Open decisions
 
 Responsive panel thresholds and
-whether session navigation has a dedicated screen or dialog need gallery review.
+inspection access for optional sections need gallery review. Session Browser uses
+a dedicated screen, as specified in its component contract.
 Keep host-provided command names out of generic public contracts.

@@ -16,6 +16,7 @@ implementation design details without referencing private design files.
 | [Run Activity](run-activity.md) | Whole-run status, identified cancellation and connection independence | Reusable state/view, Chat composition and twenty scenarios in Tool Call Card |
 | [Question Form](question-form.md) | Staged choices/text, review, cancellation, host acknowledgements and queued above-dock focus | Implemented with shared queue, Chat and 52 scenarios; human acceptance pending |
 | [Permission Review](permission-review.md) | Deliberate identified choices, exact scopes, inspection, retry and host outcomes | Implemented with mixed queue, Chat and 56 scenarios; human acceptance pending |
+| [Session Browser](session-browser.md) | Stable session rows, local/remote search, acknowledged actions, paging and dedicated-screen return | Implemented with 72 live scenarios; human acceptance pending |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
 Session browsers, trees, panels and notices are proposed in
@@ -57,3 +58,4 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Run Activity](run-activity.md) | Defined run/connection contract | Defined states/cancellation/fallbacks | Implemented reusable state and Chat composition | [Expanded checks passed](../verification.md#gallery-profiles-and-run-activity-engineering-record--2026-10-11) | Pending |
 | [Question Form](question-form.md) | Defined full structured answer contract | Defined review/field/cancellation/profiles | Reusable form, shared queue, Chat and 52 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |
 | [Permission Review](permission-review.md) | Defined complete review/host contract | Defined scopes/inspection/queue/profiles | Reusable review, mixed queue, Chat and 56 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |
+| [Session Browser](session-browser.md) | Complete host/view contract | Dedicated screen, actions, deletion and profiles defined | Reusable browser, Chat entry and 72 live scenarios | [Engineering verified](../verification.md#session-browser-engineering-record--2026-10-12) | Human visual review pending |

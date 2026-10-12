@@ -11,6 +11,7 @@ mod option_picker;
 mod permissions;
 mod reviews;
 mod scenarios;
+mod sessions;
 mod tool_cards;
 
 use crate::{
@@ -118,6 +119,8 @@ pub enum Component {
     /// Staged identified questions above a preserved Chat draft.
     QuestionForm,
     PermissionReview,
+    /// Dedicated host-owned conversation browser.
+    SessionBrowser,
 }
 
 #[derive(Clone, Copy)]
@@ -133,6 +136,8 @@ enum Screen {
     ToolCallCard,
     QuestionForm,
     PermissionReview,
+    /// Dedicated host-owned conversation browser.
+    SessionBrowser,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -174,8 +179,9 @@ pub struct Gallery {
     tool_scenario: usize,
     reviews: reviews::ReviewDemo,
     permissions: permissions::PermissionDemo,
-    scenarios: [Picker; 10],
-    scenario_viewports: [ListState; 10],
+    sessions: sessions::SessionDemo,
+    scenarios: [Picker; 11],
+    scenario_viewports: [ListState; 11],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -200,6 +206,7 @@ impl Gallery {
             Screen::ToolCallCard => Some(Component::ToolCallCard),
             Screen::QuestionForm => Some(Component::QuestionForm),
             Screen::PermissionReview => Some(Component::PermissionReview),
+            Screen::SessionBrowser => Some(Component::SessionBrowser),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -263,6 +270,10 @@ impl Gallery {
     ///
     /// # Errors
     /// Returns an error for an unknown scenario before changing gallery state.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "One scenario opening applies the shared profile once and preserves all other component states"
+    )]
     pub fn open_scenario(&mut self, component: Component, id: &str) -> Result<()> {
         let id = match (component, id) {
             (Component::Picker, "default")
@@ -313,6 +324,18 @@ impl Gallery {
                 self.theme.colors = ColorMode::NoColor;
             }
         }
+        if matches!(component, Component::SessionBrowser) {
+            match id {
+                "ansi16" => self.theme.colors = ColorMode::Ansi16,
+                "no-color" | "no-color-pending" => self.theme.colors = ColorMode::NoColor,
+                "ascii" => self.theme.symbols = Symbols::Ascii,
+                "light" => {
+                    self.theme.colors = ColorMode::TrueColor;
+                    self.theme.theme = Theme::Light;
+                }
+                _ => {}
+            }
+        }
         for code in entry.keys {
             self.fixture_event(
                 component,
@@ -344,7 +367,8 @@ impl Gallery {
             }
             _ => {
                 self.preview_width = match (component, id) {
-                    (Component::Chat, "narrow" | "search-narrow-ascii")
+                    (Component::SessionBrowser, "narrow" | "narrow-search" | "narrow-delete")
+                    | (Component::Chat, "narrow" | "search-narrow-ascii")
                     | (Component::QuestionForm, "narrow" | "narrow-review" | "narrow-field")
                     | (
                         Component::PermissionReview,
@@ -441,6 +465,10 @@ impl Gallery {
                 self.reviews = reviews::ReviewDemo::new(fixture);
                 Screen::QuestionForm
             }
+            Component::SessionBrowser => {
+                self.sessions = sessions::SessionDemo::new(fixture);
+                Screen::SessionBrowser
+            }
             Component::PermissionReview => {
                 self.permissions = permissions::PermissionDemo::new(fixture);
                 Screen::PermissionReview
@@ -454,6 +482,7 @@ impl Gallery {
                 | Component::ToolCallCard
                 | Component::QuestionForm
                 | Component::PermissionReview
+                | Component::SessionBrowser
         ) {
             for _ in 0..fixture {
                 self.fixture_event(
@@ -497,6 +526,9 @@ impl Gallery {
             Component::PermissionReview => {
                 self.permissions.update(event);
             }
+            Component::SessionBrowser => {
+                self.sessions.update(event);
+            }
         }
     }
 
@@ -518,6 +550,7 @@ impl Gallery {
                     "Tool Call Card".into(),
                     "Question Form".into(),
                     "Permission Review".into(),
+                    "Session Browser".into(),
                 ],
                 Some(0),
             ),
@@ -536,6 +569,7 @@ impl Gallery {
             tool_scenario: 0,
             reviews: reviews::ReviewDemo::new(0),
             permissions: permissions::PermissionDemo::new(0),
+            sessions: sessions::SessionDemo::new(0),
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -560,6 +594,7 @@ impl Gallery {
             Screen::ToolCallCard => "tool-call-card",
             Screen::QuestionForm => "question-form",
             Screen::PermissionReview => "permission-review",
+            Screen::SessionBrowser => "session-browser",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -642,6 +677,9 @@ impl Gallery {
         if matches!(self.screen, Screen::PermissionReview) {
             self.permissions.tick(elapsed);
         }
+        if matches!(self.screen, Screen::SessionBrowser) {
+            self.sessions.tick(elapsed);
+        }
     }
 
     /// Apply an input event. Returns true when the gallery should exit.
@@ -656,6 +694,9 @@ impl Gallery {
             return false;
         }
         if matches!(self.screen, Screen::QuestionForm) && self.reviews.update(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::SessionBrowser) && self.sessions.update(event) {
             return false;
         }
         if matches!(self.screen, Screen::PermissionReview) && self.permissions.update(event) {
@@ -736,6 +777,7 @@ impl Gallery {
             | Screen::ToolCallCard
             | Screen::QuestionForm
             | Screen::PermissionReview
+            | Screen::SessionBrowser
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -796,6 +838,7 @@ impl Gallery {
             Screen::ToolCallCard => self.tools.render(frame, body, self.theme),
             Screen::QuestionForm => self.reviews.render(frame, body, self.theme),
             Screen::PermissionReview => self.permissions.render(frame, body, self.theme),
+            Screen::SessionBrowser => self.sessions.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(

@@ -1,0 +1,32 @@
+---
+source: tests/integration/session_gallery.rs
+expression: "screen(&mut g, 100, 28)"
+---
+Canonic TUI · Component gallery
+
+sessions ───────────────────────────────────────────────────────────────── 8 sessions · all projects
+pinned
+   Digest timezone             acme-api #281       3 files changed             done           20:01
+recent
+ ● Search reindex              acme-api #281       3 files changed             needs you      now
+   Stuck retries               acme-worker #88     run grep 409 logs/worker.l⋯ working        3m
+ └ try backoff                 acme-worker #88     3 files changed                            1h
+   Webhook docs                acme-worker #88     3 files changed                            2h
+   Cache spike┌ delete session ───────────────────────────────────────────────────── ┐        5h
+older         │Delete 'Webhook docs' in acme-worker?                                 │
+   Invoice exp│38 messages and 1 fork. This can't be undone.                         │        Tue
+   Onboarding │1 Keep it                                                             │        Mon
+              │2 Delete session                                                      │
+              │enter · esc keep                                                      │
+              └ ───────────────────────────────────────────────────────── esc cancel ┘
+
+
+preview ──────────────────────────────────────────────────────────────────────────────── acme-worker
+acme · 14:02
+The 409s come from two workers claiming the same job.
+I'm adding a lease check before retrying.
+run grep 409 logs/worker.log · running
+────────────────────────────────────────────────────────────────────────────────────────────────────
+enter keep/delete · esc keep · pgdn text
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme
