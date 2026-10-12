@@ -56,6 +56,7 @@ pub struct Editor {
     draft: Draft,
     history: History,
     limit: usize,
+    reject_overflow: bool,
     width: u16,
     height: usize,
     offset: usize,
@@ -84,6 +85,7 @@ impl Editor {
             draft: Draft::default(),
             history: History::default(),
             limit,
+            reject_overflow: false,
             width: 80,
             height: 1,
             offset: 0,
@@ -97,6 +99,12 @@ impl Editor {
             yanked: None,
             kill_group: None,
         }
+    }
+    /// Current text, stored as UTF-8 with LF line endings.
+    /// Reject complete insertion transactions at the byte limit instead of retaining
+    /// a prefix. Applies to typing, paste and text replacement; defaults off.
+    pub fn set_reject_overflow(&mut self, reject: bool) {
+        self.reject_overflow = reject;
     }
     /// Current text, stored as UTF-8 with LF line endings.
     #[must_use]
@@ -247,6 +255,14 @@ impl Editor {
             .saturating_sub(self.draft.expanded_size() - removed);
         let end = Self::fitting_end(&text, budget);
         let dropped = text.len() - end;
+        if self.reject_overflow && dropped > 0 {
+            self.rejected = true;
+            self.message(format!(
+                "insertion rejected · {} byte limit · shorten the input",
+                self.limit
+            ));
+            return Outcome::Rejected;
+        }
         if end == 0 && !text.is_empty() {
             self.rejected = true;
             self.message(format!(

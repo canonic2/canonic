@@ -1,0 +1,32 @@
+---
+source: tests/integration/permission_gallery.rs
+expression: "screen(&mut g, 80, 28)"
+---
+Canonic TUI · Component gallery
+
+acme
+  I'll make the digest follow each user's timezone.▌
+
+
+edit 2 files ────────────────────────────────────────────────────────── run #276
+Edit 2 files in src/digest/
+ ▾ details  11 more lines · pgdn
+│ --- a/src/digest/settings.ts
+│ +++ b/src/digest/settings.ts
+│ @@ -17,3 +17,4 @@
+│   17   headers: {
+│   18 −   json,
+ 1 Allow once  this edit
+ 2 Allow for this session  edits in src/digest/
+ 3 Deny  acme is told no
+ 4 Skip  acme goes on without it
+───────────────────────────────────────────────────────────────── nothing chosen
+
+message ────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+───────────────────────────────────────────────────────────── acme-api#276 ~chat
+tab hide details · ↑↓ scroll · 1–9 choose · esc hide
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

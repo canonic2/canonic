@@ -1,5 +1,75 @@
 # Usage
 
+## Permission Review
+
+Open `cargo run --locked --features gallery -- --component permission-review --scenario main`.
+Numbers highlight a choice; Enter confirms it. An affirmative default is invalid.
+Up/Down navigate choices and the details row. Tab opens/hides safe details;
+PageUp/PageDown scroll them; Ctrl-F searches loaded source and Enter finds the
+next match. Paste is dropped with a notice. Escape closes search, then details,
+then dismisses; dismissal differs from Deny and Skip.
+
+Broader choices open a Dialog quoting the exact host scope, with Back selected.
+Down or 2 only highlights Allow; Enter confirms. Escape returns without a response.
+Destructive choices require two unmodified Enter presses within three seconds.
+Movement, inspection changes, paste, expiry and replacement disarm them.
+Sending locks input until an actual host acknowledgement. Failed application
+requires R retry; Enter never silently resends. F5/F6/F7 simulate applied/failed/
+refused results, F8 expiry, F9 replacement and F12 a stale result. No gallery
+scenario grants permission, executes an agent or writes policy.
+
+Hosts construct `permission_review::PermissionReview` from a bounded `Request`,
+route events through `update`, inject elapsed time with `tick`, and drain
+`Intent::Respond` immutable ID/revision/choice/scope/ticket envelopes. Only the
+exact current ticket can acknowledge actual application. Call `expire`, `withdraw`
+or validated `replace` for host lifetime/material changes. `render_with` draws
+the panel and `render_overlay` its Dialog in a separate caller-owned viewport.
+See the [complete contract](../specs/components/permission-review.md).
+
+Use `chat.push_review(Review::Permission(Box::new(panel)))` or
+`Review::Questions(Box::new(form))` for immediate saved-anchor composition.
+`chat.reviews_mut()` exposes explicit host acknowledgement, reorder and withdrawal;
+tick/render/update synchronizes closed receipts. Drain `take_intents` regularly.
+The queue has one active review and at most sixteen waiting. Arrivals defer after
+actual Composer text changes until one second of quiet or Ctrl-G. Active Permission
+withdrawal stays visible until Escape; later entries retain host order.
+
+## Question Form
+
+Open `cargo run --locked --features gallery -- --component question-form --scenario main`.
+Single-choice numbers/Enter choose and advance; Space marks multiple choices and
+Enter validates them. Tab/Shift-Tab navigate freely without clearing answers.
+Fields reuse Editor: Ctrl-J newline, selection, paste and undo stay in the form.
+Something else opens on Enter, typing or paste on its last row. Esc keeps typed
+text staged, Delete clears it and Ctrl-Z restores it. Host character limits show
+validation without cutting text; resource-limit insertions reject whole.
+
+One question submits when confirmed. Multiple questions require Enter on Review;
+1–9 edit a question, and Up/Down then Enter reaches later questions. The host must
+acknowledge the opaque response ticket. Failure retains answers for another
+deliberate confirmation; refusal returns to the addressed question. Esc with
+answers opens a Dialog defaulting to Keep answering. Send answers so far appears
+only when explicitly offered by the host. Expired/replaced answers remain copyable
+with Y; clipboard work is an identified host intent.
+
+Construct `question_form::Request` with stable IDs and a material revision, then
+`QuestionForm::new`. Standalone hosts call `update`, `tick`, `render_with` for the
+panel and `render_overlay` last with their modal viewport. Drain `take_intents`;
+acknowledge response/copy tickets separately. Use `replace` for a higher material
+revision and `expire` for host lifetime changes. Components perform no I/O.
+
+Chat owns `reviews_mut()` and `reviews()` for a shared `ReviewQueue`. Push
+`Review::Questions(Box::new(form))`, reorder a complete set of identities, or
+withdraw by ID. Active input and focus survive later arrivals/reordering. Actual
+typing defers opening for a one-second pause or Ctrl-G; navigation alone does not.
+Chat consumes form input above the fixed dock and restores Composer state and the
+saved logical viewport on closure. Concurrent output remains unread. Host execution,
+request lifetime, order, transport and durable storage remain external.
+
+Gallery F5/F6/F7 simulate acceptance/failure/refusal. F8 expires, F9 replaces, F12
+tries a stale reply, F2 cycles fixtures and F10 returns to the retained scenario
+picker. No fixture executes an agent or changes real permissions.
+
 ## Commands and keyboard help
 
 Open **Commands and bindings** in the catalog, or use

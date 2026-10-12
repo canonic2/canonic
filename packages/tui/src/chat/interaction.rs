@@ -18,6 +18,11 @@ impl Chat {
         if matches!(event, Event::Key(k) if k.kind == KeyEventKind::Release) {
             return Action::None;
         }
+        self.sync_reviews();
+        if self.reviews.update(event) {
+            self.sync_reviews();
+            return Action::None;
+        }
         if let Some(mut chooser) = self.artifacts.take() {
             if chooser.update(self, event) {
                 self.artifacts = Some(chooser);
@@ -38,7 +43,12 @@ impl Chat {
         if !self.input.overlay_open() && self.chat_key(event) {
             return Action::None;
         }
-        if let Some(submission) = self.input.update(event) {
+        let before = self.input.editor().text().to_owned();
+        let submission = self.input.update(event);
+        if self.input.editor().text() != before {
+            self.reviews.note_typing();
+        }
+        if let Some(submission) = submission {
             self.resume();
             return Action::Submit(submission);
         }

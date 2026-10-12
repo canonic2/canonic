@@ -8,6 +8,8 @@ mod dialog_body;
 mod dialogs;
 mod editor;
 mod option_picker;
+mod permissions;
+mod reviews;
 mod scenarios;
 mod tool_cards;
 
@@ -113,6 +115,9 @@ pub enum Component {
     CompletionMenu,
     /// Identified tool activity, output, concurrency and acknowledged effects.
     ToolCallCard,
+    /// Staged identified questions above a preserved Chat draft.
+    QuestionForm,
+    PermissionReview,
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +131,8 @@ enum Screen {
     Composer,
     CompletionMenu,
     ToolCallCard,
+    QuestionForm,
+    PermissionReview,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -165,8 +172,10 @@ pub struct Gallery {
     completion: completion::CompletionDemo,
     tools: tool_cards::ToolDemo,
     tool_scenario: usize,
-    scenarios: [Picker; 8],
-    scenario_viewports: [ListState; 8],
+    reviews: reviews::ReviewDemo,
+    permissions: permissions::PermissionDemo,
+    scenarios: [Picker; 10],
+    scenario_viewports: [ListState; 10],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -189,6 +198,8 @@ impl Gallery {
             Screen::Composer => Some(Component::Composer),
             Screen::CompletionMenu => Some(Component::CompletionMenu),
             Screen::ToolCallCard => Some(Component::ToolCallCard),
+            Screen::QuestionForm => Some(Component::QuestionForm),
+            Screen::PermissionReview => Some(Component::PermissionReview),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -333,11 +344,17 @@ impl Gallery {
             }
             _ => {
                 self.preview_width = match (component, id) {
-                    (Component::Chat, "narrow" | "search-narrow-ascii") => Some(40),
-                    (Component::Chat, "pane") => Some(64),
-                    (Component::ToolCallCard, "narrow" | "narrow-diff" | "narrow-failed") => {
+                    (Component::Chat, "narrow" | "search-narrow-ascii")
+                    | (Component::QuestionForm, "narrow" | "narrow-review" | "narrow-field")
+                    | (
+                        Component::PermissionReview,
+                        "narrow" | "narrow-details" | "narrow-scope" | "short",
+                    )
+                    | (Component::ToolCallCard, "narrow" | "narrow-diff" | "narrow-failed") => {
                         Some(40)
                     }
+                    (Component::Chat, "pane") => Some(64),
+                    (Component::QuestionForm | Component::PermissionReview, "tiny") => Some(12),
                     _ => None,
                 };
                 self.apply_chat_profile(component, id);
@@ -420,6 +437,14 @@ impl Gallery {
                 self.tools = tool_cards::ToolDemo::new(fixture);
                 Screen::ToolCallCard
             }
+            Component::QuestionForm => {
+                self.reviews = reviews::ReviewDemo::new(fixture);
+                Screen::QuestionForm
+            }
+            Component::PermissionReview => {
+                self.permissions = permissions::PermissionDemo::new(fixture);
+                Screen::PermissionReview
+            }
         };
         if !matches!(
             component,
@@ -427,6 +452,8 @@ impl Gallery {
                 | Component::Composer
                 | Component::CompletionMenu
                 | Component::ToolCallCard
+                | Component::QuestionForm
+                | Component::PermissionReview
         ) {
             for _ in 0..fixture {
                 self.fixture_event(
@@ -464,6 +491,12 @@ impl Gallery {
             Component::ToolCallCard => {
                 self.tools.update(event);
             }
+            Component::QuestionForm => {
+                self.reviews.update(event);
+            }
+            Component::PermissionReview => {
+                self.permissions.update(event);
+            }
         }
     }
 
@@ -483,6 +516,8 @@ impl Gallery {
                     "Composer".into(),
                     "Completion Menu".into(),
                     "Tool Call Card".into(),
+                    "Question Form".into(),
+                    "Permission Review".into(),
                 ],
                 Some(0),
             ),
@@ -499,6 +534,8 @@ impl Gallery {
             completion: completion::CompletionDemo::scenario(0),
             tools: tool_cards::ToolDemo::new(0),
             tool_scenario: 0,
+            reviews: reviews::ReviewDemo::new(0),
+            permissions: permissions::PermissionDemo::new(0),
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -521,6 +558,8 @@ impl Gallery {
             Screen::Composer => "composer",
             Screen::CompletionMenu => "completion-menu",
             Screen::ToolCallCard => "tool-call-card",
+            Screen::QuestionForm => "question-form",
+            Screen::PermissionReview => "permission-review",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -597,6 +636,12 @@ impl Gallery {
         if matches!(self.screen, Screen::ToolCallCard) {
             self.tools.tick(elapsed);
         }
+        if matches!(self.screen, Screen::QuestionForm) {
+            self.reviews.tick(elapsed);
+        }
+        if matches!(self.screen, Screen::PermissionReview) {
+            self.permissions.tick(elapsed);
+        }
     }
 
     /// Apply an input event. Returns true when the gallery should exit.
@@ -608,6 +653,12 @@ impl Gallery {
             return false;
         }
         if matches!(self.screen, Screen::ToolCallCard) && self.tools.update(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::QuestionForm) && self.reviews.update(event) {
+            return false;
+        }
+        if matches!(self.screen, Screen::PermissionReview) && self.permissions.update(event) {
             return false;
         }
         if matches!(self.screen, Screen::Composer) && self.composer.update(event) {
@@ -683,6 +734,8 @@ impl Gallery {
             | Screen::Composer
             | Screen::CompletionMenu
             | Screen::ToolCallCard
+            | Screen::QuestionForm
+            | Screen::PermissionReview
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -741,6 +794,8 @@ impl Gallery {
             Screen::Composer => self.composer.render(frame, body, self.theme),
             Screen::CompletionMenu => self.completion.render(frame, body, self.theme),
             Screen::ToolCallCard => self.tools.render(frame, body, self.theme),
+            Screen::QuestionForm => self.reviews.render(frame, body, self.theme),
+            Screen::PermissionReview => self.permissions.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(

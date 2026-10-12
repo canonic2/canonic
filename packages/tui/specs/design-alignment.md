@@ -19,8 +19,8 @@ Human visual acceptance and consumer/platform acceptance remain independent.
 | Completion Menu | Source tickets, alias ranking, distinct timeout warning, Alt-R retry, source labels, separate activity/footer help and 30 interactive frames; expanded engineering checks passed | Human visual acceptance and real discovery/execution |
 | Composer | Identified host-confirmed work controls, fixed activity ordering, typed file references, queue/shell/editor recovery, complete keys and 99 interactive scenarios; expanded engineering checks passed | Human visual acceptance and real host adapters |
 | Chat | Rich transcript, explicit pending/failure acknowledgements, serial paging/retry, quiet notes, host suggestions, fallback search and 76 interactive frames; expanded engineering checks passed | Human visual acceptance and real host adapters |
-| Question Form | Complete intended standalone contract; above-dock ownership resolved | Implementation, shared review queue, Chat, scenarios and checks |
-| Permission Review | Designs available; host authority remains external | Complete standalone spec, explicit confirmation, shared review queue, Chat, scenarios and checks |
+| Question Form | Structured answers, validation, review, partial cancellation, identified host acknowledgements, expiry/copy, above-dock Chat and 52 live scenarios | Human visual acceptance and real host adapters |
+| Permission Review | Standalone contract, exact scopes, safe defaults, explicit confirmation/retry, inspection, mixed queue, Chat and 56 live scenarios | Human visual acceptance and real host authority adapters |
 | Terminal lifecycle | Existing alternate-screen runtime and PTY restoration | Inline result scrollback, plain-output/handoff/error/quit frames and wider platform acceptance |
 
 ## Open decisions

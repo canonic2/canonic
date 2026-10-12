@@ -292,11 +292,26 @@ impl Chat {
         theme: Presentation,
         framed: bool,
     ) {
-        let [status, transcript, unread, above, activity, composer, hints] = Layout::vertical([
+        self.sync_reviews();
+        let review_height = self.reviews.active().map_or(0, |r| {
+            r.height(area.width, theme)
+                .min(area.height.saturating_sub(11))
+        });
+        let [
+            status,
+            transcript,
+            unread,
+            above,
+            review,
+            activity,
+            composer,
+            hints,
+        ] = Layout::vertical([
             Constraint::Length(u16::from(framed)),
             Constraint::Min(0),
             Constraint::Length(1),
             Constraint::Length(self.input.above_height_for(area.width)),
+            Constraint::Length(review_height),
             Constraint::Length(1),
             Constraint::Length(5),
             Constraint::Length(1),
@@ -351,9 +366,9 @@ impl Chat {
                 },
                 ..EditorView::default()
             },
-            self.mode() == Mode::Compose,
+            self.mode() == Mode::Compose && self.reviews.active().is_none(),
         );
-        if self.mode() != Mode::Compose {
+        if self.mode() != Mode::Compose || self.reviews.active().is_some() {
             frame.buffer_mut().set_style(
                 Rect::new(
                     composer.x,
@@ -364,21 +379,46 @@ impl Chat {
                 theme.muted().add_modifier(Modifier::DIM),
             );
         }
-        let hint = match self.mode() {
-            Mode::Search => if self.query().is_empty() { "esc closes".into() } else if hints.width < 50 { "esc back · ↑↓ match · enter stay".into() } else { "↑↓ prev/next · enter stay here · esc back".into() },
-            Mode::Select if self.pending.as_ref().is_some_and(|p| matches!(p.kind, PendingKind::Copy)) => "esc done · copy pending".into(),
-            Mode::Select => self.tool_hint().unwrap_or_else(|| match hints.width {
-                0..=49 => "↑↓ block · y copy · esc done",
-                50..=89 => "↑↓ block · y copy · c code · o open · esc done",
-                _ => "↑↓ block · shift+↑↓ extend · m message · y copy · c code · o open · enter fold · esc done",
-            }.into()),
-            Mode::Compose => self.input.footer_hint_for(hints.width).replace(
-                "actions on", &format!("actions {}", self.actions)),
-        };
+        let hint = self.focus_hint(hints.width);
+        let hint = self
+            .reviews
+            .active()
+            .map_or(hint, |r| r.hint_for(hints.width));
         self.render_run_hints(frame, hints, theme, &hint);
         self.input.render_overlay(frame, area, theme);
         if let Some(chooser) = &mut self.artifacts {
             chooser.render(frame, area, activity, theme);
+        }
+        self.render_reviews(frame, review, activity, theme);
+        self.reviews.render_overlay(frame, area, theme);
+    }
+    fn render_reviews(
+        &mut self,
+        frame: &mut Frame<'_>,
+        review: Rect,
+        activity: Rect,
+        theme: Presentation,
+    ) {
+        if self.reviews.active().is_some() {
+            self.reviews.render_with(frame, review, theme);
+        } else if self.reviews.waiting_count() > 0 {
+            frame.render_widget(
+                Paragraph::new(self.reviews.waiting_label()).style(theme.warning()),
+                activity,
+            );
+        }
+    }
+    fn focus_hint(&self, width: u16) -> String {
+        match self.mode() {
+            Mode::Search => if self.query().is_empty() { "esc closes".into() } else if width < 50 { "esc back · ↑↓ match · enter stay".into() } else { "↑↓ prev/next · enter stay here · esc back".into() },
+            Mode::Select if self.pending.as_ref().is_some_and(|p| matches!(p.kind, PendingKind::Copy)) => "esc done · copy pending".into(),
+            Mode::Select => self.tool_hint().unwrap_or_else(|| match width {
+                0..=49 => "↑↓ block · y copy · esc done",
+                50..=89 => "↑↓ block · y copy · c code · o open · esc done",
+                _ => "↑↓ block · shift+↑↓ extend · m message · y copy · c code · o open · enter fold · esc done",
+            }.into()),
+            Mode::Compose => self.input.footer_hint_for(width).replace(
+                "actions on", &format!("actions {}", self.actions)),
         }
     }
     fn render_run_hints(

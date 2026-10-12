@@ -216,8 +216,23 @@ host projection; reusable permission and question reviews are separate component
 - **C-06:** Long-history measurements record cold/warm work and cache bounds;
   omissions are explicit and full-history/export remains host-owned.
 
+## Human review composition
+
+`push_review` composes [Question Form](question-form.md) and
+[Permission Review](permission-review.md) above the fixed Composer dock, through
+one shared host-ordered queue. Opening saves the logical anchor/follow state;
+input reaches the active review before search, selection or Composer overlays.
+The same Composer instance retains its document/caret/selection/mode/undo. Actual
+typing defers arrival for one second or until Ctrl-G; cursor motion alone does
+not defer it. Host acknowledgement, expiry and dismissal project distinct
+receipts, and concurrent transcript output remains unread after focus returns.
+`reviews_mut` exposes addressed host material/lifetime/order updates; synchronize
+with tick/render/update before subsequent background work. The components own
+their acceptance/confirmation rules; Chat owns placement and viewport restoration.
+
+
 ## Remaining gaps
 
 Human acceptance, consumer integration and broader native coverage are separate.
-Unloaded-history search, session browsers, split diff viewers, real host adapters
-and reusable permission reviews belong to their own components/hosts.
+Unloaded-history search, session browsers, split diff viewers and real host adapters
+remain separate capabilities.

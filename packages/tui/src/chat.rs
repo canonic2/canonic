@@ -5,6 +5,7 @@ mod content;
 mod interaction;
 mod layout;
 mod model;
+mod reviews;
 mod run;
 mod syntax;
 mod tools;
@@ -210,6 +211,9 @@ pub struct Chat {
     welcome: Welcome,
     run: Option<crate::run_activity::RunActivity>,
     artifacts: Option<artifacts::Chooser>,
+    reviews: crate::review_queue::ReviewQueue,
+    review_saved: Option<reviews::Saved>,
+    review_serial: u64,
 }
 impl Default for Chat {
     fn default() -> Self {
@@ -253,6 +257,9 @@ impl Default for Chat {
             welcome: Welcome::default(),
             run: None,
             artifacts: None,
+            reviews: crate::review_queue::ReviewQueue::default(),
+            review_saved: None,
+            review_serial: 0,
         }
     }
 }
@@ -822,6 +829,8 @@ impl Chat {
     /// Advance notices, leader expiry and Composer using the host's elapsed clock.
     pub fn tick(&mut self, elapsed: Duration) {
         self.now = self.now.saturating_add(elapsed);
+        self.reviews.tick(elapsed);
+        self.sync_reviews();
         self.input.tick(elapsed);
         if let Some(chooser) = &mut self.artifacts {
             chooser.tick(elapsed);

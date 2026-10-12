@@ -681,7 +681,7 @@ fn target(call: &Call, narrow: bool) -> (String, Role) {
         _ => (call.target.clone(), Role::Plain),
     }
 }
-fn output_line<'a>(
+pub(crate) fn output_line<'a>(
     output: &Output,
     raw: &'a str,
     index: usize,

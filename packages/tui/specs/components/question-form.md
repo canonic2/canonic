@@ -7,8 +7,9 @@ Chat's Composer. Stage answers locally and send one identified response only
 after deliberate confirmation. Execution, request lifetime, transport, storage,
 acceptance and review ordering belong to the host.
 
-This is the complete intended local contract. Implementation and engineering
-evidence are pending. Human visual and platform acceptance remain independent.
+The reusable component, shared queue, Chat composition and deterministic gallery
+are implemented. Engineering evidence is tracked in [Verification](../verification.md).
+Human visual and platform acceptance remain independent.
 Related contracts: [Chat](chat.md), [Editor](editor.md), [Dialog](dialog.md) and
 [Activity](../features/activity.md).
 
@@ -32,11 +33,27 @@ its count. Count Unicode scalar values consistently, including newlines.
 
 An opaque response ticket identifies one immutable snapshot of answers and its
 request/revision. Copies and acknowledgements use their own single-use tickets.
-Foreign, duplicate, replaced and expired completions have no effect. Replacing
+Foreign, duplicate, replaced and expired completions have no effect. Accepted
+and cancelled lifetimes cannot reopen through material replacement. Replacing
 a material revision invalidates every old ticket, clears choices and fields,
 and retains the old answer text solely for an explicit copy request.
 
 ## Local state and transitions
+
+For multiple choice, Something else counts as one mark and may accompany ordinary
+marks; its nonempty field must satisfy the same character validation. A single
+choice alternate clears the typed answer as one undoable field edit. Optional
+empty answers bypass mark minima; nonempty answers obey all bounds. Partial
+submission omits empty questions but validates every included answer. Review
+supports Up/Down and Enter editing beyond the first nine numeric shortcuts;
+Ctrl-Enter on Review is not a submission. Copy has an independent single-use
+ticket, and failure never changes staged answers. Queues reject duplicate request
+IDs across component kinds, cap waiting requests at sixteen and reject invalid
+host reorder snapshots atomically. Reordering never steals the active review.
+
+Implementation owners are `question_form` (request validation, staging, editing,
+response lifecycle and panel rendering), `review_queue` (host ordering and arrival
+timing) and Chat (fixed dock, saved viewport and receipts). All clocks are injected.
 
 | State | Input and resulting behavior |
 | --- | --- |

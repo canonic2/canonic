@@ -135,6 +135,11 @@ impl Editor {
         base.text.replace_range(range.clone(), "");
         base.atoms.retain(|c, _| base.text.contains(*c));
         let (killed, dropped) = fit_yank(killed, &base, self.limit);
+        if self.reject_overflow && dropped > 0 {
+            self.rejected = true;
+            self.message("yank rejected · insertion exceeds byte limit".into());
+            return Outcome::Rejected;
+        }
         if killed.text.is_empty() {
             self.message(format!(
                 "yank refused · byte or chip limit · {dropped} bytes left out"

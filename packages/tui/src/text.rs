@@ -3,6 +3,33 @@
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+pub(crate) fn elide(text: &str, width: u16, symbols: crate::theme::Symbols) -> String {
+    let width = usize::from(width);
+    if text.width() <= width {
+        return text.to_owned();
+    }
+    let marker = if symbols == crate::theme::Symbols::Ascii {
+        "..."
+    } else {
+        "⋯"
+    };
+    if width < marker.width() {
+        return String::new();
+    }
+    let budget = width.saturating_sub(marker.width());
+    let mut output = String::new();
+    let mut used = 0;
+    for g in text.graphemes(true) {
+        if used + g.width() > budget {
+            break;
+        }
+        output.push_str(g);
+        used += g.width();
+    }
+    output.push_str(marker);
+    output
+}
+
 pub(crate) fn clean(text: &str, limit: usize, multiline: bool) -> String {
     let mut output = String::new();
     for character in text

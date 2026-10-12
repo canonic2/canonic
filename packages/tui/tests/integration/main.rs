@@ -22,10 +22,18 @@ mod dialog_terminal;
 mod editor;
 #[cfg(feature = "gallery")]
 mod gallery;
+#[cfg(feature = "gallery")]
+mod permission_gallery;
+mod permission_review;
 mod picker;
 #[cfg(feature = "gallery")]
 mod picker_terminal;
 mod presentation;
+mod question_form;
+#[cfg(feature = "gallery")]
+mod review_gallery;
+#[cfg(feature = "gallery")]
+mod review_terminal;
 mod run_activity;
 mod tool_call_card;
 #[cfg(feature = "gallery")]

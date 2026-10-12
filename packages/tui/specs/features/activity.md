@@ -4,8 +4,10 @@ Status: [Tool Call Card](../components/tool-call-card.md) implements reusable
 identified activity/output, ordered concurrency, preview expansion and acknowledged
 copy/details/retry through Chat. [Run Activity](../components/run-activity.md)
 implements run progress, cancellation races and independent connection state.
-Pending human request forms remain proposed capabilities. Gallery effects are
-deterministic simulations.
+[Question Form](../components/question-form.md) and
+[Permission Review](../components/permission-review.md) implement isolated human
+reviews above the Composer, sharing one host-ordered queue. Gallery effects are
+deterministic simulations; authority remains host-owned.
 
 ## Tool and run activity
 
@@ -57,9 +59,9 @@ may continue according to host policy. UI never kills a product process.
 
 ## Permission and confirmation workflow
 
-`review` accepts request ID/revision, affected run, title, operation summary,
+Implemented [Permission Review](../components/permission-review.md) accepts request ID/revision, affected run, title, operation summary,
 safe details/diff, choices with opaque response IDs and explicit scope labels,
-safe default or no selection, expiry/pending state and close policy.
+safe default or no selection, and expiry/pending state.
 
 1. Opening saves focus and preserves draft; pending requests are identified and
    can queue without silently replacing one being reviewed.
@@ -75,13 +77,13 @@ safe default or no selection, expiry/pending state and close policy.
 Caller may supply allow-once, deny, skip or broader-scope choices. The UI does not
 invent a grant scope or store it. Broader grants use an additional review of exact
 host-supplied scope when the host requires it. Denial, cancellation/dismissal and
-skip are distinct response IDs/intent kinds. Closing may return dismiss or a
-caller-defined negative response, explicitly documented; never affirmative.
+skip are distinct response IDs/intent kinds. Escape returns a distinct dismissal
+intent without choosing a negative or affirmative response.
 Host handles noninteractive fallback without acquiring a UI lease.
 
 ## Questions
 
-Question form supports one/multiple questions with stable IDs, description,
+Implemented [Question Form](../components/question-form.md) supports one/multiple questions with stable IDs, description,
 single/multiple choice, disabled options, optional typed answer, required/min/max
 constraints and staged answers. Navigation between questions preserves answers.
 Multiple-choice toggling is separate from final submission. Review lists answers
@@ -123,7 +125,8 @@ Question and permission panels sit above the dock. The Composer dims while a
 panel owns focus and retains its full draft, cursor, selection and scroll.
 Requests arriving during typing remain in the activity row until a one-second
 pause or Ctrl-G. Their shared queue follows host order and shows additional
-waiting requests. These are specified requirements awaiting implementation.
+waiting requests. The reusable shared queue and Chat composition implement this
+local behavior; hosts own execution, authority, storage and request lifetime.
 
 The host owns request order and authority. Permission dismissal is a distinct
 outcome from Deny/Skip; wider-scope choices require another confirmation quoting

@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 8] = [
+pub(super) const COMPONENTS: [Component; 10] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -49,6 +49,8 @@ pub(super) const COMPONENTS: [Component; 8] = [
     Component::Composer,
     Component::CompletionMenu,
     Component::ToolCallCard,
+    Component::QuestionForm,
+    Component::PermissionReview,
 ];
 
 pub(super) const PROFILES: [&str; 8] = [
@@ -72,6 +74,8 @@ pub(super) fn index(component: Component) -> usize {
         Component::Composer => 5,
         Component::CompletionMenu => 6,
         Component::ToolCallCard => 7,
+        Component::QuestionForm => 8,
+        Component::PermissionReview => 9,
     }
 }
 
@@ -104,6 +108,8 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::Composer => &COMPOSER,
         Component::CompletionMenu => &COMPLETION,
         Component::ToolCallCard => &TOOL_CARDS,
+        Component::QuestionForm => &QUESTIONS,
+        Component::PermissionReview => &PERMISSIONS,
     }
 }
 
@@ -117,6 +123,8 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::Composer => "composer",
         Component::CompletionMenu => "completion-menu",
         Component::ToolCallCard => "tool-call-card",
+        Component::QuestionForm => "question-form",
+        Component::PermissionReview => "permission-review",
     }
 }
 
@@ -130,8 +138,69 @@ pub(super) fn board(component: Component) -> &'static str {
         Component::Composer => "design/composer/README.md · States / The ↑ key",
         Component::CompletionMenu => "design/completion-menu/README.md · States / Keys & behavior",
         Component::ToolCallCard => "Tool Call Card · States / Actions / Concurrency / Fallbacks",
+        Component::PermissionReview => {
+            "Permission Review · States / Confirmation / Queue / Profiles"
+        }
+        Component::QuestionForm => {
+            "Question Form · Answers / Review / Request lifecycle / Placement"
+        }
     }
 }
+
+const QUESTIONS: [Scenario; 52] = [
+    live!("main", 0),
+    live!("single", 1),
+    live!("multiple", 2),
+    live!("limit-reached", 3),
+    live!("disabled", 4),
+    live!("required-missing", 5),
+    live!("typed", 6),
+    live!("something-else", 7),
+    live!("review", 8),
+    live!("review-missing", 9),
+    live!("back", 10),
+    live!("skip-required", 11),
+    live!("review-edit", 12),
+    live!("empty-field", 13),
+    live!("multiline", 14),
+    live!("other-field", 15),
+    live!("other-cleared", 16),
+    live!("other-undo", 17),
+    live!("too-long", 18),
+    live!("submitting", 19),
+    live!("accepted", 20),
+    live!("failed", 21),
+    live!("refused", 22),
+    live!("cancel-with-answers", 23),
+    live!("cancelled", 24),
+    live!("partial-offered", 25),
+    live!("partial-submitting", 26),
+    live!("partial-accepted", 27),
+    live!("expired", 28),
+    live!("replaced", 29),
+    live!("waiting-open", 30),
+    live!("queue", 31),
+    live!("no-ack", 32),
+    live!("delayed-ack", 33),
+    live!("foreign-ack", 34),
+    live!("stale-ack", 35),
+    live!("streaming", 36),
+    live!("draft-restored", 37),
+    live!("long-choices", 38),
+    live!("long-prompt", 39),
+    live!("resource-limit", 40),
+    live!("typed-required", 41),
+    live!("single-typed", 42),
+    live!("narrow", 43),
+    live!("narrow-review", 44),
+    live!("narrow-field", 45),
+    live!("tiny", 46),
+    live!("reduced-motion", 47),
+    live!("copy-failed", 48),
+    live!("expired-copy", 49),
+    live!("queue-reordered", 50),
+    live!("queue-withdrawn", 51),
+];
 
 const TOOL_CARDS: [Scenario; 79] = [
     live!("main", 0),
@@ -590,4 +659,63 @@ const CHAT: [Scenario; 76] = [
     live!("search-no-color", 73),
     live!("search-narrow-ascii", 74),
     live!("host-suggestions", 75),
+];
+
+const PERMISSIONS: [Scenario; 56] = [
+    live!("main", 0),
+    live!("safe-default", 1),
+    live!("details", 2),
+    live!("chosen", 3),
+    live!("paste-ignored", 4),
+    live!("search", 5),
+    live!("scope-check", 6),
+    live!("scope-back", 7),
+    live!("scope-sending", 8),
+    live!("allowed-session", 9),
+    live!("covered-later", 10),
+    live!("waiting-open", 11),
+    live!("mixed-queue", 12),
+    live!("next-request", 13),
+    live!("many-resources", 14),
+    live!("command", 15),
+    live!("network", 16),
+    live!("destructive", 17),
+    live!("armed", 18),
+    live!("disarmed", 19),
+    live!("arm-expired", 20),
+    live!("sending", 21),
+    live!("allowed", 22),
+    live!("failed", 23),
+    live!("retry", 24),
+    live!("no-ack", 25),
+    live!("delayed-ack", 26),
+    live!("foreign-ack", 27),
+    live!("stale-ack", 28),
+    live!("changed", 29),
+    live!("changed-scope", 30),
+    live!("expired", 31),
+    live!("expired-sending", 32),
+    live!("withdrawn", 33),
+    live!("dismissed", 34),
+    live!("denied", 35),
+    live!("skipped", 36),
+    live!("refused", 37),
+    live!("queue-reordered", 38),
+    live!("queue-withdrawn", 39),
+    live!("streaming", 40),
+    live!("draft-restored", 41),
+    live!("anchor-restored", 42),
+    live!("linked-card", 43),
+    live!("card-resumed", 44),
+    live!("narrow", 45),
+    live!("narrow-details", 46),
+    live!("narrow-scope", 47),
+    live!("short", 48),
+    live!("tiny", 49),
+    live!("long-scope", 50),
+    live!("long-details", 51),
+    live!("long-choices", 52),
+    live!("disabled", 53),
+    live!("reduced-motion", 54),
+    live!("scope-destructive", 55),
 ];

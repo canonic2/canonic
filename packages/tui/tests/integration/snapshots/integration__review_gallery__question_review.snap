@@ -1,0 +1,32 @@
+---
+source: tests/integration/review_gallery.rs
+expression: "screen(&mut g, 80, 28)"
+---
+Canonic TUI · Component gallery
+
+acme
+  Before I change the digest, three quick questions.▌
+
+
+
+
+
+
+
+
+
+digest rollout ────────────────────────────────────────────────────────── review
+✓ users  ✓ channels  ✓ note  › review
+1 users   Users with a timezone set
+2 channels   digest emails, weekly report
+3 note   Digest times now follow each user's · timezone. Users without one keep⋯
+────────────────────────────────────────────────────────────────────────────────
+
+message ────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+───────────────────────────────────────────────────────────── acme-api#276 ~chat
+enter send · 1–9 edit · ↑↓ row · esc cancel
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

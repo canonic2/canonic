@@ -14,7 +14,7 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 394 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 502 named entries, plus
 eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
@@ -29,7 +29,39 @@ not a claim that every specified state is implemented or visually accepted.
 | [Chat](../components/chat.md), [activity](activity.md), [browsing](browsing.md) and [presentation](../presentation.md) | 76 interactive entries: rich identified turns, streaming/delivery/stop/resync, bounded content, loaded search and selection, delayed copy/link/inspection acknowledgements, earlier/newer loading/failure/recovery, hidden timestamps, quiet notes, host suggestions and fallback profiles | Reusable review, sessions and standalone inspection belong to their own components. Host effects are simulated; human acceptance is separate |
 | [Tool Call Card](../components/tool-call-card.md) | 79 interactive entries: lifecycle/output, measured progress, child tasks/artifacts, redaction/controls, host reorder, selection/actions, concurrency/caps, profiles and twenty whole-run states, including reduced motion with advancing host seconds and generic input waiting | Human visual acceptance and real execution/clipboard/permission adapters stay separate |
 
+## Permission Review coverage
+
+| Component / public contract | Interactive scenarios | Remaining acceptance |
+| --- | --- | --- |
+| [Question Form](../components/question-form.md) | 52 live answer/review/validation/lifetime/queue states plus eight profiles | Human visual/platform acceptance and real host delivery |
+| [Permission Review](../components/permission-review.md) | 56 live inspection/confirmation/lifetime/mixed-queue states plus eight profiles | Human visual/platform acceptance and real host authority |
+
+The 56 live entries map opening/defaults, numeric highlighting, details/search/
+dropped paste, exact-scope confirmation/Back/sending/session receipts, covered
+later operations, destructive arm/disarm/expiry, acknowledged outcomes, R retry,
+no/delayed/foreign/stale acknowledgements, material changes, expiry/withdrawal,
+mixed order/reorder/withdrawal, streaming, restored draft/anchor and linked tool
+cards. Long resources/choices/details/scopes and narrow/short/tiny profiles remain
+interactive. `src/gallery/permissions.rs` drives public components and simulated
+host acknowledgements. F5/F6/F7 apply/fail/refuse, F8 expires, F9 replaces and F12
+supplies a stale result. [Human steps](../human-testing.md#permission-review) keep
+visual acceptance separate from engineering verification.
+
+
+## Question Form coverage
+
+The 52 named entries exercise single/multiple/typed answers, Something else,
+required/min/max/character/resource limits, free navigation and review editing,
+safe cancellation and offered partial submission, immutable pending snapshots,
+failed/refused/delayed/stale/foreign acknowledgements, expiry/copy/replacement,
+queue reorder/withdrawal, streaming, caret return and long/narrow/tiny profiles.
+`src/gallery/reviews.rs` drives the reusable form and Chat through public events.
+F5 acknowledges, F6 fails, F7 refuses, F8 expires, F9 replaces and F12 supplies
+a stale acknowledgement. Copy and host delivery are deterministic simulations.
+See [human review](../human-testing.md#question-form-review).
+
 ## Tool Call Card coverage
+
 
 | Contract area | Runnable scenarios |
 | --- | --- |

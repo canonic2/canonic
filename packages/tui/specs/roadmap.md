@@ -16,8 +16,11 @@ streaming/resync, anchors/paging, search, selection/copy and 76 scenarios.
 Tool Call Card implements identified activity/output, ordered groups and selected
 copy/details/retry with host-owned execution. Its 79 gallery scenarios include
 progress, child tasks/artifacts, host reorder and whole-run cancellation races.
-Question Form and Permission Review designs are available; their implementations
-remain next in the component sequence. Session Browser is the next design-team
+Question Form implements staged answers, review, cancellation/partial delivery,
+host acknowledgement races and above-dock Chat with 52 live scenarios.
+Permission Review implements explicit choices, scope/destructive confirmation,
+inspection, host outcomes and the mixed queue with 56 live scenarios.
+Session Browser is the next design-team
 handoff. Permission policy, native inline hosting and broader acceptance remain separate.
 
 ## Delivery scope and phase order
@@ -88,6 +91,8 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | R-03 | [Activity](features/activity.md#acceptance-criteria): exact review identity/no implicit affirmative/expiry | 4 |
 | R-04 | [Activity](features/activity.md#acceptance-criteria): single/multi/typed question staged/reviewed response | 4 |
 | R-05 | [Activity](features/activity.md#acceptance-criteria): queued/stale review isolation and no authority effects | 4 |
+| QF-01–QF-07 | [Question Form](components/question-form.md#acceptance-criteria): staged/typed/review/cancellation, identified host delivery, queue and verification | 4 |
+| PR-01–PR-06 | [Permission Review](components/permission-review.md#acceptance-criteria): deliberate/exact-scope confirmation, lifecycle races, mixed queue and inspection | 4 |
 | D-01 | [Dialog](components/dialog.md): topmost input/focus/generation/resize | 2 |
 | DG-02–DG-05 | [Dialog](components/dialog.md#acceptance-criteria): timed arrival/guard, app closure, notices/attention and caution qualification | 2 |
 | D-02 | [Option Picker](components/option-picker.md): identity/loading/disabled/index adapter | 2 |
@@ -142,8 +147,8 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 
 ## Remaining gap summary
 
-Question Form and Permission Review await implementation. Session Browser is the
-next design-team handoff. Review queue composition, browsers,
+Question Form, Permission Review and their shared above-dock queue are implemented.
+Session Browser is the next design-team handoff. Browsers,
 inline hosting and broad native acceptance remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),

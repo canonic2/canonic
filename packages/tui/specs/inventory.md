@@ -27,6 +27,8 @@ Full application operations appear below to establish host ownership.
 | [Chat](../src/chat.rs) | Identified rich parts/revisions/resync, immutable submission delivery, semantic content/search/copy; 100 turns and 64 KiB per turn |
 | [Tool Call Card](../src/tool_call_card.rs) | Nine lifecycle states, text/code/diff/unavailable bodies, host progress/tasks/artifacts, coalesced previews, reorder by ID and acknowledged effects; 79 deterministic gallery scenarios |
 | [Run Activity](../src/run_activity.rs) | Whole-run state, single outstanding cancel, completion/failure races, independent offline status, 140 ms injected animation and Chat composition |
+| [Question Form](../src/question_form.rs) / [Review Queue](../src/review_queue.rs) | Bounded structured descriptors, isolated Editor fields, staged validation/review, opaque acknowledgement tickets, explicit partial cancellation, expiry/copy and host-ordered Chat focus |
+| [Permission Review](../src/permission_review.rs) | Safe defaults, numeric highlighting, explicit Enter/scope/destructive confirmation, loaded source search, exact response tickets, R retry, refusal and expiry/withdrawal/material races; mixed queue and Chat receipts |
 | [Composer](../src/composer.rs) | Submission and work-control tickets with host acknowledgements; FIFO held edits/pause, history/search, stash/drop undo, typed paste/image/file atoms, shell/completion, backward-compatible autosave codec, editor conflicts and 99 gallery scenarios; host executes/persists |
 | [Completion Menu](../src/completion.rs) | Prefix/word/alias/fuzzy ranking, source tickets/progress/streaming, distinct timeout warnings and Alt-R retry; Composer token routing, separate menu/draft help and 30 interactive gallery states; host discovers/executes |
 | [Editor](../src/editor.rs) / [Focus](../src/focus.rs) | Slice 1 functional gate passed; redesign awaits renewed gate: word-wrapped source rows, selection, one-transaction paste with whole-grapheme cutting, grouped undo; independent focus orders and modal return scopes |
@@ -76,8 +78,8 @@ separate.
 | Shell entry mode | Host-defined mode label/submit | Execution/authorization | Implemented shell mode and separate recall; host executes; [Composer](components/composer.md) |
 | Tool calls/output/errors/diagnostics | Cards/expandable output/progress | Invocation/taxonomy/result meaning | Reusable cards/groups, supplied progress/tasks/artifacts, Chat selection, identified effects and bounded streaming; [Tool Call Card](components/tool-call-card.md), [Run Activity](components/run-activity.md), [Activity](features/activity.md) |
 | File changes/diffs/hunks | Code/diff viewer/resource tree | Diff/Git/snapshot/revert/apply | Implemented local projection; [Conversation](components/chat.md), [Browsing](features/browsing.md) |
-| Permission/trust/confirmation | Versioned review and safe choices | Identity/scope/expiry/grants/enforcement | Picker only; [Activity](features/activity.md) |
-| Single/multi/typed questions | Form and review | Delivery/schema/validation | Missing; [Activity](features/activity.md) |
+| Permission/trust/confirmation | Versioned review and safe choices | Identity/scope/expiry/grants/enforcement | Implemented local review; [Permission Review](components/permission-review.md) |
+| Single/multi/typed questions | Form and review | Delivery/schema/validation | Implemented; [Question Form](components/question-form.md) |
 | Cancel/retry | Pending/acknowledged states/intents | Process interrupts/deadlines/reconnect | Partial; [Activity](features/activity.md) |
 | Transcript search/timeline | Loaded search/jump browser | Unloaded search/paging | Chat loaded search/anchors/paging implemented; timeline browser separate; [Conversation](components/chat.md) |
 | Selection/copy/export | Logical ranges/payload intents | Clipboard/files/destination/privacy | Chat block/Markdown/code copy implemented; full export host-owned; [Interaction](features/interaction.md) |

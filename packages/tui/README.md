@@ -10,6 +10,15 @@ Drone and Shield use it through local Cargo path dependencies. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
+Permission Review offers 56 deterministic scenarios. Numbers highlight; Enter
+confirms. Broader choices quote exact host scope in a second check on Back;
+destructive choices require two deliberate Enter presses within three seconds.
+F5 acknowledges, F6 fails, F7 refuses, F8 expires, F9 replaces and F12 supplies
+a stale result. R explicitly retries failed application. It shares Question
+Form's above-dock Chat queue and preserves the draft and logical viewport.
+See [Permission Review](specs/components/permission-review.md) and
+[usage](docs/usage.md#permission-review). No fixture executes or stores a grant.
+
 From the repository root:
 
 ```sh
@@ -17,7 +26,7 @@ make -C packages/tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, or **Tool Call Card**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, or **Permission Review**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its
@@ -62,6 +71,14 @@ including twenty run activity and cancellation scenarios.
 Ctrl-X V selects cards; Enter expands, `o` opens searchable full-output details,
 `r` requests a new retry card, and `y`/`c` copy call/output in the local simulation.
 See [usage](docs/usage.md#tool-call-card) and its [contract](specs/components/tool-call-card.md).
+
+Question Form stages single/multiple choices and multiline typed answers above
+Chat's preserved Composer. Multiple questions require a final Review; one question
+submits on deliberate choice. The shared queue defers arrivals during typing,
+retains the active review and validates identified host acknowledgements. Its 52
+scenarios simulate failure/refusal, partial answers, expiry, replacement and copy.
+F5 accepts, F6 fails, F7 refuses, F8 expires, F9 replaces and F12 probes a stale
+reply. See [usage](docs/usage.md#question-form) and the [contract](specs/components/question-form.md).
 
 The editor uses full-width text between title/footer rules, with semantic color
 and cell tokens. F2 cycles its twenty-five working states; F4 cycles color profiles.

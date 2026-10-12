@@ -14,7 +14,8 @@ implementation design details without referencing private design files.
 | [Chat](chat.md) | Rich transcript, identified streaming, search, selection and fixed Composer dock | Implemented with 76 interactive scenarios |
 | [Tool Call Card](tool-call-card.md) | Identified tool states, measured progress, child tasks/artifacts and acknowledged effects | Reusable cards, Chat integration and 79 interactive scenarios implemented |
 | [Run Activity](run-activity.md) | Whole-run status, identified cancellation and connection independence | Reusable state/view, Chat composition and twenty scenarios in Tool Call Card |
-| [Question Form](question-form.md) | Staged choices/text, review, cancellation, host acknowledgements and queued above-dock focus | Complete intended contract; implementation pending |
+| [Question Form](question-form.md) | Staged choices/text, review, cancellation, host acknowledgements and queued above-dock focus | Implemented with shared queue, Chat and 52 scenarios; human acceptance pending |
+| [Permission Review](permission-review.md) | Deliberate identified choices, exact scopes, inspection, retry and host outcomes | Implemented with mixed queue, Chat and 56 scenarios; human acceptance pending |
 
 Focus, bindings, themes and the terminal runtime are shared infrastructure.
 Session browsers, trees, panels and notices are proposed in
@@ -54,3 +55,5 @@ visible. All five checkpoints must be assessed for the scope being handed over.
 | [Chat](chat.md) | Defined complete local contract | Defined content/states/fallbacks | Expanded acknowledgements, paging and 76 scenarios implemented | [Expanded checks passed](../verification.md#chat-alignment-engineering-record--2026-10-11) | Complete component review pending |
 | [Tool Call Card](tool-call-card.md) | Defined complete local contract | Defined states/output/actions/fallbacks | Implemented reusable cards and Chat/group integration | See [verification record](../verification.md#tool-call-card-engineering-record--2026-10-10) | Complete visual review pending |
 | [Run Activity](run-activity.md) | Defined run/connection contract | Defined states/cancellation/fallbacks | Implemented reusable state and Chat composition | [Expanded checks passed](../verification.md#gallery-profiles-and-run-activity-engineering-record--2026-10-11) | Pending |
+| [Question Form](question-form.md) | Defined full structured answer contract | Defined review/field/cancellation/profiles | Reusable form, shared queue, Chat and 52 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |
+| [Permission Review](permission-review.md) | Defined complete review/host contract | Defined scopes/inspection/queue/profiles | Reusable review, mixed queue, Chat and 56 scenarios | [Review checks](../verification.md#question-form-and-permission-review-engineering-record--2026-10-11) | Human visual review pending |

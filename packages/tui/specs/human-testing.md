@@ -5,6 +5,77 @@ The historical gates below retain their other component acceptance records.
 Composer implements its complete local workflow; host execution, storage keys,
 clipboard formats and native human visual acceptance remain consumer checkpoints.
 
+## Permission Review
+
+Human visual acceptance remains pending. Run:
+
+```sh
+make -C packages/tui run CARGO_FLAGS="-- --component permission-review --scenario main"
+```
+
+1. Enter initially does nothing. 1 highlights Allow once; Enter sends. F5
+   acknowledges before an allowed receipt appears. Composer's mid-draft caret
+   returns exactly. F10 opens the retained searchable scenario picker.
+2. In `safe-default`, only Deny starts selected. In `disabled`, the reason is
+   readable and Enter sends nothing. Paste into `main` or `search`; the whole
+   paste is dropped and neither choice nor Composer changes.
+3. Tab opens details; PageDown reaches the remainder. Ctrl-F types a literal
+   search; Enter visits matches without responding. Escape ends search, hides
+   details, then dismisses. Check `many-resources`, `long-details`, `command`
+   and `network`; all safe host resources/source remain inspectable.
+4. 2 then Enter opens the scope Dialog on Back. Enter backs out. Reopen, choose
+   2 and Enter: sending includes exact scope. F5 records it word for word.
+   Check `scope-back`, `scope-sending`, `allowed-session` and `long-scope`; PageDown
+   reveals every scope word. No grant file is written.
+5. `destructive` needs Enter twice within three seconds. `armed`, `disarmed`
+   and `arm-expired` expose timing/movement. `scope-destructive` also requires
+   the destructive second Enter inside the exact-scope check.
+6. In `failed`, Enter cannot resend; R sends the same material with a fresh
+   attempt. F6 fails, F7 refuses/disables the attempted choice, F8 expires and
+   F9 replaces/clears it. F12 submits a stale acknowledgement. Inspect
+   `delayed-ack`, `foreign-ack`, `changed-scope` and `expired-sending`.
+7. Compare `denied`, `skipped`, `dismissed`, `expired` and `withdrawn` receipts.
+   Withdrawal holds the active explanation until Escape opens the next review.
+   `mixed-queue`, `next-request`, `queue-reordered` and `queue-withdrawn` follow
+   host order with one active review. `waiting-open` waits one second or Ctrl-G.
+8. `streaming`, `draft-restored`, `anchor-restored`, `linked-card` and
+   `card-resumed` preserve draft/viewport and show host-linked card meaning.
+   Inspect `narrow-details`, `narrow-scope`, `short`, `tiny`, all eight profiles
+   and `reduced-motion`. F4/Ctrl-T remain live after opening any profile.
+
+## Question Form review
+
+
+Human visual acceptance remains pending. Run:
+
+```sh
+make -C packages/tui run CARGO_FLAGS="-- --component question-form --scenario main"
+```
+
+1. Choose Audience with a number; mark Channels with Space, then Enter. Type
+   Notes with Ctrl-J newline or paste; Tab opens Review. Inspect each answer,
+   use Up/Down then Enter to edit, return, and Enter to send. F5 acknowledges;
+   no receipt appears before it. The mid-draft Composer caret returns unchanged.
+2. F10 opens the retained scenario picker. Exercise `single`, `multiple`,
+   `required-missing`, `limit-reached`, `too-long`, `something-else`,
+   `other-cleared` and `other-undo`. Disabled rows explain why they cannot answer.
+3. In `cancel-with-answers`, Keep answering is selected. Escape keeps every field.
+   `partial-offered` requires a deliberate offered partial submission; F5 accepts.
+   `partial-submitting` locks keys. `partial-accepted` names the partial receipt.
+4. Inspect `submitting`, `no-ack`, `delayed-ack`, `failed`, `refused`,
+   `foreign-ack` and `stale-ack`. F6 fails, F7 refuses, F12 supplies a stale result.
+   Enter retries deliberately with a fresh ticket; repeated pending Enter is inert.
+5. F8 expires; Y copies retained answers through a simulated acknowledgement.
+   F9 replaces the material revision; old answers are copyable, never answers to
+   the replacement. Inspect `copy-failed`, `expired-copy` and `resource-limit`.
+6. `waiting-open` opens after one second of quiet or Ctrl-G. `queue`,
+   `queue-reordered`, `queue-withdrawn` and `streaming` preserve draft and active
+   focus. Output accumulated during review remains unread when the panel closes.
+7. Inspect `long-choices`, `long-prompt`, `narrow-review`, `narrow-field`, `tiny`
+   and all named profiles. F4 changes color capabilities; Ctrl-T toggles light.
+   Confirm Enter/Escape remain usable and selection does not depend on hue.
+
+
 ## Delivery contract
 
 Each complete component or explicitly bounded feature is a delivery unit;

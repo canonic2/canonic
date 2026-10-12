@@ -31,6 +31,10 @@ An oversized chip is refused as a whole. No-fit insertion preserves selection
 and draft. Up to 256 inline payloads are supported in a draft. Rendering is safe
 at zero area and does not move the cursor outside the supplied rectangle.
 
+`set_reject_overflow(true)` makes typing, paste and yank reject an oversized
+insertion whole, preserving text, selection, caret and undo. Question Form uses
+this policy at 64 KiB; its host character limit remains validation only.
+
 ## Implementation design
 
 ### View contract

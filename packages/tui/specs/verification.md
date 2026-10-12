@@ -24,6 +24,73 @@ commit is not human acceptance. Tests found in source are not a new test run.
 These records were carried forward during the specification reorganization;
 Markdown changes do not rerun or refresh Rust engineering evidence.
 
+## Question Form and Permission Review engineering record — 2026-10-11
+
+Final scope: both reusable components, opaque single-use host acknowledgement
+tickets, one host-ordered review queue, above-dock Chat composition and receipt
+rendering. Question Form was completed and checked before Permission Review.
+The gallery adds 52 Question Form and 56 Permission Review live scenarios,
+bringing the named registry to 502 entries, plus eight profiles per component.
+Gallery host effects remain deterministic simulations.
+
+Host `make -C packages/tui check` passed 267 tests, four doctests, formatting,
+strict Clippy, private-item API documentation and dependency auditing using the
+package-pinned toolchain. `make -C packages/tui build` passed. Gallery-disabled
+`cargo nextest run --locked --no-default-features` passed 211 tests. Gate, Shield
+and Drone optional `tui` compilation passed offline using disposable manifests
+and lockfiles; their workspace sources and lockfiles were preserved.
+
+Ten Question Form and fifteen Permission Review behavioral tests cover bounded
+descriptors and whole field insertion rejection, staged validation/cancellation,
+deliberate numeric/Enter and exact-scope/destructive confirmation, explicit retry,
+refusal, replacement, expiry, withdrawal and foreign/stale/duplicate tickets.
+Mixed queue order/capacity and undrained-intent invalidation are checked. Chat
+checks preserve the exact Composer document, caret, selection, mode and undo,
+logical anchors/follow state and unread output. Long receipt titles cannot hide
+the actual acknowledged outcome. Rendering exercises tiny/narrow areas, long
+resources/choices/details/scopes and independent color/symbol/theme profiles.
+Four gallery tests exercise the live states; twelve snapshots were inspected.
+
+Two new native macOS PTY flows passed alongside the existing terminal checks.
+They cover isolated multiline Question Form paste, ignored Permission Review
+paste, explicit scope confirmation/Back, failed-action retry, expiry and late
+acknowledgement, draft/caret restoration, resize and retained F10 navigation.
+The harness drains shutdown output, verifies cooked input and compares exact
+terminal attributes after exit.
+
+Public local links resolved 443 references before this evidence update. Both
+repositories passed whitespace checks; all 31 new source/spec/test files belong
+only to public, and private design repairs remain untouched. No staging, commit,
+publication or consumer rollout command was run. Concurrent configuration,
+Shield and Workbench changes were preserved; Session Browser was not implemented.
+
+Human visual acceptance and broader native/platform acceptance remain pending.
+Use the [Question Form review](human-testing.md#question-form-review) and
+[Permission Review review](human-testing.md#permission-review) for acceptance.
+Actual delivery, permission authority and external effects remain host-owned.
+
+## Question Form engineering record — 2026-10-11
+
+Before beginning Permission Review, the complete Question Form gate passed
+248 all-feature tests, four doctests, formatting, strict Clippy, API docs and
+dependency auditing with host access. The release library/gallery build passed.
+Nine behavioral tests cover descriptor/field bounds, Unicode validation, staged
+answers, exact tickets, cancellation/partial delivery, queue timing/order and
+Composer document/caret/selection/undo plus unread preservation. Two gallery
+tests exercise 52 live states; five snapshots were inspected. The native macOS
+PTY flow verifies isolated multiline paste, deliberate submission, acknowledgement,
+mid-draft caret return, undo, resize, cooked input and terminal-mode restoration.
+The PTY harness drains shutdown output before checking exit.
+
+Gallery-disabled nextest passed 195 tests. Gate, Shield and Drone optional `tui`
+compilation passed offline using disposable manifests and lockfiles; workspace
+consumer lockfiles remained unchanged. Public local links resolved 410 references.
+Both repositories passed whitespace checks. No staging command was run; concurrent
+Shield/configuration changes outside this scope were left untouched.
+
+Human visual acceptance and broader native/platform acceptance remain pending.
+The [Question Form review](human-testing.md#question-form-review) provides steps.
+
 ## Gallery profiles and Run Activity engineering record — 2026-10-11
 
 Scope: named Command Palette, Completion Menu and Dialog profiles apply once
