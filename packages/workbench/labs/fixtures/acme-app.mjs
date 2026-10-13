@@ -31,6 +31,7 @@ export const DEPENDENCIES = {
 // The large shapes share the large lockfile, apart from large-web's fonts.
 DEPENDENCIES['large-system'] = DEPENDENCIES.large;
 DEPENDENCIES.huge = DEPENDENCIES.large;
+DEPENDENCIES.giant = DEPENDENCIES.large;
 DEPENDENCIES['large-web'] = {
   ...DEPENDENCIES.large,
   '@fontsource-variable/inter': '5.3.0',
@@ -38,7 +39,7 @@ DEPENDENCIES['large-web'] = {
   '@fontsource-variable/material-symbols-outlined': '5.3.8',
   '@fontsource/jetbrains-mono': '5.3.0',
 };
-export const LOCKFILE = { small: 'small', large: 'large', 'large-system': 'large', huge: 'large', 'large-web': 'large-web' };
+export const LOCKFILE = { small: 'small', large: 'large', 'large-system': 'large', huge: 'large', giant: 'large', 'large-web': 'large-web' };
 
 const SIZES = {
   small: { components: 5, features: 0, pages: 0, componentBytes: 2500 },
@@ -49,6 +50,8 @@ const SIZES = {
   'large-system': { components: 140, features: 60, pages: 40, componentBytes: 6000, sections: [14, 34], fonts: 'system', sentinels: true },
   'large-web': { components: 140, features: 60, pages: 40, componentBytes: 6000, sections: [14, 34], fonts: 'web', photos: true, sentinels: true },
   huge: { components: 140, features: 60, pages: 200, componentBytes: 6000, sections: [14, 34], fonts: 'system', sentinels: true },
+  // The first page lab's largest project.
+  giant: { components: 140, features: 60, pages: 600, componentBytes: 6000, sections: [14, 34], fonts: 'system', sentinels: true },
 };
 
 const NOUNS = ['job', 'quote', 'invoice', 'client', 'site', 'visit', 'crew', 'asset', 'part', 'estimate',

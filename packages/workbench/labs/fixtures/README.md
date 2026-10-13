@@ -24,6 +24,7 @@ directory, and install scripts do not run.
 | `large-system` | The `large` shape with system fonts only, and the extended isolation sentinels: each page leaves a listener, an interval, a portal, a `<body>` class, a global and a request mock, and records in `<html data-acme-leaks>` what an earlier page left. The check runs after mount, so it does not delay readiness. Uses the `large` lockfile |
 | `large-web` | `large-system` plus the environment's web fonts (Inter variable, Noto Sans JP with 320 characters from across the CJK block, a variable icon font with ligatures), JetBrains Mono on every fourth page only, and a deterministic 1200×800 PNG of about 2.5 MB per page. Its own lockfile |
 | `huge` | `large-system` with 200 pages. Uses the `large` lockfile |
+| `giant` | `large-system` with 600 pages. Uses the `large` lockfile |
 | `formats` | One preview or page in every native format: React pages, a Vue single-file component, an Astro component, an HTML page, a React Native Web screen, a preview through a project adapter, a docs page with web and React Native Web lenses, and 2 broken previews. Project plugins in esbuild and Rspack form, and named edit targets |
 
 Each large page has its own sections (14–34 modules), an Apollo query

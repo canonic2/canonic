@@ -814,3 +814,27 @@ out of the aggregates.
   directions, so those comparisons are inconclusive by the rule.
 - The owner decides. Implementation still needs its own confirmation run
   through the shipping server and the VS Code webview.
+
+## Confirmation run, 2026-10-13
+
+The [labs methodology](../../specs/labs.md#reports-and-decisions) asks for the
+lab's sequences to be run again through the shipping product once the winning
+change is built in. Run on 2026-10-13, 16:35–17:11 UTC, with the product as
+variant 0 and the stage 2 runner unchanged, on the host above in headless
+Chrome ([report](results/2026-10-13-confirmation/report.json),
+[summary](results/2026-10-13-confirmation/summary.md)).
+
+**Inconclusive for start and edits.** Test suites from other work were
+running on the host throughout. The one-minute load average had a median of
+50 during the start cells, peaking at 528, and 30 during the edits, on 16
+hardware threads. The start and edit samples follow the load, so they are not
+evidence about the product. The run is to be repeated on a quiet host.
+
+The navigation cells ran at a median load of 11. They match the prototype's
+warm document within its spread, and two improve on it:
+
+- state changes on the same page take 95–106 ms at the median, against 143–168
+  ms in the prototype, because the product re-renders them in place;
+- a reload takes about 60 ms, against 94–107 ms.
+
+Every correctness check passed.
