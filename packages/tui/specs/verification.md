@@ -690,6 +690,45 @@ native Linux/Windows, multiplexers, IME and assistive acceptance remain separate
 This record establishes the explicit inline key path under the owned macOS PTY;
 it does not establish the complete native compatibility matrix or consumer rollout.
 
+## Gallery SIGTSTP and full-screen job control — 2026-10-12
+
+Both gallery hosts use `gallery/job_control.rs` for explicit Ctrl-Alt-Z and
+external SIGTSTP. A scoped gallery-only flag registration does no terminal I/O
+from signal delivery. The owning loop releases/restores the existing lease,
+retains polled events and pending Composer input, restarts active fixture clocks
+on return and repaints current geometry. Inline return retains borrowed views;
+full-screen return uses `TerminalSession::handoff`. Components and reusable
+runtime imports install no job-control handlers. The gallery-only optional
+signal-hook dependency is already present transitively in the package lockfile.
+The guard removes its flag registration on exit; signal-hook retains its OS
+dispatch shim for the process lifetime. The adapter targets the gallery CLI,
+not arbitrary embedders' signal policies.
+
+Owned macOS controlling-PTY cases verify key/external suspension, canonical shell
+input and exact termios while actually stopped, background SIGCONT without
+mode acquisition or drawing, shell output preserved through resize, retained
+inline draft/Session Browser and full-screen multiline draft/caret/undo. Repeated
+external suspension passes. Existing unavailable-terminal and too-small inline
+resume cases also pass. Each fixture case owns its session and secondary process
+group; no user terminal, shell or unrelated process is signalled.
+
+- `make -C packages/tui check`: formatting, strict Clippy, **379 tests**, **4
+  doctests**, API docs and dependency advisories/bans/licenses/sources passed.
+- Release library/gallery build and gallery-disabled locked/offline compilation
+  passed.
+- Gate/Drone optional `tui` compilation passed through unchanged reviewed temporary
+  manifests pointing at actual sources. Drone uses its temporary resolved lockfile
+  for the pre-existing Markdown dependency gap; its original locked build is not
+  established by that check. Original consumer manifests/lockfiles stayed unchanged.
+- Changed Markdown links, tracked/new-file whitespace and both repository diff
+  checks passed. Module review keeps signals and host clocks in the gallery,
+  terminal release/reacquisition in the runtime and component state in existing views.
+
+Real-shell/emulator visual review, native Linux/Windows, multiplexers, IME and
+assistive acceptance remain open. Uncatchable SIGSTOP cannot run cleanup;
+termination signals and custom inherited handlers require separate policies.
+No consumer UI rollout or complete platform support claim follows from this record.
+
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation

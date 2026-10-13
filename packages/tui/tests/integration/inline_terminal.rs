@@ -37,6 +37,26 @@ fn native_suspend_releases_modes_and_retains_draft_and_borrowed_view() {
     );
 }
 #[test]
+#[cfg(unix)]
+fn full_screen_job_control_preserves_draft_and_restores_shell() {
+    let output = std::process::Command::new("python3")
+        .args([
+            "-B",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/full_suspend.py"
+            ),
+        ])
+        .arg(assert_cmd::cargo::cargo_bin!("tui-gallery"))
+        .output()
+        .expect("owned full-screen job-control fixture");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+#[test]
 fn plain_input_retries_empty_lines_and_eof_never_selects_a_default() {
     for (input, expected) in [
         ("\n2\n", "Deploy API only · fixture only"),

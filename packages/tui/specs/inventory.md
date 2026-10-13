@@ -6,7 +6,7 @@ Baseline inspected on **2026-10-09**: [manifest](../Cargo.toml),
 [exports](../src/lib.rs), all source modules, [usage](../docs/usage.md),
 [development](../docs/development.md) and integration test modules. Structure
 and acceptance conventions follow [Gate](../../gate/specs/README.md) and
-[Shield](../../../private/shield/specs/README.md). This pass inspected source and
+[Shield](../../shield/specs/README.md). This pass inspected source and
 assertions; it did not rerun Rust gates or establish fresh platform acceptance.
 Chat implementation and test coverage were updated on 2026-10-11; executed checks
 are recorded separately in [Verification](verification.md#chat-alignment-engineering-record--2026-10-11).

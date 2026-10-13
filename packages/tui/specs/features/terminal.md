@@ -124,8 +124,7 @@ fixtures have typed-number input without defaults; empty/EOF cancels or retries.
 Plain Chat reports its retained draft and ends without submission.
 
 Remaining scope: general external log-writer coordination and actual product
-adapters are host integration work. Externally delivered POSIX suspension signals,
-full-screen job control and Windows ConPTY, emulator reflow, multiplexers, IME and
+adapters are host integration work. Windows ConPTY, emulator reflow, multiplexers, IME and
 assistive testing are separate acceptance. The handoff's unresolved remove-key,
 cancel/skip glyph, filter-clear hint and Tab wording choices do not change current
 component bindings in this increment.
@@ -137,16 +136,28 @@ lease, releases modes before a foreground host callback and reacquires afterward
 operation and reacquisition results remain separate. Release failure skips the
 callback. Unix restoration preserves the original termios settings. The owned
 PTY test verifies a cooked editor callback, raw reacquisition and final restored
-shell input. The native inline gallery binds Ctrl-Alt-Z to an explicit Unix host
+shell input. Both gallery hosts bind Ctrl-Alt-Z to an explicit Unix host
 adapter; Ctrl-Z retains editor undo. It verifies controlling-terminal foreground
 ownership, pauses the lease, then sends SIGSTOP only to its own process. SIGCONT
 from a background job stops again before mode acquisition or drawing. Foreground
 return resumes below intervening output, measures the window, and restores any
-borrowed alternate view with retained host state. No job-control signal handlers
-or dispositions are installed by this adapter. Acquisition failure
+borrowed alternate view with retained host state. Full-screen resume uses the
+runtime's existing handoff and repaints with current geometry. Acquisition failure
 returns an error with modes released. Unsupported hosts retain the active lease
-and show an unavailable notice. External SIGTSTP, full-screen job control and
-native Linux/Windows acceptance remain separate requirements.
+and show an unavailable notice. Native Linux/Windows acceptance remains separate.
+
+`gallery/job_control.rs` owns a SIGTSTP flag registration for an interactive Unix
+foreground gallery. Signal delivery only sets an atomic flag. The owning event
+loop handles it before drawing and after polling, retains any polled event,
+releases the lease, and stops through the same foreground-return path. Component
+state, focus, pending input bursts and host data remain in the loop. Active fixture
+clocks restart on return without advancing through suspended time. Registration
+is absent from plain/list/help paths and gallery-disabled library imports.
+The guard unregisters its flag on exit; signal-hook retains its process-wide
+dispatch shim rather than restoring the previous OS disposition. This adapter is
+for the gallery CLI lifetime, not an embeddable arbitrary signal-policy manager.
+Uncatchable SIGSTOP bypasses cleanup; external termination signals and custom
+pre-existing signal handlers have separate policies/acceptance.
 
 Suspend flushes draw state, releases owned modes and
 marks lease unavailable for rendering. Host owns launch/signals/child wait.

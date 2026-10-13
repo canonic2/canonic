@@ -10,8 +10,8 @@ borrowed full-screen views and plain numbered fallback. Live regions use compone
 measurements to grow and shrink under the same lease. Its 30 scenarios are also
 available in the regular gallery. Run the native host with
 `cargo run --locked --features gallery -- --inline --component inline-composition --scenario streaming`.
-Native Unix Ctrl-Alt-Z releases modes and suspends; shell `fg` restores the draft
-and borrowed view. Ctrl-Z retains editor undo.
+Both native Unix hosts release modes on Ctrl-Alt-Z or external SIGTSTP; shell `fg`
+restores the draft and active view. Ctrl-Z retains editor undo.
 See [usage](docs/usage.md#inline-composition) and the
 [terminal contract](specs/features/terminal.md#inline-runtime-api).
 Code/Diff Inspection supplies code and unified-patch views, logical navigation,

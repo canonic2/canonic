@@ -1,8 +1,8 @@
 //! Owns the explicit native inline gallery loop, plain fallback and foreground release demonstration.
 
 mod plain;
-mod suspension;
 use super::{InlineDemo, NAMES};
+use crate::gallery::job_control;
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     runtime::{Capabilities, InlineOptions, InlineSession},
@@ -24,7 +24,7 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
     for line in &demo.printed {
         println!("{line}");
     }
-    let mut session = match open(&demo, p) {
+    let session = match open(&demo, p) {
         Ok(s) => s,
         Err(e) => {
             println!("inline unavailable: {e}");
@@ -37,23 +37,36 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
         session.finish(&result)?;
         return Ok(());
     }
+    interactive(session, &mut demo, p)
+}
+fn interactive(mut session: InlineSession, demo: &mut InlineDemo, p: Presentation) -> Result<()> {
+    let signals = job_control::Suspension::install()?;
     let mut last = Instant::now();
     loop {
+        if signals.requested() {
+            session = job_control::inline(session)?;
+            last = Instant::now();
+        }
         if let Err(error) = session
-            .set_height(measured(&demo, p))
+            .set_height(measured(demo, p))
             .and_then(|()| session.draw(|f| demo.render_live(f, f.area(), p)))
         {
             let cleanup = session.finish("inline → couldn't draw · nothing confirmed");
             return Err(anyhow::anyhow!("{error}; cleanup: {cleanup:?}"));
         }
-        if let Some(event) = session.poll(Duration::from_millis(20))? {
-            if matches!(&event,Event::Key(k) if k.kind==KeyEventKind::Press && k.code==KeyCode::Char('z') && k.modifiers==(KeyModifiers::CONTROL | KeyModifiers::ALT))
-            {
-                if let Err(error) = suspension::available() {
+        let event = session.poll(Duration::from_millis(20))?;
+        if signals.requested() {
+            session = job_control::inline(session)?;
+            last = Instant::now();
+            session.draw(|f| demo.render_live(f, f.area(), p))?;
+        }
+        if let Some(event) = event {
+            if job_control::key(&event) {
+                if let Err(error) = job_control::available() {
                     demo.notice = format!("suspend unavailable: {error}");
                     continue;
                 }
-                session = suspension::run(session)?;
+                session = job_control::inline(session)?;
                 last = Instant::now();
                 continue;
             }

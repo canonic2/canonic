@@ -3,7 +3,7 @@ import os, select, signal, subprocess, sys, termios, time
 from inline_pty import Host
 
 if len(sys.argv) == 2:
-    for case in ['success', 'failure', 'unsupported']:
+    for case in ['success', 'external', 'failure', 'unsupported']:
         subprocess.run([sys.executable, '-B', __file__, sys.argv[1], case], check=True, timeout=30)
     sys.exit(0)
 
@@ -13,27 +13,13 @@ signal.signal(signal.SIGHUP, signal.SIG_IGN)
 signal.signal(signal.SIGTTOU, signal.SIG_IGN)
 
 def stopped(h, shell_input=True):
-    deadline = time.monotonic() + 10
-    while True:
-        pid, status = os.waitpid(h.child.pid, os.WNOHANG | os.WUNTRACED)
-        if pid:
-            assert os.WIFSTOPPED(status), (status, h.output[-2000:])
-            assert os.WSTOPSIG(status) == signal.SIGSTOP, (status, h.output[-2000:])
-            break
-        assert time.monotonic() < deadline, h.output[-2000:]
-        h.drain()
-    h.drain()
-    # A controlling macOS tty marks cooked input PENDIN after raw restoration.
-    # Exercise the shell's canonical input before comparing the exact baseline.
-    if shell_input:
-        os.write(h.master, b'shell-input\r')
-        assert select.select([h.slave], [], [], 1)[0]
-        assert os.read(h.slave, 1024) == b'shell-input\n'
-    assert termios.tcgetattr(h.slave) == h.before, (h.before, termios.tcgetattr(h.slave), h.output[-1000:])
-    assert h.saved is None
-    h.drain()
+    h.wait_stopped(shell_input)
 
-if sys.argv[2] == 'success':
+def suspend(h):
+    if sys.argv[2] == 'external': os.kill(h.child.pid, signal.SIGTSTP)
+    else: os.write(h.master, b'\x1b\x1a')
+
+if sys.argv[2] in ['success', 'external']:
     scenario = 'streaming'
 else:
     scenario = 'main'
@@ -64,7 +50,7 @@ try:
         sys.exit(0)
     h.wait('and bump the app version')
     h.send(b'!', 'and bump the app versio!n')
-    os.write(h.master, b'\x1b\x1a')  # Ctrl-Alt-Z
+    suspend(h)
     stopped(h)
     other = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], preexec_fn=os.setpgrp)
     try:
@@ -83,7 +69,7 @@ try:
     h.wait('and bump the app versio!n')
     assert 'SHELL SENTINEL' in h.all_text(), h.all_text()
     h.send(b'\x18o', 'sessions')
-    os.write(h.master, b'\x1b\x1a')
+    suspend(h)
     stopped(h)
     os.kill(h.child.pid, signal.SIGCONT)
     h.wait_mode(True); h.wait('sessions')

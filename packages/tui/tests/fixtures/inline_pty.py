@@ -79,6 +79,25 @@ class Host:
             assert self.child.poll() is None,self.output[-1000:]
             assert time.monotonic()<deadline,self.screen()
             self.drain()
+    def wait_stopped(self, shell_input=True):
+        deadline = time.monotonic() + 10
+        while True:
+            pid, status = os.waitpid(self.child.pid, os.WNOHANG | os.WUNTRACED)
+            if pid:
+                assert os.WIFSTOPPED(status), (status, self.output[-2000:])
+                assert os.WSTOPSIG(status) == signal.SIGSTOP, (status, self.output[-2000:])
+                break
+            assert time.monotonic() < deadline, self.output[-2000:]
+            self.drain()
+        self.drain()
+        # Consume macOS PENDIN through real canonical input, then compare exact modes.
+        if shell_input:
+            os.write(self.master, b'shell-input\r')
+            assert select.select([self.slave], [], [], 1)[0]
+            assert os.read(self.slave, 1024) == b'shell-input\n'
+        assert termios.tcgetattr(self.slave) == self.before
+        assert self.saved is None
+        self.drain()
     def resize(self, width, height):
         self.width, self.height = width,height
         # Preserve terminal contents rather than clearing them. Production emulators may reflow.

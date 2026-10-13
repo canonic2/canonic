@@ -166,9 +166,9 @@ Status Panels & Notices is implemented with responsive placement and explicit
 clock/action ownership. Inline terminal hosting now has a bounded reusable lease,
 ordered print ledger, measured region sizing, retained borrowed views and a native fixture. The bounded
 delivery continues with human visual/native acceptance and documented host gaps.
-The native inline gallery has explicit Unix Ctrl-Alt-Z suspension and foreground
-resume. Next runtime work covers external signals and full-screen job control;
-final visual/platform acceptance remains separate from engineering verification.
+Both native gallery hosts have Unix Ctrl-Alt-Z/external SIGTSTP suspension and
+foreground resume. Final visual/platform acceptance remains separate from
+engineering verification; further runtime work follows observed acceptance gaps.
 Additional browsers and
 application features require a concrete consumer need rather than extending
 this component delivery indefinitely.

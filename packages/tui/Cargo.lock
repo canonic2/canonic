@@ -155,6 +155,7 @@ dependencies = [
  "pulldown-cmark",
  "ratatui",
  "rustix",
+ "signal-hook",
  "unicode-segmentation",
  "unicode-width",
 ]

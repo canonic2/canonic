@@ -9,6 +9,7 @@ mod dialogs;
 mod editor;
 mod inline;
 mod inspection;
+mod job_control;
 mod option_picker;
 mod permissions;
 mod reviews;
@@ -1067,16 +1068,40 @@ pub fn run(cli: &Cli) -> Result<()> {
             gallery.open_scenarios(component);
         }
     }
+    interactive(&mut gallery)
+}
+
+fn interactive(gallery: &mut Gallery) -> Result<()> {
     // Declared first so the terminal restores its colors before policy is restored.
     let _color_output = ColorOutput::acquire();
+    let signals = job_control::Suspension::install()?;
     let mut terminal = TerminalSession::open()?;
     let mut last_tick = Instant::now();
     let input_clock = Instant::now();
     let mut burst = crate::composer::PasteBurst::default();
     loop {
+        if signals.requested() {
+            terminal = job_control::full(terminal)?;
+            last_tick = Instant::now();
+        }
         terminal.draw(|frame| gallery.render(frame))?;
+        let event = terminal.poll(Duration::from_millis(20))?;
+        if signals.requested() {
+            terminal = job_control::full(terminal)?;
+            last_tick = Instant::now();
+            terminal.draw(|frame| gallery.render(frame))?;
+        }
+        if event.as_ref().is_some_and(job_control::key) {
+            if let Err(error) = job_control::available() {
+                gallery.note = format!("suspend unavailable: {error}");
+            } else {
+                terminal = job_control::full(terminal)?;
+                last_tick = Instant::now();
+            }
+            continue;
+        }
         let mut events = burst.flush_idle(input_clock.elapsed());
-        if let Some(event) = terminal.poll(Duration::from_millis(20))? {
+        if let Some(event) = event {
             if matches!(gallery.screen, Screen::Composer) && !gallery.composer.overlay_open() {
                 events.extend(burst.push(event, input_clock.elapsed()));
             } else {
