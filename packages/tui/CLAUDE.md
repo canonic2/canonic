@@ -10,7 +10,7 @@ coverage, debug-runtime for terminal diagnosis, fix-checks for gates, and
 product-specs/product-docs for internal specs and supported guides. These common
 skills cover this package; do not add duplicate package-specific workflows.
 Instructions are sourced here under .canonic/guides/tui/. Regenerate with
-node private/sandbox/src/index.mjs after guide or rule changes.
+node private/drone-legacy/src/index.mjs after guide or rule changes.
 
 ## Ownership and boundaries
 
