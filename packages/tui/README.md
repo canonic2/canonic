@@ -25,7 +25,9 @@ scenarios. Ctrl-X I opens status and Ctrl-X N lists notices when the host enable
 the adapter. See [usage](docs/usage.md#status-panels-and-notices) and the
 [contract](specs/components/status-panels-and-notices.md).
 The Cargo package is `canonic-tui`; Rust code imports it as `canonic_tui`.
-Drone and Gate declare it through optional local Cargo path dependencies. Ratatui
+Drone and Gate declare it through optional local Cargo path dependencies. Shield's
+default `tui` feature uses inline operator pickers and editors; its
+`--no-default-features` build retains plain prompts and unchanged policy transports. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
