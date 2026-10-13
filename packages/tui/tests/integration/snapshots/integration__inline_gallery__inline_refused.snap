@@ -1,0 +1,28 @@
+---
+source: tests/integration/inline_gallery.rs
+expression: "screen(&mut g, width, height)"
+---
+Canonic TUI · Component gallery
+
+~/acme-api $ acme preview
+plan · 3 services · fixture only
+
+
+edit 2 files ─────────────── not applied
+Edit 2 files in src/digest/
+To send each user's timezone with the d⋯
+  src/digest/settings.ts  +6 -2
+  src/digest/schedule.ts  +3 -1
+ ▸ details  diff · 2 files · +9 -3
+ 1 Allow once
+    this edit
+ 2 Allow for this session
+    edits in src/digest/
+ 3 Deny
+    acme is told no
+ 4 Skip
+    acme goes on without it
+! host plan changed; retry explicitly
+──────────────────── nothing allowed yet
+
+Esc back · Ctrl-C quit · F10 scenarios ·

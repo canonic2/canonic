@@ -5,6 +5,12 @@ host-supplied descriptors, plus validated scoped shortcuts and leader sequences.
 See [usage](docs/usage.md#commands-and-keyboard-help).
 
 An unpublished Rust component library and local full-screen gallery for Canonic.
+Inline Composition adds an explicit normal-screen host, ordered settled output,
+borrowed full-screen views and plain numbered fallback. Its 30 scenarios are also
+available in the regular gallery. Run the native host with
+`cargo run --locked --features gallery -- --inline --component inline-composition --scenario streaming`.
+See [usage](docs/usage.md#inline-composition) and the
+[terminal contract](specs/features/terminal.md#inline-runtime-api).
 Code/Diff Inspection supplies code and unified-patch views, logical navigation,
 folds, whole-file switching, loaded find, line selection and acknowledged
 copy/editor requests. Its 51 live scenarios include Chat/tree return with
@@ -52,7 +58,7 @@ make -C packages/tui run
 ```
 
 The first screen selects **Option picker**, **Full-screen chat**, **Multiline editor**,
-**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, **Session Browser**, **Tree Browser**, **Code & diff inspection**, or **Status Panels & Notices**. Use arrows
+**Dialogs**, **Commands and bindings**, **Composer**, **Completion Menu**, **Tool Call Card**, **Question Form**, **Permission Review**, **Session Browser**, **Tree Browser**, **Code & diff inspection**, **Status Panels & Notices**, or **Inline Composition**. Use arrows
 and Enter to open its scenario picker, then choose a scenario with Enter.
 `main` is first. Esc returns through pickers and quits at the component picker.
 Composer uses Esc for local actions and F10 for scenarios; Ctrl-C twice on its

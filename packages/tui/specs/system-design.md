@@ -58,7 +58,8 @@ entry points need an explicit compatibility plan when contracts change.
 | `inspection` | Bounded code/patch and optional whole new file | Exact load/copy/editor results and caller return | [Implemented reusable scope](components/code-diff-inspection.md) |
 | `status_panels` | Supplied sections/notices and explicit host time | Stable focus/folds, expiry, persistent errors and exact action requests | Reusable component and responsive gallery composition implemented |
 | `chat` | Conversation/composer/activity/review/status and capabilities | Screen intents; layout/focus/screen-scoped presentation | Rich transcript, Composer, cards, Run Activity, review queue and opt-in status composition implemented |
-| `runtime` | Explicit inline/full-screen mode/capabilities | Lease, frames/events, suspend/resume/close result; owned modes | Full-screen lease/handoff implemented; inline hosting pending |
+| `runtime` | Explicit inline/full-screen mode/capabilities | Lease, frames/events, release/resume/close result; owned modes | Full-screen and bounded inline leases, alternate borrowing and foreground handoff implemented |
+| `inline_composition` | Authoritative ordered part snapshots | Frozen output batches, exact receipts, live parts and corrections; no I/O | Implemented bounded print ledger |
 | `gallery` | Fixture descriptions/scripted updates | Simulated results/evidence; clock/event log/fixture lifetime | Implemented; expanded fixtures/measurements pending |
 
 The capability table does not mandate one module per row. Related

@@ -51,7 +51,7 @@ fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
     Event::Key(KeyEvent::new(code, modifiers))
 }
 
-fn facts() -> Snapshot {
+pub(super) fn facts() -> Snapshot {
     let mut sections = vec![];
     for (id, title, kind, summary, detail) in [
         (

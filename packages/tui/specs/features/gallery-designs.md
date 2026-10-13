@@ -14,13 +14,13 @@ At the same terminal size the prior view is restored; after resize the viewport
 adjusts to keep the selected item visible.
 
 Contract review: 2026-10-10, including the composer's updated Up-key behavior.
-The registry is `src/gallery/scenarios.rs`. It contains 718 named entries, plus
+The registry is `src/gallery/scenarios.rs`. It contains 748 named entries, plus
 eight main-view presentation/width profiles per component. This is a contract coverage map,
 not a claim that every specified state is implemented or visually accepted.
 
 | Component / public contract | Interactive scenarios | States needing a dedicated implementation or fixture |
 | --- | --- | --- |
-| [Option picker](../components/option-picker.md#picker-contract) | main/default, details, disabled, danger, filter, no-match, scrolled, multi, groups, loading, narrow, done, empty, error, maximum, minimum; inline placement, centered dialog, full-screen host | Native inline terminal ownership; inline placement currently runs inside the gallery's alternate screen |
+| [Option picker](../components/option-picker.md#picker-contract) | main/default, details, disabled, danger, filter, no-match, scrolled, multi, groups, loading, narrow, done, empty, error, maximum, minimum; inline placement, centered dialog, full-screen host | Native short-picker hosting is available through Inline Composition; broader human acceptance remains separate |
 | [Editor](../components/editor.md#editor-workflow) | main/focused, blurred, empty, wrap, selection, unicode, scrolled, pasted, undo, near-limit, limit, paste-cut, kill-ring, word-parts, line-kills, typed-refused, blurred-scrolled, blurred-limit, tiny-3/2/1, paste-refused-whole, chip-cap, control-characters; modal focus isolation | Dedicated composer-host and growing prompt-host fixtures. Composer input is already available through the composer main view, and dialog prompts through dialog. Foreground editor host adapter is verified separately |
 | [Dialog](../components/dialog.md#official-dialog-design) | 36 named scenarios: panels/stack, timed arrival/guard/attention, locked/outside/error/filter handling, clear/removal, tiny/tall/profile states and irreversible/exact-name confirmation; `late` remains stale ticket rejection | Human visual acceptance and native inline-screen transitions |
 | [Commands](../components/command-palette.md#commands-completion-and-help) | 25 interactive frames: palette/filter/key/unavailable/empty, help/custom/conflicts, pending/hints/miss, empty scopes, help miss, host refusal, alias/slash search, short/40-column and palette/help/hints profiles | Slash insertion belongs to Composer; native human acceptance remains separate |
@@ -164,3 +164,16 @@ long reasons, caller return, medium/narrow/tiny layouts, profiles and reviews.
 Eight shared profiles are additional. F5 acknowledges, F6 fails and F7 advances
 explicit fixture time. Human visual and real consumer acceptance are separate;
 see the [contract](../components/status-panels-and-notices.md).
+
+## Inline Composition coverage
+
+30 entries compose short pickers, structured questions, permissions, printed/live
+Chat, ordered settling/corrections, queued/pending/refused responses, cancellation,
+withdrawal, stopped host, wrapped results, narrow/tiny, capability fallback and
+return/profile fixtures. Eight shared profiles are additional. `--inline` runs an
+explicit normal-screen host with cursor anchoring, alternate borrowing, output
+ordering, resize/redraw and foreground release. Ordinary gallery entries render
+the same component fixtures inside its existing full-screen lease. The fallback
+and return names provide starting states; actual native transitions require their
+keys or terminal conditions. Native human matrix and consumer integration remain
+separate from fixture engineering coverage.

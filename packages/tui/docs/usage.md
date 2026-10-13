@@ -798,3 +798,57 @@ Supply derived `Chrome` with `set_status_chrome` for summary/activity and compos
 focus styling. Retain the actual Chat object when entering another focus scope.
 See the [component contract](../specs/components/status-panels-and-notices.md)
 for limits, clock behavior and host ownership.
+
+## Inline composition
+
+Open `--component inline-composition --scenario main` for the gallery preview.
+Add `--inline` to run after ordinary shell output in the normal terminal screen:
+
+```sh
+cargo run --locked --features gallery -- --inline --component inline-composition --scenario main
+cargo run --locked --features gallery -- --inline --component inline-composition --scenario streaming
+```
+
+The native host draws a bounded live region and keeps settled output in normal
+scrollback. The picker uses its existing arrow/number/Enter controls; Esc or
+Ctrl-C cancels without a selection. Question/permission fixtures use the same
+components and confirmation rules as the full-screen gallery. F5 accepts a
+pending simulated response or settles the next card; F6 fails a pending response;
+F7 appends later card information, F8 queues a question and F9 prints host output
+above the region. All responses are fixture data; no operation executes.
+
+In `streaming`, Ctrl-X O/F/I/N borrow the alternate screen for sessions, files,
+status or notices. Ctrl-F, Alt-PageUp and Ctrl-X V open the retained transcript
+for search, reading or selection. Esc returns to the dock with the same draft and
+caret. Palette/help and Composer overlays also borrow the screen; completion
+menus remain above the dock. Native F4 opens inspection. The ordinary gallery
+keeps F4 for colors. Background output waits until the borrowed view closes.
+Ctrl-L redraws only the live region. F11 releases modes for foreground fixture
+output and reacquires below it. It demonstrates handoff; it does not suspend the
+process. Empty idle Composer quit retains its existing two-press protection.
+
+On resize the host reserves fresh rows below reflowed content. Old live rows may
+remain as terminal reflow artifacts. Below 20 columns or three live rows, the
+region shows a size warning and ignores confirmation. Starting too small,
+unknown capabilities, pipes or a missing cursor report use numbered plain input;
+empty input and EOF choose nothing. Plain reviews display supplied scopes;
+questions collect typed answers and require final `send`. Chat without cursor
+control reports its retained draft and ends without sending it. A host without
+alternate-screen support reports unavailable browser/inspection entry.
+
+Library hosts explicitly open `runtime::InlineSession` with resolved
+`Capabilities` and a maximum `height`. Use `draw`/`poll`, gate confirmation with
+`confirmation_available`, and route ordinary output through `print_before`.
+`enter_alternate`/`leave_alternate` share the lease; `pause` returns a released
+token whose `resume` verifies a new cursor anchor. The host retains its data and
+owns job control, editor processes and persistence. `finish` releases modes and
+prints a readable wrapped result; an empty result clears the owned rows.
+
+`inline_composition::PrintLedger` takes authoritative ordered `Part` snapshots.
+`ready` returns the settled contiguous prefix; acknowledge the exact `Batch`
+only after output is accepted. Later revisions append a named correction. Abort
+an ambiguously partial write to stop automatic replay. Use
+`Chat::render_inline_live` for the dock/activity/review area without drawing its
+transcript, and render live parts in the host's remaining space. See the
+[terminal contract](../specs/features/terminal.md#inline-runtime-api) for bounds
+and the remaining native acceptance scope.

@@ -62,7 +62,7 @@ are inert. Esc clears a nonempty query before returning `Cancelled`.
 and stays stable while filtering, clamped by host area. Details disappear before
 labels truncate at grapheme boundaries; group rows count toward paging. Hosts
 own placement and execute/recheck returned intents. This supports stage/dock/
-full-screen gallery placement; an inline terminal adapter remains slice 12.
+full-screen gallery placement and the explicit bounded inline terminal host.
 
 ### Presentation ownership
 

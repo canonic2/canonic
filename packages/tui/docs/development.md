@@ -21,6 +21,16 @@ terminal lifetime. gallery.rs owns fixture composition and the application loop;
 main.rs stays thin. All components accept caller-owned events and frames. Add a
 component to the gallery's selector and fixtures when it is implemented.
 
+`runtime/inline.rs` owns cursor anchoring, fixed live rows, normal-screen output,
+alternate borrowing and released foreground tokens under the shared terminal
+lease. `inline_composition.rs` is a pure bounded print ledger; hosts acknowledge
+exact batches only after output acceptance. `gallery/inline.rs` composes existing
+views and deterministic host data. Its native loop is opt-in through `--inline`;
+plain fallback is a fixture host adapter, not an implicitly enabled consumer CLI.
+The owned Unix PTY test uses a small VT emulator that replies to cursor reports,
+tracks normal/alternate buffers and checks cooked input plus original termios
+after restoration. It does not establish real emulator reflow or Windows support.
+
 `tool_call_card.rs` owns call/group state and opaque effects; its model/view
 submodules hold safe snapshots and bounded semantic row projection. Chat's tools
 adapter owns message/part routing and stable group-member anchors. The dedicated

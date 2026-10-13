@@ -7,6 +7,7 @@ mod conversation;
 mod dialog_body;
 mod dialogs;
 mod editor;
+mod inline;
 mod inspection;
 mod option_picker;
 mod permissions;
@@ -40,10 +41,17 @@ use std::time::{Duration, Instant};
     version,
     about = "Explore Canonic terminal components with local fixtures"
 )]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line switches"
+)]
 pub struct Cli {
     /// List components without opening an interactive terminal.
     #[arg(long)]
     pub list: bool,
+    /// Run the native inline composition host; ordinary gallery views remain full screen.
+    #[arg(long)]
+    pub inline: bool,
     /// Open a component's scenario picker; otherwise start at the component picker.
     #[arg(long, value_enum)]
     pub component: Option<Component>,
@@ -129,6 +137,7 @@ pub enum Component {
     /// Read-only host-supplied code and unified patch inspection.
     CodeDiffInspection,
     StatusPanelsAndNotices,
+    InlineComposition,
 }
 
 #[derive(Clone, Copy)]
@@ -149,6 +158,7 @@ enum Screen {
     TreeBrowser,
     CodeDiffInspection,
     StatusPanelsAndNotices,
+    InlineComposition,
     Scenarios(Component),
     Design(Component, usize),
 }
@@ -194,8 +204,9 @@ pub struct Gallery {
     trees: trees::TreeDemo,
     inspection: inspection::InspectionDemo,
     status: status::StatusDemo,
-    scenarios: [Picker; 14],
-    scenario_viewports: [ListState; 14],
+    inline: inline::InlineDemo,
+    scenarios: [Picker; 15],
+    scenario_viewports: [ListState; 15],
     scenario_return: Screen,
     preview_width: Option<u16>,
 }
@@ -224,6 +235,7 @@ impl Gallery {
             Screen::TreeBrowser => Some(Component::TreeBrowser),
             Screen::CodeDiffInspection => Some(Component::CodeDiffInspection),
             Screen::StatusPanelsAndNotices => Some(Component::StatusPanelsAndNotices),
+            Screen::InlineComposition => Some(Component::InlineComposition),
             Screen::Scenarios(component) | Screen::Design(component, _) => Some(component),
         }
     }
@@ -347,6 +359,7 @@ impl Gallery {
                 | Component::TreeBrowser
                 | Component::CodeDiffInspection
                 | Component::StatusPanelsAndNotices
+                | Component::InlineComposition
         ) {
             match id {
                 "ansi16" => self.theme.colors = ColorMode::Ansi16,
@@ -391,7 +404,10 @@ impl Gallery {
             _ => {
                 self.preview_width = match (component, id) {
                     (Component::CodeDiffInspection, "narrow" | "narrow-code")
-                    | (Component::StatusPanelsAndNotices, "narrow") => Some(40),
+                    | (
+                        Component::StatusPanelsAndNotices | Component::InlineComposition,
+                        "narrow",
+                    ) => Some(40),
                     (Component::TreeBrowser, "narrow" | "narrow-filter")
                     | (Component::SessionBrowser, "narrow" | "narrow-search" | "narrow-delete")
                     | (Component::Chat, "narrow" | "search-narrow-ascii")
@@ -408,7 +424,8 @@ impl Gallery {
                     (
                         Component::QuestionForm
                         | Component::PermissionReview
-                        | Component::StatusPanelsAndNotices,
+                        | Component::StatusPanelsAndNotices
+                        | Component::InlineComposition,
                         "tiny",
                     ) => Some(12),
                     _ => None,
@@ -513,6 +530,10 @@ impl Gallery {
                 self.status = status::StatusDemo::new(fixture);
                 Screen::StatusPanelsAndNotices
             }
+            Component::InlineComposition => {
+                self.inline = inline::InlineDemo::new(fixture);
+                Screen::InlineComposition
+            }
             Component::PermissionReview => {
                 self.permissions = permissions::PermissionDemo::new(fixture);
                 Screen::PermissionReview
@@ -530,6 +551,7 @@ impl Gallery {
                 | Component::TreeBrowser
                 | Component::CodeDiffInspection
                 | Component::StatusPanelsAndNotices
+                | Component::InlineComposition
         ) {
             for _ in 0..fixture {
                 self.fixture_event(
@@ -585,6 +607,9 @@ impl Gallery {
             Component::StatusPanelsAndNotices => {
                 self.status.update(event);
             }
+            Component::InlineComposition => {
+                self.inline.update(event);
+            }
         }
     }
 
@@ -610,6 +635,7 @@ impl Gallery {
                     "Tree Browser".into(),
                     "Code & diff inspection".into(),
                     "Status Panels & Notices".into(),
+                    "Inline composition".into(),
                 ],
                 Some(0),
             ),
@@ -632,6 +658,7 @@ impl Gallery {
             trees: trees::TreeDemo::new(0),
             inspection: inspection::InspectionDemo::new(0),
             status: status::StatusDemo::new(0),
+            inline: inline::InlineDemo::new(0),
             scenarios: std::array::from_fn(|index| scenarios::picker(scenarios::COMPONENTS[index])),
             scenario_viewports: std::array::from_fn(|_| ListState::default()),
             scenario_return: Screen::Catalog,
@@ -660,6 +687,7 @@ impl Gallery {
             Screen::TreeBrowser => "tree-browser",
             Screen::CodeDiffInspection => "code-diff-inspection",
             Screen::StatusPanelsAndNotices => "status-panels-and-notices",
+            Screen::InlineComposition => "inline-composition",
             Screen::Scenarios(_) => "scenarios",
             Screen::Design(_, _) => "design",
         }
@@ -728,6 +756,9 @@ impl Gallery {
         }
         if matches!(self.screen, Screen::StatusPanelsAndNotices) {
             self.status.tick(elapsed);
+        }
+        if matches!(self.screen, Screen::InlineComposition) {
+            self.inline.tick(elapsed);
         }
         self.editor.tick(elapsed);
         self.picker.tick(elapsed);
@@ -846,6 +877,7 @@ impl Gallery {
             | Screen::TreeBrowser
             | Screen::CodeDiffInspection
             | Screen::StatusPanelsAndNotices
+            | Screen::InlineComposition
             | Screen::Scenarios(_)
             | Screen::Design(_, _) => {}
         }
@@ -860,6 +892,7 @@ impl Gallery {
             Screen::TreeBrowser => self.trees.update(event),
             Screen::CodeDiffInspection => self.inspection.update(event),
             Screen::StatusPanelsAndNotices => self.status.update(event),
+            Screen::InlineComposition => self.inline.update(event),
             _ => false,
         }
     }
@@ -922,6 +955,7 @@ impl Gallery {
             Screen::TreeBrowser => self.trees.render(frame, body, self.theme),
             Screen::CodeDiffInspection => self.inspection.render(frame, body, self.theme),
             Screen::StatusPanelsAndNotices => self.status.render(frame, body, self.theme),
+            Screen::InlineComposition => self.inline.render(frame, body, self.theme),
             Screen::Scenarios(component) => {
                 let index = scenarios::index(component);
                 self.scenarios[index].render_with_state(
@@ -995,6 +1029,26 @@ pub fn run(cli: &Cli) -> Result<()> {
             println!("  {} · main view profiles", scenarios::PROFILES.join(" / "));
         }
         return Ok(());
+    }
+    if cli.inline {
+        if cli
+            .component
+            .is_some_and(|c| !matches!(c, Component::InlineComposition))
+        {
+            anyhow::bail!("--inline requires --component inline-composition");
+        }
+        return inline::run(
+            cli.scenario.as_deref(),
+            Presentation {
+                theme: if cli.light { Theme::Light } else { Theme::Dark },
+                colors: cli.colors.resolve(),
+                symbols: if cli.ascii {
+                    Symbols::Ascii
+                } else {
+                    Symbols::Unicode
+                },
+            },
+        );
     }
     let mut gallery = Gallery::new();
     gallery.theme = Presentation {

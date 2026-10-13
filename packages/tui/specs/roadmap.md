@@ -21,7 +21,9 @@ host acknowledgement races and above-dock Chat with 52 live scenarios.
 Permission Review implements explicit choices, scope/destructive confirmation,
 inspection, host outcomes and the mixed queue with 56 live scenarios.
 Session Browser implements dedicated navigation/search/paging and acknowledged
-row actions with retained Chat instances and 72 live scenarios. Permission policy, native inline hosting and broader acceptance remain separate.
+row actions with retained Chat instances and 72 live scenarios. Permission policy
+and broader native acceptance remain separate. The bounded inline host and
+composition fixture are implemented in phase 6.
 Tree Browser supplies lazy files/tasks, stable folds, filtering with ancestors,
 acknowledged effects and 66 live scenarios; full engineering gates passed.
 Code/Diff Inspection supplies bounded code/unified patches, navigation, folds,
@@ -155,13 +157,15 @@ undo/apply. Generic views may expose supplied descriptors/intents for them.
 
 Question Form, Permission Review and their shared above-dock queue are implemented.
 Session/Tree Browser and Code/Diff Inspection are implemented. Other browsers,
-inline hosting and broad native acceptance remain separate work. Composer's
+broader native acceptance and real host adapters remain separate work. Composer's
 submission, history/stash, queue and editor handoff are implemented local scope.
 Current per-component gaps belong in the [component contracts](components/README.md),
 and feature gaps in the [feature contracts](features/README.md).
 
 Status Panels & Notices is implemented with responsive placement and explicit
-clock/action ownership. The bounded delivery continues with inline terminal
-hosting and acceptance fixes. Additional browsers and
+clock/action ownership. Inline terminal hosting now has a bounded reusable lease,
+ordered print ledger, retained borrowed views and a native fixture. The bounded
+delivery continues with human visual/native acceptance and documented host gaps.
+Additional browsers and
 application features require a concrete consumer need rather than extending
 this component delivery indefinitely.

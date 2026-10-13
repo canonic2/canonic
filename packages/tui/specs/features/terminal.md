@@ -1,7 +1,8 @@
 # Terminal ownership, compatibility and presentation
 
-Status: foundation lease exists; inline mode, explicit error reporting and wider
-compatibility are proposed. [Inventory](../inventory.md) qualifies existing cleanup.
+Status: full-screen and bounded inline leases, explicit cleanup errors, foreground
+release/resume and an ordered print ledger are implemented. Wider native
+compatibility remains unverified. [Inventory](../inventory.md) records the scope.
 
 ## One terminal owner
 
@@ -42,7 +43,7 @@ unrelated preceding output; if safe anchoring is unavailable, use host plain fal
 
 Chat dialogs follow the [dialog panel contract](../components/dialog.md#official-dialog-design):
 temporarily enter an alternate screen, redraw the visible conversation tail there,
-and return on close. This transition remains pending the inline adapter.
+and return on close. The inline gallery borrows that screen with the existing lease.
 
 Inline adapter owns cursor-region bookkeeping and redraw, not picker decisions.
 Same picker/review renders into a bounded area and returns same intent in both
@@ -50,6 +51,66 @@ modes. One inline interaction at a time; no hidden interaction on hook/protocol
 paths. Gate and Shield choose interactive invocation eligibility themselves.
 Initial inline acceptance uses short menus/review; arbitrary rich full-screen
 layouts in scrollback are outside that first slice.
+
+## Inline runtime API
+
+`runtime::InlineSession` acquires modes only after host-resolved cursor capability,
+TTY and initial size checks. A real cursor report establishes its first anchor;
+unknown/missing reports return an error for plain fallback. `InlineOptions::height`
+is an explicit host limit, capped at window height minus two rows. A fixed Ratatui
+viewport occupies freshly reserved rows. It never uses the inline autoresize path
+that can clear the normal screen when width shrinks. Size changes abandon stale
+coordinates and reserve fresh rows at the bottom; existing terminal reflow artifacts
+are not erased. Resize events invalidate the anchor even while the alternate
+screen is borrowed and even if the size returns to its original dimensions.
+Hosts using another event source call `invalidate_anchor` for any resize;
+the provided `poll` records these events. `redraw` invalidates only the
+current owned live buffer.
+
+Hosts gate affirmative input with `confirmation_available`; undersized regions
+still offer cancellation. `print_before` accepts at most 64 KiB per record, strips
+control effects, wraps in terminal cells, prints above the region and reanchors it.
+All writers must participate in this host route while a lease is active. Direct
+external writes are not arbitrated. On `enter_alternate`, the same lease borrows
+the full screen; `leave_alternate` returns to the normal region and drains deferred
+output in order. The queue is capped at 128 records and 1 MiB. Overflow is explicit.
+Host state remains alive across transitions. A write failure stops further drawing;
+finish attempts mode restoration and reports errors without retrying partial writes.
+
+`pause` clears only owned rows and returns a released `PausedInline` token.
+`resume` checks the actual terminal and obtains a fresh anchor below intervening
+foreground output. Unix tokens preserve the initial termios baseline across
+handoffs. These APIs do not send job-control signals. `finish(result)` restores
+modes and emits plain result text; `finish("")` is the explicit clear policy.
+Drop restores the lease as a backstop but supplies no completion result.
+
+`inline_composition::PrintLedger` owns write-once output independently of rendering
+and terminal I/O. A per-turn snapshot has at most 256 identities, 1 MiB of supplied
+text/labels/IDs, 60 KiB per text, 128-byte IDs and 256-byte labels. Retained accepted
+parts remain bounded by 256 identities. Settled records wait for unsettled
+predecessors. `ready` freezes one exact batch; updates during a pending write do not
+change that batch. Exact acknowledgement records its printed versions. Duplicate,
+foreign and altered receipts are inert. New revisions of printed records append
+`↳ label → text`. Atomic replacement rejects duplicate IDs and stale/materially
+inconsistent revisions, including outstanding batches. `abort` stops replay after
+an ambiguous write. No notice, status, permission authority or execution belongs
+to this ledger. Hosts insert explicit retry/rewind markers as fresh ordered records.
+
+`Chat::render_inline_live` reuses Composer/activity/reviews and excludes the loaded
+transcript. The host renders live records above its dock. Transcript search,
+selection and reading use a retained full-screen Chat view. The gallery additionally
+borrows views for Composer overlays, sessions, tree, inspection and status/notices.
+It has no sidebars beside normal scrollback. The native CLI is opt-in; list/help
+and existing consumers acquire no inline lease implicitly. Plain picker/review
+fixtures have typed-number input without defaults; empty/EOF cancels or retries.
+Plain Chat reports its retained draft and ends without submission.
+
+Remaining scope: automatic content-height measurement, general external log-writer
+coordination and actual product adapters are host integration work. Native POSIX
+suspend/foreground and Windows ConPTY, emulator reflow, multiplexers, IME and
+assistive testing are separate acceptance. The handoff's unresolved remove-key,
+cancel/skip glyph, filter-clear hint and Tab wording choices do not change current
+component bindings in this increment.
 
 ## Suspension and asynchronous lifecycle
 

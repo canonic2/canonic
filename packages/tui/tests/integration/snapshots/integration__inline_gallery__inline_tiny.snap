@@ -1,0 +1,10 @@
+---
+source: tests/integration/inline_gallery.rs
+expression: "screen(&mut g, width, height)"
+---
+Canonic TUI · Comp
+
+esc cancel
+
+
+Esc back · Ctrl-C

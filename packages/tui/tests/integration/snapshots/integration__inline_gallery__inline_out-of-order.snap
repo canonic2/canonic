@@ -1,0 +1,28 @@
+---
+source: tests/integration/inline_gallery.rs
+expression: "screen(&mut g, width, height)"
+---
+Canonic TUI · Component gallery
+
+~/acme-api $ acme preview
+plan · 3 services · fixture only
+acme · Adding the timezone and a test.
+
+
+edit src/settings.ts ··· writing
+run tests → done · waits for earlier card
+
+
+
+
+
+
+✕ Local connection failed · ctrl+g retry · +3 more · ctrl+x n
+message ────────────────────────────────────────────────────────────────────────
+and bump the app version
+
+
+───────────────────────────────────────────────────────────── acme-api#276 ~chat
+actions on · enter sends · F1 keys                         ctx 42% · $0.42 · ! 1
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme

@@ -1,5 +1,8 @@
 //! Owns one interactive terminal lease and restores its modes on drop or unwinding.
 
+mod inline;
+pub use inline::{Capabilities, InlineOptions, InlineSession, PausedInline};
+
 #[cfg(unix)]
 use crossterm::event::{
     KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
@@ -25,6 +28,7 @@ pub struct TerminalSession {
     raw: bool,
     screen: bool,
     paste: bool,
+    held: Option<()>,
     #[cfg(unix)]
     keyboard: Option<KeyboardEnhancementFlags>,
     #[cfg(unix)]
@@ -63,6 +67,12 @@ impl TerminalSession {
     /// # Errors
     /// Returns an error for piped input/output, an existing lease, or terminal I/O failure.
     pub fn open() -> io::Result<Self> {
+        let mut session = Self::acquire_modes(true)?;
+        session.terminal = Some(Terminal::new(CrosstermBackend::new(io::stdout()))?);
+        Ok(session)
+    }
+
+    fn acquire_modes(screen: bool) -> io::Result<Self> {
         if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
             return Err(io::Error::other(
                 "The gallery requires an interactive terminal; use --list for plain output",
@@ -79,6 +89,7 @@ impl TerminalSession {
             raw: false,
             screen: false,
             paste: false,
+            held: Some(()),
             #[cfg(unix)]
             keyboard: None,
             #[cfg(unix)]
@@ -90,8 +101,12 @@ impl TerminalSession {
         }
         terminal::enable_raw_mode()?;
         session.raw = true;
-        session.screen = true;
-        execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+        session.screen = screen;
+        if screen {
+            execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+        } else {
+            execute!(io::stdout(), Hide)?;
+        }
         session.paste = true;
         execute!(io::stdout(), EnableBracketedPaste)?;
         #[cfg(unix)]
@@ -100,7 +115,6 @@ impl TerminalSession {
             session.keyboard = Some(flags);
             execute!(io::stdout(), PushKeyboardEnhancementFlags(flags))?;
         }
-        session.terminal = Some(Terminal::new(CrosstermBackend::new(io::stdout()))?);
         Ok(session)
     }
 
@@ -153,6 +167,8 @@ impl TerminalSession {
         }
         if std::mem::take(&mut self.screen) {
             record(execute!(io::stdout(), Show, LeaveAlternateScreen));
+        } else if self.held.is_some() {
+            record(execute!(io::stdout(), Show));
         }
         if std::mem::take(&mut self.raw) {
             record(terminal::disable_raw_mode());
@@ -168,7 +184,9 @@ impl TerminalSession {
                 .map_err(Into::into),
             );
         }
-        ACTIVE.store(false, Ordering::Release);
+        if self.held.take().is_some() {
+            ACTIVE.store(false, Ordering::Release);
+        }
         if errors.is_empty() {
             Ok(())
         } else {

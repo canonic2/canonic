@@ -38,7 +38,8 @@ Full application operations appear below to establish host ownership.
 | Chat viewport | Logical message/part/source anchors, usize navigation, follow/unread, opaque paging, cached visible row projection |
 | [Text](../src/text.rs) | Removes controls except allowed newlines, bounds UTF-8 by scalars, grapheme wrapping, narrow replacement; strips ESC rather than parsing complete escape sequences |
 | [Theme](../src/theme.rs) | Semantic ANSI/indexed/RGB/no-color profiles and ASCII decoration; terminal-default body colors and syntax/diff/selection styles resolved by Chat |
-| [Runtime](../src/runtime.rs) | TTY checks, process-local lease, raw/alternate/cursor/paste, startup guard/drop restoration attempts, synchronous draw/poll; explicit close errors and foreground handoff; exact Unix termios restoration; inline and forced-signal handling remain outside this adapter |
+| [Runtime](../src/runtime.rs) | TTY/capability checks, one process-local lease, raw/cursor/paste/enhanced keys, full-screen and fixed inline rows, cursor reports, alternate borrowing, output/deferred queue, explicit close and foreground release/resume; exact Unix termios restoration; host owns signals |
+| [Inline composition](../src/inline_composition.rs) | Bounded ordered settled prefix, frozen exact write batches, write-once receipts, appended corrections and ambiguous-write stop; host owns terminal I/O and live rendering |
 | [Gallery](../src/gallery.rs) | Selector/picker/chat/editor; independent drafts, resettable Unicode/long/limit scenarios; deterministic stream queue; busy/disconnected protects draft; 76 Chat scenarios exercise rich content, delayed identified effects and serial paging recovery |
 | [Editor tests](../tests/integration/editor.rs) | Editing, bounds, selection, undo, focus removal/return, cursor/style, reviewed multiline snapshot and arbitrary Unicode properties |
 | [Rich picker tests](../tests/integration/picker.rs) | Identity/default/disabled refresh, hidden marks, query undo, status isolation, group paging, compact snapshot, Unicode/narrow styles and supplied-ID properties |
@@ -48,7 +49,7 @@ Full application operations appear below to establish host ownership.
 | Consumers | Optional dependencies in [Gate](../../gate/Cargo.toml), [Shield](../../../private/shield/Cargo.toml), [Drone](../../../private/drone/Cargo.toml); no library calls found in consumer source; this is dependency readiness |
 
 Chat snapshots, Unicode properties and native Unix search/copy/resize workflows
-are present. Native Windows acceptance, inline hosting and full host adapters
+are present. Native Windows acceptance and full host adapters
 remain separate work.
 Editor controls remain stored and render as safe pictures/hex; transcript controls
 are sanitized before rendering. See [Gate 1](human-testing.md#gate-1--editor-and-focus)

@@ -40,7 +40,7 @@ macro_rules! planned {
     };
 }
 
-pub(super) const COMPONENTS: [Component; 14] = [
+pub(super) const COMPONENTS: [Component; 15] = [
     Component::Picker,
     Component::Chat,
     Component::Editor,
@@ -55,6 +55,7 @@ pub(super) const COMPONENTS: [Component; 14] = [
     Component::TreeBrowser,
     Component::CodeDiffInspection,
     Component::StatusPanelsAndNotices,
+    Component::InlineComposition,
 ];
 
 pub(super) const PROFILES: [&str; 8] = [
@@ -84,6 +85,7 @@ pub(super) fn index(component: Component) -> usize {
         Component::TreeBrowser => 11,
         Component::CodeDiffInspection => 12,
         Component::StatusPanelsAndNotices => 13,
+        Component::InlineComposition => 14,
     }
 }
 
@@ -122,6 +124,7 @@ pub(super) fn entries(component: Component) -> &'static [Scenario] {
         Component::TreeBrowser => TREES,
         Component::CodeDiffInspection => INSPECTION,
         Component::StatusPanelsAndNotices => STATUS,
+        Component::InlineComposition => INLINE,
     }
 }
 
@@ -141,6 +144,7 @@ pub(super) fn name(component: Component) -> &'static str {
         Component::TreeBrowser => "tree-browser",
         Component::CodeDiffInspection => "code-diff-inspection",
         Component::StatusPanelsAndNotices => "status-panels-and-notices",
+        Component::InlineComposition => "inline-composition",
     }
 }
 
@@ -151,6 +155,9 @@ pub(super) fn board(component: Component) -> &'static str {
         }
         Component::StatusPanelsAndNotices => {
             "Status Panels & Notices · Sections / Focus / Notices / Profiles"
+        }
+        Component::InlineComposition => {
+            "Inline composition · Print / Region / Return / Resize / Failure"
         }
         Component::TreeBrowser => "Tree Browser · Files / Tasks / Loading / Navigation / Profiles",
         Component::SessionBrowser => {
@@ -971,4 +978,37 @@ const STATUS: &[Scenario] = &[
     live!("light", 24),
     live!("reduced-motion", 25),
     live!("review", 26),
+];
+
+const INLINE: &[Scenario] = &[
+    live!("main", 0),
+    live!("picker", 1),
+    live!("question", 2),
+    live!("permission", 3),
+    live!("streaming", 4),
+    live!("out-of-order", 5),
+    live!("follow-up", 6),
+    live!("queued", 7),
+    live!("pending", 8),
+    live!("refused", 9),
+    live!("cancelled", 10),
+    live!("withdrawn", 11),
+    live!("host-stopped", 12),
+    live!("long-result", 13),
+    live!("empty", 14),
+    live!("long", 15),
+    live!("narrow", 16),
+    live!("short", 17),
+    live!("tiny", 18),
+    live!("plain", 19),
+    live!("no-anchor", 20),
+    live!("no-alternate", 21),
+    live!("return", 22),
+    live!("late-output", 23),
+    live!("redraw", 24),
+    live!("handoff", 25),
+    live!("ascii", 26),
+    live!("no-color", 27),
+    live!("ansi16", 28),
+    live!("light", 29),
 ];

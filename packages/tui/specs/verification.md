@@ -564,6 +564,51 @@ links/anchors and the renamed private design indexes were checked. Human visual
 review, broader native platforms, inline hosting and real host adapters remain
 separate acceptance work.
 
+## Inline Composition engineering record — 2026-10-12
+
+Implemented the bounded [inline runtime contract](features/terminal.md#inline-runtime-api):
+verified cursor anchoring, fresh fixed rows, ordered settled output, appended
+corrections, retained live Chat, alternate-screen borrowing and foreground
+release/resume. The gallery adds 30 entries and eight shared profiles; the native
+host is explicitly enabled with `--inline`. Seven reviewed snapshots cover the
+picker, printed/live/dock, out-of-order completion, correction, pending/refused
+review and tiny cancellation hint.
+
+- Final `make check`: format, strict Clippy, **374 tests**, **4 doctests**, API
+  documentation and dependency advisories/bans/licenses/sources passed.
+- Gallery-disabled nextest: **301 tests** passed. After the final anchor
+  refinement, the feature-off build passed and the full suite exercised the
+  native inline changes.
+- `make build`: release library/gallery passed; its headless inventory lists
+  the 30 inline entries and shared profiles.
+- Gate and Shield optional `tui` compilation passed locked/offline with Rust
+  1.99 in disposable manifests pointing at their actual sources. Drone passed
+  after resolving its existing missing Markdown dependencies in the temporary
+  lockfile. All original consumer manifests/locks remained unchanged.
+
+Eight added tests cover contiguous settling, revisions during pending output,
+exact/foreign/altered/duplicate receipts, atomic invalid snapshots, forgotten
+pending revisions and ambiguous-write stop. Gallery coverage checks borrowed
+view return and the retained caret, including unavailable alternate-screen entry.
+Owned Unix PTYs verify cursor reports and missing-report fallback, surrounding
+output before/after, selected result preservation after host output, confirmation
+blocked at tiny size, growth, explicit redraw, foreground release, deferred output,
+alternate resize away/back, transcript search/reading return, cancellation and
+normal cooked input plus original terminal attributes. Empty/EOF plain input
+chooses nothing. The small VT harness records no normal-screen whole-page clear.
+
+Final Rust/PTY source hashes remained unchanged through the last full gate,
+release and consumer builds. Local Markdown links/anchors and both Gate repository
+whitespace checks passed. Module review retains pure print accounting, shared
+component state and one terminal lease; only the explicit gallery host performs
+terminal I/O and fixture acknowledgements.
+
+This establishes the reusable runtime/fixture slice, not human visual approval,
+actual product integration or the full native matrix. Automatic content-height
+policy, POSIX job-control, real emulator reflow, Windows, multiplexers, IME and
+assistive acceptance remain qualified in the terminal contract. Existing component
+bindings remain in force pending the documented design wording/key decisions.
+
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation

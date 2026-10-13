@@ -279,11 +279,15 @@ impl Chat {
     }
     /// Render with explicit color/alphabet capability inputs.
     pub fn render_with(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
-        self.render_composition(frame, area, theme, true);
+        self.render_composition(frame, area, theme, true, false);
     }
     /// Render the design's plain transcript over a fixed Composer and host footer.
     pub fn render_docked_with(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
-        self.render_composition(frame, area, theme, false);
+        self.render_composition(frame, area, theme, false, false);
+    }
+    /// Render only the live dock/review scopes; the host owns immutable printed transcript text.
+    pub fn render_inline_live(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+        self.render_composition(frame, area, theme, false, true);
     }
     fn composer_focused(&self) -> bool {
         self.mode() == Mode::Compose
@@ -297,6 +301,7 @@ impl Chat {
         area: Rect,
         theme: Presentation,
         framed: bool,
+        live_only: bool,
     ) {
         self.sync_reviews();
         let review_height = self.reviews.active().map_or(0, |r| {
@@ -328,32 +333,9 @@ impl Chat {
             status,
         );
         self.input.render_above(frame, above, theme);
-        let block = if framed {
-            Block::bordered().title("Conversation")
-        } else {
-            Block::default()
-        };
-        let inner = block.inner(transcript);
-        self.width = inner.width;
-        if self.tool_symbols != theme.symbols {
-            self.tool_symbols = theme.symbols;
-            for (key, cache) in &mut self.cache {
-                if self.tools.contains_key(key) {
-                    cache.width = 0;
-                }
-            }
+        if !live_only {
+            self.render_transcript(frame, transcript, theme, framed);
         }
-        self.height = usize::from(inner.height).max(1);
-        self.refresh();
-        frame.render_widget(block, transcript);
-        let lines: Vec<_> = self
-            .rows
-            .iter()
-            .skip(self.scroll)
-            .take(usize::from(inner.height))
-            .map(|row| self.render_row(row.row(), theme))
-            .collect();
-        frame.render_widget(Paragraph::new(lines).style(theme.base()), inner);
         self.render_unread(frame, unread, theme);
         self.render_activity(frame, activity, theme);
         self.input.render_with(
@@ -413,6 +395,40 @@ impl Chat {
                 activity,
             );
         }
+    }
+    fn render_transcript(
+        &mut self,
+        frame: &mut Frame<'_>,
+        transcript: Rect,
+        theme: Presentation,
+        framed: bool,
+    ) {
+        let block = if framed {
+            Block::bordered().title("Conversation")
+        } else {
+            Block::default()
+        };
+        let inner = block.inner(transcript);
+        self.width = inner.width;
+        if self.tool_symbols != theme.symbols {
+            self.tool_symbols = theme.symbols;
+            for (key, cache) in &mut self.cache {
+                if self.tools.contains_key(key) {
+                    cache.width = 0;
+                }
+            }
+        }
+        self.height = usize::from(inner.height).max(1);
+        self.refresh();
+        frame.render_widget(block, transcript);
+        let lines: Vec<_> = self
+            .rows
+            .iter()
+            .skip(self.scroll)
+            .take(usize::from(inner.height))
+            .map(|row| self.render_row(row.row(), theme))
+            .collect();
+        frame.render_widget(Paragraph::new(lines).style(theme.base()), inner);
     }
     fn focus_hint(&self, width: u16) -> String {
         if self.status_chrome.as_ref().is_some_and(|c| c.focused) {

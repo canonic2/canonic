@@ -11,7 +11,7 @@ multiple components. Each feature owns its behavior, boundaries and acceptance;
 | [Input, focus and navigation](interaction.md) | Routing, focus scopes, keyboard bindings, scrolling, selection and copy | Focus and keyboard foundations implemented; pointer interaction proposed |
 | [Activity, review and cancellation](activity.md) | Tool/run state, permissions, questions and cancellation | Cards/groups, Run Activity, Question Form, Permission Review and shared queue implemented; host authority remains external |
 | [Browsing, panels and notices](browsing.md) | Session/resource browsing, trees, summary panels and notices | Session/Tree Browser, Code/Diff Inspection and Status Panels & Notices implemented; other browsers proposed |
-| [Terminal hosting and compatibility](terminal.md) | Terminal lease, inline/full-screen hosting, cleanup and accessibility | Foundation lease implemented; inline hosting and wider compatibility pending |
+| [Terminal hosting and compatibility](terminal.md) | Terminal lease, inline/full-screen hosting, print ledger, cleanup and accessibility | Bounded inline/full-screen leases and foreground handoff implemented; wider native acceptance pending |
 
 These public contracts contain their implementation requirements without links
 to private design files. Package-wide architecture, delivery and engineering
