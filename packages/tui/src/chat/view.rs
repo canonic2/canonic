@@ -289,6 +289,18 @@ impl Chat {
     pub fn render_inline_live(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
         self.render_composition(frame, area, theme, false, true);
     }
+    /// Preferred inline dock, above-dock and review height, excluding host live records.
+    /// Active reviews retain the same three-row reading allowance as full-screen hosts.
+    #[must_use]
+    pub fn inline_height(&self, width: u16, theme: Presentation) -> u16 {
+        let review = self
+            .reviews
+            .active()
+            .map_or(0, |r| r.height(width, theme).saturating_add(3));
+        8_u16
+            .saturating_add(self.input.above_height_for(width))
+            .saturating_add(review)
+    }
     fn composer_focused(&self) -> bool {
         self.mode() == Mode::Compose
             && self.reviews.active().is_none()

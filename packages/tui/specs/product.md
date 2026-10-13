@@ -7,7 +7,7 @@ for module ownership.
 ## Purpose and scope
 
 Provide terminal interactions developed and verified independently of a product.
-Gate and Shield need short choices, confirmations and inspection followed by
+Gate needs short choices, confirmations and inspection followed by
 ordinary command output. Drone needs a composed full-screen conversation with
 an editable draft, streaming content, tool activity and human review. Shared
 components supply compatible interaction behavior; each host retains its decisions.

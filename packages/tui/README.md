@@ -6,7 +6,8 @@ See [usage](docs/usage.md#commands-and-keyboard-help).
 
 An unpublished Rust component library and local full-screen gallery for Canonic.
 Inline Composition adds an explicit normal-screen host, ordered settled output,
-borrowed full-screen views and plain numbered fallback. Its 30 scenarios are also
+borrowed full-screen views and plain numbered fallback. Live regions use component
+measurements to grow and shrink under the same lease. Its 30 scenarios are also
 available in the regular gallery. Run the native host with
 `cargo run --locked --features gallery -- --inline --component inline-composition --scenario streaming`.
 See [usage](docs/usage.md#inline-composition) and the
@@ -22,7 +23,7 @@ scenarios. Ctrl-X I opens status and Ctrl-X N lists notices when the host enable
 the adapter. See [usage](docs/usage.md#status-panels-and-notices) and the
 [contract](specs/components/status-panels-and-notices.md).
 The Cargo package is `canonic-tui`; Rust code imports it as `canonic_tui`.
-Drone and Shield use it through local Cargo path dependencies. Ratatui
+Drone and Gate declare it through optional local Cargo path dependencies. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
@@ -144,7 +145,6 @@ Each consumer has an optional `tui` Cargo feature enabling the dependency:
 
 ```sh
 cargo check --locked --features tui --manifest-path private/drone/Cargo.toml
-cargo check --locked --features tui --manifest-path private/shield/Cargo.toml
 cargo check --locked --features tui --manifest-path packages/gate/Cargo.toml
 ```
 

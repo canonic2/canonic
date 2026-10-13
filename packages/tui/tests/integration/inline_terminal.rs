@@ -3,7 +3,10 @@
 #[test]
 fn inline_native_host_preserves_surrounding_output_and_terminal_modes() {
     let output = std::process::Command::new("python3")
-        .args(["-c", include_str!("../fixtures/inline_host.py")])
+        .args([
+            "-B",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/inline_host.py"),
+        ])
         .arg(assert_cmd::cargo::cargo_bin!("tui-gallery"))
         .output()
         .expect("owned inline PTY fixture");

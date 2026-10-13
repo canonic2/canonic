@@ -328,12 +328,26 @@ impl InlineDemo {
     pub(super) fn plain(&self) -> bool {
         self.plain
     }
-    pub(super) fn height(&self) -> u16 {
-        if matches!(self.region, Region::Dock) {
-            18
-        } else {
-            12
-        }
+    pub(super) fn height(&self, width: u16, p: Presentation) -> u16 {
+        let height = match &self.region {
+            Region::Picker(picker) => picker.height(width, picker_view(p, u16::MAX)),
+            Region::Questions(q) => q.height(width, p),
+            Region::Permission(r) => r.height(width, p),
+            Region::Dock => {
+                let live = self
+                    .ledger
+                    .live()
+                    .iter()
+                    .map(|part| crate::text::wrapped(&part.text, width).len())
+                    .sum::<usize>();
+                self.chat
+                    .inline_height(width, p)
+                    .saturating_add(u16::try_from(live).unwrap_or(u16::MAX))
+            }
+        };
+        height
+            .max(3)
+            .saturating_add(u16::from(!self.notice.is_empty()))
     }
     fn next(&mut self, line: String) {
         if let Some(region) = self.waiting.pop_front() {
@@ -606,7 +620,8 @@ impl InlineDemo {
         ))));
     }
     pub(super) fn render_live(&mut self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
-        self.tiny = area.width < 20 || area.height < 3;
+        let notice_height = u16::from(self.overlay.is_none() && !self.notice.is_empty());
+        self.tiny = area.width < 20 || area.height.saturating_sub(notice_height) < 3;
         frame.render_widget(Block::default().style(p.base()), area);
         if self.tiny {
             frame.render_widget(
@@ -662,22 +677,13 @@ impl InlineDemo {
         let area = content;
         match &mut self.region {
             Region::Picker(picker) => {
-                picker.render(
-                    frame,
-                    area,
-                    PickerView {
-                        title: "deploy to staging",
-                        source: if self.waiting.is_empty() {
-                            ""
-                        } else {
-                            "1 more waiting"
-                        },
-                        context: "Deploy the fixture image to 3 services?",
-                        presentation: p,
-                        max_height: area.height,
-                    },
-                    true,
-                );
+                let mut view = picker_view(p, area.height);
+                view.source = if self.waiting.is_empty() {
+                    ""
+                } else {
+                    "1 more waiting"
+                };
+                picker.render(frame, area, view, true);
             }
             Region::Questions(q) => q.render_with(frame, area, p, self.waiting.len()),
             Region::Permission(r) => r.render_with(frame, area, p, self.waiting.len()),
@@ -692,13 +698,15 @@ impl InlineDemo {
                     .ledger
                     .live()
                     .iter()
-                    .map(|part| part.text.as_str())
+                    .flat_map(|part| crate::text::wrapped(&part.text, area.width))
                     .collect::<Vec<_>>()
                     .join("\n");
                 frame.render_widget(
                     Paragraph::new(live).style(p.base()),
                     Rect {
-                        height: area.height.saturating_sub(8),
+                        height: area
+                            .height
+                            .saturating_sub(self.chat.inline_height(area.width, p)),
                         ..area
                     },
                 );
@@ -716,17 +724,26 @@ impl InlineDemo {
                 ..area
             },
         );
+        let live_height = area.height.saturating_sub(print_height);
+        let preferred = self.result.as_ref().map_or_else(
+            || self.height(area.width, p),
+            |result| {
+                u16::try_from(crate::text::wrapped(result, area.width).len()).unwrap_or(u16::MAX)
+            },
+        );
         let live = Rect::new(
             area.x,
             area.y + print_height,
             area.width,
-            area.height.saturating_sub(print_height),
+            if self.overlay.is_some() {
+                live_height
+            } else {
+                preferred.min(live_height)
+            },
         );
         if let Some(result) = &self.result {
             frame.render_widget(
-                Paragraph::new(result.clone())
-                    .wrap(ratatui::widgets::Wrap { trim: false })
-                    .style(p.base()),
+                Paragraph::new(crate::text::wrapped(result, area.width).join("\n")).style(p.base()),
                 live,
             );
         } else {
@@ -736,4 +753,13 @@ impl InlineDemo {
 }
 fn cancel(event: &Event) -> bool {
     matches!(event,Event::Key(k) if k.kind==KeyEventKind::Press && (k.code==KeyCode::Esc && k.modifiers==KeyModifiers::NONE || k.code==KeyCode::Char('c') && k.modifiers==KeyModifiers::CONTROL))
+}
+fn picker_view(p: Presentation, max_height: u16) -> PickerView<'static> {
+    PickerView {
+        title: "deploy to staging",
+        source: "",
+        context: "Deploy the fixture image to 3 services?",
+        presentation: p,
+        max_height,
+    }
 }

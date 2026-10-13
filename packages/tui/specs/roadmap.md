@@ -164,7 +164,7 @@ and feature gaps in the [feature contracts](features/README.md).
 
 Status Panels & Notices is implemented with responsive placement and explicit
 clock/action ownership. Inline terminal hosting now has a bounded reusable lease,
-ordered print ledger, retained borrowed views and a native fixture. The bounded
+ordered print ledger, measured region sizing, retained borrowed views and a native fixture. The bounded
 delivery continues with human visual/native acceptance and documented host gaps.
 Additional browsers and
 application features require a concrete consumer need rather than extending

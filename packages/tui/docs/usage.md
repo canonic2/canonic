@@ -531,7 +531,7 @@ through OSC 11 is not implemented; select light tokens explicitly.
 
 ## Local consumers
 
-Drone, Shield and Gate declare `canonic-tui` as an optional, versioned local
+Drone and Gate declare `canonic-tui` as an optional, versioned local
 path dependency. Enable their `tui` feature; no package registry is involved for
 this library. Upstream dependencies are resolved through their Cargo lockfiles.
 
@@ -837,7 +837,13 @@ control reports its retained draft and ends without sending it. A host without
 alternate-screen support reports unavailable browser/inspection entry.
 
 Library hosts explicitly open `runtime::InlineSession` with resolved
-`Capabilities` and a maximum `height`. Use `draw`/`poll`, gate confirmation with
+`Capabilities` and a preferred content `height`. Recompute it from the existing
+picker/question/permission height APIs when width or content changes and pass it
+to `set_height`. The native gallery does this automatically. Growth reserves more
+owned rows; shrink clears the old tail. The window cap retains the preference for
+later growth. Borrowed screens defer fitting until return; modes and component
+state survive. Zero height is rejected without changing the active region.
+Use `draw`/`poll`, gate confirmation with
 `confirmation_available`, and route ordinary output through `print_before`.
 `enter_alternate`/`leave_alternate` share the lease; `pause` returns a released
 token whose `resume` verifies a new cursor anchor. The host retains its data and
@@ -849,6 +855,7 @@ prints a readable wrapped result; an empty result clears the owned rows.
 only after output is accepted. Later revisions append a named correction. Abort
 an ambiguously partial write to stop automatic replay. Use
 `Chat::render_inline_live` for the dock/activity/review area without drawing its
-transcript, and render live parts in the host's remaining space. See the
+transcript. Measure that space with `Chat::inline_height` and add the wrapped live
+parts, then render them in the host's remaining space. See the
 [terminal contract](../specs/features/terminal.md#inline-runtime-api) for bounds
 and the remaining native acceptance scope.

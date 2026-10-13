@@ -13,6 +13,22 @@ fn screen(g: &mut Gallery, width: u16, height: u16) -> String {
     super::components::dump(t.backend().buffer())
 }
 #[test]
+fn wrapped_result_uses_its_own_height_after_the_picker_closes() {
+    let mut g = Gallery::new();
+    g.open_scenario(Component::InlineComposition, "long-result")
+        .unwrap();
+    let text = screen(&mut g, 40, 40);
+    assert_eq!(
+        text.chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .matches("truncation.")
+            .count(),
+        8,
+        "{text}"
+    );
+}
+#[test]
 fn inline_states_render_and_borrowed_views_preserve_the_caret() {
     let mut g = Gallery::new();
     for (name, expected) in [

@@ -57,7 +57,7 @@ layouts in scrollback are outside that first slice.
 `runtime::InlineSession` acquires modes only after host-resolved cursor capability,
 TTY and initial size checks. A real cursor report establishes its first anchor;
 unknown/missing reports return an error for plain fallback. `InlineOptions::height`
-is an explicit host limit, capped at window height minus two rows. A fixed Ratatui
+is the preferred content height, capped at window height minus two rows. A fixed Ratatui
 viewport occupies freshly reserved rows. It never uses the inline autoresize path
 that can clear the normal screen when width shrinks. Size changes abandon stale
 coordinates and reserve fresh rows at the bottom; existing terminal reflow artifacts
@@ -66,6 +66,24 @@ screen is borrowed and even if the size returns to its original dimensions.
 Hosts using another event source call `invalidate_anchor` for any resize;
 the provided `poll` records these events. `redraw` invalidates only the
 current owned live buffer.
+
+Hosts supply component measurements to `set_height`, without reacquiring terminal
+modes or replacing component state. Growth clears the old owned rows and reserves
+only the additional rows below them, scrolling preceding output into normal
+history if needed. Shrink clears the previous owned region and keeps its top
+anchor; abandoned rows are blank. Equal effective heights perform no redraw I/O.
+Zero is rejected without changing the accepted height or stopping the lease.
+Terminal failures stop further drawing. During alternate borrowing, only the
+preferred height changes; normal-screen fitting occurs on return. Window shrink
+clamps the visible region while retaining the preference for later growth and
+foreground resume. Known resize invalidation always takes precedence over old rows.
+
+The inline gallery uses `ChoicePicker::height`, `QuestionForm::height` and
+`PermissionReview::height`. Chat exposes pure `inline_height` for its fixed dock,
+above-dock content and active review allowance; hosts add the wrapped live records.
+It excludes printed history and measures with the current width/presentation.
+The gallery preview and native host use the same measurements. Notices retain an
+explicit row, and insufficient room for the component still blocks confirmation.
 
 Hosts gate affirmative input with `confirmation_available`; undersized regions
 still offer cancellation. `print_before` accepts at most 64 KiB per record, strips
@@ -105,8 +123,8 @@ and existing consumers acquire no inline lease implicitly. Plain picker/review
 fixtures have typed-number input without defaults; empty/EOF cancels or retries.
 Plain Chat reports its retained draft and ends without submission.
 
-Remaining scope: automatic content-height measurement, general external log-writer
-coordination and actual product adapters are host integration work. Native POSIX
+Remaining scope: general external log-writer coordination and actual product
+adapters are host integration work. Native POSIX
 suspend/foreground and Windows ConPTY, emulator reflow, multiplexers, IME and
 assistive testing are separate acceptance. The handoff's unresolved remove-key,
 cancel/skip glyph, filter-clear hint and Tab wording choices do not change current

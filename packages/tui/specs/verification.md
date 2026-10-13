@@ -609,6 +609,49 @@ policy, POSIX job-control, real emulator reflow, Windows, multiplexers, IME and
 assistive acceptance remain qualified in the terminal contract. Existing component
 bindings remain in force pending the documented design wording/key decisions.
 
+## Inline content sizing engineering record — 2026-10-12
+
+The [inline runtime](features/terminal.md#inline-runtime-api) now accepts preferred
+height updates under the existing lease. Stable-window growth reserves additional
+rows below the region; shrink clears the old owned tail while retaining its top
+anchor. Resize invalidation takes precedence. Borrowed screens defer fitting until
+return, and the preferred height survives window clamps and foreground resume.
+Zero height is rejected without mutating or stopping the accepted region.
+
+The gallery/native host reuse picker, question and permission measurements.
+`Chat::inline_height` measures dock/above-dock/review space without I/O; the host
+adds wrapped live records and notice space. Settled cards remove their live rows.
+Rendering and measurement share cell-based wrapping. Completed preview results
+measure their own text, preserving long receipts after the picker closes.
+Four updated snapshots were reviewed for compact streaming, out-of-order,
+settled/correction and pending-review placement.
+
+- Final `make check`: format, strict Clippy, **377 tests**, **4 doctests**, API docs
+  and dependency advisories/bans/licenses/sources passed.
+- Gallery-disabled nextest: **303 tests** passed, including the direct height API
+  PTY test; the final feature-off build also passed.
+- Release library/gallery build passed.
+- Gate optional `tui` compilation passed locked/offline with Rust 1.99 through a
+  disposable manifest pointing at actual sources. Drone passed with its existing
+  missing Markdown dependencies resolved only in a temporary lockfile. Shield's
+  current manifest declares no `tui` feature/dependency, so no Shield TUI feature
+  check applies. Original consumer manifests/locks remained unchanged.
+
+Three added tests cover measured review/draft layout, long result wrapping and
+real owned PTY growth to the window cap, shrink cleanup, atomic zero rejection,
+deferred fitting with the normal buffer untouched, return, output insertion,
+window clamp/growth and foreground release/resume. The native streaming fixture
+also verifies that a settled card reduces the live region from ten to nine rows.
+The shared VT harness preserves discarded normal rows as scrollback on height
+shrink; Python bytecode caching is disabled for fixture execution.
+
+Final Rust/PTY sources remained unchanged through the last package gate and
+build/compilation checks. Module review keeps pure measurement with components,
+physical fitting in the runtime and invocation/clock/output routing with the host.
+Human visual approval, actual emulator reflow, POSIX job control, Windows,
+multiplexers, IME and assistive acceptance remain separate. No consumer rollout
+or product execution is established by these checks.
+
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation

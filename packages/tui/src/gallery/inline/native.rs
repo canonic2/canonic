@@ -23,20 +23,7 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
     for line in &demo.printed {
         println!("{line}");
     }
-    let term = std::env::var("TERM").unwrap_or_default();
-    let capable = io::stdin().is_terminal()
-        && io::stdout().is_terminal()
-        && term != "dumb"
-        && !term.is_empty()
-        && !demo.plain();
-    let options = InlineOptions {
-        height: demo.height(),
-        capabilities: Capabilities {
-            cursor: capable,
-            alternate: capable && !demo.no_alternate(),
-        },
-    };
-    let mut session = match InlineSession::open(options) {
+    let mut session = match open(&demo, p) {
         Ok(s) => s,
         Err(e) => {
             println!("inline unavailable: {e}");
@@ -51,7 +38,10 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
     }
     let mut last = Instant::now();
     loop {
-        if let Err(error) = session.draw(|f| demo.render_live(f, f.area(), p)) {
+        if let Err(error) = session
+            .set_height(measured(&demo, p))
+            .and_then(|()| session.draw(|f| demo.render_live(f, f.area(), p)))
+        {
             let cleanup = session.finish("inline → couldn't draw · nothing confirmed");
             return Err(anyhow::anyhow!("{error}; cleanup: {cleanup:?}"));
         }
@@ -102,4 +92,23 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
         demo.tick(elapsed);
         last = Instant::now();
     }
+}
+fn measured(demo: &InlineDemo, p: Presentation) -> u16 {
+    let width = crossterm::terminal::size().map_or(80, |(width, _)| width);
+    demo.height(width, p)
+}
+fn open(demo: &InlineDemo, p: Presentation) -> io::Result<InlineSession> {
+    let term = std::env::var("TERM").unwrap_or_default();
+    let capable = io::stdin().is_terminal()
+        && io::stdout().is_terminal()
+        && term != "dumb"
+        && !term.is_empty()
+        && !demo.plain();
+    InlineSession::open(InlineOptions {
+        height: measured(demo, p),
+        capabilities: Capabilities {
+            cursor: capable,
+            alternate: capable && !demo.no_alternate(),
+        },
+    })
 }

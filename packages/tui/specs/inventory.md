@@ -38,7 +38,7 @@ Full application operations appear below to establish host ownership.
 | Chat viewport | Logical message/part/source anchors, usize navigation, follow/unread, opaque paging, cached visible row projection |
 | [Text](../src/text.rs) | Removes controls except allowed newlines, bounds UTF-8 by scalars, grapheme wrapping, narrow replacement; strips ESC rather than parsing complete escape sequences |
 | [Theme](../src/theme.rs) | Semantic ANSI/indexed/RGB/no-color profiles and ASCII decoration; terminal-default body colors and syntax/diff/selection styles resolved by Chat |
-| [Runtime](../src/runtime.rs) | TTY/capability checks, one process-local lease, raw/cursor/paste/enhanced keys, full-screen and fixed inline rows, cursor reports, alternate borrowing, output/deferred queue, explicit close and foreground release/resume; exact Unix termios restoration; host owns signals |
+| [Runtime](../src/runtime.rs) | TTY/capability checks, one process-local lease, raw/cursor/paste/enhanced keys, full-screen and fitted inline rows, cursor reports, alternate borrowing, output/deferred queue, explicit close and foreground release/resume; exact Unix termios restoration; host owns signals |
 | [Inline composition](../src/inline_composition.rs) | Bounded ordered settled prefix, frozen exact write batches, write-once receipts, appended corrections and ambiguous-write stop; host owns terminal I/O and live rendering |
 | [Gallery](../src/gallery.rs) | Selector/picker/chat/editor; independent drafts, resettable Unicode/long/limit scenarios; deterministic stream queue; busy/disconnected protects draft; 76 Chat scenarios exercise rich content, delayed identified effects and serial paging recovery |
 | [Editor tests](../tests/integration/editor.rs) | Editing, bounds, selection, undo, focus removal/return, cursor/style, reviewed multiline snapshot and arbitrary Unicode properties |
@@ -46,7 +46,7 @@ Full application operations appear below to establish host ownership.
 | [Dialog tests](../tests/integration/dialog.rs) | Nested routing, selection-first Esc, return repair, stale/foreign tickets, atomic validation, outside pointer isolation, tiny geometry, snapshot and arbitrary stack changes |
 | [Component tests](../tests/integration/components.rs) | Choice/default/cancel/search identity, paste/graphemes/bounds/safe control display, tiny rendering/focus style; property covers choice-index bounds |
 | [Gallery tests](../tests/integration/gallery.rs) | Navigation/simulation, one selector snapshot, headless paths; Unix Python PTY assertions for navigation, submission, resize, Ctrl-C, raw and alternate-screen restoration |
-| Consumers | Optional dependencies in [Gate](../../gate/Cargo.toml), [Shield](../../../private/shield/Cargo.toml), [Drone](../../../private/drone/Cargo.toml); no library calls found in consumer source; this is dependency readiness |
+| Consumers | Optional dependencies in [Gate](../../gate/Cargo.toml) and [Drone](../../../private/drone/Cargo.toml); no library calls found in consumer source; this is dependency readiness |
 
 Chat snapshots, Unicode properties and native Unix search/copy/resize workflows
 are present. Native Windows acceptance and full host adapters

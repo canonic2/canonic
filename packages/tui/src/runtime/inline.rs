@@ -27,6 +27,7 @@ pub struct Capabilities {
 /// Explicit inline acquisition; constructors perform no terminal work.
 #[derive(Clone, Copy, Debug)]
 pub struct InlineOptions {
+    /// Preferred content height; the terminal clamps it to window height minus two.
     pub height: u16,
     pub capabilities: Capabilities,
 }
@@ -137,6 +138,75 @@ impl InlineSession {
     /// Report a resize from an external event source; stale rows will be abandoned.
     pub fn invalidate_anchor(&mut self) {
         self.anchor_lost = true;
+    }
+    /// Update the preferred height without reacquiring modes or changing component state.
+    /// Growth reserves rows below the region; shrink clears only previously owned rows.
+    /// Borrowed screens defer the change until return. Resize abandons stale coordinates.
+    /// # Errors
+    /// Zero is rejected atomically. Terminal errors stop further drawing until release.
+    pub fn set_height(&mut self, height: u16) -> io::Result<()> {
+        self.check()?;
+        if height == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "inline height must be positive",
+            ));
+        }
+        self.options.height = height;
+        if self.alternate {
+            return Ok(());
+        }
+        let result = self.fit_height();
+        if result.is_err() {
+            self.failed = true;
+        }
+        result
+    }
+    fn fit_height(&mut self) -> io::Result<()> {
+        if self.anchor_lost || terminal::size()? != self.size {
+            return self.fresh_bottom();
+        }
+        let height = self
+            .options
+            .height
+            .min(self.size.1.saturating_sub(2))
+            .max(1);
+        if height == self.area.height {
+            return Ok(());
+        }
+        let old = self.area;
+        let size = self.size;
+        self.clear_owned()?;
+        // Cleanup may have discovered a resize and already reserved the new region.
+        if self.area != old || self.size != size {
+            return Ok(());
+        }
+        let mut out = io::stdout();
+        if height > old.height {
+            let extra = height - old.height;
+            queue!(out, MoveTo(0, old.bottom().saturating_sub(1)))?;
+            for _ in 0..extra {
+                queue!(out, Print("\r\n"))?;
+            }
+            out.flush()?;
+            let bottom = old
+                .bottom()
+                .saturating_sub(1)
+                .saturating_add(extra)
+                .min(self.size.1.saturating_sub(1));
+            self.area.y = bottom.saturating_sub(height - 1);
+        }
+        self.area.height = height;
+        self.fixed_terminal()
+    }
+    fn fixed_terminal(&mut self) -> io::Result<()> {
+        self.terminal = Some(Terminal::with_options(
+            CrosstermBackend::new(io::stdout()),
+            TerminalOptions {
+                viewport: Viewport::Fixed(self.area),
+            },
+        )?);
+        Ok(())
     }
     /// Require enough visible rows before dispatching a confirmation to a component.
     #[must_use]
@@ -346,12 +416,8 @@ impl InlineSession {
         }
         self.alternate = false;
         if !self.anchor_lost && terminal::size()? == self.size {
-            self.terminal = Some(Terminal::with_options(
-                CrosstermBackend::new(io::stdout()),
-                TerminalOptions {
-                    viewport: Viewport::Fixed(self.area),
-                },
-            )?);
+            self.fixed_terminal()?;
+            self.fit_height()?;
         } else {
             self.fresh_bottom()?;
         }
