@@ -40,6 +40,15 @@ export async function mount(canvas, source, context, environment) {
       const scripts = Array.from(canvas.querySelectorAll('script'));
       for (const script of scripts) {
         if (context.signal.aborted) return restore;
+        // A bundled script: the build registered it under the marker's ID.
+        const marker = script.getAttribute('data-workbench-script');
+        if (marker) {
+          const [id, index] = marker.split(':');
+          const load = window.__wbHtmlScripts?.[id]?.[Number(index)];
+          script.remove();
+          if (load) { const module = await load(); await module.default?.(); }
+          continue;
+        }
         const live = document.createElement('script');
         for (const attribute of script.attributes) live.setAttribute(attribute.name, attribute.value);
         live.textContent = script.textContent;

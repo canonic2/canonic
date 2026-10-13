@@ -1520,13 +1520,17 @@ textarea,
   border: 0;
   /* The product inside is light — don't let the dark shell bleed in. */
   color-scheme: light;
-  visibility: hidden;
+  /* Frames waiting behind the visible one still render, so loading and
+     readiness progress as they would on screen. */
+  visibility: visible;
+  z-index: 0;
 }
 
-/* Only the promoted buffer is visible. On first load there is no previous
-   page to preserve, so its active frame stays hidden until fully loaded. */
+/* The promoted buffer paints above the others. On first load there is no
+   previous page to preserve, so its active frame stays hidden until loaded. */
 .wb-artboard-content iframe.is-active {
   visibility: visible;
+  z-index: 1;
 }
 
 .wb-artboard-content.is-loading iframe.is-active {

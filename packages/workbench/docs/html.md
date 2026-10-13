@@ -171,22 +171,20 @@ a document of its own:
 
 `<link rel="stylesheet">` files and `<style>` blocks are compiled with their
 `@import` rules, and each relative `url()` is resolved from the file it appears
-in and copied with the preview. A `url()` that starts with `/` fails the build
-with `Could not resolve`; write it relative to the stylesheet. External
-stylesheets keep their URLs.
-
-A `url()` may reference fonts (`.woff`, `.woff2`, `.ttf`), images (`.svg`,
-`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif`), or media (`.mp4`, `.mp3`).
-Another type fails the build, such as `No loader is configured for ".otf" files`.
+in and copied with the preview, whatever its file type. A `url()` that starts
+with `/` fails the build with `Module not found: Can't resolve '/…'`; write it
+relative to the stylesheet. External stylesheets keep their URLs.
 
 ### Scripts
 
-Every `<script>` is compiled and bundled with what it imports: local modules,
-installed packages, CSS (added to the page), JSON (as data), and the file types
-above (as URLs).
+Every inline `<script>` and local `<script src>`, classic or module, is
+compiled and bundled with what it imports: local modules, installed packages,
+CSS (added to the page), JSON (as data), and images, fonts, and media (as URLs;
+the types are listed in [Styles, fonts, and images](react.md#styles-fonts-and-images)).
+Importing another file type fails the build with `Module parse failed`.
+External scripts keep their URLs.
 
-- A `<script src>` file can be TypeScript. An inline `<script>` is JavaScript
-  only; move TypeScript into a file.
+- Inline scripts and `<script src>` files can be TypeScript.
 - Each script is wrapped so that its top-level declarations stay private. An
   inline handler such as `onclick="hello()"` can't see a `function hello()`
   declared in a script, and fails with `ReferenceError: hello is not defined`.
@@ -199,17 +197,18 @@ above (as URLs).
 
 ### Images and other files
 
-Relative paths in `src`, `poster`, and `srcset`, and in `href` on `<link>`
-elements, are resolved from the HTML file and copied with the preview. A path
-that starts with `/` is resolved from the project root. A URL with a scheme,
-such as `https:` or `data:`, is kept as it is. A local file that doesn't exist
-fails the build with `Missing HTML asset: <path> in <file>`.
+Relative paths in `src`, `poster`, and `srcset` are resolved from the HTML
+file and copied with the preview. A path that starts with `/` is resolved from
+the project root. A URL with a scheme, such as `https:` or `data:`, is kept as
+it is. A local file that doesn't exist fails the build with
+`Module not found: Can't resolve '<path>'`.
 
 These aren't rewritten, so a relative path in them doesn't load:
 
 - an attribute value without quotes, such as `src=logo.svg`,
 - a `url()` inside a `style="..."` attribute; move it into a stylesheet,
-- `href` on `<a>` and other elements that aren't `<link>`.
+- `href` on `<a>` elements, and on `<link>` elements other than stylesheets,
+  such as `<link rel="icon">`.
 
 ### Links
 
@@ -433,10 +432,10 @@ fix it and save, or use **Reset state**.
 
 | Error | Cause and fix |
 | --- | --- |
-| `Missing HTML asset: <path> in <file>` | A `src`, `srcset`, `poster`, or `<link href>` names a local file that doesn't exist, or one outside the project. Fix the path. |
-| `Expected ";" but found ":"` and other syntax errors in an inline script | The inline script contains TypeScript. Move it to a `.ts` file and load it with `<script src>`. |
-| `Could not resolve "/…"` | A stylesheet's `url()` starts with `/`. Make it relative to the stylesheet. |
-| `No loader is configured for "<extension>" files` | A stylesheet or script references a file type Workbench doesn't copy. See [Stylesheets](#stylesheets). |
+| `Module not found: Can't resolve '<path>'` | A `src`, `srcset`, or `poster`, or a stylesheet's `<link href>`, names a local file that doesn't exist. Fix the path. |
+| `Module not found: Can't resolve '/…'` from a stylesheet | A stylesheet's `url()` starts with `/`. Make it relative to the stylesheet. |
+| `Module build failed (from builtin:swc-loader)` | A script has a syntax error. The lines after it give the message and position. |
+| `Module parse failed` | A script imports a file type Workbench doesn't compile. See [Scripts](#scripts). |
 | `ReferenceError: <name> is not defined` from an `onclick` or other inline handler | Script declarations are private. Add the listener from the script, or assign the function to `window`. |
 | `The selected source export does not exist for <id> — <state>` | `source.export` names an export the module doesn't have. |
 | `An HTML JavaScript entry must export a mount function.` | The module's selected export isn't a function. |

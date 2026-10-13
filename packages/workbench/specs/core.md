@@ -125,7 +125,10 @@ continues to describe the shipping single-view interface.
   refresh, and canvas closure release their resources. Managed hosts dispose
   adapters and tracked page work before removal. Returning to a managed preview
   checks its source revision and remounts if it changed. Sessions are local to
-  the open canvas; no destination page is predicted or preloaded.
+  the open canvas; no destination page is predicted or preloaded. The
+  [preview pipeline](preview-pipeline/README.md) adds a warm runtime of shared
+  code per project, not a predicted page, and keeps retained frames current
+  through hot updates ([warm runtime](preview-pipeline/warm-runtime.md)).
 - Managed previews wait for mounting, fonts, and visible images before becoming
   ready. Offscreen lazy images keep native lazy loading and do not delay the
   frame swap. Readiness must also progress when the browser suspends animation

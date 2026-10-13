@@ -13,6 +13,11 @@ const pageListeners = [];
 const pageTimers = new Set();
 const pageIntervals = new Set();
 const pagePaints = new Set();
+// A reused document drops window globals a preview added. Runtime, bundler
+// and framework globals stay, since dependency modules stay loaded between
+// previews.
+const baselineGlobals = new Set(Object.keys(window));
+const KEPT_GLOBALS = /^(?:__wb|__workbench|wb[A-Z]|workbench$|webpackChunk|rspack|wb_|\$Refresh|__REACT|__reactRefresh|__VUE|__vue|__rspack|__webpack|regeneratorRuntime)/;
 const nativeClearTimeout = window.clearTimeout.bind(window);
 const nativeClearInterval = window.clearInterval.bind(window);
 const nativeCancelPaint = window.cancelAnimationFrame.bind(window);
@@ -74,6 +79,9 @@ async function clear() {
   document.body.replaceChildren();
   for (const element of [document.documentElement, document.body]) {
     for (const attribute of Array.from(element.attributes)) element.removeAttribute(attribute.name);
+  }
+  for (const key of Object.keys(window)) {
+    if (!baselineGlobals.has(key) && !KEPT_GLOBALS.test(key)) { try { delete window[key]; } catch (_) { window[key] = undefined; } }
   }
   window.__workbenchReady = false;
   window.__workbenchError = null;

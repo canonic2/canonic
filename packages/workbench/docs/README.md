@@ -36,7 +36,7 @@ collections you edit with **Configure pages**. See
 | [Vue](vue.md) | Preview Vue single-file components, with plugins, slots, and events |
 | [Astro](astro.md) | Preview Astro components and pages rendered on the server |
 | [HTML](html.md) | Preview plain HTML, CSS, and scripts, or mount anything from a module |
-| [Custom adapters](custom-adapters.md) | Register another technology, compiler plugins, aliases, and build constants |
+| [Custom adapters](custom-adapters.md) | Register another technology, Rspack rules and plugins, aliases, and build constants |
 
 ## Connect your implementation
 

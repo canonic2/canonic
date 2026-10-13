@@ -16,7 +16,7 @@ lifecycle hooks, and the command-line checker, see
 - **Vue 3 in your project.** Workbench imports `vue` from your project, resolved
   from the definition file's folder the way Node resolves packages. It never
   installs or replaces it. Without it, the build fails with
-  `Could not resolve "vue"`.
+  `Module not found: Can't resolve 'vue'`.
 - **Nothing else from the Vue toolchain.** Workbench compiles `.vue` files with
   its own bundled `@vue/compiler-sfc` 3.5. It doesn't check your Vue version,
   and it is tested with Vue 3.5. It doesn't read `vite.config.*` or
@@ -341,7 +341,8 @@ error in the preview's frame, then calls your handler.
 ## Styles, fonts, and images
 
 - **Component styles.** `<style>` and `<style scoped>` blocks are compiled and
-  loaded with the preview, and `v-bind()` in CSS works.
+  loaded with the preview, `v-bind()` in CSS works, and `<style src="...">`
+  loads a CSS file.
 - **Global CSS.** List stylesheets in the definition's `styles`, relative to the
   definition, or import them from a script with `import './tokens.css'`. Both
   are bundled into the preview's stylesheet, with their `@import` rules.
@@ -350,11 +351,13 @@ error in the preview's frame, then calls your handler.
   resolved from the file it appears in and copied with the preview. Importing a
   file in a script, as in `import logoUrl from '../assets/logo.svg'`, gives its
   URL. An SVG import is a URL, not a component.
-- **File types.** Fonts: `.woff`, `.woff2`, `.ttf`. Images: `.svg`, `.png`,
-  `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif`. Media: `.mp4`, `.mp3`. JSON imports
-  as data. Any other type in a `url()` or import fails the build, such as
-  `No loader is configured for ".otf" files`. Convert the file, or handle it
-  with a [compiler plugin](workbench-previews.md#register-other-technologies).
+- **File types.** A script can import fonts (`.woff`, `.woff2`, `.ttf`,
+  `.otf`, `.eot`), images (`.svg`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`,
+  `.avif`, `.ico`, `.bmp`), and media (`.mp4`, `.webm`, `.mov`, `.mp3`,
+  `.ogg`, `.wav`, `.m4a`). JSON imports as data. A `url()` in CSS can
+  reference a file of any type. Importing another type from a script fails
+  the build with `Module parse failed`; handle it with a
+  [rule](custom-adapters.md#rules-and-plugins).
 
 `src/styles/tokens.css`, listed in `styles` in the greeting example:
 
@@ -367,17 +370,16 @@ error in the preview's frame, then calls your handler.
 body { font-family: 'Acme Sans', system-ui, sans-serif; }
 ```
 
-Not supported without a compiler plugin:
+Not supported:
 
-- **CSS preprocessors and external style files.** `<style lang="scss">` and
-  other `lang` values, and `<style src="...">`, fail the build with
-  `Vue style preprocessors need a compiler plugin: <file>`.
-- **CSS Modules.** A `<style module>` block's CSS loads, but `$style` is
-  undefined, so a template that reads it fails to render with
-  `Cannot read properties of undefined`.
+- **CSS preprocessors.** `<style lang="scss">` and other `lang` values fail the
+  build with `Module parse failed`. Use plain CSS, or add a
+  [rule](custom-adapters.md#rules-and-plugins) whose loaders compile the
+  language.
 - **Tailwind and PostCSS.** Workbench doesn't run PostCSS. `@tailwind` and
-  `@apply` are dropped without an error, so utility classes have no styles.
-  Build your CSS with your own toolchain and list the output file in `styles`.
+  `@apply` are left unprocessed, without an error, so utility classes have no
+  styles. Build your CSS with your own toolchain and list the output file in
+  `styles`.
 
 ## Imports, aliases, and environment variables
 
@@ -479,30 +481,27 @@ can declare a Markdown page and its lenses with `defineDocs` instead; see
 
 | Supported | Not supported |
 | --- | --- |
-| `<script setup>` and `<script>`, with `lang="ts"` or plain JavaScript | `lang="tsx"` or `lang="jsx"` scripts: the build fails on the JSX |
+| `<script setup>` and `<script>`, with `lang="ts"` or plain JavaScript | `lang="tsx"` or `lang="jsx"` scripts: their JSX is compiled for React, not Vue |
 | The Options API and `defineComponent` | Prop or emit types imported from another file, as in `defineProps<CardProps>()` with `CardProps` imported. Declare the type in the `.vue` file. |
 | `defineProps`, `withDefaults`, and `defineEmits`, typed with types declared in the same file | `<template lang="pug">` and other template languages: the source is shown as text |
-| Template-only components | `<style module>`, `<style lang>`, `<style src>` (see [Styles, fonts, and images](#styles-fonts-and-images)) |
-| `<style>`, `<style scoped>`, and `v-bind()` in CSS | Custom blocks such as `<i18n>` or `<docs>`: they are ignored |
+| Template-only components | `<style lang>` (see [Styles, fonts, and images](#styles-fonts-and-images)) |
+| `<style>`, `<style scoped>`, `<style module>` (read as `$style`), `<style src>`, and `v-bind()` in CSS | Custom blocks such as `<i18n>` or `<docs>`: they are ignored |
 
 ## Errors and fixes
 
 The [command-line checker](workbench-previews.md#command-line-tools) compiles
 every preview, so it reports build errors. Errors that happen while rendering,
-such as a missing `$style` or an undefined `import.meta.env`, appear only in
-the preview's frame.
+such as an undefined `import.meta.env`, appear only in the preview's frame.
 
 | Error | Cause and fix |
 | --- | --- |
-| `Could not resolve "vue"` | Vue isn't installed where the definition can resolve it. Install `vue` in the project. |
-| `Could not resolve "<package>"` | A package the component imports isn't installed, or only exists in your app's build setup. Install it, or map it in `aliases`. |
+| `Module not found: Can't resolve 'vue'` | Vue isn't installed where the definition can resolve it. Install `vue` in the project. |
+| `Module not found: Can't resolve '<package>'` | A package the component imports isn't installed, or only exists in your app's build setup. Install it, or map it in `aliases`. |
 | ``No fs option provided to `compileScript` in non-Node environment. File system access is required for resolving imported types.`` | `defineProps` or `defineEmits` uses a type imported from another file. Declare the type in the `.vue` file. |
-| `Vue style preprocessors need a compiler plugin: <file>` | A `<style>` block has a `lang` or `src` attribute. Use plain CSS, or add a compiler plugin. |
-| `No loader is configured for ".otf" files` | CSS or a script references a file type Workbench doesn't copy. See [Styles, fonts, and images](#styles-fonts-and-images). |
+| `Module parse failed` | A `<style>` block has a `lang` attribute, or a script imports a file type Workbench doesn't compile. See [Styles, fonts, and images](#styles-fonts-and-images). |
 | `Element is missing end tag.` and other template errors | The Vue compiler's message for invalid template syntax in the file. |
 | `DataCloneError: … could not be cloned` | `inputs`, `fixtures`, or `globals` hold a function or another value that can't be copied. Keep them to plain data. |
 | `Cannot read properties of undefined (reading 'VITE_…')` | The code reads `import.meta.env`. Add the value to `define`. |
-| `Cannot read properties of undefined (reading '<class>')` | The template reads `$style` from a `<style module>` block, which isn't supported. |
 | Clicks don't appear under **Actions** | Add an environment with a `wrap` export, and declare the events with `defineEmits` or `emits`. See [Events and actions](#events-and-actions). |
 
 For problems that apply to every preview, such as a preview missing from the

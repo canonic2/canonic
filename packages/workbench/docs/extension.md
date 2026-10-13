@@ -108,10 +108,11 @@ a separate native helper and need Screen Recording permission.
 When the space has [TypeScript previews](workbench-previews.md) or
 [docs](docs-pages.md) with examples, the server starts a separate worker
 process that compiles them and runs their project code: definitions, examples,
-`workbench.config.ts`, compiler plugins, and Astro rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
+`workbench.config.ts`, Rspack plugins and loaders, and Astro rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
 separate Node installation.
 
-- It starts the first time previews are listed and stops with the server.
+- It starts the first time previews are listed, builds every preview and docs
+  example right away, and stops with the server.
 - If it stops, the next preview request starts a new one.
 - Changing the `previews` key in `workbench.yaml` restarts it with the new
   settings. With `previews: false`, nothing is compiled and no worker runs:

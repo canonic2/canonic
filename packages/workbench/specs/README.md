@@ -46,6 +46,8 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 | [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Page, collection and space scopes, ZIP/PDF/image/browser output, background captures, hashes, and warnings |
+| [Preview pipeline](preview-pipeline/README.md) | How native pages are compiled, served, kept warm, made ready and updated: [performance](preview-pipeline/performance.md) requirements and targets, the Rspack [compiler](preview-pipeline/compiler.md), [serving](preview-pipeline/serving.md), [hot updates](preview-pipeline/hot-updates.md), the [warm runtime](preview-pipeline/warm-runtime.md), [readiness](preview-pipeline/readiness.md) and [plugins](preview-pipeline/plugins.md) |
+| [Labs](labs.md) | How engineering questions are settled by comparing working variants: plans, fixtures, boundaries, correctness checks, measurement, evidence and decisions |
 | [Module layout](modules.md) | Capability ownership under `src/modules/`, shared UI and infrastructure locations, and bounded migration requirements |
 
 The workbench is one implementation in `packages/workbench/workbench/`. Projects provide

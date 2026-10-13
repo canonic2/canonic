@@ -37,10 +37,13 @@ async function main() {
     }
     const index = await compiler.index();
     const failures = index.errors.slice();
-    for (const preview of index.previews) {
-      try { await compiler.compile(preview.file, false); console.log('Built ' + preview.id); }
-      catch (error) { failures.push(preview.file + ': ' + error.message); }
-    }
+    const builder = require('./portable.cjs').portableBuilder(compiler);
+    try {
+      for (const preview of index.previews) {
+        try { await builder.compile(preview.file); console.log('Built ' + preview.id); }
+        catch (error) { failures.push(preview.file + ': ' + error.message); }
+      }
+    } finally { await builder.close(); }
     if (failures.length) { console.error(failures.join('\n')); process.exitCode = 1; }
     return;
   }

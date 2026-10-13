@@ -41,7 +41,7 @@ export async function boot(preview, sources, adapter, environment, options) {
   let loadStarted;
   let phaseStarted;
   let stopped = false;
-  let revisionTimer;
+  let lastOverrides = {};
   const listeners = [];
   let stopping;
   function listen(name, handler) {
@@ -52,7 +52,6 @@ export async function boot(preview, sources, adapter, environment, options) {
     if (stopping) return stopping;
     stopped = true;
     controller?.abort();
-    clearInterval(revisionTimer);
     listeners.forEach(([name, handler, target = window]) => target.removeEventListener(name, handler, target !== window));
     if (window.wbPreviewActions?.follow === follow) window.wbPreviewActions.follow = null;
     window.__workbenchRequests?.deactivate();
@@ -163,6 +162,7 @@ export async function boot(preview, sources, adapter, environment, options) {
     await dispose();
     canvas.replaceChildren();
     selected = state;
+    lastOverrides = overrides;
     const spec = states[state];
     controller = new AbortController();
     const rendered = context = {
@@ -217,22 +217,26 @@ export async function boot(preview, sources, adapter, environment, options) {
     }
     for (const play of [preview.play, spec.play]) if (play) await play({ ...context, canvas });
     for (const ready of [environment?.ready, preview.ready, spec.ready]) if (ready) await ready(context);
-    diagnostic('fonts.waiting', { fontStatus: document.fonts?.status || 'unavailable' });
+    diagnostic('hooks.completed');
+    // Fonts the page's text starts loading count too, so this waits on the
+    // font set's ready promise rather than a status read once.
+    const fontStatus = document.fonts?.status || 'unavailable';
     if (document.fonts) await whileActive(document.fonts.ready, rendered.signal);
     if (rendered.signal.aborted) return;
+    diagnostic('fonts.completed', { fontStatus });
     const images = Array.from(document.images).filter(image => {
       if (image.loading !== 'lazy' || image.complete) return true;
       const rect = image.getBoundingClientRect();
       return rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
     });
-    diagnostic('images.waiting', { pendingImages: images.filter(image => !image.complete).length,
-      deferredImages: document.images.length - images.length });
+    const pendingImages = images.filter(image => !image.complete).length;
     await whileActive(Promise.race([Promise.all(images.map(image => image.complete ? Promise.resolve() :
       new Promise(resolve => { image.addEventListener('load', resolve, { once: true }); image.addEventListener('error', resolve, { once: true }); }))),
       new Promise(resolve => setTimeout(resolve, 3000))]), rendered.signal);
     if (rendered.signal.aborted) return;
+    diagnostic('images.completed', { pendingImages, deferredImages: document.images.length - images.length, stillPending: images.filter(image => !image.complete).length });
     window.__workbenchReady = true;
-    diagnostic('ready', { pendingImages: images.filter(image => !image.complete).length });
+    diagnostic('ready');
     report('ready', { state, inputs: context.inputs, controls: preview.controls || {}, docs: preview.docs || '', actions });
   }
   listen('message', event => {
@@ -245,27 +249,23 @@ export async function boot(preview, sources, adapter, environment, options) {
     }
     pending = pending.then(() => {
       if (data.command === 'reset') actions = [];
+      // A state command comes from the address: no state there is the first one.
+      if (data.command === 'state') return render(data.state || Object.keys(states)[0], {});
       return render(data.state || selected, data.inputs || {});
     }).catch(fail);
   });
   listen('pagehide', () => { void shutdown().catch(() => {}); });
   listen('error', event => { if (event.message) context?.error(event.error || new Error(event.message)); });
   listen('unhandledrejection', event => context?.error(event.reason));
+  // A hot update to a source that does not refresh itself re-renders the
+  // selected state with its inputs, without reloading the document. Edits
+  // arrive pushed from the server; nothing here polls.
+  window.__workbenchRerender = next => {
+    if (stopped) return;
+    if (next) Object.assign(sources, next);
+    pending = pending.then(() => render(selected, lastOverrides)).catch(fail);
+  };
   pending = Promise.resolve().then(() => render(initial)).catch(fail);
   await pending;
-  if (options?.development && !stopped) {
-    let revision = options.revision;
-    revisionTimer = setInterval(async () => {
-      try {
-        const answer = await fetch(options.revisionUrl, { cache: 'no-store' });
-        const data = await answer.json();
-        if (!stopped && revision !== data.revision) {
-          clearInterval(revisionTimer);
-          if (window.__workbenchHost) window.wbPreviewHost.load(location.href);
-          else location.reload();
-        }
-      } catch (_) { /* The server can restart while the editor remains open. */ }
-    }, 1000);
-  }
   return { dispose: shutdown };
 }

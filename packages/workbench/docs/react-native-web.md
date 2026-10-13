@@ -168,7 +168,7 @@ list previews. Import only types from component files.
 
 - An import of exactly `react-native` loads `react-native-web`. Deep imports
   such as `react-native/Libraries/...` aren't rewritten and fail with
-  `Could not resolve`. Give each one an alias, or move the code into a
+  `Module not found: Can't resolve`. Give each one an alias, or move the code into a
   `.web.*` file.
 - For an import without an extension, Workbench tries `.web.tsx`, `.web.ts`,
   `.web.jsx`, and `.web.js` first, then `.tsx`, `.ts`, `.jsx`, `.js`, `.mjs`,
@@ -384,10 +384,9 @@ Choose the artboard sizes with `sizes`; `mobile` suits most app screens. See
   `source={{ uri: avatar }}` or `source={avatar}`.
 - Workbench loads the file you name. It doesn't pick `@2x` or `@3x` variants.
 - Declare custom fonts with `@font-face` in a stylesheet listed in `styles`,
-  then use the family name in `fontFamily`. Font files can be `.woff`,
-  `.woff2`, or `.ttf`.
+  then use the family name in `fontFamily`.
 
-The other file types, and what needs a compiler plugin, are listed in
+The other file types, and what needs a rule, are listed in
 [Styles, fonts, and images](react.md#styles-fonts-and-images).
 
 ## Packages that need extra settings
@@ -395,38 +394,38 @@ The other file types, and what needs a compiler plugin, are listed in
 Some React Native packages assume Metro, React Native's bundler. Settings in
 `workbench.config.ts` cover the common cases:
 
-- **`__DEV__` or `global`** fail with `__DEV__ is not defined` or
-  `global is not defined`. Define them.
-- **JSX in `.js` files** fails with
-  `The JSX syntax extension is not currently enabled`. Add a compiler plugin
-  that loads that package's `.js` files as JSX.
-- **Flow type annotations** fail with a syntax error, such as
-  `Expected ")" but found ":"`. They need a compiler plugin that strips Flow
-  types, or an alias to a compiled build of the package.
+- **`__DEV__`** fails with `__DEV__ is not defined`. Define it.
+- **JSX in `.js` files** fails with `Module parse failed`. Workbench compiles
+  your own files but not the packages in `node_modules`, so add a rule that
+  compiles that package's `.js` files as JSX.
+- **Flow type annotations** also fail with `Module parse failed`. They need a
+  rule with a loader that strips Flow types, or an alias to a compiled build of
+  the package.
 
 ```ts
-import fs from 'node:fs';
 import { defineConfig } from '@canonic2/workbench';
 
-// acme-native-lib publishes JSX in .js files.
-const jsxInJs = {
-  name: 'jsx-in-js',
-  setup(build: any) {
-    build.onLoad({ filter: /node_modules[\\/]acme-native-lib[\\/].*\.js$/ }, async (args: { path: string }) => ({
-      contents: await fs.promises.readFile(args.path, 'utf8'),
-      loader: 'jsx',
-    }));
-  },
-};
-
 export default defineConfig({
-  define: { __DEV__: 'true', global: 'globalThis' },
-  plugins: [jsxInJs],
+  define: { __DEV__: 'true' },
+  rules: [
+    {
+      // acme-native-lib publishes JSX in .js files.
+      test: /\.js$/,
+      include: /node_modules[\\/]acme-native-lib/,
+      loader: 'builtin:swc-loader',
+      options: {
+        jsc: {
+          parser: { syntax: 'ecmascript', jsx: true },
+          transform: { react: { runtime: 'automatic' } },
+        },
+      },
+    },
+  ],
 });
 ```
 
-Compiler plugins use [esbuild's plugin interface](https://esbuild.github.io/plugins/).
-See [the configuration file](custom-adapters.md#configuration-file).
+`builtin:swc-loader` is Rspack's built-in compiler for JavaScript and
+TypeScript. See [Rules and plugins](custom-adapters.md#rules-and-plugins).
 
 ## Document components with a docs page
 
@@ -492,11 +491,12 @@ padding and content-based height; they don't become full-screen frames.
 
 | Error | Cause and fix |
 | --- | --- |
-| `Could not resolve "react-native-web"`, `"react"`, or `"react-dom/client"` | A required package isn't installed where the definition can find it. Install it in the project. |
-| `Could not resolve "<native package>"` | A native-only module. [Replace it](#replace-native-only-modules) with a `.web.*` file or an alias. |
-| `Could not resolve "react-native/…"` | A deep import into `react-native`. [Alias it or move it into a `.web.*` file](#how-imports-resolve). |
-| `__DEV__ is not defined`, `global is not defined` | Add them to `define`. See [Packages that need extra settings](#packages-that-need-extra-settings). |
-| `The JSX syntax extension is not currently enabled` | A package publishes JSX in `.js` files. Add a [plugin](#packages-that-need-extra-settings). |
+| `Cannot find module 'react-native' for matched aliased key 'react-native'` | `react-native-web` isn't installed where the definition can find it. Install it in the project. |
+| `Module not found: Can't resolve 'react/jsx-runtime'`, or another `react` or `react-dom` import | React isn't installed where the definition can find it. Install `react` and `react-dom` in the project. |
+| `Module not found: Can't resolve '<native package>'` | A native-only module. [Replace it](#replace-native-only-modules) with a `.web.*` file or an alias. |
+| `Module not found: Can't resolve 'react-native/…'` | A deep import into `react-native`. [Alias it or move it into a `.web.*` file](#how-imports-resolve). |
+| `__DEV__ is not defined` | Add it to `define`. See [Packages that need extra settings](#packages-that-need-extra-settings). |
+| `Module parse failed` | A package publishes JSX or Flow types in `.js` files. Add a [rule](#packages-that-need-extra-settings). |
 | A full-screen view is only as tall as its content | Check that the root view and any environment wrappers grow with `flex: 1`. See [Layout and full-height screens](#layout-and-full-height-screens). |
 | Tabs, a header, or the app background are missing | The preview mounts the screen without its parent layout. Add a [screen environment](#preview-a-screen-inside-its-app-layout). |
 | Phone safe-area spacing is missing or changes after mount | Supply and consume deterministic metrics in the preview wrapper. See [Safe areas and device dimensions](#safe-areas-and-device-dimensions). |

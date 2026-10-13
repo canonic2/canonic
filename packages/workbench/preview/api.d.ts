@@ -85,18 +85,32 @@ export interface Preview<T extends Record<string, unknown> = Record<string, unkn
 export interface BrowserAdapter {
   mount(canvas: HTMLElement, source: unknown, context: PreviewContext, environment?: unknown): Cleanup | Promise<Cleanup>;
 }
+/**
+ * An Rspack plugin. Workbench applies it to the compilers that build
+ * previews; take Rspack's classes from `compiler.rspack`, since the project
+ * need not install Rspack.
+ */
+export interface CompilerPlugin {
+  apply(compiler: any): void;
+}
+/** An Rspack module rule, such as `{ test: /\.svg$/, loader: './svg-loader.cjs' }`. Loader paths resolve from the project root. */
+export type CompilerRule = Record<string, unknown>;
 export interface Adapter {
   /** Browser module exporting mount(canvas, source, context, environment). */
   runtime: string;
-  /** esbuild-compatible compiler plugins, executed only in trusted projects. */
-  plugins?: unknown[];
+  /** Rspack plugins for this adapter's previews only, executed only in trusted projects. */
+  plugins?: CompilerPlugin[];
+  /** Rspack module rules for this adapter's previews only. */
+  rules?: CompilerRule[];
 }
 export interface WorkbenchConfig {
   adapters?: Record<string, Adapter>;
   /** An environment module around every preview, or one per adapter name, relative to the project root. */
   environment?: string | Record<string, string>;
-  /** esbuild plugins run before the built-in loaders. */
-  plugins?: unknown[];
+  /** Rspack plugins, applied after Workbench's own, executed only in trusted projects. */
+  plugins?: CompilerPlugin[];
+  /** Rspack module rules, applied after Workbench's own. */
+  rules?: CompilerRule[];
   aliases?: Record<string, string>;
   resolveExtensions?: string[];
   /** Packages resolved from one project installation (React in monorepos). */

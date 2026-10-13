@@ -231,14 +231,16 @@ it.
 | `import './Button.css'` in a component | Bundles the CSS and loads it with the preview |
 | `import styles from './Card.module.css'` | Treats it as a CSS module, with locally scoped class names |
 | `styles: ['../styles/global.css']` in the definition | Loads global CSS, such as resets, tokens, and `@font-face` rules, that no component imports |
-| `url(...)` in CSS | Copies the image or font and rewrites the URL |
+| `url(...)` in CSS | Copies the file and rewrites the URL |
 | `import logo from './logo.svg'` | Copies the file; `logo` is its URL, for an `img` `src` |
 | `import copy from './copy.json'` | Imports the parsed JSON |
 
-Files you can import or reference from CSS are `.svg`, `.png`, `.jpg`,
-`.jpeg`, `.gif`, `.webp`, `.avif`, `.woff`, `.woff2`, `.ttf`, `.mp4`, and
-`.mp3`, plus CSS, JSON, and script files. A preview waits for its fonts and
-visible images to load before it counts as ready.
+A script can import images (`.svg`, `.png`, `.jpg`, `.jpeg`, `.gif`,
+`.webp`, `.avif`, `.ico`, `.bmp`), fonts (`.woff`, `.woff2`, `.ttf`, `.otf`,
+`.eot`), media (`.mp4`, `.webm`, `.mov`, `.mp3`, `.ogg`, `.wav`, `.m4a`), CSS,
+JSON, and script files. A `url()` in CSS can reference a file of any type. A
+preview waits for its fonts and visible images to load before it counts as
+ready.
 
 The `<html>` element carries `data-wb-state`, so a global stylesheet can
 change with the state, for example
@@ -246,28 +248,24 @@ change with the state, for example
 
 These need more than the built-in compiler:
 
-- **Sass, Less, and Stylus** fail with
-  `No loader is configured for ".scss" files`.
+- **Sass, Less, and Stylus** fail with `Module parse failed`.
 - **PostCSS and Tailwind** don't run. `@tailwind` and `@apply` are left
   unprocessed, so utility classes have no styles. Build the CSS with your own
   tooling and list the output file in `styles`.
 - **SVG as a React component**, such as SVGR's
   `import { ReactComponent as Logo } from './logo.svg'`, fails with
-  `No matching export in "logo.svg" for import "ReactComponent"`. An SVG import
-  is a URL.
-- **Other file types**, such as `.otf` fonts or `.webm` video, fail with
-  `No loader is configured`.
+  `Can't import the named export 'ReactComponent'`. An SVG import is a URL.
+- **Other file types imported from a script**, such as `.pdf` or `.txt`, fail
+  with `Module parse failed`.
 
-For any of these, add a [compiler plugin](custom-adapters.md#plugins)
+For any of these, add a [rule or plugin](custom-adapters.md#rules-and-plugins)
 in `workbench.config.ts`.
 
 ## Imports, JSX, and environment variables
 
 - **JSX** compiles with React's automatic runtime, so components don't need
-  `import React`. A `jsx` or `jsxImportSource` setting in the nearest
-  `tsconfig.json` takes precedence. With `"jsx": "react"`, each file that uses
-  JSX needs `import React from 'react'`, or the preview fails with
-  `React is not defined`.
+  `import React`. The `jsx` and `jsxImportSource` settings in `tsconfig.json`
+  aren't read.
 - **`paths` in `tsconfig.json`**, such as `"@/*": ["./src/*"]`, resolve as
   they do in your editor.
 - **`aliases` in `workbench.config.ts`** replace an exact import specifier with
@@ -383,20 +381,20 @@ A `*.workbench.ts` file can declare a Markdown page and its lenses with
   [request mocks](preview-data.md#request-mocks), or mocked modules.
 - Inputs can't hold functions or elements. Use a
   [preview-only module or an environment](#props-children-and-callbacks).
-- Saving a file reloads the preview; component state isn't preserved.
 
 ## Errors and fixes
 
 | Error | Cause and fix |
 | --- | --- |
-| `Could not resolve "react"`, `"react-dom/client"`, or `"react/jsx-runtime"` | React isn't installed where the definition and component can find it. Install `react` and `react-dom` in the project. |
-| `React is not defined` | `tsconfig.json` sets `"jsx": "react"`. Import React in the file, or use `"jsx": "react-jsx"`. |
+| `Module not found: Can't resolve 'react/jsx-runtime'`, or another `react` or `react-dom` import | React isn't installed where the definition and component can find it. Install `react` and `react-dom` in the project. |
 | `Cannot read properties of null (reading 'useState')`, or React's invalid hook call error | Two copies of React. Add them to [`dedupe`](#use-one-copy-of-react-in-a-monorepo). |
 | `The selected source export does not exist for <id> — <state>` | `source.export` doesn't match an export of the entry. A named export needs `export: 'Button'`. |
 | `DataCloneError: … could not be cloned` | An input holds a function or another value that can't be copied. See [Props, children, and callbacks](#props-children-and-callbacks). |
 | `process is not defined`, or `Cannot read properties of undefined (reading 'VITE_…')` | An environment variable isn't defined. Add it to [`define`](#imports-jsx-and-environment-variables). |
-| `No loader is configured for ".<ext>" files` | An unsupported file type, or a definition that imports a component. See [Styles, fonts, and images](#styles-fonts-and-images) and [Write a first preview](#write-a-first-preview). |
-| `Could not resolve "<package>/<path>"` with an alias set | Aliases match whole specifiers only. Alias that specifier too. |
+| `No loader is configured for ".<ext>" files` | The definition imports a component, which imports a file such as an image. Name the component in `source` instead. See [Write a first preview](#write-a-first-preview). |
+| `Module parse failed` | A script imports a file type Workbench doesn't compile, such as `.scss` or `.pdf`. See [Styles, fonts, and images](#styles-fonts-and-images). |
+| `Can't import the named export 'ReactComponent'` | An SVG is imported as a React component. An SVG import is a URL. |
+| `Module not found: Can't resolve '<package>/<path>'` with an alias set | Aliases match whole specifiers only. Alias that specifier too. |
 
 For previews that don't appear in the list, see
 [A TypeScript preview is missing or broken](troubleshooting.md#a-typescript-preview-is-missing-or-broken).

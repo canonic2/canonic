@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { specification, verify } = require('./bundle-compiler.cjs');
+const { specification, rspackSpecification, verify, RSPACK_TARGETS } = require('./bundle-compiler.cjs');
 const targets = require('./bundle-runtime.cjs').targets;
 
 test('each supported VSIX target has a matching locked native compiler', () => {
@@ -14,6 +14,19 @@ test('each supported VSIX target has a matching locked native compiler', () => {
     assert.equal(spec.member, target.startsWith('win32-') ? 'esbuild.exe' : 'bin/esbuild');
   }
   assert.throws(() => specification('unknown-x64'), /Unsupported/);
+});
+
+test('each supported VSIX target has a matching locked Rspack binding', () => {
+  const version = require('../package.json').dependencies['@rspack/core'];
+  for (const target of targets) {
+    const spec = rspackSpecification(target);
+    const platform = RSPACK_TARGETS[target];
+    assert.equal(spec.entry.version, version);
+    assert.equal(spec.entry.resolved, 'https://registry.npmjs.org/@rspack/binding-' + platform + '/-/binding-' + platform + '-' + version + '.tgz');
+    assert.match(spec.entry.integrity, /^sha512-[A-Za-z0-9+/]+=*$/);
+    assert.equal(spec.member, 'rspack.' + platform + '.node');
+  }
+  assert.throws(() => rspackSpecification('unknown-x64'), /Unsupported/);
 });
 
 test('a target missing from the lockfile, or locked at another version, is refused', () => {

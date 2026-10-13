@@ -111,7 +111,7 @@ Use native builders for release validation and signing.
 The download happens at build time only. `CANONIC_ELECTRON_ZIP_DIR` can point
 to a directory of official Electron ZIPs for an offline build.
 
-Packaging also writes the target's pinned native esbuild binary to `preview/bin/`.
+Packaging also writes the target's pinned native esbuild binary and Rspack binding to `preview/bin/`.
 It copies the matching installed binary, or, when building another target,
 downloads the registry archive and checks it against the integrity recorded in
 `pnpm-lock.yaml`. The installed worker uses this bundled

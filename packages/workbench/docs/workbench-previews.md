@@ -152,7 +152,7 @@ See [Customize lens labels](lenses.md#customize-lens-labels).
 | `docs` | Text shown under **Documentation** in **Preview controls**. |
 | `fixtures`, `globals` | Data and settings that environments, hooks, and request handlers read from the context. See [Fixtures and globals](preview-data.md#fixtures-and-globals). |
 | `styles` | Stylesheets to load with the preview, relative to the definition. |
-| `assets` | Extra local files or folders the source or a compiler plugin reads at runtime, relative to the definition. |
+| `assets` | Extra local files or folders the source or a loader reads at runtime, relative to the definition. |
 | `environment` | A module, relative to the definition, that wraps or configures every state. See [Environments](preview-data.md#environments). |
 | `setup`, `play`, `ready` | [Lifecycle hooks](#lifecycle-hooks) for every state. |
 
@@ -246,23 +246,38 @@ Errors are shown in the preview's frame: thrown errors, rejected promises,
 React error boundaries, Vue's error handler, and anything a custom adapter
 passes to `context.error(error)`.
 
-Saving the definition or any file it uses reloads the open preview within a
-second or so. This is a full reload, not hot module replacement. If you add or
-remove a definition, or change its `title` or states, run
+Saving a file updates the open previews that use it, usually within a fraction
+of a second, without reloading the canvas:
+
+- React components keep their state through React Fast Refresh, as long as
+  the order of their hooks is unchanged.
+- Vue components update through Vue's hot reload. A template or style edit
+  keeps the component's state; a script edit resets it.
+- Stylesheets, CSS modules, and Vue style blocks are replaced in place.
+- HTML and Astro previews render again in place, with the selected state and
+  inputs.
+- Saving the definition, an environment, or a module that can't update in
+  place reloads the preview, keeping its state, size, and inputs.
+- Saving `workbench.config.ts` restarts the compilers and reloads the open
+  previews.
+- A syntax error shows in the frame, and the next good save recovers it.
+
+If you add or remove a definition, or change its `title` or states, run
 **Workbench: Refresh Pages** to update the sidebar.
 
-Workbench compiles previews with its bundled native compiler. The first build
-depends on the size of the source and its imports; unchanged builds are cached
-across worker restarts. Source and configuration changes trigger a fresh build.
-Your project does not need to install a compiler. Live source maps remain
-available to developer tools without adding their size to the preview script.
+Workbench compiles previews with [Rspack](https://rspack.rs/), bundled with the
+extension. It starts building when the project opens, and builds all of the
+project's previews and docs examples together, so code they share loads once:
+moving to another page loads only that page's own code. The build cache is kept
+in the system's temporary folder, never in your project, and is reused when
+Workbench restarts. Your project does not need to install a compiler.
 
 ## Register other technologies
 
 Adapter names aren't a fixed list. `workbench.config.ts` at the project root,
 or the file named by [`previews.config`](configuration.md#previews), registers
-adapters and sets compiler plugins, `aliases`, `dedupe`, `resolveExtensions`,
-and `define` for every preview. An adapter whose name isn't built in or
+adapters and sets Rspack `rules` and `plugins`, `aliases`, `dedupe`,
+`resolveExtensions`, and `define` for every preview. An adapter whose name isn't built in or
 registered fails with `Unknown adapter`. See [Custom adapters](custom-adapters.md).
 
 ## Compare a design with a preview

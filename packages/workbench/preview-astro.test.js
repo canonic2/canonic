@@ -7,6 +7,13 @@ const { Compiler } = require('./preview/compiler.cjs');
 const server = require('./server');
 const portable = require('./preview/portable.cjs');
 
+// Portable builds: the Rspack production compiler the export and the CLI use.
+async function build(t, root, file) {
+  const builder = portable.portableBuilder(new Compiler(root));
+  t.after(() => builder.close());
+  return builder.compile(file);
+}
+
 function fixture(t, files = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-astro-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -43,15 +50,15 @@ function fixture(t, files = {}) {
 
 test('Astro renders props, states, slots and alternate sources, packages client assets and keeps frontmatter in Node', async t => {
   const root = fixture(t);
-  const compiler = new Compiler(root);
-  const built = await compiler.compile('button.workbench.ts', false);
+  const built = await build(t, root, 'button.workbench.ts');
   assert.match(built.rendered.default.html, /<article[^>]*><button/);
   assert.match(built.rendered.default.html, />Continue<\/button>/);
   assert.doesNotMatch(built.rendered.default.html, / disabled/);
   assert.match(built.rendered.disabled.html, / disabled/);
   assert.match(built.rendered.alternate.html, /<strong>Continue<\/strong>/);
   assert.ok(Array.from(built.outputs.keys()).some(name => name.endsWith('.svg')));
-  assert.match(built.rendered.default.html, /<script type="module" src="\.\/assets\//);
+  // The client script is bundled; it runs when the page renders.
+  assert.ok(Array.from(built.outputs).some(([name, body]) => name.endsWith('.js') && body.includes(Buffer.from('decorated'))));
   const css = Array.from(built.outputs.values()).map(body => body.toString()).join('\n');
   assert.match(css, /purple/);
   assert.match(css, /astro-/);
@@ -61,7 +68,7 @@ test('Astro renders props, states, slots and alternate sources, packages client 
   assert.ok(built.localFiles.includes(path.join(root, 'client.ts')));
   assert.ok(built.packages.some(pkg => pkg.name === 'astro'));
   fs.writeFileSync(path.join(root, 'nested/Frame.astro'), '<section><slot /></section>');
-  const changed = await compiler.compile('button.workbench.ts', false);
+  const changed = await build(t, root, 'button.workbench.ts');
   assert.notEqual(changed.revision, built.revision);
   assert.match(changed.rendered.default.html, /<section>/);
 });
@@ -81,7 +88,7 @@ test('Astro frontmatter fetches are answered by the state request mocks', async 
       {plans && !plans.length && <p>No plans</p>}`,
   });
   const original = globalThis.fetch;
-  const built = await new Compiler(root).compile('plans.workbench.ts', false);
+  const built = await build(t, root, 'plans.workbench.ts');
   assert.equal(globalThis.fetch, original);
   assert.match(built.rendered.default.html, /<li>Team<\/li><li>Business<\/li>/);
   assert.match(built.rendered.empty.html, /No plans/);
@@ -117,19 +124,19 @@ test('portable Astro exports retain all reference states without requiring a ren
   assert.deepEqual(result.previews[0].controls, {});
   const js = result.files.filter(file => file.path.endsWith('.js')).map(file => Buffer.from(file.data, 'base64').toString()).join('\n');
   assert.doesNotMatch(js, /SERVER_ONLY_SENTINEL|node:fs/);
-  assert.match(js, /renderUrl: null/);
+  assert.match(js, /renderUrl:\s*null/);
 });
 
 test('Astro compilation reports missing framework dependencies and unsupported application integrations', async t => {
   const root = fixture(t, { 'Button.astro': '---\nimport { getCollection } from "astro:content";\nconst posts = await getCollection("posts");\n---\n{posts.length}' });
-  await assert.rejects(new Compiler(root).compile('button.workbench.ts'), /astro:content needs the Astro application pipeline/);
+  await assert.rejects(build(t, root, 'button.workbench.ts'), /astro:content needs the Astro application pipeline; use a URL lens, or stand in for it with an alias/);
   fs.writeFileSync(path.join(root, 'Button.astro'), '<style lang="scss">$color:red; button{color:$color}</style>');
-  await assert.rejects(new Compiler(root).compile('button.workbench.ts'), /style preprocessors need a compiler plugin/);
+  await assert.rejects(build(t, root, 'button.workbench.ts'), /style preprocessors are not supported; use plain CSS/);
   fs.writeFileSync(path.join(root, 'Button.astro'), '---\nimport Card from "./card.tsx";\n---\n<Card client:load />');
   fs.writeFileSync(path.join(root, 'card.tsx'), 'export default function Card() { return null; }');
-  await assert.rejects(new Compiler(root).compile('button.workbench.ts'), /client\/server islands need application integrations/);
+  await assert.rejects(build(t, root, 'button.workbench.ts'), /client\/server islands need application integrations/);
   fs.unlinkSync(path.join(root, 'node_modules'));
-  await assert.rejects(new Compiler(root).compile('button.workbench.ts'), /needs astro installed/);
+  await assert.rejects(build(t, root, 'button.workbench.ts'), /needs astro installed/);
 });
 
 test('raw and URL imports preserve assets from a nested package public directory', async t => {
@@ -140,11 +147,21 @@ test('raw and URL imports preserve assets from a nested package public directory
     'packages/acme/icon.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
     'packages/acme/public/public.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
   });
-  const built = await new Compiler(root).compile('button.workbench.ts', false);
+  const built = await build(t, root, 'button.workbench.ts');
   assert.match(built.rendered.default.html, /<svg/);
-  assert.match(built.rendered.default.html, /<img src="\.\/assets\/[^"\s]+\.svg"/);
+  assert.ok(Array.from(built.outputs.keys()).filter(name => /^assets\/.+\.svg$/.test(name)).length >= 2, 'the URL import and the public file are packaged');
   assert.ok(built.localFiles.includes(path.join(root, 'packages/acme/icon.svg')));
   assert.ok(built.localFiles.includes(path.join(root, 'packages/acme/public/public.svg')));
+});
+
+test('an alias stands in for an Astro application module', async t => {
+  const root = fixture(t, {
+    'Button.astro': '---\nimport { getCollection } from "astro:content";\nconst posts = await getCollection("blog");\n---\n<p>{posts[0].data.title}</p>',
+    'preview/content.ts': 'export async function getCollection(name: string) { return [{ id: "launch", data: { title: "Acme launch" } }]; }',
+    'workbench.config.ts': "export default { aliases: { 'astro:content': './preview/content.ts' } };",
+  });
+  const built = await build(t, root, 'button.workbench.ts');
+  assert.match(built.rendered.default.html, /<p>Acme launch<\/p>/);
 });
 
 test('Astro frontmatter honors Workbench aliases and environment defines', async t => {
@@ -153,7 +170,7 @@ test('Astro frontmatter honors Workbench aliases and environment defines', async
     'fixtures/message.ts': 'export const label = "Acme";',
     'workbench.config.ts': `export default { aliases: { '#acme': './fixtures/message.ts' }, define: { 'import.meta.env.SITE': JSON.stringify('https://example.com/acme/') } };`,
   });
-  const built = await new Compiler(root).compile('button.workbench.ts', false);
+  const built = await build(t, root, 'button.workbench.ts');
   assert.match(built.rendered.default.html, /<p>Acme https:\/\/example.com\/acme\/<\/p>/);
   assert.ok(built.localFiles.includes(path.join(root, 'fixtures/message.ts')));
 });
@@ -164,7 +181,8 @@ test('docs examples render Astro components from a folder, with their assets mad
     'examples/plain.astro': '<p>Plain</p>',
     'one.astro': '<p>One</p>',
   });
-  const compiler = new Compiler(root);
+  const compiler = portable.portableBuilder(new Compiler(root));
+  t.after(() => compiler.close());
   const compiled = await compiler.compileDocs({ adapter: 'astro', examples: 'examples/' });
   assert.deepEqual(compiled.examples.map(example => example.id), ['plain', 'primary']);
   const bundle = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-astro-docs-')), 'examples.mjs');

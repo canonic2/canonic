@@ -270,6 +270,7 @@ to the authored render. Edits never change your files.
 | `import url from './logo.svg?url'` | A URL to the copied file |
 | `import text from './icon.svg?raw'` | The file's text |
 | `import logo from './logo.png'` | A URL string, not Astro's image object |
+| `<img src="./logo.svg">` | Resolved from the component's folder and copied with the preview |
 | `<img src="/logo.svg">` | Found in the project root, then in the nearest package's `public/` folder |
 
 Scripts run again on every state change, input edit, and reset, and can read
@@ -330,26 +331,17 @@ export default defineConfig({
 - **`aliases`** in `workbench.config.ts` also apply to frontmatter. Each alias
   matches one exact import specifier. See
   [Custom adapters](custom-adapters.md#aliases).
-- **Global `plugins`** in `workbench.config.ts` run in the frontmatter build as
-  well as in the browser. Use one to stand in for a module that needs Astro's
-  application pipeline. This plugin answers `astro:content` with a local
-  fixture:
+- **An alias can stand in for an `astro:` module** that needs Astro's
+  application pipeline, such as `astro:content`. This one answers
+  `astro:content` with a local fixture:
 
   ```ts
   // workbench.config.ts
-  import path from 'node:path';
   import { defineConfig } from '@canonic2/workbench';
 
-  const content = {
-    name: 'acme-content',
-    setup(build) {
-      build.onResolve({ filter: /^astro:content$/ }, () => ({
-        path: path.join(__dirname, 'preview/content.ts'),
-      }));
-    },
-  };
-
-  export default defineConfig({ plugins: [content] });
+  export default defineConfig({
+    aliases: { 'astro:content': './preview/content.ts' },
+  });
   ```
 
   ```ts
@@ -360,7 +352,10 @@ export default defineConfig({
   ```
 
   A component that calls `getCollection('blog')` then renders the fixture.
-  `aliases` can't do this: `astro:` imports are rejected before aliases apply.
+- **`rules` and `plugins`** in `workbench.config.ts` apply to the component's
+  `<script>` tags and what they import, which are built for the browser. They don't
+  run in frontmatter, which Workbench bundles separately for Node. See
+  [Rules and plugins](custom-adapters.md#rules-and-plugins).
 
 Registering an adapter named `astro` in `workbench.config.ts` replaces this
 adapter entirely, including server rendering. See
@@ -370,13 +365,13 @@ adapter entirely, including server rendering. See
 
 | Feature | Error | What to do |
 | --- | --- | --- |
-| `astro:content`, `astro:assets`, and other `astro:` modules | `astro:assets needs the Astro application pipeline; use a URL lens or a compiler plugin.` | Stand in for the module with a global plugin, as above, or use a URL lens |
+| `astro:content`, `astro:assets`, and other `astro:` modules | `astro:content needs the Astro application pipeline; use a URL lens, or stand in for it with an alias.` | Stand in for the module with an alias, as above, or use a URL lens |
 | `client:*` directives and `server:defer` | `Astro client/server islands need application integrations; use a URL lens for <file>` | Use a URL lens |
 | React, Vue, Svelte, or other framework components inside Astro | ``Unable to render `Widget`. No valid renderer was found for this file extension.`` | Preview the framework component with its own adapter, or use a URL lens |
-| `<style lang="scss">` and other preprocessors | `Astro style preprocessors need a compiler plugin: <file>` | Use plain CSS, or a URL lens. A plugin that returns CSS doesn't fix this |
+| `<style lang="scss">` and other preprocessors | `Astro style preprocessors are not supported; use plain CSS: <file>` | Use plain CSS, or a URL lens. A rule in `workbench.config.ts` doesn't change this |
 | Importing `.scss`, `.md`, or `.mdx` files | `No loader is configured for ".scss" files: <file>` | Use plain CSS, or pass the content as an input |
 | `import.meta.glob` | `(intermediate value).glob is not a function` | Import the files directly |
-| `astro.config.*`, integrations, middleware, and `.env` files | None: they are not loaded | Use `define`, `aliases`, and `plugins` in `workbench.config.ts` |
+| `astro.config.*`, integrations, middleware, and `.env` files | None: they are not loaded | Use `define` and `aliases` in `workbench.config.ts`, and `rules` and `plugins` for scripts |
 
 ## Document components with a docs page
 
@@ -460,7 +455,7 @@ example as it was rendered, with its styles and scripts.
 | `Astro previews require Astro 4.9 or newer (the Container API).` | Upgrade Astro to 4.9 or later. |
 | `Cannot load the project Astro compiler: …` | Reinstall your dependencies so Astro's compiler package is present. |
 | `The selected Astro source export does not exist: <name>` | Fix `source.export`, or remove it to use the default export. |
-| `Missing HTML asset: <url> in <file>` | A rendered `src`, `poster`, `srcset`, or `<link href>` names a local file that doesn't exist. Attributes such as `data-src` are checked too, so `data-src="undefined"` fails this way. |
+| `Module not found: Can't resolve '<path>'` | A rendered `src`, `poster`, or `srcset` names a local file that doesn't exist. Attributes such as `data-src` are checked too, so `data-src="undefined"` fails this way. |
 | `Cannot read properties of undefined (reading '<name>')` | If `<name>` is an `import.meta.env` value, set it with `define`. Otherwise a prop is missing: add it to `inputs`. |
 
 For the other problems listed under `Workbench previews:`, see

@@ -2,16 +2,18 @@
 // Neither the editor extension host nor the screenshot renderer loads projects.
 const http = require('node:http');
 const path = require('node:path');
-const { Compiler, docsRequest } = require('./compiler.cjs');
+const { Compiler, docsRequest, validate, mockFetches } = require('./compiler.cjs');
+const { Pipeline } = require('../src/modules/preview-pipeline/index.ts');
 const portable = require('./portable.cjs');
 const { withPreviewScripts } = require('../preview-scripts');
 const compiler = new Compiler(process.argv[2], JSON.parse(process.argv[3] || '{}'));
+const diagnostic = (event, details) => { if (process.connected) process.send({ type: 'diagnostic', event, details }); };
+// Previews and docs lenses build through the Rspack pipeline; esbuild still
+// evaluates definitions and builds Astro input edits and portable exports.
+const pipeline = new Pipeline(compiler, { validate, docsRequest, mockFetches, createAstro: (root, target, config) => require('./astro.cjs').create(root, target, config) },
+  { previewDir: __dirname, log: diagnostic });
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
-const slugs = new Map();
 const variants = new Map();
-// Docs bundles by slug, to the request that builds them.
-const docs = new Map();
-const docsBase = slug => '/_workbench/previews/docs/' + slug + '/';
 let queue = Promise.resolve();
 const serial = work => { const result = queue.then(work); queue = result.catch(() => {}); return result; };
 const json = (res, value) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(value)); };
@@ -20,9 +22,6 @@ const server = http.createServer((req, res) => {
   const requested = Date.now();
   let started;
   const traced = ['/index', '/page', '/descriptor', '/render', '/export', '/docs/bundle'].includes(url.pathname);
-  const diagnostic = (event, details) => {
-    if (process.connected) process.send({ type: 'diagnostic', event, details });
-  };
   res.once('finish', () => {
     const elapsedMs = Date.now() - requested;
     if (traced || elapsedMs >= 500) diagnostic('preview.request.completed', {
@@ -33,13 +32,26 @@ const server = http.createServer((req, res) => {
   });
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') { res.statusCode = 405; res.end('GET only'); return; }
+  // The event stream stays open and built output is read from memory, so
+  // neither waits in the serial queue.
+  if (url.pathname === '/rspack/events') { pipeline.events(req, res); return; }
+  if (url.pathname.startsWith('/rspack/')) {
+    pipeline.serve(url.pathname, res).catch(error => {
+      diagnostic('preview.pipeline.serve.failed', { path: url.pathname, message: String(error.message || error).slice(0, 500) });
+      if (!res.headersSent) { res.statusCode = 500; json(res, { error: error.message }); } else res.end();
+    });
+    return;
+  }
   serial(async () => {
     started = Date.now();
     if (traced) diagnostic('preview.request.started', {
       route: url.pathname, file: url.searchParams.get('file'), queueMs: started - requested,
     });
-    if (url.pathname === '/index') { json(res, await compiler.index()); return; }
-    if (url.pathname === '/revision') { json(res, { revision: (await compiler.compile(url.searchParams.get('file'))).revision }); return; }
+    if (url.pathname === '/index') {
+      const index = await compiler.index();
+      json(res, { ...index, errors: [...index.errors, ...pipeline.problems()] });
+      return;
+    }
     if (url.pathname === '/render') {
       const inputs = JSON.parse(url.searchParams.get('inputs') || '{}');
       if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('Astro inputs must be an object.');
@@ -51,20 +63,11 @@ const server = http.createServer((req, res) => {
       json(res, { html: result.rendered[state].html, base: '/_workbench/previews/preview/' + result.slug + '/' });
       return;
     }
-    if (url.pathname === '/page' || url.pathname === '/descriptor') {
-      const result = await compiler.compile(url.searchParams.get('file'));
-      slugs.set(result.slug, result.file);
-      if (url.pathname === '/descriptor') {
-        const base = '/_workbench/previews/preview/' + result.slug + '/';
-        json(res, { base, module: base + 'preview.js?revision=' + result.revision,
-          stylesheet: result.outputs.has('preview.css') ? base + 'preview.css' : null,
-          title: result.title, options: { development: true, revision: result.revision,
-            revisionUrl: '/_workbench/previews/revision?file=' + encodeURIComponent(result.file) } });
-        return;
-      }
+    if (url.pathname === '/descriptor') { json(res, pipeline.descriptor(await pipeline.preview(url.searchParams.get('file')))); return; }
+    if (url.pathname === '/page') {
       res.setHeader('Content-Type', mime['.html']);
       // The outer URL owns state; the compatibility bundle reads it here.
-      res.end(withPreviewScripts(result.outputs.get('index.html').toString()));
+      res.end(withPreviewScripts(pipeline.page(await pipeline.preview(url.searchParams.get('file')))));
       return;
     }
     // A docs page lens: what it offers, for problems, or its bundle to mount.
@@ -77,23 +80,11 @@ const server = http.createServer((req, res) => {
     }
     if (url.pathname === '/docs/bundle') {
       const request = JSON.parse(url.searchParams.get('request') || 'null');
-      const result = await compiler.compileDocs(request);
-      docs.set(result.slug, request);
-      const base = docsBase(result.slug);
-      json(res, { base, module: base + 'examples.js?revision=' + result.revision, revision: result.revision,
-        stylesheet: result.stylesheet ? base + 'examples.css?revision=' + result.revision : null,
-        examples: result.examples, problems: result.problems });
+      const entry = await pipeline.docs(request);
+      const descriptor = pipeline.descriptor(entry);
+      // Examples update in place, so the bundle's revision stays the same.
+      json(res, { base: descriptor.base, module: descriptor.module, revision: 'rspack', stylesheet: null, examples: entry.examples, problems: entry.problems });
       return;
-    }
-    const docsAsset = /^\/docs\/([^/]+)\/(.+)$/.exec(url.pathname);
-    if (docsAsset && docs.has(docsAsset[1])) {
-      const result = await compiler.compileDocs(docs.get(docsAsset[1]));
-      const body = result.outputs.get(decodeURIComponent(docsAsset[2]));
-      if (body) {
-        res.setHeader('Content-Type', mime[path.extname(docsAsset[2])] || 'application/octet-stream');
-        res.end(body);
-        return;
-      }
     }
     if (url.pathname === '/export') {
       const config = require('../config').read(compiler.root);
@@ -105,8 +96,9 @@ const server = http.createServer((req, res) => {
       return;
     }
     const match = /^\/preview\/([^/]+)\/(.+)$/.exec(url.pathname);
-    if (match && (slugs.has(match[1]) || variants.has(match[1]))) {
-      const result = variants.get(match[1]) || await compiler.compile(slugs.get(match[1]));
+    // Astro input edits render through esbuild, with their own assets.
+    if (match && variants.has(match[1])) {
+      const result = variants.get(match[1]);
       const name = decodeURIComponent(match[2]);
       const body = result.outputs.get(name);
       if (body) {
@@ -125,7 +117,10 @@ const server = http.createServer((req, res) => {
 });
 server.listen(0, '127.0.0.1', () => {
   if (process.send) process.send({ port: server.address().port });
+  // Pre-warm: build every preview and docs lens before anything asks.
+  pipeline.warming = pipeline.prewarm();
 });
-process.on('disconnect', () => server.close(() => process.exit(0)));
-process.on('message', message => { if (message === 'close') server.close(() => process.exit(0)); });
-process.on('SIGTERM', () => server.close(() => process.exit(0)));
+const stop = () => pipeline.close().catch(() => {}).finally(() => server.close(() => process.exit(0)));
+process.on('disconnect', stop);
+process.on('message', message => { if (message === 'close') stop(); });
+process.on('SIGTERM', stop);

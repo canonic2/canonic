@@ -10,7 +10,9 @@ records the contract, how it is built, and what is still open. See
 
 The sections below are the agreed contract. Where the code does not yet meet
 it, the gap is marked; unresolved choices are under
-[open questions](#open-questions).
+[open questions](#open-questions). How previews are compiled, served, kept
+warm, made ready and updated after edits is specified in the
+[preview pipeline](preview-pipeline/README.md).
 
 ## Purpose and scope
 
@@ -138,9 +140,10 @@ applies independently within each isolated artboard.
   **Actions**, and **Documentation**. Edits re-render the current state with
   input overrides and last until reset, reload, source revision change, or session eviction;
   they never write files or affect references or exports.
-- Saving the definition or any file in its dependency graph reloads the open
-  preview: in development the page polls a revision URL every second and
-  reloads when it changes. This is a full reload, not hot module replacement.
+- Saving the definition or any file in its dependency graph updates the open
+  preview without a manual refresh: edits apply as hot updates pushed from the
+  server, and edits that cannot apply in place reload the preview
+  ([hot updates](preview-pipeline/hot-updates.md)).
 - Astro input edits re-render through the worker; frontmatter runs in Node.
 
 ### Links and navigation
@@ -295,11 +298,11 @@ reached through `node_modules` are listed by name and version.
   their existing host layout; custom runtimes own their host styling.
 - `workbench.config.ts`, or `previews.config`, is evaluated like a definition.
   Its `adapters` map a name to a `runtime` module (`mount(canvas, source,
-  context, environment)`) and optional `plugins`; registering a built-in name
-  replaces it. It also sets global `plugins`, `aliases`, `dedupe`,
-  `resolveExtensions`, and `define`. An unregistered name fails with
-  `Unknown adapter`. Plugins are esbuild plugins and run before Workbench's own
-  loaders.
+  context, environment)`) and optional `rules` and `plugins`; registering a
+  built-in name replaces it. It also sets global `rules`, `plugins`, `aliases`,
+  `dedupe`, `resolveExtensions`, and `define`. An unregistered name fails with
+  `Unknown adapter`. Rules and plugins are Rspack rules and plugins, applied
+  after Workbench's own ([plugins](preview-pipeline/plugins.md#project-plugins)).
 - Custom adapters, compiler plugins, live output, and portable output share the
   same entry and [browser runtime](../preview/browser.js).
 
@@ -320,15 +323,12 @@ reached through `node_modules` are listed by name and version.
   3 seconds. It also exits when its parent's IPC channel disconnects.
 - Its error output is logged as `preview.worker` (each chunk truncated), and
   per-request timing as `preview.request.completed`.
-- Compiled output is cached against the size and modification time of every
-  file it read; config changes clear the memory cache. Authored builds also
-  persist in the host's temporary directory across worker restarts, scoped to
-  the project root, discovery options, compiler implementation, evaluated
-  config and runtime version. Stale or unreadable artifacts rebuild from source;
-  a disk-cache failure does not prevent compilation. Input-edit renders are not
-  cached. Only discovered definitions inside the project compile. A request
+- Previews and docs lenses build in the worker's
+  [preview pipeline](preview-pipeline/README.md): Rspack compilers in watch
+  mode, with output in memory and a persistent cache in the host's temporary
+  folder. Only discovered definitions inside the project compile. A request
   for one definition checks discovery rules directly without scanning every
-  project file. Live source maps are separate files, fetched by developer tools.
+  project file.
 - In an untrusted server (`isTrusted: false`), no definition runs, discovered
   files produce `Workbench previews require a trusted workspace.`, and preview
   routes answer 404. When trust applies is part of the
@@ -339,9 +339,11 @@ reached through `node_modules` are listed by name and version.
 The worker runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
 in Node mode when that runtime is used on the host, and otherwise on the
 current process's executable (Node for the standalone server). `NODE_OPTIONS`
-is removed from its environment. Compilation uses native `esbuild`. Each
-platform VSIX bundles the matching pinned binary at build time; source
-checkouts use the package's installed compiler. Projects install no compiler,
+is removed from its environment. Previews compile with Rspack, and esbuild
+evaluates definitions and builds Workbench's own bundles
+([compiler](preview-pipeline/compiler.md#what-stays-on-esbuild)). Each
+platform VSIX bundles the matching pinned esbuild binary and Rspack binding at
+build time; source checkouts use the package's installed compilers. Projects install no compiler,
 and the installed extension downloads none.
 
 ### Readiness and errors
@@ -349,7 +351,8 @@ and the installed extension downloads none.
 - A render aborts the previous signal and runs cleanups in reverse; a failed
   cleanup does not stop the others. `setup` runs environment, preview, then
   state; the source mounts; `play` and `ready` follow; then fonts, then visible
-  images (offscreen lazy images excluded) or 3 seconds.
+  images (offscreen lazy images excluded) or 3 seconds. Each phase is logged on its own event
+  ([readiness](preview-pipeline/readiness.md)).
 - Thrown errors, unhandled rejections, adapter errors, and `context.error`
   clear readiness, release resources, and show the error in the frame.
   **Reset state** recovers.

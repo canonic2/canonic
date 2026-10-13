@@ -292,8 +292,10 @@ example Ant Design's):
 - The page is ready when the Markdown has rendered, every example has
   mounted, and fonts and visible images have loaded, with the same limits as
   previews. Capture and export wait for readiness.
-- Saving the Markdown, a lens's example source, or any file in its
-  dependency graph reloads the page and keeps its scroll position.
+- Saving the Markdown replaces it in place, keeping the scroll position and
+  the mounted examples; saving a lens's example source, or any file in its
+  dependency graph, hot-updates the examples
+  ([hot updates](preview-pipeline/hot-updates.md#docs-pages)).
 
 ## States
 
@@ -375,12 +377,13 @@ problems update when they arrive.
   waiting for a build: its panels are `pending` until the page script learns
   the lens's bundle, which then mounts them or names why not. The examples are
   usually built already: the extension and the command-line server start the
-  compile worker with the session and build every docs page in each lens in
-  the background, one at a time.
-- **Compilation.** The compile worker builds one bundle per docs page and lens
-  from that lens's example source, with the lens's adapter, styles,
-  environment, and the project's `workbench.config.ts`. Bundles share the
-  preview cache and trust rules.
+  compile worker with the session, which builds every docs page in each lens
+  with the previews as it starts ([warm runtime](preview-pipeline/warm-runtime.md)).
+- **Compilation.** Each docs page lens is an entry of the
+  [preview pipeline](preview-pipeline/compiler.md#entries), built from that
+  lens's example source with the lens's adapter, styles, environment, and the
+  project's `workbench.config.ts`. Lenses share the previews' compilers, cache
+  and trust rules.
 - **The preview host.** Docs pages load into the same warm preview host as
   previews, which renders the page, mounts each example, and reports
   readiness, the examples in view (for handoffs), and scroll position (for
@@ -509,8 +512,8 @@ the pilot and is not part of this contract.
   no project code", and examples are project code. The Markdown still renders,
   and every panel says why its example is missing.
 - **2026-10-04: one worker, one compiler path.** Docs bundles build in the
-  preview worker through the same esbuild setup as previews
-  (`createBuild` in [compiler.cjs](../preview/compiler.cjs)), so aliases,
+  preview worker through the same compiler setup as previews (the
+  [preview pipeline](preview-pipeline/README.md) since 2026-10-13), so aliases,
   plugins, Vue and HTML loading, styles, and environments behave alike. The
   bundle exports `examples`, `adapter`, and `environment`; the page script
   mounts them. The worker also starts for a project whose only compiled code
@@ -630,10 +633,10 @@ Verified 2026-10-04:
   pages, swaps the State menu for a Lens menu, and follows docs links.
 - **Compilation.** `Compiler.docsExamples` lists a lens's examples: a directory's
   files, or a file's named exports from a bundled build with packages external,
-  so `export * from` re-exports are listed. `Compiler.compileDocs` builds the
-  bundle. A listing is kept until a file it read changes, as a bundle is.
-  Worker routes: `/docs/index`, `/docs/bundle`, and the bundle's files
-  under `/_workbench/previews/docs/<slug>/`.
+  so `export * from` re-exports are listed. The pipeline builds each lens as an
+  entry, and the portable export as a production bundle. A listing is kept until
+  a file it read changes. Worker routes: `/docs/index`, and `/docs/bundle`,
+  which answers with the lens's preview module.
 - **Serving.** A page's Markdown is served as its docs at the Markdown's path
   (`?lens=`, `?state=`), with its panels pending; any other `.md` is served as
   a file.

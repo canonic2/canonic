@@ -200,8 +200,9 @@ implementation restores the artboard and its size.
 - **Handoffs** name the Markdown, the lens, and the examples in view with
   their source files.
 
-Saving the Markdown, an example, or anything an example imports reloads the
-docs at the same scroll position.
+Saving the Markdown updates the page in place, at the same scroll position, and
+leaves the examples mounted. Saving an example, or anything an example imports,
+updates that example in place.
 
 ### Show code and Copy code
 

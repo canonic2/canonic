@@ -200,22 +200,52 @@ function restoreScroll(): void {
   } catch { /* Storage can be unavailable; the page then opens at the top. */ }
 }
 
+/**
+ * The server pushes "docs-changed" when a docs page's Markdown changes; the
+ * page checks its revision once and, when it changed, swaps its Markdown in
+ * place. Mounted examples stay (they hot-update on their own), and so does
+ * the scroll position.
+ */
 function watchRevision(): void {
   if (!options?.revisionUrl) return;
-  const timer = setInterval(async () => {
+  const revisionUrl = options.revisionUrl;
+  let hub = window as unknown as { EventSource: typeof EventSource; __wbPushSource?: EventSource };
+  try { if (parent !== window && parent.location.origin === location.origin) hub = parent as unknown as typeof hub; } catch { /* Another origin: use this window. */ }
+  const source = hub.__wbPushSource ?? (hub.__wbPushSource = new hub.EventSource('/_workbench/previews/rspack/events'));
+  let checking = false;
+  const check = async (): Promise<void> => {
+    if (checking) return;
+    checking = true;
     try {
-      const answer = await fetch(options.revisionUrl, { cache: 'no-store' });
+      const answer = await fetch(revisionUrl, { cache: 'no-store' });
       const { revision } = await answer.json();
-      // A page that never learned its revision takes the first answer as it.
-      if (revision && !options.revision) options.revision = revision;
-      else if (revision && revision !== options.revision) {
-        clearInterval(timer);
-        try { sessionStorage.setItem(SCROLL_KEY, window.scrollX + ',' + window.scrollY); } catch { /* See restoreScroll. */ }
-        location.reload();
+      if (revision && revision !== options!.revision) {
+        options!.revision = revision;
+        await swapMarkdown();
       }
-    } catch { /* The server can restart while the page stays open. */ }
-  }, 1000);
-  addEventListener('pagehide', () => clearInterval(timer), { once: true });
+    } catch { /* The server can restart while the page stays open. */ } finally { checking = false; }
+  };
+  const onMessage = (event: MessageEvent): void => {
+    try { if (JSON.parse(event.data).type === 'docs-changed') void check(); } catch { /* Not a pipeline message. */ }
+  };
+  source.addEventListener('message', onMessage);
+  addEventListener('pagehide', () => source.removeEventListener('message', onMessage), { once: true });
+}
+
+async function swapMarkdown(): Promise<void> {
+  const answer = await fetch(location.href, { cache: 'no-store' });
+  const next = new DOMParser().parseFromString(await answer.text(), 'text/html').querySelector('main.wb-docs');
+  const current = document.querySelector('main.wb-docs');
+  if (!next || !current) {
+    try { sessionStorage.setItem(SCROLL_KEY, window.scrollX + ',' + window.scrollY); } catch { /* See restoreScroll. */ }
+    location.reload();
+    return;
+  }
+  for (const figure of Array.from(next.querySelectorAll('[data-wb-example]'))) {
+    const live = current.querySelector('[data-wb-example="' + CSS.escape(figure.getAttribute('data-wb-example') ?? '') + '"]');
+    if (live) figure.replaceWith(live);
+  }
+  current.replaceChildren(...Array.from(next.childNodes));
 }
 
 async function start(): Promise<void> {

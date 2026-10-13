@@ -1012,6 +1012,30 @@
       });
       return;
     }
+    // The warm document: the visible warm host changes page in place, as an
+    // application's router would, keeping loaded dependencies, stylesheets and
+    // fonts. A new state of the same preview re-renders without reloading it.
+    if (frame.wbWarmHost && frame.wbRequestedUrl && frameReady && /\.workbench\.tsx?(?:[?#]|$)/.test(src) &&
+        new URL(src, location.href).origin === location.origin) {
+      var showing = new URL(frame.wbRequestedUrl, location.href);
+      var next = new URL(src, location.href);
+      sessions.forget(frame);
+      frame.wbSessionKey = key;
+      frame.wbRestoring = false;
+      sessions.add(key, frame);
+      var host = frame.contentWindow;
+      if (showing.pathname === next.pathname && host && host.__workbenchOptions && !host.__workbenchError) {
+        frame.wbRequestedUrl = src;
+        frame.wbLoadSequence = (frame.wbLoadSequence || 0) + 1;
+        host.history.replaceState(host.history.state, '', next.href);
+        host.__workbenchReady = false;
+        host.postMessage({ type: 'workbench-preview-command', command: 'state', state: next.searchParams.get('state') || undefined }, location.origin);
+        frameLoaded({ currentTarget: frame, warm: true });
+        return;
+      }
+      prepareFrame(frame, src);
+      return;
+    }
     if (!frame.getAttribute('src') || (frame.wbWarmHost && !frame.wbRequestedUrl && !frameReady)) {
       artboardContent.classList.add('is-loading');
       frameReady = false;

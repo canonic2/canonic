@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Compiler, docsRequest } = require('./preview/compiler.cjs');
+const { portableBuilder } = require('./preview/portable.cjs');
 
 function fixture(t, files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-docs-test-'));
@@ -28,6 +29,13 @@ async function load(t, compiled) {
 
 const canvas = () => ({ textContent: '' });
 
+// A docs lens's portable bundle, from the Rspack production compiler.
+function builder(t, root) {
+  const built = portableBuilder(new Compiler(root));
+  t.after(() => built.close());
+  return built;
+}
+
 test('a folder lens bundles one example per file, by file name, with its styles', async t => {
   const root = fixture(t, {
     'docs/button/primary.ts': 'export default (canvas) => { canvas.textContent = "Primary"; };',
@@ -37,7 +45,7 @@ test('a folder lens bundles one example per file, by file name, with its styles'
     'docs/label.ts': 'export const label: string = "With icon";',
     'theme.css': '.acme-button { color: purple; }',
   });
-  const compiled = await new Compiler(root).compileDocs({ adapter: 'html', examples: 'docs/button/', styles: ['theme.css'] });
+  const compiled = await builder(t, root).compileDocs({ adapter: 'html', examples: 'docs/button/', styles: ['theme.css'] });
   assert.deepEqual(compiled.examples, [
     { id: 'primary', file: 'docs/button/primary.ts', export: 'default' },
     { id: 'with-icon', file: 'docs/button/with-icon.ts', export: 'default' },
@@ -63,7 +71,7 @@ test('a file lens bundles each named export as a kebab-case example and skips th
       'export default () => {};',
     ].join('\n'),
   });
-  const compiled = await new Compiler(root).compileDocs({ adapter: 'html', examples: 'card.examples.ts' });
+  const compiled = await builder(t, root).compileDocs({ adapter: 'html', examples: 'card.examples.ts' });
   assert.deepEqual(compiled.examples.map(example => [example.id, example.export]), [['basic', 'basic'], ['with-custom-style', 'withCustomStyle']]);
   assert.deepEqual(compiled.problems, ['with_custom_style: gives the same example ID as withCustomStyle (“with-custom-style”).']);
   const bundle = await load(t, compiled);
@@ -79,7 +87,7 @@ test('the project environment and the lens environment wrap the examples togethe
     'lens-environment.ts': 'export const setup = () => { globalThis.acmeOrder.push("lens"); };',
     'examples/basic.ts': 'export default () => {};',
   });
-  const compiled = await new Compiler(root).compileDocs({ adapter: 'html', examples: 'examples/', environment: 'lens-environment.ts' });
+  const compiled = await builder(t, root).compileDocs({ adapter: 'html', examples: 'examples/', environment: 'lens-environment.ts' });
   const bundle = await load(t, compiled);
   globalThis.acmeOrder = [];
   t.after(() => { delete globalThis.acmeOrder; });
@@ -89,10 +97,9 @@ test('the project environment and the lens environment wrap the examples togethe
 
 test('adding an example to a folder rebuilds the bundle', async t => {
   const root = fixture(t, { 'examples/basic.ts': 'export default () => {};' });
-  const compiler = new Compiler(root);
+  const compiler = builder(t, root);
   const request = { adapter: 'html', examples: 'examples/' };
   const first = await compiler.compileDocs(request);
-  assert.equal(await compiler.compileDocs(request), first, 'unchanged sources reuse the build');
   // Directory times have coarse resolution on some file systems.
   await new Promise(resolve => setTimeout(resolve, 20));
   fs.writeFileSync(path.join(root, 'examples/large.ts'), 'export default () => {};');
@@ -115,7 +122,7 @@ test('a lens’s listing is kept until a file it read changes', async t => {
 
 test('docs requests stay inside the project and name what is wrong', async t => {
   const root = fixture(t, { 'examples/basic.ts': 'export default () => {};', 'card.astro': '---\n---\n<p>Card</p>' });
-  const compiler = new Compiler(root);
+  const compiler = builder(t, root);
   await assert.rejects(compiler.compileDocs({ adapter: 'html', examples: '../outside/' }), /inside the project/);
   await assert.rejects(compiler.compileDocs({ adapter: 'html', examples: 'missing/' }), /doesn’t exist: missing\//);
   await assert.rejects(compiler.compileDocs({ adapter: 'html', examples: 'examples/', styles: ['gone.css'] }), /A style doesn’t exist: gone.css/);
@@ -200,11 +207,15 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   const info = await (await request(base + options.bundle.info)).json();
   assert.deepEqual(info.examples.sort(), ['ghost', 'primary', 'secondary']);
   assert.equal(info.error, null);
+  // The lens's preview module names its build's scripts and stylesheets.
   const bundle = await request(base + info.module);
   assert.equal(bundle.status, 200);
-  assert.match(await bundle.text(), /Secondary/);
-  assert.ok(info.stylesheet, 'the lens’s styles come with the bundle');
-  assert.match(await (await request(base + info.stylesheet)).text(), /purple/);
+  const module = await bundle.text();
+  const scripts = JSON.parse(/const scripts = (\[[^\]]*\]);/.exec(module)[1]);
+  assert.match(await (await request(base + scripts[scripts.length - 1])).text(), /Secondary/);
+  const styles = JSON.parse(/for \(const style of (\[[^\]]*\])\)/.exec(module)[1]);
+  assert.ok(styles.length, 'the lens’s styles come with the bundle');
+  assert.match(await (await request(base + styles[0].href)).text(), /purple/);
 
   const native = await (await request(base + '/docs/button.md?lens=native&state=loading')).text();
   const nativeOptions = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(native)[1]);

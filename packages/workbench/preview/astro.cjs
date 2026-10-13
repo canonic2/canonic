@@ -36,7 +36,13 @@ async function create(root, source, config = {}) {
   const plugin = { name: 'workbench-astro-server', setup(build) {
     // Keep Astro's server runtime in Node, using this project's own version.
     build.onResolve({ filter: /^astro\// }, args => ({ path: pathToFileURL(astro.resolve(args.path)).href, external: true }));
-    build.onResolve({ filter: /^astro:/ }, args => { throw new Error(args.path + ' needs the Astro application pipeline; use a URL lens or a compiler plugin.'); });
+    // An alias stands in for an Astro application module, such as astro:content.
+    build.onResolve({ filter: /^astro:/ }, args => {
+      const alias = config.aliases?.[args.path];
+      if (!alias) throw new Error(args.path + ' needs the Astro application pipeline; use a URL lens, or stand in for it with an alias.');
+      const target = alias.startsWith('.') || path.isAbsolute(alias) ? path.resolve(root, alias) : alias;
+      return build.resolve(target, { resolveDir: args.resolveDir, kind: args.kind, pluginData: { workbenchAlias: true } });
+    });
     build.onResolve({ filter: /.*/ }, args => {
       const alias = !args.pluginData?.workbenchAlias && config.aliases?.[args.path];
       if (alias) {
@@ -64,7 +70,7 @@ async function create(root, source, config = {}) {
           const attributes = node.openingElement?.attributes || node.attributes || [];
           const language = attributes.find(attribute => (attribute.name?.name || attribute.name) === 'lang');
           const value = language?.value?.value || language?.value;
-          if (value && value !== 'css') throw new Error('Astro style preprocessors need a compiler plugin: ' + args.path);
+          if (value && value !== 'css') throw new Error('Astro style preprocessors are not supported; use plain CSS: ' + args.path);
         }
         for (const value of Object.values(node)) {
           if (Array.isArray(value)) value.forEach(visit);
@@ -116,7 +122,8 @@ async function create(root, source, config = {}) {
   } };
   const built = await esbuild.build({ absWorkingDir: root, entryPoints: [source], bundle: true,
     platform: 'node', format: 'esm', write: false, metafile: true, logLevel: 'silent',
-    plugins: [...(config.plugins || []), plugin],
+    // Project plugins are Rspack plugins, which this Node bundle cannot run.
+    plugins: [plugin],
     define: { 'import.meta.env.BASE_URL': JSON.stringify('/'), 'import.meta.env.SITE': JSON.stringify('https://example.com'),
       'import.meta.env.DEV': 'false', 'import.meta.env.PROD': 'true', ...config.define },
   });

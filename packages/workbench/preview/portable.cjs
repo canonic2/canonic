@@ -1,8 +1,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// The portable compiler: Rspack production builds with the project's plugins.
+function portableBuilder(compiler) {
+  const { validate, docsRequest, mockFetches } = require('./compiler.cjs');
+  const { PortableBuilder } = require('../src/modules/preview-pipeline/portable.ts');
+  return new PortableBuilder(compiler, { validate, docsRequest, mockFetches, createAstro: (root, target, config) => require('./astro.cjs').create(root, target, config) },
+    { previewDir: __dirname });
+}
+
 // This package is shared by the editor ZIP exporter and the standalone CLI.
 async function create(compiler, options = {}) {
+  const builder = portableBuilder(compiler);
+  try { return await build(compiler, builder, options); } finally { await builder.close(); }
+}
+
+async function build(compiler, builder, options) {
   const index = await compiler.index();
   const files = [];
   const previews = [];
@@ -10,7 +23,7 @@ async function create(compiler, options = {}) {
   function add(name, body) { files.push({ path: 'browser/' + name, data: Buffer.from(body).toString('base64') }); }
   for (const preview of index.previews.filter(preview => !options.selection || options.selection.pages.includes(preview.file))) {
     try {
-      const result = await compiler.compile(preview.file, false);
+      const result = await builder.compile(preview.file);
       for (const [name, body] of result.outputs) add(result.slug + '/' + name, body);
       previews.push({ ...preview, states: options.selection?.states.length ? preview.states.filter(state => options.selection.states.includes(state.id)) : preview.states,
         ...(result.portableNote ? { controls: {}, docs: (preview.docs || '') + '\n' + result.portableNote } : {}), directory: 'browser/' + result.slug, files: result.localFiles,
@@ -31,7 +44,7 @@ async function create(compiler, options = {}) {
   }
   const discovered = (index.docs || []).map(page => ({ src: page.src, page: page.src, label: page.title.split('/').filter(Boolean).pop() || page.id, lens: page.lens, lenses: page.lenses }));
   const { docsPages, portableDocs } = require('../src/modules/docs/index.ts');
-  const docs = await portableDocs(compiler, docsPages(config, discovered).filter(page => !options.selection || options.selection.pages.includes(page.page || page.src)), add);
+  const docs = await portableDocs({ root: compiler.root, compileDocs: request => builder.compileDocs(request) }, docsPages(config, discovered).filter(page => !options.selection || options.selection.pages.includes(page.page || page.src)), add);
   warnings.push(...docs.warnings);
   for (const file of ['index.html', 'viewer.js', 'viewer.css']) add(file, fs.readFileSync(path.join(__dirname, 'viewer', file)));
   for (const file of ['preview-controls.js', 'preview-controls.css']) add(file, fs.readFileSync(path.join(__dirname, '..', 'workbench', file)));
@@ -41,4 +54,4 @@ async function create(compiler, options = {}) {
   return { files, previews, docs: docs.pages, warnings };
 }
 
-module.exports = { create };
+module.exports = { create, portableBuilder };

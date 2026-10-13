@@ -91,8 +91,9 @@ test('offscreen lazy images do not hold preview readiness behind the image timeo
   assert.equal(r.window.__workbenchReady, true);
   assert.equal(observed, false);
   assert.deepEqual(r.diagnostics.map(entry => entry.details.phase),
-    ['started', 'setup.completed', 'mount.completed', 'fonts.waiting', 'images.waiting', 'ready']);
-  const images = r.diagnostics.find(entry => entry.details.phase === 'images.waiting');
+    ['started', 'setup.completed', 'mount.completed', 'hooks.completed', 'fonts.completed', 'images.completed', 'ready']);
+  // Each phase's time is on the event that ends it.
+  const images = r.diagnostics.find(entry => entry.details.phase === 'images.completed');
   assert.equal(images.details.deferredImages, 1);
   assert.equal(images.details.pendingImages, 0);
   assert.ok(r.diagnostics.at(-1).details.elapsedMs >= 0);

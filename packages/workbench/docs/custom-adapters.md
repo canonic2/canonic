@@ -3,9 +3,9 @@
 Workbench previews ship with adapters for HTML, React, Vue, Astro, and React
 Native Web. To preview anything else, such as web components, Svelte, Solid, or
 an in-house rendering library, register an adapter in `workbench.config.ts`. The
-same file holds the compiler settings every preview shares: esbuild plugins,
-import aliases, deduplicated packages, file extensions, and build-time
-constants.
+same file holds the compiler settings every preview shares: Rspack plugins and
+loader rules, import aliases, deduplicated packages, file extensions, and
+build-time constants.
 
 Use this guide when:
 
@@ -21,20 +21,20 @@ For the definition keys, controls, hooks, and the command-line checker, see
 ## Requirements
 
 - A `workbench.yaml` at the project root, and a
-  [trusted workspace](extension.md#workspace-trust). Plugins and runtimes run
-  project code.
+  [trusted workspace](extension.md#workspace-trust). Plugins, loaders and
+  runtimes run project code.
 - Whatever your adapter renders with, installed in your project. Workbench
   bundles your runtime module with the project's own packages and installs
   nothing.
-- Plugins written for [esbuild's plugin API](https://esbuild.github.io/plugins/).
-  Vite, Rollup, and Babel plugins need a wrapper that calls them from esbuild's
-  `onLoad` or `onResolve`.
+- Plugins and loaders for [Rspack](https://rspack.rs/), which compiles
+  previews. Most webpack loaders work as Rspack rules. Vite, Rollup, and Babel
+  plugins need an equivalent loader or plugin.
 
 ## Example: web components
 
 This example previews a custom element whose shadow DOM styles are imported with
 a Vite-style `?inline` suffix. It registers a `web-components` adapter, with a
-plugin that loads `?inline` imports as text. It needs no packages.
+rule that loads `?inline` imports as text. It needs no packages.
 
 ```text
 acme-ui/
@@ -50,35 +50,17 @@ acme-ui/
     └── inline.d.ts
 ```
 
-`workbench.config.ts` registers the adapter and its plugin:
+`workbench.config.ts` registers the adapter and its rule:
 
 ```ts
-import fs from 'node:fs';
 import { defineConfig } from '@canonic2/workbench';
-
-// Imports ending in `?inline` load the file's text, for shadow DOM styles.
-const inlineText = {
-  name: 'acme-inline-text',
-  setup(build) {
-    build.onResolve({ filter: /\?inline$/ }, async args => {
-      const result = await build.resolve(args.path.slice(0, -'?inline'.length), {
-        resolveDir: args.resolveDir,
-        kind: args.kind,
-      });
-      return { path: result.path, errors: result.errors, pluginData: { inline: true } };
-    });
-    build.onLoad({ filter: /.*/ }, args => {
-      if (!args.pluginData?.inline) return;
-      return { contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' };
-    });
-  },
-};
 
 export default defineConfig({
   adapters: {
     'web-components': {
       runtime: './preview/web-components.ts',
-      plugins: [inlineText],
+      // Imports ending in `?inline` load the file's text, for shadow DOM styles.
+      rules: [{ resourceQuery: /inline/, type: 'asset/source' }],
     },
   },
 });
@@ -221,9 +203,6 @@ $ node <extension>/preview/cli.cjs check acme-ui
 Built components/acme-button
 ```
 
-esbuild also reads `import styles from './acme-button.css' with { type: 'text' }`
-without a plugin. The plugin is for code that already uses `?inline`.
-
 ## The runtime module
 
 `runtime` is a browser module, relative to the project root, that exports
@@ -234,7 +213,7 @@ module.
 | Argument | Value |
 | --- | --- |
 | `canvas` | The empty element to render into. |
-| `source` | The export of the state's `source.entry` named by `source.export` (`default` when omitted), after your plugins compile it. |
+| `source` | The export of the state's `source.entry` named by `source.export` (`default` when omitted), after your rules and plugins compile it. |
 | `context` | The [preview context](workbench-previews.md#lifecycle-hooks): `id`, `state`, `inputs`, `fixtures`, `globals`, `signal`, `action`, `navigate`, and `error`. |
 | `environment` | Everything the definition's `environment` module exports, or `{}` when it has none. Define your own hooks here, such as `wrap` above. With a [project-wide environment](preview-data.md#environments) too, the two are combined: `setup`, `mount`, `ready`, `configure`, and `wrap` run both, the project's outside, and other exports come from the definition's module first. |
 
@@ -271,7 +250,7 @@ implementations:
 ```
 
 Workbench bundles the lens's example source with the runtime and the adapter's
-`plugins`, and calls `mount(canvas, source, context, environment)` once per
+`rules` and `plugins`, and calls `mount(canvas, source, context, environment)` once per
 example:
 
 - `canvas` is the example's panel, and `source` is the example: a file's
@@ -292,8 +271,8 @@ A built-in adapter replaced in `adapters` is replaced for docs examples too.
 
 Workbench reads `workbench.config.ts` at the project root. To use another file
 inside the project, set [`previews.config`](configuration.md#previews) in
-`workbench.yaml`. Saving the file, or a file it imports, rebuilds the open
-preview.
+`workbench.yaml`. Saving the file, or a file it imports, restarts the preview
+compilers and reloads the open previews.
 
 Workbench runs the file in Node. Relative imports are bundled with it; packages
 are loaded from your project's `node_modules`. `defineConfig` from
@@ -303,8 +282,9 @@ are loaded from your project's `node_modules`. `defineConfig` from
 import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
-  adapters: { /* name: { runtime, plugins } */ },
+  adapters: { /* name: { runtime, rules, plugins } */ },
   environment: './src/workbench/environment.tsx',
+  rules: [],
   plugins: [],
   aliases: {},
   dedupe: [],
@@ -315,9 +295,10 @@ export default defineConfig({
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `adapters` | map of name to `{ runtime, plugins? }` | Adapters that definitions name in `adapter`. |
+| `adapters` | map of name to `{ runtime, rules?, plugins? }` | Adapters that definitions name in `adapter`. |
 | `environment` | path, or map of adapter name to path | An [environment](preview-data.md#environments) around every preview, or around each adapter's previews, relative to the project root. |
-| `plugins` | list of esbuild plugins | Plugins for every preview. |
+| `rules` | list of Rspack module rules | Loader rules for every preview. |
+| `plugins` | list of Rspack plugins | Plugins for every preview. |
 | `aliases` | map of import specifier to path or package | Redirects exact imports. |
 | `dedupe` | list of package names | Packages resolved from the definition's folder. |
 | `resolveExtensions` | list of extensions | The extensions tried for imports without one. Replaces the default list. |
@@ -330,26 +311,50 @@ kebab-case names, such as `web-components`. Each value has:
 
 - `runtime`: the [runtime module](#the-runtime-module), relative to the project
   root.
-- `plugins`: esbuild plugins for previews that use this adapter only.
-  `defineAdapter` from `@canonic2/workbench` types one adapter on its own.
+- `rules` and `plugins`: Rspack rules and plugins for previews that use this
+  adapter only. `defineAdapter` from `@canonic2/workbench` types one adapter on its own.
 
-### plugins
+### rules and plugins
 
-Global `plugins` apply to every preview. Adapter `plugins` apply to previews
-that use the adapter. In a build, global plugins run first, then the adapter's,
-then Workbench's own resolvers and loaders, so your plugins decide first how a
-file resolves and loads.
+Workbench compiles previews with [Rspack](https://rspack.rs/). `rules` are
+[module rules](https://rspack.rs/config/module#modulerules): they pick a loader
+or a module type for matching files. `plugins` are
+[Rspack plugins](https://rspack.rs/concepts/plugins): objects with
+`apply(compiler)`. Global ones apply to every preview, and an adapter's to the
+previews that use it. Workbench's own rules and plugins come first.
 
-Plugins run when Workbench bundles a preview for the browser, and global plugins
-also run when it renders [Astro frontmatter](astro.md#imports-aliases-and-plugins)
-in Node. They don't run when Workbench reads a definition or this file, so a
-`.workbench.ts` file can't import a file that only a plugin can load.
+Write a plugin as a plain object and take Rspack's classes from the compiler it
+is given, since your project doesn't install Rspack. This one serves a virtual
+module, `virtual:build-info`:
 
-- **Keep real file paths.** Workbench reloads a preview and copies source files
-  into exports based on the files a build reads. A plugin that returns its own
-  `namespace` or a `suffix` for a file hides it: edits to the file don't reload
-  the preview, and exports leave it out. Return the file's path and carry
-  anything else in `pluginData`, as the example does.
+```ts
+const buildInfo = {
+  apply(compiler) {
+    const { NormalModuleReplacementPlugin } = compiler.rspack;
+    const source = 'export const buildInfo = ' + JSON.stringify('Acme build 42') + ';';
+    new NormalModuleReplacementPlugin(/^virtual:build-info$/, resource => {
+      resource.request = 'data:text/javascript,' + encodeURIComponent(source);
+    }).apply(compiler);
+  },
+};
+```
+
+A loader is a file that exports a function from source text to module text.
+Name it in a rule by path, relative to the project root:
+
+```ts
+rules: [{ test: /\.tsx?$/, exclude: /node_modules/, enforce: 'pre', loader: './workbench/greeting-loader.cjs' }],
+```
+
+Rules and plugins run when Workbench builds previews and docs examples, live
+and for the [design-system export](design-system-export.md). They don't run when
+Workbench reads a definition or this file, or in
+[Astro frontmatter](astro.md#imports-aliases-and-plugins), so a `.workbench.ts`
+file can't import a file that only a loader can read.
+
+A plugin written for esbuild, an object with `setup(build)`, is reported as a
+configuration problem and left out.
+
 - **Build absolute paths from `__dirname`,** the folder of the configuration
   file. Don't rely on the current working directory.
 
@@ -427,8 +432,8 @@ export default defineConfig({
 
 Your runtime receives the selected export and does all the mounting, including
 any providers. A replaced `astro` adapter doesn't render on the server:
-`.astro` files then need a plugin that compiles them for the browser, or the
-build fails with `No loader is configured for ".astro" files`. Replacing
+`.astro` files then need a rule that compiles them for the browser, or the
+build fails with `Module parse failed`. Replacing
 `react-native-web` keeps its `react-native` alias and `.web.*` extensions.
 
 ## Errors and fixes
@@ -437,11 +442,11 @@ build fails with `No loader is configured for ".astro" files`. Replacing
 | --- | --- | --- |
 | `Unknown adapter “<name>”. Register it in workbench.config.ts.` | The frame and `check` | Add the name to `adapters`, or fix the definition's `adapter`. |
 | `adapter must be a registered kebab-case name.` | Configuration problems | Use lowercase letters, digits, and hyphens in the adapter name. |
-| `Could not resolve "<path>"` on a runtime path | The frame and `check` | Fix `runtime`. It is relative to the project root. |
+| `Module not found: Can't resolve '<path>'` on a runtime path | The frame and `check` | Fix `runtime`. It is relative to the project root. |
 | `adapter.mount is not a function` | The frame | Export a function named `mount` from the runtime. |
 | `The selected source export does not exist for <id> — <state>` | The frame only; `check` passes | Fix `source.export`, or export that name from the entry. |
-| `No loader is configured for ".<ext>" files` | The frame and `check` | Add a plugin that loads the file type. |
-| `Cannot import "<file>" into a JavaScript file without an output path configured` | The frame and `check` | A definition imports a file only a plugin can load, or an Astro frontmatter plugin returned CSS. Move the import into the source, or return JavaScript. |
+| `Module parse failed` on a file type Workbench doesn't compile | The frame and `check` | Add a rule with a loader for the file type. |
+| `workbench.config.ts: “<name>” is an esbuild plugin.` | Configuration problems | Rewrite it as an Rspack plugin or a loader rule. |
 | `Workbench previews: <message>` | Configuration problems | `workbench.config.ts` threw while loading. No previews load until it's fixed; `check` prints the same message. |
 | `previews.config: must be a project-relative config file.` | Configuration problems | Point `previews.config` at a file inside the project. Previews stay off until it's fixed. |
 

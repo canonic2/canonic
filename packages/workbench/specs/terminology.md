@@ -19,6 +19,7 @@ something listed here, it uses this word and no synonym.
 | **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
 | **Markdown page** | A page whose `src` is its Markdown: its docs, with no design lens. A `defineDocs` definition declares one. |
 | **Example** | A live render placed in docs, shown in its own panel with **Show code** and **Copy code**. |
+| **Native format** | A page format Workbench defines and renders end to end: TypeScript previews and docs (Markdown pages, `defineDocs`, and their examples). Authored HTML, implementations and catalogs are not native formats. Unrelated to React Native and the native window stream; see [performance](preview-pipeline/performance.md). |
 
 An address names a page and, when they aren't the defaults, its state, size,
 lens, and in a docs lens an example; see the [core contract](core.md).
