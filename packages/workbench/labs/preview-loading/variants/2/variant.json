@@ -1,0 +1,4 @@
+{
+  "extends": "1",
+  "name": "Shared chunks with a warm spare"
+}

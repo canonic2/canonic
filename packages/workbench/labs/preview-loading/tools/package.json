@@ -1,0 +1,12 @@
+{
+  "name": "preview-loading-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "oxc-transform": "0.151.0",
+    "es-module-lexer": "3.0.2",
+    "react-refresh": "0.19.0",
+    "@rspack/core": "2.2.7",
+    "@rspack/plugin-react-refresh": "2.0.2"
+  }
+}

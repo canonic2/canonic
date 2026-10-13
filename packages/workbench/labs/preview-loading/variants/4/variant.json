@@ -1,0 +1,4 @@
+{
+  "extends": "1",
+  "name": "Unbundled dev server with HMR"
+}

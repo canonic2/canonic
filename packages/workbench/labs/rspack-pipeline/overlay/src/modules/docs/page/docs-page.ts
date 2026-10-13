@@ -1,0 +1,276 @@
+/* The script of a served docs page: it mounts the lens's examples, runs Show
+   code and Copy code, reports readiness and actions to the canvas, and reloads
+   the page, keeping its scroll position, when the Markdown or an example
+   changes. Options come from window.__workbenchDocs (page-document.ts). The
+   server answers with the Markdown at once; a page served that way asks for
+   its bundle here, and its panels wait as `pending` until then. */
+
+import type { BundleInfo } from '../docs-service.ts';
+import type { DocsPageOptions } from '../page-document.ts';
+import { mountExamples, type ExamplesBundle, type ExampleResult } from './mount-examples.ts';
+
+/** What the canvas calls on a docs page in its frame (same origin). */
+export interface DocsPageApi {
+  scrollToExample(id: string): void;
+  /** The examples at least partly in view, top to bottom. */
+  visibleExamples(): { id: string; status: string }[];
+}
+
+declare global {
+  interface Window {
+    __workbenchDocs?: DocsPageOptions;
+    __workbenchReady?: boolean;
+    __workbenchError?: string | null;
+    wbDocsPage?: DocsPageApi;
+    wbPreviewActions?: { follow?: ((href: string, kind: string, element: Element) => boolean) | null };
+  }
+}
+
+interface ExampleSource {
+  file: string;
+  text: string;
+  html: string;
+}
+
+const options = window.__workbenchDocs;
+const SCROLL_KEY = 'wb-docs-scroll:' + location.pathname;
+const actions: { name: string; values: string[] }[] = [];
+const sources = new Map<string, Promise<ExampleSource>>();
+
+function report(type: string, detail: Record<string, unknown>): void {
+  window.dispatchEvent(new CustomEvent('workbench:' + type, { detail }));
+  if (parent !== window) parent.postMessage({ type: 'workbench-preview', event: type, id: options?.page, docsPage: true, ...detail }, location.origin);
+}
+
+function onAction(type: string, detail: Record<string, unknown>): void {
+  if (type === 'action') {
+    actions.push({ name: String(detail.name), values: (detail.values as string[]) ?? [] });
+    actions.splice(0, Math.max(0, actions.length - 30));
+  }
+  report(type, { ...detail, state: options?.state ?? 'default' });
+}
+
+function source(id: string): Promise<ExampleSource> {
+  let pending = sources.get(id);
+  if (!pending) {
+    pending = fetch(options!.sourceUrl + encodeURIComponent(id), { cache: 'no-store' }).then(async answer => {
+      const body = await answer.json();
+      if (!answer.ok) throw new Error(body.error || 'Couldn’t load the example’s code.');
+      return body as ExampleSource;
+    });
+    pending.catch(() => sources.delete(id));
+    sources.set(id, pending);
+  }
+  return pending;
+}
+
+function wireTools(): void {
+  document.addEventListener('click', event => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>('[data-wb-show-code], [data-wb-copy-code]');
+    const figure = button?.closest<HTMLElement>('[data-wb-example]');
+    if (!button || !figure) return;
+    const id = figure.dataset.wbExample ?? '';
+    if (button.hasAttribute('data-wb-show-code')) void toggleCode(figure, id, button);
+    else void copyCode(id, button);
+  });
+}
+
+async function toggleCode(figure: HTMLElement, id: string, button: HTMLButtonElement): Promise<void> {
+  const panel = figure.querySelector<HTMLElement>('[data-wb-example-code]');
+  if (!panel) return;
+  const opening = panel.hidden;
+  button.setAttribute('aria-expanded', String(opening));
+  button.setAttribute('aria-label', opening ? 'Hide code' : 'Show code');
+  button.title = opening ? 'Hide code' : 'Show code';
+  if (!opening) { panel.hidden = true; return; }
+  panel.hidden = false;
+  if (panel.dataset.loaded) return;
+  try {
+    const code = await source(id);
+    const pre = document.createElement('pre');
+    const element = document.createElement('code');
+    element.className = 'hljs';
+    element.innerHTML = code.html;
+    pre.title = code.file;
+    pre.append(element);
+    panel.replaceChildren(pre);
+    panel.dataset.loaded = 'true';
+  } catch (error) {
+    panel.replaceChildren(Object.assign(document.createElement('p'), { className: 'wb-docs-example-note', textContent: String((error as Error).message) }));
+  }
+}
+
+async function copyCode(id: string, button: HTMLButtonElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText((await source(id)).text);
+    button.classList.add('is-done');
+    button.title = 'Copied';
+    setTimeout(() => { button.classList.remove('is-done'); button.title = 'Copy code'; }, 1500);
+  } catch (error) {
+    button.title = 'Couldn’t copy: ' + String((error as Error).message);
+  }
+}
+
+/* A pending panel, once the bundle says what it shows: mounted, or a note. */
+function settle(figure: HTMLElement, status: 'ready' | 'missing' | 'unavailable', note?: string): void {
+  figure.dataset.status = status;
+  if (status === 'ready') return;
+  figure.replaceChildren(Object.assign(document.createElement('p'), { className: 'wb-docs-example-note', textContent: note ?? '' }));
+}
+
+function stylesheet(href: string): Promise<void> {
+  return new Promise(resolve => {
+    const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href });
+    link.addEventListener('load', () => resolve(), { once: true });
+    link.addEventListener('error', () => resolve(), { once: true });
+    document.head.append(link);
+  });
+}
+
+/* Where a deferred page's bundle is, with its panels settled; null when nothing mounts. */
+async function resolveBundle(info: string): Promise<string | null> {
+  const pending = figures().filter(figure => figure.dataset.status === 'pending');
+  let answer: BundleInfo;
+  try {
+    const response = await fetch(info, { cache: 'no-store' });
+    answer = await response.json();
+    if (!response.ok) throw new Error((answer as unknown as { error?: string }).error || 'Couldn’t load the examples.');
+  } catch (error) {
+    for (const figure of pending) settle(figure, 'unavailable', String((error as Error).message ?? error));
+    return null;
+  }
+  options!.revision = answer.revision;
+  if (answer.error || !answer.module) {
+    for (const figure of pending) settle(figure, 'unavailable', answer.error ?? 'This page has no examples.');
+    return null;
+  }
+  const exported = new Set(answer.examples);
+  for (const figure of pending) {
+    if (exported.has(figure.dataset.wbExample ?? '')) settle(figure, 'ready');
+    else settle(figure, 'missing', 'Not available in ' + (options!.lensLabel ?? options!.lens));
+  }
+  if (answer.stylesheet) await stylesheet(answer.stylesheet);
+  return answer.module;
+}
+
+function figures(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-wb-example]'));
+}
+
+function visibleExamples(): { id: string; status: string }[] {
+  return figures().filter(figure => {
+    const box = figure.getBoundingClientRect();
+    return box.bottom > 0 && box.top < window.innerHeight;
+  }).map(figure => ({ id: figure.dataset.wbExample ?? '', status: figure.dataset.status ?? '' }));
+}
+
+/* An address that names an example opens the page scrolled to it. */
+function scrollToExample(id: string): void {
+  document.getElementById('example-' + id)?.scrollIntoView({ block: 'start' });
+}
+
+/* Links between docs pages open the other page on the canvas; on its own, the
+   page follows them like any link. Every other link is recorded as an action,
+   as in a preview. */
+function wireLinks(): void {
+  if (parent === window) return;
+  addEventListener('click', event => {
+    const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[data-wb-docs-page]');
+    if (!link || event.defaultPrevented || event.button !== 0) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const fragment = /#example-([a-z0-9-]+)$/.exec(link.getAttribute('href') ?? '');
+    report('docs-navigate', { page: link.dataset.wbDocsPage, example: fragment?.[1] ?? null });
+  }, true);
+  if (window.wbPreviewActions) {
+    window.wbPreviewActions.follow = (href, kind) => {
+      onAction('action', { name: kind === 'submit' ? 'submit' : 'navigate', values: [href] });
+      return true;
+    };
+  }
+}
+
+function restoreScroll(): void {
+  try {
+    const saved = sessionStorage.getItem(SCROLL_KEY);
+    if (saved === null) return;
+    sessionStorage.removeItem(SCROLL_KEY);
+    const [x, y] = saved.split(',').map(Number);
+    window.scrollTo(x ?? 0, y ?? 0);
+  } catch { /* Storage can be unavailable; the page then opens at the top. */ }
+}
+
+/* Rspack pipeline lab: a pushed docs change makes the page check its revision
+   once, and a changed page swaps its Markdown in place, keeping mounted
+   examples (which hot-update on their own) and the scroll position. */
+function watchRevision(): void {
+  if (!options?.revisionUrl) return;
+  let hub = window as unknown as { EventSource: typeof EventSource; __wbPushSource?: EventSource };
+  try { if (parent !== window && parent.location.origin === location.origin) hub = parent as unknown as typeof hub; } catch { /* Another origin: use this window. */ }
+  const source = hub.__wbPushSource ?? (hub.__wbPushSource = new hub.EventSource('/_workbench/previews/rspack/events'));
+  let checking = false;
+  const check = async (): Promise<void> => {
+    if (checking) return;
+    checking = true;
+    try {
+      const answer = await fetch(options.revisionUrl, { cache: 'no-store' });
+      const { revision } = await answer.json();
+      if (revision && revision !== options.revision) {
+        options.revision = revision;
+        await swapMarkdown();
+      }
+    } catch { /* The server can restart while the page stays open. */ } finally { checking = false; }
+  };
+  const onMessage = (event: MessageEvent): void => {
+    try { if (JSON.parse(event.data).type === 'docs-changed') void check(); } catch { /* Not a pipeline message. */ }
+  };
+  source.addEventListener('message', onMessage);
+  addEventListener('pagehide', () => source.removeEventListener('message', onMessage), { once: true });
+}
+
+async function swapMarkdown(): Promise<void> {
+  const answer = await fetch(location.href, { cache: 'no-store' });
+  const next = new DOMParser().parseFromString(await answer.text(), 'text/html').querySelector('main.wb-docs');
+  const current = document.querySelector('main.wb-docs');
+  if (!next || !current) { location.reload(); return; }
+  for (const figure of Array.from(next.querySelectorAll('[data-wb-example]'))) {
+    const live = current.querySelector('[data-wb-example="' + CSS.escape(figure.getAttribute('data-wb-example') ?? '') + '"]');
+    if (live) figure.replaceWith(live);
+  }
+  current.replaceChildren(...Array.from(next.childNodes));
+  window.dispatchEvent(new CustomEvent('workbench:docs-updated'));
+}
+
+async function start(): Promise<void> {
+  window.__workbenchReady = false;
+  window.__workbenchError = null;
+  window.wbDocsPage = { scrollToExample, visibleExamples };
+  wireTools();
+  wireLinks();
+  let results: ExampleResult[] = [];
+  const wanted = options?.bundle;
+  const module = !wanted ? null : 'info' in wanted ? await resolveBundle(wanted.info) : wanted.module;
+  if (module && options) {
+    try {
+      // Against the page, not this script: in a portable export they sit in different folders.
+      const bundle = await import(new URL(module, location.href).href) as ExamplesBundle;
+      const mounted = await mountExamples(document, bundle, { page: options.page, state: options.state ?? 'default', report: onAction });
+      results = mounted.results;
+      addEventListener('pagehide', () => { void mounted.dispose().catch(() => {}); }, { once: true });
+    } catch (error) {
+      window.__workbenchError = String((error as Error)?.stack ?? error);
+      for (const stage of document.querySelectorAll('[data-wb-example-stage]')) {
+        stage.replaceWith(Object.assign(document.createElement('pre'), { className: 'wb-docs-example-error', textContent: window.__workbenchError }));
+      }
+      report('error', { message: String((error as Error)?.message ?? error) });
+    }
+  } else if (document.fonts) {
+    await document.fonts.ready;
+  }
+  restoreScroll();
+  window.__workbenchReady = true;
+  report('ready', { state: options?.state ?? 'default', inputs: {}, controls: {}, docs: '', actions, examples: results });
+  watchRevision();
+}
+
+void start();

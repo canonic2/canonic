@@ -1,0 +1,4 @@
+{
+  "extends": "1",
+  "name": "Bundled with built-in HMR (Rspack)"
+}

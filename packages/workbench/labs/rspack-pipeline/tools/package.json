@@ -1,0 +1,14 @@
+{
+  "name": "rspack-pipeline-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rspack/core": "2.2.7",
+    "@rspack/plugin-react-refresh": "2.0.2",
+    "react-refresh": "0.19.0",
+    "vue-loader": "17.4.2",
+    "memfs": "4.79.0",
+    "style-loader": "4.0.0",
+    "css-loader": "7.1.5"
+  }
+}
