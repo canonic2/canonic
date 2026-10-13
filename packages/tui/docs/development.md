@@ -32,7 +32,12 @@ updates `InlineSession::set_height` as content or width changes. Pure measuremen
 and terminal fitting remain separate owners. The shared `tests/fixtures/inline_pty.py`
 harness replies to cursor reports, tracks normal/alternate buffers and checks
 cooked input plus original termios
-after restoration. It does not establish real emulator reflow or Windows support.
+after restoration. `gallery/inline/native/suspension.rs` owns the explicit Unix
+Ctrl-Alt-Z stop/foreground-resume adapter. `inline_suspend.py` owns a shell-like
+controlling session and another process group to exercise background continuation.
+It verifies cooked input while stopped and failed resume, without installing
+job-control signal handlers in production. It does not establish real emulator reflow or
+Windows support.
 
 `tool_call_card.rs` owns call/group state and opaque effects; its model/view
 submodules hold safe snapshots and bounded semantic row projection. Chat's tools

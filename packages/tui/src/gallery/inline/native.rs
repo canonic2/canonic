@@ -1,6 +1,7 @@
 //! Owns the explicit native inline gallery loop, plain fallback and foreground release demonstration.
 
 mod plain;
+mod suspension;
 use super::{InlineDemo, NAMES};
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -46,6 +47,16 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
             return Err(anyhow::anyhow!("{error}; cleanup: {cleanup:?}"));
         }
         if let Some(event) = session.poll(Duration::from_millis(20))? {
+            if matches!(&event,Event::Key(k) if k.kind==KeyEventKind::Press && k.code==KeyCode::Char('z') && k.modifiers==(KeyModifiers::CONTROL | KeyModifiers::ALT))
+            {
+                if let Err(error) = suspension::available() {
+                    demo.notice = format!("suspend unavailable: {error}");
+                    continue;
+                }
+                session = suspension::run(session)?;
+                last = Instant::now();
+                continue;
+            }
             if matches!(&event,Event::Key(k) if k.kind==KeyEventKind::Press && k.code==KeyCode::F(11) && k.modifiers==KeyModifiers::NONE)
             {
                 let paused = session.pause()?;

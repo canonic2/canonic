@@ -652,6 +652,44 @@ Human visual approval, actual emulator reflow, POSIX job control, Windows,
 multiplexers, IME and assistive acceptance remain separate. No consumer rollout
 or product execution is established by these checks.
 
+## Explicit inline suspension engineering record — 2026-10-12
+
+The native inline gallery's Ctrl-Alt-Z path verifies foreground ownership, pauses
+the existing lease and stops only the gallery process. Foreground continuation
+reacquires current geometry and restores the retained draft/borrowed view.
+Background continuation stops again without acquiring modes or drawing. Ctrl-Z
+continues to undo editor transactions. Signal effects live in the gallery's
+`native/suspension.rs` adapter; reusable runtime APIs install no job-control handlers.
+
+The new owned controlling-PTY test passes on macOS with Rust 1.99.0 and Python 3.
+Each case owns a separate session. It verifies actual SIGSTOP, canonical shell
+input and exact termios while stopped, another foreground process group and
+background SIGCONT, intervening shell output, resize, retained draft and Session
+Browser return. Too-small resume fails without a confirmation result and leaves
+canonical input intact. A missing controlling terminal reports unavailable and
+preserves cancellation. The harness handles PTY EOF without an unbounded drain.
+On macOS a controlling tty can mark restored input PENDIN; the fixture consumes
+a cooked shell line before comparing the original termios, rather than masking
+that flag or changing production restoration.
+
+- `make -C packages/tui check`: formatting, strict Clippy, **378 tests**, **4
+  doctests**, API docs and dependency checks passed.
+- Release library/gallery build and gallery-disabled locked/offline compilation
+  passed.
+- Gate and Drone optional `tui` compilation passed locked/offline through the
+  reviewed disposable manifests pointing at current sources. Drone uses the
+  temporary lockfile resolving its pre-existing missing Markdown dependencies;
+  this does not establish that its original locked build passes. All original
+  consumer manifests/lockfiles remained unchanged. Shield declares no TUI feature.
+- Changed Markdown links, new-file whitespace and both repository whitespace
+  checks passed. Module review retains input/render state in components, terminal
+  restoration in the runtime, and stop/continue orchestration in the gallery host.
+
+External SIGTSTP, full-screen job control, real shell/emulator visual acceptance,
+native Linux/Windows, multiplexers, IME and assistive acceptance remain separate.
+This record establishes the explicit inline key path under the owned macOS PTY;
+it does not establish the complete native compatibility matrix or consumer rollout.
+
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation

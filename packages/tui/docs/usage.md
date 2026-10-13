@@ -825,7 +825,14 @@ menus remain above the dock. Native F4 opens inspection. The ordinary gallery
 keeps F4 for colors. Background output waits until the borrowed view closes.
 Ctrl-L redraws only the live region. F11 releases modes for foreground fixture
 output and reacquires below it. It demonstrates handoff; it does not suspend the
-process. Empty idle Composer quit retains its existing two-press protection.
+process. In the native inline host on Unix, Ctrl-Alt-Z releases terminal modes
+and stops the gallery; use the shell's `fg` to continue. Ctrl-Z keeps editor undo.
+Resume waits for foreground terminal ownership, measures the current window and
+restores the retained draft and borrowed view. Background continuation stays
+stopped with shell modes intact. Without a controlling foreground terminal the
+host shows an unavailable notice. Failed reacquisition reports an error and
+leaves the terminal released. Empty idle Composer quit retains its existing
+two-press protection.
 
 On resize the host reserves fresh rows below reflowed content. Old live rows may
 remain as terminal reflow artifacts. Below 20 columns or three live rows, the

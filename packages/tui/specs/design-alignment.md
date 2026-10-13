@@ -26,7 +26,7 @@ Human visual acceptance and consumer/platform acceptance remain independent.
 | Code/Diff Inspection | Read-only code/unified patch, navigation/folds/find/selection, exact host effects, caller return and 51 live scenarios | Human visual acceptance and real host adapters |
 | Status Panels & Notices | Supplied sections/five states, responsive sidebar/Dialog, explicit clock, persistent errors, exact actions and 27 live scenarios | Human visual acceptance and real host adapters |
 | Inline composition | Ordered printed/live/dock fixture, measured content sizing, shared reviews, alternate views, bounded normal-screen lease, plain fallback and 30 scenarios | Human visual acceptance, real host adapters and native job-control/platform matrix |
-| Terminal lifecycle | Full-screen/inline leases, cursor reports, bounded output, explicit cleanup and foreground release/resume | Wider emulator reflow, platform and POSIX suspend acceptance |
+| Terminal lifecycle | Full-screen/inline leases, cursor reports, bounded output, explicit cleanup, foreground release/resume and explicit native inline suspension | Wider emulator reflow, platform, external signal and full-screen job-control acceptance |
 
 ## Open decisions
 

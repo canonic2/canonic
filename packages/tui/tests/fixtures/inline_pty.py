@@ -2,7 +2,7 @@
 import fcntl, os, pty, re, select, signal, struct, subprocess, sys, termios, time
 
 class Host:
-    def __init__(self, scenario=None, report_cursor=True, args=None, env_extra=None):
+    def __init__(self, scenario=None, report_cursor=True, args=None, env_extra=None, controlling=False):
         self.master, self.slave = pty.openpty()
         self.before = termios.tcgetattr(self.slave)
         self.width, self.height = 100, 32
@@ -12,7 +12,9 @@ class Host:
         self.report_cursor = report_cursor
         env = dict(os.environ, TERM='xterm-256color'); env.update(env_extra or {})
         command = args or [sys.argv[1], '--inline', '--component', 'inline-composition', '--scenario', scenario, '--colors', 'none', '--ascii']
-        self.child = subprocess.Popen(command, stdin=self.slave, stdout=self.slave, stderr=self.slave, start_new_session=True, env=env)
+        # The fixture's session survives the gallery, like a shell's session does.
+        if controlling: fcntl.ioctl(self.slave, termios.TIOCSCTTY, 0)
+        self.child = subprocess.Popen(command, stdin=self.slave, stdout=self.slave, stderr=self.slave, start_new_session=not controlling, env=env)
     def blank(self): return [[' '] * self.width for _ in range(self.height)]
     def newline(self):
         self.row += 1
@@ -59,7 +61,11 @@ class Host:
     def screen(self): return '\n'.join(''.join(r) for r in self.cells)
     def all_text(self): return '\n'.join(self.history) + '\n' + self.screen()
     def drain(self, timeout=.1):
-        if select.select([self.master], [], [], timeout)[0]: self.parse(os.read(self.master,65536))
+        if select.select([self.master], [], [], timeout)[0]:
+            data = os.read(self.master,65536)
+            self.parse(data)
+            return bool(data)
+        return False
     def wait(self, text):
         deadline = time.monotonic()+10
         while text not in self.screen():
@@ -87,7 +93,8 @@ class Host:
         while self.child.poll() is None:
             assert time.monotonic()<deadline,self.output[-1000:]
             self.drain()
-        while select.select([self.master],[],[],.05)[0]: self.drain(0)
+        while select.select([self.master],[],[],.05)[0]:
+            if not self.drain(0): break
         assert self.child.returncode == 0, self.output[-1000:]
         assert self.normal_clears==0, self.output
         assert self.saved is None

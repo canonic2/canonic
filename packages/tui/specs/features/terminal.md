@@ -124,8 +124,8 @@ fixtures have typed-number input without defaults; empty/EOF cancels or retries.
 Plain Chat reports its retained draft and ends without submission.
 
 Remaining scope: general external log-writer coordination and actual product
-adapters are host integration work. Native POSIX
-suspend/foreground and Windows ConPTY, emulator reflow, multiplexers, IME and
+adapters are host integration work. Externally delivered POSIX suspension signals,
+full-screen job control and Windows ConPTY, emulator reflow, multiplexers, IME and
 assistive testing are separate acceptance. The handoff's unresolved remove-key,
 cancel/skip glyph, filter-clear hint and Tab wording choices do not change current
 component bindings in this increment.
@@ -137,8 +137,18 @@ lease, releases modes before a foreground host callback and reacquires afterward
 operation and reacquisition results remain separate. Release failure skips the
 callback. Unix restoration preserves the original termios settings. The owned
 PTY test verifies a cooked editor callback, raw reacquisition and final restored
-shell input. General suspend/resume and host job-control transitions remain
-separate runtime requirements. Suspend flushes draw state, releases owned modes and
+shell input. The native inline gallery binds Ctrl-Alt-Z to an explicit Unix host
+adapter; Ctrl-Z retains editor undo. It verifies controlling-terminal foreground
+ownership, pauses the lease, then sends SIGSTOP only to its own process. SIGCONT
+from a background job stops again before mode acquisition or drawing. Foreground
+return resumes below intervening output, measures the window, and restores any
+borrowed alternate view with retained host state. No job-control signal handlers
+or dispositions are installed by this adapter. Acquisition failure
+returns an error with modes released. Unsupported hosts retain the active lease
+and show an unavailable notice. External SIGTSTP, full-screen job control and
+native Linux/Windows acceptance remain separate requirements.
+
+Suspend flushes draw state, releases owned modes and
 marks lease unavailable for rendering. Host owns launch/signals/child wait.
 Resume checks terminal/capabilities, reacquires modes, measures size and forces
 redraw. Resume failure returns an error and leaves a clean noninteractive state;

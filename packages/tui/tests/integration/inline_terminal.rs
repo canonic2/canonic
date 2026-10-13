@@ -17,6 +17,26 @@ fn inline_native_host_preserves_surrounding_output_and_terminal_modes() {
     );
 }
 #[test]
+#[cfg(unix)]
+fn native_suspend_releases_modes_and_retains_draft_and_borrowed_view() {
+    let output = std::process::Command::new("python3")
+        .args([
+            "-B",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/inline_suspend.py"
+            ),
+        ])
+        .arg(assert_cmd::cargo::cargo_bin!("tui-gallery"))
+        .output()
+        .expect("owned job-control PTY fixture");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+#[test]
 fn plain_input_retries_empty_lines_and_eof_never_selects_a_default() {
     for (input, expected) in [
         ("\n2\n", "Deploy API only · fixture only"),
