@@ -15,6 +15,7 @@ mod composer_host;
 #[cfg(feature = "gallery")]
 mod composer_terminal;
 mod composer_workflows;
+mod diagnostic;
 mod dialog;
 mod dialog_design;
 #[cfg(feature = "gallery")]

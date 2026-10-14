@@ -158,9 +158,10 @@ Native human visual acceptance and consumer rollout remain separate evidence.
 
 ## Status Panels & Notices coverage
 
-27 live states cover five section states, folds, warning context, queued notices,
+30 live states cover five section states, folds, warning context, queued notices,
 info/success, set-aside errors, pending/failure/resolution, expiry, disabled actions,
-long reasons, caller return, medium/narrow/tiny layouts, profiles and reviews.
+long reasons, caller return, medium/narrow/tiny layouts, profiles, reviews and
+three settled command diagnostic views.
 Eight shared profiles are additional. F5 acknowledges, F6 fails and F7 advances
 explicit fixture time. Human visual and real consumer acceptance are separate;
 see the [contract](../components/status-panels-and-notices.md).

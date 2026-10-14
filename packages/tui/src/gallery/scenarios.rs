@@ -978,6 +978,9 @@ const STATUS: &[Scenario] = &[
     live!("light", 24),
     live!("reduced-motion", 25),
     live!("review", 26),
+    live!("command-error", 27),
+    live!("command-error-long", 28),
+    live!("command-error-empty", 29),
 ];
 
 const INLINE: &[Scenario] = &[

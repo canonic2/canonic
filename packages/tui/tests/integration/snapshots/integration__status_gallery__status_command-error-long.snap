@@ -1,0 +1,44 @@
+---
+source: tests/integration/status_gallery.rs
+expression: before
+---
+Canonic TUI · Component gallery
+
+Error: Configuration needs
+review
+
+Acme could not open the
+selected project. The supplied
+configuration was changed while
+the operation was being
+reviewed. Inspect the current
+file and retry after the owning
+operation finishes; this
+message requests no operation.
+
+File: acme/project/config.toml
+
+Next
+- Inspect the file, then retry
+acme setup.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Esc back · Ctrl-C quit · F10 sce

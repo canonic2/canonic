@@ -1,9 +1,11 @@
 //! Owns supplied status sections and notice lifecycle; hosts own operations, time and placement.
 
+mod diagnostic;
 mod input;
 mod model;
 mod view;
 use crate::{event::Event, theme::Presentation};
+pub use diagnostic::Diagnostic;
 pub use model::{
     Action, Chrome, Entry, Glyph, Intent, Invalid, Kind, Mode, Notice, Outcome, Request, Row,
     Section, Severity, Snapshot, State, Target, Ticket,

@@ -20,7 +20,7 @@ copy/editor requests. Its 51 live scenarios include Chat/tree return with
 preserved caller state. See [usage](docs/usage.md#code-and-diff-inspection) and
 the [contract](specs/components/code-diff-inspection.md).
 Status Panels & Notices provides supplied sections, responsive Chat/Dialog placement,
-explicit notice expiry, persistent errors and acknowledged actions in 27 live
+explicit notice expiry, persistent errors, settled command diagnostics and acknowledged actions in 30 live
 scenarios. Ctrl-X I opens status and Ctrl-X N lists notices when the host enables
 the adapter. See [usage](docs/usage.md#status-panels-and-notices) and the
 [contract](specs/components/status-panels-and-notices.md).

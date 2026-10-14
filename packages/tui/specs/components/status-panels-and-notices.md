@@ -8,7 +8,7 @@ discovers files, probes connections, computes prices or executes actions.
 
 ## Current status
 
-Reusable `StatusPanels`, opt-in Chat routing and 27 deterministic gallery
+Reusable `StatusPanels`, settled `Diagnostic`, opt-in Chat routing and 30 deterministic gallery
 scenarios are implemented. Human visual acceptance and product adapters are
 separate checkpoints. See [verification](../verification.md).
 
@@ -81,6 +81,29 @@ text. Pending operations cap at 128; retained failure text caps at 4 MiB.
 Oversized completion reasons preserve pending work and return an error.
 
 ## Host boundary
+
+### Settled command diagnostics
+
+`status_panels::Diagnostic` supplies immutable severity, title, message, labeled
+context and textual recovery suggestions. It reuses the notice severity palette
+for caller-owned frames or permanent normal-screen output. It has no notice ID,
+expiry, action, acknowledgement or terminal lease. Suggestions describe an action;
+the component never executes one or waits for a key.
+
+`lines(width, presentation)` provides wrapped rows, `render` clips them to the
+supplied frame area, and `write` emits every row to the supplied writer. Hosts
+select width, color capability and environment fallback. Stream `NoColor` is
+literal text without ANSI, while frame `NoColor` retains semantic attributes.
+Styled stream output resets colors/attributes and attempts cleanup on writer
+failure; failures propagate without replacing the host's original error.
+
+Control and bidirectional formatting characters are escaped. Printable Unicode
+and graphemes are retained. Context values are literal single fields, including
+escaped newlines. Each field caps safe display text at 64 KiB, with a visible
+truncation marker; context caps at 16 fields and suggestions at eight, with
+omission markers. Rendering/formatting neither reads environment nor moves the
+cursor or changes terminal modes. The `command-error`, `command-error-long` and
+`command-error-empty` gallery fixtures execute no operations.
 
 Hosts own clock advancement, snapshot revisions, authorization, operations,
 authentication, persistence and focus composition. An action descriptor is not

@@ -799,6 +799,35 @@ focus styling. Retain the actual Chat object when entering another focus scope.
 See the [component contract](../specs/components/status-panels-and-notices.md)
 for limits, clock behavior and host ownership.
 
+## Permanent command feedback
+
+For a command that exits, use `status_panels::Diagnostic` rather than an
+interactive notice lifecycle. Supply the severity, readable cause, relevant
+context and recovery text:
+
+```rust
+use canonic_tui::{status_panels::{Diagnostic, Severity}, theme::{ColorMode, Presentation}};
+let feedback = Diagnostic {
+    severity: Severity::Error,
+    title: "Configuration needs review",
+    message: "Acme could not use the selected file.",
+    context: &[("File", "acme/config.toml")],
+    help: &["Inspect the file, then retry acme setup."],
+};
+feedback.write(&mut std::io::stderr(), 80, Presentation {
+    colors: ColorMode::NoColor,
+    ..Presentation::default()
+})?;
+```
+
+The host chooses terminal width and presentation. `NoColor` streams contain no
+ANSI; styled output resets attributes after each span. This formatter acquires no
+terminal and prompts for nothing. `render` draws into an existing frame and
+`lines` lets a host manage a scrollable viewport. The three `command-error`
+scenarios under Status Panels & Notices demonstrate short, long and minimal
+feedback. See the [contract](../specs/components/status-panels-and-notices.md#settled-command-diagnostics)
+for display bounds and safe text.
+
 ## Inline composition
 
 Open `--component inline-composition --scenario main` for the gallery preview.

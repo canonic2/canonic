@@ -68,3 +68,48 @@ pub(crate) fn wrapped(text: &str, width: u16) -> Vec<String> {
     }
     rows
 }
+
+/// Prefer word boundaries for prose; retain grapheme-safe splitting for long tokens.
+pub(crate) fn wrapped_prose(text: &str, width: u16) -> Vec<String> {
+    let width = usize::from(width).max(1);
+    let mut rows = Vec::new();
+    for line in text.split('\n') {
+        let mut remaining = line;
+        loop {
+            let mut cells = 0;
+            let mut end = 0;
+            let mut space = None;
+            let mut overflow = false;
+            for (index, grapheme) in remaining.grapheme_indices(true) {
+                if cells + grapheme.width() > width {
+                    overflow = true;
+                    break;
+                }
+                cells += grapheme.width();
+                end = index + grapheme.len();
+                if grapheme == " " && index > 0 {
+                    space = Some((index, end));
+                }
+            }
+            if !overflow {
+                rows.push(remaining.into());
+                break;
+            }
+            if let Some((before, after)) = space {
+                rows.push(remaining[..before].into());
+                remaining = &remaining[after..];
+            } else if end > 0 {
+                rows.push(remaining[..end].into());
+                remaining = &remaining[end..];
+            } else {
+                let length = remaining
+                    .graphemes(true)
+                    .next()
+                    .map_or(remaining.len(), str::len);
+                rows.push("\u{fffd}".into());
+                remaining = &remaining[length..];
+            }
+        }
+    }
+    rows
+}

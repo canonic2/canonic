@@ -1,0 +1,16 @@
+---
+source: tests/integration/diagnostic.rs
+expression: screen
+---
+Error: Configuration needs
+review
+
+Acme could not use the selected
+file.
+
+File: café/👩‍💻 .toml
+Details: bad\u{1b}[2J\u{202e} va
+lue
+
+Next
+- Run acme setup after review.

@@ -1,0 +1,44 @@
+---
+source: tests/integration/status_gallery.rs
+expression: before
+---
+Canonic TUI · Component gallery
+
+Error: Configuration needs review
+
+The supplied configuration changed
+during review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Esc back · Ctrl-C quit · F10 scenarios ·

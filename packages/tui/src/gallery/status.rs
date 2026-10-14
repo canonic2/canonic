@@ -5,8 +5,8 @@ use crate::{
     dialog::{ClosePolicy, Dialog, DialogView, Size, Stack},
     event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     status_panels::{
-        Action, Chrome, Entry, Glyph, Intent, Kind, Mode, Notice, Outcome, Request, Row, Section,
-        Severity, Snapshot, State, StatusPanels,
+        Action, Chrome, Diagnostic, Entry, Glyph, Intent, Kind, Mode, Notice, Outcome, Request,
+        Row, Section, Severity, Snapshot, State, StatusPanels,
     },
     theme::Presentation,
 };
@@ -45,6 +45,9 @@ pub(super) const NAMES: &[&str] = &[
     "light",
     "reduced-motion",
     "review",
+    "command-error",
+    "command-error-long",
+    "command-error-empty",
 ];
 
 fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
@@ -149,6 +152,7 @@ pub(super) struct StatusDemo {
     request: Option<Request>,
     leader: Option<Duration>,
     log: String,
+    diagnostic: Option<&'static str>,
 }
 impl StatusDemo {
     pub(super) fn new(index: usize) -> Self {
@@ -168,6 +172,7 @@ impl StatusDemo {
             request: None,
             leader: None,
             log: String::new(),
+            diagnostic: name.starts_with("command-error").then_some(name),
         };
         if !matches!(
             name,
@@ -296,6 +301,9 @@ impl StatusDemo {
         {
             return false;
         }
+        if self.diagnostic.is_some() {
+            return !matches!(event, Event::Key(k) if k.kind == KeyEventKind::Press && k.modifiers == KeyModifiers::NONE && k.code == KeyCode::Esc);
+        }
         if let Event::Key(k) = event
             && k.kind == KeyEventKind::Press
             && k.modifiers == KeyModifiers::NONE
@@ -342,6 +350,30 @@ impl StatusDemo {
         true
     }
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, p: Presentation) {
+        if let Some(name) = self.diagnostic {
+            let message = if name == "command-error-long" {
+                "Acme could not open the selected project. The supplied configuration was changed while the operation was being reviewed. Inspect the current file and retry after the owning operation finishes; this message requests no operation."
+            } else {
+                "The supplied configuration changed during review."
+            };
+            Diagnostic {
+                severity: Severity::Error,
+                title: "Configuration needs review",
+                message,
+                context: if name == "command-error-empty" {
+                    &[]
+                } else {
+                    &[("File", "acme/project/config.toml")]
+                },
+                help: if name == "command-error-empty" {
+                    &[]
+                } else {
+                    &["Inspect the file, then retry acme setup."]
+                },
+            }
+            .render(frame, area, p);
+            return;
+        }
         let review = self.chat.reviews().active().is_some();
         let sidebar = area.width >= 120 && area.height >= 16;
         let chat_area = Rect {

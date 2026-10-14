@@ -100,3 +100,22 @@ fn pane_leader_expires_without_switching_focus_or_editing_the_saved_draft() {
     assert!(!text.contains("Notices"));
     assert!(text.contains("and bump the app version"));
 }
+#[test]
+fn settled_command_errors_are_runnable_and_have_no_effect_actions() {
+    for (name, width) in [
+        ("command-error", 80),
+        ("command-error-long", 32),
+        ("command-error-empty", 40),
+    ] {
+        let mut g = Gallery::new();
+        g.open_scenario(Component::StatusPanelsAndNotices, name)
+            .expect("diagnostic fixture");
+        let before = screen(&mut g, width, 40);
+        assert!(before.contains("Error:"));
+        g.update(&key(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(screen(&mut g, width, 40), before);
+        insta::assert_snapshot!(format!("status_{name}"), before);
+        g.update(&key(KeyCode::Esc, KeyModifiers::NONE));
+        assert_ne!(screen(&mut g, width, 40), before);
+    }
+}

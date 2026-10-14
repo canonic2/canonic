@@ -1,0 +1,44 @@
+---
+source: tests/integration/status_gallery.rs
+expression: before
+---
+Canonic TUI · Component gallery
+
+Error: Configuration needs review
+
+The supplied configuration changed during review.
+
+File: acme/project/config.toml
+
+Next
+- Inspect the file, then retry acme setup.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Esc back · Ctrl-C quit · F10 scenarios · F2 next · F4 colors · Ctrl-T theme
