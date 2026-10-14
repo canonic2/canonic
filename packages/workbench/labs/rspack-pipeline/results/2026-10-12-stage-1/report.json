@@ -17,13 +17,6 @@
       3.15,
       10.2,
       15.01
-    ],
-    "busiest": [
-      "mediaanalysisd 99.5%",
-      "com.apple.Virtualization.VirtualMachine 49.7%",
-      "claude 16.8%",
-      "ArqAgent 15.9%",
-      "iTerm2 12.8%"
     ]
   },
   "started": "2026-10-12T21:28:46.586Z",

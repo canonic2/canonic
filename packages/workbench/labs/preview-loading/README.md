@@ -228,7 +228,7 @@ first run, this plan follows; after it, a change is a dated amendment.
 
 ### Host and tools
 
-macOS 15 on Intel (Xeon W-2140B, 16 threads, 64 GB). Apple silicon and other
+macOS 15 on Intel (16 threads, 64 GB). Apple silicon and other
 platforms are not measured. Headless Chrome through the standalone server,
 using the package's DevTools driver in `scripts/chrome.cjs`, for run sets. The
 VS Code webview with the bundled Electron runtime for the confirmation run.
@@ -290,7 +290,7 @@ Run set 1 ran from 14:26 to 15:57 UTC on 2026-10-11 at Workbench commit
 `63a096f`, alone under the lab lock, with 3 warmups and 10 samples per cell,
 on the host described above, in headless Chrome 154. Evidence:
 [summary](results/2026-10-11-set-1/summary.md) and its `report.json`, which
-records each result's load average and busiest other processes.
+records each result's load average.
 
 ### Results, large fixture
 

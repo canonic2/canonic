@@ -31,8 +31,6 @@
     "date": "2026-10-11T14:25:20.934Z",
     "platform": "darwin",
     "arch": "x64",
-    "osRelease": "24.6.0",
-    "cpu": "Intel(R) Xeon(R) W-2140B CPU @ 3.20GHz",
     "cpus": 16,
     "memoryGb": 64,
     "loadAverage": [
@@ -75,13 +73,6 @@
         2.77,
         4.53,
         5.27
-      ],
-      "busiest": [
-        "ArqAgent 115.2%",
-        "claude 38%",
-        "iTerm2 31.6%",
-        "tccd 15.2%",
-        "WindowServer 11.4%"
       ]
     },
     "atEnd": {
@@ -90,13 +81,6 @@
         6.08,
         6.26,
         7.9
-      ],
-      "busiest": [
-        "taskgated 98.8%",
-        "fseventsd 20.9%",
-        "WindowServer 11.6%",
-        "Python 6.9%",
-        "Codex (Renderer) 6.7%"
       ]
     }
   },
@@ -141,13 +125,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 120.4%",
-          "iTerm2 5.9%",
-          "WindowServer 2.9%",
-          "claude 2.2%",
-          "Codex (Renderer) 1.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -173,13 +150,6 @@
           4.8,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 102.8%",
-          "SystemUIServer 15%",
-          "backupd 9.2%",
-          "ContinuityCaptureAgent 6.5%",
-          "iTerm2 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -208,13 +178,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 107.2%",
-          "SystemUIServer 30.8%",
-          "backupd 15%",
-          "WindowServer 8%",
-          "diskimagesiod 7.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -241,13 +204,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 101.6%",
-          "WindowServer 8.3%",
-          "iTerm2 3.4%",
-          "Codex (Renderer) 1.6%",
-          "claude 0.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -273,13 +229,6 @@
           4.8,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 85.2%",
-          "SystemUIServer 12.6%",
-          "iTerm2 3.8%",
-          "WindowServer 3.7%",
-          "ContinuityCaptureAgent 2.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -308,13 +257,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 87.4%",
-          "syspolicyd 17.4%",
-          "iTerm2 7.6%",
-          "SystemUIServer 4.6%",
-          "WindowServer 3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -340,13 +282,6 @@
           4.81,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 115.8%",
-          "syspolicyd 34.6%",
-          "Code Helper 32.4%",
-          "SystemUIServer 8.2%",
-          "Code 4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -374,13 +309,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 113.7%",
-          "Code Helper 35.1%",
-          "syspolicyd 8.4%",
-          "WindowServer 6%",
-          "iTerm2 5.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -406,13 +334,6 @@
           4.81,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 118.2%",
-          "iTerm2 8.1%",
-          "Code Helper 7.5%",
-          "WindowServer 7.2%",
-          "syspolicyd 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -442,13 +363,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 120.2%",
-          "SystemUIServer 13.8%",
-          "backupd 6.9%",
-          "iTerm2 4.7%",
-          "WindowServer 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -474,13 +388,6 @@
           4.81,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 124.5%",
-          "iTerm2 5.7%",
-          "claude 4.3%",
-          "claude 3.3%",
-          "WindowServer 2.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -509,13 +416,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 119.2%",
-          "WindowServer 6.9%",
-          "iTerm2 6.5%",
-          "Codex (Renderer) 1.7%",
-          "Codex (Service) 0.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -542,13 +442,6 @@
           4.81,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 120.4%",
-          "claude 5.5%",
-          "iTerm2 3.8%",
-          "WindowServer 3%",
-          "Codex (Renderer) 1.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -577,13 +470,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 120.3%",
-          "Code Helper 17.2%",
-          "SystemUIServer 9.5%",
-          "WindowServer 7.5%",
-          "iTerm2 6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -610,13 +496,6 @@
           4.81,
           4.78,
           5.31
-        ],
-        "busiest": [
-          "ArqAgent 117.2%",
-          "WindowServer 4.3%",
-          "iTerm2 3.9%",
-          "Code Helper 3.7%",
-          "SystemUIServer 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -646,13 +525,6 @@
           4.78,
           5.31
         ],
-        "busiest": [
-          "ArqAgent 139.9%",
-          "WindowServer 2.8%",
-          "iTerm2 2.6%",
-          "fseventsd 1.9%",
-          "Codex (Renderer) 1.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -680,13 +552,6 @@
           4.75,
           5.3
         ],
-        "busiest": [
-          "ArqAgent 127%",
-          "SystemUIServer 9.3%",
-          "WindowServer 5.9%",
-          "iTerm2 4.6%",
-          "backupd 3.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -712,13 +577,6 @@
           4.67,
           4.75,
           5.3
-        ],
-        "busiest": [
-          "ArqAgent 120.3%",
-          "iTerm2 5%",
-          "WindowServer 3.9%",
-          "Codex (Renderer) 1.8%",
-          "SystemUIServer 1.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -747,13 +605,6 @@
           4.75,
           5.3
         ],
-        "busiest": [
-          "ArqAgent 114.6%",
-          "WindowServer 8.7%",
-          "iTerm2 7.2%",
-          "bluetoothd 4.6%",
-          "sharingd 1.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -780,13 +631,6 @@
           4.67,
           4.75,
           5.3
-        ],
-        "busiest": [
-          "ArqAgent 112.8%",
-          "bluetoothd 5.4%",
-          "iTerm2 4.8%",
-          "WindowServer 4%",
-          "sharingd 3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -816,13 +660,6 @@
           4.75,
           5.3
         ],
-        "busiest": [
-          "ArqAgent 120.6%",
-          "bluetoothd 4.5%",
-          "WindowServer 3.2%",
-          "iTerm2 3.1%",
-          "Code Helper (Plugin) 3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -849,13 +686,6 @@
           4.53,
           4.72,
           5.28
-        ],
-        "busiest": [
-          "ArqAgent 117.6%",
-          "ContinuityCaptureAgent 6.3%",
-          "iTerm2 6.2%",
-          "WindowServer 5.9%",
-          "bluetoothd 3.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -884,13 +714,6 @@
           4.72,
           5.28
         ],
-        "busiest": [
-          "ArqAgent 118.1%",
-          "ContinuityCaptureAgent 7.7%",
-          "bluetoothd 4.6%",
-          "WindowServer 4.4%",
-          "iTerm2 4.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -916,13 +739,6 @@
           4.53,
           4.72,
           5.28
-        ],
-        "busiest": [
-          "ArqAgent 113.6%",
-          "launchd 12.7%",
-          "SystemUIServer 12.2%",
-          "Code Helper (Renderer) 10.2%",
-          "backupd 6%"
         ],
         "quiet": true,
         "waitedMs": 1
@@ -950,13 +766,6 @@
           4.72,
           5.28
         ],
-        "busiest": [
-          "ArqAgent 128.6%",
-          "backupd 15.7%",
-          "iTerm2 7.9%",
-          "ContinuityCaptureAgent 7.2%",
-          "WindowServer 6.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -982,13 +791,6 @@
           4.53,
           4.72,
           5.28
-        ],
-        "busiest": [
-          "ArqAgent 116.7%",
-          "ContinuityCaptureAgent 9.7%",
-          "iTerm2 9.3%",
-          "mdworker_shared 9.1%",
-          "mdworker_shared 8.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1017,13 +819,6 @@
           4.72,
           5.28
         ],
-        "busiest": [
-          "ArqAgent 112.1%",
-          "bluetoothd 4.9%",
-          "WindowServer 4.7%",
-          "ContinuityCaptureAgent 4%",
-          "iTerm2 4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1049,13 +844,6 @@
           5.61,
           4.94,
           5.36
-        ],
-        "busiest": [
-          "ArqAgent 165.9%",
-          "SystemUIServer 12.7%",
-          "WindowServer 6.3%",
-          "ContinuityCaptureAgent 6.3%",
-          "iTerm2 6.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1083,13 +871,6 @@
           4.94,
           5.36
         ],
-        "busiest": [
-          "ArqAgent 134.3%",
-          "backupd 8.8%",
-          "ContinuityCaptureAgent 8.4%",
-          "diskimagesiod 5.3%",
-          "bluetoothd 5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1115,13 +896,6 @@
           5.61,
           4.94,
           5.36
-        ],
-        "busiest": [
-          "ArqAgent 110.8%",
-          "iTerm2 20.3%",
-          "WindowServer 6.6%",
-          "bluetoothd 6.4%",
-          "tccd 5.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1150,13 +924,6 @@
           4.94,
           5.36
         ],
-        "busiest": [
-          "ArqAgent 164.7%",
-          "WindowServer 13.1%",
-          "iTerm2 10.4%",
-          "bluetoothd 5.7%",
-          "coreaudiod 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1182,13 +949,6 @@
           6.77,
           5.22,
           5.45
-        ],
-        "busiest": [
-          "ArqAgent 72%",
-          "WindowServer 4.7%",
-          "iTerm2 4.1%",
-          "fseventsd 2.2%",
-          "bluetoothd 1.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1217,13 +977,6 @@
           5.22,
           5.45
         ],
-        "busiest": [
-          "ArqAgent 58.1%",
-          "SystemUIServer 12.1%",
-          "backupd 11.7%",
-          "com.docker.backend 11.5%",
-          "WindowServer 8.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1251,13 +1004,6 @@
           5.22,
           5.45
         ],
-        "busiest": [
-          "ArqAgent 69.9%",
-          "SystemUIServer 13.5%",
-          "iTerm2 6.2%",
-          "WindowServer 6.1%",
-          "fseventsd 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1284,13 +1030,6 @@
           6.77,
           5.22,
           5.45
-        ],
-        "busiest": [
-          "ArqAgent 66.5%",
-          "WindowServer 12.2%",
-          "backupd 9.8%",
-          "diskimagesiod 7.8%",
-          "SystemUIServer 4.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1320,13 +1059,6 @@
           5.2,
           5.44
         ],
-        "busiest": [
-          "ArqAgent 73.9%",
-          "backupd 18.3%",
-          "ChatGPT 15.9%",
-          "SystemUIServer 13.8%",
-          "diskimagesiod 10.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1353,13 +1085,6 @@
           5.67,
           5.61
         ],
-        "busiest": [
-          "ArqAgent 71%",
-          "WindowServer 10.6%",
-          "Spotify 4.8%",
-          "Codex (Renderer) 4.6%",
-          "iTerm2 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1385,13 +1110,6 @@
           8.28,
           5.67,
           5.61
-        ],
-        "busiest": [
-          "Code Helper (Renderer) 74%",
-          "ArqAgent 71.1%",
-          "WindowServer 10.5%",
-          "iTerm2 6.3%",
-          "Codex (Service) 4.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1421,13 +1139,6 @@
           5.65,
           5.6
         ],
-        "busiest": [
-          "ArqAgent 76.4%",
-          "WindowServer 10.2%",
-          "Codex (Service) 7.1%",
-          "backupd 6.1%",
-          "SystemUIServer 5.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1454,13 +1165,6 @@
           9.55,
           6.12,
           5.77
-        ],
-        "busiest": [
-          "ArqAgent 75.7%",
-          "WindowServer 7.6%",
-          "fseventsd 4.9%",
-          "Codex (Renderer) 4.1%",
-          "Codex (Service) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1489,13 +1193,6 @@
           6.12,
           5.77
         ],
-        "busiest": [
-          "ArqAgent 64.4%",
-          "WindowServer 11.7%",
-          "Codex (Service) 8.5%",
-          "Codex (Renderer) 5.4%",
-          "iTerm2 5.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1522,13 +1219,6 @@
           9.58,
           6.18,
           5.79
-        ],
-        "busiest": [
-          "ArqAgent 57.1%",
-          "WindowServer 10.1%",
-          "iTerm2 8.3%",
-          "Codex (Renderer) 5.3%",
-          "Codex (Service) 5.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1558,13 +1248,6 @@
           7.45,
           6.25
         ],
-        "busiest": [
-          "plugin-container 167.3%",
-          "firefox 101%",
-          "ArqAgent 59.5%",
-          "plugin-container 26.1%",
-          "WindowServer 16.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1591,13 +1274,6 @@
           13.78,
           7.72,
           6.37
-        ],
-        "busiest": [
-          "ArqAgent 143.4%",
-          "fseventsd 16.5%",
-          "Codex (Renderer) 15.4%",
-          "backupd 13.2%",
-          "SystemUIServer 9.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1626,13 +1302,6 @@
           7.72,
           6.37
         ],
-        "busiest": [
-          "ArqAgent 148.3%",
-          "backupd 24.9%",
-          "Codex (Renderer) 19.3%",
-          "SystemUIServer 11.8%",
-          "WindowServer 9.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1659,13 +1328,6 @@
           13.78,
           7.72,
           6.37
-        ],
-        "busiest": [
-          "Codex (Renderer) 158.2%",
-          "ArqAgent 136.2%",
-          "Code Helper (Renderer) 34.1%",
-          "backupd 17.3%",
-          "SystemUIServer 14.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1694,13 +1356,6 @@
           7.72,
           6.37
         ],
-        "busiest": [
-          "ArqAgent 125.9%",
-          "Codex (Renderer) 22.3%",
-          "WindowServer 16.7%",
-          "Codex (Service) 16.5%",
-          "ChatGPT 10.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1726,13 +1381,6 @@
           12.92,
           7.64,
           6.35
-        ],
-        "busiest": [
-          "ArqAgent 82.6%",
-          "WindowServer 13.9%",
-          "Codex (Service) 12.9%",
-          "Codex (Renderer) 10.1%",
-          "iTerm2 6.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1760,13 +1408,6 @@
           7.64,
           6.35
         ],
-        "busiest": [
-          "ArqAgent 77.4%",
-          "WindowServer 9.6%",
-          "Codex (Service) 6.7%",
-          "ContinuityCaptureAgent 6.4%",
-          "Codex (Renderer) 5.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1792,13 +1433,6 @@
           12.92,
           7.64,
           6.35
-        ],
-        "busiest": [
-          "ArqAgent 78.6%",
-          "WindowServer 10.5%",
-          "ContinuityCaptureAgent 8.8%",
-          "Codex (Service) 8.2%",
-          "Codex (Renderer) 5.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1826,13 +1460,6 @@
           7.64,
           6.35
         ],
-        "busiest": [
-          "ArqAgent 78.5%",
-          "WindowServer 10.7%",
-          "Codex (Service) 8.3%",
-          "iTerm2 5.3%",
-          "Codex (Renderer) 5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1858,13 +1485,6 @@
           12.92,
           7.64,
           6.35
-        ],
-        "busiest": [
-          "ArqAgent 76.7%",
-          "WindowServer 9.6%",
-          "Codex (Service) 7.8%",
-          "iTerm2 6.9%",
-          "Codex (Renderer) 4.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1893,13 +1513,6 @@
           7.64,
           6.35
         ],
-        "busiest": [
-          "ArqAgent 78.1%",
-          "Codex (Renderer) 24.9%",
-          "Codex (Service) 12.9%",
-          "WindowServer 11.4%",
-          "SystemUIServer 10.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1925,13 +1538,6 @@
           12.92,
           7.64,
           6.35
-        ],
-        "busiest": [
-          "ArqAgent 79.5%",
-          "Codex (Renderer) 58.2%",
-          "Codex (Service) 23.9%",
-          "WindowServer 17.7%",
-          "backupd 8.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -1959,13 +1565,6 @@
           7.64,
           6.35
         ],
-        "busiest": [
-          "ArqAgent 78.8%",
-          "Codex (Renderer) 58%",
-          "Codex (Service) 24.8%",
-          "WindowServer 17.2%",
-          "backupd 10.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -1991,13 +1590,6 @@
           12.92,
           7.64,
           6.35
-        ],
-        "busiest": [
-          "ArqAgent 78.5%",
-          "Codex (Renderer) 58.7%",
-          "Codex (Service) 25.1%",
-          "WindowServer 15.5%",
-          "SystemUIServer 9.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2026,13 +1618,6 @@
           7.64,
           6.35
         ],
-        "busiest": [
-          "ArqAgent 78.2%",
-          "Codex (Renderer) 58.9%",
-          "Codex (Service) 30%",
-          "WindowServer 14.7%",
-          "ChatGPT 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2059,13 +1644,6 @@
           12.92,
           7.64,
           6.35
-        ],
-        "busiest": [
-          "ArqAgent 74.2%",
-          "Codex (Renderer) 67.2%",
-          "Codex (Service) 30.3%",
-          "WindowServer 15.9%",
-          "ChatGPT 5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2095,13 +1673,6 @@
           7.64,
           6.35
         ],
-        "busiest": [
-          "ArqAgent 77.4%",
-          "Codex (Renderer) 54.4%",
-          "Codex (Service) 24.8%",
-          "WindowServer 18.4%",
-          "iTerm2 4.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2128,13 +1699,6 @@
           12.84,
           7.71,
           6.39
-        ],
-        "busiest": [
-          "ArqAgent 78.5%",
-          "Codex (Renderer) 29.4%",
-          "WindowServer 17%",
-          "Codex (Service) 16.8%",
-          "SystemUIServer 14%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2163,13 +1727,6 @@
           7.71,
           6.39
         ],
-        "busiest": [
-          "Codex (Renderer) 217.6%",
-          "ArqAgent 38.8%",
-          "ChatGPT 22.5%",
-          "WindowServer 18.5%",
-          "plugin-container 18.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2197,13 +1754,6 @@
           7.71,
           6.39
         ],
-        "busiest": [
-          "Codex (Renderer) 108.3%",
-          "ArqAgent 61.9%",
-          "plugin-container 23.5%",
-          "WindowServer 13.5%",
-          "ChatGPT 10%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2229,13 +1779,6 @@
           12.84,
           7.71,
           6.39
-        ],
-        "busiest": [
-          "ArqAgent 71.3%",
-          "Codex (Renderer) 51.7%",
-          "WindowServer 16.4%",
-          "Codex (Service) 14.6%",
-          "plugin-container 8.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2265,13 +1808,6 @@
           7.71,
           6.39
         ],
-        "busiest": [
-          "ArqAgent 76.5%",
-          "WindowServer 12.3%",
-          "Codex (Renderer) 11.8%",
-          "Codex (Service) 9.3%",
-          "iTerm2 8.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2298,13 +1834,6 @@
           12.84,
           7.71,
           6.39
-        ],
-        "busiest": [
-          "ArqAgent 78.2%",
-          "SystemUIServer 15.1%",
-          "WindowServer 10.5%",
-          "Codex (Service) 8.1%",
-          "iTerm2 5.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2334,13 +1863,6 @@
           7.71,
           6.39
         ],
-        "busiest": [
-          "ArqAgent 73.5%",
-          "SystemUIServer 20.1%",
-          "WindowServer 7.4%",
-          "ContinuityCaptureAgent 6.3%",
-          "Codex (Service) 6.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2367,13 +1889,6 @@
           12.29,
           7.68,
           6.38
-        ],
-        "busiest": [
-          "ArqAgent 74.9%",
-          "SystemUIServer 14.9%",
-          "WindowServer 8.6%",
-          "Codex (Service) 6.4%",
-          "Codex (Renderer) 4.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2402,13 +1917,6 @@
           7.68,
           6.38
         ],
-        "busiest": [
-          "ArqAgent 76.4%",
-          "WindowServer 10%",
-          "Codex (Service) 7.7%",
-          "SystemUIServer 5.7%",
-          "iTerm2 5.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2436,13 +1944,6 @@
           7.68,
           6.38
         ],
-        "busiest": [
-          "ArqAgent 77%",
-          "WindowServer 9.2%",
-          "Codex (Service) 8.4%",
-          "Codex (Renderer) 5.4%",
-          "tracd 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2468,13 +1969,6 @@
           12.29,
           7.68,
           6.38
-        ],
-        "busiest": [
-          "ArqAgent 77.3%",
-          "WindowServer 8.2%",
-          "Codex (Service) 5.9%",
-          "Codex (Renderer) 4.5%",
-          "fseventsd 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2503,13 +1997,6 @@
           7.68,
           6.38
         ],
-        "busiest": [
-          "ArqAgent 75%",
-          "WindowServer 9.6%",
-          "SystemUIServer 8.8%",
-          "Codex (Service) 8.4%",
-          "iTerm2 5.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2535,13 +2022,6 @@
           12.29,
           7.68,
           6.38
-        ],
-        "busiest": [
-          "ArqAgent 70.7%",
-          "WindowServer 10.5%",
-          "Codex (Service) 8.1%",
-          "iTerm2 4.7%",
-          "Codex (Renderer) 4.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2569,13 +2049,6 @@
           7.8,
           6.43
         ],
-        "busiest": [
-          "ArqAgent 60.1%",
-          "WindowServer 12%",
-          "Codex (Service) 8.9%",
-          "iTerm2 8.5%",
-          "ContinuityCaptureAgent 5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2601,13 +2074,6 @@
           12.51,
           7.8,
           6.43
-        ],
-        "busiest": [
-          "ArqAgent 61.4%",
-          "WindowServer 12.5%",
-          "ContinuityCaptureAgent 11.2%",
-          "Codex (Service) 10.3%",
-          "iTerm2 9.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2635,13 +2101,6 @@
           7.8,
           6.43
         ],
-        "busiest": [
-          "ArqAgent 76.2%",
-          "WindowServer 10.2%",
-          "Codex (Service) 8.1%",
-          "iTerm2 5.7%",
-          "Codex (Renderer) 4.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2667,13 +2126,6 @@
           12.51,
           7.8,
           6.43
-        ],
-        "busiest": [
-          "ArqAgent 58.7%",
-          "WindowServer 9.2%",
-          "Codex (Service) 7.4%",
-          "Codex (Renderer) 4.1%",
-          "iTerm2 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2702,13 +2154,6 @@
           7.8,
           6.43
         ],
-        "busiest": [
-          "ArqAgent 70.2%",
-          "WindowServer 11.1%",
-          "Codex (Service) 8.8%",
-          "iTerm2 6.3%",
-          "Codex (Renderer) 4.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2734,13 +2179,6 @@
           12.87,
           8.04,
           6.53
-        ],
-        "busiest": [
-          "ArqAgent 67.6%",
-          "Codex (Renderer) 13.6%",
-          "WindowServer 10.5%",
-          "Codex (Service) 9.8%",
-          "claude 7.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2769,13 +2207,6 @@
           8.04,
           6.53
         ],
-        "busiest": [
-          "ArqAgent 60.7%",
-          "Codex (Renderer) 17.8%",
-          "WindowServer 13.1%",
-          "Codex (Service) 9.2%",
-          "iTerm2 6.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2802,13 +2233,6 @@
           12.87,
           8.04,
           6.53
-        ],
-        "busiest": [
-          "ArqAgent 65.9%",
-          "ChatGPT 18.2%",
-          "backupd 18.1%",
-          "WindowServer 10.1%",
-          "Codex (Renderer) 6.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2837,13 +2261,6 @@
           8.02,
           6.54
         ],
-        "busiest": [
-          "ArqAgent 70.2%",
-          "backupd 27.5%",
-          "claude 22.3%",
-          "iTerm2 19.6%",
-          "diskimagesiod 16%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2869,13 +2286,6 @@
           12.4,
           8.02,
           6.54
-        ],
-        "busiest": [
-          "ArqAgent 70.8%",
-          "backupd 29.7%",
-          "Codex (Renderer) 14.1%",
-          "WindowServer 11.8%",
-          "diskimagesiod 11.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2905,13 +2315,6 @@
           8.02,
           6.54
         ],
-        "busiest": [
-          "ArqAgent 76.9%",
-          "Codex (Renderer) 13.9%",
-          "SystemUIServer 8.8%",
-          "WindowServer 8.3%",
-          "Codex (Service) 6.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -2938,13 +2341,6 @@
           13.63,
           8.51,
           6.73
-        ],
-        "busiest": [
-          "ArqAgent 63.7%",
-          "Codex (Renderer) 13.1%",
-          "SystemUIServer 12%",
-          "backupd 11.2%",
-          "WindowServer 8.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -2973,13 +2369,6 @@
           9.25,
           7.03
         ],
-        "busiest": [
-          "ArqAgent 78.6%",
-          "backupd 10.1%",
-          "Codex (Renderer) 10.1%",
-          "WindowServer 7.7%",
-          "Codex (Service) 5.6%"
-        ],
         "quiet": true,
         "waitedMs": 10081
       },
@@ -3005,13 +2394,6 @@
           15.53,
           9.25,
           7.03
-        ],
-        "busiest": [
-          "ArqAgent 67.8%",
-          "Codex (Renderer) 12.6%",
-          "WindowServer 8.4%",
-          "iTerm2 8.3%",
-          "Codex (Service) 5.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3039,13 +2421,6 @@
           14.53,
           9.14,
           7.01
-        ],
-        "busiest": [
-          "ArqAgent 75.4%",
-          "Codex (Renderer) 14.8%",
-          "WindowServer 10.8%",
-          "Codex (Service) 7.5%",
-          "ChatGPT 4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3075,13 +2450,6 @@
           9.14,
           7.01
         ],
-        "busiest": [
-          "ArqAgent 65.5%",
-          "Codex (Renderer) 17.6%",
-          "WindowServer 8.6%",
-          "Codex (Service) 6.7%",
-          "ChatGPT 4.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3110,13 +2478,6 @@
           9.79,
           7.32
         ],
-        "busiest": [
-          "ArqAgent 73.1%",
-          "claude 12.1%",
-          "WindowServer 10.6%",
-          "iTerm2 7.1%",
-          "ContinuityCaptureAgent 5.2%"
-        ],
         "quiet": true,
         "waitedMs": 1
       },
@@ -3143,13 +2504,6 @@
           15.98,
           10.26,
           7.53
-        ],
-        "busiest": [
-          "Codex (Renderer) 59.1%",
-          "ArqAgent 49.1%",
-          "Tower 28%",
-          "Codex (Service) 25.3%",
-          "fseventsd 17.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3178,13 +2532,6 @@
           10.21,
           7.52
         ],
-        "busiest": [
-          "ArqAgent 62.7%",
-          "Codex (Renderer) 40.6%",
-          "Tower 39.5%",
-          "Codex (Service) 22.4%",
-          "backupd 16.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3212,13 +2559,6 @@
           10.21,
           7.52
         ],
-        "busiest": [
-          "ArqAgent 60.3%",
-          "Tower 57.7%",
-          "Codex (Renderer) 44.7%",
-          "spindump 25.6%",
-          "backupd 22.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3244,13 +2584,6 @@
           15.26,
           10.21,
           7.52
-        ],
-        "busiest": [
-          "Codex (Renderer) 172.5%",
-          "spindump 41.4%",
-          "ArqAgent 40.7%",
-          "Tower 38%",
-          "Codex (Service) 19.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3279,13 +2612,6 @@
           10.21,
           7.52
         ],
-        "busiest": [
-          "Codex (Renderer) 176%",
-          "spindump 47.6%",
-          "Tower 38.3%",
-          "ArqAgent 32.5%",
-          "Codex (Service) 20.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3311,13 +2637,6 @@
           15.26,
           10.21,
           7.52
-        ],
-        "busiest": [
-          "Codex (Renderer) 42.7%",
-          "ArqAgent 36.1%",
-          "Codex (Service) 19.2%",
-          "spindump 14.1%",
-          "WindowServer 12%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3345,13 +2664,6 @@
           10.21,
           7.52
         ],
-        "busiest": [
-          "Codex (Renderer) 62.3%",
-          "ArqAgent 37.5%",
-          "Codex (Service) 18%",
-          "WindowServer 13.2%",
-          "ChatGPT 12.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3377,13 +2689,6 @@
           15.26,
           10.21,
           7.52
-        ],
-        "busiest": [
-          "Codex (Renderer) 55.3%",
-          "ArqAgent 39.1%",
-          "Codex (Service) 20.8%",
-          "WindowServer 20.4%",
-          "backupd 19%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3411,13 +2716,6 @@
           10.21,
           7.52
         ],
-        "busiest": [
-          "Codex (Renderer) 39.9%",
-          "ArqAgent 39.7%",
-          "backupd 22.6%",
-          "Codex (Service) 18%",
-          "WindowServer 16.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3443,13 +2741,6 @@
           15.26,
           10.21,
           7.52
-        ],
-        "busiest": [
-          "ArqAgent 40.4%",
-          "Codex (Renderer) 38%",
-          "WindowServer 18.7%",
-          "Codex (Service) 18.5%",
-          "backupd 16.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3478,13 +2769,6 @@
           10.07,
           7.49
         ],
-        "busiest": [
-          "ArqAgent 39.9%",
-          "Codex (Renderer) 36.1%",
-          "WindowServer 18.9%",
-          "Codex (Service) 18.5%",
-          "iTerm2 9.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3511,13 +2795,6 @@
           10.07,
           7.49
         ],
-        "busiest": [
-          "Codex (Renderer) 41%",
-          "ArqAgent 40.4%",
-          "Codex (Service) 21.7%",
-          "WindowServer 14.7%",
-          "iTerm2 6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3543,13 +2820,6 @@
           14.19,
           10.07,
           7.49
-        ],
-        "busiest": [
-          "ArqAgent 41.3%",
-          "Codex (Renderer) 33.5%",
-          "Codex (Service) 15.9%",
-          "WindowServer 14.4%",
-          "backupd 11.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3578,13 +2848,6 @@
           10.07,
           7.49
         ],
-        "busiest": [
-          "Codex (Renderer) 46.3%",
-          "ArqAgent 43.1%",
-          "Codex (Service) 20%",
-          "WindowServer 16.4%",
-          "ContinuityCaptureAgent 4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3611,13 +2874,6 @@
           14.19,
           10.07,
           7.49
-        ],
-        "busiest": [
-          "ArqAgent 41.8%",
-          "Codex (Renderer) 40%",
-          "Codex (Service) 19.2%",
-          "WindowServer 18.4%",
-          "iTerm2 11.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3647,13 +2903,6 @@
           10.07,
           7.49
         ],
-        "busiest": [
-          "ArqAgent 41.2%",
-          "Codex (Renderer) 35.9%",
-          "WindowServer 25.7%",
-          "Codex (Service) 17.8%",
-          "NotificationCenter 8.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3680,13 +2929,6 @@
           14.19,
           10.07,
           7.49
-        ],
-        "busiest": [
-          "Tower 59.2%",
-          "ArqAgent 42.1%",
-          "Codex (Renderer) 18.1%",
-          "WindowServer 11.9%",
-          "Codex (Service) 10.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3715,13 +2957,6 @@
           10.07,
           7.49
         ],
-        "busiest": [
-          "Tower 59.3%",
-          "ArqAgent 42.4%",
-          "Codex (Renderer) 11.5%",
-          "WindowServer 10.3%",
-          "Codex (Service) 10.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3747,13 +2982,6 @@
           14.19,
           10.07,
           7.49
-        ],
-        "busiest": [
-          "ArqAgent 42.5%",
-          "Tower 21.7%",
-          "node 17.5%",
-          "WindowServer 10.9%",
-          "Codex (Service) 9.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3783,13 +3011,6 @@
           10.02,
           7.49
         ],
-        "busiest": [
-          "ArqAgent 42.6%",
-          "Codex (Renderer) 16.2%",
-          "WindowServer 14.3%",
-          "backupd 12.6%",
-          "Codex (Service) 9.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3817,13 +3038,6 @@
           10.02,
           7.49
         ],
-        "busiest": [
-          "ArqAgent 40.6%",
-          "Codex (Renderer) 28.3%",
-          "WindowServer 9.9%",
-          "Codex (Service) 8.3%",
-          "iTerm2 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3850,13 +3064,6 @@
           13.62,
           10.02,
           7.49
-        ],
-        "busiest": [
-          "ArqAgent 41.6%",
-          "Codex (Renderer) 17.5%",
-          "WindowServer 10.1%",
-          "Codex (Service) 9.3%",
-          "iTerm2 5.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3886,13 +3093,6 @@
           10.02,
           7.49
         ],
-        "busiest": [
-          "ArqAgent 38.7%",
-          "Codex (Renderer) 19.4%",
-          "tracd 9.8%",
-          "WindowServer 8.6%",
-          "Codex (Service) 7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3919,13 +3119,6 @@
           12.85,
           9.92,
           7.47
-        ],
-        "busiest": [
-          "ArqAgent 38.3%",
-          "Codex (Renderer) 14.8%",
-          "WindowServer 9.9%",
-          "ContinuityCaptureAgent 6.7%",
-          "iTerm2 6.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -3954,13 +3147,6 @@
           9.92,
           7.47
         ],
-        "busiest": [
-          "ArqAgent 37.3%",
-          "Codex (Renderer) 12.9%",
-          "WindowServer 11.7%",
-          "Codex (Service) 8.4%",
-          "ChatGPT 3.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -3988,13 +3174,6 @@
           9.92,
           7.47
         ],
-        "busiest": [
-          "ArqAgent 39.6%",
-          "(ps) 16.7%",
-          "SystemUIServer 10.7%",
-          "Codex (Renderer) 9.3%",
-          "WindowServer 8.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4020,13 +3199,6 @@
           12.85,
           9.92,
           7.47
-        ],
-        "busiest": [
-          "ArqAgent 39.7%",
-          "WindowServer 10.4%",
-          "Codex (Renderer) 7.9%",
-          "iTerm2 6.5%",
-          "Codex (Service) 6.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4054,13 +3226,6 @@
           9.92,
           7.47
         ],
-        "busiest": [
-          "ArqAgent 38.5%",
-          "SystemUIServer 28.8%",
-          "Codex (Renderer) 10.9%",
-          "WindowServer 8.3%",
-          "ContinuityCaptureAgent 6.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4087,13 +3252,6 @@
           9.92,
           7.47
         ],
-        "busiest": [
-          "ArqAgent 38.7%",
-          "Codex (Renderer) 17.4%",
-          "SystemUIServer 10.3%",
-          "WindowServer 9.7%",
-          "backupd 8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4119,13 +3277,6 @@
           12.85,
           9.92,
           7.47
-        ],
-        "busiest": [
-          "ArqAgent 33.4%",
-          "Codex (Renderer) 15%",
-          "WindowServer 8.5%",
-          "Codex (Service) 6.9%",
-          "ChatGPT 4.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4154,13 +3305,6 @@
           9.92,
           7.47
         ],
-        "busiest": [
-          "Codex (Renderer) 235.3%",
-          "ArqAgent 27.4%",
-          "WindowServer 11.4%",
-          "Codex (Service) 8.1%",
-          "ChatGPT 6.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4188,13 +3332,6 @@
           10.15,
           7.56
         ],
-        "busiest": [
-          "Codex (Renderer) 81.8%",
-          "plugin-container 57.7%",
-          "ArqAgent 36.3%",
-          "ChatGPT 32.4%",
-          "WindowServer 17.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4220,13 +3357,6 @@
           13.52,
           10.17,
           7.58
-        ],
-        "busiest": [
-          "ChatGPT 43.2%",
-          "ArqAgent 33.3%",
-          "WindowServer 17.2%",
-          "Codex (Renderer) 8.2%",
-          "iTerm2 6.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4254,13 +3384,6 @@
           10.17,
           7.58
         ],
-        "busiest": [
-          "ArqAgent 38.3%",
-          "ChatGPT 29.2%",
-          "backupd 23.5%",
-          "WindowServer 15.9%",
-          "diskimagesiod 14%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4286,13 +3409,6 @@
           12.76,
           10.06,
           7.56
-        ],
-        "busiest": [
-          "ArqAgent 29%",
-          "backupd 28.2%",
-          "WindowServer 16.9%",
-          "Codex (Service) 13.3%",
-          "diskimagesiod 10.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4322,13 +3438,6 @@
           10.06,
           7.56
         ],
-        "busiest": [
-          "ArqAgent 29.3%",
-          "WindowServer 14.6%",
-          "iTerm2 12.4%",
-          "plugin-container 9.4%",
-          "ContinuityCaptureAgent 6.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4355,13 +3464,6 @@
           14.27,
           10.53,
           7.77
-        ],
-        "busiest": [
-          "Codex (Renderer) 109.6%",
-          "ArqAgent 30%",
-          "ChatGPT 18%",
-          "codex 16%",
-          "WindowServer 11.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4390,13 +3492,6 @@
           10.53,
           7.77
         ],
-        "busiest": [
-          "Codex (Renderer) 41.8%",
-          "ArqAgent 31.4%",
-          "ChatGPT 9.6%",
-          "WindowServer 8.8%",
-          "codex 5.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4424,13 +3519,6 @@
           10.42,
           7.75
         ],
-        "busiest": [
-          "Codex (Renderer) 36.1%",
-          "ArqAgent 28%",
-          "WindowServer 16.9%",
-          "codex 16%",
-          "Codex (Service) 14.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4456,13 +3544,6 @@
           13.45,
           10.42,
           7.75
-        ],
-        "busiest": [
-          "codex 169.3%",
-          "npm exec chrome-devtools-mcp@latest 125.6%",
-          "npm exec chrome-devtools-mcp@latest 120.5%",
-          "Codex (Renderer) 104%",
-          "trustd 65.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4491,13 +3572,6 @@
           10.43,
           7.77
         ],
-        "busiest": [
-          "Codex (Renderer) 95.4%",
-          "codex 42.4%",
-          "ChatGPT 42.3%",
-          "ArqAgent 32.8%",
-          "chrome-devtools-mcp 23.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4523,13 +3597,6 @@
           13.25,
           10.43,
           7.77
-        ],
-        "busiest": [
-          "ChatGPT 104%",
-          "codex 54.2%",
-          "ArqAgent 29.7%",
-          "WindowServer 16.3%",
-          "trustd 15.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4559,13 +3626,6 @@
           10.31,
           7.74
         ],
-        "busiest": [
-          "ArqAgent 33.6%",
-          "codex 20.1%",
-          "trustd 11.7%",
-          "WindowServer 8.7%",
-          "Codex (Service) 6.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4592,13 +3652,6 @@
           13.28,
           10.59,
           7.89
-        ],
-        "busiest": [
-          "ArqAgent 26.3%",
-          "fseventsd 8.4%",
-          "claude 7.5%",
-          "WindowServer 6.6%",
-          "iTerm2 5.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4627,13 +3680,6 @@
           10.59,
           7.89
         ],
-        "busiest": [
-          "ArqAgent 27.2%",
-          "Code Helper 25.7%",
-          "iTerm2 7.5%",
-          "WindowServer 6.5%",
-          "Codex (Renderer) 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4660,13 +3706,6 @@
           12.38,
           10.45,
           7.85
-        ],
-        "busiest": [
-          "ArqAgent 28.9%",
-          "WindowServer 7.7%",
-          "fseventsd 7.1%",
-          "SystemUIServer 5.5%",
-          "Codex (Renderer) 5.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4696,13 +3735,6 @@
           10.36,
           7.87
         ],
-        "busiest": [
-          "ArqAgent 32.5%",
-          "WindowServer 10.8%",
-          "SystemUIServer 10.4%",
-          "Codex (Service) 8.8%",
-          "Codex (Renderer) 5.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4729,13 +3761,6 @@
           13.18,
           10.77,
           8.05
-        ],
-        "busiest": [
-          "Codex (Renderer) 75.5%",
-          "launchd 30.1%",
-          "ArqAgent 22.8%",
-          "WindowServer 13.3%",
-          "claude 11.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4764,13 +3789,6 @@
           10.85,
           8.1
         ],
-        "busiest": [
-          "claude 58.8%",
-          "ArqAgent 32.7%",
-          "Codex (Renderer) 8.1%",
-          "WindowServer 7.8%",
-          "iTerm2 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4796,13 +3814,6 @@
           13.4,
           10.85,
           8.1
-        ],
-        "busiest": [
-          "ArqAgent 32.7%",
-          "claude 20.6%",
-          "iTerm2 7.2%",
-          "WindowServer 7.1%",
-          "codex 5.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4830,13 +3841,6 @@
           10.85,
           8.1
         ],
-        "busiest": [
-          "ArqAgent 34.8%",
-          "node 18.2%",
-          "node 12.9%",
-          "WindowServer 7.3%",
-          "Codex (Renderer) 7.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4863,13 +3867,6 @@
           10.85,
           8.1
         ],
-        "busiest": [
-          "ArqAgent 34%",
-          "node 17.4%",
-          "Python 9.9%",
-          "node 6.9%",
-          "WindowServer 5.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4895,13 +3892,6 @@
           13.4,
           10.85,
           8.1
-        ],
-        "busiest": [
-          "ArqAgent 33.4%",
-          "Python 15%",
-          "node 9.5%",
-          "iTerm2 7.5%",
-          "WindowServer 6.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4930,13 +3920,6 @@
           10.85,
           8.1
         ],
-        "busiest": [
-          "ArqAgent 30.4%",
-          "codex 24.9%",
-          "WindowServer 7%",
-          "node 5.8%",
-          "Codex (Renderer) 5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -4962,13 +3945,6 @@
           13.4,
           10.85,
           8.1
-        ],
-        "busiest": [
-          "ArqAgent 25.6%",
-          "node 22.7%",
-          "(node) 22.7%",
-          "node 21.8%",
-          "node 15.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -4997,13 +3973,6 @@
           10.85,
           8.1
         ],
-        "busiest": [
-          "ArqAgent 30.7%",
-          "(shield) 12.3%",
-          "codex 11%",
-          "Codex (Renderer) 8.8%",
-          "(Python) 8.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5030,13 +3999,6 @@
           10.79,
           8.09
         ],
-        "busiest": [
-          "codex 35.7%",
-          "ArqAgent 33.2%",
-          "Codex (Renderer) 25.3%",
-          "WindowServer 7.1%",
-          "iTerm2 5.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5062,13 +4024,6 @@
           12.89,
           10.79,
           8.09
-        ],
-        "busiest": [
-          "codex 74%",
-          "ArqAgent 34.3%",
-          "Codex (Renderer) 12.9%",
-          "WindowServer 6.1%",
-          "Codex (Service) 4.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5097,13 +4052,6 @@
           10.79,
           8.09
         ],
-        "busiest": [
-          "codex 68.3%",
-          "codex 44.6%",
-          "ArqAgent 35.5%",
-          "SystemUIServer 9.4%",
-          "WindowServer 6.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5131,13 +4079,6 @@
           10.79,
           8.09
         ],
-        "busiest": [
-          "ArqAgent 31%",
-          "codex 17.5%",
-          "Python 9.9%",
-          "tracd 8.1%",
-          "node 7.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5164,13 +4105,6 @@
           12.89,
           10.79,
           8.09
-        ],
-        "busiest": [
-          "ArqAgent 32.4%",
-          "(shield) 14.6%",
-          "(Python) 9.7%",
-          "iTerm2 7%",
-          "WindowServer 6.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5200,13 +4134,6 @@
           10.79,
           8.09
         ],
-        "busiest": [
-          "ArqAgent 34.9%",
-          "Python 15.9%",
-          "node 14.7%",
-          "WindowServer 9.9%",
-          "Codex (Service) 7.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5232,13 +4159,6 @@
           12.89,
           10.79,
           8.09
-        ],
-        "busiest": [
-          "ArqAgent 32.7%",
-          "SystemUIServer 10.6%",
-          "WindowServer 6.2%",
-          "iTerm2 5.2%",
-          "node 4.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5267,13 +4187,6 @@
           10.79,
           8.09
         ],
-        "busiest": [
-          "ArqAgent 31.7%",
-          "(shield) 14.5%",
-          "(Python) 9.6%",
-          "WindowServer 6.9%",
-          "iTerm2 6.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5300,13 +4213,6 @@
           12.89,
           10.79,
           8.09
-        ],
-        "busiest": [
-          "ArqAgent 33.6%",
-          "node 13.9%",
-          "iTerm2 6.8%",
-          "ContinuityCaptureAgent 6.6%",
-          "WindowServer 6.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5336,13 +4242,6 @@
           10.66,
           8.06
         ],
-        "busiest": [
-          "ArqAgent 33.7%",
-          "backupd 10.7%",
-          "SystemUIServer 8.7%",
-          "WindowServer 6.2%",
-          "codex 5.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5368,13 +4267,6 @@
           12.1,
           10.66,
           8.06
-        ],
-        "busiest": [
-          "ArqAgent 33.7%",
-          "Codex (Renderer) 26.9%",
-          "WindowServer 17.4%",
-          "Firefox GPU Helper 15.8%",
-          "ChatGPT 13.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5403,13 +4295,6 @@
           10.66,
           8.06
         ],
-        "busiest": [
-          "ChatGPT 77.2%",
-          "Slack Helper (Renderer) 73.5%",
-          "ArqAgent 27.1%",
-          "codex 21.5%",
-          "Codex (Renderer) 12.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5436,13 +4321,6 @@
           12.1,
           10.66,
           8.06
-        ],
-        "busiest": [
-          "ArqAgent 27.6%",
-          "Slack Helper (Renderer) 9.6%",
-          "ChatGPT 7.5%",
-          "WindowServer 7.1%",
-          "iTerm2 6.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5472,13 +4350,6 @@
           10.66,
           8.06
         ],
-        "busiest": [
-          "ArqAgent 33.3%",
-          "SystemUIServer 13.1%",
-          "(shield) 12.2%",
-          "backupd 11.6%",
-          "Codex (Service) 9.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5505,13 +4376,6 @@
           11.61,
           10.58,
           8.05
-        ],
-        "busiest": [
-          "zsh 29.9%",
-          "ArqAgent 17.9%",
-          "php 12.9%",
-          "WindowServer 10%",
-          "backupd 5.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5540,13 +4404,6 @@
           10.58,
           8.05
         ],
-        "busiest": [
-          "ArqAgent 27.9%",
-          "backupd 16.3%",
-          "diskimagesiod 13.1%",
-          "WindowServer 8.9%",
-          "(Python) 7.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5573,13 +4430,6 @@
           10.58,
           8.05
         ],
-        "busiest": [
-          "ArqAgent 40.1%",
-          "backupd 20.1%",
-          "WindowServer 9.1%",
-          "diskimagesiod 7.2%",
-          "iTerm2 5.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5605,13 +4455,6 @@
           11.61,
           10.58,
           8.05
-        ],
-        "busiest": [
-          "ArqAgent 36.9%",
-          "backupd 19.7%",
-          "diskimagesiod 13%",
-          "WindowServer 11.7%",
-          "Codex (Service) 10.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5640,13 +4483,6 @@
           10.58,
           8.05
         ],
-        "busiest": [
-          "node 46.8%",
-          "ArqAgent 27.2%",
-          "backupd 24.3%",
-          "Python 17.4%",
-          "SystemUIServer 12.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5673,13 +4509,6 @@
           10.81,
           8.14
         ],
-        "busiest": [
-          "shield 74.5%",
-          "ChatGPT 54.9%",
-          "ArqAgent 31.8%",
-          "WindowServer 11.1%",
-          "node 9.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5705,13 +4534,6 @@
           12.6,
           10.81,
           8.14
-        ],
-        "busiest": [
-          "shield 94.3%",
-          "ArqAgent 31.3%",
-          "ChatGPT 12.4%",
-          "WindowServer 7.9%",
-          "ContinuityCaptureAgent 6.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5740,13 +4562,6 @@
           10.81,
           8.14
         ],
-        "busiest": [
-          "shield 99.3%",
-          "ArqAgent 32.6%",
-          "WindowServer 11.7%",
-          "Codex (Renderer) 10.2%",
-          "Codex (Service) 9.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5772,13 +4587,6 @@
           12.45,
           10.84,
           8.19
-        ],
-        "busiest": [
-          "shield 95.7%",
-          "ArqAgent 32.2%",
-          "WindowServer 14.7%",
-          "Codex (Renderer) 9.3%",
-          "Codex (Service) 8.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5806,13 +4614,6 @@
           10.84,
           8.19
         ],
-        "busiest": [
-          "shield 93.2%",
-          "ArqAgent 49.7%",
-          "WindowServer 16.4%",
-          "fseventsd 10.3%",
-          "iTerm2 7.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5838,13 +4639,6 @@
           12.45,
           10.84,
           8.19
-        ],
-        "busiest": [
-          "shield 88.9%",
-          "ArqAgent 76.8%",
-          "WindowServer 14.4%",
-          "SystemUIServer 5.4%",
-          "iTerm2 4.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5873,13 +4667,6 @@
           10.84,
           8.19
         ],
-        "busiest": [
-          "ArqAgent 101.2%",
-          "WindowServer 11.7%",
-          "identityservicesd 5.9%",
-          "iTerm2 5.5%",
-          "Codex (Renderer) 4.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5906,13 +4693,6 @@
           11.69,
           10.71,
           8.16
-        ],
-        "busiest": [
-          "shield 88.2%",
-          "ArqAgent 57%",
-          "WindowServer 17.6%",
-          "iTerm2 10.4%",
-          "Codex (Renderer) 6.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -5942,13 +4722,6 @@
           10.71,
           8.16
         ],
-        "busiest": [
-          "shield 93.5%",
-          "backupd 20.2%",
-          "WindowServer 17.6%",
-          "diskimagesiod 9.5%",
-          "iTerm2 8.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -5974,13 +4747,6 @@
           12.34,
           10.9,
           8.27
-        ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "iTerm2 6.1%",
-          "Codex (Service) 3.3%",
-          "Codex (Renderer) 3.3%",
-          "fseventsd 2.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6009,13 +4775,6 @@
           10.81,
           8.25
         ],
-        "busiest": [
-          "WindowServer 11.4%",
-          "Codex (Service) 9.2%",
-          "Codex (Renderer) 5.8%",
-          "node 4.1%",
-          "iTerm2 2.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6042,13 +4801,6 @@
           11.75,
           10.81,
           8.25
-        ],
-        "busiest": [
-          "claude 41.4%",
-          "WindowServer 6%",
-          "fseventsd 5.5%",
-          "Codex (Renderer) 4.6%",
-          "ContinuityCaptureAgent 4.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6077,13 +4829,6 @@
           10.81,
           8.25
         ],
-        "busiest": [
-          "claude 57.5%",
-          "SystemUIServer 13.9%",
-          "diskimagesiod 12.5%",
-          "backupd 7%",
-          "WindowServer 5.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6110,13 +4855,6 @@
           11.75,
           10.81,
           8.25
-        ],
-        "busiest": [
-          "mds_stores 121.1%",
-          "mds 19.4%",
-          "tracd 11.1%",
-          "Codex (Renderer) 8.6%",
-          "codex 7.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6146,13 +4884,6 @@
           10.96,
           8.32
         ],
-        "busiest": [
-          "Code Helper (Renderer) 72.9%",
-          "claude 66.6%",
-          "mds_stores 50.4%",
-          "Tower 31.7%",
-          "(git) 16.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6178,13 +4909,6 @@
           15.72,
           11.76,
           8.65
-        ],
-        "busiest": [
-          "mds 29.1%",
-          "SystemUIServer 11.8%",
-          "backupd 8.3%",
-          "WindowServer 5.6%",
-          "iTerm2 5.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6212,13 +4936,6 @@
           15.91,
           11.86,
           8.71
-        ],
-        "busiest": [
-          "Python 60.4%",
-          "fseventsd 16.3%",
-          "mds 16.2%",
-          "WindowServer 7.5%",
-          "ArqAgent 5.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6248,13 +4965,6 @@
           11.68,
           8.68
         ],
-        "busiest": [
-          "mds 20.8%",
-          "backupd 10.8%",
-          "WindowServer 10.5%",
-          "Codex (Service) 7.7%",
-          "Spotify 6.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6281,13 +4991,6 @@
           15,
           12.01,
           8.87
-        ],
-        "busiest": [
-          "mds 18.7%",
-          "SystemUIServer 11.2%",
-          "fseventsd 6.8%",
-          "WindowServer 5.1%",
-          "Codex (Renderer) 4.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6316,13 +5019,6 @@
           12.01,
           8.87
         ],
-        "busiest": [
-          "mds 17.7%",
-          "WindowServer 6.7%",
-          "iTerm2 5.1%",
-          "Codex (Renderer) 3.7%",
-          "fseventsd 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6348,13 +5044,6 @@
           15,
           12.01,
           8.87
-        ],
-        "busiest": [
-          "(node) 9.9%",
-          "WindowServer 9.7%",
-          "Codex (Service) 7.3%",
-          "Codex (Renderer) 5.3%",
-          "iTerm2 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6382,13 +5071,6 @@
           12.01,
           8.87
         ],
-        "busiest": [
-          "WindowServer 8.5%",
-          "Codex (Service) 5.4%",
-          "Codex (Renderer) 4.9%",
-          "iTerm2 4.1%",
-          "node 1.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6415,13 +5097,6 @@
           12.01,
           8.87
         ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "Codex (Renderer) 3.9%",
-          "Codex (Service) 3.6%",
-          "iTerm2 3.3%",
-          "claude 2.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6447,13 +5122,6 @@
           15,
           12.01,
           8.87
-        ],
-        "busiest": [
-          "WindowServer 5.9%",
-          "iTerm2 3.6%",
-          "Codex (Service) 3.4%",
-          "Codex (Renderer) 3.4%",
-          "claude 2.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6482,13 +5150,6 @@
           11.91,
           8.85
         ],
-        "busiest": [
-          "SystemUIServer 13.8%",
-          "WindowServer 6.2%",
-          "iTerm2 3.6%",
-          "Codex (Service) 3.2%",
-          "Codex (Renderer) 3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6514,13 +5175,6 @@
           14.27,
           11.91,
           8.85
-        ],
-        "busiest": [
-          "WindowServer 6.3%",
-          "iTerm2 4.5%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.1%",
-          "node 1.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6549,13 +5203,6 @@
           11.91,
           8.85
         ],
-        "busiest": [
-          "iTerm2 7.5%",
-          "WindowServer 6.9%",
-          "ContinuityCaptureAgent 6.3%",
-          "Codex (Renderer) 4.5%",
-          "Codex (Service) 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6582,13 +5229,6 @@
           11.91,
           8.85
         ],
-        "busiest": [
-          "WindowServer 9.4%",
-          "Codex (Service) 6.1%",
-          "Codex (Renderer) 5.8%",
-          "iTerm2 4%",
-          "node 1.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6614,13 +5254,6 @@
           14.27,
           11.91,
           8.85
-        ],
-        "busiest": [
-          "launchd 27.7%",
-          "backupd 15.1%",
-          "SystemUIServer 13.1%",
-          "WindowServer 11.5%",
-          "Codex (Service) 9.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6649,13 +5282,6 @@
           11.91,
           8.85
         ],
-        "busiest": [
-          "Codex (Renderer) 12.7%",
-          "WindowServer 12.1%",
-          "launchd 10.8%",
-          "Codex (Service) 9.9%",
-          "claude 7.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6682,13 +5308,6 @@
           14.27,
           11.91,
           8.85
-        ],
-        "busiest": [
-          "WindowServer 9.2%",
-          "Codex (Renderer) 7.5%",
-          "Codex (Service) 7.2%",
-          "iTerm2 4.1%",
-          "launchd 1.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6718,13 +5337,6 @@
           11.91,
           8.85
         ],
-        "busiest": [
-          "WindowServer 7.6%",
-          "Codex (Renderer) 5.9%",
-          "iTerm2 5.5%",
-          "Codex (Service) 4.1%",
-          "node 1.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6750,13 +5362,6 @@
           14.27,
           11.91,
           8.85
-        ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "Codex (Renderer) 4.3%",
-          "iTerm2 3.2%",
-          "Codex (Service) 3.2%",
-          "claude 2.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6785,13 +5390,6 @@
           11.78,
           8.82
         ],
-        "busiest": [
-          "(node) 8.8%",
-          "WindowServer 7.3%",
-          "ContinuityCaptureAgent 6.6%",
-          "iTerm2 3.9%",
-          "Codex (Service) 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6818,13 +5416,6 @@
           13.45,
           11.78,
           8.82
-        ],
-        "busiest": [
-          "SystemUIServer 6.7%",
-          "WindowServer 5.7%",
-          "Codex (Renderer) 3.4%",
-          "Codex (Service) 3.2%",
-          "fseventsd 3.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6853,13 +5444,6 @@
           11.78,
           8.82
         ],
-        "busiest": [
-          "WindowServer 5.9%",
-          "(node) 4%",
-          "iTerm2 3.4%",
-          "Codex (Service) 3.2%",
-          "Codex (Renderer) 3.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6885,13 +5469,6 @@
           13.45,
           11.78,
           8.82
-        ],
-        "busiest": [
-          "WindowServer 10.4%",
-          "Codex (Service) 7.3%",
-          "Codex (Renderer) 5.6%",
-          "iTerm2 4.3%",
-          "fseventsd 3.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -6921,13 +5498,6 @@
           11.78,
           8.82
         ],
-        "busiest": [
-          "WindowServer 11.7%",
-          "Codex (Service) 10%",
-          "Codex (Renderer) 4.9%",
-          "iTerm2 3%",
-          "fseventsd 2.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6955,13 +5525,6 @@
           11.78,
           8.82
         ],
-        "busiest": [
-          "backupd 16.1%",
-          "SystemUIServer 14.3%",
-          "(node) 9.9%",
-          "WindowServer 7%",
-          "iTerm2 7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -6988,13 +5551,6 @@
           13.45,
           11.78,
           8.82
-        ],
-        "busiest": [
-          "backupd 22.9%",
-          "Codex (Renderer) 9.1%",
-          "Spotify 8.3%",
-          "diskimagesiod 8.1%",
-          "WindowServer 6.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7024,13 +5580,6 @@
           11.78,
           8.82
         ],
-        "busiest": [
-          "backupd 19.3%",
-          "SystemUIServer 14.1%",
-          "iTerm2 8.6%",
-          "WindowServer 7.9%",
-          "diskimagesiod 6.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7057,13 +5606,6 @@
           12.93,
           11.7,
           8.81
-        ],
-        "busiest": [
-          "WindowServer 8.6%",
-          "backupd 7.9%",
-          "SystemUIServer 5.5%",
-          "Codex (Service) 5%",
-          "Spotify 4.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7092,13 +5634,6 @@
           11.7,
           8.81
         ],
-        "busiest": [
-          "(node) 9.1%",
-          "WindowServer 6%",
-          "Codex (Renderer) 4%",
-          "Codex (Service) 3.6%",
-          "fseventsd 3.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7126,13 +5661,6 @@
           11.7,
           8.81
         ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 6.2%",
-          "Codex (Service) 3.4%",
-          "Codex (Renderer) 3.2%",
-          "bluetoothd 1.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7158,13 +5686,6 @@
           12.93,
           11.7,
           8.81
-        ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "backupd 3.8%",
-          "bluetoothd 3.6%",
-          "Codex (Renderer) 3.3%",
-          "Codex (Service) 3.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7192,13 +5713,6 @@
           11.6,
           8.79
         ],
-        "busiest": [
-          "WindowServer 8.2%",
-          "iTerm2 6.5%",
-          "Codex (Renderer) 5.1%",
-          "Codex (Service) 4.4%",
-          "(node) 3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7224,13 +5738,6 @@
           12.38,
           11.6,
           8.79
-        ],
-        "busiest": [
-          "NewsToday2 28.7%",
-          "SystemUIServer 25.3%",
-          "(node) 8.5%",
-          "WindowServer 7.1%",
-          "iTerm2 6.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7258,13 +5765,6 @@
           11.6,
           8.79
         ],
-        "busiest": [
-          "NewsToday2 15.1%",
-          "SystemUIServer 11.6%",
-          "iTerm2 7.8%",
-          "WindowServer 7.5%",
-          "mds_stores 5.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7290,13 +5790,6 @@
           12.38,
           11.6,
           8.79
-        ],
-        "busiest": [
-          "WindowServer 7.2%",
-          "iTerm2 6.3%",
-          "Codex (Renderer) 4.1%",
-          "NewsToday2 3.6%",
-          "Codex (Service) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7324,13 +5817,6 @@
           11.6,
           8.79
         ],
-        "busiest": [
-          "SystemUIServer 15.2%",
-          "backupd 12.4%",
-          "WindowServer 6.9%",
-          "diskimagesiod 5.5%",
-          "iTerm2 5.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7356,13 +5842,6 @@
           12.38,
           11.6,
           8.79
-        ],
-        "busiest": [
-          "WindowServer 13.2%",
-          "Codex (Service) 10.3%",
-          "iTerm2 9.9%",
-          "Codex (Renderer) 6.4%",
-          "fseventsd 3.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7391,13 +5870,6 @@
           11.6,
           8.79
         ],
-        "busiest": [
-          "WindowServer 8.9%",
-          "Codex (Service) 5.5%",
-          "Codex (Renderer) 4.6%",
-          "iTerm2 3.4%",
-          "fseventsd 2.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7425,13 +5897,6 @@
           11.66,
           8.85
         ],
-        "busiest": [
-          "Codex (Renderer) 25.3%",
-          "ArqAgent 15.7%",
-          "WindowServer 8.4%",
-          "Codex (Service) 6.7%",
-          "fseventsd 4.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7457,13 +5922,6 @@
           12.53,
           11.66,
           8.85
-        ],
-        "busiest": [
-          "WindowServer 6.8%",
-          "iTerm2 4.9%",
-          "Codex (Renderer) 4.2%",
-          "Codex (Service) 3.3%",
-          "backupd 1.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7492,13 +5950,6 @@
           11.55,
           8.82
         ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "iTerm2 3.6%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.4%",
-          "claude 1.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7525,13 +5976,6 @@
           11.93,
           11.55,
           8.82
-        ],
-        "busiest": [
-          "npm exec chrome-devtools-mcp@latest 16.2%",
-          "WindowServer 6.4%",
-          "fseventsd 4%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7561,13 +6005,6 @@
           11.55,
           8.82
         ],
-        "busiest": [
-          "Code Helper (Renderer) 17.3%",
-          "backupd 16.3%",
-          "SystemUIServer 15.4%",
-          "(node) 12.2%",
-          "WindowServer 8.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7594,13 +6031,6 @@
           12.53,
           11.7,
           8.93
-        ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "fseventsd 4.3%",
-          "Codex (Renderer) 4%",
-          "Codex (Service) 3.4%",
-          "iTerm2 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7629,13 +6059,6 @@
           11.58,
           8.9
         ],
-        "busiest": [
-          "plugin-container 58.7%",
-          "WindowServer 9.3%",
-          "Codex (Service) 5.8%",
-          "Codex (Renderer) 5.2%",
-          "iTerm2 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7661,13 +6084,6 @@
           11.84,
           11.58,
           8.9
-        ],
-        "busiest": [
-          "SystemUIServer 14.9%",
-          "backupd 7%",
-          "WindowServer 6.2%",
-          "iTerm2 5.3%",
-          "Codex (Renderer) 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7695,13 +6111,6 @@
           11.3,
           11.47,
           8.87
-        ],
-        "busiest": [
-          "plugin-container 39.4%",
-          "WindowServer 7.6%",
-          "Codex (Renderer) 5%",
-          "iTerm2 4.7%",
-          "Codex (Service) 4.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7731,13 +6140,6 @@
           11.47,
           8.87
         ],
-        "busiest": [
-          "backupd 18.3%",
-          "diskimagesiod 10%",
-          "(node) 8.6%",
-          "WindowServer 7.7%",
-          "iTerm2 6.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7764,13 +6166,6 @@
           12,
           11.62,
           8.97
-        ],
-        "busiest": [
-          "SystemUIServer 15.6%",
-          "fseventsd 15.2%",
-          "WindowServer 11.8%",
-          "Codex (Service) 8.5%",
-          "Codex (Renderer) 7.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7800,13 +6195,6 @@
           11.44,
           8.96
         ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 5%",
-          "backupd 4.9%",
-          "Codex (Renderer) 4.3%",
-          "Codex (Service) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7833,13 +6221,6 @@
           11.71,
           11.58,
           9.05
-        ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 6%",
-          "fseventsd 4.7%",
-          "Codex (Renderer) 4.6%",
-          "Codex (Service) 3.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7868,13 +6249,6 @@
           11.58,
           9.05
         ],
-        "busiest": [
-          "Tower 42.7%",
-          "WindowServer 7.3%",
-          "SystemUIServer 7.3%",
-          "backupd 5.8%",
-          "fseventsd 4.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7900,13 +6274,6 @@
           11.71,
           11.58,
           9.05
-        ],
-        "busiest": [
-          "Tower 55.3%",
-          "(node) 50.8%",
-          "Codex (Renderer) 11.5%",
-          "fseventsd 11.1%",
-          "WindowServer 8.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -7935,13 +6302,6 @@
           11.58,
           9.05
         ],
-        "busiest": [
-          "Tower 26%",
-          "codex 18.1%",
-          "WindowServer 11.1%",
-          "fseventsd 10.7%",
-          "Codex (Renderer) 9.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -7967,13 +6327,6 @@
           11.71,
           11.58,
           9.05
-        ],
-        "busiest": [
-          "claude 45.4%",
-          "claude 38.3%",
-          "WindowServer 6.8%",
-          "Code Helper (Renderer) 6.7%",
-          "mdworker_shared 5.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8001,13 +6354,6 @@
           11.58,
           9.05
         ],
-        "busiest": [
-          "claude 21.7%",
-          "mdworker_shared 19.5%",
-          "mdworker_shared 18.8%",
-          "mdworker_shared 18.4%",
-          "claude 15.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8033,13 +6379,6 @@
           11.17,
           11.47,
           9.02
-        ],
-        "busiest": [
-          "SystemUIServer 12.9%",
-          "claude 12.7%",
-          "mdworker_shared 11.2%",
-          "mdworker_shared 11.1%",
-          "mdworker_shared 10.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8068,13 +6407,6 @@
           11.47,
           9.02
         ],
-        "busiest": [
-          "mds_stores 26.1%",
-          "backupd 15.4%",
-          "mdworker_shared 13.5%",
-          "diskimagesiod 8.8%",
-          "WindowServer 5.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8100,13 +6432,6 @@
           11.17,
           11.47,
           9.02
-        ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "iTerm2 4.8%",
-          "Codex (Renderer) 4.3%",
-          "Codex (Service) 3.1%",
-          "backupd 1.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8134,13 +6459,6 @@
           11.47,
           9.02
         ],
-        "busiest": [
-          "WindowServer 5.8%",
-          "Codex (Renderer) 4.8%",
-          "Codex (Service) 3.3%",
-          "iTerm2 2.6%",
-          "codex 1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8166,13 +6484,6 @@
           11.17,
           11.47,
           9.02
-        ],
-        "busiest": [
-          "iTerm2 8.6%",
-          "WindowServer 6.4%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.3%",
-          "codex 1.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8200,13 +6511,6 @@
           11.17,
           11.47,
           9.02
-        ],
-        "busiest": [
-          "SystemUIServer 14.5%",
-          "backupd 9%",
-          "WindowServer 6%",
-          "iTerm2 4.1%",
-          "Codex (Service) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8236,13 +6540,6 @@
           11.47,
           9.02
         ],
-        "busiest": [
-          "backupd 19%",
-          "WindowServer 9.6%",
-          "Codex (Service) 8%",
-          "diskimagesiod 7.6%",
-          "Codex (Renderer) 5.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8269,13 +6566,6 @@
           11.17,
           11.47,
           9.02
-        ],
-        "busiest": [
-          "backupd 16.6%",
-          "WindowServer 6.9%",
-          "iTerm2 6.5%",
-          "diskimagesiod 4.7%",
-          "Codex (Renderer) 4.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8304,13 +6594,6 @@
           11.47,
           9.02
         ],
-        "busiest": [
-          "backupd 19.5%",
-          "diskimagesiod 8.7%",
-          "WindowServer 6.2%",
-          "Codex (Renderer) 4%",
-          "Codex (Service) 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8336,13 +6619,6 @@
           11.17,
           11.47,
           9.02
-        ],
-        "busiest": [
-          "backupd 23.7%",
-          "SystemUIServer 9%",
-          "diskimagesiod 6.3%",
-          "WindowServer 6%",
-          "fseventsd 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8372,13 +6648,6 @@
           11.33,
           8.99
         ],
-        "busiest": [
-          "backupd 21.6%",
-          "diskimagesiod 11.3%",
-          "WindowServer 6.5%",
-          "iTerm2 5.1%",
-          "Codex (Service) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8406,13 +6675,6 @@
           11.33,
           8.99
         ],
-        "busiest": [
-          "com.docker.backend 17.9%",
-          "backupd 13.1%",
-          "codex 12.9%",
-          "WindowServer 9.5%",
-          "Codex (Renderer) 8.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8438,13 +6700,6 @@
           10.52,
           11.33,
           8.99
-        ],
-        "busiest": [
-          "WindowServer 11.2%",
-          "Codex (Service) 9.3%",
-          "iTerm2 5.3%",
-          "Codex (Renderer) 5.3%",
-          "com.docker.backend 4.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8473,13 +6728,6 @@
           11.33,
           8.99
         ],
-        "busiest": [
-          "mdworker_shared 14.4%",
-          "WindowServer 9.6%",
-          "Codex (Renderer) 7.1%",
-          "Codex (Service) 6.9%",
-          "iTerm2 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8507,13 +6755,6 @@
           11.33,
           8.99
         ],
-        "busiest": [
-          "WindowServer 6.9%",
-          "ContinuityCaptureAgent 6.2%",
-          "mdworker_shared 5.6%",
-          "Codex (Renderer) 4.6%",
-          "iTerm2 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8540,13 +6781,6 @@
           10.52,
           11.33,
           8.99
-        ],
-        "busiest": [
-          "WindowServer 7.2%",
-          "iTerm2 5.6%",
-          "Codex (Renderer) 3.4%",
-          "Codex (Service) 3.3%",
-          "claude 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8576,13 +6810,6 @@
           11.33,
           8.99
         ],
-        "busiest": [
-          "WindowServer 5.6%",
-          "Codex (Renderer) 3.4%",
-          "Codex (Service) 3.2%",
-          "iTerm2 2.3%",
-          "SystemUIServer 2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8609,13 +6836,6 @@
           10.07,
           11.22,
           8.97
-        ],
-        "busiest": [
-          "WindowServer 10.8%",
-          "Codex (Service) 8.2%",
-          "Codex (Renderer) 5.1%",
-          "iTerm2 2.4%",
-          "bluetoothd 1.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8644,13 +6864,6 @@
           11.22,
           8.97
         ],
-        "busiest": [
-          "SystemUIServer 36.3%",
-          "parsec-fbf 29.2%",
-          "mdworker_shared 17.6%",
-          "mdworker_shared 17.3%",
-          "mdworker_shared 17%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8678,13 +6891,6 @@
           11.22,
           8.97
         ],
-        "busiest": [
-          "parsec-fbf 36.2%",
-          "plugin-container 24.1%",
-          "SystemUIServer 18%",
-          "mds 7.5%",
-          "WindowServer 7.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8710,13 +6916,6 @@
           10.07,
           11.22,
           8.97
-        ],
-        "busiest": [
-          "WindowServer 7%",
-          "iTerm2 7%",
-          "Codex (Renderer) 4.6%",
-          "dataaccessd 4.4%",
-          "Codex (Service) 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8744,13 +6943,6 @@
           11.22,
           8.97
         ],
-        "busiest": [
-          "WindowServer 10.8%",
-          "Codex (Service) 8.2%",
-          "iTerm2 5.7%",
-          "Codex (Renderer) 5.1%",
-          "claude 3.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8776,13 +6968,6 @@
           9.67,
           11.12,
           8.94
-        ],
-        "busiest": [
-          "SystemUIServer 15.5%",
-          "WindowServer 13.4%",
-          "backupd 10.1%",
-          "Codex (Service) 10.1%",
-          "Codex (Renderer) 5.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8810,13 +6995,6 @@
           11.12,
           8.94
         ],
-        "busiest": [
-          "plugin-container 28.7%",
-          "SystemUIServer 16.7%",
-          "ContinuityCaptureAgent 8.2%",
-          "WindowServer 8%",
-          "iTerm2 7.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8843,13 +7021,6 @@
           11.12,
           8.94
         ],
-        "busiest": [
-          "WindowServer 6.8%",
-          "iTerm2 5.1%",
-          "Codex (Renderer) 4%",
-          "Codex (Service) 3.4%",
-          "plugin-container 2.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8875,13 +7046,6 @@
           9.67,
           11.12,
           8.94
-        ],
-        "busiest": [
-          "WindowServer 6.9%",
-          "backupd 4.3%",
-          "iTerm2 3.8%",
-          "SystemUIServer 3.5%",
-          "Codex (Service) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8910,13 +7074,6 @@
           11.12,
           8.94
         ],
-        "busiest": [
-          "Codex (Renderer) 7.3%",
-          "launchd 7%",
-          "WindowServer 6.6%",
-          "iTerm2 4.8%",
-          "Codex (Service) 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -8942,13 +7099,6 @@
           10.31,
           11.21,
           9
-        ],
-        "busiest": [
-          "SystemUIServer 14.4%",
-          "backupd 9.7%",
-          "WindowServer 5.8%",
-          "fseventsd 5.1%",
-          "iTerm2 4.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -8976,13 +7126,6 @@
           10.31,
           11.21,
           9
-        ],
-        "busiest": [
-          "claude 16.3%",
-          "iTerm2 8.2%",
-          "WindowServer 8.1%",
-          "backupd 6.1%",
-          "Codex (Renderer) 4.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9012,13 +7155,6 @@
           11.21,
           9
         ],
-        "busiest": [
-          "firefox 54%",
-          "WindowServer 8.1%",
-          "Codex (Service) 6.6%",
-          "Codex (Renderer) 5.8%",
-          "iTerm2 4.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9046,13 +7182,6 @@
           11.34,
           9.09
         ],
-        "busiest": [
-          "WindowServer 6.3%",
-          "iTerm2 5.2%",
-          "fseventsd 4.6%",
-          "Codex (Service) 3.3%",
-          "Codex (Renderer) 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9078,13 +7207,6 @@
           11.05,
           11.34,
           9.09
-        ],
-        "busiest": [
-          "iTerm2 7%",
-          "WindowServer 6.9%",
-          "Codex (Renderer) 4.3%",
-          "Codex (Service) 3.6%",
-          "bluetoothd 2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9112,13 +7234,6 @@
           10.73,
           11.27,
           9.07
-        ],
-        "busiest": [
-          "mdworker_shared 18.3%",
-          "WindowServer 10.4%",
-          "Codex (Service) 9.7%",
-          "Codex (Renderer) 5.6%",
-          "iTerm2 2.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9148,13 +7263,6 @@
           11.27,
           9.07
         ],
-        "busiest": [
-          "mdworker_shared 7.7%",
-          "WindowServer 6.4%",
-          "iTerm2 4.4%",
-          "mds 4.3%",
-          "mds_stores 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9181,13 +7289,6 @@
           12.69,
           11.68,
           9.26
-        ],
-        "busiest": [
-          "backupd 18.1%",
-          "diskimagesiod 10.4%",
-          "fseventsd 6.4%",
-          "WindowServer 6.2%",
-          "iTerm2 4.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9216,13 +7317,6 @@
           11.68,
           9.26
         ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "fseventsd 4.1%",
-          "Codex (Renderer) 4.1%",
-          "claude 3.9%",
-          "iTerm2 3.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9250,13 +7344,6 @@
           11.68,
           9.26
         ],
-        "busiest": [
-          "Tower 37.6%",
-          "WindowServer 12.2%",
-          "Codex (Service) 9.1%",
-          "iTerm2 5.5%",
-          "Codex (Renderer) 5.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9282,13 +7369,6 @@
           12.15,
           11.59,
           9.24
-        ],
-        "busiest": [
-          "com.docker.backend 24.3%",
-          "backupd 17.5%",
-          "diskimagesiod 9.5%",
-          "WindowServer 6.4%",
-          "iTerm2 6.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9318,13 +7398,6 @@
           11.39,
           9.21
         ],
-        "busiest": [
-          "plugin-container 32%",
-          "backupd 14.1%",
-          "WindowServer 10.4%",
-          "Codex (Service) 7.3%",
-          "iTerm2 6.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9351,13 +7424,6 @@
           11.35,
           11.45,
           9.27
-        ],
-        "busiest": [
-          "fseventsd 14.2%",
-          "spindump 11.7%",
-          "iTerm2 8.8%",
-          "SystemUIServer 8.4%",
-          "WindowServer 8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9386,13 +7452,6 @@
           11.45,
           9.27
         ],
-        "busiest": [
-          "fseventsd 8.6%",
-          "WindowServer 6.7%",
-          "iTerm2 5.4%",
-          "Codex (Service) 3.5%",
-          "ArqAgent 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9420,13 +7479,6 @@
           11.45,
           9.27
         ],
-        "busiest": [
-          "WindowServer 6%",
-          "fseventsd 4.8%",
-          "Codex (Renderer) 4%",
-          "Codex (Service) 3.8%",
-          "iTerm2 3.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9452,13 +7504,6 @@
           10.6,
           11.29,
           9.23
-        ],
-        "busiest": [
-          "Python 24.5%",
-          "firefox 23.6%",
-          "ContinuityCaptureAgent 10.6%",
-          "WindowServer 9.1%",
-          "codex 8.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9486,13 +7531,6 @@
           11.29,
           9.23
         ],
-        "busiest": [
-          "backupd 17.9%",
-          "SystemUIServer 14.3%",
-          "WindowServer 12.5%",
-          "ContinuityCaptureAgent 10.5%",
-          "firefox 10.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9519,13 +7557,6 @@
           11.29,
           9.23
         ],
-        "busiest": [
-          "plugin-container 80.5%",
-          "backupd 16.7%",
-          "WindowServer 12.3%",
-          "Codex (Service) 9.1%",
-          "diskimagesiod 6.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9551,13 +7582,6 @@
           10.6,
           11.29,
           9.23
-        ],
-        "busiest": [
-          "plugin-container 25.9%",
-          "plugin-container 25.4%",
-          "backupd 10.4%",
-          "iTerm2 8.4%",
-          "WindowServer 8.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9586,13 +7610,6 @@
           11.29,
           9.23
         ],
-        "busiest": [
-          "plugin-container 9.9%",
-          "plugin-container 9.8%",
-          "WindowServer 7.4%",
-          "backupd 4%",
-          "Codex (Renderer) 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9618,13 +7635,6 @@
           10.6,
           11.29,
           9.23
-        ],
-        "busiest": [
-          "Code 11.5%",
-          "iTerm2 7.4%",
-          "WindowServer 6.3%",
-          "Codex (Service) 3.2%",
-          "Codex (Renderer) 3.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9653,13 +7663,6 @@
           11.29,
           9.23
         ],
-        "busiest": [
-          "iTerm2 7.1%",
-          "WindowServer 6.4%",
-          "Codex (Renderer) 4.7%",
-          "Codex (Service) 3.4%",
-          "Code 2.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9685,13 +7688,6 @@
           10.6,
           11.29,
           9.23
-        ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 3.7%",
-          "Codex (Renderer) 3.4%",
-          "Codex (Service) 3.1%",
-          "bluetoothd 2.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9719,13 +7715,6 @@
           11.29,
           9.23
         ],
-        "busiest": [
-          "WindowServer 5.9%",
-          "Codex (Renderer) 3.7%",
-          "Codex (Service) 3.1%",
-          "iTerm2 2.6%",
-          "bluetoothd 1.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9752,13 +7741,6 @@
           10.6,
           11.29,
           9.23
-        ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.4%",
-          "iTerm2 1.6%",
-          "bluetoothd 1.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9788,13 +7770,6 @@
           11.29,
           9.23
         ],
-        "busiest": [
-          "WindowServer 9.6%",
-          "iTerm2 7.8%",
-          "Codex (Service) 7.7%",
-          "Codex (Renderer) 4.7%",
-          "bluetoothd 2.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9820,13 +7795,6 @@
           10.07,
           11.17,
           9.2
-        ],
-        "busiest": [
-          "plugin-container 15.7%",
-          "WindowServer 6.8%",
-          "Codex (Service) 3.7%",
-          "Codex (Renderer) 3.7%",
-          "iTerm2 3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9855,13 +7823,6 @@
           11.17,
           9.2
         ],
-        "busiest": [
-          "SystemUIServer 13.4%",
-          "WindowServer 5.5%",
-          "plugin-container 4.1%",
-          "iTerm2 3.4%",
-          "Codex (Renderer) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9889,13 +7850,6 @@
           11.17,
           9.2
         ],
-        "busiest": [
-          "WindowServer 6.3%",
-          "iTerm2 3.3%",
-          "SystemUIServer 3.2%",
-          "Codex (Service) 3.1%",
-          "Codex (Renderer) 2.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9921,13 +7875,6 @@
           10.07,
           11.17,
           9.2
-        ],
-        "busiest": [
-          "WindowServer 6.3%",
-          "iTerm2 5.4%",
-          "Codex (Renderer) 3.8%",
-          "fseventsd 3.4%",
-          "Codex (Service) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -9956,13 +7903,6 @@
           11.17,
           9.2
         ],
-        "busiest": [
-          "WindowServer 5.6%",
-          "iTerm2 5.6%",
-          "Codex (Renderer) 4.7%",
-          "Codex (Service) 3.3%",
-          "bluetoothd 1.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -9989,13 +7929,6 @@
           10.07,
           11.17,
           9.2
-        ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "fseventsd 3.3%",
-          "Codex (Renderer) 3.3%",
-          "Codex (Service) 3.2%",
-          "iTerm2 3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10025,13 +7958,6 @@
           11.17,
           9.2
         ],
-        "busiest": [
-          "WindowServer 5.5%",
-          "iTerm2 3.8%",
-          "Codex (Renderer) 3.8%",
-          "Codex (Service) 3.1%",
-          "Code Helper (Plugin) 2.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10059,13 +7985,6 @@
           11.17,
           9.2
         ],
-        "busiest": [
-          "WindowServer 7.9%",
-          "Codex (Renderer) 7.3%",
-          "Codex (Service) 7%",
-          "iTerm2 4.4%",
-          "bluetoothd 2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10092,13 +8011,6 @@
           10.07,
           11.17,
           9.2
-        ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "ContinuityCaptureAgent 6.2%",
-          "iTerm2 4.6%",
-          "Codex (Renderer) 4.1%",
-          "Codex (Service) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10128,13 +8040,6 @@
           11.07,
           9.17
         ],
-        "busiest": [
-          "WindowServer 5.6%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.3%",
-          "iTerm2 2.9%",
-          "ContinuityCaptureAgent 2.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10161,13 +8066,6 @@
           9.66,
           11.07,
           9.17
-        ],
-        "busiest": [
-          "WindowServer 8.9%",
-          "Codex (Service) 7.1%",
-          "Codex (Renderer) 5.4%",
-          "iTerm2 3.9%",
-          "bluetoothd 1.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10196,13 +8094,6 @@
           11.07,
           9.17
         ],
-        "busiest": [
-          "Spotify 22.6%",
-          "WindowServer 11.7%",
-          "Codex (Service) 9.5%",
-          "Codex (Renderer) 6.1%",
-          "iTerm2 4.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10228,13 +8119,6 @@
           9.66,
           11.07,
           9.17
-        ],
-        "busiest": [
-          "WindowServer 11%",
-          "Spotify 10.5%",
-          "Codex (Service) 8.1%",
-          "Codex (Renderer) 5.2%",
-          "iTerm2 2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10262,13 +8146,6 @@
           11.07,
           9.17
         ],
-        "busiest": [
-          "SystemUIServer 9.2%",
-          "WindowServer 9%",
-          "iTerm2 7.1%",
-          "Codex (Service) 4.9%",
-          "Codex (Renderer) 4.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10294,13 +8171,6 @@
           9.66,
           11.07,
           9.17
-        ],
-        "busiest": [
-          "SystemUIServer 18.9%",
-          "WindowServer 6.3%",
-          "ContinuityCaptureAgent 4.5%",
-          "Codex (Service) 3.7%",
-          "Codex (Renderer) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10329,13 +8199,6 @@
           10.95,
           9.14
         ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "Spotify 4.8%",
-          "iTerm2 4.4%",
-          "Codex (Renderer) 3.4%",
-          "Codex (Service) 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10362,13 +8225,6 @@
           10.95,
           9.14
         ],
-        "busiest": [
-          "WindowServer 9%",
-          "Codex (Service) 6%",
-          "Codex (Renderer) 5.4%",
-          "iTerm2 4.5%",
-          "ContinuityCaptureAgent 2.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10394,13 +8250,6 @@
           9.21,
           10.95,
           9.14
-        ],
-        "busiest": [
-          "WindowServer 7.7%",
-          "iTerm2 6.2%",
-          "Codex (Renderer) 5%",
-          "Codex (Service) 4.7%",
-          "ArqAgent 1.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10429,13 +8278,6 @@
           10.95,
           9.14
         ],
-        "busiest": [
-          "backupd 19.5%",
-          "diskimagesiod 14.1%",
-          "WindowServer 7.4%",
-          "iTerm2 4.8%",
-          "Codex (Service) 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10461,13 +8303,6 @@
           9.53,
           10.97,
           9.17
-        ],
-        "busiest": [
-          "backupd 9.3%",
-          "WindowServer 5.9%",
-          "iTerm2 3.9%",
-          "diskimagesiod 3.8%",
-          "Codex (Renderer) 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10495,13 +8330,6 @@
           10.97,
           9.17
         ],
-        "busiest": [
-          "WindowServer 7.9%",
-          "com.docker.backend 7.2%",
-          "iTerm2 4.8%",
-          "Codex (Service) 3.6%",
-          "bluetoothd 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10527,13 +8355,6 @@
           9.53,
           10.97,
           9.17
-        ],
-        "busiest": [
-          "(git) 37.6%",
-          "fseventsd 19.6%",
-          "Python 14.4%",
-          "tracd 11.4%",
-          "WindowServer 6.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10562,13 +8383,6 @@
           10.83,
           9.13
         ],
-        "busiest": [
-          "WindowServer 5.8%",
-          "Codex (Renderer) 3.7%",
-          "SystemUIServer 3.6%",
-          "Codex (Service) 3.4%",
-          "backupd 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10596,13 +8410,6 @@
           10.83,
           9.13
         ],
-        "busiest": [
-          "iTerm2 6.3%",
-          "WindowServer 6.2%",
-          "Codex (Renderer) 4.7%",
-          "SystemUIServer 3.6%",
-          "Codex (Service) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10629,13 +8436,6 @@
           9.01,
           10.83,
           9.13
-        ],
-        "busiest": [
-          "Codex (Service) 11.6%",
-          "WindowServer 11.4%",
-          "Codex (Renderer) 5.1%",
-          "iTerm2 2.8%",
-          "ArqAgent 1.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10665,13 +8465,6 @@
           10.83,
           9.13
         ],
-        "busiest": [
-          "SystemUIServer 9.1%",
-          "WindowServer 6.2%",
-          "backupd 5.6%",
-          "iTerm2 5.1%",
-          "Codex (Renderer) 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10700,13 +8493,6 @@
           11.25,
           9.31
         ],
-        "busiest": [
-          "rustc 95.4%",
-          "WindowServer 6.7%",
-          "iTerm2 5.3%",
-          "fseventsd 4.8%",
-          "Codex (Renderer) 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10732,13 +8518,6 @@
           12.38,
           11.48,
           9.42
-        ],
-        "busiest": [
-          "backupd 18.6%",
-          "diskimagesiod 10.8%",
-          "fseventsd 5.7%",
-          "WindowServer 5.7%",
-          "Codex (Renderer) 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10767,13 +8546,6 @@
           11.34,
           9.39
         ],
-        "busiest": [
-          "WindowServer 7.5%",
-          "Codex (Renderer) 6.1%",
-          "backupd 5.4%",
-          "diskimagesiod 4.7%",
-          "iTerm2 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10801,13 +8573,6 @@
           11.34,
           9.39
         ],
-        "busiest": [
-          "WindowServer 7.3%",
-          "iTerm2 6.4%",
-          "Codex (Service) 3.5%",
-          "Codex (Renderer) 3.3%",
-          "fseventsd 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10834,13 +8599,6 @@
           11.63,
           11.34,
           9.39
-        ],
-        "busiest": [
-          "SystemUIServer 14.9%",
-          "Python 12.1%",
-          "gate 10.8%",
-          "backupd 8.3%",
-          "WindowServer 7.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10870,13 +8628,6 @@
           11.46,
           9.46
         ],
-        "busiest": [
-          "Codex (Renderer) 6.5%",
-          "WindowServer 5.9%",
-          "fseventsd 4.4%",
-          "Codex (Service) 3.5%",
-          "iTerm2 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10903,13 +8654,6 @@
           12.19,
           11.53,
           9.52
-        ],
-        "busiest": [
-          "fseventsd 18.8%",
-          "gate 11.7%",
-          "tccd 8.9%",
-          "syspolicyd 8.9%",
-          "trustd 8.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -10938,13 +8682,6 @@
           11.53,
           9.52
         ],
-        "busiest": [
-          "codex 7%",
-          "WindowServer 6.2%",
-          "Codex (Renderer) 5.2%",
-          "iTerm2 5%",
-          "Codex (Service) 3.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -10971,13 +8708,6 @@
           11.62,
           11.42,
           9.49
-        ],
-        "busiest": [
-          "SystemUIServer 9.7%",
-          "WindowServer 6.2%",
-          "fseventsd 4.7%",
-          "Codex (Service) 3.5%",
-          "Codex (Renderer) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11006,13 +8736,6 @@
           11.42,
           9.49
         ],
-        "busiest": [
-          "SystemUIServer 8.8%",
-          "WindowServer 7.4%",
-          "tracd 6.9%",
-          "iTerm2 5.5%",
-          "Codex (Service) 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11038,13 +8761,6 @@
           11.62,
           11.42,
           9.49
-        ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "iTerm2 5.8%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.2%",
-          "ContinuityCaptureAgent 2.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11072,13 +8788,6 @@
           11.42,
           9.49
         ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "iTerm2 4.6%",
-          "Codex (Service) 3.3%",
-          "Codex (Renderer) 3.2%",
-          "ArqAgent 0.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11104,13 +8813,6 @@
           11.62,
           11.42,
           9.49
-        ],
-        "busiest": [
-          "Spotify 32.4%",
-          "SystemUIServer 14.2%",
-          "WindowServer 7.2%",
-          "iTerm2 6.7%",
-          "Codex (Renderer) 4.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11138,13 +8840,6 @@
           11.42,
           9.49
         ],
-        "busiest": [
-          "backupd 19.9%",
-          "Spotify 12.6%",
-          "SystemUIServer 10.4%",
-          "WindowServer 5.9%",
-          "diskimagesiod 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11170,13 +8865,6 @@
           11.62,
           11.42,
           9.49
-        ],
-        "busiest": [
-          "backupd 7.7%",
-          "WindowServer 7.4%",
-          "iTerm2 5.7%",
-          "diskimagesiod 5.5%",
-          "SystemUIServer 4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11205,13 +8893,6 @@
           11.42,
           9.49
         ],
-        "busiest": [
-          "iTerm2 7.3%",
-          "WindowServer 7%",
-          "Codex (Renderer) 4.5%",
-          "Codex (Service) 3.2%",
-          "claude 3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11238,13 +8919,6 @@
           11.42,
           9.49
         ],
-        "busiest": [
-          "backupd 14.1%",
-          "WindowServer 6.4%",
-          "diskimagesiod 6.2%",
-          "iTerm2 3.8%",
-          "Codex (Renderer) 3.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11270,13 +8944,6 @@
           11.62,
           11.42,
           9.49
-        ],
-        "busiest": [
-          "backupd 20.8%",
-          "diskimagesiod 14.7%",
-          "WindowServer 9.3%",
-          "Codex (Service) 7%",
-          "Codex (Renderer) 6.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11305,13 +8972,6 @@
           11.42,
           9.49
         ],
-        "busiest": [
-          "backupd 26.3%",
-          "SystemUIServer 13.3%",
-          "diskimagesiod 12.4%",
-          "Codex (Service) 9.4%",
-          "WindowServer 9.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11338,13 +8998,6 @@
           11.17,
           11.33,
           9.47
-        ],
-        "busiest": [
-          "plugin-container 48.3%",
-          "backupd 22.2%",
-          "diskimagesiod 12.9%",
-          "claude 9%",
-          "WindowServer 7.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11374,13 +9027,6 @@
           11.33,
           9.47
         ],
-        "busiest": [
-          "backupd 23.7%",
-          "plugin-container 11%",
-          "diskimagesiod 8.4%",
-          "WindowServer 6.7%",
-          "Codex (Renderer) 5.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11406,13 +9052,6 @@
           11.17,
           11.33,
           9.47
-        ],
-        "busiest": [
-          "backupd 20.9%",
-          "SystemUIServer 9.5%",
-          "WindowServer 6.2%",
-          "iTerm2 5.5%",
-          "Codex (Renderer) 4.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11440,13 +9079,6 @@
           11.17,
           11.33,
           9.47
-        ],
-        "busiest": [
-          "backupd 10.9%",
-          "WindowServer 6.7%",
-          "iTerm2 6.6%",
-          "Codex (Service) 3.3%",
-          "Codex (Renderer) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11476,13 +9108,6 @@
           11.33,
           9.47
         ],
-        "busiest": [
-          "WindowServer 5.4%",
-          "Codex (Renderer) 4%",
-          "iTerm2 3.8%",
-          "Codex (Service) 3.4%",
-          "backupd 2.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11509,13 +9134,6 @@
           11.17,
           11.33,
           9.47
-        ],
-        "busiest": [
-          "backupd 20.1%",
-          "diskimagesiod 11.9%",
-          "WindowServer 7.9%",
-          "Codex (Service) 5.5%",
-          "Codex (Renderer) 5.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11544,13 +9162,6 @@
           11.33,
           9.47
         ],
-        "busiest": [
-          "plugin-container 55.2%",
-          "backupd 29.2%",
-          "diskimagesiod 12.8%",
-          "WindowServer 8.8%",
-          "Codex (Renderer) 8.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11578,13 +9189,6 @@
           11.33,
           9.47
         ],
-        "busiest": [
-          "backupd 9.7%",
-          "plugin-container 8.3%",
-          "WindowServer 6.2%",
-          "SystemUIServer 5.8%",
-          "iTerm2 5.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11610,13 +9214,6 @@
           10.51,
           11.19,
           9.44
-        ],
-        "busiest": [
-          "WindowServer 6.9%",
-          "iTerm2 5.4%",
-          "backupd 3.7%",
-          "Codex (Service) 3.3%",
-          "Codex (Renderer) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11644,13 +9241,6 @@
           10.51,
           11.19,
           9.44
-        ],
-        "busiest": [
-          "WindowServer 5.4%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.3%",
-          "iTerm2 2.8%",
-          "bluetoothd 1.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11680,13 +9270,6 @@
           11.19,
           9.44
         ],
-        "busiest": [
-          "iTerm2 7%",
-          "WindowServer 6.1%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.1%",
-          "claude 1.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11713,13 +9296,6 @@
           10.51,
           11.19,
           9.44
-        ],
-        "busiest": [
-          "WindowServer 6.7%",
-          "iTerm2 4.8%",
-          "Codex (Service) 4.5%",
-          "Codex (Renderer) 4.4%",
-          "claude 1.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11748,13 +9324,6 @@
           11.19,
           9.44
         ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "iTerm2 5.9%",
-          "Codex (Renderer) 5.9%",
-          "Codex (Service) 4.1%",
-          "bluetoothd 1.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11780,13 +9349,6 @@
           10.51,
           11.19,
           9.44
-        ],
-        "busiest": [
-          "SystemUIServer 8.3%",
-          "WindowServer 5.3%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.3%",
-          "fseventsd 2.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11814,13 +9376,6 @@
           11.04,
           9.39
         ],
-        "busiest": [
-          "WindowServer 7.2%",
-          "iTerm2 6.1%",
-          "Codex (Renderer) 4.6%",
-          "Codex (Service) 3.3%",
-          "bluetoothd 1.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11847,13 +9402,6 @@
           11.04,
           9.39
         ],
-        "busiest": [
-          "codex 19.6%",
-          "Codex (Renderer) 12.3%",
-          "iTerm2 7.4%",
-          "WindowServer 6.1%",
-          "SystemUIServer 4.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11879,13 +9427,6 @@
           9.83,
           11.04,
           9.39
-        ],
-        "busiest": [
-          "WindowServer 11.8%",
-          "Codex (Service) 8.7%",
-          "Codex (Renderer) 7.3%",
-          "codex 5.7%",
-          "iTerm2 5.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -11914,13 +9455,6 @@
           11.04,
           9.39
         ],
-        "busiest": [
-          "iTerm2 10.5%",
-          "WindowServer 9.2%",
-          "Codex (Service) 7.1%",
-          "Codex (Renderer) 6.1%",
-          "codex 2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11947,13 +9481,6 @@
           11.04,
           9.39
         ],
-        "busiest": [
-          "SystemUIServer 7.8%",
-          "backupd 6.4%",
-          "WindowServer 6.3%",
-          "diskimagesiod 4.4%",
-          "ContinuityCaptureAgent 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -11979,13 +9506,6 @@
           9.83,
           11.04,
           9.39
-        ],
-        "busiest": [
-          "backupd 8.1%",
-          "WindowServer 7.3%",
-          "iTerm2 5.9%",
-          "diskimagesiod 5.2%",
-          "Codex (Renderer) 4.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12014,13 +9534,6 @@
           10.9,
           9.35
         ],
-        "busiest": [
-          "WindowServer 7.2%",
-          "iTerm2 5%",
-          "Codex (Service) 3.4%",
-          "Codex (Renderer) 3%",
-          "fseventsd 2.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12047,13 +9560,6 @@
           10.77,
           9.32
         ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "Codex (Renderer) 4.1%",
-          "iTerm2 3.8%",
-          "Codex (Service) 3.1%",
-          "Code Helper (Plugin) 2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12079,13 +9585,6 @@
           8.78,
           10.77,
           9.32
-        ],
-        "busiest": [
-          "Code Helper (Renderer) 31.1%",
-          "SystemUIServer 11.3%",
-          "WindowServer 8.5%",
-          "iTerm2 8%",
-          "diskimagesiod 7.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12114,13 +9613,6 @@
           10.74,
           9.31
         ],
-        "busiest": [
-          "WeatherWidget 9.6%",
-          "WindowServer 6.4%",
-          "iTerm2 5.5%",
-          "Codex (Renderer) 4.5%",
-          "runningboardd 4.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12148,13 +9640,6 @@
           10.74,
           9.31
         ],
-        "busiest": [
-          "Spotify 28.6%",
-          "backupd 10.7%",
-          "WindowServer 9.2%",
-          "diskimagesiod 9.2%",
-          "Codex (Renderer) 8.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12181,13 +9666,6 @@
           8.8,
           10.74,
           9.31
-        ],
-        "busiest": [
-          "backupd 25.4%",
-          "diskimagesiod 21.4%",
-          "WindowServer 6.5%",
-          "Codex (Renderer) 6.1%",
-          "SystemUIServer 5.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12217,13 +9695,6 @@
           10.66,
           9.29
         ],
-        "busiest": [
-          "SystemUIServer 22.5%",
-          "backupd 19.4%",
-          "diskimagesiod 11.7%",
-          "WindowServer 6.8%",
-          "iTerm2 5.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12249,13 +9720,6 @@
           9.6,
           10.81,
           9.37
-        ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 5.1%",
-          "fseventsd 4.3%",
-          "Codex (Service) 3.2%",
-          "Codex (Renderer) 3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12285,13 +9749,6 @@
           10.81,
           9.37
         ],
-        "busiest": [
-          "WindowServer 6%",
-          "ContinuityCaptureAgent 3.9%",
-          "Codex (Service) 3.7%",
-          "Codex (Renderer) 3.5%",
-          "iTerm2 3.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12318,13 +9775,6 @@
           11.15,
           11.1,
           9.5
-        ],
-        "busiest": [
-          "backupd 9.4%",
-          "WindowServer 5.9%",
-          "Codex (Renderer) 5%",
-          "Codex (Service) 4.2%",
-          "iTerm2 4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12353,13 +9803,6 @@
           11.1,
           9.5
         ],
-        "busiest": [
-          "backupd 12.2%",
-          "diskimagesiod 8.4%",
-          "WindowServer 7.5%",
-          "iTerm2 6.1%",
-          "SystemUIServer 5.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12386,13 +9829,6 @@
           11.15,
           11.1,
           9.5
-        ],
-        "busiest": [
-          "plugin-container 41.2%",
-          "Codex (Renderer) 17.2%",
-          "codex 9.5%",
-          "WindowServer 8.6%",
-          "Codex (Service) 7.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12422,13 +9858,6 @@
           11.03,
           9.5
         ],
-        "busiest": [
-          "WindowServer 7.8%",
-          "iTerm2 6%",
-          "Codex (Service) 6%",
-          "Codex (Renderer) 5.3%",
-          "fseventsd 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12455,13 +9884,6 @@
           11.74,
           11.24,
           9.6
-        ],
-        "busiest": [
-          "fseventsd 14.4%",
-          "SystemUIServer 14.2%",
-          "WindowServer 11.2%",
-          "Codex (Service) 9.7%",
-          "ArqAgent 5.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12490,13 +9912,6 @@
           11.24,
           9.6
         ],
-        "busiest": [
-          "WindowServer 10.9%",
-          "Codex (Service) 8.1%",
-          "fseventsd 7.6%",
-          "iTerm2 7.5%",
-          "Codex (Renderer) 6.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12523,13 +9938,6 @@
           11.74,
           11.24,
           9.6
-        ],
-        "busiest": [
-          "claude 26.6%",
-          "WindowServer 6.8%",
-          "fseventsd 4.9%",
-          "Codex (Renderer) 4.3%",
-          "Codex (Service) 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12558,13 +9966,6 @@
           11.48,
           9.7
         ],
-        "busiest": [
-          "backupd 23.8%",
-          "diskimagesiod 12.8%",
-          "WindowServer 6.7%",
-          "iTerm2 6%",
-          "Codex (Renderer) 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12590,13 +9991,6 @@
           12.88,
           11.48,
           9.7
-        ],
-        "busiest": [
-          "backupd 19.4%",
-          "diskimagesiod 11.9%",
-          "WindowServer 8.1%",
-          "Codex (Service) 7.5%",
-          "iTerm2 5.3%"
         ],
         "quiet": true,
         "waitedMs": 1
@@ -12624,13 +10018,6 @@
           11.48,
           9.7
         ],
-        "busiest": [
-          "backupd 19.7%",
-          "diskimagesiod 11.9%",
-          "WindowServer 11.3%",
-          "Codex (Service) 9.9%",
-          "Codex (Renderer) 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12656,13 +10043,6 @@
           12.88,
           11.48,
           9.7
-        ],
-        "busiest": [
-          "WindowServer 12.2%",
-          "Codex (Service) 9.8%",
-          "backupd 9.3%",
-          "SystemUIServer 9.1%",
-          "diskimagesiod 7.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12690,13 +10070,6 @@
           11.48,
           9.7
         ],
-        "busiest": [
-          "WindowServer 8.8%",
-          "Codex (Service) 6.3%",
-          "Codex (Renderer) 6%",
-          "iTerm2 4%",
-          "backupd 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12723,13 +10096,6 @@
           11.48,
           9.7
         ],
-        "busiest": [
-          "WindowServer 7.2%",
-          "iTerm2 4.7%",
-          "Codex (Service) 4.4%",
-          "Codex (Renderer) 4.4%",
-          "bluetoothd 1.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12755,13 +10121,6 @@
           12.88,
           11.48,
           9.7
-        ],
-        "busiest": [
-          "WindowServer 7.5%",
-          "iTerm2 7.2%",
-          "Codex (Renderer) 4.6%",
-          "Codex (Service) 3.9%",
-          "bluetoothd 1.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12790,13 +10149,6 @@
           11.48,
           9.7
         ],
-        "busiest": [
-          "SystemUIServer 9%",
-          "WindowServer 6.4%",
-          "iTerm2 3.9%",
-          "Codex (Renderer) 3.7%",
-          "Codex (Service) 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12822,13 +10174,6 @@
           12.88,
           11.48,
           9.7
-        ],
-        "busiest": [
-          "Tower 64.3%",
-          "Codex (Renderer) 7.5%",
-          "WindowServer 6.6%",
-          "iTerm2 5.8%",
-          "git 4.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12856,13 +10201,6 @@
           11.48,
           9.7
         ],
-        "busiest": [
-          "Tower 67.7%",
-          "backupd 15.3%",
-          "diskimagesiod 6.7%",
-          "WindowServer 6.1%",
-          "SystemUIServer 5.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12889,13 +10227,6 @@
           12.25,
           11.38,
           9.67
-        ],
-        "busiest": [
-          "Tower 66.2%",
-          "backupd 22.2%",
-          "diskimagesiod 10.8%",
-          "WindowServer 6.9%",
-          "iTerm2 3.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -12925,13 +10256,6 @@
           11.38,
           9.67
         ],
-        "busiest": [
-          "Tower 69.7%",
-          "backupd 8.2%",
-          "WindowServer 6.4%",
-          "Codex (Renderer) 4.3%",
-          "diskimagesiod 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12959,13 +10283,6 @@
           11.38,
           9.67
         ],
-        "busiest": [
-          "WindowServer 8.5%",
-          "Codex (Service) 7.6%",
-          "Tower 7%",
-          "Codex (Renderer) 6.6%",
-          "iTerm2 2.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -12992,13 +10309,6 @@
           12.25,
           11.38,
           9.67
-        ],
-        "busiest": [
-          "WindowServer 7.4%",
-          "Codex (Renderer) 5.7%",
-          "iTerm2 5.3%",
-          "Codex (Service) 4%",
-          "Tower 1.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13028,13 +10338,6 @@
           11.38,
           9.67
         ],
-        "busiest": [
-          "WindowServer 6%",
-          "backupd 4.4%",
-          "Codex (Renderer) 3.9%",
-          "iTerm2 3.5%",
-          "Codex (Service) 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13061,13 +10364,6 @@
           12.25,
           11.38,
           9.67
-        ],
-        "busiest": [
-          "WindowServer 5.7%",
-          "iTerm2 5.1%",
-          "Codex (Renderer) 4.1%",
-          "SystemUIServer 3.3%",
-          "Codex (Service) 3.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13096,13 +10392,6 @@
           11.38,
           9.67
         ],
-        "busiest": [
-          "WindowServer 6.9%",
-          "Codex (Service) 3.2%",
-          "Codex (Renderer) 3.2%",
-          "iTerm2 2.5%",
-          "claude 2.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13128,13 +10417,6 @@
           12.25,
           11.38,
           9.67
-        ],
-        "busiest": [
-          "SystemUIServer 9.4%",
-          "WindowServer 5.6%",
-          "iTerm2 3.8%",
-          "Codex (Renderer) 3.6%",
-          "backupd 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13163,13 +10445,6 @@
           11.38,
           9.67
         ],
-        "busiest": [
-          "WindowServer 11%",
-          "Codex (Service) 9.5%",
-          "Codex (Renderer) 4.8%",
-          "iTerm2 4.4%",
-          "backupd 1.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13196,13 +10471,6 @@
           11.35,
           11.2,
           9.62
-        ],
-        "busiest": [
-          "WindowServer 12.2%",
-          "Codex (Service) 10.4%",
-          "Codex (Renderer) 5.2%",
-          "iTerm2 4.7%",
-          "bluetoothd 0.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13232,13 +10500,6 @@
           11.2,
           9.62
         ],
-        "busiest": [
-          "Codex (Renderer) 220.9%",
-          "Code Helper (Renderer) 57.7%",
-          "WindowServer 5.8%",
-          "iTerm2 5.5%",
-          "Codex (Service) 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13265,13 +10526,6 @@
           11.35,
           11.2,
           9.62
-        ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "Codex (Renderer) 5.6%",
-          "iTerm2 4.3%",
-          "Codex (Service) 3.3%",
-          "bluetoothd 0.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13300,13 +10554,6 @@
           11.2,
           9.62
         ],
-        "busiest": [
-          "WindowServer 5.9%",
-          "Codex (Renderer) 3.9%",
-          "Codex (Service) 3.3%",
-          "iTerm2 3.1%",
-          "bluetoothd 1.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13332,13 +10579,6 @@
           11.35,
           11.2,
           9.62
-        ],
-        "busiest": [
-          "SystemUIServer 15.8%",
-          "diskimagesiod 14.6%",
-          "WindowServer 9.4%",
-          "Codex (Renderer) 7.3%",
-          "Codex (Service) 6.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13366,13 +10606,6 @@
           11.2,
           9.62
         ],
-        "busiest": [
-          "WindowServer 11.5%",
-          "Codex (Service) 10%",
-          "Codex (Renderer) 8.8%",
-          "iTerm2 6.3%",
-          "SystemUIServer 1.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13398,13 +10631,6 @@
           11.35,
           11.2,
           9.62
-        ],
-        "busiest": [
-          "WindowServer 8.6%",
-          "iTerm2 7.4%",
-          "Codex (Renderer) 6.3%",
-          "Codex (Service) 5.7%",
-          "claude 2.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13433,13 +10659,6 @@
           11.2,
           9.63
         ],
-        "busiest": [
-          "WindowServer 7.7%",
-          "claude 7.4%",
-          "Codex (Service) 4.3%",
-          "Codex (Renderer) 4.1%",
-          "iTerm2 3.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13465,13 +10684,6 @@
           11.32,
           11.2,
           9.63
-        ],
-        "busiest": [
-          "backupd 42.3%",
-          "diskimagesiod 22.5%",
-          "Codex (Renderer) 7.1%",
-          "WindowServer 6.5%",
-          "iTerm2 5.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13499,13 +10711,6 @@
           11.2,
           9.63
         ],
-        "busiest": [
-          "Tower 104.4%",
-          "WindowServer 10.5%",
-          "Codex (Service) 8.4%",
-          "tracd 6.9%",
-          "ContinuityCaptureAgent 6.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13532,13 +10737,6 @@
           11.2,
           9.63
         ],
-        "busiest": [
-          "Tower 37.1%",
-          "backupd 18.3%",
-          "diskimagesiod 10.1%",
-          "WindowServer 7.1%",
-          "iTerm2 6.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13564,13 +10762,6 @@
           10.65,
           11.06,
           9.59
-        ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 5.3%",
-          "claude 3.6%",
-          "Codex (Service) 3.5%",
-          "Codex (Renderer) 3.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13599,13 +10790,6 @@
           11.06,
           9.59
         ],
-        "busiest": [
-          "backupd 15.2%",
-          "SystemUIServer 9%",
-          "WindowServer 6.4%",
-          "fseventsd 4.1%",
-          "Codex (Renderer) 4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13631,13 +10815,6 @@
           10.44,
           11.01,
           9.58
-        ],
-        "busiest": [
-          "diskimagesiod 15.1%",
-          "backupd 13.6%",
-          "tracd 8.8%",
-          "WindowServer 7%",
-          "mdworker_shared 5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13665,13 +10842,6 @@
           9.85,
           10.88,
           9.54
-        ],
-        "busiest": [
-          "WindowServer 5.8%",
-          "iTerm2 4.3%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.2%",
-          "codex 0.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13701,13 +10871,6 @@
           10.88,
           9.54
         ],
-        "busiest": [
-          "iTerm2 7.2%",
-          "WindowServer 6.5%",
-          "Codex (Renderer) 4.3%",
-          "fseventsd 3.4%",
-          "Codex (Service) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13734,13 +10897,6 @@
           11.04,
           11.1,
           9.64
-        ],
-        "busiest": [
-          "WindowServer 7.8%",
-          "Codex (Renderer) 5.7%",
-          "fseventsd 4.5%",
-          "Codex (Service) 3.9%",
-          "iTerm2 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13769,13 +10925,6 @@
           11.1,
           9.64
         ],
-        "busiest": [
-          "WindowServer 6.3%",
-          "iTerm2 5.7%",
-          "SystemUIServer 5.4%",
-          "Codex (Renderer) 3.7%",
-          "Codex (Service) 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13802,13 +10951,6 @@
           10.64,
           11.01,
           9.62
-        ],
-        "busiest": [
-          "WindowServer 12.8%",
-          "tracd 11.4%",
-          "Codex (Service) 10.9%",
-          "Codex (Renderer) 4.9%",
-          "iTerm2 4.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13838,13 +10980,6 @@
           11.01,
           9.62
         ],
-        "busiest": [
-          "backupd 18.9%",
-          "WindowServer 8.3%",
-          "fseventsd 4.8%",
-          "Codex (Service) 4.8%",
-          "ContinuityCaptureAgent 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13871,13 +11006,6 @@
           10.93,
           11.07,
           9.67
-        ],
-        "busiest": [
-          "WindowServer 6.7%",
-          "Codex (Renderer) 5.4%",
-          "Codex (Service) 5.2%",
-          "iTerm2 3.2%",
-          "bluetoothd 1.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13906,13 +11034,6 @@
           11.07,
           9.67
         ],
-        "busiest": [
-          "WindowServer 8.7%",
-          "iTerm2 6.6%",
-          "Codex (Renderer) 5.3%",
-          "Codex (Service) 5.1%",
-          "bluetoothd 2.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -13938,13 +11059,6 @@
           10.93,
           11.07,
           9.67
-        ],
-        "busiest": [
-          "WindowServer 5.6%",
-          "Codex (Renderer) 4.9%",
-          "iTerm2 3.7%",
-          "SystemUIServer 3.6%",
-          "Codex (Service) 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -13974,13 +11088,6 @@
           11.36,
           9.79
         ],
-        "busiest": [
-          "iTerm2 8.3%",
-          "WindowServer 6.3%",
-          "Codex (Service) 3.2%",
-          "Codex (Renderer) 3.1%",
-          "SystemUIServer 1.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14007,13 +11114,6 @@
           13.33,
           11.65,
           9.92
-        ],
-        "busiest": [
-          "fseventsd 14.2%",
-          "backupd 13.6%",
-          "WindowServer 7.3%",
-          "ArqAgent 6.5%",
-          "diskimagesiod 4.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14042,13 +11142,6 @@
           11.49,
           9.88
         ],
-        "busiest": [
-          "fseventsd 7.5%",
-          "WindowServer 6.9%",
-          "iTerm2 6.8%",
-          "SystemUIServer 5.2%",
-          "Codex (Renderer) 4.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14075,13 +11168,6 @@
           12.42,
           11.49,
           9.88
-        ],
-        "busiest": [
-          "backupd 12.7%",
-          "WindowServer 11.1%",
-          "Codex (Service) 9.6%",
-          "iTerm2 7.4%",
-          "diskimagesiod 4.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14110,13 +11196,6 @@
           11.49,
           9.88
         ],
-        "busiest": [
-          "backupd 21.3%",
-          "diskimagesiod 9.5%",
-          "WindowServer 7.7%",
-          "fseventsd 5.2%",
-          "plugin-container 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14142,13 +11221,6 @@
           12.42,
           11.49,
           9.88
-        ],
-        "busiest": [
-          "backupd 18%",
-          "diskimagesiod 9.7%",
-          "SystemUIServer 8.7%",
-          "launchd 7.9%",
-          "WindowServer 6.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14176,13 +11248,6 @@
           11.49,
           9.88
         ],
-        "busiest": [
-          "backupd 19.7%",
-          "diskimagesiod 11.5%",
-          "WindowServer 6.6%",
-          "launchd 4.9%",
-          "iTerm2 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14209,13 +11274,6 @@
           11.49,
           9.88
         ],
-        "busiest": [
-          "backupd 19.7%",
-          "diskimagesiod 7.5%",
-          "WindowServer 5.8%",
-          "Codex (Renderer) 3.9%",
-          "iTerm2 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14241,13 +11299,6 @@
           12.42,
           11.49,
           9.88
-        ],
-        "busiest": [
-          "backupd 23.9%",
-          "SystemUIServer 14.3%",
-          "WindowServer 6%",
-          "diskimagesiod 6%",
-          "iTerm2 5.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14276,13 +11327,6 @@
           11.49,
           9.88
         ],
-        "busiest": [
-          "backupd 22.5%",
-          "diskimagesiod 8.7%",
-          "WindowServer 6.3%",
-          "iTerm2 3.5%",
-          "SystemUIServer 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14308,13 +11352,6 @@
           11.67,
           11.35,
           9.84
-        ],
-        "busiest": [
-          "backupd 18.1%",
-          "WindowServer 11%",
-          "SystemUIServer 9.2%",
-          "Codex (Service) 8.9%",
-          "diskimagesiod 7.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14342,13 +11379,6 @@
           11.35,
           9.84
         ],
-        "busiest": [
-          "backupd 15.9%",
-          "WindowServer 11.6%",
-          "Codex (Service) 9.5%",
-          "diskimagesiod 7.9%",
-          "iTerm2 6.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14375,13 +11405,6 @@
           11.35,
           9.84
         ],
-        "busiest": [
-          "WindowServer 10.8%",
-          "Codex (Service) 8.7%",
-          "backupd 8.2%",
-          "Codex (Renderer) 4.6%",
-          "iTerm2 3.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14407,13 +11430,6 @@
           11.67,
           11.35,
           9.84
-        ],
-        "busiest": [
-          "SystemUIServer 14.5%",
-          "backupd 11.9%",
-          "WindowServer 8.2%",
-          "diskimagesiod 7.2%",
-          "Codex (Renderer) 5.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14442,13 +11458,6 @@
           11.35,
           9.84
         ],
-        "busiest": [
-          "iTerm2 7.7%",
-          "WindowServer 7.3%",
-          "backupd 5.6%",
-          "diskimagesiod 5.6%",
-          "Codex (Renderer) 4.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14476,13 +11485,6 @@
           11.35,
           9.84
         ],
-        "busiest": [
-          "WindowServer 6%",
-          "iTerm2 4.1%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.5%",
-          "Code Helper (Plugin) 2.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14509,13 +11511,6 @@
           11.67,
           11.35,
           9.84
-        ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "iTerm2 6%",
-          "claude 3.6%",
-          "fseventsd 3.4%",
-          "Codex (Service) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14545,13 +11540,6 @@
           11.35,
           9.84
         ],
-        "busiest": [
-          "WindowServer 6.7%",
-          "iTerm2 5.6%",
-          "claude 5.2%",
-          "Codex (Renderer) 4.3%",
-          "Codex (Service) 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14578,13 +11566,6 @@
           11.67,
           11.35,
           9.84
-        ],
-        "busiest": [
-          "WindowServer 5.9%",
-          "Codex (Renderer) 3.5%",
-          "iTerm2 3.3%",
-          "Codex (Service) 3.2%",
-          "ArqAgent 1.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14614,13 +11595,6 @@
           11.35,
           9.84
         ],
-        "busiest": [
-          "WindowServer 9.3%",
-          "Codex (Service) 7.9%",
-          "Codex (Renderer) 5.4%",
-          "iTerm2 4.7%",
-          "ArqAgent 0.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14648,13 +11622,6 @@
           11.17,
           9.79
         ],
-        "busiest": [
-          "WindowServer 7.1%",
-          "iTerm2 5.1%",
-          "Codex (Renderer) 3.9%",
-          "Codex (Service) 3.8%",
-          "bluetoothd 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14680,13 +11647,6 @@
           10.81,
           11.17,
           9.79
-        ],
-        "busiest": [
-          "SystemUIServer 13.7%",
-          "backupd 9.1%",
-          "WindowServer 6.6%",
-          "diskimagesiod 4.1%",
-          "Codex (Renderer) 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14715,13 +11675,6 @@
           11.17,
           9.79
         ],
-        "busiest": [
-          "WindowServer 6.8%",
-          "iTerm2 5.2%",
-          "Codex (Renderer) 3.2%",
-          "Codex (Service) 3.1%",
-          "SystemUIServer 2.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14748,13 +11701,6 @@
           10.81,
           11.17,
           9.79
-        ],
-        "busiest": [
-          "Spotify 15.2%",
-          "WindowServer 5.5%",
-          "Codex (Renderer) 3.7%",
-          "Codex (Service) 3.4%",
-          "iTerm2 3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14784,13 +11730,6 @@
           11.17,
           9.79
         ],
-        "busiest": [
-          "Codex (Renderer) 10.9%",
-          "WindowServer 8.8%",
-          "Codex (Service) 7.5%",
-          "iTerm2 2.9%",
-          "claude 2.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14817,13 +11756,6 @@
           10.81,
           11.17,
           9.79
-        ],
-        "busiest": [
-          "rustc 71.9%",
-          "mdworker_shared 10.2%",
-          "mdworker_shared 10.1%",
-          "mdworker_shared 9.6%",
-          "mdworker_shared 9.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14852,13 +11784,6 @@
           11.07,
           9.76
         ],
-        "busiest": [
-          "rustc 92.7%",
-          "WindowServer 6.2%",
-          "Codex (Renderer) 4.5%",
-          "Codex (Service) 3.7%",
-          "bluetoothd 2.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14884,13 +11809,6 @@
           10.35,
           11.07,
           9.76
-        ],
-        "busiest": [
-          "rustc 98.8%",
-          "WindowServer 6.6%",
-          "fseventsd 3.7%",
-          "iTerm2 3.7%",
-          "Codex (Renderer) 3.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -14918,13 +11836,6 @@
           11.07,
           9.76
         ],
-        "busiest": [
-          "rustc 89.7%",
-          "WindowServer 7.2%",
-          "iTerm2 4.3%",
-          "Codex (Service) 4%",
-          "Codex (Renderer) 3.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14951,13 +11862,6 @@
           11.07,
           9.76
         ],
-        "busiest": [
-          "rustc 84.6%",
-          "SystemUIServer 31%",
-          "airportd 9.1%",
-          "iTerm2 8.7%",
-          "WindowServer 7.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -14983,13 +11887,6 @@
           10.35,
           11.07,
           9.76
-        ],
-        "busiest": [
-          "WindowServer 12.4%",
-          "Codex (Service) 12.1%",
-          "Codex (Renderer) 8.3%",
-          "iTerm2 5.2%",
-          "ContinuityCaptureAgent 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15018,13 +11915,6 @@
           11.07,
           9.76
         ],
-        "busiest": [
-          "ChatGPT 39.9%",
-          "backupd 16.3%",
-          "WindowServer 7.2%",
-          "diskimagesiod 6.4%",
-          "Codex (Renderer) 4.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15051,13 +11941,6 @@
           10.92,
           9.71
         ],
-        "busiest": [
-          "WindowServer 5.7%",
-          "iTerm2 4.9%",
-          "Code Helper (Renderer) 4.4%",
-          "Codex (Renderer) 4.1%",
-          "Codex (Service) 3.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15083,13 +11966,6 @@
           9.68,
           10.92,
           9.71
-        ],
-        "busiest": [
-          "Codex (Renderer) 10.3%",
-          "WindowServer 7%",
-          "iTerm2 4.3%",
-          "Codex (Service) 3.9%",
-          "fseventsd 2.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15118,13 +11994,6 @@
           10.92,
           9.71
         ],
-        "busiest": [
-          "WindowServer 9%",
-          "iTerm2 8%",
-          "Codex (Renderer) 7.9%",
-          "Codex (Service) 6.7%",
-          "ContinuityCaptureAgent 3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15150,13 +12019,6 @@
           9.69,
           10.89,
           9.71
-        ],
-        "busiest": [
-          "clippy-driver 96.5%",
-          "clippy-driver 96.3%",
-          "Codex (Service) 13.2%",
-          "WindowServer 12.4%",
-          "iTerm2 6.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15185,13 +12047,6 @@
           10.89,
           9.71
         ],
-        "busiest": [
-          "clippy-driver 95.7%",
-          "clippy-driver 93.3%",
-          "Codex (Service) 10.1%",
-          "WindowServer 9.1%",
-          "Codex (Renderer) 6.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15217,13 +12072,6 @@
           9.69,
           10.89,
           9.71
-        ],
-        "busiest": [
-          "Codex (Renderer) 10.9%",
-          "codex 8.2%",
-          "WindowServer 7.3%",
-          "iTerm2 5.6%",
-          "Codex (Service) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15251,13 +12099,6 @@
           9.31,
           10.79,
           9.69
-        ],
-        "busiest": [
-          "tracd 11.1%",
-          "SystemUIServer 8.8%",
-          "WindowServer 7.2%",
-          "diskimagesiod 6.2%",
-          "Codex (Service) 5.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15287,13 +12128,6 @@
           10.79,
           9.69
         ],
-        "busiest": [
-          "biomesyncd 8.4%",
-          "Codex (Renderer) 6.6%",
-          "WindowServer 6.2%",
-          "ContinuityCaptureAgent 4.3%",
-          "fseventsd 4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15320,13 +12154,6 @@
           10.95,
           11.07,
           9.8
-        ],
-        "busiest": [
-          "ArqAgent 93%",
-          "WindowServer 6.2%",
-          "backupd 6.1%",
-          "Codex (Renderer) 5.6%",
-          "Codex (Service) 3.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15355,13 +12182,6 @@
           11.07,
           9.8
         ],
-        "busiest": [
-          "ArqAgent 97%",
-          "backupd 21.3%",
-          "diskimagesiod 12.4%",
-          "WindowServer 6.2%",
-          "iTerm2 4.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15389,13 +12209,6 @@
           11.07,
           9.8
         ],
-        "busiest": [
-          "backupd 13.7%",
-          "SystemUIServer 13.6%",
-          "WindowServer 10.4%",
-          "iTerm2 7.2%",
-          "diskimagesiod 6.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15421,13 +12234,6 @@
           10.4,
           10.95,
           9.77
-        ],
-        "busiest": [
-          "backupd 19.1%",
-          "WindowServer 7.3%",
-          "SystemUIServer 6.9%",
-          "iTerm2 5.4%",
-          "diskimagesiod 5.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15457,13 +12263,6 @@
           10.95,
           9.77
         ],
-        "busiest": [
-          "WindowServer 8.4%",
-          "Codex (Renderer) 5.5%",
-          "Codex (Service) 5.4%",
-          "iTerm2 4.6%",
-          "backupd 3.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15491,13 +12290,6 @@
           11.34,
           9.93
         ],
-        "busiest": [
-          "backupd 19.7%",
-          "diskimagesiod 9.4%",
-          "WindowServer 6.1%",
-          "iTerm2 4.5%",
-          "Codex (Renderer) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15524,13 +12316,6 @@
           12.29,
           11.34,
           9.93
-        ],
-        "busiest": [
-          "backupd 23.1%",
-          "fseventsd 14.4%",
-          "diskimagesiod 9.9%",
-          "SystemUIServer 7.9%",
-          "ArqAgent 7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15560,13 +12345,6 @@
           11.46,
           9.99
         ],
-        "busiest": [
-          "Tower 8.4%",
-          "WindowServer 6.8%",
-          "iTerm2 3.8%",
-          "Codex (Renderer) 3.4%",
-          "Codex (Service) 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15593,13 +12371,6 @@
           13.72,
           11.75,
           10.12
-        ],
-        "busiest": [
-          "backupd 12.5%",
-          "iTerm2 7.6%",
-          "fseventsd 7.1%",
-          "WindowServer 6.4%",
-          "diskimagesiod 6.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15628,13 +12399,6 @@
           11.75,
           10.12
         ],
-        "busiest": [
-          "WindowServer 10.1%",
-          "Codex (Service) 7.4%",
-          "Codex (Renderer) 5.6%",
-          "Spotify 4.9%",
-          "iTerm2 3.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15660,13 +12424,6 @@
           14.46,
           11.93,
           10.2
-        ],
-        "busiest": [
-          "backupd 18.6%",
-          "SystemUIServer 10.2%",
-          "WindowServer 8.8%",
-          "iTerm2 6.2%",
-          "Codex (Service) 5.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15695,13 +12452,6 @@
           11.93,
           10.2
         ],
-        "busiest": [
-          "backupd 20%",
-          "diskimagesiod 10.9%",
-          "WindowServer 7.3%",
-          "iTerm2 5.2%",
-          "Codex (Renderer) 5.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15727,13 +12477,6 @@
           14.46,
           11.93,
           10.2
-        ],
-        "busiest": [
-          "SystemUIServer 14.1%",
-          "backupd 8.7%",
-          "WindowServer 6.1%",
-          "iTerm2 4.5%",
-          "Codex (Service) 3.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15761,13 +12504,6 @@
           11.93,
           10.2
         ],
-        "busiest": [
-          "backupd 15.8%",
-          "WindowServer 6.4%",
-          "iTerm2 5.5%",
-          "SystemUIServer 5.4%",
-          "diskimagesiod 4.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15793,13 +12529,6 @@
           14.46,
           11.93,
           10.2
-        ],
-        "busiest": [
-          "backupd 23.6%",
-          "diskimagesiod 5.7%",
-          "WindowServer 5.3%",
-          "iTerm2 3.4%",
-          "claude 3.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15827,13 +12556,6 @@
           11.93,
           10.2
         ],
-        "busiest": [
-          "backupd 19.4%",
-          "SystemUIServer 13.7%",
-          "diskimagesiod 11.2%",
-          "WindowServer 6.5%",
-          "searchpartyuseragent 6.5%"
-        ],
         "quiet": true,
         "waitedMs": 1
       },
@@ -15859,13 +12581,6 @@
           14.46,
           11.93,
           10.2
-        ],
-        "busiest": [
-          "SystemUIServer 9.9%",
-          "backupd 7.8%",
-          "WindowServer 6.3%",
-          "diskimagesiod 6.2%",
-          "iTerm2 5.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15894,13 +12609,6 @@
           11.93,
           10.2
         ],
-        "busiest": [
-          "WindowServer 5.5%",
-          "Codex (Renderer) 4.7%",
-          "iTerm2 3.2%",
-          "Codex (Service) 3.2%",
-          "backupd 3%"
-        ],
         "quiet": true,
         "waitedMs": 1
       },
@@ -15926,13 +12634,6 @@
           14.46,
           11.93,
           10.2
-        ],
-        "busiest": [
-          "WindowServer 8%",
-          "Codex (Service) 7.8%",
-          "Codex (Renderer) 5.7%",
-          "iTerm2 4.8%",
-          "rapportd 2.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -15961,13 +12662,6 @@
           11.93,
           10.2
         ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "Codex (Service) 4.2%",
-          "Codex (Renderer) 3.7%",
-          "iTerm2 3.4%",
-          "ArqAgent 1.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -15993,13 +12687,6 @@
           14.46,
           11.93,
           10.2
-        ],
-        "busiest": [
-          "WindowServer 8%",
-          "Codex (Service) 5.2%",
-          "Codex (Renderer) 4.9%",
-          "iTerm2 3.9%",
-          "codex 0.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16029,13 +12716,6 @@
           11.93,
           10.2
         ],
-        "busiest": [
-          "tracd 11.2%",
-          "WindowServer 5.8%",
-          "Codex (Renderer) 4.2%",
-          "Codex (Service) 3.9%",
-          "iTerm2 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16062,13 +12742,6 @@
           13.54,
           11.78,
           10.15
-        ],
-        "busiest": [
-          "WindowServer 5.7%",
-          "iTerm2 4.3%",
-          "claude 3.3%",
-          "Codex (Renderer) 3.1%",
-          "Codex (Service) 3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16097,13 +12770,6 @@
           11.78,
           10.15
         ],
-        "busiest": [
-          "WindowServer 6.4%",
-          "iTerm2 4.2%",
-          "Codex (Renderer) 4.1%",
-          "Codex (Service) 3.3%",
-          "codex 1.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16130,13 +12796,6 @@
           13.54,
           11.78,
           10.15
-        ],
-        "busiest": [
-          "SystemUIServer 14.2%",
-          "WindowServer 5.5%",
-          "backupd 4.4%",
-          "Codex (Renderer) 3.7%",
-          "Codex (Service) 3.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16166,13 +12825,6 @@
           11.78,
           10.15
         ],
-        "busiest": [
-          "backupd 6.6%",
-          "WindowServer 6.1%",
-          "iTerm2 5.6%",
-          "SystemUIServer 5.4%",
-          "claude 5.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16199,13 +12851,6 @@
           13.54,
           11.78,
           10.15
-        ],
-        "busiest": [
-          "WindowServer 7.6%",
-          "Codex (Service) 4.7%",
-          "Codex (Renderer) 4.5%",
-          "iTerm2 3.7%",
-          "SystemUIServer 2.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16234,13 +12879,6 @@
           11.78,
           10.15
         ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "iTerm2 4.3%",
-          "Codex (Renderer) 3.9%",
-          "Codex (Service) 3.7%",
-          "fseventsd 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16266,13 +12904,6 @@
           13.54,
           11.78,
           10.15
-        ],
-        "busiest": [
-          "SystemUIServer 13.4%",
-          "WindowServer 6.2%",
-          "backupd 4.8%",
-          "Codex (Renderer) 4.2%",
-          "Codex (Service) 3.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16300,13 +12931,6 @@
           13.54,
           11.78,
           10.15
-        ],
-        "busiest": [
-          "WindowServer 5.5%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.3%",
-          "iTerm2 3.2%",
-          "SystemUIServer 1.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16336,13 +12960,6 @@
           11.6,
           10.1
         ],
-        "busiest": [
-          "Codex (Renderer) 5.9%",
-          "WindowServer 5.8%",
-          "iTerm2 5.3%",
-          "SystemUIServer 3.4%",
-          "Codex (Service) 3.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16369,13 +12986,6 @@
           12.54,
           11.6,
           10.1
-        ],
-        "busiest": [
-          "SystemUIServer 10.6%",
-          "WindowServer 7.9%",
-          "backupd 4.7%",
-          "iTerm2 4.1%",
-          "Codex (Service) 4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16404,13 +13014,6 @@
           11.6,
           10.1
         ],
-        "busiest": [
-          "iTerm2 7.9%",
-          "WindowServer 7.7%",
-          "backupd 5.7%",
-          "Codex (Renderer) 5.3%",
-          "Codex (Service) 4.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16438,13 +13041,6 @@
           11.6,
           10.1
         ],
-        "busiest": [
-          "WindowServer 5.8%",
-          "Codex (Renderer) 4.4%",
-          "Codex (Service) 3.4%",
-          "ChatGPT 3%",
-          "iTerm2 2.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16470,13 +13066,6 @@
           12.54,
           11.6,
           10.1
-        ],
-        "busiest": [
-          "SystemUIServer 9.6%",
-          "backupd 8.6%",
-          "iTerm2 7.9%",
-          "WindowServer 7.3%",
-          "Codex (Renderer) 4.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16504,13 +13093,6 @@
           11.71,
           10.15
         ],
-        "busiest": [
-          "iTerm2 6.8%",
-          "WindowServer 6.6%",
-          "claude 6.1%",
-          "Codex (Service) 4.4%",
-          "Codex (Renderer) 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16537,13 +13119,6 @@
           11.71,
           10.15
         ],
-        "busiest": [
-          "WindowServer 6.1%",
-          "iTerm2 5.7%",
-          "Codex (Renderer) 4.5%",
-          "Codex (Service) 4%",
-          "ArqAgent 1.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16569,13 +13144,6 @@
           12.97,
           11.71,
           10.15
-        ],
-        "busiest": [
-          "SystemUIServer 17.2%",
-          "backupd 9.1%",
-          "WindowServer 7.1%",
-          "diskimagesiod 6.1%",
-          "iTerm2 6.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16604,13 +13172,6 @@
           11.71,
           10.15
         ],
-        "busiest": [
-          "iTerm2 10.9%",
-          "WindowServer 7.2%",
-          "Codex (Renderer) 4.7%",
-          "Codex (Service) 4.2%",
-          "SystemUIServer 2.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16636,13 +13197,6 @@
           12.04,
           11.55,
           10.11
-        ],
-        "busiest": [
-          "rustfmt 78.9%",
-          "backupd 22.1%",
-          "Codex (Renderer) 17.9%",
-          "Codex (Service) 16.2%",
-          "SystemUIServer 15.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16670,13 +13224,6 @@
           11.55,
           10.11
         ],
-        "busiest": [
-          "backupd 26%",
-          "diskimagesiod 13.4%",
-          "WindowServer 7.5%",
-          "iTerm2 6.5%",
-          "Codex (Service) 5.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16702,13 +13249,6 @@
           12.04,
           11.55,
           10.11
-        ],
-        "busiest": [
-          "clippy-driver 73.4%",
-          "clippy-driver 73.2%",
-          "SystemUIServer 29%",
-          "mdworker_shared 23.7%",
-          "mdworker_shared 23.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16738,13 +13278,6 @@
           11.55,
           10.11
         ],
-        "busiest": [
-          "clippy-driver 93.6%",
-          "clippy-driver 91.4%",
-          "SystemUIServer 14%",
-          "mdworker_shared 8.6%",
-          "mds_stores 7.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16772,13 +13305,6 @@
           11.26,
           10.03
         ],
-        "busiest": [
-          "WindowServer 5.2%",
-          "fseventsd 4.5%",
-          "Codex (Renderer) 3.6%",
-          "iTerm2 3.4%",
-          "Codex (Service) 3.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16804,13 +13330,6 @@
           10.61,
           11.26,
           10.03
-        ],
-        "busiest": [
-          "codex 40.9%",
-          "trustd 14.4%",
-          "WindowServer 12.3%",
-          "Codex (Service) 11.8%",
-          "Code Helper (Renderer) 11.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16839,13 +13358,6 @@
           11.16,
           10
         ],
-        "busiest": [
-          "WindowServer 5.7%",
-          "Codex (Renderer) 4.5%",
-          "Codex (Service) 3.3%",
-          "iTerm2 2.6%",
-          "backupd 1.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16873,13 +13385,6 @@
           11.16,
           10
         ],
-        "busiest": [
-          "WindowServer 7.1%",
-          "iTerm2 5%",
-          "Codex (Service) 4.3%",
-          "Codex (Renderer) 4.3%",
-          "claude 3.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16906,13 +13411,6 @@
           10.16,
           11.16,
           10
-        ],
-        "busiest": [
-          "WindowServer 7.6%",
-          "ContinuityCaptureAgent 6.4%",
-          "iTerm2 6.1%",
-          "Codex (Renderer) 5%",
-          "fseventsd 4.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -16942,13 +13440,6 @@
           11.27,
           10.05
         ],
-        "busiest": [
-          "launchd 31.9%",
-          "WindowServer 9.8%",
-          "SystemUIServer 9.2%",
-          "Codex (Service) 8.6%",
-          "Codex (Renderer) 7.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -16975,13 +13466,6 @@
           10.69,
           11.24,
           10.06
-        ],
-        "busiest": [
-          "WindowServer 6.6%",
-          "iTerm2 6.3%",
-          "fseventsd 4.7%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17010,13 +13494,6 @@
           11.24,
           10.06
         ],
-        "busiest": [
-          "backupd 21.5%",
-          "diskimagesiod 10.2%",
-          "WindowServer 6.5%",
-          "Codex (Renderer) 5.6%",
-          "iTerm2 5.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17042,13 +13519,6 @@
           10.69,
           11.24,
           10.06
-        ],
-        "busiest": [
-          "backupd 24.7%",
-          "diskimagesiod 12.9%",
-          "WindowServer 11.4%",
-          "Codex (Service) 11.3%",
-          "iTerm2 6.2%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17078,13 +13548,6 @@
           11.08,
           10.02
         ],
-        "busiest": [
-          "syncdefaultsd 11.2%",
-          "iTerm2 8.2%",
-          "WindowServer 6.1%",
-          "SystemUIServer 5.4%",
-          "fseventsd 4.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17111,13 +13574,6 @@
           11.05,
           11.24,
           10.09
-        ],
-        "busiest": [
-          "fseventsd 15.6%",
-          "iTerm2 6.6%",
-          "WindowServer 6.3%",
-          "ArqAgent 5.3%",
-          "Codex (Service) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17146,13 +13602,6 @@
           11.24,
           10.09
         ],
-        "busiest": [
-          "SystemUIServer 9%",
-          "fseventsd 8.8%",
-          "WindowServer 5.5%",
-          "Codex (Service) 4%",
-          "Codex (Renderer) 3.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17180,13 +13629,6 @@
           11.09,
           10.05
         ],
-        "busiest": [
-          "WindowServer 10.6%",
-          "Codex (Service) 10.1%",
-          "iTerm2 7.2%",
-          "Codex (Renderer) 6.2%",
-          "claude 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17212,13 +13654,6 @@
           10.32,
           11.09,
           10.05
-        ],
-        "busiest": [
-          "backupd 24.9%",
-          "diskimagesiod 10.5%",
-          "com.docker.backend 10.4%",
-          "WindowServer 6.6%",
-          "iTerm2 5.8%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17247,13 +13682,6 @@
           11.09,
           10.05
         ],
-        "busiest": [
-          "backupd 23.8%",
-          "diskimagesiod 12.6%",
-          "SystemUIServer 9.7%",
-          "WindowServer 6.9%",
-          "iTerm2 5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17279,13 +13707,6 @@
           10.32,
           11.09,
           10.05
-        ],
-        "busiest": [
-          "backupd 18.6%",
-          "SystemUIServer 12.5%",
-          "diskimagesiod 10.7%",
-          "WindowServer 6.1%",
-          "iTerm2 5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17313,13 +13734,6 @@
           11.09,
           10.05
         ],
-        "busiest": [
-          "backupd 19%",
-          "diskimagesiod 10.1%",
-          "WindowServer 6.5%",
-          "ContinuityCaptureAgent 6.5%",
-          "iTerm2 6.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17345,13 +13759,6 @@
           10.32,
           11.09,
           10.05
-        ],
-        "busiest": [
-          "backupd 13.1%",
-          "diskimagesiod 12.5%",
-          "WindowServer 5.7%",
-          "iTerm2 4.9%",
-          "Codex (Renderer) 3.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17380,13 +13787,6 @@
           11.09,
           10.05
         ],
-        "busiest": [
-          "WindowServer 6.2%",
-          "backupd 5.1%",
-          "Codex (Renderer) 4%",
-          "Codex (Service) 3.3%",
-          "iTerm2 2.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17412,13 +13812,6 @@
           10.32,
           11.09,
           10.05
-        ],
-        "busiest": [
-          "Codex (Service) 12.4%",
-          "WindowServer 11.5%",
-          "Codex (Renderer) 5%",
-          "iTerm2 3.5%",
-          "bluetoothd 0.9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17446,13 +13839,6 @@
           11.09,
           10.05
         ],
-        "busiest": [
-          "Codex (Service) 9.9%",
-          "WindowServer 9%",
-          "Codex (Renderer) 6.3%",
-          "iTerm2 5.1%",
-          "sharingd 0.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17478,13 +13864,6 @@
           10.32,
           11.09,
           10.05
-        ],
-        "busiest": [
-          "iTerm2 7.9%",
-          "WindowServer 7.8%",
-          "Codex (Service) 5.8%",
-          "Codex (Renderer) 4.5%",
-          "bluetoothd 1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17513,13 +13892,6 @@
           11.09,
           10.05
         ],
-        "busiest": [
-          "WindowServer 6%",
-          "Codex (Service) 4.3%",
-          "Codex (Renderer) 4.2%",
-          "iTerm2 4%",
-          "diskimagesiod 1.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17545,13 +13917,6 @@
           10.32,
           11.09,
           10.05
-        ],
-        "busiest": [
-          "SystemUIServer 8.7%",
-          "WindowServer 6.3%",
-          "backupd 5.1%",
-          "Codex (Renderer) 4.7%",
-          "Codex (Service) 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17580,13 +13945,6 @@
           10.95,
           10.01
         ],
-        "busiest": [
-          "WindowServer 6.9%",
-          "iTerm2 6.2%",
-          "Codex (Renderer) 3.5%",
-          "Codex (Service) 3.3%",
-          "SystemUIServer 2.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17613,13 +13971,6 @@
           9.74,
           10.95,
           10.01
-        ],
-        "busiest": [
-          "ContinuityCaptureAgent 6.2%",
-          "WindowServer 5.5%",
-          "Codex (Renderer) 3.6%",
-          "Codex (Service) 3.4%",
-          "fseventsd 3.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17649,13 +14000,6 @@
           10.95,
           10.01
         ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "backupd 5.5%",
-          "iTerm2 5.2%",
-          "SystemUIServer 3.6%",
-          "Codex (Service) 3.3%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17683,13 +14027,6 @@
           10.95,
           10.01
         ],
-        "busiest": [
-          "Codex (Service) 11.5%",
-          "WindowServer 11%",
-          "iTerm2 6.1%",
-          "Codex (Renderer) 6.1%",
-          "bluetoothd 2.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17715,13 +14052,6 @@
           9.74,
           10.95,
           10.01
-        ],
-        "busiest": [
-          "Codex (Service) 12.9%",
-          "WindowServer 11%",
-          "iTerm2 4.8%",
-          "Codex (Renderer) 4.8%",
-          "diskimagesiod 3.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17751,13 +14081,6 @@
           10.95,
           10.01
         ],
-        "busiest": [
-          "WindowServer 8.8%",
-          "Codex (Service) 6%",
-          "Codex (Renderer) 5.7%",
-          "iTerm2 5.4%",
-          "bluetoothd 1.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17785,13 +14108,6 @@
           10.95,
           10.01
         ],
-        "busiest": [
-          "WindowServer 5.5%",
-          "Codex (Renderer) 3.7%",
-          "iTerm2 3.5%",
-          "Codex (Service) 3.4%",
-          "bluetoothd 1.4%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17818,13 +14134,6 @@
           9.12,
           10.8,
           9.96
-        ],
-        "busiest": [
-          "WindowServer 5.7%",
-          "iTerm2 5.1%",
-          "Codex (Service) 3.3%",
-          "fseventsd 3.1%",
-          "Codex (Renderer) 3.1%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17854,13 +14163,6 @@
           10.8,
           9.96
         ],
-        "busiest": [
-          "Codex (Renderer) 45.7%",
-          "Codex (Service) 10.5%",
-          "WindowServer 9.6%",
-          "iTerm2 9.5%",
-          "launchd 8.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17887,13 +14189,6 @@
           9.12,
           10.8,
           9.96
-        ],
-        "busiest": [
-          "Tower 57.5%",
-          "Mail 10.5%",
-          "WindowServer 7.1%",
-          "Codex (Renderer) 4.4%",
-          "Codex (Service) 3.7%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -17922,13 +14217,6 @@
           10.8,
           9.96
         ],
-        "busiest": [
-          "Tower 35%",
-          "WindowServer 7.6%",
-          "iTerm2 6.3%",
-          "Mail 5.8%",
-          "Codex (Renderer) 3.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17956,13 +14244,6 @@
           10.8,
           9.96
         ],
-        "busiest": [
-          "node 12.3%",
-          "WindowServer 8.1%",
-          "Tower 7.9%",
-          "iTerm2 5.8%",
-          "Codex (Renderer) 4.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -17988,13 +14269,6 @@
           9.12,
           10.8,
           9.96
-        ],
-        "busiest": [
-          "node 10%",
-          "WindowServer 6.8%",
-          "Codex (Renderer) 3.6%",
-          "fseventsd 3.5%",
-          "Codex (Service) 3.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18022,13 +14296,6 @@
           10.8,
           9.96
         ],
-        "busiest": [
-          "WindowServer 7%",
-          "iTerm2 6.4%",
-          "Codex (Renderer) 4.6%",
-          "claude 4.1%",
-          "Codex (Service) 3.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18055,13 +14322,6 @@
           10.76,
           9.95
         ],
-        "busiest": [
-          "Tower 90%",
-          "Codex (Service) 12%",
-          "WindowServer 11.8%",
-          "ContinuityCaptureAgent 8.5%",
-          "iTerm2 5.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18087,13 +14347,6 @@
           9.03,
           10.76,
           9.95
-        ],
-        "busiest": [
-          "Tower 47.3%",
-          "Spotify 36.7%",
-          "backupd 25.9%",
-          "SystemUIServer 14.7%",
-          "diskimagesiod 12.6%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18122,13 +14375,6 @@
           10.76,
           9.95
         ],
-        "busiest": [
-          "Tower 29.8%",
-          "backupd 24.2%",
-          "diskimagesiod 13%",
-          "Spotify 9.2%",
-          "WindowServer 7.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18154,13 +14400,6 @@
           9.03,
           10.76,
           9.95
-        ],
-        "busiest": [
-          "Tower 95.2%",
-          "backupd 32.3%",
-          "codex 28.3%",
-          "trustd 10.6%",
-          "diskimagesiod 9%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18188,13 +14427,6 @@
           10.76,
           9.95
         ],
-        "busiest": [
-          "Tower 15.1%",
-          "codex 12.2%",
-          "WindowServer 11.7%",
-          "Codex (Service) 11.2%",
-          "Codex (Renderer) 5.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18220,13 +14452,6 @@
           8.46,
           10.61,
           9.9
-        ],
-        "busiest": [
-          "WindowServer 11.8%",
-          "Codex (Service) 11.8%",
-          "Codex (Renderer) 7.2%",
-          "iTerm2 6.2%",
-          "fseventsd 2.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18255,13 +14480,6 @@
           10.61,
           9.9
         ],
-        "busiest": [
-          "backupd 12.5%",
-          "diskimagesiod 9.1%",
-          "WindowServer 6.1%",
-          "Codex (Renderer) 4.5%",
-          "Codex (Service) 3.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18288,13 +14506,6 @@
           8.35,
           10.55,
           9.88
-        ],
-        "busiest": [
-          "rustc 96.7%",
-          "rustc 94.7%",
-          "SystemUIServer 14.5%",
-          "Codex (Service) 13.4%",
-          "WindowServer 13.3%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18323,13 +14534,6 @@
           10.67,
           9.93
         ],
-        "busiest": [
-          "rustc 86.6%",
-          "rustc 86.6%",
-          "iTerm2 8.4%",
-          "WindowServer 7.4%",
-          "Codex (Renderer) 4.5%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18357,13 +14561,6 @@
           10.67,
           9.93
         ],
-        "busiest": [
-          "rustc 94.4%",
-          "(tracd) 7.2%",
-          "Codex (Renderer) 7%",
-          "WindowServer 6.9%",
-          "Codex (Service) 5.6%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18389,13 +14586,6 @@
           9.12,
           10.67,
           9.93
-        ],
-        "busiest": [
-          "rustc 176.7%",
-          "Codex (Service) 10.6%",
-          "WindowServer 9.4%",
-          "iTerm2 5.4%",
-          "Codex (Renderer) 5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18425,13 +14615,6 @@
           10.63,
           9.92
         ],
-        "busiest": [
-          "rustc 29.4%",
-          "rustc 29.1%",
-          "rustc 29%",
-          "mds_stores 25.6%",
-          "mds 22.8%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18460,13 +14643,6 @@
           10.89,
           10.02
         ],
-        "busiest": [
-          "WindowServer 6.5%",
-          "iTerm2 4.1%",
-          "Codex (Service) 3.1%",
-          "Codex (Renderer) 2.8%",
-          "bluetoothd 1.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18493,13 +14669,6 @@
           13.29,
           11.47,
           10.24
-        ],
-        "busiest": [
-          "clippy-driver 94.9%",
-          "WindowServer 6.6%",
-          "iTerm2 4.9%",
-          "fseventsd 4.5%",
-          "SystemUIServer 3.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18528,13 +14697,6 @@
           11.47,
           10.24
         ],
-        "busiest": [
-          "Codex (Renderer) 10.7%",
-          "WindowServer 8.4%",
-          "Codex (Service) 7.1%",
-          "codex 6.7%",
-          "fseventsd 4.2%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18562,13 +14724,6 @@
           11.66,
           10.32
         ],
-        "busiest": [
-          "WindowServer 6.8%",
-          "ContinuityCaptureAgent 6.3%",
-          "iTerm2 4.7%",
-          "Codex (Renderer) 4.1%",
-          "claude 4.1%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18594,13 +14749,6 @@
           14.07,
           11.66,
           10.32
-        ],
-        "busiest": [
-          "Codex (Renderer) 8.3%",
-          "WindowServer 6.2%",
-          "iTerm2 4.9%",
-          "mdworker_shared 4.6%",
-          "Codex (Service) 3.4%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18628,13 +14776,6 @@
           14.3,
           11.75,
           10.36
-        ],
-        "busiest": [
-          "fseventsd 16.5%",
-          "WindowServer 7.2%",
-          "ArqAgent 6.8%",
-          "tracd 5.7%",
-          "iTerm2 5.5%"
         ],
         "quiet": true,
         "waitedMs": 0
@@ -18664,13 +14805,6 @@
           11.71,
           10.36
         ],
-        "busiest": [
-          "WindowServer 10.8%",
-          "Codex (Service) 9.2%",
-          "Codex (Renderer) 6.3%",
-          "iTerm2 6%",
-          "backupd 4.9%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18698,13 +14832,6 @@
           11.96,
           10.48
         ],
-        "busiest": [
-          "WindowServer 10.9%",
-          "Codex (Service) 10.2%",
-          "backupd 9.8%",
-          "iTerm2 7%",
-          "Codex (Renderer) 5.7%"
-        ],
         "quiet": true,
         "waitedMs": 0
       },
@@ -18731,13 +14858,6 @@
           14.08,
           11.96,
           10.48
-        ],
-        "busiest": [
-          "Spotify 24.6%",
-          "backupd 11.4%",
-          "diskimagesiod 8.9%",
-          "WindowServer 7.3%",
-          "fseventsd 4.9%"
         ],
         "quiet": true,
         "waitedMs": 0

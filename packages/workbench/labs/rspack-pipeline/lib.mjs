@@ -17,7 +17,8 @@ export const percentile = (values, p) => { const sorted = [...values].sort((a, b
 const READINESS_FILES = ['preview/browser.js', 'workbench/workbench.css'];
 const SNAPSHOT_SKIP = new Set(['node_modules', 'dist', 'labs', '.DS_Store']);
 
-export function snapshot(runDir, kind) {
+// `overlayDir` lets another lab use its own overlay, applied whole.
+export function snapshot(runDir, kind, overlayDir = null) {
   const target = path.join(runDir, 'snapshots', 'variant-' + kind);
   if (fs.existsSync(target)) return target;
   const copy = (from, to) => {
@@ -31,7 +32,7 @@ export function snapshot(runDir, kind) {
   };
   copy(workbench, target);
   fs.symlinkSync(path.join(workbench, 'node_modules'), path.join(target, 'node_modules'), 'junction');
-  const overlay = path.join(here, 'overlay');
+  const overlay = overlayDir || path.join(here, 'overlay');
   const files = [];
   const walk = (directory, relative = '') => {
     for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -41,7 +42,7 @@ export function snapshot(runDir, kind) {
   };
   walk(overlay);
   for (const rel of files) {
-    if (kind === '0' || (kind === '1' && !READINESS_FILES.includes(rel.split(path.sep).join('/')))) continue;
+    if (!overlayDir && (kind === '0' || (kind === '1' && !READINESS_FILES.includes(rel.split(path.sep).join('/'))))) continue;
     fs.mkdirSync(path.dirname(path.join(target, rel)), { recursive: true });
     fs.copyFileSync(path.join(overlay, rel), path.join(target, rel));
   }
@@ -206,7 +207,11 @@ export async function until(target, expression, timeoutMs = 30000) {
 // network traffic, with optional added latency for fonts and images.
 export async function openCanvas(browser, url, { query = '', hash = '', latencyMs = 0 } = {}) {
   // Creating a target occasionally times out right after launch; retry once.
-  const target = await browser.createTarget().catch(async () => { await sleep(1000); return browser.createTarget(); });
+  let target;
+  for (let attempt = 1; !target; attempt++) {
+    try { target = await browser.createTarget(); }
+    catch (error) { if (attempt >= 3) throw error; await sleep(1000 * attempt); }
+  }
   const consoleEntries = [];
   const failures = [];
   const network = [];

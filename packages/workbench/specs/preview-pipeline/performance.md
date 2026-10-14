@@ -222,8 +222,44 @@ fixtures ([report](../../labs/rspack-pipeline/README.md#stage-2-report)):
   finished it took 0.81–0.83 s. Cold first opens took 6.0 s for the pipeline
   and 5.3–5.8 s for the shipping pipeline, both above the 5 s target.
 
-Docs pages have not been measured for navigation, and page listing was not
-measured.
+Docs pages have not been measured for navigation.
+
+### Page listing
+
+The page list comes from evaluating every discovered definition in the
+compile worker. The canvas loads that list before it shows any page, so its
+time adds to every first page.
+
+- The first page lab's smoke runs (2026-10-13, Intel host, synthetic
+  fixtures, single samples) measured listing at 0.8 s for 40 pages and 7.4 s
+  for 600, before any build started. In its run set 1, every variant that
+  still listed all pages first took about 14 s on the 600-page fixture to show
+  the first page with a warm build cache, against 1.1–1.4 s on the small
+  fixture
+  ([first page lab](../../labs/first-page/README.md)).
+- Each definition was bundled in its own esbuild build. A build costs
+  35–50 ms however little it holds, so 600 definitions cost 600 builds. A
+  probe on 2026-10-14 on the 600-page fixture (602 definitions, load 5–22 on
+  16 cores) measured:
+
+  | Method | Time |
+  | --- | ---: |
+  | One build per definition, in sequence | 29 s |
+  | One build per definition, all at once | 16 s |
+  | Node 24's own loader with types stripped | 2.1 s |
+  | One build for every definition | 0.24–0.34 s |
+  | Running the 602 bundled definitions | 18–31 ms, 153 ms on a cold start |
+
+  Node's loader also refuses `.tsx` definitions, extensionless relative
+  imports and `tsconfig` paths, and keeps the first version of each module.
+- Listing bundles every definition that needs evaluating in one build. A
+  build that fails is split in halves until the broken definitions are alone,
+  so each reports its own error. On the same fixture, listing took 0.6 s
+  (1.1 s on the first run), 1.4 s with one definition that does not parse,
+  and 0.33 s again with nothing changed.
+- Of the unchanged listing, most of the time is the project walk (directory
+  reads) and the checks that each definition's source exists inside the
+  project, not evaluation.
 
 The pipeline was implemented on 2026-10-13 ([preview pipeline](README.md#status)).
 Its timings in the product are not measured yet: the lab's sequences through the

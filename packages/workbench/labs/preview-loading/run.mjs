@@ -254,8 +254,8 @@ function edit(file, transform) {
 
 async function runSequences({ variant, size, fixture, snapshotDir, browserFactory, samples, warmups }) {
   const results = [];
-  // Each result records the load and busiest other processes when recorded.
-  const record = (sequence, cell, value) => { const snapshot = hostSnapshot(); results.push({ variant, fixture: size, sequence, cell, ...value, host: { loadAverage: snapshot.loadAverage, busiest: snapshot.busiest } }); };
+  // Each result records the load average when recorded.
+  const record = (sequence, cell, value) => { const snapshot = hostSnapshot(); results.push({ variant, fixture: size, sequence, cell, ...value, host: { loadAverage: snapshot.loadAverage } }); };
   const pages = fixture.manifest.previews.filter(preview => !preview.broken);
   const broken = fixture.manifest.previews.filter(preview => preview.broken);
   const cacheRoot = path.join(runDir, 'cache', `variant-${variant}-${size}`);
@@ -582,7 +582,7 @@ try {
   }
   const report = {
     plan: 'labs/preview-loading/README.md', smoke, settings,
-    host: { atStart: startSnapshot, atEnd: hostSnapshot(), date: new Date().toISOString(), platform: process.platform, arch: process.arch, osRelease: os.release(), cpu: os.cpus()[0].model, cpus: os.cpus().length,
+    host: { atStart: startSnapshot, atEnd: hostSnapshot(), date: new Date().toISOString(), platform: process.platform, arch: process.arch, cpus: os.cpus().length,
       memoryGb: Math.round(os.totalmem() / 2 ** 30), loadAverage: os.loadavg(), node: process.version, sourceRevision: settings.sourceRevision,
       overlays: Object.fromEntries(Object.entries(prepared.snapshots).map(([variant, value]) => [variant, value.overlay])) },
     fixtures: Object.fromEntries(Object.entries(prepared.fixtures).map(([size, value]) => [size, { files: value.manifest.files, sourceBytes: value.manifest.sourceBytes, previews: value.manifest.previews.length }])),

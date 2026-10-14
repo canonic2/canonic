@@ -42,7 +42,7 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
 | [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
-| [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, Shield's hooks and MCP server, and proposed Copilot surfaces |
+| [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, the agent hooks and MCP server, and proposed Copilot surfaces |
 | [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Page, collection and space scopes, ZIP/PDF/image/browser output, background captures, hashes, and warnings |

@@ -13,7 +13,8 @@ This folder owns how they are built, delivered and kept current.
 1. **Discover.** The server walks the project for definitions without running
    project code ([previews](../previews.md#author-and-discover)).
 2. **Evaluate.** The compile worker evaluates definitions and
-   `workbench.config.ts` in Node, bundled with esbuild ([compiler](compiler.md#what-stays-on-esbuild)).
+   `workbench.config.ts` in Node, bundled with esbuild. Every definition
+   that needs evaluating is bundled in one build ([compiler](compiler.md#what-stays-on-esbuild)).
 3. **Compile.** One Rspack development compiler per project and profile
    builds every preview and docs lens in one compilation, with shared chunks,
    hot updates and a persistent cache ([compiler](compiler.md)).
@@ -89,6 +90,11 @@ the targets the whole pipeline is measured against.
   - the portable build moves to an Rspack production build, so projects
     write one plugin form ([plugins](plugins.md#open-questions)).
 
+- **2026-10-14, owner:** evaluate the page list's definitions in one esbuild
+  build instead of one build per definition. An esbuild build costs tens of
+  milliseconds however little it holds, which made listing 600 pages take
+  7.4 s ([performance](performance.md#page-listing)).
+
 The proposed targets in [performance](performance.md#measured-interactions)
 are not agreed yet.
 
@@ -116,6 +122,9 @@ Each topic lists its own. The ones that change the plan:
 
 - Whether to adopt the warm document, which the lab's rule chose
   ([warm runtime](warm-runtime.md#open-questions)).
+- How to show the first page without waiting for the whole page list,
+  which the canvas loads before any page
+  ([first page lab](../../labs/first-page/README.md)).
 - How to show the first page after a restart without waiting for every
   entry: lazy compilation, if it can be made reliable, or another way
   ([compiler](compiler.md#open-questions)).

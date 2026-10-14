@@ -162,7 +162,7 @@ async function measure(prepared) {
           const quiet = await waitForQuiet(settings.quietLoad, 10 * 60 * 1000, log);
           const before = hostSnapshot();
           const result = await sample({ tools: prepared.tools, fixture, variant, shape, outdir, marker });
-          result.host = { loadAverage: before.loadAverage, busiest: before.busiest, quiet: quiet.quiet, waitedMs: quiet.waitedMs };
+          result.host = { loadAverage: before.loadAverage, quiet: quiet.quiet, waitedMs: quiet.waitedMs };
           Object.assign(result, { fixture: size, round, warmup });
           samples.push(result);
           cleanup(fixture, outdir, result);
@@ -262,8 +262,8 @@ function host(tools) {
   const lab = fs.readdirSync(here).filter(name => /\.(c|m)?js$/.test(name)).map(name => path.join(here, name))
     .concat(['acme-app.mjs', 'install.mjs'].map(name => path.join(here, '..', 'fixtures', name)));
   return {
-    date: new Date().toISOString(), platform: process.platform, arch: process.arch, osRelease: os.release(),
-    cpu: os.cpus()[0].model, cpus: os.cpus().length, memoryGb: Math.round(os.totalmem() / 2 ** 30), loadAverage: os.loadavg(),
+    date: new Date().toISOString(), platform: process.platform, arch: process.arch,
+    cpus: os.cpus().length, memoryGb: Math.round(os.totalmem() / 2 ** 30), loadAverage: os.loadavg(),
     node: process.version, workbenchEsbuild: JSON.parse(fs.readFileSync(path.join(workbench, 'node_modules', 'esbuild', 'package.json'), 'utf8')).version,
     tools: Object.fromEntries(['esbuild', 'rolldown', '@rspack/core', 'bun', '@utoo/pack'].map(name => [name, version(name)])),
     sourceRevision: settings.sourceRevision,

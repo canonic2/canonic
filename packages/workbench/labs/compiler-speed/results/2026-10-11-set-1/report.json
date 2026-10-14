@@ -31,8 +31,6 @@
     "date": "2026-10-11T07:02:59.061Z",
     "platform": "darwin",
     "arch": "x64",
-    "osRelease": "24.6.0",
-    "cpu": "Intel(R) Xeon(R) W-2140B CPU @ 3.20GHz",
     "cpus": 16,
     "memoryGb": 64,
     "loadAverage": [

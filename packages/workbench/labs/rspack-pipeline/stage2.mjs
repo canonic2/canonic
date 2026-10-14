@@ -618,7 +618,7 @@ function summary(report) {
 }
 
 const release = acquireLabLock('rspack-pipeline stage 2 ' + settings.set);
-const report = { plan: 'labs/rspack-pipeline/README.md', stage: 2, settings, smoke, host: { atStart: hostSnapshot(), platform: process.platform, arch: process.arch, osRelease: os.release(), cpu: os.cpus()[0].model, cpus: os.cpus().length, memoryGb: Math.round(os.totalmem() / 2 ** 30), node: process.version }, measured: measuredFiles(), started: new Date().toISOString() };
+const report = { plan: 'labs/rspack-pipeline/README.md', stage: 2, settings, smoke, host: { atStart: hostSnapshot(), platform: process.platform, arch: process.arch, cpus: os.cpus().length, memoryGb: Math.round(os.totalmem() / 2 ** 30), node: process.version }, measured: measuredFiles(), started: new Date().toISOString() };
 const renders = {};
 let failure = null;
 try {

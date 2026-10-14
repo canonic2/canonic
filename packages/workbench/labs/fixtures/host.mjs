@@ -25,6 +25,7 @@ export function acquireLabLock(lab) {
 }
 
 // The processes using the most CPU right now, excluding this run's own tree.
+// Shown in the console while waiting for a quiet machine; never written to reports.
 export function busiestProcesses(limit = 5) {
   const out = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,pcpu=,comm='], { encoding: 'utf8' }).stdout || '';
   const rows = out.trim().split('\n').map(line => {
@@ -37,7 +38,7 @@ export function busiestProcesses(limit = 5) {
 }
 
 export function hostSnapshot() {
-  return { at: new Date().toISOString(), loadAverage: os.loadavg().map(value => Math.round(value * 100) / 100), busiest: busiestProcesses() };
+  return { at: new Date().toISOString(), loadAverage: os.loadavg().map(value => Math.round(value * 100) / 100) };
 }
 
 // Waits until the one-minute load average is below `threshold`, checking

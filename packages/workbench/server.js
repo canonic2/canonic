@@ -194,38 +194,6 @@ function readBody(req, limit) {
   });
 }
 
-function requestJson(address, method, body, timeout) {
-  return new Promise(function (resolve, reject) {
-    var target = new URL(address);
-    var payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
-    var request = http.request({
-      hostname: target.hostname,
-      port: target.port,
-      path: target.pathname + target.search,
-      method: method,
-      timeout: timeout || 15000,
-      headers: payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {},
-    }, function (response) {
-      var chunks = [];
-      response.on('data', function (chunk) { chunks.push(chunk); });
-      response.on('end', function () {
-        var text = Buffer.concat(chunks).toString('utf8');
-        try {
-          var parsed = JSON.parse(text || '{}');
-          if (response.statusCode < 200 || response.statusCode >= 300) {
-            return reject(new Error(parsed.value && parsed.value.message || parsed.error || 'WDA answered ' + response.statusCode));
-          }
-          resolve(parsed);
-        } catch (error) { reject(new Error('WDA returned invalid JSON: ' + error.message)); }
-      });
-    });
-    request.on('timeout', function () { request.destroy(new Error('WDA request timed out.')); });
-    request.on('error', reject);
-    if (payload) request.write(payload);
-    request.end();
-  });
-}
-
 function capturePayload(body, baseUrl) {
   var payload = JSON.parse(body.toString('utf8'));
   var width = Math.round(Number(payload.width));
@@ -893,106 +861,23 @@ function start(options) {
   var onOpen = options.onOpen || function () {
     throw new Error('nothing is set up to open files');
   };
-  var simulatorSessions = {};
   var autoStorybookAddresses = {};
   var simulatorQueue = Promise.resolve();
   var listSimulators = options.simulators || bootedSimulators;
-  var iosCli = path.join(root, '.canonic', 'src', 'automation', 'ios-cli.mjs');
-  if (!fs.existsSync(iosCli)) iosCli = path.join(__dirname, '..', 'src', 'automation', 'ios-cli.mjs');
-  var simulatorStateDir = path.join('/tmp', 'canonic-workbench-ios-' + crypto.createHash('sha1').update(root).digest('hex').slice(0, 10));
-
-  function runIosCli(args, timeout) {
-    return new Promise(function (resolve, reject) {
-      childProcess.execFile(process.execPath, [iosCli].concat(args), {
-        cwd: root,
-        encoding: 'utf8',
-        maxBuffer: 16 * 1024 * 1024,
-        timeout: timeout || 150000,
-      }, function (error, stdout, stderr) {
-        if (error) return reject(new Error(String(stderr || error.message || error).trim()));
-        try { resolve(JSON.parse(stdout)); }
-        catch (parseError) { reject(new Error('iOS automation returned invalid JSON: ' + parseError.message)); }
-      });
-    });
-  }
+  var sandboxMobile = options.sandbox || require('./src/modules/sandbox/index.ts').create(root);
 
   function startSimulatorSession(udid) {
-    if (simulatorSessions[udid]) return simulatorSessions[udid];
-    var sessionName = 'workbench-' + udid.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    simulatorSessions[udid] = runIosCli([
-      'start', '--session', sessionName, '--state-dir', simulatorStateDir,
-      '--platform', 'simulator', '--udid', udid,
-    ], 150000).then(function (answer) {
-      var state = answer.state || {};
-      if (!state.sessionId || !state.wdaBaseUrl) throw new Error('WDA started without a usable session.');
-      return requestJson(state.wdaBaseUrl + '/session/' + state.sessionId + '/window/size', 'GET', undefined, 15000)
-        .then(function (sizeAnswer) {
-          var size = sizeAnswer.value || sizeAnswer;
-          return {
-            udid: udid,
-            sessionName: sessionName,
-            sessionId: state.sessionId,
-            baseUrl: state.wdaBaseUrl,
-            screen: { width: Number(size.width), height: Number(size.height) },
-          };
-        });
-    }).catch(function (error) {
-      delete simulatorSessions[udid];
-      throw error;
-    });
-    return simulatorSessions[udid];
+    return sandboxMobile.screen(udid).then(function (screen) { return { udid: udid, screen: screen }; });
   }
-
   function simulatorInput(ask) {
     var udid = String(ask.udid || '');
     if (!udid) return Promise.reject(refused(400, 'which Simulator?'));
-    return startSimulatorSession(udid).then(function (session) {
-      function ratio(value) { return Number.isFinite(value) && value >= 0 && value <= 1; }
-      var action;
-      if (ask.action === 'tap' && ratio(ask.x) && ratio(ask.y)) {
-        var tapX = Math.round(session.screen.width * ask.x);
-        var tapY = Math.round(session.screen.height * ask.y);
-        action = function () {
-          var base = session.baseUrl + '/session/' + session.sessionId;
-          return requestJson(base + '/actions', 'POST', { actions: [{
-            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' }, actions: [
-              { type: 'pointerMove', duration: 0, x: tapX, y: tapY },
-              { type: 'pointerDown', button: 0 },
-              { type: 'pause', duration: 80 },
-              { type: 'pointerUp', button: 0 },
-            ],
-          }] }, 15000)
-            .catch(function () { return requestJson(base + '/wda/tap/0', 'POST', { x: tapX, y: tapY }, 15000); })
-            .catch(function () { return requestJson(base + '/wda/tap', 'POST', { x: tapX, y: tapY }, 15000); });
-        };
-      } else if (ask.action === 'swipe' && [ask.fromX, ask.fromY, ask.toX, ask.toY].every(ratio)) {
-        var fromX = Math.round(session.screen.width * ask.fromX);
-        var fromY = Math.round(session.screen.height * ask.fromY);
-        var toX = Math.round(session.screen.width * ask.toX);
-        var toY = Math.round(session.screen.height * ask.toY);
-        var duration = Math.max(0.05, Math.min(Number(ask.duration) || 0.2, 2));
-        action = function () {
-          var base = session.baseUrl + '/session/' + session.sessionId;
-          return requestJson(base + '/actions', 'POST', { actions: [{
-            type: 'pointer', id: 'finger1', parameters: { pointerType: 'touch' }, actions: [
-              { type: 'pointerMove', duration: 0, x: fromX, y: fromY },
-              { type: 'pointerDown', button: 0 },
-              { type: 'pointerMove', duration: Math.round(duration * 1000), x: toX, y: toY },
-              { type: 'pointerUp', button: 0 },
-            ],
-          }] }, 25000).catch(function () {
-            return requestJson(base + '/wda/dragfromtoforduration', 'POST', {
-              fromX: fromX, fromY: fromY, toX: toX, toY: toY, duration: duration,
-            }, 25000);
-          });
-        };
-      } else {
-        return Promise.reject(refused(400, 'invalid Simulator input action or coordinates'));
-      }
-      var queued = simulatorQueue.then(action, action);
-      simulatorQueue = queued.catch(function () {});
-      return queued.then(function () { return { action: ask.action, screen: session.screen }; });
-    });
+    var action = function () {
+      return sandboxMobile.input(udid, ask).then(function () { return { action: ask.action }; });
+    };
+    var queued = simulatorQueue.then(action, action);
+    simulatorQueue = queued.catch(function () {});
+    return queued;
   }
 
   /* The config as this machine reads it, fresh every time it's asked for:
@@ -2383,14 +2268,7 @@ function start(options) {
       close: function () {
         diagnostic('info', 'session.stopping', { port: port });
         shown.close();
-        var stops = Object.keys(simulatorSessions).map(function (udid) {
-          return Promise.resolve(simulatorSessions[udid]).then(function (session) {
-            return runIosCli([
-              'stop', '--session', session.sessionName, '--state-dir', simulatorStateDir, '--teardown',
-            ], 30000);
-          }).catch(function () {});
-        });
-        return Promise.all(stops).then(function () {
+        return simulatorQueue.catch(function () {}).then(function () {
           return Promise.all([
             options.captureShared ? Promise.resolve() : Promise.resolve(capture.close()).catch(function () {}),
             Promise.resolve(windowVideo.close()).catch(function () {}),

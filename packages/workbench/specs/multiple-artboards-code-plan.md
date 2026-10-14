@@ -82,7 +82,7 @@ constraints are the contract.
 | Annotation state/UI | `src/modules/annotations/model.ts`, `src/components/annotations/` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
 | Canvas review | `src/modules/canvas-review/model.ts`, `src/modules/canvas-review/controller.ts` | Immutable capture manifest, full-canvas reference/context derivation, acquisition workflow, review result and errors |
 | Capture composition | `src/modules/capture/composition.ts`, `src/modules/capture/service.ts` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
-| Agent publication | `src/modules/agent-context/report.ts`, `src/modules/agent-context/publisher.ts` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and Shield reader |
+| Agent publication | `src/modules/agent-context/report.ts`, `src/modules/agent-context/publisher.ts` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and agent context reader |
 | Browser/host entry points | Browser bootstrap and existing server/extension entry points outside `src/modules/` | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
 
 Persistence is a conditional capability under `src/modules/canvas-storage/`, created
@@ -249,8 +249,8 @@ checks. Surface server, startup, and trust failures per space/artboard.
    publish it under one canvas ID to participating space services. Include
    each space's artboards and all other participants, selected ID, and actual
    versus requested views. Host/user activity ordering is distinct from load
-   completion/heartbeat ordering. Retain complete textual output for Shield
-   consumers; validate size limits rather than truncating.
+   completion/heartbeat ordering. Retain complete textual output for agent
+   integrations; validate size limits rather than truncating.
 7. **Successful handoff annotations:** preserve current clear-after-handoff
    behavior only for annotations included in the completed review. A
    concurrent new annotation must survive; failures/cancellation clear none.
@@ -280,7 +280,7 @@ are migration steps, not a release that narrows the agreed phase 1 scope.
 | 2. Single-artboard ownership | Extract model, geometry, controller, and iframe runtime from shell globals; connect the existing top bar/host via temporary explicit adapters | Existing navigation, spare-frame readiness, annotations, capture, controls, and source behavior preserved |
 | 3. Independent instances | Key artboard DOM by ID, per-instance generations/controls/notes, automatic placement, common camera and retention budget | Duplicate previews/stories stay independent; resizing/focus and eviction/disposal verified |
 | 4. Spaces and native content | Space-aware host access and catalog routing; multi-source native pool and per-instance subscriptions | Two spaces sharing roots or source names resolve correctly; native sources/codecs coexist in real host runs |
-| 5. Full-canvas review/context | Capture manifest/leases/composition and bundle storage; versioned complete context publication and Shield compatibility | Mixed-renderer capture, race/failure cleanup, all-artboard prompt and hooks/MCP verified |
+| 5. Full-canvas review/context | Capture manifest/leases/composition and bundle storage; versioned complete context publication and agent-integration compatibility | Mixed-renderer capture, race/failure cleanup, all-artboard prompt and hooks/MCP verified |
 | 6. Product completion | Resolve chosen persistence and legacy links, recovery, limits, guides and website refresh | Phase 1 acceptance criteria pass; no remaining renderer/space exclusions hidden as future work |
 | 7. Phase 2 | Free positioning and row/grid arrangement in existing geometry/interactions modules | Layout changes preserve runtime state, camera, annotations, capture mapping and accessible movement |
 
@@ -301,8 +301,8 @@ point or explicitly adapt its own delivery before removing the shared script.
 Manifest validation, capture fidelity, compiler/framework adapters, and catalog
 export remain existing capabilities, reused through their public boundaries.
 
-Keep Shield integration changes in `packages/shield/src/`. Test canonical code first;
-regeneration/rollout into distributed copies requires its own authorized scope.
+Agent-integration changes belong to the package that generates the agent
+configuration, outside Workbench; rolling them out requires its own authorized scope.
 Do not alter the other session's runtime files as part of writing this plan.
 
 ## Verification plan
@@ -322,9 +322,8 @@ Do not alter the other session's runtime files as part of writing this plan.
   spaces, composition fidelity, process/subscription cleanup, and packaging.
   Unit stubs cannot establish those host/resource contracts.
 - Package checks: `pnpm --dir packages/workbench test` and
-  `pnpm --dir packages/workbench run check`. Shield reader changes also run
-  `node --test packages/shield/src/integrations/workbench-context.test.mjs` and any
-  affected pipeline tests. Website guide/UI changes use its test/build and
+  `pnpm --dir packages/workbench run check`. Context reader changes also run
+  that reader's tests. Website guide/UI changes use its test/build and
   screenshot workflow. Finish with `git diff --check` and relevant untracked
   file review. Record platform/prerequisite limits separately from passing
   coverage; measure memory, input responsiveness, and capture size/time before

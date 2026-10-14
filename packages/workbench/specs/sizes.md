@@ -462,7 +462,7 @@ Replacing the fixed sizes touches code that assumes them
 - Multiple-artboard children open at `@resizable`, and
   `wbArtboardShell.size` switches to Resizable; that path has to set the
   artboard's size without going through the space's sizes.
-- Shield's policy hook (`packages/shield/src/adapters/policy-hook.mjs`) recognizes
+- The agent policy hook recognizes
   Workbench addresses only with `fit`, `resizable`, `390`, `393`, or `1512`;
   it has to accept any kebab-case size key. The shared Workbench skill and
   rule describe the size part of an address and change with it.
@@ -519,7 +519,7 @@ Verified on 2026-10-04 against the working tree.
   [workbench.js](../workbench/workbench.js) and [zoom.js](../workbench/zoom.js),
   through the [bridge](../src/sizes/browser/bootstrap.ts); handoff size lines
   and screenshot names; the export plan and README labels; preview keys and
-  the portable viewer; the multiple-artboard model; Shield's pattern. This
+  the portable viewer; the multiple-artboard model; the agent policy hook's pattern. This
   repository's Sidebar page opens at its `sidebar` size, checked in Chrome at
   340 × 836 on a 956-pixel canvas.
 - **Sizes are resolved on the server.** The browser's YAML reader and the
@@ -555,7 +555,7 @@ Each step ships working and tested on its own:
    to a `sidebar` size.
 3. **Handoff, export, previews.** Handoff size lines and screenshot names, the
    export plan, preview definition keys, the portable viewer, and the
-   multiple-artboard model, plus Shield's address pattern.
+   multiple-artboard model, plus the agent policy hook's address pattern.
 4. **Writing.** **Custom size…**, **Edit sizes…**, the `sizes` writer, and the
    Configure pages cards.
 5. **Documentation.** The guides, README, shared skill and rule, website, and

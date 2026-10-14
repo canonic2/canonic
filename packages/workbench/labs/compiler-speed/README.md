@@ -27,7 +27,7 @@ Amendment, 2026-10-11, after run sets 1 and 2:
   samples. Bun is not re-measured; its result in sets 1 and 2 is unchanged by
   this amendment.
 - A lock lets only one lab run at a time, and each sample records the load
-  average and the busiest other processes at its start. The runner can hold
+  average at its start. The runner can hold
   each sample until the load is below a threshold; the owner chose not to
   gate on load for sets 3 and 4 (threshold 16, one per hardware thread), so
   load is recorded rather than controlled.
@@ -254,7 +254,7 @@ with no other heavy work on the host.
 
 ### Host and tools
 
-macOS 15 on Intel (Xeon W-2140B, 16 threads, 64 GB). Apple silicon and other
+macOS 15 on Intel (16 threads, 64 GB). Apple silicon and other
 platforms are not measured. Node 24; headless Chrome through the package's
 DevTools driver in `scripts/chrome.cjs` for render parity. Compiler and
 fixture dependencies are pinned in the lab and installed into the run
@@ -324,8 +324,7 @@ What changed from sets 1 and 2:
   restarted between set 2 and set 3; the lab cannot attribute the change.
 - The recorded one-minute load average (median about 12 in set 3) counts the
   lab's own multi-threaded compilers, so it does not measure background load
-  alone. The busiest other processes recorded were the window server, an
-  editor, a terminal and a backup agent.
+  alone.
 
 Result against the decision rule, from sets 3 and 4:
 
@@ -350,7 +349,7 @@ Result against the decision rule, from sets 3 and 4:
 ### Run sets 1 and 2
 
 Two run sets on 2026-10-11 at Workbench commit `ef5a4aa`, macOS 15 on Intel
-(Xeon W-2140B, 16 threads, 64 GB), Node 24.12, Chrome 154: set 1 at 06:30
+(16 threads, 64 GB), Node 24.12, Chrome 154: set 1 at 06:30
 UTC and set 2 at 08:09 UTC, each with 2 warmups and 10 samples per cell and
 no failed samples. The host also ran an idle VS Code with the Workbench
 extension. Evidence: [set 1](results/2026-10-11-set-1/summary.md),

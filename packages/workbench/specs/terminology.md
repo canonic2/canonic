@@ -137,7 +137,7 @@ document, such as a heading's section in docs or a guide.
 - **2026-10-04: identifiers and payloads follow the terms.** Code, routes,
   payload fields, and prompt text use these words too, including those other
   tools read: the handoff prompt, `/_workbench/config`, and the agent-context
-  payloads Shield's hook and MCP server consume. Those consumers change in the
+  payloads the agent hook and MCP server consume. Those consumers change in the
   same release as Workbench.
 - **2026-10-04: the toolbar holds the tools.** The bar at the bottom carries
   the drawing and handoff tools; the bar across the top is the **top bar**,

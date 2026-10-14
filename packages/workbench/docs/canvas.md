@@ -239,7 +239,7 @@ those, use a [handoff](annotations-and-handoff.md#hand-off-to-an-agent).
 Agents can also read the same reference without a paste. Every open canvas
 tells the Workbench server which page it shows, and
 `GET /_workbench/view` on the server returns the reference from the canvas
-you changed most recently. Projects configured with Canonic's Shield can give
+you changed most recently. Projects with agent hooks set up can give
 it to Claude Code and Codex with every prompt, and to MCP clients through a
 `current_view` tool. A project with a `.canonic` folder gets the server's
 address in `.canonic/.workbench/server.json`; add that folder to

@@ -10,9 +10,9 @@ reviewing a native app alongside web pages.
 - **macOS 13 or later with Xcode**, which builds the capture helper the first
   time a Simulator is streamed, and at least one booted Simulator.
 - **Screen Recording permission** for your editor. See [Permissions](#permissions).
-- **WebDriverAgent (WDA)** for taps and drags, installed through
-  [Canonic Shield](#install-webdriveragent)'s iOS automation in the project.
-  Without it the stream still shows, but input doesn't reach the device.
+- **Sandbox Rust binary** for taps and drags, with an explicit synthetic target
+  declared in `.canonic/sandbox.json`. See [Configure input](#configure-input).
+  Without it the stream still shows, but input reports a setup error.
 
 ## Configure it
 
@@ -103,19 +103,19 @@ opens the right settings pane. Then:
 When you run the server without the editor, grant the permission to the
 terminal app that started it.
 
-## Install WebDriverAgent
+## Configure input
 
-Workbench sends input through the iOS automation in
-[Canonic Shield](https://github.com/canonic2/canonic). With Shield installed in
-the project, install WebDriverAgent once from the project root:
+Install the compiled Sandbox product at `.canonic/sandbox/bin/sandbox` and declare
+this simulator in `.canonic/sandbox.json`:
 
-```sh
-node .canonic/src/automation/ios-cli.mjs install-wda
+```json
+{"environments":{"local":{"synthetic":true,"targets":["simulator:YOUR-UUID"],"unrestrictedExternal":true}}}
 ```
 
-This clones WebDriverAgent into `.canonic/.dependencies/ios`. Run it again
-with `--force` to replace an existing copy. The first input to a device starts
-a WDA session, so expect a delay before the first tap lands.
+The target must contain synthetic test data. Sandbox owns validation, controller
+acquisition, native touch dispatch and cleanup for each input command. The
+simulator input path requires no guest helper. Workbench's display path uses the
+window capture helper and still requires the Screen Recording permission above.
 
 ## Screenshots and exports
 
@@ -131,4 +131,4 @@ instead of getting a reference image.
 | No Simulator pages | Boot a Simulator. With a `device` name or UDID, check that it matches exactly. The config route's `problems` reports when no booted device matches. |
 | Black canvas or a permission error | Grant Screen Recording to the editor, then restart it. |
 | A design page's Simulator lens says the Simulator isn't declared | Name the device by its UDID, keep `catalog: true` on the implementation, and boot the device. See [Add a Simulator lens to a design page](#add-a-simulator-lens-to-a-design-page). |
-| Stream shows but taps do nothing | Install WebDriverAgent. Check the **Workbench** log (**Workbench: Show Log**) for automation errors. |
+| Stream shows but taps do nothing | Install Sandbox and verify the declared target in `.canonic/sandbox.json`. Check the **Workbench** log (**Workbench: Show Log**) for automation errors. |

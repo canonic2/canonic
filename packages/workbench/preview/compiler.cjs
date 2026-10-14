@@ -292,13 +292,54 @@ class Compiler {
       build.onResolve({ filter: /^@canonic2\/workbench$/ }, () => ({ path: API }));
     } };
   }
-  async evaluate(file) {
-    const result = await esbuild.build({ absWorkingDir: this.root, entryPoints: [file], bundle: true, platform: 'node', format: 'cjs', packages: 'external', write: false, metafile: true, logLevel: 'silent', plugins: [this.apiPlugin()] });
+  evaluationOptions() {
+    return { absWorkingDir: this.root, bundle: true, platform: 'node', format: 'cjs', packages: 'external', write: false, metafile: true, logLevel: 'silent', plugins: [this.apiPlugin()] };
+  }
+  run(text, file) {
     const loaded = new Module(file);
     loaded.filename = file;
     loaded.paths = Module._nodeModulePaths(path.dirname(file));
-    loaded._compile(result.outputFiles[0].text, file);
-    return { value: loaded.exports.default || loaded.exports, files: this.tracked(result.metafile) };
+    loaded._compile(text, file);
+    return loaded.exports.default || loaded.exports;
+  }
+  async evaluate(file) {
+    const result = await esbuild.build({ ...this.evaluationOptions(), entryPoints: [file] });
+    return { value: this.run(result.outputFiles[0].text, file), files: this.tracked(result.metafile) };
+  }
+  // Evaluates every definition whose cached result is stale in one esbuild
+  // build. A build costs tens of milliseconds however little it holds, so one
+  // build per definition made listing a large project take seconds. A build
+  // that fails is split in halves, so a broken definition costs a few more
+  // builds rather than one per file. The files left, and a definition that
+  // throws, go to definition(), which evaluates them alone and reports their
+  // own errors.
+  async load(files) {
+    const stale = files.filter(file => { const cached = this.definitions.get(file); return !cached || !this.fresh(cached.watched); });
+    if (stale.length > 1) await this.loadBatch(stale);
+  }
+  async loadBatch(files) {
+    let result;
+    try {
+      result = await esbuild.build({ ...this.evaluationOptions(), entryPoints: files, outdir: path.join(this.root, '.workbench-definitions'), outbase: this.root });
+    } catch (_) {
+      if (files.length < 2) return;
+      const half = Math.ceil(files.length / 2);
+      await this.loadBatch(files.slice(0, half));
+      await this.loadBatch(files.slice(half));
+      return;
+    }
+    const pending = new Set(files);
+    const texts = new Map(result.outputFiles.map(output => [output.path, output.text]));
+    for (const [output, meta] of Object.entries(result.metafile.outputs)) {
+      if (!meta.entryPoint) continue;
+      const file = path.resolve(this.root, meta.entryPoint);
+      const text = texts.get(path.resolve(this.root, output));
+      if (!pending.has(file) || text === undefined) continue;
+      let value;
+      try { value = this.run(text, file); } catch (_) { continue; }
+      const evaluated = { value, files: this.tracked(meta) };
+      this.definitions.set(file, { evaluated, watched: new Map(evaluated.files.map(file => [file, stamp(file)])) });
+    }
   }
   async definition(file) {
     const cached = this.definitions.get(file);
@@ -326,6 +367,7 @@ class Compiler {
     const errors = [];
     const ids = new Set();
     const files = discover(this.root, this.options.include);
+    await this.load(files);
     for (const file of files) {
       try {
         const evaluated = await this.definition(file);

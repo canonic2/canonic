@@ -5,8 +5,8 @@ interface Snapshot { state: CanvasState; browsed: string; spaces: readonly Space
 export function spaceIds(snapshot: Snapshot): Set<string> {
   const ids = new Set([snapshot.browsed, ...snapshot.state.artboards.map(b => b.target.space.id)].filter(Boolean));
   const roots = new Set(snapshot.spaces.filter(p => ids.has(p.id)).map(p => p.root).filter(Boolean));
-  // Sibling servers share their root's announcement file. Any address Shield
-  // discovers must expose the same complete canvas.
+  // Sibling servers share their root's announcement file. Any address an agent
+  // integration discovers must expose the same complete canvas.
   for (const s of snapshot.spaces) if (s.root && roots.has(s.root)) ids.add(s.id);
   return ids;
 }

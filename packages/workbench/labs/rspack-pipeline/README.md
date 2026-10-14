@@ -394,7 +394,7 @@ They are proposed, not agreed. The 10% threshold is the owner's.
 
 ### Host and tools
 
-macOS 15 on Intel (Xeon W-2140B, 16 threads, 64 GB). Apple silicon and other
+macOS 15 on Intel (16 threads, 64 GB). Apple silicon and other
 platforms are not measured. Headless Chrome through the standalone server
 for run sets. The labs methodology requires confirming the integrated
 product in the VS Code webview after implementation. Pinned in the lab:

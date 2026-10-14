@@ -140,8 +140,8 @@ changes were present during investigation.
   and optional manifest key, not just its served root. Several spaces can
   share a root and still have different configurations. Runtime space IDs
   depend on local paths and are not portable team-sharing references.
-- [Shield's context reader](../../shield/src/integrations/workbench-context.mjs)
-  validates the reporting server's root and consumes `view.text`.
+- The agent context reader validates the reporting server's root and consumes
+  `view.text`.
   [Agent context](agent-context.md#finding-the-server) also notes that spaces
   sharing a root share one announcement file. Multi-space publication must
   account for this, and context transport needs changes beyond the canvas UI.
@@ -320,7 +320,7 @@ They make the implementation boundaries concrete without narrowing content.
   fields. Match Copy reference to that same record.
 - Suggested discovery: publish the full canvas record to each participating
   space's context service, under the same canvas ID. Each service keeps its
-  own root for Shield validation. Handle shared-root announcements explicitly
+  own root for the context reader's validation. Handle shared-root announcements explicitly
   rather than allowing space selection to decide which context survives.
   Closing or removing participation withdraws the record; heartbeat expiry
   still handles vanished canvases.

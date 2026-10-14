@@ -31,8 +31,8 @@ The publisher under `src/canvas/` serializes updates to participating spaces
 and their shared-root siblings. User activity determines the current canvas;
 background readiness and heartbeats only update its report. Oversize reports
 fail explicitly without silently truncating artboards. The server validates
-version 2 and retains the legacy single-view shape for older clients. Shield
-continues to consume `view.text`.
+version 2 and retains the legacy single-view shape for older clients. Agent
+integrations consume `view.text`.
 
 The current canvas UI continues to publish the legacy single-view shape. Its
 reference formatter can contribute each instance's reference to a future host;
@@ -85,31 +85,22 @@ workbench runs its own server.
 | Surface | Agents | What the user does | What the agent gets | Status |
 | --- | --- | --- | --- | --- |
 | Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a page is showing | Implemented |
-| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor Shield configures | Asks about "this page", or attaches the resource | The current view on request | Implemented |
+| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor the agent configuration covers | Asks about "this page", or attaches the resource | The current view on request | Implemented |
 | Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request | Proposed |
 | **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled | Proposed |
 | Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file | Waiting on VS Code |
 
-### Shield sets it up
+### The agent configuration sets it up
 
-**Decision (2026-10-03):** Shield writes the hook and MCP configuration when a
-project's `.canonic/canonic.yml` has:
+**Decision (2026-10-03):** the project's agent configuration writes the hook
+and MCP configuration when Workbench agent context is enabled for the project.
 
-```yaml
-workbench:
-  agent_context: true
-```
-
-Shield's [workbench-context.mjs](../../shield/src/integrations/workbench-context.mjs)
-does the work in both roles: `hook` prints the view (or nothing), and `mcp`
-serves the tool and resource over stdio. Shield adds the MCP server to every
-enabled editor's configuration and the hook to Claude Code's
-`.claude/settings.json` and Codex's `.codex/hooks.json`. Its configuration
-docs cover the generated entries.
-
-The [Shield interception specification](../../shield/specs/features/agent-interception.md) defines
-generation, runtime protocols, approval, and agent coverage. Codex requires
-review and trust of new or changed hook definitions before they can run.
+One context reader does the work in both roles: `hook` prints the view (or
+nothing), and `mcp` serves the tool and resource over stdio. The
+configuration adds the MCP server to every enabled editor's configuration and
+the hook to Claude Code's `.claude/settings.json` and Codex's
+`.codex/hooks.json`. Codex requires review and trust of new or changed hook
+definitions before they can run.
 
 - Editors start MCP servers and Codex hooks in the session's directory, which
   may be below the project root or inside a nested Git repository. The
@@ -126,7 +117,7 @@ review and trust of new or changed hook definitions before they can run.
 - **Copilot `#page` tool.** `contributes.languageModelTools` with
   `vscode.lm.registerTool` (VS Code 1.95), registered only when the API exists
   (`engines.vscode` is `^1.123.0`, which already includes it).
-- **Copilot and Cursor without Shield.** The extension could register the same
+- **Copilot and Cursor without the agent configuration.** The extension could register the same
   MCP server itself, through `registerMcpServerDefinitionProvider` (VS Code
   1.101) or `vscode.cursor.mcp.registerServer`, pointing at its own address,
   with no project files.
@@ -154,10 +145,8 @@ review and trust of new or changed hook definitions before they can run.
 - Automated: [agent-view.test.js](../agent-view.test.js) (latest canvas,
   heartbeats, closing, staleness, field filtering, the announcement file),
   [server.test.js](../server.test.js) (the route and the file's lifecycle),
-  and Shield's
-  [integration](../../shield/src/integrations/workbench-context.test.mjs),
-  [output](../../shield/src/outputs/workbench-context.test.mjs), and
-  [loader](../../shield/src/loaders/workbench.test.mjs) tests.
+  and the context reader's, output's and loader's own tests in the package
+  that generates the agent configuration.
 - Manual, not yet done: the hook and tool inside the Claude Code and Codex
   extensions, with their versions recorded.
 
@@ -172,9 +161,8 @@ review and trust of new or changed hook definitions before they can run.
   browser canvas open, the one the user last moved is the one they mean.
 - **No screenshots (2026-10-03).** `current_view` reports the page; images
   stay in the handoff, which the user starts deliberately.
-- **Shield distributes the configuration (2026-10-03).** Canonic projects
-  already generate their agent configuration with Shield; the extension
-  writes none.
+- **The agent configuration distributes it (2026-10-03).** Canonic projects
+  already generate their agent configuration; the extension writes none.
 
 ## Discoveries
 

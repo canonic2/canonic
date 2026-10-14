@@ -117,9 +117,9 @@ Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
   of, or as well as, using a catalog. See the gap below.
 - The canvas shows the device through the native window stream described in
   [Native window stream](#native-window-stream). Taps and drags on the canvas
-  are sent to the device through WebDriverAgent (WDA), installed by Canonic
-  Shield's iOS automation. Without WDA the stream still shows, but input
-  doesn't reach the device.
+  are sent through the Sandbox Rust CLI adapter, with explicit target authorization
+  in `.canonic/sandbox.json`. Each input invocation acquires and closes its owned
+  run/session. Missing binary or target configuration is an input setup error.
 - Simulator lenses have no state menu. `start` is reported as a problem;
   `root` and code pointers work as for other implementations.
 - Export reference screenshots are supported for authored design pages,

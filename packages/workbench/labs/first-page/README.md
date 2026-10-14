@@ -7,13 +7,42 @@ pre-warming, [hot updates](../../specs/preview-pipeline/hot-updates.md) for
 what must keep working, and [performance](../../specs/preview-pipeline/performance.md#measured-interactions)
 for the targets.
 
-Status: the owner agreed the plan on 2026-10-13.
+Status: the owner agreed the plan on 2026-10-13. Run set 1 finished on
+2026-10-14; run set 2 has not run.
 
 Amendment, 2026-10-13, before any run: the Rspack pipeline lab's confirmation
 run was spoiled by other work on the host (load averages up to 528). Each
 sample here waits until the one-minute load average is below 8, for at most
 ten minutes, and records the load it started at. A sample that starts above
 the threshold after the wait is kept and marked.
+
+Amendment, 2026-10-13, after the smoke runs and before any run set:
+
+- **Warm samples share one warm cache.** S2 and S3 start from one persistent
+  cache per variant and fixture, built once and kept warm by each S2 sample's
+  full build. A cache per sample would add a full build of up to 600 pages
+  to every sample. S1 still starts from an empty cache each time, and closes
+  as soon as its page shows.
+- **Prototype fixes from the smoke runs**, none of which changes a boundary:
+  - the worker lists the project once when the server and pre-warming ask
+    together;
+  - a page asked for before its compiler exists is in that compiler's first
+    build;
+  - variant 1 adds the rest of the project only after the first page is
+    served, as the plan says;
+  - built files are served at once while later batches build;
+  - variant 3 describes its pages through its own compiler.
+- **The moved-module check counts shared chunks only.** A module copied into
+  each page's own chunk has not moved when a page is added.
+
+Amendment, 2026-10-14, after run set 1 and before run set 2: run set 1
+showed that listing the project's definitions, which every variant does
+before its first page, grows with the page count. Each definition had its own
+esbuild build. The product lists them in one build since then
+([page listing](../../specs/preview-pipeline/performance.md#page-listing)), and
+every variant's copy of the compiler carries that change. Run set 2 therefore
+measures a different listing than run set 1: set 1 stays the record of the
+cost, and the decision rule is applied to set 2.
 
 ## Plan
 
@@ -177,7 +206,7 @@ requires.
 
 ### Host and tools
 
-macOS 15 on Intel (Xeon W-2140B, 16 threads, 64 GB), headless Chrome through
+macOS 15 on Intel (16 threads, 64 GB), headless Chrome through
 the standalone server, with the Rspack and loader versions the package pins.
 Apple silicon is not measured. The winning change is confirmed through the
 shipping server and the VS Code webview after implementation.

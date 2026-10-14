@@ -118,6 +118,41 @@ test('discovers TypeScript previews, validates IDs and states, and isolates inva
   assert.throws(() => new Compiler(root, { include: ['src/**'] }).declared('button.workbench.ts'), /declared/);
 });
 
+test('lists every definition from one build, follows helper edits and isolates broken definitions', async t => {
+  const page = (id, extra = '') => `import { definePreview } from '@canonic2/workbench';
+import { section } from '../titles';
+export default definePreview({ id: 'pages/${id}', title: section + '/${id}', adapter: 'html', source: { entry: '../button.ts' } });${extra}`;
+  const root = fixture(t, {
+    'titles.ts': "export const section: string = 'Acme';",
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Button"; }',
+    'pages/alpha.workbench.ts': page('alpha'),
+    'pages/beta.workbench.tsx': page('beta'),
+    'pages/gamma.workbench.ts': page('gamma'),
+  });
+  // Definitions evaluated one build at a time: only those the shared build could not.
+  const compiler = new Compiler(root);
+  const alone = [];
+  const evaluate = compiler.evaluate.bind(compiler);
+  compiler.evaluate = file => { alone.push(path.relative(root, file)); return evaluate(file); };
+  let index = await compiler.index();
+  assert.deepEqual(index.previews.map(preview => preview.title), ['Acme/alpha', 'Acme/beta', 'Acme/gamma']);
+  assert.deepEqual(index.errors, []);
+  assert.deepEqual(alone, []);
+  fs.writeFileSync(path.join(root, 'titles.ts'), "export const section: string = 'Acme Pages';\n");
+  index = await compiler.index();
+  assert.deepEqual(index.previews.map(preview => preview.title), ['Acme Pages/alpha', 'Acme Pages/beta', 'Acme Pages/gamma']);
+  assert.deepEqual(alone, []);
+
+  fs.writeFileSync(path.join(root, 'pages/beta.workbench.tsx'), page('beta', '\nthrow new Error("beta failed");'));
+  fs.writeFileSync(path.join(root, 'pages/gamma.workbench.ts'), page('gamma', '\nconst = ;'));
+  index = await compiler.index();
+  assert.deepEqual(index.previews.map(preview => preview.id), ['pages/alpha']);
+  assert.equal(index.errors.length, 2);
+  assert.match(index.errors.join('\n'), /pages\/beta\.workbench\.tsx: beta failed/);
+  assert.match(index.errors.join('\n'), /pages\/gamma\.workbench\.ts: /);
+  assert.deepEqual(alone.sort(), ['pages/beta.workbench.tsx', 'pages/gamma.workbench.ts']);
+});
+
 test('indexes a definition’s size keys and rejects entries that aren’t keys', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts', "sizes: ['laptop', 'sidebar']"),
