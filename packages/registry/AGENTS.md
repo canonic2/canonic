@@ -1,0 +1,268 @@
+# Registry — Package Instructions
+
+Read README.md and specs/README.md before changing behavior. canonic-registry
+is an unpublished Rust library for signed pack catalogs, verified acquisition,
+dependency resolution, a digest-addressed cache and lockfile entries. Products
+use it through local path dependencies. There is no binary, root Cargo
+workspace or publication pipeline.
+
+## Ownership and boundaries
+
+- The library owns registry mechanics only. Pack contents and validation,
+  built-in registry constants, operator review, product state locations and
+  installation belong to consumers. Never name or special-case a consumer.
+- digest.rs, timestamp.rs, names.rs, source.rs, catalog.rs, checkpoint.rs,
+  registrations.rs, selector.rs, resolution.rs and lock.rs are pure domain
+  modules with no filesystem, network or process I/O. The adapters are
+  acquisition.rs (with acquisition/hosted.rs), registrations/global_file.rs
+  and cache.rs.
+- files.rs is the private shared filesystem infrastructure: bounded reads,
+  entry kinds without following links, private directories and atomic
+  private writes. Filesystem adapters use it instead of their own copies.
+  Text and path rules belong in names.rs, digest helpers in digest.rs.
+- testing.rs is public test support: its signing key is always available to
+  unit tests, its TLS server needs the test-support feature. test_support.rs
+  holds fixtures shared by unit tests; use it instead of per-module copies.
+- The library never executes artifact content, reads a terminal, reads the
+  clock for expiry checks (callers pass `now`) or chooses file locations.
+- Keep every input bounded and refuse rather than truncate. Admission of
+  checkpoints and registration writes are all-or-nothing.
+- Production fetchers use public TLS roots only. Never add a way to trust
+  other roots or skip verification outside the test-support feature.
+- Return the module's typed thiserror enum; document errors on every public
+  fallible function. Rust modules are self-named files directly under src/.
+
+## Development and checks
+
+Rust 1.99.0, Rust 2024 and Cargo.lock are pinned. make check runs fmt, strict
+Clippy, nextest, doctests, API docs and deny with all features; make coverage
+runs cargo llvm-cov nextest. Use CARGO_FLAGS=--offline only for cached
+dependencies. docs/contributing/development.md lists tool versions and configuration.
+
+Run these from packages/registry (use ~/.cargo/bin/cargo if needed):
+
+```sh
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo nextest run --locked --all-features
+cargo test --doc --locked --all-features
+cargo doc --locked --all-features --no-deps --document-private-items
+cargo deny check
+```
+
+Unit tests live with their modules. The single integration binary at
+tests/integration/main.rs requires the test-support feature and opens
+loopback TLS listeners; it needs host network access in an agent sandbox.
+Review intended lockfile snapshot changes with cargo insta. Keep fixtures on
+Acme/example.com names, temporary directories and ephemeral ports.
+Use narrow justified lint expectations only; keep too_many_lines enabled.
+
+---
+
+# Behavioral testing and package verification
+
+- Read the package guide and existing tests before choosing a runner, location
+  or fixture. Use package scripts and supported runtime versions; do not introduce
+  a new test framework simply to apply a shared workflow.
+- Test observable contracts, success, meaningful failures and edge cases.
+  Avoid tests that repeat implementation details, documentation text or generated
+  file contents without exercising a behavioral contract.
+- Test pure validation and transformations directly. Mock external boundaries
+  when appropriate for isolation; do not mock away the behavior being verified.
+- Use real temporary files, Git worktrees, processes, browser hosts or containers
+  when those boundaries determine correctness. A unit mock cannot prove resource
+  isolation, host compatibility or descendant cleanup.
+- Fixtures are deterministic where practical and use neutral Acme/example.com
+  data. Give integration resources unique ownership; cleanup only resources
+  created by the run. Preserve user checkouts, profiles, processes and data.
+- Restore mutated globals, environment, timers and test state. Keep production
+  startup independent of fixtures. Store generated evidence in the package's
+  ignored artifact locations or temporary directories.
+- Select checks from the affected contract. Preserve the assertions and coverage
+  scope while fixing failures; do not weaken thresholds, skip suites or broadly
+  suppress rules to obtain a pass.
+- Report executed commands and observed outcomes. Missing prerequisites, optional
+  captures and platform limits are distinct from behavior failures and passing
+  acceptance. Do not infer untested platform coverage from another host's result.
+
+---
+
+# Debugging from observed evidence
+
+- Identify the affected package, host, identity and reproduction before editing.
+  A deterministic failing test or supplied diagnostic may establish reproduction.
+- Inspect existing logs, errors, state snapshots, reports and ownership records
+  first. Use configured telemetry only when available and relevant; this rule
+  does not require a telemetry service.
+- Trace the execution path and correlate evidence using relevant project/session,
+  request, run or resource IDs. Distinguish observed facts from hypotheses.
+- Add temporary instrumentation only where existing evidence is insufficient.
+  Keep it bounded; never expose credentials, secret environment values, full
+  sensitive payloads or resolved configuration containing secrets.
+- Verify the correction on the original failing surface and check neighboring
+  owners when shared resources are involved. Preserve causes and cleanup errors.
+- Remove temporary instrumentation when verification is complete unless it is
+  deliberately retained as useful, documented diagnostics. Report remaining
+  uncertainty rather than claiming a speculative fix.
+
+---
+
+# Modular architecture and incremental migration
+
+These are the target architecture principles for Canonic packages. Package
+guides describe current layouts, runtimes and compatibility constraints.
+
+- Organize capabilities into modules with one clear owner for behavior, types,
+  validation, state and lifecycle. Group files by responsibility; do not split
+  every function into a file or create empty architectural layers.
+- Place capability modules where the package's language expects them.
+  JavaScript/TypeScript packages use `src/modules/<capability>/` for new
+  capability modules and bounded capability migrations. Rust packages follow
+  the Rust architecture rule. Keep the capability's logic, orchestration,
+  dedicated adapters, types and tests together, following the package's test
+  convention. A capability module represents an owned capability, not one file
+  or every importable unit.
+- Keep application composition, shared presentation, themes and host/platform
+  infrastructure outside capability modules, in the locations defined by the
+  package guide. Capability-specific adapters stay with their module;
+  infrastructure shared across capabilities has its own explicit owner. Do not
+  create empty folders or move code into a generic utilities directory to tidy
+  the tree.
+- Package guides document current locations, target locations and justified
+  layout exceptions. Existing code outside the target location is not an
+  instruction to move it all at once. Migrate within the requested capability,
+  preserving public entry points and updating consumers, asset serving and
+  packaging where paths change.
+- Separate domain decisions, application workflows, external adapters and
+  presentation. Pure logic must not depend on UI, transport or host frameworks.
+  Application code coordinates capabilities; adapters implement external I/O.
+- Expose deliberate module APIs. Depend on another module's public contract,
+  not its internal state or incidental files. Keep shared helpers small and
+  independent of product-specific behavior; avoid a miscellaneous shared module.
+- Give mutable state one owner. Derive display data instead of maintaining
+  competing copies. Scope caches and state to the identity and lifetime they serve.
+- Validate untrusted input at boundaries. Separate reusable validation from
+  HTTP, IPC, CLI and UI handling; keep domain invariants with their owner.
+- Make filesystem, processes, network and persistence side effects explicit.
+  Document ownership, completion, cancellation, cleanup and partial failure.
+  Preserve error causes; observe promises and do not hide failures in empty catches.
+- Compose dependencies at application entry points. Avoid hidden I/O or lifecycle
+  initialization during imports. Prefer explicit dependencies over global service
+  lookup; functions and classes are both valid when their responsibility is clear.
+- Match each package's language, module format, supported runtime, build and
+  dependency constraints. Shared rules do not mandate a framework,
+  dependency-injection library, package manager or repository-wide toolchain.
+- Extract shared implementations after repeated behavior establishes a compatible
+  contract. Shared instructions do not require shared code or a new package.
+- New capabilities follow this direction. Improve separation within the affected
+  area during normal changes; existing debt does not authorize unrelated rewrites.
+  Larger migrations need a bounded scope, preserved public contracts, behavioral
+  verification and updates to the owning package's specs and guides.
+- Reviews distinguish existing debt from newly introduced violations. Document
+  justified exceptions and concrete migration boundaries rather than claiming
+  the whole package already follows the target architecture.
+
+---
+
+# Product specifications and documentation
+
+Specs hold internal requirements, workflows, system contracts, decisions,
+discoveries, acceptance criteria, and known gaps. Docs hold reader-facing guides,
+references, and troubleshooting. The package's writing rule defines their source
+locations, audience, publishing, and validation.
+
+- Read the relevant specification before changing product behavior. Update it
+  when a requirement, decision, workflow, or material discovery changes. Separate
+  agreed requirements, proposals, verified behavior, implementation gaps, and
+  open questions. Existing code or passing tests do not establish product intent.
+- Record durable discoveries with evidence and rationale. Label hypotheses;
+  include dates and conditions for measurements where relevant. Keep current
+  requirements prominent rather than accumulating a conversation transcript.
+- Build experiments, probes and prototypes in temporary folders, not in the
+  repository. Record their findings in the relevant spec, with enough detail
+  about each fixture's setup to rebuild it, then delete the scripts. Product
+  code and tests replace prototypes; they are not kept alongside them. The
+  exception is a planned lab in a package whose labs spec allows committed
+  labs; delete its runners once the decision ships.
+- Update affected documentation when supported behavior changes. Verify claims,
+  examples, labels, commands, defaults, and recovery instructions against the
+  product. A specification does not establish that a proposed feature is available.
+- Docs, READMEs, and agent instructions describe only what exists. When a
+  feature, key, command, file, or route is removed or replaced, delete or rewrite
+  the text about it; do not keep it with a note that it was removed, renamed, or
+  is "no longer" supported, and avoid "previously", "formerly", and "now" phrasing.
+  History belongs in the changelog, release notes, and commit messages.
+- Keep internal requirements and investigation notes in specs. Include technical
+  detail in docs when it helps the intended audience use, configure, integrate,
+  or troubleshoot the product. Prefer existing topics and cross-links over copies.
+- Check links and run the package's relevant validation. Do not add tests that
+  merely assert documentation text. Writing a spec does not authorize implementing
+  proposals; writing docs does not itself authorize publishing or distribution.
+
+---
+
+# Registry writing locations and checks
+
+- Specs for the library's contracts, limits and acceptance live in
+  packages/registry/specs/, indexed by README.md. Each requirement has one
+  owning topic.
+- Guides for the supported API and development live in packages/registry/docs/,
+  indexed by README.md and the package README.
+- This is an unpublished, product-agnostic Rust library. Write about consuming
+  products generically; never name a specific product, its registry or its
+  file locations. Use Acme/example.com examples.
+- State bounds, refusal conditions and what the caller owns (review, storage,
+  pack contents) precisely. The library never grants trust implicitly.
+- Verify Markdown links and each affected repository's diff. Regenerate agent
+  outputs after changing guides or configuration.
+
+---
+
+# Rust package architecture
+
+Rust packages apply the shared architecture principles with Rust's own
+conventions. Where this rule and the language-neutral rule differ on layout,
+this rule applies.
+
+- Use Cargo's standard layout: `src/main.rs` for the binary, `src/lib.rs` for
+  the library, `tests/` for integration tests, and `benches/` and `examples/`
+  when needed. Keep one package until its size or reuse justifies a workspace;
+  a workspace keeps its crates flat under `crates/`, with a virtual root manifest.
+- Keep `main.rs` thin: parse arguments, set up configuration, call the
+  library's `run`, and exit with its status. Output formatting and all other
+  logic live in the library, where they can be tested.
+- Start every module with a `//!` comment saying what it owns.
+- Build scripts write only inside `OUT_DIR`. Pass values to the code with
+  `cargo:rustc-env` and read them with `env!` rather than writing files beside
+  the build output.
+- Put capability modules directly under `src/`, referred to as
+  `crate::<capability>`. Do not add a `src/modules/` level. Use self-named
+  module files (`src/ownership.rs`, or `src/ownership.rs` with `src/ownership/`
+  for submodules) rather than `mod.rs`; enforce it with Clippy's
+  `mod_module_files` lint.
+- Layer dependencies inward. Domain modules hold pure rules and types with no
+  process, filesystem or terminal I/O. Application modules carry out one use
+  case each by coordinating domain and adapters. Adapter modules wrap external
+  systems such as processes, the filesystem and the CLI. Domain code never
+  depends on application or adapter code.
+- Split application code by use case or command family, not into one file of
+  every workflow.
+- Keep visibility as narrow as the design allows. Use `pub(crate)` for items
+  shared inside the package and `pub` only for the library's deliberate API.
+  Test internals with unit tests in the module (`#[cfg(test)] mod tests`, or a
+  `tests.rs` submodule once they outgrow the module); use `tests/` for behavior
+  through the public interface or the built binary. Build integration tests as
+  one binary, `tests/<name>/main.rs`, with a module per area and a shared
+  fixture module, rather than one crate per file.
+- Keep Clippy's `too_many_lines` on. A function that must stay long carries
+  `#[expect(clippy::too_many_lines, reason = "...")]`.
+- Add a trait only where a second implementation exists or a test needs to
+  replace an external boundary that cannot run for real. Do not add traits only
+  to mirror a layer diagram.
+- Return typed errors (`thiserror` enums) where callers or tests branch on the
+  kind of failure. Use `anyhow` with context in application code and at the
+  binary boundary.
+- Deny broken and private intra-doc links in `[lints.rustdoc]`, and build the
+  API docs with `cargo doc --no-deps --document-private-items` as a check.
+- Keep `Cargo.toml` `[lints]`, `rustfmt` and Clippy settings authoritative; the
+  package guide lists the commands and configuration files.

@@ -4,7 +4,7 @@ Status: existing engineering baseline. [Gallery and verification](features/galle
 specifies proposed behavioral evidence as components are implemented;
 [Delivery](roadmap.md) tracks criteria separately from engineering checks.
 
-Use the Gate/Shield quality baseline: pinned Rust 1.99.0 with rustfmt, Clippy and
+Use the shared Rust quality baseline: pinned Rust 1.99.0 with rustfmt, Clippy and
 llvm-tools; committed Cargo.lock; no unsafe code; pedantic/unwrap_used/
 mod_module_files lints; strict warnings; documented public APIs and rustdoc links.
 Do not disable too_many_lines or add broad lint suppression. Tests may unwrap.
@@ -23,7 +23,7 @@ feature checks prove local dependency compatibility, not completed UI migrations
 Dependency policy allows approved upstream registries and MIT/Apache/Unicode
 licenses, ignores unpublished proprietary package licenses, warns on duplicate
 versions, denies wildcards/unknown sources and checks advisories. Exceptions
-require the same package-specific rationale as Gate and Shield. Artifacts stay
+require a package-specific rationale. Artifacts stay
 under ignored target/; no binaries or reports are published.
 
 Ratatui's layout/cache graph uses foldhash, licensed under Zlib. A narrow

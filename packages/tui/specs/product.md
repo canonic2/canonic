@@ -7,8 +7,8 @@ for module ownership.
 ## Purpose and scope
 
 Provide terminal interactions developed and verified independently of a product.
-Gate needs short choices, confirmations and inspection followed by
-ordinary command output. Drone needs a composed full-screen conversation with
+Command-line tools need short choices, confirmations and inspection followed by
+ordinary command output. A chat client needs a composed full-screen conversation with
 an editable draft, streaming content, tool activity and human review. Shared
 components supply compatible interaction behavior; each host retains its decisions.
 
@@ -74,7 +74,7 @@ component with overlays and streaming. Leaving ends fixture activity.
 
 ## Ownership boundaries
 
-| Library | Host / Drone / agent adapter |
+| Library | Host / chat client / agent adapter |
 | --- | --- |
 | Editing, focus, local filtering, selection and intents | Command spelling, availability, parsing and execution |
 | Session rows, hierarchy and navigation | Create/resume/fork/delete/move, storage and synchronization |

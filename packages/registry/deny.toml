@@ -1,0 +1,44 @@
+# Dependency checks for `cargo deny check`. See docs/contributing/development.md.
+
+[graph]
+all-features = true
+
+[advisories]
+# Unmaintained crates fail only when this package depends on them directly.
+unmaintained = "workspace"
+
+[licenses]
+# This package's own license is proprietary; the unpublished package is not checked.
+private = { ignore = true }
+allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+# HTTPS uses Rustls/ring and bundled public trust-anchor data.
+[[licenses.exceptions]]
+name = "ring"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "rustls-webpki"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "subtle"
+allow = ["BSD-3-Clause"]
+
+[[licenses.exceptions]]
+name = "untrusted"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

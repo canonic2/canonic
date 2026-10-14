@@ -48,7 +48,7 @@ and return on close. The inline gallery borrows that screen with the existing le
 Inline adapter owns cursor-region bookkeeping and redraw, not picker decisions.
 Same picker/review renders into a bounded area and returns same intent in both
 modes. One inline interaction at a time; no hidden interaction on hook/protocol
-paths. Gate and Shield choose interactive invocation eligibility themselves.
+paths. Hosts choose interactive invocation eligibility themselves.
 Initial inline acceptance uses short menus/review; arbitrary rich full-screen
 layouts in scrollback are outside that first slice.
 

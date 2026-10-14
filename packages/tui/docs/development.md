@@ -2,7 +2,7 @@
 
 This is one unpublished Cargo package, with optional `gallery` feature and
 `tui-gallery` binary. Rust 1.99.0, Rust 2024, Cargo.lock, rustfmt, strict Clippy,
-nextest, doctests, rustdoc, cargo-deny, insta and proptest match Gate/Shield.
+nextest, doctests, rustdoc, cargo-deny, insta and proptest.
 
 `make check` runs the package gates; `make build` builds a release gallery.
 `make coverage` uses `cargo llvm-cov nextest --html` and writes to
@@ -10,7 +10,7 @@ nextest, doctests, rustdoc, cargo-deny, insta and proptest match Gate/Shield.
 uses cached dependencies. `make run` opens the component selector. No root
 workspace, distribution script or registry publication exists.
 
-Missing development tools can be installed with the same versions as Gate:
+Missing development tools can be installed at the pinned versions:
 
 ```sh
 cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.9.1 cargo-insta@1.49.0
@@ -140,5 +140,5 @@ backend passes resize, modal input, Ctrl-C and post-exit canonical line handling
 This is native macOS evidence; Windows and Linux acceptance remain separate.
 
 The library emits no logs or terminal input on import. Gallery fixture errors are
-display-only; product logging stays with the host. Review Gate changes in both
-owning repositories and run each one's `git diff --check` through its entry folder.
+display-only; product logging stays with the host. Review changes in each
+owning repository and run its `git diff --check`.

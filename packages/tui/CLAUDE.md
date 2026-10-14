@@ -1,16 +1,9 @@
 # Rust TUI — Package Instructions
 
 Read README.md and specs/README.md before changing components. This unpublished
-library supplies reusable views to Drone, Shield and Gate through local path
+library supplies reusable views to consuming CLIs through local path
 dependencies; its optional gallery feature builds tui-gallery. No root Cargo
 workspace or publication pipeline exists.
-
-Use develop-module and review-module for module work, write-tests for behavioral
-coverage, debug-runtime for terminal diagnosis, fix-checks for gates, and
-product-specs/product-docs for internal specs and supported guides. These common
-skills cover this package; do not add duplicate package-specific workflows.
-Instructions are sourced here under .canonic/guides/tui/. Regenerate with
-node private/drone-legacy/src/index.mjs after guide or rule changes.
 
 ## Ownership and boundaries
 
@@ -28,7 +21,7 @@ node private/drone-legacy/src/index.mjs after guide or rule changes.
 
 ## Development and checks
 
-Rust 1.99.0, Rust 2024 and Cargo.lock are pinned, matching Gate and Shield.
+Rust 1.99.0, Rust 2024 and Cargo.lock are pinned.
 make -C packages/tui run opens the selector. make build builds the release
 gallery. make check runs fmt, strict Clippy, nextest, doctests, API docs and deny;
 make coverage runs cargo llvm-cov nextest. Use CARGO_FLAGS=--offline only for
@@ -54,9 +47,7 @@ separately. Test rendered behavior rather than repeating documentation or intern
 structure. Keep fixtures temporary and preserve user terminals and processes.
 Use narrow justified lint expectations only; keep too_many_lines enabled.
 
-Gate ownership covers this package in private and public repositories. Check
-git -C .gate/repos/private diff --check and the public equivalent, and review
-gate changes <repo> for each affected repository. Publication remains disabled.
+Run git diff --check in each affected repository. Publication remains disabled.
 
 ---
 
@@ -167,10 +158,10 @@ guides describe current layouts, runtimes and compatibility constraints.
 
 # Product specifications and documentation
 
-Use `product-specs` to maintain internal requirements, workflows, system contracts,
-decisions, discoveries, acceptance criteria, and known gaps. Use `product-docs`
-to maintain reader-facing guides, references, and troubleshooting. The package's
-writing rule defines its source locations, audience, publishing, and validation.
+Specs hold internal requirements, workflows, system contracts, decisions,
+discoveries, acceptance criteria, and known gaps. Docs hold reader-facing guides,
+references, and troubleshooting. The package's writing rule defines their source
+locations, audience, publishing, and validation.
 
 - Read the relevant specification before changing product behavior. Update it
   when a requirement, decision, workflow, or material discovery changes. Separate
@@ -182,7 +173,9 @@ writing rule defines its source locations, audience, publishing, and validation.
 - Build experiments, probes and prototypes in temporary folders, not in the
   repository. Record their findings in the relevant spec, with enough detail
   about each fixture's setup to rebuild it, then delete the scripts. Product
-  code and tests replace prototypes; they are not kept alongside them.
+  code and tests replace prototypes; they are not kept alongside them. The
+  exception is a planned lab in a package whose labs spec allows committed
+  labs; delete its runners once the decision ships.
 - Update affected documentation when supported behavior changes. Verify claims,
   examples, labels, commands, defaults, and recovery instructions against the
   product. A specification does not establish that a proposed feature is available.
@@ -253,14 +246,14 @@ this rule applies.
 
 # Rust TUI writing locations and checks
 
-- Use product-specs for architecture, runtime ownership, components and acceptance
+- Specs for architecture, runtime ownership, components and acceptance live
   in packages/tui/specs/, indexed by README.md.
-- Use product-docs for supported usage and development in packages/tui/docs/,
+- Guides for supported usage and development live in packages/tui/docs/,
   indexed by README.md and the package README.
 - This is an unpublished local Rust library and component gallery. No release
   registry or publishing integration exists. Keep fixtures independent of products,
   accounts and operations; use Acme/example.com examples.
 - Document actions returned to hosts, input/focus ownership, cancellation, rendering
   limits and headless behavior. A component never grants product authorization.
-- Verify Markdown links and each affected Gate repository's diff. Regenerate
+- Verify Markdown links and each affected repository's diff. Regenerate
   agent outputs after changing guides or configuration.

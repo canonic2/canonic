@@ -28,9 +28,7 @@ browser scripts own their listeners and interactions.
 
 The current layout is the migration starting point. Extract repeated behavior
 within the affected scope and preserve static rendering, base-path links and
-source-owned product documentation. Use develop-module, review-module,
-create-ui-component, write-tests, fix-checks and debug-runtime with the package's
-commands. Do not introduce a client framework or shared UI package as a prerequisite.
+source-owned product documentation. Do not introduce a client framework or shared UI package as a prerequisite.
 
 ## Rules
 
@@ -180,10 +178,10 @@ guides describe current layouts, runtimes and compatibility constraints.
 
 # Product specifications and documentation
 
-Use `product-specs` to maintain internal requirements, workflows, system contracts,
-decisions, discoveries, acceptance criteria, and known gaps. Use `product-docs`
-to maintain reader-facing guides, references, and troubleshooting. The package's
-writing rule defines its source locations, audience, publishing, and validation.
+Specs hold internal requirements, workflows, system contracts, decisions,
+discoveries, acceptance criteria, and known gaps. Docs hold reader-facing guides,
+references, and troubleshooting. The package's writing rule defines their source
+locations, audience, publishing, and validation.
 
 - Read the relevant specification before changing product behavior. Update it
   when a requirement, decision, workflow, or material discovery changes. Separate
@@ -195,7 +193,9 @@ writing rule defines its source locations, audience, publishing, and validation.
 - Build experiments, probes and prototypes in temporary folders, not in the
   repository. Record their findings in the relevant spec, with enough detail
   about each fixture's setup to rebuild it, then delete the scripts. Product
-  code and tests replace prototypes; they are not kept alongside them.
+  code and tests replace prototypes; they are not kept alongside them. The
+  exception is a planned lab in a package whose labs spec allows committed
+  labs; delete its runners once the decision ships.
 - Update affected documentation when supported behavior changes. Verify claims,
   examples, labels, commands, defaults, and recovery instructions against the
   product. A specification does not establish that a proposed feature is available.
@@ -258,12 +258,10 @@ the actual component format, styles, host integration and verification commands.
 - Workbench user guides are owned by `packages/workbench/docs/` and loaded by
   `src/content.config.ts`. Edit those guides at their source. Website specs and
   maintainer notes must not enter the Workbench collection or search index.
-- Follow `website-update` for site structure and `website-workbench` for the
-  Workbench overview and screenshots. Match supported product capabilities;
+- Match supported product capabilities;
   download and release data come from GitHub rather than invented versions.
 - For site content or behavior changes, run `pnpm --dir packages/website test`
   and `pnpm --dir packages/website run build`, then inspect affected output.
-  Follow the relevant website skill for visual checks when layout or screenshots
-  change. Internal Markdown-only specs need link review and `git diff --check`.
-- Writing content does not itself authorize deployment. Use `website-release`
-  when publishing is requested.
+  Check the rendered pages visually when layout or screenshots change. Internal Markdown-only specs need link review and `git diff --check`.
+- Writing content does not itself authorize deployment; publish only when
+  requested.

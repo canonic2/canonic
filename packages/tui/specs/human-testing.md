@@ -335,7 +335,7 @@ Engineering on 2026-10-10: `make check` passed formatting, strict Clippy,
 API docs and dependency audit. Gallery-disabled nextest passed 47 tests, and
 the release build passed. The final recent-shortcut and stable-filter-height
 refinements passed their rendered regressions, strict Clippy and release rebuild.
-Shield's locked optional TUI compilation passed; Drone's workspace lockfile is
+One consumer's locked optional TUI compilation passed; another's workspace lockfile is
 out of date, so its optional TUI compilation used a disposable manifest/lockfile
 copy and passed without editing workspace files. Palette/keys snapshots
 were inspected; Markdown targets and scoped diff
@@ -532,8 +532,8 @@ No commit or dialog implementation follows until this gate passes.
 
 Slice 2a engineering: formatting, strict Clippy, 34 all-feature tests (including
 native macOS PTY), one doctest, API docs and dependency audit passed. The
-gallery-disabled library passed 29 tests; release build passed. Gate, Shield and
-Drone optional `tui` features compiled offline, with lockfiles restored byte-for-
+gallery-disabled library passed 29 tests; release build passed. The consumers'
+optional `tui` features compiled offline, with lockfiles restored byte-for-
 byte after temporary resolution. Reviewed the compact snapshot and six actual
 TestBackend style/geometry previews. Duplicate dependency warnings remain allowed
 by auditing. Native Linux/Windows and human modifier-key encoding are unverified.
@@ -676,7 +676,7 @@ Engineering: formatting, strict Clippy, 52 all-feature tests including macOS PTY
 scenarios, 40 gallery-disabled tests, one doctest, API docs and dependency audit
 passed. Measured geometry, fallback styles, Unicode caret cells, fixed dock and
 snapshots are covered. Native Linux/Windows and human key encodings are unverified.
-The release build and Gate/Shield/Drone optional TUI feature compilation passed;
+The release build and the consumers' optional TUI feature compilation passed;
 consumer lockfiles were restored byte-for-byte. Scoped diff and local Markdown
 link checks passed in both owning repositories. Dependency auditing reports
 allowed duplicate-version warnings.
@@ -757,10 +757,10 @@ acceptance remain independent work.
 
 | Slice | Engineering | Human | Commit / next action |
 | --- | --- | --- | --- |
-| 0 | Passed during foundation commit; recorded in verification | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: private `d623657`, public `e32517d` |
-| 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: private `41ee25b`, public `735103b`; user authorized next slice |
-| 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: private `f3e7579`, public `17e53d5` |
-| 2b | Foundation engineering recorded; timed policies and 36 scenarios implemented | Expanded visual review pending | Foundation checkpoint: private `4c6260d`, public `05857ee`; new work uncommitted; native inline transition separate |
+| 0 | Passed during foundation commit; recorded in verification | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: `e32517d` |
+| 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: `735103b`; user authorized next slice |
+| 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: `17e53d5` |
+| 2b | Foundation engineering recorded; timed policies and 36 scenarios implemented | Expanded visual review pending | Foundation checkpoint: `05857ee`; new work uncommitted; native inline transition separate |
 | 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
 | Composer | Complete local workflow and native host adapters implemented; current engineering checks recorded above | Native visual review remains separate | Review complete component; commit only when requested |
 | Completion Menu | Reusable component, Composer integration and 30 interactive states; expanded engineering checks passed | Complete visual review pending | Review complete component; commit only when requested |
@@ -772,7 +772,7 @@ Slice 1 engineering: `make -C packages/tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs
 and dependency auditing. `cargo nextest run --locked --no-default-features`
 passed 21 library tests; `make -C packages/tui build` passed release build.
-Gate/Shield/Drone `cargo check --offline --features tui` passed with temporary
+Consumer `cargo check --offline --features tui` passed with temporary
 lock resolution; their existing lockfiles were restored byte-for-byte to keep
 this slice scoped to Rust TUI. Consumers need lock resolution when adopting the
 polling backend dependency; this is compilation evidence, not a product rollout.

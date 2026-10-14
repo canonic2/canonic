@@ -5,8 +5,7 @@
 Baseline inspected on **2026-10-09**: [manifest](../Cargo.toml),
 [exports](../src/lib.rs), all source modules, [usage](../docs/usage.md),
 [development](../docs/development.md) and integration test modules. Structure
-and acceptance conventions follow [Gate](../../gate/specs/README.md) and
-[Shield](../../shield/specs/README.md). This pass inspected source and
+and acceptance conventions follow the shared Rust package rules. This pass inspected source and
 assertions; it did not rerun Rust gates or establish fresh platform acceptance.
 Chat implementation and test coverage were updated on 2026-10-11; executed checks
 are recorded separately in [Verification](verification.md#chat-alignment-engineering-record--2026-10-11).
@@ -46,7 +45,7 @@ Full application operations appear below to establish host ownership.
 | [Dialog tests](../tests/integration/dialog.rs) | Nested routing, selection-first Esc, return repair, stale/foreign tickets, atomic validation, outside pointer isolation, tiny geometry, snapshot and arbitrary stack changes |
 | [Component tests](../tests/integration/components.rs) | Choice/default/cancel/search identity, paste/graphemes/bounds/safe control display, tiny rendering/focus style; property covers choice-index bounds |
 | [Gallery tests](../tests/integration/gallery.rs) | Navigation/simulation, one selector snapshot, headless paths; Unix Python PTY assertions for navigation, submission, resize, Ctrl-C, raw and alternate-screen restoration |
-| Consumers | Optional dependencies in [Gate](../../gate/Cargo.toml) and [Drone](../../../private/drone/Cargo.toml); no library calls found in consumer source; this is dependency readiness |
+| Consumers | Optional dependencies in consuming CLIs; no library calls found in consumer source; this is dependency readiness |
 
 Chat snapshots, Unicode properties and native Unix search/copy/resize workflows
 are present. Native Windows acceptance and full host adapters

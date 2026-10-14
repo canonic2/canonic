@@ -1,0 +1,2 @@
+# Tests may unwrap; production code returns errors. See docs/contributing/development.md.
+allow-unwrap-in-tests = true

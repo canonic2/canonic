@@ -79,15 +79,14 @@ substantially reworks it, in bounded steps that preserve public contracts; local
 fixes stay in place. Update consumers, runtime imports, browser asset allowlists,
 webview loading/CSP and packaging references together when paths change. Preserve
 browser/server manifest agreement, host compatibility and packaged assets.
-Use develop-module, review-module, create-ui-component, write-tests, fix-checks
-and debug-runtime with the commands below. A shared UI package is not required.
+A shared UI package is not required.
 
 ### Browser UI direction
 
 The target for Workbench-owned UI is Web Components, defined in
 [`specs/web-components.md`](specs/web-components.md), with host-independent themes
 defined in [`specs/themes.md`](specs/themes.md). Read both before component or theme
-work, and use `workbench-ui` with the shared component/review workflows.
+work.
 
 New components and substantial migrations belong under `src/components/<name>/`
 as TypeScript custom elements with `wb-` tags, open Shadow DOM, explicit inputs,
@@ -132,7 +131,7 @@ page; `src/components/design-pages.test.ts` fails a component without one.
 The package uses pnpm, with its own frozen lockfile, a flat (`hoisted`)
 `node_modules`, and no dependency install scripts. Run commands from this
 folder, or with `pnpm --dir packages/workbench` from the repository root;
-agent shell calls use the repository-root form, which Shield allows.
+agent shell calls use the repository-root form, which the repository's shell policy allows.
 
 | Change | Command |
 | --- | --- |
@@ -262,10 +261,10 @@ guides describe current layouts, runtimes and compatibility constraints.
 
 # Product specifications and documentation
 
-Use `product-specs` to maintain internal requirements, workflows, system contracts,
-decisions, discoveries, acceptance criteria, and known gaps. Use `product-docs`
-to maintain reader-facing guides, references, and troubleshooting. The package's
-writing rule defines its source locations, audience, publishing, and validation.
+Specs hold internal requirements, workflows, system contracts, decisions,
+discoveries, acceptance criteria, and known gaps. Docs hold reader-facing guides,
+references, and troubleshooting. The package's writing rule defines their source
+locations, audience, publishing, and validation.
 
 - Read the relevant specification before changing product behavior. Update it
   when a requirement, decision, workflow, or material discovery changes. Separate
@@ -277,7 +276,9 @@ writing rule defines its source locations, audience, publishing, and validation.
 - Build experiments, probes and prototypes in temporary folders, not in the
   repository. Record their findings in the relevant spec, with enough detail
   about each fixture's setup to rebuild it, then delete the scripts. Product
-  code and tests replace prototypes; they are not kept alongside them.
+  code and tests replace prototypes; they are not kept alongside them. The
+  exception is a planned lab in a package whose labs spec allows committed
+  labs; delete its runners once the decision ships.
 - Update affected documentation when supported behavior changes. Verify claims,
   examples, labels, commands, defaults, and recovery instructions against the
   product. A specification does not establish that a proposed feature is available.
@@ -364,8 +365,7 @@ and `packages/workbench/specs/themes.md`; read them before component or theme wo
   reworking them. Do not combine a component task with an unsolicited full UI
   rewrite, a new rendering framework, or changes to project preview adapters.
 
-Use `workbench-ui` with `create-ui-component` for implementation or
-`review-module` for review. These instructions refine the shared UI contracts;
+These instructions refine the shared UI contracts;
 they do not distribute a UI package or configuration to consuming projects.
 
 ---
@@ -387,6 +387,6 @@ they do not distribute a UI package or configuration to consuming projects.
   `pnpm --dir packages/website run build`, then inspect affected pages. For
   Workbench behavior changes, run `pnpm --dir packages/workbench test`.
   Markdown-only internal specs need link review and `git diff --check`.
-- When visible behavior affects overview copy or screenshots, use
-  `website-workbench`. Consuming projects supply configuration, not copies of
-  Workbench scripts. Publishing follows the separately authorized release workflow.
+- When visible behavior affects overview copy or screenshots, update the
+  website's Workbench overview and screenshots. Consuming projects supply
+  configuration, not copies of Workbench scripts. Publishing follows the separately authorized release workflow.

@@ -56,12 +56,12 @@ exit. The native check consumes restored cooked input before comparing attribute
 as the existing terminal tests do; macOS can briefly set its pending-input flag.
 
 Gallery-disabled `cargo nextest run --locked --no-default-features` passed 265
-tests. The release library/gallery build passed. Gate and Shield optional `tui`
-compilation passed offline with locked disposable manifests. Drone's copied lock
+tests. The release library/gallery build passed. Two consumers' optional `tui`
+compilation passed offline with locked disposable manifests. The third consumer's copied lock
 needed the existing TUI Markdown dependencies; offline resolution and compilation
 passed only in its disposable fixture. Original consumer manifests and lockfiles
 were unchanged; this is compilation compatibility, not consumer execution or a
-successful locked check against Drone's original lock.
+successful locked check against that consumer's original lock.
 
 All 480 public local links/anchors resolved. Public/private whitespace checks,
 all final Rust source hashes, snapshot update state and unchanged existing staging
@@ -100,12 +100,12 @@ paste, destructive arming/paste disarming, failure, mid-draft caret/undo return,
 Ctrl-X O, resize, cooked input and exact terminal attributes after exit.
 Existing native terminal flows also passed in the full suite.
 
-Gate and Shield optional `tui` compilation passed offline with locked disposable
-manifests. Drone's copied lock required the existing TUI Markdown dependencies
+Two consumers' optional `tui` compilation passed offline with locked disposable
+manifests. The third consumer's copied lock required the existing TUI Markdown dependencies
 `pulldown-cmark` and `unicase`; resolution and compilation passed offline solely
 in its disposable fixture. Workspace consumer manifests and lockfiles remained
 unchanged. This establishes compilation compatibility, not consumer execution
-or a successful locked check against Drone's existing workspace lock.
+or a successful locked check against that consumer's existing workspace lock.
 
 Public local links resolved 461 references before this evidence update. Public
 and private whitespace checks passed; all new source/spec/test files are excluded
@@ -128,8 +128,8 @@ Gallery host effects remain deterministic simulations.
 Host `make -C packages/tui check` passed 267 tests, four doctests, formatting,
 strict Clippy, private-item API documentation and dependency auditing using the
 package-pinned toolchain. `make -C packages/tui build` passed. Gallery-disabled
-`cargo nextest run --locked --no-default-features` passed 211 tests. Gate, Shield
-and Drone optional `tui` compilation passed offline using disposable manifests
+`cargo nextest run --locked --no-default-features` passed 211 tests. The consumers'
+optional `tui` compilation passed offline using disposable manifests
 and lockfiles; their workspace sources and lockfiles were preserved.
 
 Ten Question Form and fifteen Permission Review behavioral tests cover bounded
@@ -153,8 +153,8 @@ terminal attributes after exit.
 Public local links resolved 443 references before this evidence update. Both
 repositories passed whitespace checks; all 31 new source/spec/test files belong
 only to public, and private design repairs remain untouched. No staging, commit,
-publication or consumer rollout command was run. Concurrent configuration,
-Shield and Workbench changes were preserved; Session Browser was not implemented.
+publication or consumer rollout command was run. Concurrent configuration
+and other package changes were preserved; Session Browser was not implemented.
 
 Human visual acceptance and broader native/platform acceptance remain pending.
 Use the [Question Form review](human-testing.md#question-form-review) and
@@ -174,11 +174,11 @@ PTY flow verifies isolated multiline paste, deliberate submission, acknowledgeme
 mid-draft caret return, undo, resize, cooked input and terminal-mode restoration.
 The PTY harness drains shutdown output before checking exit.
 
-Gallery-disabled nextest passed 195 tests. Gate, Shield and Drone optional `tui`
+Gallery-disabled nextest passed 195 tests. The consumers' optional `tui`
 compilation passed offline using disposable manifests and lockfiles; workspace
 consumer lockfiles remained unchanged. Public local links resolved 410 references.
 Both repositories passed whitespace checks. No staging command was run; concurrent
-Shield/configuration changes outside this scope were left untouched.
+changes outside this scope were left untouched.
 
 Human visual acceptance and broader native/platform acceptance remain pending.
 The [Question Form review](human-testing.md#question-form-review) provides steps.
@@ -224,7 +224,7 @@ retry and host confirmation, caret return, resize, cooked-mode input and exact
 terminal-attribute restoration. Existing search, selection, picker return, tool
 cards, dialogs and external-editor terminal checks also passed. Public local
 links resolved 401 references across 33 Markdown files before this evidence update;
-both Gate repositories passed whitespace and public/private ownership checks.
+both repositories passed whitespace and public/private ownership checks.
 These changes preserve Chat's public signatures; the consumer compilation evidence
 after Composer's expanded contracts remains applicable.
 
@@ -244,14 +244,14 @@ and dependency auditing. Existing native macOS PTY tests passed, including card
 details, draft/caret return, resize, picker navigation and terminal restoration.
 The release library/gallery build passed. Gallery-disabled nextest passed
 161 tests. The public documentation check resolved
-382 local links and anchors; both Gate repositories passed whitespace checks.
+382 local links and anchors; both repositories passed whitespace checks.
 Ownership checks place source/specs in public and design references in private.
 
 Six Run Activity tests cover single-use cancellation, completion races, retry,
 stale/foreign acknowledgement, disconnection, injected motion, draft/queue
 preservation and Escape selection priority. Extended card/gallery checks cover
 progress, safe escape markers, host reordering, child tasks, artifacts and all
-additional run states. Gate, Shield and Drone optional `tui` consumer compilation
+additional run states. Optional `tui` consumer compilation
 passed offline with disposable manifests after the expanded public APIs;
 workspace consumer lockfiles were preserved. This is compilation evidence, not
 consumer adapter execution.
@@ -268,7 +268,7 @@ and timed irreversible confirmation, plus artifact/options host composition.
 The gallery supplies 36 named Dialog scenarios. Host `make -C packages/tui check`
 passed 205 tests, four doctests, formatting, strict Clippy, private-item API docs
 and dependency auditing. The release library/gallery build passed. A fresh
-gallery-disabled nextest run passed 165 tests. Gate, Shield and Drone optional
+gallery-disabled nextest run passed 165 tests. The consumers' optional
 TUI compilation passed offline with disposable manifests after the Dialog API
 changes; workspace lockfiles were preserved.
 
@@ -298,9 +298,8 @@ release library/gallery build passed; gallery-disabled nextest passed 169 tests.
 The strengthened border assertion also passed a focused rerun. All 391 local
 links and anchors resolved; both repositories passed whitespace checks, and
 ownership checks preserve public source/specs and private design references.
-Gate and Drone optional TUI compilation passed using disposable manifests. Shield's
-current consumer tree fails independently in `src/policy/compiled.rs`: its
-`matches` and `work` helpers pass `Arc<PikeVM>` where `PikeVM` is expected.
+Two consumers' optional TUI compilation passed using disposable manifests. The
+third consumer's tree failed independently, in code unrelated to this package.
 The refreshed disposable manifest includes current consumer dependencies;
 workspace sources and lockfiles remain untouched by this check. Human
 visual acceptance, host execution and Linux/Windows acceptance remain pending.
@@ -323,13 +322,13 @@ coverage verifies Alt-R retry, Ctrl-R history search, draft preservation, picker
 return, resize and exact terminal restoration. Gallery host effects remain
 deterministic simulations.
 
-Gate, Shield and Drone optional TUI consumer compilation passed with refreshed
-disposable manifests. Drone's copied lockfile required offline resolution in the
-temporary directory before its locked check. Shield's earlier compilation blocker is resolved in its current tree;
+Optional TUI consumer compilation passed with refreshed
+disposable manifests. One consumer's copied lockfile required offline resolution in the
+temporary directory before its locked check. Another consumer's earlier compilation blocker is resolved in its current tree;
 its existing unused-import warning is outside this TUI change. Consumer checks
 preserve workspace sources and lockfiles. The local documentation check resolved
 390 links and anchors across 32 Markdown files before adding this record's links.
-Both Gate repositories passed whitespace checks, and ownership checks preserve
+Both repositories passed whitespace checks, and ownership checks preserve
 public source/specs and private design references. Human visual acceptance,
 native Linux/Windows and real consumer discovery/execution remain pending.
 
@@ -357,7 +356,7 @@ picker restoration, resize and exact terminal restoration.
 
 The release library/gallery build passed during this alignment. Gallery-disabled
 nextest passed 182 tests after the public work-control and typed-atom contracts.
-Gate, Shield and Drone compiled offline with optional `tui` using disposable
+The consumers compiled offline with optional `tui` using disposable
 manifests and the pinned package toolchain; workspace source and lockfiles were
 preserved. Offline dependency resolution was confined to temporary verification
 directories. Documentation links, ownership and both repository whitespace diffs
@@ -382,9 +381,9 @@ to the draft cursor, picker return, resize, quit and exact terminal restoration.
 The release library/gallery build passed with `make -C packages/tui build`.
 Gallery-disabled nextest (`cargo nextest run --locked --no-default-features`)
 passed 143 tests. The final card regression rerun without gallery passed all
-seventeen card tests. Gate, Shield and Drone compiled offline with optional `tui`
+seventeen card tests. The consumers compiled offline with optional `tui`
 using disposable manifests/lockfiles; workspace lockfiles were not changed.
-Gate's existing timing/dead-code warnings remain outside this component's scope.
+One consumer's existing timing/dead-code warnings remain outside this component's scope.
 All 374 local README/docs/spec links and anchors resolved. Public/private ownership
 and both repositories' whitespace checks passed; internal design work stayed private.
 
@@ -407,7 +406,7 @@ navigation. Main, narrow, long-description and partial-failure layouts have
 reviewed render snapshots; the semantic-color main view was inspected visually.
 
 `make -C packages/tui build` passed the release library/gallery build.
-Gallery-disabled nextest passed all 104 tests. Gate, Shield and Drone passed
+Gallery-disabled nextest passed all 104 tests. The consumers passed
 offline compilation checks with their optional `tui` feature using disposable
 manifests; their workspace lockfiles remained byte-for-byte unchanged.
 Human visual acceptance, native Linux/Windows acceptance and real consumer source
@@ -423,7 +422,7 @@ queue edits, history, stash, editor conflicts, file insertion and paste chips.
 `make build` passed the release library/gallery build. Gallery-disabled nextest
 passed all 88 tests. These checks establish the reusable component and explicit
 host adapters; gallery host work remains simulated.
-Gate, Shield and Drone also passed offline checks with their optional `tui`
+The consumers also passed offline checks with their optional `tui`
 feature. Their original lockfiles were preserved byte-for-byte.
 
 The evidence applies to the implemented reusable workflows and explicit host
@@ -450,7 +449,7 @@ acceptance and native Windows coverage remain separate.
 `make -C packages/tui check` passed formatting, strict all-target Clippy,
 157 all-feature tests, three doctests, private-item API documentation and
 dependency auditing. Gallery-disabled nextest passed 126 tests. The release
-library/gallery build passed. Gate, Shield and Drone optional TUI compilation
+library/gallery build passed. The consumers' optional TUI compilation
 passed offline using disposable manifests/lockfiles; workspace lockfiles stayed
 unchanged. This is dependency compilation, not consumer UI rollout.
 
@@ -509,12 +508,11 @@ complete gate run. Final results:
   including native editor handoff. Native suites used host PTY access.
 - `make build`: release library/gallery passed; the release `--list` inventory
   exposes all 51 inspection scenarios and eight additional profiles.
-- Gate and Shield `tui` feature compilation passed locked/offline in temporary
-  manifest/lock copies. Drone passed with offline lock resolution in its copy;
+- Two consumers' `tui` feature compilation passed locked/offline in temporary
+  manifest/lock copies. The third passed with offline lock resolution in its copy;
   its existing working lock lacks the already-used Markdown dependencies.
   All six original consumer manifests/locks remained byte-identical.
-- Source hashes remained unchanged through final validation. Both Gate
-  repositories' whitespace checks and 848 local file/anchor links passed.
+- Source hashes remained unchanged through final validation. Both repositories' whitespace checks and 848 local file/anchor links passed.
   The unrelated original staging remained byte-identical.
 
 Tests cover exact/foreign/duplicate/stale/wrong-kind acknowledgements, malformed
@@ -543,9 +541,9 @@ reviewed for sidebar, narrow status, notices, failure, ASCII and review placemen
   including native editor handoff. PTY suites ran with host access.
 - `make build`: release library/gallery passed. Release `--list` exposes all 27
   status scenarios and eight profiles.
-- Gate and Shield optional `tui` compilation passed locked/offline with Rust 1.99
+- Two consumers' optional `tui` compilation passed locked/offline with Rust 1.99
   in disposable manifests pointing at their actual library and binary sources.
-  Drone passed after offline resolution of its existing missing Markdown
+  The third passed after offline resolution of its existing missing Markdown
   dependencies in the temporary lockfile. Original consumer manifests/locks
   remained unchanged; this is compilation evidence, not product rollout.
 
@@ -559,7 +557,7 @@ The native Unix PTY exercises status/notice entry, action failure/retry/success,
 draft editing/undo, resize and exact terminal-mode restoration.
 
 Final Rust source hashes remained unchanged through validation.
-Both Gate repositories passed whitespace review; local Markdown
+Both repositories passed whitespace review; local Markdown
 links/anchors and the renamed private design indexes were checked. Human visual
 review, broader native platforms, inline hosting and real host adapters remain
 separate acceptance work.
@@ -581,8 +579,8 @@ review and tiny cancellation hint.
   native inline changes.
 - `make build`: release library/gallery passed; its headless inventory lists
   the 30 inline entries and shared profiles.
-- Gate and Shield optional `tui` compilation passed locked/offline with Rust
-  1.99 in disposable manifests pointing at their actual sources. Drone passed
+- Two consumers' optional `tui` compilation passed locked/offline with Rust
+  1.99 in disposable manifests pointing at their actual sources. The third passed
   after resolving its existing missing Markdown dependencies in the temporary
   lockfile. All original consumer manifests/locks remained unchanged.
 
@@ -598,7 +596,7 @@ normal cooked input plus original terminal attributes. Empty/EOF plain input
 chooses nothing. The small VT harness records no normal-screen whole-page clear.
 
 Final Rust/PTY source hashes remained unchanged through the last full gate,
-release and consumer builds. Local Markdown links/anchors and both Gate repository
+release and consumer builds. Local Markdown links/anchors and both repository
 whitespace checks passed. Module review retains pure print accounting, shared
 component state and one terminal lease; only the explicit gallery host performs
 terminal I/O and fixture acknowledgements.
@@ -631,11 +629,10 @@ settled/correction and pending-review placement.
 - Gallery-disabled nextest: **303 tests** passed, including the direct height API
   PTY test; the final feature-off build also passed.
 - Release library/gallery build passed.
-- Gate optional `tui` compilation passed locked/offline with Rust 1.99 through a
-  disposable manifest pointing at actual sources. Drone passed with its existing
-  missing Markdown dependencies resolved only in a temporary lockfile. Shield's
-  current manifest declares no `tui` feature/dependency, so no Shield TUI feature
-  check applies. Original consumer manifests/locks remained unchanged.
+- One consumer's optional `tui` compilation passed locked/offline with Rust 1.99 through a
+  disposable manifest pointing at actual sources. Another passed with its existing
+  missing Markdown dependencies resolved only in a temporary lockfile. The third
+  declares no `tui` feature/dependency, so no TUI feature check applies to it. Original consumer manifests/locks remained unchanged.
 
 Three added tests cover measured review/draft layout, long result wrapping and
 real owned PTY growth to the window cap, shrink cleanup, atomic zero rejection,
@@ -676,11 +673,11 @@ that flag or changing production restoration.
   doctests**, API docs and dependency checks passed.
 - Release library/gallery build and gallery-disabled locked/offline compilation
   passed.
-- Gate and Drone optional `tui` compilation passed locked/offline through the
-  reviewed disposable manifests pointing at current sources. Drone uses the
+- Two consumers' optional `tui` compilation passed locked/offline through the
+  reviewed disposable manifests pointing at current sources. One uses the
   temporary lockfile resolving its pre-existing missing Markdown dependencies;
   this does not establish that its original locked build passes. All original
-  consumer manifests/lockfiles remained unchanged. Shield declares no TUI feature.
+  consumer manifests/lockfiles remained unchanged. The third declares no TUI feature.
 - Changed Markdown links, new-file whitespace and both repository whitespace
   checks passed. Module review retains input/render state in components, terminal
   restoration in the runtime, and stop/continue orchestration in the gallery host.
@@ -716,8 +713,8 @@ group; no user terminal, shell or unrelated process is signalled.
   doctests**, API docs and dependency advisories/bans/licenses/sources passed.
 - Release library/gallery build and gallery-disabled locked/offline compilation
   passed.
-- Gate/Drone optional `tui` compilation passed through unchanged reviewed temporary
-  manifests pointing at actual sources. Drone uses its temporary resolved lockfile
+- Two consumers' optional `tui` compilation passed through unchanged reviewed temporary
+  manifests pointing at actual sources. One uses its temporary resolved lockfile
   for the pre-existing Markdown dependency gap; its original locked build is not
   established by that check. Original consumer manifests/lockfiles stayed unchanged.
 - Changed Markdown links, tracked/new-file whitespace and both repository diff
@@ -732,4 +729,4 @@ No consumer UI rollout or complete platform support claim follows from this reco
 For behavior changes, run the owning package checks and record observed results
 with scope, date and platform. Use real terminal evidence for terminal contracts.
 For Markdown-only changes, check local links/anchors, private-design separation
-and each affected Gate repository's diff. Do not add tests that assert prose.
+and each affected repository's diff. Do not add tests that assert prose.

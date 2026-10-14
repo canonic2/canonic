@@ -531,7 +531,7 @@ through OSC 11 is not implemented; select light tokens explicitly.
 
 ## Local consumers
 
-Drone and Gate declare `canonic-tui` as an optional, versioned local
+Consuming CLIs declare `canonic-tui` as an optional, versioned local
 path dependency. Enable their `tui` feature; no package registry is involved for
 this library. Upstream dependencies are resolved through their Cargo lockfiles.
 
