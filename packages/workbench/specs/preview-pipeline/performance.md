@@ -67,6 +67,9 @@ Feature specs own the behavior that must not change while making it faster.
   compile. Discovery reads only what it needs to list pages.
 - The first page compiles on request. Compilation after a worker restart
   uses the persisted build cache when its inputs are unchanged.
+- The time to the first page after the server starts does not grow with the
+  number of pages in the project. The first page waits for its own
+  definition and build, not for the whole page list or other pages' builds.
 - An edit to a page's source or to code it shares rebuilds only what the edit
   affects, and the canvas shows the change without a manual refresh. A page
   whose inputs did not change is not rebuilt.
@@ -224,6 +227,10 @@ fixtures ([report](../../labs/rspack-pipeline/README.md#stage-2-report)):
 
 Docs pages have not been measured for navigation.
 
+The pipeline was implemented on 2026-10-13 ([preview pipeline](README.md#status)).
+Its timings in the product are not measured yet: the lab's sequences through the
+shipping server and the VS Code webview are the next step.
+
 ### Page listing
 
 The page list comes from evaluating every discovered definition in the
@@ -260,10 +267,23 @@ time adds to every first page.
 - Of the unchanged listing, most of the time is the project walk (directory
   reads) and the checks that each definition's source exists inside the
   project, not evaluation.
+- At start, the server's page list and pre-warming both list the project.
+  Callers at the same time share one definitions build: a later caller waits
+  for the build in progress, then evaluates only what it left stale, so an
+  edit made meanwhile still appears.
 
-The pipeline was implemented on 2026-10-13 ([preview pipeline](README.md#status)).
-Its timings in the product are not measured yet: the lab's sequences through the
-shipping server and the VS Code webview are the next step.
+### First page
+
+The shipping pipeline does not meet the
+[first-open requirement](#first-open-and-edits): with a warm cache, its first
+page waits for every definition to be listed and every entry to be prepared
+and built. The [first page lab](../../labs/first-page/README.md#report)
+(2026-10-13 to 2026-10-15, three run sets, synthetic fixtures, one Intel
+host, headless Chrome) measured about 1.2 s on 5 pages and 14–16 s on 600.
+None of its starts kept the first page within 25% of the 5-page time; the
+best took about three times as long. On 600 pages, the costs still growing
+with the page count were preparing every entry before the first build and
+the canvas loading the whole page list before any page.
 
 ## Verification
 

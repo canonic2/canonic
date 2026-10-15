@@ -1,7 +1,7 @@
 // First page lab runner. See README.md for the plan.
 //
 //   node labs/first-page/run.mjs --set <label> [--results <new directory>]
-//     [--variants 0,1,2,3,4,D2] [--fixtures small,large-system,huge,giant,formats]
+//     [--variants 0,1,2,3,4,5,6,D2] [--fixtures small,large-system,huge,giant,formats]
 //     [--samples 10] [--warmups 3] [--quiet 8] [--smoke] [--keep]
 //
 // Every variant runs from a snapshot of this package with overlay/ copied over
@@ -24,7 +24,7 @@ const flag = name => args.includes('--' + name);
 const smoke = flag('smoke');
 const settings = {
   set: option('set', smoke ? 'smoke' : null),
-  variants: option('variants', '0,1,2,3,4,D2').split(','),
+  variants: option('variants', '0,1,2,3,4,5,6,D2').split(','),
   fixtures: option('fixtures', 'small,large-system,huge,giant,formats').split(','),
   samples: Number(option('samples', smoke ? 1 : 10)),
   warmups: Number(option('warmups', smoke ? 0 : 3)),
@@ -46,6 +46,8 @@ const VARIANTS = {
   2: { start: 'lazy' },
   3: { start: 'first-compiler' },
   4: { start: 'cached-index' },
+  5: { start: 'control', index: 'cached' },
+  6: { start: 'lazy', index: 'cached' },
   D2: { start: 'requested', chunks: 'default' },
 };
 
@@ -82,7 +84,7 @@ async function fixture(size) {
 function serverFor(variant, fx, cache) {
   const spec = VARIANTS[variant];
   return startServer({ snapshotDir: snapshot(runDir, 'first-page', path.join(here, 'overlay')), root: fx.root, cache, log,
-    env: { WORKBENCH_LAB_START: spec.start, ...(spec.chunks ? { WORKBENCH_LAB_CHUNKS: spec.chunks } : {}) } });
+    env: { WORKBENCH_LAB_START: spec.start, ...(spec.chunks ? { WORKBENCH_LAB_CHUNKS: spec.chunks } : {}), ...(spec.index ? { WORKBENCH_LAB_INDEX: spec.index } : {}) } });
 }
 
 const working = fx => fx.manifest.previews.filter(page => !page.broken);

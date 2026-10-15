@@ -22,6 +22,8 @@ const require = createRequire(import.meta.url);
 const MODE = process.env.WORKBENCH_LAB_START || 'control';
 const REQUESTED_FIRST = MODE === 'requested' || MODE === 'cached-index';
 const STABLE = (REQUESTED_FIRST || MODE === 'lazy') && process.env.WORKBENCH_LAB_CHUNKS !== 'default';
+// Variants 5 and 6: the page list comes from a cached index, so definitions are evaluated here.
+const CACHED_INDEX = process.env.WORKBENCH_LAB_INDEX === 'cached';
 const BATCH = Number(process.env.WORKBENCH_LAB_BATCH || 20);
 const FIRST_GENERATION = 1000;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -44,6 +46,8 @@ export interface ProjectCompiler {
   /** The absolute path of a discovered definition; throws for anything else. */
   declared(file: string): string;
   definition(file: string): Promise<{ value: unknown }>;
+  /** Evaluates the stale definitions among files in one build. */
+  load(files: string[]): Promise<void>;
   index(): Promise<{ previews: Array<{ file: string }>; docs: Array<{ id: string; src: string; lenses: Array<Record<string, unknown>> }>; errors: string[] }>;
   docsExamples(request: Any): Promise<{ examples: Array<{ id: string; file: string; export: string }>; problems: string[] }>;
 }
@@ -521,6 +525,13 @@ export class Pipeline {
       this.watchConfig();
       await this.watchDocs(index);
       if (REQUESTED_FIRST) { await this.prewarmInBatches(index, started); return; }
+      if (CACHED_INDEX) {
+        // One build for every definition the cached index skipped, not one each.
+        const files: string[] = [];
+        for (const preview of index.previews) { try { files.push(this.compiler.declared(preview.file)); } catch (_) { /* previewEntry reports it */ } }
+        await this.compiler.load(files);
+        this.mark('definitions.loaded', { files: files.length, ms: Date.now() - started });
+      }
       const prepared: Entry[] = [];
       for (const preview of index.previews) {
         try { prepared.push(await this.previewEntry(preview.file)); }

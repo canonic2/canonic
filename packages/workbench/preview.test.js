@@ -153,6 +153,31 @@ export default definePreview({ id: 'pages/${id}', title: section + '/${id}', ada
   assert.deepEqual(alone.sort(), ['pages/beta.workbench.tsx', 'pages/gamma.workbench.ts']);
 });
 
+test('callers listing at the same time share one definitions build', async t => {
+  const page = id => `import { definePreview } from '@canonic2/workbench';
+import { section } from '../titles';
+export default definePreview({ id: 'pages/${id}', title: section + '/${id}', adapter: 'html', source: { entry: '../button.ts' } });`;
+  const root = fixture(t, {
+    'titles.ts': "export const section: string = 'Acme';",
+    'button.ts': 'export default function(canvas) { canvas.textContent = "Button"; }',
+    'pages/alpha.workbench.ts': page('alpha'),
+    'pages/beta.workbench.ts': page('beta'),
+  });
+  const compiler = new Compiler(root);
+  const builds = [];
+  const loadBatch = compiler.loadBatch.bind(compiler);
+  compiler.loadBatch = files => { builds.push(files.length); return loadBatch(files); };
+  const [first, second] = await Promise.all([compiler.index(), compiler.index()]);
+  assert.deepEqual(builds, [2]);
+  assert.deepEqual(second.previews, first.previews);
+
+  // After an edit, the next callers share one build again and see it.
+  fs.writeFileSync(path.join(root, 'titles.ts'), "export const section: string = 'Acme Pages';\n");
+  const again = await Promise.all([compiler.index(), compiler.index()]);
+  assert.deepEqual(builds, [2, 2]);
+  for (const index of again) assert.deepEqual(index.previews.map(preview => preview.title), ['Acme Pages/alpha', 'Acme Pages/beta']);
+});
+
 test('indexes a definition’s size keys and rejects entries that aren’t keys', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts', "sizes: ['laptop', 'sidebar']"),

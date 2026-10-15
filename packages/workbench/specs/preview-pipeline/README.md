@@ -95,6 +95,19 @@ the targets the whole pipeline is measured against.
   milliseconds however little it holds, which made listing 600 pages take
   7.4 s ([performance](performance.md#page-listing)).
 
+- **2026-10-15, owner:** on the
+  [first page lab](../../labs/first-page/README.md#report), which adopted no
+  start:
+  - every entry is still built at start. Adding entries in batches, and a
+    cached page index, are not pursued: batches slowed every later build
+    several times over, and the cached index saved little once listing was
+    one build ([compiler](compiler.md#discoveries));
+  - callers listing at the same time share one definitions build
+    ([performance](performance.md#page-listing));
+  - the first page's time must not grow with the number of pages, which the
+    shipping start does not meet yet
+    ([performance](performance.md#first-page)).
+
 The proposed targets in [performance](performance.md#measured-interactions)
 are not agreed yet.
 
@@ -123,8 +136,11 @@ Each topic lists its own. The ones that change the plan:
 - Whether to adopt the warm document, which the lab's rule chose
   ([warm runtime](warm-runtime.md#open-questions)).
 - How to show the first page without waiting for the whole page list,
-  which the canvas loads before any page
-  ([first page lab](../../labs/first-page/README.md)).
+  which the canvas loads before any page. The
+  [first page lab](../../labs/first-page/README.md#report) found no start
+  that meets its rule: on 600 pages the best first page took about three
+  times as long as on 5, with preparing every entry and loading the page
+  list still growing with the project.
 - How to show the first page after a restart without waiting for every
   entry: lazy compilation, if it can be made reliable, or another way
   ([compiler](compiler.md#open-questions)).

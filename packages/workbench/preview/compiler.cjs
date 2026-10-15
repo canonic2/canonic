@@ -282,6 +282,8 @@ class Compiler {
     this.config = {};
     this.configFiles = new Map();
     this.definitions = new Map();
+    // The definitions build in progress, which other callers wait for.
+    this.loading = null;
   }
   tracked(meta) {
     return Object.keys(meta.inputs).filter(file => !file.startsWith('workbench:')).map(file => path.resolve(this.root, file)).filter(file => fs.existsSync(file));
@@ -312,10 +314,16 @@ class Compiler {
   // that fails is split in halves, so a broken definition costs a few more
   // builds rather than one per file. The files left, and a definition that
   // throws, go to definition(), which evaluates them alone and reports their
-  // own errors.
+  // own errors. Callers at the same time, such as the page list and
+  // pre-warming at start, wait for the build in progress and then evaluate
+  // only what it left stale, so an edit made meanwhile is still picked up.
   async load(files) {
+    // The caller that started the build handles its failure; others only wait for it.
+    while (this.loading) await this.loading.catch(() => {});
     const stale = files.filter(file => { const cached = this.definitions.get(file); return !cached || !this.fresh(cached.watched); });
-    if (stale.length > 1) await this.loadBatch(stale);
+    if (stale.length < 2) return;
+    this.loading = this.loadBatch(stale).finally(() => { this.loading = null; });
+    await this.loading;
   }
   async loadBatch(files) {
     let result;

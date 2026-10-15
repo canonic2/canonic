@@ -134,23 +134,43 @@ and [portable.ts](../../src/modules/preview-pipeline/portable.ts). Gaps:
 ## Lazy compilation
 
 Rspack's `lazyCompilation` builds an entry only when a document first asks
-for it. The prototype tried it on 2026-10-12, and it is not reliable yet
-([finding 9](../../labs/rspack-pipeline/README.md#findings)):
+for it. The pipeline does not use it: every entry is built at start
+([entries](#entries)).
 
-- Rspack's middleware expects a POST, and Workbench's server forwards only
-  GET requests to the worker. The prototype used a copy of Rspack's client
-  that asks with GET.
-- Most previews compiled on first request in 0.2–0.3 s.
-- The first preview's request stalled, a compile error did not show for a
-  lazily built entry, and pages stopped loading after a config change.
-- Whether lazy compilation avoids moved chunks (see [entries](#entries)) is
-  not established.
-
-The pipeline builds every entry at start. Lazy compilation becomes a
-requirement only if stage 2 of the lab shows that building every entry is too
-slow on its huge fixture (200 previews).
+- **2026-10-12, Rspack pipeline lab, stage 1**
+  ([finding 9](../../labs/rspack-pipeline/README.md#findings)). Most
+  previews compiled on first request in 0.2–0.3 s. Rspack's middleware
+  expects a POST, and Workbench's server forwards only GET requests to the
+  worker. The first preview's request stalled, a compile error did not show
+  for a lazily built entry, and pages stopped loading after a config change.
+- **2026-10-13 to 2026-10-15, first page lab**
+  ([report](../../labs/first-page/README.md#report), synthetic fixtures, one
+  Intel host, headless Chrome). A prototype fixed those problems: its client
+  asks with GET, which the worker hands to Rspack's middleware as a POST;
+  build errors are reported for lazily built entries; and the client is
+  created again after a config change. With every entry declared and the
+  stable chunk layout ([discoveries](#discoveries)), it passed every
+  correctness check in three run sets: hot updates with state kept, no moved
+  modules, errors in pages not yet built, and config edits. On 600 pages,
+  against the shipping start, it showed the first page in about 4 s against
+  14 s, finished building in about 3 s against 13 s, applied edits in about
+  0.25 s against 0.9 s in the two run sets at moderate load, and its worker
+  used about a fifth of the memory.
+  Opening a page not yet built took about twice as long, 0.4 s against
+  0.2 s, which fails the 10% threshold. One config edit on 40 pages took
+  62 s, against 1.5–2.3 s in the other samples, and is unexplained.
 
 ## Discoveries
+
+- **2026-10-15, first page lab.** Naming split chunks by package (one chunk
+  per `node_modules` package) and by project folder makes a module's chunk
+  independent of which entries exist. With that layout, entries joined the
+  build after the first page without moving a shared module, and hot updates
+  kept working; with Rspack's default splitting, one shared-module update
+  failed. Joining in batches made every later build slower on 600 pages:
+  the full build took 83–95 s against 13 s, edits about 4 s against 0.9 s,
+  and a config edit about 80 s against 11–13 s
+  ([report](../../labs/first-page/README.md#report)).
 
 - **2026-10-11, compiler speed lab.** On one Intel macOS host, Rspack 2.2.7 in
   watch mode rebuilt the 40-page fixture in about 140 ms after a page or
@@ -173,13 +193,14 @@ slow on its huge fixture (200 previews).
 
 ## Open questions
 
-- **The first page after a restart.** With the persistent cache warm, every
-  entry rebuilds before the first page can show: 3.3–3.4 s on the 40-page
-  fixture against 1.5–1.8 s for the shipping compiler, in stage 2. Lazy
-  compilation, or another way to serve the first page early that keeps the
-  entry set fixed for open documents, is needed to meet the first-open
-  target.
-
+- **The first page after a restart.** With the persistent cache warm, the
+  first page waits for every entry to be prepared and built: about 14 s on
+  600 synthetic pages against about 1.2 s on 5, in the
+  [first page lab](../../labs/first-page/README.md#report). No start the
+  lab tried keeps the first page independent of the page count
+  ([performance](performance.md#first-open-and-edits)). Lazy compilation came
+  closest, at about three times the 5-page time
+  ([lazy compilation](#lazy-compilation)).
 - **Changing the entry set.** A preview or docs lens added or removed while
   pages are open changes the entry set. The proposed rule treats this like a
   configuration change: a new generation, with open documents reloading into

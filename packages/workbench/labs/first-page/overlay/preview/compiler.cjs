@@ -23,7 +23,8 @@ const inside = (root, file) => {
   return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
 };
 const slash = file => file.split(path.sep).join('/');
-const LAB_CACHED_INDEX = process.env.WORKBENCH_LAB_START === 'cached-index';
+// Variant 4, and variants 5 and 6 through WORKBENCH_LAB_INDEX.
+const LAB_CACHED_INDEX = process.env.WORKBENCH_LAB_START === 'cached-index' || process.env.WORKBENCH_LAB_INDEX === 'cached';
 const stamp = file => { try { const s = fs.statSync(file); return s.mtimeMs + ':' + s.size; } catch (_) { return 'missing'; } };
 
 function discover(root, include) {
@@ -374,7 +375,7 @@ class Compiler {
     const errors = [];
     const ids = new Set();
     const files = discover(this.root, this.options.include);
-    // First page lab, variant 4: listings from the last run, reused while every
+    // First page lab, variants 4 to 6: listings from the last run, reused while every
     // file a definition read, and the config, are unchanged.
     const cacheFile = require('node:path').join(require('node:os').tmpdir(), 'canonic-workbench-index', digest(this.root + JSON.stringify(this.options)) + '.json');
     const configStamp = JSON.stringify(Array.from(this.configFiles));
