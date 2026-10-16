@@ -37,23 +37,12 @@ The canvas keeps, per project and profile, a runtime that has loaded:
 - global stylesheets from the project environment;
 - the web fonts those stylesheets load.
 
-A selection mounts into it, so only the page's own chunks load. Two forms
-were prototyped; stage 2 of the lab chooses one
-([open questions](#open-questions)):
-
-- **Warm spare frame.** A prepared spare frame waits with the runtime loaded.
-  A selection takes the spare, and the next spare starts preparing. Each
-  preview still gets its own document, which keeps isolation as it is today.
-  Shared chunks and fonts come from the browser's HTTP and code caches.
-- **Warm document.** One long-lived document per project and profile changes
-  page in place, like an application's router. Between pages it restores its
-  baseline (see [isolation](#isolation-in-a-reused-document)) and loads the
-  next preview's project modules fresh, keeping dependencies, stylesheets and
-  fonts in memory.
-
-The canvas's existing warm host already reuses documents between previews
-([previews](../previews.md#open-states-controls-and-actions)), so both forms
-need the isolation rules below.
+A selection mounts into one long-lived warm document per project and profile.
+Between pages it restores its baseline and loads the selected preview's project
+modules while retaining shared dependencies, stylesheets and fonts. State,
+input and size changes re-render the current page without reloading its modules.
+[Managed-preview lifecycle](../previews.md#open-states-controls-and-actions)
+defines host mounting and retained import-time resources.
 
 ### Isolation in a reused document
 
@@ -77,22 +66,21 @@ It also:
   own modules are evaluated fresh too, so its registry starts over;
 - keeps the globals that the bundler and hot runtime own: the chunk registry,
   hot-update callbacks, React Refresh and Vue hot-reload hooks, and
-  Workbench's own globals. Removing them broke hot updates in stage 1
-  ([finding 8](../../labs/rspack-pipeline/README.md#findings)).
+  Workbench's own globals. Those globals belong to the retained compiler runtime, not to a page.
 
 Import-time body nodes keep their retention rule in
 [previews](../previews.md#open-states-controls-and-actions).
 
 ### Resource bounds
 
-- One warm runtime per project and profile: at most one prepared spare frame,
-  or one warm document.
+- At most one warm document per project and profile.
 - Retained frames keep the limits in [core](../core.md#canvas-and-artboard): one
   active and up to three inactive sessions for 15 minutes. A warm document
   counts as one session.
-- The heap of a warm document after a long walk, and of each retained frame,
-  is measured in stage 2. If it grows with the number of pages shown, the
-  document is replaced after a bound that stage 2 sets.
+- Warm-document and retained-frame memory must have measured bounds. A
+  document whose retained resources exceed its bound is replaced without
+  losing the requested view. Choosing the threshold and safe replacement
+  behavior remains implementation work.
 
 ## Status
 
@@ -101,41 +89,22 @@ document. A new state, input or size of the preview a warm document shows
 re-renders through the preview runtime without reloading its modules. Gaps:
 
 - Returning to a page the warm document showed earlier loads its modules
-  again; there are no other retained frames to resume. In the prototype this
-  took 94–114 ms, against the proposed 100 ms target.
+  again rather than guaranteeing per-page runtime-state retention. The
+  [retained-page requirement](performance.md#navigation-keeps-the-canvas-usable)
+  and resource budget must be met together.
 - The warm document is not replaced after a bound; its heap after long walks
   is not limited.
 
-## Discoveries
+## Verification
 
-- **2026-10-12, stage 1.** Both forms rendered every page and docs lens of the
-  formats fixture across two walks in opposite orders. The fixture's
-  isolation sentinels found nothing left behind on any page. Each page leaves
-  a window listener, a timer, a portal node, a `<body>` class, a `window`
-  global and a request mock on purpose
-  ([report](../../labs/rspack-pipeline/README.md#stage-1-report)).
-- **2026-10-13, stage 2.**
-  - **Warm document:** new pages loaded about 0.36 MB in 2 scripts,
-    against about 5 MB for the shipping pipeline, and showed in 0.14–0.18 s.
-    The canvas heap after 26 new pages was 138–162 MB, about the shipping
-    pipeline's.
-  - **Warm spare:** new pages loaded 0.42 MB in 12 scripts and showed in
-    0.23–0.37 s, and the canvas heap held about 270–300 MB.
-  - **Pre-warming:** with pre-warming finished, the first page showed in
-    0.81–0.83 s against 2.4–2.7 s without it
-    ([report](../../labs/rspack-pipeline/README.md#stage-2-report)).
-- **2026-10-12, readiness probe.** On a warm switch to a page that loads no
-  web fonts, about 300 ms of the 600 ms from selection to ready went to
-  loading the page's 5.2 MB bundle, which is mostly code shared with other
-  pages ([lab evidence](../../labs/rspack-pipeline/README.md#evidence-so-far)).
+Isolation and warm-host lifecycle are covered by
+[preview-host tests](../../workbench/preview-host.test.js) and
+[preview-runtime tests](../../preview-runtime.test.js). The
+[pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report) holds design
+comparisons. Long-session heap bounds and real-host confirmation remain
+acceptance work, not properties established by those prototype runs.
 
 ## Open questions
 
-- **Adopting the warm document.** The lab's rule chooses the warm document if
-  it passes every isolation check and is at least 10% faster than the warm
-  spare at the median, walking ten new pages on a large fixture. In stage 2
-  it passed every check and was 24–55% faster in both run sets. It still
-  re-evaluates modules for state, input and size changes and on return, which
-  must re-render in place first. The owner decides.
 - **Which page to prepare.** Preparing the most recently selected page's
   chunks, beyond the shared ones, is not specified yet.

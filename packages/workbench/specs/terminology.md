@@ -2,7 +2,7 @@
 
 One vocabulary for Workbench: the interface, its labels and accessible names,
 the code, the user guides, the specs, handoff prompts, payloads, and the agent
-skill all use the terms below. Agreed 2026-10-04.
+skill all use the terms below.
 
 A term names one thing. When a guide, label, or identifier needs a word for
 something listed here, it uses this word and no synonym.
@@ -94,8 +94,8 @@ The bar across the top of the canvas, with controls for the page showing.
 | **Breadcrumb** | The space, page, and state showing, at the left. The state part is the **state switcher**. |
 | **Actions switch** | Whether links and forms in the page work. |
 | **Lens switcher** | One button per lens, in the middle. Shown only when the page has two or more lenses. |
-| **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**: the artboard's size. Which sizes a page supports is its `sizes`. Disabled in the docs canvas mode. |
-| **Size menu** | Proposed in [artboard sizes](sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
+| **Size switcher** | The space's configured size buttons, defaulting to **Fit**, **Laptop**, **Mobile**, and **Resizable**. A page's `sizes` limits or extends its choices. Disabled in the docs canvas mode. |
+| **Size menu** | Defined in [artboard sizes](sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
 | **Reload**, **Open the source**, **Copy reference**, **Open on its own** | Actions on the page showing, named by their labels. |
 | **Preview controls** | The panel of a preview's inputs, actions, and **Reset state**. |
 | **More menu** | Space-wide commands, such as **Configure pages** and the design-system export, and the top bar's controls that don't fit a narrow window. |
@@ -118,41 +118,10 @@ link to another page of the product being designed. "Screenshot" is an image
 of the canvas or of a page. "Section" keeps its ordinary meaning for part of a
 document, such as a heading's section in docs or a guide.
 
-## Decisions
+## Naming across interfaces
 
-- **2026-10-04: page is what the canvas shows, whatever renders it.** One
-  word covers authored pages, previews, Markdown pages, and catalog entries, as the
-  **Configure pages** command does.
-- **2026-10-04: space and collection.** A space is what the switcher changes
-  between, and a collection is a set of pages within it. "Project" keeps its
-  everyday meaning, the codebase, which the guides use throughout (project
-  root, project code, trusted project) and which Canonic Studio's project tabs
-  also mean. A collection lives in the sidebar, apart from anything on the
-  canvas, as design tools place named regions on their canvas.
-- **2026-10-04: canvas mode.** The canvas has one mode per way of showing a
-  page, named **default** and **docs**.
-- **2026-10-04: the schema uses the same words.** `spaces`, `collections`, and
-  `group:` in `workbench.yaml`, each the only key for its thing; any other key
-  is reported as a problem.
-- **2026-10-04: identifiers and payloads follow the terms.** Code, routes,
-  payload fields, and prompt text use these words too, including those other
-  tools read: the handoff prompt, `/_workbench/config`, and the agent-context
-  payloads the agent hook and MCP server consume. Those consumers change in the
-  same release as Workbench.
-- **2026-10-04: the toolbar holds the tools.** The bar at the bottom carries
-  the drawing and handoff tools; the bar across the top is the **top bar**,
-  named by position because it mixes page context, page actions, and
-  space-wide commands.
-- **2026-10-04: annotations.** What's drawn with the toolbar is an
-  annotation, one word for a single drawing and, in the plural, all of them. In
-  a tool for HTML and component pages, "markup" means a page's own markup, and
-  designers and developers know annotations from design handoff.
-- **2026-10-04: lenses are implementations, plus the design.** Each
-  implementation a page maps to is one of its lenses; the design lens is the
-  page as authored. The kind says how a lens renders, and a catalog is an
-  implementation that brings pages of its own.
-- **2026-10-04: view controls.** All four controls change the view, not the
-  page: recentering as well as zooming.
-- **2026-10-04: entries are named by what they are.** A collection, group,
-  page, or state in the sidebar is called that, since a layout word doesn't say
-  which kind of thing it is.
+The schema uses `spaces`, `collections` and `group:` for their respective
+concepts. Routes, payload fields, copied references, handoff prompts and agent
+integrations use the same vocabulary. Changes to these public names update
+consumers and guides in the same release. A sidebar entry is named by its
+content: collection, group, page or state.

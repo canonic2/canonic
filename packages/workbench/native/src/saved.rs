@@ -11,7 +11,11 @@ pub(crate) struct Stamp(Option<(u128, u64, bool)>);
 pub(crate) fn stamp(file: &Path) -> Stamp {
     Stamp(fs::metadata(file).ok().and_then(|meta| {
         Some((
-            meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_nanos(),
+            meta.modified()
+                .ok()?
+                .duration_since(UNIX_EPOCH)
+                .ok()?
+                .as_nanos(),
             meta.len(),
             meta.is_dir(),
         ))
@@ -90,7 +94,12 @@ mod tests {
         let mut saved = Saved::default();
         saved.records.insert(
             "page".into(),
-            Record { file: "page".into(), watched: vec![], entry: Ok("{}".into()), docs: false },
+            Record {
+                file: "page".into(),
+                watched: vec![],
+                entry: Ok("{}".into()),
+                docs: false,
+            },
         );
         saved.save(&file, "a").unwrap();
         assert_eq!(Saved::load(&file, "a").records.len(), 1);

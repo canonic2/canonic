@@ -35,7 +35,8 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
   these are kept outside the published documentation.
 - `scripts/`: VSIX packaging, including the per-platform Electron runtime.
 - `native/`: the Rust page index (`workbench-native`), with its pinned Cargo
-  manifest, lockfile, toolchain, rustfmt, Clippy and cargo-deny configuration.
+  manifest, lockfile, toolchain, Clippy, nextest and cargo-deny configuration.
+  Formatting uses rustfmt defaults; LLVM tools support coverage reports.
 - `src/modules/page-index/`: native index process, saved storage, ordering
   and worker fallback, exposed through `index.ts`.
 
@@ -141,10 +142,16 @@ agent shell calls use the repository-root form, which the repository's shell pol
 | --- | --- |
 | Extension or workbench behavior | `pnpm test` |
 | Type-check `src/` | `pnpm run check` |
-| Native Rust index (from `native/`) | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo doc --no-deps --document-private-items`, `cargo deny check` |
+| Native Rust gates | `pnpm run check:native` (format, strict Clippy, nextest, doctests, rustdoc, cargo-deny) |
+| Native Rust coverage | `pnpm run coverage:native` (HTML in `native/target/llvm-cov/`) |
 | Run the server on a project | `node server.js <project>`, then open the reported workbench URL |
 | Packaging | `pnpm run package` (this host) or `pnpm run package:all <target>`, then inspect `dist/` |
 | Locked dependencies | `pnpm install --frozen-lockfile` |
+
+Native gates use locked dependencies and all features. See `native/README.md`
+for pinned check-tool installation and individual commands; `make -C native check`
+and `make -C native coverage` run the same gates and coverage directly.
+The release workflow runs the native gates before packaging.
 
 Tests build a debug native index before running Node tests. Packaging builds
 `workbench-native` with Rust 1.99.0, `cargo build --release --locked` and the

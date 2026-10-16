@@ -101,7 +101,7 @@ components retain their own licensing.
 (`all`, `current`, `custom`), optional state/size filters, and lens. Current-view
 requests include the selected page, state, lens, size and viewport dimensions.
 Unknown pages, invalid options and mismatched current selections answer `400`.
-Empty legacy requests and direct GET downloads default to a whole-space source ZIP.
+Empty requests and direct GET downloads default to a whole-space source ZIP.
 
 The dialog offers all declared variants or the current view. Source ZIP defaults
 to all; single-page PDF/images default to current. Browser ZIP uses declared
@@ -155,8 +155,9 @@ filters. Browser-only output fails if no compiled previews or docs are available
 
 ## Capture scheduling versus the camera
 
-The [multiple-artboard canvas](multiple-artboards.md) changes interactive
-screenshots and handoffs to include the entire canvas. It does not change this
+The [multiple-artboard support API](multiple-artboards.md) composes interactive
+screenshots and handoffs from every supplied instance. Its user-facing canvas
+integration remains future work. It does not change this
 catalog-wide design-system export into an export of the current arrangement.
 On a mixed-space canvas, the export action targets the selected artboard's
 owning space; handoff images are stored by the canvas host space. Reuse
@@ -234,7 +235,7 @@ Portable-build fallback and local capture reuse are covered by module and server
 regressions. Source, capture and portable warnings all contribute to the final
 export warning count.
 
-Space scope was confirmed by code inspection on 2026-10-04:
+Space ownership is explicit in the implementation:
 [server.js](../server.js) reads `config.read(where)` for its selected space,
 and its export endpoint passes that resolved view into `beginExport`.
 [source.ts](../src/modules/export/source.ts) starts page records from `view.pages` and copies

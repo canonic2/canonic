@@ -30,8 +30,9 @@ The user-facing reference is [The VS Code extension](../docs/extension.md).
 - Start commands and TypeScript previews run project code. Each checks trust
   again before running; untrusted, start commands are skipped with a log entry
   and discovered previews are replaced by the problem
-  `Workbench previews require a trusted workspace.` Discovery may list
-  definition files without trust, but never loads or compiles them.
+  `Workbench previews require a trusted workspace.` The server may scan for
+  definition presence to produce that problem, but returns no discovered
+  definitions and executes none in an untrusted workspace.
 
 ## Commands and settings
 
@@ -169,7 +170,7 @@ Component and theme contracts: [Web Components](web-components.md) and
   the switcher, as the home of **Add a space…**.
 - `node server.js a b …` starts every space eagerly, shares one capture
   service, and prints one `workbench on <url>  <name>` line per space. One
-  folder behaves and prints as before.
+  folder produces one server and one reported URL.
 
 ## Sidebar and problems
 
@@ -199,8 +200,9 @@ Component and theme contracts: [Web Components](web-components.md) and
   acknowledged the refresh, so a pick of a new page or state does not target
   an old manifest. A refresh rejected for an invalid manifest keeps the
   queued pick until a later refresh succeeds.
-- Edits to preview source other than the definition's page metadata are
-  picked up by the worker on the next request; see
+- The running pipeline watches preview source dependencies and pushes build
+  results; definition metadata still needs catalog refresh until the watcher
+  gap is closed. See
   [TypeScript previews](previews.md).
 
 ## Implementation startup
@@ -221,6 +223,7 @@ Component and theme contracts: [Web Components](web-components.md) and
 ```text
 VS Code extension host
   ├─ loopback workbench server ── project, workbench, and preview pages
+  │    ├─ native page index ── listing; separate Node evaluator when needed
   │    ├─ preview worker ── compiles and serves TypeScript previews (bundled runtime or Node)
   │    ├─ screenshot capture service ── bundled Electron helper
   │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS
@@ -247,18 +250,15 @@ Server, canvas, capture, preview worker, and handoff diagnostics go to the
 logging after 2 MB per session. Records never contain screenshots, page HTML,
 or handoff prompts.
 
-## Decisions
+## Ownership constraints
 
-- **One server per space (2026-10-03).** The server, config readers,
-  preview worker, agent view, and every route assume one root. A server per
-  space keeps the single-space path unchanged and isolates each space's
-  origin (and so its canvas storage); the cost is a port and a preview worker
-  per opened space, so servers start lazily and share one capture service.
-- **Added spaces are global, current space is per window (2026-10-03).**
-  A user adds a space to Workbench, not to one window; which one a window
-  shows is that window's state.
-- **Watch preview definitions (2026-10-03).** Adding a preview should not need
-  a manual refresh, so definition files are watched alongside the YAML files.
+- Each space has its own server, origin, configuration, preview compiler and
+  agent-view state. Servers start lazily where possible and share the host's
+  capture service.
+- Added-space membership is global to the editor installation. Current-space
+  selection is per window.
+- Discovery and refresh must preserve the latest selection and named problems;
+  definition watching remains a required gap below.
 
 ## Implementation gaps
 
@@ -279,13 +279,12 @@ or handoff prompts.
 
 ## Open questions
 
-- **What is the trust gate for?** The extension declares no untrusted-workspace
-  support, so VS Code never runs it in Restricted Mode, and the standalone
-  server treats a missing trust flag as trusted. As built, no user can reach
-  the start-command or preview trust checks. `isTrusted` is also read once at
-  activation and passed to the server as a constant, so granting trust later
-  would not be observed. Either declare limited untrusted support and make
-  the gate live (reading trust changes), or remove the checks.
+- **Restricted Mode and live trust.** Decide whether Workbench should expose
+  non-executing inspection in untrusted workspaces. The extension currently
+  declares no Restricted Mode support, and its server trust flag is fixed at
+  creation. Supporting that workflow requires a live trust contract for both
+  workspace and added-space roots; start commands and evaluation must remain
+  gated throughout transitions.
 
 ## Verification points
 
@@ -321,5 +320,5 @@ or handoff prompts.
   definition (until definition watching is implemented and tested), activity-bar visibility without `workbench.yaml`, handoff
   from **Open Canvas in Browser**, and in VS Code: adding, switching, and
   removing spaces, the window-focus reread, and extension.js wiring. The
-  canvas and sidebar switchers were exercised in headless Chrome against
-  `node server.js` with two fixture spaces (2026-10-03).
+  canvas and sidebar switchers also have browser fixture coverage; that does
+  not establish editor-window or remote-host acceptance.

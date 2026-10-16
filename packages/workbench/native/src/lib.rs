@@ -19,7 +19,9 @@ pub fn run() -> Result<()> {
         "expected: workbench-native index < request.json"
     );
     let mut input = String::new();
-    std::io::stdin().take(1024 * 1024).read_to_string(&mut input)?;
+    std::io::stdin()
+        .take(1024 * 1024)
+        .read_to_string(&mut input)?;
     let request = serde_json::from_str(&input).context("invalid index request")?;
     let answer = index::index(&request)?;
     std::io::stdout().write_all(&serde_json::to_vec(&answer)?)?;

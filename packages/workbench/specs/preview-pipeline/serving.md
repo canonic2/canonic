@@ -22,9 +22,7 @@ queue.
 - **Stylesheets** keep stable names per chunk and are served without caching.
   Rspack's CSS hot update fetches a chunk's new stylesheet by the name the
   document already knows. It finds the old link by URL prefix or by a
-  `data-rspack` attribute naming the chunk. With content-hashed names it
-  fetched the old file
-  ([finding 5](../../labs/rspack-pipeline/README.md#findings)).
+  `data-rspack` attribute naming the chunk, so updates address the current CSS.
 - **Hot-update manifests and chunks** are served without caching.
 - Asset files emitted by the compiler, such as images and fonts imported by
   sources, are served from the same prefix with content-hashed names.
@@ -34,8 +32,8 @@ queue.
 A preview's development address returns a small ES module rather than the
 entry chunk itself. It:
 
-1. Imports the preview runtime and request mocks before any project module,
-   as compiled previews do today ([previews](../previews.md#data-request-mocks-and-the-project-environment)).
+1. Imports the preview runtime and request mocks before any project module
+   ([previews](../previews.md#data-request-mocks-and-the-project-environment)).
 2. Throws the entry's build error at once if its last build failed, so the
    frame shows it ([hot updates](hot-updates.md#errors-and-recovery)).
 3. Adds the entry's stylesheets as links tagged with `data-rspack`, unless the
@@ -68,14 +66,10 @@ receives pushed updates, so the runtime starts no revision poll
 Implemented, with one gap: preview and docs descriptors are still answered in
 the worker's serial queue, so a long export or Astro input render delays them.
 
-## Discoveries
+## Verification
 
-- **2026-10-12, stage 1.** The prototype served every format with these rules.
-  Variant 3 kept one document per profile across every page of two walks of
-  the formats fixture, loading each shared chunk once. CSS hot updates
-  replaced the stylesheet in place for global CSS, CSS modules, Vue scoped
-  styles and an HTML preview's linked stylesheet
-  ([report](../../labs/rspack-pipeline/README.md#stage-1-report)).
-- **2026-10-11, preview loading lab.** On its 40-page fixture, a project-wide
-  shared build cut showing a new preview from 1.4 s to 0.13–0.2 s
-  ([report](../../labs/preview-loading/README.md#results-large-fixture)).
+[Pipeline tests](../../src/modules/preview-pipeline/pipeline.test.ts) cover
+compiler output and serving. Shared-runtime isolation and stylesheet updates
+also have [pipeline lab evidence](../../labs/rspack-pipeline/README.md#stage-2-report).
+The remaining descriptor-queue gap must be closed without weakening build
+error reporting or generation checks.

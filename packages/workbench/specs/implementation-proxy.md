@@ -2,8 +2,7 @@
 
 URL and Storybook lenses load through a loopback proxy that the workbench
 server runs for each implementation origin. This spec explains why it exists,
-what it does, and why the workbench must not go back to framing
-implementations directly. See [proxy.js](../proxy.js), the `proxied` config
+what it does, and how it preserves live-page capture without project setup. See [proxy.js](../proxy.js), the `proxied` config
 step in [server.js](../server.js), and `upstream` in
 [lenses.js](../workbench/lenses.js). The user-facing description is
 [Embedding and sign-in](../docs/lenses.md#embedding-and-sign-in).
@@ -22,34 +21,17 @@ origin can't be read: the browser blocks scripts from reaching into a
 cross-origin iframe. Only a script running **inside** that page, the preview
 bridge (`/_workbench/preview-bridge.js`), can send its DOM out.
 
-Before the proxy, the lens iframe loaded the implementation's own address, so
-the bridge ran only if the team added a loader to its Storybook or app. Without
-it, a screenshot came from the helper loading the URL afresh in its own
-session. That copy showed the initial page, so the screenshot silently left
-out whatever the reviewer had done. The reported case (2026-10-03) was a
-Customers story with its Create Customer modal open: the canvas showed the
-modal, and the screenshot showed the list without it.
-
-Asking teams to change their Storybook or app to fit Workbench is not
-acceptable. The proxy lets Workbench add the bridge itself.
+Workbench injects the bridge through a loopback proxy so teams need no
+Storybook or application changes. Capturing a fresh browser session cannot
+stand in for the live page's in-memory interaction state.
 
 ## Why a proxy
 
-The script has to get into a page whose HTML another server sends, inside an
-iframe Workbench doesn't control. These were considered and rejected:
-
-| Approach | Why it doesn't work |
-| --- | --- |
-| Teams load the bridge from `.storybook/preview` or their app | Product requirement: projects install nothing for Workbench. |
-| VS Code injects the script | Extensions can only `postMessage` to the top document of their webview. There is no API to run script in a nested frame, and no access to the webview's Electron `webContents` or DevTools protocol. |
-| The Electron capture helper injects the script | The helper renders a separate, hidden copy for screenshots. The page the reviewer interacts with lives in VS Code's webview, which the helper never touches. |
-| The workbench page reads the iframe | Same-origin policy forbids reading a cross-origin iframe. |
-| Serve the implementation under a path on the workbench's own origin | Dev servers request absolute paths (`/@vite/client`, `/sb-addons/…`, `/index.json`, `/storybook-server-channel`) that collide with project files and `/_workbench/` routes, and a second implementation makes them ambiguous. |
-| Reload the URL in the helper and replay state | Interaction state lives in the page's memory; a fresh load can't reproduce it, and the helper has its own session. |
-
-The workbench server already sees every page it serves and adds its scripts to
-them (`withPreviewScripts`). Putting the server in front of implementations
-extends that model to pages it doesn't own.
+The proxy supplies document injection and a dedicated origin for each
+implementation, preserving root-relative dev-server routes and WebSocket
+traffic. Each implementation's origin remains distinct from Workbench's own
+project and control routes. The injected script reports the live document;
+interaction state is not reconstructed in a separate application session.
 
 ## Requirements
 
@@ -90,39 +72,21 @@ extends that model to pages it doesn't own.
 - **Capture accepts the proxy origins** alongside the configured ones
   (`origins()` in [server.js](../server.js)).
 
-## Do not go back to direct framing
+## Capture boundary
 
-Do not change lenses back to loading an implementation's own address in the
-iframe, and do not serve Storybook or another implementation from the
-workbench's own origin in place of the proxy. Either one brings back the
-original failure: screenshots and handoffs that silently differ from what the
-reviewer sees, or a request that teams change their projects. Proposals to
-remove the proxy "to simplify" or "because Storybook works without it" must
-first meet the requirement above: the live page, as seen, captured with no
-project changes. Fix proxy problems in the proxy.
-
-Implementations Workbench doesn't frame are outside this rule: `workbench`
-previews are already served by Workbench, and `ios-simulator` and `window`
-lenses are native streams.
+URL and Storybook documents must receive the bridge without project changes,
+retain their implementation-specific absolute paths, and capture live user
+state. Every framed implementation uses its own proxy origin. Workbench-served
+previews and native streams use their own acquisition paths.
 
 ## Current status
 
 ### Verified behavior
 
-Verified 2026-10-03:
-
-- Against a Vite-based Storybook on `localhost:6006`, with no Storybook
-  changes: the bridge connected, a modal opened by a real click appeared in the
-  screenshot, and a handoff named the element under its annotation from the
-  mirrored copy. Storybook's channel WebSocket ran through the proxy. Vite's HMR socket
-  connected to port 6006 directly, which works because Vite names its own port.
-  No page exceptions.
-- With a fixture that sends `X-Frame-Options: DENY`, the page loaded and an
-  opened `<dialog>` with its backdrop and input value appeared in the
-  screenshot.
-- Form sign-in with a `SameSite=Lax` session cookie kept its session across
-  reloads and lens switches ([smoke-lenses.cjs](../scripts/smoke-lenses.cjs)).
-  One of four runs failed before sign-in completed and was not reproduced.
+The proxy and capture tests below cover transport, injection, origins and
+mirrored element names. The lens smoke scenario checks sessions and sign-in.
+Real implementation acceptance includes an interaction-only state, such as an
+opened modal, appearing in the captured image without project changes.
 
 ### Known gaps
 

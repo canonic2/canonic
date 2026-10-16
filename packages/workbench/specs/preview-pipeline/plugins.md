@@ -31,7 +31,7 @@ compiler, before any project plugin:
 ### Astro
 
 - Astro components render on the server in the compile worker, through the
-  Astro container, as they do today ([previews](../previews.md#data-request-mocks-and-the-project-environment)).
+  Astro container, under the preview contract ([previews](../previews.md#data-request-mocks-and-the-project-environment)).
 - The rendered HTML and its client resources become virtual modules in the
   compiler, handled by the HTML loader, so the client side gets hot updates
   and shared chunks like any other format.
@@ -43,8 +43,7 @@ compiler, before any project plugin:
 
 ### Project plugins
 
-The owner decided on 2026-10-12 that project plugins are Rspack plugins, and
-on 2026-10-13 to implement the pipeline with the keys below.
+Project configuration supplies Rspack plugins and module rules:
 
 ```ts
 import { defineConfig } from '@canonic2/workbench';
@@ -69,31 +68,29 @@ export default defineConfig({
   Rspack's classes from the compiler it is applied to (`compiler.rspack`),
   rather than importing its own copy of `@rspack/core`, which the project need
   not install.
-- A plugin object with esbuild's shape (`name` and `setup`) and no `apply` is
-  reported as a problem naming the plugin, and the other previews still load.
+- A plugin must expose `apply(compiler)`. An unsupported plugin shape produces
+  a problem naming the plugin while other previews remain available.
 - A plugin that throws, or a rule that fails, shows as a build error in the
   previews whose graph it affects ([compiler](compiler.md#build-errors)).
 
-Common esbuild plugin patterns and their Rspack forms, as used by the
-[formats fixture](../../labs/fixtures/README.md#the-formats-size):
+Common extension points:
 
-| esbuild plugin | Rspack form |
+| Task | Rspack form |
 | --- | --- |
-| A virtual module served by the plugin | `NormalModuleReplacementPlugin` rewriting the request to a module the plugin supplies, such as a `data:` URI with the generated source |
-| A source transform while loading files | A loader in `rules`, with `enforce: 'pre'` when it must see the original source |
-| An import redirected by the importing file | `NormalModuleReplacementPlugin` testing the request and the issuer |
+| Supply a virtual module | `NormalModuleReplacementPlugin` redirects to generated module source |
+| Transform source | A loader in `rules`, with `enforce: 'pre'` when it needs original source |
+| Redirect an import by its issuer | `NormalModuleReplacementPlugin` inspects request and issuer |
 
 ### Portable output
 
 The portable build and the export's docs examples build with an Rspack
 production compiler that uses the same format handling and project plugins,
-so projects write one plugin form (decided 2026-10-13,
-[pipeline decisions](README.md#decisions)).
+so projects write one plugin form.
 
 ## Status
 
 Implemented: Workbench's format handling as Rspack loaders and rules, the
-project `plugins` and `rules` keys, problems for esbuild-shaped plugins, and
+project `plugins` and `rules` keys, plugin-shape validation, and
 portable output from an Rspack production build. HTML previews bundle every
 inline and local script and run it per render, with top-level declarations
 private. An `aliases` entry stands in for an Astro application module, such as
@@ -102,20 +99,15 @@ private. An `aliases` entry stands in for an Astro application module, such as
 - Astro frontmatter and Astro input edits still bundle with esbuild, without
   project plugins or rules.
 
-## Discoveries
+## Verification
 
-- **2026-10-11, compiler speed lab.** No candidate bundler runs Workbench's
-  esbuild plugins or projects' esbuild plugins unchanged. Rspack needs both
-  rewritten as loaders and plugins
-  ([capability checklist](../../labs/compiler-speed/README.md#capability-checklist-1)).
-- **2026-10-12, stage 1.** All of the table above worked in the prototype,
-  and all three of the formats fixture's project plugins worked in their
-  Rspack form. They take Rspack's classes from `compiler.rspack`, with
-  `compiler.webpack` as a fallback
-  ([report](../../labs/rspack-pipeline/README.md#stage-1-report)).
+[Preview integration tests](../../preview.test.js) cover project plugins,
+module rules, format handling and portable builds. Plugin behavior in
+server-side definition and Astro evaluation must be assessed separately from
+browser compilation; successful browser output does not establish that path.
 
 ## Open questions
 
 - **Plugins in definition evaluation.** Definitions are evaluated without
-  project plugins today. Whether a definition may import a module that only a
+  project plugins. Whether a definition may import a module that only a
   plugin can resolve is not specified.

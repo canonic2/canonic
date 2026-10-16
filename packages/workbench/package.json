@@ -40,6 +40,8 @@
   "scripts": {
     "test": "node scripts/build-native.cjs --debug && node --test",
     "check": "tsc -p tsconfig.json",
+    "check:native": "make -C native check",
+    "coverage:native": "make -C native coverage",
     "serve": "node server.js",
     "package": "node scripts/package.cjs",
     "package:all": "node scripts/package-all.cjs",

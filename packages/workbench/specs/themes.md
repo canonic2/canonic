@@ -7,7 +7,7 @@ theme. In VS Code it follows the active theme, including user color overrides.
 In a standalone browser it remains usable without any VS Code variables or API.
 The same [Web Components](web-components.md) serve both environments.
 
-**Status (2026-10-04): shared defaults and first consumer implemented.**
+**Status:** shared tokens and migrated controls implemented.
 `src/theme/defaults.css` supplies the space switcher's and size controls' tokens,
 including the selected segment, error text and primary button roles, and direct
 webview host mappings. The sidebar maps host roles for this control; the canvas continues
@@ -23,8 +23,8 @@ inherit through component hosts into Shadow DOM.
 
 Keep theme assets under `src/theme/`, separate from components and host transport.
 Define defaults for every token used by migrated components. Start from the
-existing Workbench palette for standalone use; this task does not introduce a
-theme picker, OS preference behavior, or persisted theme settings.
+Workbench palette for standalone use. A theme picker, OS preference behavior
+and persisted theme settings are outside this contract.
 
 The token contract covers surfaces (panel, canvas, floating controls, inputs and
 menus), foregrounds, borders, hover and selection, action buttons, focus, disabled
@@ -120,7 +120,7 @@ accent colors; interactive control states use the host's semantic roles.
 - Changing theme or a color override while a menu/input is active updates colors
   without losing focus, text, selection, canvas state, or preview state.
 - Reloading or switching spaces receives the latest snapshot. A missing optional
-  value falls back; a formerly supplied value does not survive its omission.
+  value falls back; a supplied value does not survive its omission.
 - Unrelated windows/messages cannot change the theme. Pure mapping and snapshot
   replacement tests cover missing/invalid values and host boundary validation.
 - Real browser checks verify inheritance into nested Shadow DOM, native controls,
@@ -129,7 +129,7 @@ accent colors; interactive control states use the host's semantic roles.
 
 ## Evidence and implementation gaps
 
-Verified from repository sources on 2026-10-04:
+Current source boundaries:
 
 - [sidebar.css](../workbench/sidebar.css) already maps panel/text variables but
   uses fixed blue accents and derived shades.

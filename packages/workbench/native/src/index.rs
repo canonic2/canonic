@@ -62,7 +62,9 @@ pub(crate) fn index(request: &Request) -> Result<Response> {
     // Only the plain path/globstar subset is interpreted natively. Picomatch
     // handles extglobs, braces, character classes, escapes and negation.
     let custom = patterns.iter().any(|pattern| {
-        pattern.bytes().any(|byte| !byte.is_ascii_alphanumeric() && !b"/.*_-".contains(&byte))
+        pattern
+            .bytes()
+            .any(|byte| !byte.is_ascii_alphanumeric() && !b"/.*_-".contains(&byte))
             || pattern.contains("***")
     });
     let discovered = discovery::discover(
@@ -109,10 +111,16 @@ pub(crate) fn index(request: &Request) -> Result<Response> {
     let reused_count = reused.iter().flatten().count();
     timings["checkMs"] = json!(ms(step));
     let config = request.root.join(
-        request.options.get("config").and_then(Value::as_str).unwrap_or("workbench.config.ts"),
+        request
+            .options
+            .get("config")
+            .and_then(Value::as_str)
+            .unwrap_or("workbench.config.ts"),
     );
-    let settings_changed =
-        previous.settings.iter().any(|(file, saved)| stamp(&request.root.join(file)) != *saved);
+    let settings_changed = previous
+        .settings
+        .iter()
+        .any(|(file, saved)| stamp(&request.root.join(file)) != *saved);
     let check_settings = config.exists() && (previous.settings.is_empty() || settings_changed);
     if reused_count == files.len()
         && previous.records.len() == files.len()
@@ -169,13 +177,24 @@ pub(crate) fn index(request: &Request) -> Result<Response> {
                 )
             }));
             let entry = projection.entry.map(|entry| entry.to_string());
-            Some((file.clone(), Record { file: file.clone(), watched, entry, docs: false }))
+            Some((
+                file.clone(),
+                Record {
+                    file: file.clone(),
+                    watched,
+                    entry,
+                    docs: false,
+                },
+            ))
         })
         .collect();
     let parsed_count = records.len() - reused_count;
     timings["parseMs"] = json!(ms(step));
-    let pending: Vec<_> =
-        files.iter().filter(|file| !records.contains_key(*file)).cloned().collect();
+    let pending: Vec<_> = files
+        .iter()
+        .filter(|file| !records.contains_key(*file))
+        .cloned()
+        .collect();
     let step = Instant::now();
     let mut settings = previous.settings.clone();
     if !pending.is_empty() || check_settings {
@@ -224,11 +243,18 @@ pub(crate) fn index(request: &Request) -> Result<Response> {
                 vec![]
             };
             let result = entry.entry.map(|entry| entry.to_string()).ok_or_else(|| {
-                entry.error.unwrap_or_else(|| "definition evaluation failed".into())
+                entry
+                    .error
+                    .unwrap_or_else(|| "definition evaluation failed".into())
             });
             records.insert(
                 entry.file.clone(),
-                Record { file: entry.file, watched, entry: result, docs: entry.docs },
+                Record {
+                    file: entry.file,
+                    watched,
+                    entry: result,
+                    docs: entry.docs,
+                },
             );
         }
     }
@@ -261,7 +287,9 @@ pub(crate) fn index(request: &Request) -> Result<Response> {
         generation = format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
         );
         next.generation.clone_from(&generation);
         if let Err(error) = next.save(&request.saved, &request.identity) {

@@ -9,11 +9,12 @@ This contract concerns the tool's interface, not the framework used by pages it
 previews. It does not change the preview adapters or require projects to adopt
 Web Components.
 
-**Status (2026-10-04): first component migration implemented.** The space switcher
+**Status:** migrated space, size and Actions controls use this contract. The space switcher
 and its decorative space mark use this contract in the sidebar, breadcrumb and
 design examples. The size switcher and its two dialogs, Custom size and Edit
-sizes, follow it in the canvas top bar ([sizes](sizes.md)), as does the Actions switch beside it. The rest of the interface remains legacy HTML, JavaScript and
-shared CSS. Related contracts: [themes](themes.md),
+sizes, follow it in the canvas top bar ([sizes](sizes.md)), as does the Actions
+switch beside it. Other interface surfaces use HTML, JavaScript and shared CSS.
+Related contracts: [themes](themes.md),
 [core behavior](core.md), and [extension hosting](vscode-extension.md).
 
 ## Component structure
@@ -96,11 +97,10 @@ Migrate one bounded control and its consumers at a time. Preserve existing routi
 host messaging, preview isolation, and capture behavior. Compatibility adapters
 belong at the existing host boundary, not inside the reusable element.
 
-Before shipping the first component, extend the browser asset serving allowlist
-to cover the intended component and theme assets without exposing server modules
-or tests. Check direct webview resource URLs/CSP, local server imports, type
+Browser asset serving must cover intended component and theme assets without
+exposing server modules or tests. Check direct webview resource URLs/CSP, local server imports, type
 checking, and VSIX inclusion. Use the same implementation in `design/` examples;
-update legacy examples that rely on reaching into private DOM to use public inputs
+update examples that rely on reaching into private DOM to use public inputs
 or actual interaction. Do not maintain a parallel mock component.
 
 ## Design pages
@@ -167,14 +167,14 @@ element, not in the page.
   canvas only, by [canvas-bootstrap.ts](../src/components/canvas-bootstrap.ts);
   the sidebar's bundle registers the space controls. Their pure form and row
   logic is tested in Node beside each element.
-- Each of the six elements has its [design page](#design-pages), a `defineDocs`
+- Each element requires its [design page](#design-pages), a `defineDocs`
   definition in [design/](../design/size-switcher.workbench.ts);
   [design-pages.test.ts](../src/components/design-pages.test.ts) fails an
   element folder without the three files, the `components/<name>` ID, or a
   Public API section. It checks the page exists, not that it is current: a
   changed API without an updated page is a review finding.
 - [Space switcher](../src/components/space-switcher/element.ts) and
-  [space mark](../src/components/space-mark/element.ts) are the first elements.
+  [space mark](../src/components/space-mark/element.ts) use the same contract.
   Their [public API and examples](../design/space-switcher.md) document properties,
   events, parts and keyboard behavior. Application operations remain in the
   existing sidebar and canvas controllers.

@@ -42,7 +42,10 @@ fn truthy(value: &Value) -> bool {
     }
 }
 fn fallback(value: Option<&Value>, default: Value) -> Value {
-    value.filter(|value| truthy(value)).cloned().unwrap_or(default)
+    value
+        .filter(|value| truthy(value))
+        .cloned()
+        .unwrap_or(default)
 }
 fn resolve(base: &Path, entry: &str) -> PathBuf {
     let mut result = PathBuf::new();
@@ -58,7 +61,10 @@ fn resolve(base: &Path, entry: &str) -> PathBuf {
     result
 }
 fn relative(root: &Path, file: &Path) -> String {
-    file.strip_prefix(root).unwrap_or(file).to_string_lossy().replace('\\', "/")
+    file.strip_prefix(root)
+        .unwrap_or(file)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 fn label(id: &str) -> String {
     let mut label = String::new();
@@ -67,7 +73,9 @@ fn label(id: &str) -> String {
         if at == 0 && character.is_ascii_alphanumeric() {
             label.push(character.to_ascii_uppercase());
         } else if character == '-'
-            && characters.peek().is_some_and(|(_, next)| next.is_ascii_alphanumeric())
+            && characters
+                .peek()
+                .is_some_and(|(_, next)| next.is_ascii_alphanumeric())
         {
             label.push(' ');
             if let Some((_, next)) = characters.next() {
@@ -103,14 +111,22 @@ pub(crate) fn project(
         return None;
     }
     if let Some(states) = raw.get("states").and_then(Value::as_object) {
-        if states.values().any(|state| !state.is_object() || !requests_valid(state.get("requests")))
+        if states
+            .values()
+            .any(|state| !state.is_object() || !requests_valid(state.get("requests")))
         {
             return None;
         }
-    } else if raw.get("states").is_some_and(|value| !value.is_null() && !value.is_object()) {
+    } else if raw
+        .get("states")
+        .is_some_and(|value| !value.is_null() && !value.is_object())
+    {
         return None;
     }
-    if raw.get("controls").is_some_and(|value| !value.is_object() && truthy(value)) {
+    if raw
+        .get("controls")
+        .is_some_and(|value| !value.is_object() && truthy(value))
+    {
         return None;
     }
     // JavaScript's realpath and whitespace rules own unusual source paths,
@@ -133,8 +149,9 @@ pub(crate) fn project(
     let mut sources = vec![];
     let result = (|| {
         let error = |message: &str| format!("{}: {message}", file.display());
-        let object =
-            raw.as_object().ok_or_else(|| error("default export must be definePreview({...})."))?;
+        let object = raw
+            .as_object()
+            .ok_or_else(|| error("default export must be definePreview({...})."))?;
         if !string(object.get("id"), id) {
             return Err(error("id must use kebab-case segments separated by /."));
         }
@@ -165,10 +182,15 @@ pub(crate) fn project(
             let target = resolve(directory, entry);
             sources.push(target.clone());
             if !target.starts_with(root) || !source_exists(&target) {
-                return Err(error(&format!("source must exist inside the project: {entry}")));
+                return Err(error(&format!(
+                    "source must exist inside the project: {entry}"
+                )));
             }
         }
-        if object.get("states").is_some_and(|states| !states.is_object()) {
+        if object
+            .get("states")
+            .is_some_and(|states| !states.is_object())
+        {
             return Err(error("states must be a map."));
         }
         let default = json!({"default": {}});
@@ -200,18 +222,27 @@ pub(crate) fn project(
                     })
             });
             if !valid {
-                return Err(error("sizes must be a list of size keys, such as laptop or mobile."));
+                return Err(error(
+                    "sizes must be a list of size keys, such as laptop or mobile.",
+                ));
             }
         }
         if let Some(controls) = object.get("controls").and_then(Value::as_object) {
             for (name, control) in controls {
-                if !control.get("type").and_then(Value::as_str).is_some_and(|kind| {
-                    ["text", "number", "boolean", "select", "json"].contains(&kind)
-                }) {
+                if !control
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .is_some_and(|kind| {
+                        ["text", "number", "boolean", "select", "json"].contains(&kind)
+                    })
+                {
                     return Err(error(&format!("invalid control {name}")));
                 }
                 if control["type"] == "select"
-                    && control.get("options").and_then(Value::as_array).is_none_or(Vec::is_empty)
+                    && control
+                        .get("options")
+                        .and_then(Value::as_array)
+                        .is_none_or(Vec::is_empty)
                 {
                     return Err(error("select controls need options."));
                 }
@@ -223,13 +254,20 @@ pub(crate) fn project(
         let mut links = Map::new();
         if let Some(raw_links) = object.get("links").and_then(Value::as_object) {
             for (href, target) in raw_links {
-                let normalized =
-                    if target.is_string() { json!({"preview": target}) } else { target.clone() };
+                let normalized = if target.is_string() {
+                    json!({"preview": target})
+                } else {
+                    target.clone()
+                };
                 let valid = normalized.is_object()
                     && (normalized.get("preview").is_some_and(truthy)
                         || normalized.get("state").is_some_and(truthy))
-                    && normalized.get("preview").is_none_or(|value| string(Some(value), id))
-                    && normalized.get("state").is_none_or(|value| string(Some(value), kebab));
+                    && normalized
+                        .get("preview")
+                        .is_none_or(|value| string(Some(value), id))
+                    && normalized
+                        .get("state")
+                        .is_none_or(|value| string(Some(value), kebab));
                 if !valid {
                     return Err(error(&format!(
                         "link {href} must name a preview ID, or {{ preview, state }}."
@@ -243,7 +281,9 @@ pub(crate) fn project(
                 links.insert(href.clone(), link);
             }
         }
-        let source = object["source"]["entry"].as_str().expect("validated source");
+        let source = object["source"]["entry"]
+            .as_str()
+            .expect("validated source");
         let mut out = json!({"id": preview_id, "title": fallback(object.get("title"), preview_id.clone()), "adapter": object["adapter"], "file": relative(root, file), "source": relative(root, &resolve(directory, source)), "states": listed, "controls": fallback(object.get("controls"), json!({})), "docs": fallback(object.get("docs"), Value::Null), "links": links});
         for key in ["sizes", "icon"] {
             if let Some(value) = object.get(key) {
@@ -252,7 +292,10 @@ pub(crate) fn project(
         }
         Ok(out)
     })();
-    Some(Projection { entry: result, sources })
+    Some(Projection {
+        entry: result,
+        sources,
+    })
 }
 
 #[cfg(test)]
@@ -266,7 +309,10 @@ mod tests {
             (json!(null), "default export"),
             (json!({}), "id must"),
             (json!({"id":"page"}), "adapter must"),
-            (json!({"id":"page","adapter":"html","icon":"BAD"}), "icon must"),
+            (
+                json!({"id":"page","adapter":"html","icon":"BAD"}),
+                "icon must",
+            ),
         ] {
             assert!(
                 project(&raw, &file, root, |_| true)
@@ -288,9 +334,14 @@ mod tests {
         assert_eq!(entry["states"][1]["label"], " Ready");
         assert_eq!(entry["links"]["/next"]["preview"], "page");
         assert_eq!(entry["title"], "page");
+        insta::assert_json_snapshot!("page_list_entry", entry);
         for (key, value, message) in [
             ("sizes", json!([]), "sizes must"),
-            ("controls", json!({"tone":{"type":"select","options":[]}}), "select controls"),
+            (
+                "controls",
+                json!({"tone":{"type":"select","options":[]}}),
+                "select controls",
+            ),
             ("links", json!({"/bad":null}), "link /bad must"),
         ] {
             let mut invalid = raw.clone();

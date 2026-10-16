@@ -1,47 +1,23 @@
 # Artboard sizes
 
-Status: **implemented except Configure pages cards and the guides**
-(2026-10-04). Sizes, the size switcher with its menu, Custom size…, and Edit
-sizes… work; see [Current status](#current-status). The user guides and the
-website still describe the four fixed sizes.
+Status: implemented size model, resolved server configuration, size switcher,
+Custom size… and Edit sizes…. Configure pages cards and public-guide alignment
+remain delivery gaps; see [current status](#current-status).
 
 ## Purpose and scope
 
-Today the size switcher has four fixed sizes: Fit, Laptop (1512 × 982), Mobile
-(393 × 852), and Resizable. A page can only narrow that list. A design that
-isn't a laptop or phone screen has no size of its own:
+A space defines its artboard sizes: dimensions, labels, icons, order and which
+appear as buttons. A space without configuration gets Fit, Laptop, Mobile and
+Resizable. A page may limit those choices and add its own sizes, but cannot
+change the space's size definitions or buttons. Either axis can fill the canvas.
+This supports screens, narrow panels, popovers and other components at their
+intended dimensions. Custom size… and Edit sizes… write `workbench.yaml`.
 
-- This repository's **Sidebar** page draws the Workbench sidebar: 340 pixels
-  wide and as tall as the window. Fit makes it as wide as the canvas, and
-  Resizable is one size shared by every page, starting at 1024 × 768
-  ([workbench.js](../workbench/workbench.js)).
-- A component, panel, popover, or dialog is designed at a known width, often
-  with a height that follows the window.
-
-With this work, **a space defines its sizes**: their dimensions, labels,
-icons, order, and which of them are buttons in the size switcher. A space that
-defines none gets the default sizes. **A page** can limit which of them it
-supports, down to one, and add sizes of its own; it can't change the space's
-sizes or the size switcher's buttons. Either axis of a size
-can **fill** the canvas. **Custom size…** and **Edit sizes…** in the size menu
-create and change sizes in `workbench.yaml`.
-
-One word names this everywhere: **size**, and `sizes` in `workbench.yaml` and
-preview definitions.
-
-In scope: the schema for spaces and pages, the size switcher and size menu,
-fill axes, addresses, handoffs, the design-system export, **Configure pages**,
-TypeScript preview definitions, the portable viewer, and the multiple-artboard
-model.
-
-Out of scope:
-
-- Docs lenses, which have no artboard size ([docs](docs-pages.md)).
-- iOS Simulator and window lenses, which show the device's or window's own
-  size letterboxed in the artboard ([implementations](implementations.md));
-  their artboard size behaves as it does today.
-- Per-page Resizable dimensions. Resizable stays one size per viewer, shared by
-  every page.
+The contract covers configuration, canvas sizing, addresses, handoffs, export,
+Configure pages, TypeScript definitions, the portable viewer and the
+multiple-artboard model. Docs lenses use their own canvas layout. Simulator
+and window content keeps its native dimensions, letterboxed inside the chosen
+artboard. Resizable dimensions are viewer-local and shared across pages.
 
 ## Default sizes
 
@@ -212,7 +188,7 @@ name. A menu button follows them and opens the **size menu**:
 | (actions) | **Custom size…** and **Edit sizes…**, shown when the workbench server is running, as **Configure pages** is |
 
 - The current size is checked. Sizes the page doesn't support are disabled,
-  with the reason in their titles, as disabled buttons have today. A page's
+  with the reason in their titles. A page's
   own sizes are listed only while that page shows.
 - When the current size isn't a button, the menu button shows that size's
   icon and is pressed, and its accessible name and title name the size, such
@@ -311,8 +287,7 @@ The size part of an address is the size's key:
 ```
 
 - An address naming a size the page doesn't have is rewritten to the size
-  actually shown, as an unknown width is today
-  ([core](core.md#selection-and-navigation)).
+  actually shown ([core](core.md#selection-and-navigation)).
 - Keys are kebab-case, so they never contain the `:`, `!`, `~`, or `@` that
   mark the other parts of an address.
 - An address in a docs lens still has no size part.
@@ -388,7 +363,7 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 ## Acceptance criteria
 
 1. A space without `sizes` shows Fit, Laptop, Mobile, and Resizable as
-   buttons, and behaves as before; its addresses use `@fit`, `@laptop`,
+   buttons, and uses those defaults; its addresses use `@fit`, `@laptop`,
    `@mobile`, and `@resizable`.
 2. With the `sizes` example above and the Sidebar page listing
    `[sidebar, resizable]`, opening the page from Laptop shows a
@@ -435,81 +410,7 @@ sizes, the local merge, and problems; `address.test.js` for size keys;
 menu, and dialogs need a browser check of keyboard use and focus with the
 [browser harness](../scripts/chrome.cjs).
 
-## Implementation notes
-
-Replacing the fixed sizes touches code that assumes them
-([inventory, 2026-10-04](#discoveries)). In particular:
-
-- The size buttons are static markup in `index.html`, and the valid widths are
-  read from their `data-width` attributes. The switcher has to be drawn from
-  the space's resolved sizes, and addresses validated against them.
-- `setWidth` treats any non-built-in mode as a number of pixels and takes the
-  height from the pressed button. Sizes need one resolved table, with width,
-  height, and fill per axis, shared by the shell, export, handoff, and the
-  multiple-artboard adapter.
-- `zoom.js` sizes Fit on both axes together; fill needs the same logic per
-  axis.
-- The CSS sizes icons by literal `data-width` values; icons from the space need
-  one rule.
-- The preview compiler and its types, the config editor's cards, the export's
-  size table, the portable viewer's modes, and `src/canvas/model.ts` each
-  hard-code the four sizes. `model.ts`, `legacy-runtime.ts`, and the Resizable
-  rails in `workbench.js` bound sizes at 320, and the portable viewer at 240.
-- `manifest.merge` replaces a space's keys wholesale except `implementations`;
-  `sizes` needs the same key merge, inside `spaces` entries too.
-- The writer in `config.js` replaces top-level blocks and
-  `spaces.<key>.collections`; it needs the same for `spaces.<key>.sizes`.
-- Multiple-artboard children open at `@resizable`, and
-  `wbArtboardShell.size` switches to Resizable; that path has to set the
-  artboard's size without going through the space's sizes.
-- The agent policy hook recognizes
-  Workbench addresses only with `fit`, `resizable`, `390`, `393`, or `1512`;
-  it has to accept any kebab-case size key. The shared Workbench skill and
-  rule describe the size part of an address and change with it.
-- `annotations.js` builds handoff screenshot names and the width line from the
-  pressed button's title; both move to the resolved size.
-
-## Decisions
-
-- **2026-10-04: one word, size.** Spaces, pages, preview definitions, the
-  interface, the export, and handoffs say `sizes` and "size". A term names
-  one thing ([terminology](terminology.md)), and two words for an artboard's
-  dimensions would not.
-- **2026-10-04: each space defines its sizes.** A space owns its sizes,
-  including which are buttons, their icons, and their order. Sizes aren't
-  shared between spaces. A space without `sizes` gets the default four.
-- **2026-10-04: pages limit and add, nothing else.** A page can limit which of
-  the space's sizes it supports, down to one so it can't be switched, and can
-  add sizes of its own, shown in the size menu. It can't change a space size
-  or the size switcher's buttons, which belong to the space.
-- **2026-10-04: Custom size… creates a named size in `workbench.yaml`.** It
-  writes to the space by default, or to the page with **Only for this page**.
-  There is no per-viewer ad hoc size besides Resizable.
-- **2026-10-04: no new default sizes.** The defaults stay Fit, Laptop, Mobile,
-  and Resizable. A concept with Desktop, Tablet, Small phone, and Android
-  presets was considered; those are sizes a space declares.
-- **2026-10-04: no minimum beyond 1 pixel.** Small components need small
-  artboards. Sizes and Resizable's drag go down to 1 × 1. A filled axis keeps
-  Fit's 320-pixel floor, since it follows the canvas rather than a choice.
-- **2026-10-04: icons are configurable.** Every size takes a Lucide `icon`.
-- **2026-10-04: the space's order is the menu's order.** The space decides,
-  as it does for buttons.
-- **2026-10-04: export every supported size but Resizable.** See
-  [Design-system export](#design-system-export).
-- **2026-10-04: dialogs write like Configure pages.** Writes that change pages
-  replace the `collections` block and lose comments inside it, as **Configure
-  pages** does. A line-level YAML editor that keeps them was considered and
-  left for later; both features would use it.
-- **2026-10-04: a placed preview takes the page's sizes, else its definition's.**
-  A page that lists the preview and its `sizes` decides; without them, the
-  definition's apply. Before, readers filled every page's sizes, so a
-  definition's never did.
-- **2026-10-04: no compatibility with the old names.** Workbench has no users
-  yet, so `@1512` and `@393` addresses aren't mapped to the new keys.
-
 ## Current status
-
-Verified on 2026-10-04 against the working tree.
 
 - **Built:** the size model, schema, export sizes, and edits in
   [src/sizes/](../src/sizes/), with tests beside each; the server reader and
@@ -541,38 +442,17 @@ Verified on 2026-10-04 against the working tree.
 - **To do:** Configure pages cards for every size of the space (they still
   show the default sizes the space has), and the guides listed at the end.
 
-## Implementation order
+## Remaining delivery
 
-Each step ships working and tested on its own:
+- Configure pages must list every size resolved for the space, including
+  page-owned sizes, instead of limiting cards to the built-in keys.
+- Public guides and the website must describe the configured size switcher,
+  editing actions and keyed addresses. This is documentation debt for the
+  implemented controls, not a future size-model design.
+- Verify these controls in the VS Code host as well as the standalone browser.
+  Source tests and browser checks do not establish every host interaction.
 
-1. **Schema and readers.** Space and page `sizes`, defaults, own sizes,
-   problems, the local merge, and the resolved shape, in `manifest.js` and
-   both readers. The canvas keeps its four buttons, mapped from the resolved
-   default sizes.
-2. **Canvas.** The size switcher drawn from the space's sizes, the size menu
-   without its actions, fill sizing in `zoom.js`, addresses and persistence by
-   key, and the Resizable drag down to 1. This repository's Sidebar page moves
-   to a `sidebar` size.
-3. **Handoff, export, previews.** Handoff size lines and screenshot names, the
-   export plan, preview definition keys, the portable viewer, and the
-   multiple-artboard model, plus the agent policy hook's address pattern.
-4. **Writing.** **Custom size…**, **Edit sizes…**, the `sizes` writer, and the
-   Configure pages cards.
-5. **Documentation.** The guides, README, shared skill and rule, website, and
-   changelog listed below, for each step's visible change as it ships.
-
-## Discoveries
-
-- **2026-10-04: the four sizes are hard-coded in many places.** An inventory
-  of the package found them in the manifest reader, the preview compiler and
-  its types, the config editor, the address router, the size buttons and their
-  CSS, zoom, the multiple-artboard model and controller, the export plan, the
-  portable viewer, handoff text, the user guides, the website overview, and
-  the shared Workbench skill and rule. Screenshot names in
-  `.canonic/.handoffs/` don't include the size, so shots of one page at two
-  sizes overwrite each other; that predates this work.
-
-## Documentation to update when shipped
+## Public-guide alignment
 
 [Configuration](../docs/configuration.md) (`sizes` on spaces and pages),
 [Using the canvas](../docs/canvas.md) (size switcher, size menu, addresses,

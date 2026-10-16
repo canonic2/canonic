@@ -25,7 +25,9 @@ pub(crate) fn discover(
     ) -> Result<Discovery> {
         let path = root.join(dir);
         let current = stamp(&path);
-        let reused = known.get(dir).filter(|saved| !walk && saved.stamp.as_ref() == Some(&current));
+        let reused = known
+            .get(dir)
+            .filter(|saved| !walk && saved.stamp.as_ref() == Some(&current));
         let record = if let Some(record) = reused {
             record.clone()
         } else {
@@ -42,17 +44,28 @@ pub(crate) fn discover(
                 }
                 children.push((name, kind.is_dir()));
             }
-            Directory { stamp: Some(current), children }
+            Directory {
+                stamp: Some(current),
+                children,
+            }
         };
         let subtrees: Vec<_> = record
             .children
             .par_iter()
             .map(|(name, directory)| {
-                let relative = if dir.is_empty() { name.clone() } else { format!("{dir}/{name}") };
+                let relative = if dir.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{dir}/{name}")
+                };
                 if *directory {
                     visit(root, &relative, known, walk)
                 } else {
-                    Ok(Discovery { files: vec![relative], directories: HashMap::new(), reads: 0 })
+                    Ok(Discovery {
+                        files: vec![relative],
+                        directories: HashMap::new(),
+                        reads: 0,
+                    })
                 }
             })
             .collect();

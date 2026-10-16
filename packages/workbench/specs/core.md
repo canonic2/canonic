@@ -23,7 +23,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
   (`/<path>.workbench.ts`) with assets under `/_workbench/previews/`, all on
   one origin. Workbench does not copy files into the project.
 - `workbench.local.yaml` is optional. It replaces top-level values except that
-  `implementations` merges by implementation name, one level deep. A nested
+  `implementations` and space `sizes` merge by key, one level deep. A nested
   `start` block supplied locally replaces the whole committed `start` block,
   and a local `previews` value replaces the committed one.
 - The config accepts block YAML. Names and IDs used in addresses are checked;
@@ -34,7 +34,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
   and optionally one level of groups (`group:`). `collections` may be omitted
   unless `previews: false` and no implementation has a catalog; then a config
   with no usable page fails with *nothing to show*.
-- `previews` is a map (`include`, `config`, `icon`, `icons`) or `false`. Discovery is on by
+- `previews` is a map (`include`, `config`, `icon`, `icons`, `lensLabel`) or `false`. Discovery is on by
   default; `false` turns it off and no preview code runs. An invalid value is
   a problem and leaves previews off until fixed. Discovery, definitions, and
   the worker are specified in [TypeScript previews](previews.md).
@@ -61,7 +61,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
 - Every configuration, catalog, preview, and implementation problem names
   where it came from, for example
   `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
-- Every surface shows the same problems list (decided 2026-10-03): the VS Code
+- Every surface shows the same problems list: the VS Code
   sidebar above its page list, and the canvas wherever it runs (the editor tab,
   **Open Canvas in Browser**, and a standalone server). `/_workbench/config`
   lists them under `problems`.
@@ -78,11 +78,12 @@ Space, collection, group, page, state, lens, and the parts of the interface
 
 ## Selection and navigation
 
-- One selection is encoded as `#<src>[:<state>]@<width>[~<lens>]`. For example,
-  `#pages/sign-in.html:error@393~staging` names a page, state, artboard width,
+- One selection is encoded as `#<src>[:<state>]@<size>[~<lens>]`. For example,
+  `#pages/sign-in.html:error@mobile~staging` names a page, state, artboard size,
   and implementation. The default state and design lens are omitted; the
-  workbench always writes the width. It normalizes the address after routing
-  to the view it actually shows.
+  workbench writes the resolved size key for an artboard and omits it in a
+  docs lens. Docs addresses can also name `!<example>`. It normalizes the
+  address after routing to the view it actually shows.
 - The sidebar lists the collections, then the chosen collection's pages;
   search finds pages across collections, including state and group labels. A
   page with multiple states expands to its states. An imported title is a page that
@@ -107,16 +108,17 @@ continues to describe the shipping single-view interface.
 - Config and catalog discovery show **Loading pages…**. The first iframe
   preview shows **Loading preview…** until it is ready; later navigations keep
   the outgoing preview visible. Loading indicators honor reduced motion.
-- The size switcher offers Fit, Laptop (1512 × 982), Mobile (393 × 852), and
-  Resizable modes. A page's optional `sizes` list disables unsupported
-  modes; omission enables all four. Fit follows the available workbench space.
-  Fixed and resizable sizes keep their dimensions when the editor is smaller.
-  Sizes defined by each space are proposed in [artboard sizes](sizes.md).
+- The size switcher uses the space's ordered sizes and each page's supported
+  sizes, including page-specific sizes. With no space configuration the
+  defaults are Fit, Laptop, Mobile and Resizable. Filled axes follow the
+  available canvas; fixed dimensions remain fixed when the editor is smaller.
+  The [sizes contract](sizes.md) owns the schema, menu, editing and defaults.
+
 - An ordinary iframe navigation uses a spare iframe. The current preview stays
   visible until its replacement loads, then the frames exchange roles. A
   superseded load must not replace a newer selection.
-- Workbench previews, Storybook, and URL lenses retain their attached iframe
-  sessions across selections: one active session and up to three inactive
+- Retained preview sessions preserve their attached iframe
+  across selections: one active session and up to three inactive
   sessions for 15 minutes after departure. Returning preserves form edits,
   scroll, menus, and application state. Inactive frames are inert, keep their
   layout dimensions, and cannot send navigation or keyboard commands to the
@@ -128,7 +130,8 @@ continues to describe the shipping single-view interface.
   the open canvas; no destination page is predicted or preloaded. The
   [preview pipeline](preview-pipeline/README.md) adds a warm runtime of shared
   code per project, not a predicted page, and keeps retained frames current
-  through hot updates ([warm runtime](preview-pipeline/warm-runtime.md)).
+  through hot updates. The [warm-runtime status](preview-pipeline/warm-runtime.md#status)
+  identifies the managed per-page return and memory-bound gaps.
 - Managed previews wait for mounting, fonts, and visible images before becoming
   ready. Offscreen lazy images keep native lazy loading and do not delay the
   frame swap. Readiness must also progress when the browser suspends animation
@@ -147,8 +150,6 @@ continues to describe the shipping single-view interface.
   iframe; the workbench does not read its DOM directly.
 
 ## Verified behavior
-
-Checked against the working tree on 2026-10-03.
 
 - `previews` validation: `manifest.previews` returns `false` and adds a
   problem for a non-map, an empty or escaping `include`, or an absolute or

@@ -25,6 +25,12 @@ jobs:
       - name: Check release notes
         run: node packages/workbench/scripts/release-notes.cjs "${GITHUB_REF_NAME#workbench/v}"
       - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          components: clippy, rustfmt, llvm-tools
+      - name: Install Rust check tools
+        run: cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2
+      - run: pnpm run check:native
+        working-directory: packages/workbench
       - run: pnpm install --frozen-lockfile
         working-directory: packages/workbench
       - run: pnpm run check

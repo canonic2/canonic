@@ -72,7 +72,7 @@ The keys, their validation, and examples are in the
 
 ## Switching the visible story
 
-The future [multiple-artboard contract](multiple-artboards.md) requires two
+The [multiple-artboard integration contract](multiple-artboards.md) requires two
 stories from the same Storybook to remain independently rendered. Story reuse,
 channel messages, pending acknowledgements, and session retention must be scoped
 to an artboard instance and render generation, not just implementation/base URL.
@@ -88,7 +88,7 @@ This work follows the iframe runtime ownership in the
   interactions without rendering again. Picking another story in that session
   uses the channel; the session retains the most recently rendered story.
 - Workbench accepts `currentStoryWasSet` and `storyRendered` only from the
-  active or loading preview iframe, at the configured Storybook origin, and for
+  active or loading preview iframe, at the resolved Storybook proxy origin, and for
   the requested story ID. It reports the selection to the VS Code sidebar and
   signals a new frame to capture only after `storyRendered`. A pending
   selection keeps the editor bridge ready for another pick without claiming
@@ -99,7 +99,7 @@ This work follows the iframe runtime ownership in the
   An initial load, a pending iframe navigation, or a different Storybook
   origin also uses iframe navigation.
 - Editor shortcuts reach the workbench through Storybook's `previewKeydown`
-  channel, accepted only from the active preview iframe at the Storybook's
+  channel, accepted only from the active preview iframe at its resolved proxy
   origin. Storybook itself does not forward keys while a text field in the
   story has focus (reported in the user guide; not controlled by Workbench).
 
@@ -112,8 +112,8 @@ This work follows the iframe runtime ownership in the
   served from the workbench's origin instead; see that spec. Capture is in
   [capture.md](capture.md).
 - Design-system export plans a reference for each imported story at each of
-  the page's sizes; imported pages declare none, so they use fit,
-  laptop, and mobile. A state without a story ID becomes a warning. An
+  the page's resolved sizes. Imported pages inherit the space's sizes;
+  Resizable is skipped under the [size export rule](sizes.md#design-system-export). A state without a story ID becomes a warning. An
   authored page mapped to Storybook exports its design, not the story.
   [Export capture](export.md) schedules background workers and does not drive
   the visible workbench preview.
@@ -128,8 +128,6 @@ This work follows the iframe runtime ownership in the
   Workbench navigates when acknowledgement or rendering doesn't arrive.
 
 ## Current gaps
-
-Found on 2026-10-03 by reading the code.
 
 - **Mapped-only Storybooks are not checked up front.** Only catalog imports
   and `url: auto` detection add to `problems`. When a Storybook used only by

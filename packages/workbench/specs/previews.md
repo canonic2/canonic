@@ -23,7 +23,7 @@ project-registered adapters. They do not run a project's application server,
 `astro.config.*`, or middleware; a whole application stays a
 [URL lens](implementations.md#url-implementations).
 
-- **Requirement (decided 2026-10-03):** a preview is a mock of its page, in
+- **Requirement:** a preview is a mock of its page, in
   the way a Storybook story is, not a running copy of the application.
   Workbench owns everything that would navigate away from it: links and forms
   open other previews through the canvas or are recorded as actions, and the
@@ -55,25 +55,13 @@ project-registered adapters. They do not run a project's application server,
   module, even when the project installs the package, so builds never depend
   on the installed version. The framework itself (React, Vue,
   Astro, React Native Web) must come from the project.
-- Discovery walks the project for `**/*.workbench.ts` and `**/*.workbench.tsx`,
-  in sorted order, skipping dot-prefixed entries, symbolic links, and
-  `node_modules`, `dist`, `build`, and `coverage`.
-  `previews.include` replaces the patterns; `previews: false` turns previews
-  off and closes the worker. The native page index walks and parses literal
-  definitions without running project code. Computed definitions and every
-  `defineDocs` definition use one batch of the compiler's esbuild evaluation
-  in the bundled Electron runtime as Node. The list does not wait for the
-  preview worker. Untrusted workspaces list no definitions.
-- A saved index lives under `canonic-workbench-index/<root digest>/` in the
-  system temporary folder. File stamps cover definitions, validated source
-  paths and the evaluated definitions' esbuild inputs. Warm reads stat known
-  directories and re-read only changed directories. Changes to the binary,
-  evaluator, compiler, API or include settings invalidate the save. Invalid or
-  unreadable saves rebuild; writes publish by atomic rename. The
-  [resource bounds](preview-pipeline/performance.md#resource-bounds) define
-  retention. Missing, failing or timed-out native indexes log a diagnostic
-  and use the worker's index. The manifest answer and definition contract
-  are identical on both paths.
+- The [page index](preview-pipeline/page-index.md) owns discovery patterns,
+  ordering, skipped paths, saved-state reuse, evaluation and fallback. Discovery
+  is enabled by default; `previews.include` replaces its patterns and
+  `previews: false` disables project preview code and closes the worker.
+  Native listing is independent of compile-worker startup. Untrusted
+  workspaces list no definitions.
+
 - A definition that fails to load or validate becomes one problem prefixed
   with its file; other previews still load. A second definition with an
   existing ID fails with `Duplicate preview id`.
@@ -111,13 +99,13 @@ project-registered adapters. They do not run a project's application server,
 - An authored page whose `src` is a definition file keeps its place and
   label and takes the definition's states and icon unless it has an explicit
   authored icon; the imported duplicate is dropped.
-  The file must still match discovery. Sizes: see
-  [open question 2](#open-questions).
-- **Requirement (decided 2026-10-03):** the sidebar and canvas update when a
+  The file must still match discovery. Authored-page size precedence follows
+  the [sizes contract](sizes.md#typescript-previews).
+- **Requirement:** the sidebar and canvas update when a
   definition file matching discovery is added, removed, renamed, or changes
   its title, states, or sizes, without **Workbench: Refresh Pages**; see
   [the extension's refresh contract](vscode-extension.md#refresh).
-  **Gap:** only `workbench.yaml` and `workbench.local.yaml` are watched today,
+  **Gap:** only `workbench.yaml` and `workbench.local.yaml` are watched,
   so definition changes need **Refresh Pages** or a YAML change.
 
 ### Open, states, controls, and actions
@@ -141,6 +129,8 @@ applies independently within each isolated artboard.
   page-level listeners, timers, and animation frames remain owned by that
   session until it is evicted or reset. The canvas retains up to three inactive
   sessions for 15 minutes; return checks the compiled revision before reuse.
+  The warm-document path can reuse one session across pages; its per-page
+  return-state limitation is recorded in [warm runtime](preview-pipeline/warm-runtime.md#status).
 - Body nodes created during a preview module's import, such as SVG symbol
   sprites, are retained by compiled module URL and restored before its next
   mount. They are detached while another module is active or the host is reset.
@@ -190,7 +180,7 @@ applies independently within each isolated artboard.
 
 ### Data: request mocks and the project environment
 
-- **Requirement (decided 2026-10-03):** a preview supplies the data its real
+- **Requirement:** a preview supplies the data its real
   page loads, in whatever way that page loads it, for every adapter:
   `inputs` for props, an environment for providers and stores, `requests` for
   the page's own network calls, and `aliases` for modules. Projects can run
@@ -248,11 +238,10 @@ after 8 seconds.
 The [design-system export](export.md) plans one reference per preview state at
 the page's sizes, loading the definition URL with `?state=`. After
 references, it asks the worker for the portable build and adds the `browser/`
-package and catalog. A preview that fails to build is a warning. **Requirement
-(decided 2026-10-03):** a portable build that fails entirely, including a
+package and catalog. A preview that fails to build is a warning. **Requirement:** a portable build that fails entirely, including a
 worker failure, is also a warning, and the export still delivers its sources
 and references without `browser/`; see [export](export.md#job-lifecycle).
-**Gap:** a worker failure fails the whole export today. The source closure is
+The source closure is
 the compiler's resolved local module graph (outside `node_modules`); packages
 reached through `node_modules` are listed by name and version.
 
@@ -288,8 +277,9 @@ reached through `node_modules` are listed by name and version.
 - `inputs`, `fixtures`, `globals` merge preview, then state, then (for inputs)
   control overrides, and are structured-cloned per render. Validation only
   checks that state values serialize as JSON.
-- `sizes`: a nonempty subset of `fit`, `laptop`, `mobile`, `resizable`
-  (`type Size = 'fit' | 'laptop' | 'mobile' | 'resizable'`).
+- `sizes`: a nonempty list of kebab-case `SizeKey` values, including keys
+  declared by the space. The [sizes contract](sizes.md#typescript-previews)
+  owns resolution, unknown-key reporting and authored-page precedence.
   `controls`: known types; `select` needs nonempty `options`.
 - `styles`, `assets`, and `environment` resolve from the definition. Declared
   assets must stay inside the project.
@@ -321,11 +311,14 @@ reached through `node_modules` are listed by name and version.
 
 ### Compile worker lifecycle and trust
 
-- Definitions and config are bundled for Node and executed only in a forked
-  worker, never in the extension host or capture renderer. The worker serves a
-  loopback port and handles one request at a time.
-- It starts lazily on the first config resolution that finds definitions in a
-  trusted workspace with previews enabled, and must report its port within
+- Project code runs in child processes, never in the extension host or
+  capture renderer. The [page index](preview-pipeline/page-index.md) owns its
+  separate evaluator; rendering and compilation use the compile worker.
+  The worker serves a loopback port; queued operations are serialized, while
+  output files and pushed updates bypass that queue.
+- The compile service is created for discovered definitions or docs examples.
+  A compilation request starts its process; eager server startup also starts
+  pre-warming in trusted spaces with previews enabled. It must report its port within
   30 seconds or startup fails with a problem. A change to the resolved
   `previews` value replaces it on the next resolution; `previews: false`
   closes it. Catalog reads time out after 120 seconds, exports after 300,
@@ -411,83 +404,29 @@ and the installed extension downloads none.
   render and `combine`; [preview-astro.test.js](../preview-astro.test.js)
   covers frontmatter fetches per state. [preview.test.js](../preview.test.js) "the project environment
   applies…" covers the single and per-adapter forms and a missing file.
-- Not covered by automated tests: the XMLHttpRequest replacement and the
-  project environment in a compiled preview (verified in Chrome on
-  2026-10-03; see decisions). The recipes in
-  [preview-data.md](../docs/preview-data.md) were run as written in Chrome on
-  2026-10-03 (React, Vue, and Astro); none uses a third-party data or router
-  library, since none is installed in this repository.
-- Not covered by automated tests: the canvas and viewer handling of
-  `navigate` (verified by hand; see the 2026-10-03 entries under decisions).
-- Not covered: [manifest.test.js](../workbench/manifest.test.js) and
-  [server.test.js](../server.test.js) have no TypeScript-preview cases; no test
-  covers an unknown lens ID, manual-placement sizes, definition watching,
-  CLI `check` or `init`
-  beyond type generation, the worker's timeouts or restart, or packaging.
+- Dedicated verification gaps include XMLHttpRequest replacement in a compiled
+  preview, project environments with third-party clients/routers, and canvas
+  and portable-viewer navigation. Browser recipes are in
+  [preview data](../docs/preview-data.md).
+- Definition watching, worker timeout/restart paths, CLI `check`/`init` beyond
+  type generation, and installed cross-platform CLI use need dedicated
+  acceptance coverage. See the [page-index evidence](preview-pipeline/page-index.md#acceptance-and-evidence)
+  for native listing and packaging evidence.
 
-## Decisions and discoveries
+## Design constraints
 
-- **Native compiler and persistent builds (2026-10-04).** An observed React
-  page's initial descriptor request took 20.2 seconds in VS Code, followed by
-  a 24 ms React mount. A source-checkout reproduction on macOS x64 measured
-  21.4 seconds for WASM compilation and 2.2 seconds with native esbuild.
-  Platform packaging supplies native binaries without runtime downloads.
-  Separate source maps reduced that preview's served JavaScript from 19.5 MB
-  to 5.1 MB. Cached artifacts avoid bundling again after a worker restart;
-  source, config, compiler and runtime changes invalidate them. These are
-  observations of one large project, not latency guarantees for every preview.
-- **Project code stays out of the extension host and capture renderer**; Astro
-  frontmatter stays in the worker and only rendered HTML and client assets reach
-  the browser ([worker.cjs](../preview/worker.cjs), [astro.cjs](../preview/astro.cjs),
-  `preview-astro.test.js`).
-- **Hidden frames.** Browsers can suspend animation frames in the hidden spare
-  iframe until promotion, which itself waits for readiness, so readiness never
-  depends on a paint (comment in [browser.js](../preview/browser.js); test
-  "a hidden iframe becomes ready…").
-- **Asset requests skip catalog rebuilds** but recheck configuration, trust,
-  and settings ([server.js](../server.js)).
-- **2026-10-03, reproduction** with the standalone server on a scratch Acme
-  fixture: an unknown lens ID produced the documented problem while the
-  page kept `implementations.built = { preview: "components/missing" }` with
-  no `path`; a manual page placing a definition that declares
-  `viewports: [mobile]` resolved and merged with all four viewports.
-- **2026-10-03, manual CLI check**: an installed local build at
-  `~/.vscode/extensions/canonic.canonic-workbench-0.6.0` (from an earlier
-  working-tree state; four preview files differ from the current tree) ran
-  `check` and `build` on an HTML-adapter fixture with Node 24 on macOS arm64;
-  both succeeded and wrote the viewer. No other adapter, platform, or packaged
-  VSIX was tried.
-
-- **2026-10-03, website previews before `links`**: with the standalone server
-  on `packages/website` and headless Chrome, every link in the Overview
-  preview reached the browser with actions on: `/workbench/install/` loaded a
-  route the server doesn't have, and the `.vsix` links downloaded from GitHub.
-  With actions off, every link was stopped, including the page's own `#tour`
-  and `#install` anchors. The hand-off in `actions.js` recognized only `.html`
-  addresses, so no preview could reach another.
-- **2026-10-03, after `links`**: on the same setup, with actions on, `#tour`
-  scrolled the page (scrollY 1380), the `.vsix`, docs, and GitHub links were
-  prevented and listed under **Actions** as `navigate`, and `/workbench/install/`
-  switched the canvas to `previews/install.workbench.ts`. With actions off,
-  the same links were prevented and nothing was logged. The resolved config
-  had no problems. The portable viewer's `navigate` handling was not run.
-- **2026-10-03, how two client projects mock page data in Storybook.** One
-  renders real data-fetching pages and answers GraphQL operations by name from
-  typed fixtures through a custom Apollo link, with per-story overrides for
-  empty, never-resolving loading, and error states, a seeded session in
-  `localStorage`, and a memory router that logs navigation. The other splits
-  pages into a data provider and a view and renders the view inside its
-  context provider with fixture values, seeding stores directly and swapping
-  native modules at the bundler. `requests` covers the first without a custom
-  client; environments and `aliases` already covered the second.
-- **2026-10-03, request mocks in Chrome**: a React fixture whose page keeps
-  `window.fetch` from load time and also uses XMLHttpRequest rendered its
-  default, empty, loading, and 500 states from mocks; the project environment
-  wrapped the preview's and its `setup` ran; a POST was listed under
-  **Actions**.
-- **The warm preview host carries a `<base>`** pointing at the compiled
-  output, so a fragment-only `href` resolves to another document there; this
-  is why `actions.js` scrolls fragments itself.
+- Project code remains in the evaluator or compile worker. Astro frontmatter
+  runs on the server side; only rendered HTML and client assets reach browsers.
+- Runtime readiness cannot depend on animation frames being delivered to a
+  hidden frame. The [readiness contract](preview-pipeline/readiness.md) owns
+  rendering, font and image waits.
+- Asset requests recheck configuration and trust without rebuilding the catalog.
+- Fragment navigation is handled inside the preview because the warm host's
+  `<base>` points at compiler output. A fragment must scroll its source page
+  rather than resolve against that output directory.
+- Request mocks provide data-fetching states; environments provide application
+  context; aliases provide platform substitutions. None requires running a
+  project's application server.
 
 ## Implementation gaps
 
@@ -515,21 +454,14 @@ and the installed extension downloads none.
 
 ## Open questions
 
-1. **Unknown lens ID.** The problem is reported, but the lens stays on the
-   page without a `path`, and the canvas builds the URL as base plus
-   `undefined`, so it appears to load `<root>/undefined`. The same happens with
-   no problem at all when previews are disabled, untrusted, or none are
-   discovered, because mapping is skipped. Should the lens be dropped, or show
-   a named error?
-2. **CLI from an installed extension.** No automated test runs the CLI from a
-   packaged or installed VSIX, on other platforms, or with React, Vue, or Astro
-   resolving from the user's project. The documented install path assumes a
-   folder without a platform suffix, which matched the local install.
-4. **JSON vs. cloneable data.** Validation checks that state data serializes
-   as JSON; the runtime uses `structuredClone`, and the guide says "plain,
-   cloneable data". Which is the contract?
-5. **Unexpected worker exit.** Should it be logged and reported as a problem,
-   rather than surfacing only as a failed request until the next one restarts
-   the worker?
-6. **Trust.** Whether the trust gate is reachable at all is an
-   [extension question](vscode-extension.md#open-questions).
+- **Unavailable Workbench lens.** An unknown preview ID, disabled previews or
+  unavailable discovery must yield an explicit unavailable lens. Decide
+  whether to hide that lens or render its named error; never navigate to an
+  unresolved path.
+- **State data.** Validation uses JSON serialization while runtime isolation
+  uses `structuredClone`. Decide whether JSON data or the broader cloneable
+  set is the authoring contract.
+- **Worker exit.** Decide whether an unexpected worker exit should publish a
+  persistent problem before a subsequent request starts its replacement.
+- **Trust changes.** Live workspace-trust transitions and added spaces are
+  governed by the [extension contract](vscode-extension.md#open-questions).

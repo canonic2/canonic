@@ -1,7 +1,7 @@
 # Multiple artboards: code and migration plan
 
-Architecture and bounded migration record, 2026-10-04.
-The [product contract](multiple-artboards.md#implemented-support-system--2026-10-04)
+Architecture and bounded integration plan.
+The [product contract](multiple-artboards.md#implemented-support-system)
 records support APIs, limits, verification, and remaining work. The current
 implementation is infrastructure only; it does not change the shipping UI.
 
@@ -23,7 +23,7 @@ implementation is infrastructure only; it does not change the shipping UI.
 This migration keeps the existing renderer, preview compiler, annotation
 engine, and acquisition engine behind narrow ports. Singleton state is isolated by
 renderer instance. Their deeper TypeScript extraction is architectural follow-up;
-it was not expanded into a package-wide rewrite. The capability map and contracts
+the remaining extraction is scoped to integration needs. The capability map and contracts
 below describe that target direction. New canvas state and its lifecycle have
 one controller owner; renderer handles never enter serializable state.
 
@@ -161,7 +161,7 @@ ephemeral URLs come from resolution rather than replacing source identity.
 - Parse external values as `unknown`. Validate space/source identities,
   finite bounded geometry, supported sizes, unique IDs, and selection
   membership. Types never replace request/message validation. Persisted schema
-  versions and legacy address adaptation have explicit parsers.
+  versions and single-view address adaptation have explicit parsers.
 
 ## Runtime and transport contracts
 
@@ -244,7 +244,8 @@ checks. Surface server, startup, and trust failures per space/artboard.
    have bounded acquisition and forced owned-resource cleanup paths.
    On failure/cancel, release all leases and temporary output; report named
    failures, never claim success for omitted ready artboards. Loading/error
-   placeholder policy and output limits require the product decisions.
+   placeholder policy and image limits follow the implemented support contract;
+   memory budgets and any additional output formats remain delivery decisions.
 6. **Context:** derive a complete versioned record from the same snapshot and
    publish it under one canvas ID to participating space services. Include
    each space's artboards and all other participants, selected ID, and actual
@@ -269,41 +270,22 @@ updated once per subscription; disposal is idempotent. Diagnostics carry canvas,
 artboard, space, operation and generation IDs with bounded errors, not page
 HTML, images, or full handoff prompts.
 
-## Delivery and migration sequence
+## Remaining delivery sequence
 
-Each slice remains reviewable and verified. Intermediate one-artboard slices
-are migration steps, not a release that narrows the agreed phase 1 scope.
-
-| Slice | Code change | Evidence before moving on |
+| Slice | Integration work | Acceptance evidence |
 | --- | --- | --- |
-| 1. Browser delivery | Establish restricted `src/` module serving with stripped types, JavaScript MIME, safe path validation and caching; import browser bootstrap; verify VSIX carries `.ts` sources and `src/package.json` | Real server serves/imports nested `.ts` modules; Node and VS Code can load host modules; package file inspection |
-| 2. Single-artboard ownership | Extract model, geometry, controller, and iframe runtime from shell globals; connect the existing top bar/host via temporary explicit adapters | Existing navigation, spare-frame readiness, annotations, capture, controls, and source behavior preserved |
-| 3. Independent instances | Key artboard DOM by ID, per-instance generations/controls/notes, automatic placement, common camera and retention budget | Duplicate previews/stories stay independent; resizing/focus and eviction/disposal verified |
-| 4. Spaces and native content | Space-aware host access and catalog routing; multi-source native pool and per-instance subscriptions | Two spaces sharing roots or source names resolve correctly; native sources/codecs coexist in real host runs |
-| 5. Full-canvas review/context | Capture manifest/leases/composition and bundle storage; versioned complete context publication and agent-integration compatibility | Mixed-renderer capture, race/failure cleanup, all-artboard prompt and hooks/MCP verified |
-| 6. Product completion | Resolve chosen persistence and legacy links, recovery, limits, guides and website refresh | Phase 1 acceptance criteria pass; no remaining renderer/space exclusions hidden as future work |
-| 7. Phase 2 | Free positioning and row/grid arrangement in existing geometry/interactions modules | Layout changes preserve runtime state, camera, annotations, capture mapping and accessible movement |
+| Canvas presentation | Compose keyed artboards, selected controls, automatic placement and a shared camera around the implemented model/controller/runtime APIs | Independent repeated views, keyboard/focus, geometry, cleanup and preserved one-view behavior |
+| Space and native hosting | Connect browsing and source/input actions to each instance's owning space; compose pooled native subscriptions | Mixed-space and shared-root recovery, real native capture/input, independent subscriptions |
+| Review and context UI | Connect camera, handoff and reference controls to complete canvas snapshots and participating-space publication | Race/failure cleanup, complete composite/prompt, hooks and MCP |
+| Product completion | Resolve storage policy, recovery, host limits and public guides | Phase 1 acceptance in browser and VS Code |
+| Phase 2 arrangement | Extend geometry and interactions for free positioning and row/grid placement | Stable renderer state, capture mapping and accessible movement |
 
-The current server's `serveFile` does not establish browser TypeScript stripping;
-the guide's delivery direction is a prerequisite to verify/implement, not assumed
-infrastructure. Serve only the intended browser dependency graph under a fixed
-Workbench namespace; never expose Node adapters or arbitrary repository files.
-Preserve extension packaging and forwarded URL behavior. A file-based canvas and
-portable preview viewer do not have this server: define their support/delivery
-explicitly before removing legacy assets they use.
-
-Existing `workbench.js`, `zoom.js`, `annotations.js`, `simulator.js`, controls, and
-reference/context scripts become bounded adapters or have their affected
-responsibilities migrated. Remove obsolete global listeners/state when their
-owner moves; do not run old and new loading/capture pipelines together.
-Portable preview controls are a separate consumer: retain a compatible entry
-point or explicitly adapt its own delivery before removing the shared script.
-Manifest validation, capture fidelity, compiler/framework adapters, and catalog
-export remain existing capabilities, reused through their public boundaries.
-
-Agent-integration changes belong to the package that generates the agent
-configuration, outside Workbench; rolling them out requires its own authorized scope.
-Do not alter the other session's runtime files as part of writing this plan.
+Browser TypeScript delivery is implemented by
+[browser-modules.ts](../src/server/browser-modules.ts), and direct webview
+bundling by [webview-components.ts](../src/server/webview-components.ts).
+Further migrations preserve their restricted browser dependency graph, CSP,
+Node 24 loading and packaging. Portable and file-based paths retain their own
+runtime constraints.
 
 ## Verification plan
 

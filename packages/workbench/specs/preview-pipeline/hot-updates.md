@@ -37,8 +37,7 @@ pipeline meets them.
   event named. An update that Rspack aborts or fails, or a document left on an
   older generation, reloads the preview into the warm host.
 - Hidden frames render behind the visible one ([readiness](readiness.md#hidden-frames)).
-  Applying updates there produced no console errors in stage 1. Their CPU and
-  memory cost is measured in stage 2.
+  Their CPU and memory costs count against the retained-runtime budget.
 
 ### Edit behavior
 
@@ -111,7 +110,7 @@ mounts its preview there. Any other document reloads.
   ([serving](serving.md#the-preview-module)).
 - The next successful build recovers the frame without a manual reload, by
   hot update or, when the update cannot apply, by a preview reload.
-- Thrown errors during an update behave as runtime errors do today: readiness
+- Thrown errors during an update follow the runtime error contract: readiness
   clears and the frame shows the error ([previews](../previews.md#readiness-and-errors)).
 - When saves follow each other quickly, the page ends with the last save's
   output.
@@ -127,23 +126,12 @@ rule, errors per entry and docs pages updated in place. Gaps:
 - A reopened event stream does not start with the current state; a frame that
   missed a build catches up at the next one.
 
-## Discoveries
+## Verification
 
-- **2026-10-12, stage 1** of the [Rspack pipeline lab](../../labs/rspack-pipeline/README.md#stage-1-report),
-  formats fixture, one sample per edit, Intel macOS, headless Chrome:
-  - Every row of the edit table behaved as written.
-  - Stylesheet edits showed in 52–80 ms, React and Vue edits in 52–189 ms,
-    HTML and Astro re-renders in 52–80 ms, and docs edits in 51–80 ms.
-  - Definition and environment edits reloaded the preview in 103–133 ms.
-    Config edits replaced the compilers in 375–384 ms.
-  - A syntax error showed in the frame and recovered in 266–317 ms after the
-    fix. Two saves 150 ms apart ended on the second.
-  - The shipping control took 0.64–1 s for every edit, lost component state,
-    and did not recover from the syntax error within 30 s.
-  - With no edits, no revision requests were made in 5 s with every page
-    open; the control polled.
-- **2026-10-12, stage 1, edit to a module shared by every page.** A hidden
-  retained frame showed the edit when selected again, without a reload.
-- **2026-10-11, preview loading lab.** Rspack with HMR kept React state on
-  every edit, with edits visible in 0.05–0.16 s on the 40-page fixture
-  ([report](../../labs/preview-loading/README.md#hmr)).
+[Pipeline tests](../../src/modules/preview-pipeline/pipeline.test.ts),
+[preview integration tests](../../preview.test.js) and
+[docs integration tests](../../preview-docs.test.js) exercise the implemented
+build, serving and docs paths. The [pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report)
+holds format-by-format edit and isolation evidence. Event-stream reconnects
+must still be tested against missed builds, and entry-set replacement must
+preserve hot updates in already-open documents.

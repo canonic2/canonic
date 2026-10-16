@@ -205,84 +205,57 @@ files, since a commit ID alone does not identify uncommitted code.
 
 ## Runner reliability
 
-A runner is measurement code. Its defects look like product results, so it
-gets the same care as product code. The rules below come from defects found
-in Workbench labs, cited with the lab and date. Add a rule here when a lab
-finds a new kind of runner defect.
+Measurement code must satisfy the same reliability and ownership standards as
+product code. Runner defects must not appear as product timings or verdicts.
 
 ### Waits and stop conditions
 
-- **A timer stops on the target, not on any change.** A wait for a page
-  stops when that page's own content shows: its root element, a marker in
-  its content, or the edit's value. "A frame changed" or "the frame is
-  ready" can be the previous page. The previous page's error ended a wait
-  for the next page (Rspack pipeline, stage 2 smoke, 2026-10-12). A warm
-  document changes page without swapping frames, so frame-change events
-  never come (stage 1).
-- **A value check must tell the two values apart.** When one value contains
-  the other, such as "Acme: Page A" and "Acme: Page A edited", match the
-  text exactly. A substring check passed before the undo was written,
-  giving negative times (stage 2, set 1).
-- **Compare a page only once it has settled.** A fresh copy compared while
-  its mocked data still showed "Loading" failed a freshness check that the
-  live page passed (stage 2, set 1). Wait for the same loaded state on both
-  sides.
-- **An error ends a wait only when the step expects one,** such as opening a
-  broken preview. A step that waits for readiness never sees an error page,
-  which is never ready (stage 2 smoke).
-- **Markers live inside the page's content.** A preview can rewrite the
-  `<body>` or `<html>` attributes that a runner marks: an HTML preview's own
-  `<body class>` removed the sentinel class (stage 2 smoke).
-- **Wait for events or poll tightly; never let a deadline become a result.**
-  A 30-second polling deadline in variant code showed up as a 35-second
-  "first error" (preview loading, 2026-10-11). Report a timeout as a
-  timeout, with what the page showed, never as a latency.
-- **Observe from outside the product.** Check readiness, fonts and images
-  with the runner's own probe at the moment the timer stops, not by reading
-  the product's readiness flag alone. That probe found pages marked ready
-  while fonts were still loading (stage 2, set 1).
+- Stop on the requested page's content and generation, not any frame change,
+  readiness message or outgoing error. A warm document can navigate without
+  swapping frames.
+- Distinguish edited and original values exactly; substring matches cannot
+  establish which revision is visible.
+- Compare both copies only after they reach the same settled data state.
+- An error ends a wait when the sequence expects an error. Readiness waits
+  must detect failure explicitly rather than wait on an error page forever.
+- Put runner markers in owned content. Page markup can replace body/html
+  attributes, so those attributes are not stable measurement markers.
+- Use events or tight polling with explicit deadlines. Report a timeout with
+  the observed state, never as a successful latency sample.
+- Independently observe fonts, images and visible content when stopping a
+  timer. The product's readiness flag alone is not the correctness oracle.
 
-### Comparisons
+### Comparisons and verdicts
 
-- **Ignore what variants deliver differently by design, and nothing else.**
-  This covers asset URLs, CSS module class names, and whether stylesheets
-  arrive as `<link>`/`<style>` elements or as imports. Write each exclusion
-  down with its reason. Without them, render parity failed on identical
-  Astro pages (stage 2 smoke).
-- **Compare files by content, not modification time.** An mtime digest
-  reported writes that never happened (stage 1).
-- **Build URLs with `new URL(path, base)`.** Joining strings doubled a path
-  segment (stage 1).
-- **Compute a check's verdict last.** Spreading a build's result into a
-  check after its `ok` replaced the verdict with the build's own, so checks
-  passed with build errors (instant first page, stage 1 smoke, 2026-10-15).
-- **Keep every console entry and request failure.** Keeping only the first
-  40 hid entries from the baseline comparison (stage 1).
+- Exclude only differences declared by the variant design, such as generated
+  asset URLs or stylesheet delivery form. Record every exclusion and reason.
+- Compare project files by content; normalized timestamps cannot establish
+  whether the project stayed unchanged.
+- Keep correctness verdicts separate from build/protocol fields. A field from
+  variant output must never overwrite a failed runner assertion.
+- Read structured reports for verdicts. Live logs help diagnose a stuck run;
+  filtering a log cannot establish that every check passed.
 
 ### Caches, files and processes
 
-- **Measure the named cache, not its parent folder.** Pointing a server's
-  temporary folder at the run directory also captured a 327 MB runtime
-  unpacked there, which the product keeps in extension storage (stage 2
-  smoke). List what else the folder holds in the report.
-- **Restore every edited file in `finally`.** Wait for the page to show the
-  original again before the next step.
-- **Retry the browser's flaky setup steps once, and record the retry.**
-  Creating a tab right after launch timed out once (stage 2 smoke).
+- Give the run its own cache directories. Measure compiler-cache size
+  separately from extracted runtimes, fixture dependencies and browser profiles.
+- Record saved-index, compiler-cache, runtime-preparation and browser-cache
+  states independently. A warm compiler does not imply a warm page index.
+- Restore edited fixture files in `finally`, and wait for the original output
+  before beginning the next sequence.
+- A declared setup retry is bounded and recorded. Do not retry failing
+  correctness or timing samples until a favorable result appears.
+- Close every server, worker, browser and child process on completion, failure
+  and cancellation; report cleanup failures.
 
 ### Before and during a run set
 
-- **Smoke every group first:** one sample per cell, with the control and one
-  candidate, on every fixture. Classify each smoke failure as a runner defect
-  (fix it) or a finding (record it) before the run set starts. The control's
-  expected failures, such as polling, are listed in the plan so they are not
-  mistaken for either.
-- **Read results from the report, not the log.** A watch that filters a live
-  log missed a failed check (stage 2, set 1). The report's checks are the
-  record; a live watch is only for noticing a stuck run.
-- **A finding that appears during a run set does not change it.** Record it
-  and finish the set; change the method only by a dated amendment before the
-  next one.
+- Smoke every group with the control and one candidate on every fixture.
+  Classify failures as runner defects or findings before starting the set.
+  Declare any expected control failures in the plan.
+- A finding during the set does not change its checks or thresholds. Finish
+  and record the finding; amend the method before a subsequent run set.
 
 ## Reports and decisions
 
@@ -317,12 +290,15 @@ A decision follows these steps:
    copying tables across specs. Do not relax a correctness check to fit the
    fastest variant.
 
-## Labs
+## Lab records and active follow-up
 
-| Lab | Question | Status |
-| --- | --- | --- |
-| [Preview loading](../labs/preview-loading/README.md) | How should a project's TypeScript previews compile, load and reuse frames so that switching pages in one project is fast, without losing isolation, freshness or error containment? | Run set 1 reported 2026-10-11; set 2 needed |
-| [Rspack pipeline](../labs/rspack-pipeline/README.md) | Can the proposed Rspack pipeline deliver the performance plan in one implementation, with hot updates for every native format, shared chunks, lazy compilation, a warm frame or document, pre-warming and readiness fixes, without breaking an existing contract? | Decided 2026-10-13: implement the pipeline with the warm document; implemented the same day; the confirmation run through the shipping server and the VS Code webview is pending |
-| [First page](../labs/first-page/README.md) | How can the first page after Workbench starts show in about its own build time, whatever the number of pages, while hot updates keep working? | Decided 2026-10-15 after three run sets: no variant passes the decision rule, and none is adopted |
-| [Instant first page](../labs/instant-first-page/README.md) | Can a Rust preview host, using Rspack's Rust crates directly, show the first page and the complete page list within the agreed instant targets on 5, 600 or 10,000 pages, starting from that page alone and a saved page index, while edits and page switches stay within the 10% rule? | Agreed 2026-10-15; stage 1 reported the same day. Rust page index implemented; stage 2 continues in parallel |
-| [Compiler speed](../labs/compiler-speed/README.md) | Does another bundler compile a project's previews substantially faster than esbuild, with output that renders the same? Which candidates provide HMR with React Fast Refresh? | Reported 2026-10-11 after four run sets; with the owner's 10% threshold, Rspack meets the large-fixture speed criterion; decision pending |
+Lab plans and reports retain experiment history. Feature specs own the current
+product contracts; a report or an unadopted variant is not a shipping interface.
+
+| Record | Current relevance and remaining work |
+| --- | --- |
+| [Preview loading](../labs/preview-loading/README.md) | Shared-build and runtime design evidence; current navigation requirements belong to [performance](preview-pipeline/performance.md) |
+| [Rspack pipeline](../labs/rspack-pipeline/README.md) | Evidence for the implemented compiler, warm document and hot updates; shipping-server/webview confirmation remains open |
+| [First page](../labs/first-page/README.md) | Startup-scaling comparisons; no replacement start is adopted by the active compiler contract |
+| [Instant first page](../labs/instant-first-page/README.md) | Evidence for the implemented [page index](preview-pipeline/page-index.md); compiler-host investigation remains separate. The lab owns its current plan and run status |
+| [Compiler speed](../labs/compiler-speed/README.md) | Compiler-selection evidence; the active development/portable compiler is Rspack |

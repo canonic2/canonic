@@ -9,14 +9,11 @@ agent live in the shared [AI agents research](../../../docs/research/agents/READ
 
 ## Purpose and scope
 
-When a text file is open in VS Code, chats treat it as context: the user can
-ask about "this file" without naming it. The canvas is a webview, and no chat
-treats a webview that way ([discoveries](#discoveries)). Without this feature
-the user clicks **Copy reference** and pastes.
-
-**Agreed outcome (2026-10-03):** an agent in a VS Code chat can know the
-current canvas view, with the same information **Copy reference** copies, without
-the user pasting it.
+An agent should understand which Workbench view the user means by “this
+page” without requiring the user to paste a reference. The context carries
+exactly the information exposed by Copy reference. Hooks and MCP provide
+explicit delivery; host-native implicit context is a proposed integration,
+subject to each editor's supported capabilities.
 
 In scope: Claude Code and Codex (extensions and CLIs), GitHub Copilot, and
 Cursor. Other MCP clients get the same tool at no extra cost. Annotations and
@@ -31,10 +28,10 @@ The publisher under `src/canvas/` serializes updates to participating spaces
 and their shared-root siblings. User activity determines the current canvas;
 background readiness and heartbeats only update its report. Oversize reports
 fail explicitly without silently truncating artboards. The server validates
-version 2 and retains the legacy single-view shape for older clients. Agent
+version 2 and the single-view report shape. Agent
 integrations consume `view.text`.
 
-The current canvas UI continues to publish the legacy single-view shape. Its
+The current canvas UI continues to publish the single-view shape. Its
 reference formatter can contribute each instance's reference to a future host;
 the singleton publisher is disabled only for an explicit isolated runtime.
 
@@ -47,7 +44,7 @@ the singleton publisher is disabled only for an explicit isolated runtime.
 - the lens (label and key) with its upstream implementation address, or
   `Design`.
 
-**Implemented (2026-10-03):**
+**Implemented publication behavior:**
 
 - [agent-context.js](../workbench/agent-context.js) builds the view with
   `wbReference.text()`, the function behind **Copy reference**, so the two
@@ -88,11 +85,11 @@ workbench runs its own server.
 | MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor the agent configuration covers | Asks about "this page", or attaches the resource | The current view on request | Implemented |
 | Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request | Proposed |
 | **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled | Proposed |
-| Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file | Waiting on VS Code |
+| Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file | Proposed; host capability review required |
 
 ### The agent configuration sets it up
 
-**Decision (2026-10-03):** the project's agent configuration writes the hook
+The project's agent configuration writes the hook
 and MCP configuration when Workbench agent context is enabled for the project.
 
 One context reader does the work in both roles: `hook` prints the view (or
@@ -112,36 +109,29 @@ definitions before they can run.
   visible, with how long ago it changed. People often ask about the page
   from a chat beside it.
 
-### Proposed next
+### Proposed integrations
 
-- **Copilot `#page` tool.** `contributes.languageModelTools` with
-  `vscode.lm.registerTool` (VS Code 1.95), registered only when the API exists
-  (`engines.vscode` is `^1.123.0`, which already includes it).
-- **Copilot and Cursor without the agent configuration.** The extension could register the same
-  MCP server itself, through `registerMcpServerDefinitionProvider` (VS Code
-  1.101) or `vscode.cursor.mcp.registerServer`, pointing at its own address,
-  with no project files.
-- **Ask agent button.** Each agent has its own entry point; see
-  [Claude Code](../../../docs/research/agents/claude-code.md#commands-and-uris),
-  [Codex](../../../docs/research/agents/codex.md#commands-and-uris),
-  [Copilot](../../../docs/research/agents/copilot.md#opening-chat-from-an-extension),
-  and [Cursor](../../../docs/research/agents/cursor.md#prompts-from-outside).
-- **Copilot context provider.** Adopt `registerChatTabContextProvider` once
-  it is finalized ([microsoft/vscode#271104](https://github.com/microsoft/vscode/issues/271104)).
+- A Copilot page-reference tool, callable explicitly or by the agent.
+- Extension-owned MCP registration for hosts that support it, without requiring
+  generated project configuration. Keep the same reference and discovery rules.
+- An Ask agent action that opens the installed agent with the reference.
+- Implicit canvas context where an editor exposes a supported provider API.
+
+These integrations require a capability review against the
+[agent research](../../../docs/research/agents/README.md) before implementation.
+No proposed editor API or specific host version is assumed available by this
+contract.
 
 ## Acceptance criteria
 
 - With the canvas on a page, the server's view text equals what
-  **Copy reference** copies. Checked 2026-10-03 in headless Chrome against
-  this repository's demo workbench, along with a state change in the same page,
-  a navigation to another page, and closing the canvas.
+  **Copy reference** copies, including after state/lens changes and navigation.
 - Changing page, state, story, or lens, or following a link in a live page,
   changes the next answer.
 - Closing the canvas stops the context: the hook prints nothing and
   `current_view` says no canvas is open.
 - The generated hook and MCP commands find the script from the project root
-  and from nested folders, including a nested Git repository. Checked
-  2026-10-03 with this repository's generated files.
+  and from nested folders, including a nested Git repository.
 - Automated: [agent-view.test.js](../agent-view.test.js) (latest canvas,
   heartbeats, closing, staleness, field filtering, the announcement file),
   [server.test.js](../server.test.js) (the route and the file's lifecycle),
@@ -150,42 +140,20 @@ definitions before they can run.
 - Manual, not yet done: the hook and tool inside the Claude Code and Codex
   extensions, with their versions recorded.
 
-## Decisions
+## Integration constraints
 
-- **Same content as Copy reference (2026-10-03).** Agents and people should be
-  pointed at a page the same way, and the reference is already the
-  supported, documented form.
-- **MCP and hooks before Copilot-only APIs (2026-10-03).** They reach every
-  agent in scope without proposed APIs.
-- **The most recently changed canvas wins (2026-10-03).** With the tab and a
-  browser canvas open, the one the user last moved is the one they mean.
-- **No screenshots (2026-10-03).** `current_view` reports the page; images
-  stay in the handoff, which the user starts deliberately.
-- **The agent configuration distributes it (2026-10-03).** Canonic projects
-  already generate their agent configuration; the extension writes none.
-
-## Discoveries
-
-What each agent supports, with versions and sources, is recorded in the
-shared [AI agents research](../../../docs/research/agents/README.md), checked
-on 2026-10-03. The findings that shape this spec:
-
-- **No agent treats a webview as context**, and none lets another extension
-  add to what it picks up from the editor. Copilot's proposed
-  [chat context provider](../../../docs/research/agents/copilot.md#implicit-context)
-  is the only exception. Hence a current view held by the server.
-- **MCP tools are the only integration every agent supports**
-  ([protocols](../../../docs/research/agents/protocols.md#mcp)). Claude Code and
-  Codex ignore VS Code's tool and MCP provider APIs, and Cursor implements
-  neither, so each host registers the server its own way.
-- **The Copilot context provider may not match a webview panel
-  (unverified).** If it doesn't, the canvas would have to become a custom
-  editor. Copilot re-reads that context when the webview posts a message, so
-  the canvas would post on every view change.
-- **Cross-agent IDE protocols don't help.** Each carries only files on disk,
-  or belongs to one agent ([protocols](../../../docs/research/agents/protocols.md)).
-- **Roo Code, Continue, and Amazon Q are excluded** as archived, unmaintained,
-  or reaching end of support ([agents](../../../docs/research/agents/README.md#agents)).
+- People and agents receive the same resolved reference text. Single-view and
+  canvas reports preserve their own complete identities; selected focus does
+  not hide other supplied artboards.
+- User activity determines the current canvas. Background readiness updates
+  and heartbeats cannot steal precedence from the canvas last used.
+- Context contains references and status. Screenshot sharing remains a
+  deliberate handoff action.
+- Agent configuration owns generated project integration. Editor-specific
+  registration must not introduce a second context model or conflicting files.
+- Agent-specific capabilities and external API status belong in
+  [agent research](../../../docs/research/agents/README.md), not duplicated
+  version claims in this product contract.
 
 ## Open questions
 
@@ -195,6 +163,6 @@ on 2026-10-03. The findings that shape this spec:
   `workbench.yaml` in a package gets no context.
 - **Size.** **Copy reference** doesn't include the artboard size. Adding it
   would change the "same as Copy reference" requirement.
-- **Unverified agent behavior.** Whether the Codex IDE extension runs hooks,
-  and the working directory Codex starts MCP servers in (the commands don't
-  depend on it); whether Claude Code's panel accepts MCP resource @-mentions.
+- **Host acceptance.** Confirm hook invocation, tool/resource access and
+  script discovery inside each supported editor, with host versions recorded
+  in the verification evidence.

@@ -37,14 +37,23 @@ pub(crate) fn call(request: &Request, action: &str, files: &[String]) -> Result<
         .context("start definition evaluator")?;
     let input =
         json!({"root": request.root, "options": request.options, "action": action, "files": files});
-    let write =
-        child.stdin.take().context("evaluator stdin")?.write_all(&serde_json::to_vec(&input)?);
+    let write = child
+        .stdin
+        .take()
+        .context("evaluator stdin")?
+        .write_all(&serde_json::to_vec(&input)?);
     if let Err(error) = write {
         let _ = child.kill();
         let _ = child.wait();
         return Err(error.into());
     }
-    let output = child.wait_with_output().context("definition evaluator output")?;
-    ensure!(output.status.success(), "definition evaluator failed: {}", output.status);
+    let output = child
+        .wait_with_output()
+        .context("definition evaluator output")?;
+    ensure!(
+        output.status.success(),
+        "definition evaluator failed: {}",
+        output.status
+    );
     serde_json::from_slice(&output.stdout).context("invalid evaluator JSON")
 }

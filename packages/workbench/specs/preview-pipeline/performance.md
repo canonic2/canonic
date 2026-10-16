@@ -118,12 +118,10 @@ caches, and any prepared spare runtimes each have a stated bound and an
 eviction rule in the owning feature spec. Speed achieved by unbounded
 retention does not meet these requirements.
 
-The saved page index is capped at 64 MiB per project (32 MiB of postcard data
-and a 32 MiB complete ordered answer) and 32 project directories
-under `canonic-workbench-index/` in the system temporary folder. Index requests
-evict inactive directories after seven days and the oldest directories beyond
-the count bound. Oversized saves are not persisted. Writes use a temporary
-file and atomic rename; an interrupted write cannot replace a complete save.
+The [page-index contract](page-index.md#process-and-resource-ownership) owns
+saved-index byte/count bounds, eviction and process limits. Compiler and warm
+runtime bounds belong to their respective topics; an index bound does not
+establish a bound for the entire pipeline.
 
 ## Measured interactions
 
@@ -140,6 +138,9 @@ measured conditions recorded here.
 The owner agreed the warm first-page and page-list targets on 2026-10-15.
 They hold at any page count, not only on the large fixture. With a cold
 cache, the first page shows in about its own build time.
+For listing, warm means a valid saved index and complete ordered answer.
+For first-page rendering, report the saved-index, build-cache and runtime
+preparation states separately; one warm cache does not imply the others.
 
 | Interaction | Boundary | Proposed target (large fixture) |
 | --- | --- | --- |
@@ -153,7 +154,7 @@ cache, the first page shows in about its own build time.
 | Edit code shared by every page | File write to visible | p50 ≤ 2 s |
 | Open the first page after the server starts, build cache warm | Canvas opening to visible | **Agreed:** p50 ≤ 500 ms |
 | Open the first page after the server starts, build cache cold | Selection to visible | p50 ≤ 5 s |
-| List pages, build cache warm | Canvas opening to the complete page list | **Agreed:** ≤ 200 ms |
+| List pages, saved index warm | Canvas opening to the complete page list | **Agreed:** ≤ 200 ms |
 
 On the small fixture, no interaction may be slower than the shipping behavior
 it replaces by more than 10%.
@@ -177,102 +178,40 @@ editor can be broken down from the Workbench log without a profiler.
 
 ## Status
 
-These requirements are not yet met for TypeScript previews on large projects.
-An exploratory investigation on 2026-10-11 of one selected local React project
-with Workbench 0.13.1 found the following. Details are in the
-[preview loading lab](../../labs/preview-loading/README.md#hypothesis).
+The native page index is implemented, while the complete-list and first-page
+targets remain unmet at the largest measured page counts. Listing measurements
+are below; the compiler's first-page limitation is recorded separately. The
+implemented Rspack pipeline has correctness evidence, but its complete sequence
+through the shipping server and VS Code webview has not been measured.
 
-- Switching to a page not yet opened took about 0.85–2.9 s, most of it in the
-  browser. Cached server-side work was 12–26 ms per request.
-- Each preview compiles to its own complete bundle (about 5.1 MB), and a newly
-  selected page usually gets a new frame document, so shared code is loaded
-  and evaluated again for every page. About 95% of each bundle was code
-  shared with the other page.
-- After mount, the events logged as the font and image readiness phases
-  took about 0.5–0.8 s and 0.65–1 s. The log puts each phase's duration on
-  the next event, so these may not be the font and image waits themselves
-  ([gap](../previews.md#implementation-gaps)). A probe on 2026-10-12 in headless
-  Chrome measured about 130 ms for each wait on a page with no web fonts
-  ([readiness](readiness.md#discoveries)).
-- Cold compiles took 2.7–11 s per page. Discovery requests took 0.5–1.6 s.
-- Returning to a retained page took 82–133 ms, within the proposed target.
-- Edits are not applied in place. Each open preview polls a revision URL once
-  a second, and each poll asks the worker to check the preview's build; a
-  changed revision reloads the whole preview. There is no hot module
-  replacement or React Fast Refresh, and state other than the selected state
-  and inputs is lost on every edit.
+### Pipeline acceptance
 
-The [preview loading lab](../../labs/preview-loading/README.md)'s first run set
-(2026-10-11, synthetic 40-page fixture, one Intel host, headless Chrome)
-measured the control at 1.4 s to show a new preview, against 0.13–0.2 s with
-a project-wide shared build and 0.34–0.48 s with the two HMR variants, whose
-edits appeared in 0.05–0.16 s with React state kept. It also found that a
-file edited during a compile can leave stale output cached
-([TypeScript previews](../previews.md#implementation-gaps)). A second run set is
-needed before a decision. The [compiler speed lab](../../labs/compiler-speed/README.md)
-found Rspack 21–27% faster than esbuild on cold builds of the large fixture
-and 26–71% faster on rebuilds, with built-in HMR and React Fast Refresh. It
-also measured about 1.1 s of Workbench's own work around esbuild for each
-cold preview.
+The Rspack pipeline is implemented with shared chunks, pushed hot updates and
+warm documents. Its correctness and design evidence are linked from the
+[pipeline overview](README.md#status). Full navigation and edit sequences
+through the shipping server and VS Code webview need a confirmation run;
+prototype timings do not establish those product targets.
 
-Stage 1 of the [Rspack pipeline lab](../../labs/rspack-pipeline/README.md#stage-1-report)
-(2026-10-12, formats fixture, one sample per edit, one Intel host, headless
-Chrome) ran a prototype of the whole [preview pipeline](README.md). Every
-edit requirement above was met on every native format: stylesheet, React,
-Vue, HTML, Astro and docs edits showed in 51–189 ms with component state kept
-where the framework keeps it, reloads took about 0.1 s, and errors recovered
-on the next save, with no polling. These are feasibility samples, not
-measurements against the targets. Stage 2 measures the targets on the large,
-web-font and huge fixtures.
-
-Stage 2 of the same lab (2026-10-13, two run sets, the same host) measured
-the prototype against the targets above on the large, web-font and huge
-fixtures ([report](../../labs/rspack-pipeline/README.md#stage-2-report)):
-
-- New pages, back-to-back selections, reloads and every edit target were
-  met by the warm document variant in both sets. New pages took 0.14–0.18 s
-  at the median, against 0.4–2.6 s for the shipping pipeline.
-- The warm document missed the retained-page target on the web-font fixture
-  (109–114 ms) and the state-change target (143–168 ms), because it
-  re-evaluates modules on those changes. The warm spare met both, but missed
-  the new-page p95 once (992 ms).
-- The first page after a restart with a warm cache took 3.3–3.4 s, against
-  the 1.5 s target, because every entry rebuilds first. With pre-warming
-  finished it took 0.81–0.83 s. Cold first opens took 6.0 s for the pipeline
-  and 5.3–5.8 s for the shipping pipeline, both above the 5 s target.
-
-Docs pages have not been measured for navigation.
-
-The pipeline was implemented on 2026-10-13 ([preview pipeline](README.md#status)).
-Its timings in the product are not measured yet: the lab's sequences through the
-shipping server and the VS Code webview are the next step.
+The [pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report) holds
+controlled prototype comparisons. The [first-page lab](../../labs/first-page/README.md#report)
+and [compiler-host plan](../../labs/instant-first-page/README.md#stage-2-plan)
+address startup scaling. Their alternative implementations are not the active
+compiler contract.
 
 ### Page listing
 
-The server's native Rust index lists pages before the compile worker starts.
-It parses literal previews, evaluates computed definitions and docs in one
-Node batch with the shipping compiler, and saves entries with their input
-file stamps. Warm reads check known directory stamps and re-read only changed
-directories. The worker retains its own index for pre-warming. Failures log
-`previews.index.fallback` and use the worker's listing.
+The server's [native page index](page-index.md) lists pages independently of
+the compile worker. Its saved-state, evaluation and failure contracts are
+owned there. The measurements below distinguish the lab prototype from the
+shipping-server boundary.
 
-Stage 1 of the [instant first page lab](../../labs/instant-first-page/README.md#stage-1-report)
-(2026-10-15, one run set, synthetic Acme fixtures, Intel macOS, process-internal
-times) measured:
+The [instant first page lab](../../labs/instant-first-page/README.md#stage-1-report)
+holds the index design comparison. Process startup, adapter ordering and
+configuration assembly belong to the shipping-server boundary below.
+A newly placed macOS executable may also incur a one-time system launch check;
+report that state separately from subsequent launches.
 
-| Pages | Shipping Node, cold | Rust, cold | Rust, warm directory checks |
-| ---: | ---: | ---: | ---: |
-| 5 | 161 ms | 2.5 ms | 1.6 ms |
-| 40 | 229 ms | 6.1 ms | 2.6 ms |
-| 600 | 913 ms | 38 ms | 8.5 ms |
-| 10,000 | 12.9 s | 1.07 s | 108 ms |
-
-Process start added 12–25 ms in the lab. A newly placed macOS executable can
-take about 0.8 s once for the system's first-launch check, like the bundled
-runtime. These lab measurements establish the design; server measurements
-include process startup, adapter ordering and config assembly.
-
-Pre-install shipping-server probe, 2026-10-15 at about 20:54 EDT: Node 24.12.0, Intel
+Shipping-server probe, 2026-10-15 at about 20:54 EDT: Node 24.12.0, Intel
 macOS, release native executable, Acme seed 1. Each fixture had one cold read
 and three warm reads, with a fresh server instance per read and no eager
 pre-warming. Framework dependencies were not installed: listing evaluates
@@ -301,8 +240,7 @@ files: server `aac7f3b3951f`, compiler `4e9f7f3cadc7`, evaluator
 `e3c7efaaacb7`, TypeScript adapter `7a464917b48e`, native index application
 `0b467d3c834e`, release executable `b5459121478c`.
 
-A repeat at about 21:00 EDT used the installed release's executable after
-the custom-glob partial-save correction. One-minute host load was
+A loaded-host repeat at about 21:00 EDT used the installed release's executable. One-minute host load was
 13.27–20.16. Warm HTTP medians were 35, 44, 48 and 1,198 ms for the same four
 fixtures; the 10,002-definition native work had a median of 181 ms and its
 HTTP responses ranged from 596 to 1,499 ms. No compile worker started.
@@ -321,17 +259,13 @@ establish that target. A resident index remains an open question.
 
 ### First page
 
-The shipping pipeline does not meet the
-[first-open requirement](#first-open-and-edits): with a warm cache, its first
-page waits for the pipeline’s entries to be prepared and built. The native
-page list is independent of the worker’s start; it does not change compiler
-start or pre-warming. The Rust compiler host remains stage 2 work. The [first page lab](../../labs/first-page/README.md#report)
-(2026-10-13 to 2026-10-15, three run sets, synthetic fixtures, one Intel
-host, headless Chrome) measured about 1.2 s on 5 pages and 14–16 s on 600.
-None of its starts kept the first page within 25% of the 5-page time; the
-best took about three times as long. On 600 pages, the costs still growing
-with the page count were preparing every entry before the first build and
-the canvas loading the whole page list before any page.
+The shipping eager compiler does not meet the
+[first-open requirement](#first-open-and-edits): its first page waits for all
+entries to be prepared and built even with the build cache warm. Native
+listing does not change that compiler start or pre-warming. The Rust compiler
+host remains lab work. A replacement must meet the first-page budget through
+the shipping canvas and preserve page switches, edits, errors and isolation;
+a faster list alone does not establish success.
 
 ## Verification
 

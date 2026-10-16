@@ -4,6 +4,9 @@ Part of the [preview pipeline](README.md). This spec covers the development
 compiler that builds previews and docs lenses for the canvas. It also says
 which jobs stay on esbuild. Format handling and the project plugin contract
 are in [plugins](plugins.md); delivering the output is in [serving](serving.md).
+The [page index](page-index.md) owns server-side listing. The worker retains
+its own index for compilation and pre-warming; the Rust page-index integration
+does not replace this compiler with the lab's Rust compiler host.
 
 ## Requirements
 
@@ -94,15 +97,13 @@ are in [plugins](plugins.md); delivering the output is in [serving](serving.md).
   never runs in the extension host.
 - Rspack 2 is published as ES modules only. The CommonJS worker loads it
   through Node 24's `require` of ES modules.
-- The bundled binding is named through `NAPI_RS_NATIVE_LIBRARY_PATH` only while
-  Rspack loads ([rspack.cjs](../../preview/rspack.cjs)). Other napi-rs modules
-  read the same variable: with it left set, Astro 7's compiler loaded Rspack's
-  binding and every Astro render failed with `a is not a function`
-  (found 2026-10-13).
+- Scope `NAPI_RS_NATIVE_LIBRARY_PATH` to loading the bundled Rspack binding
+  ([rspack.cjs](../../preview/rspack.cjs)). Other napi-rs modules share that
+  environment key and must resolve their own bindings.
 - Each platform VSIX bundles the matching pinned Rspack native binding, as it
   does esbuild. The installed extension downloads no compiler, and projects
-  install none. The darwin-x64 Rspack binding is 50.4 MB, against 11.7 MB for
-  esbuild, measured by the compiler speed lab on 2026-10-11.
+  install none. Packaging includes both the Rspack binding and esbuild,
+  whose separate evaluation responsibilities are listed below.
 
 ### What stays on esbuild
 
@@ -118,7 +119,6 @@ The portable build and the export's docs examples use an Rspack production
 compiler with the same format handling and project plugins
 ([plugins](plugins.md#portable-output)).
 
-
 ## Status
 
 Implemented in [pipeline.ts](../../src/modules/preview-pipeline/pipeline.ts)
@@ -131,81 +131,32 @@ and [portable.ts](../../src/modules/preview-pipeline/portable.ts). Gaps:
 - An entry added while pages are open changes the entry set
   ([open questions](#open-questions)).
 
-## Lazy compilation
+## First-page design constraints
 
-Rspack's `lazyCompilation` builds an entry only when a document first asks
-for it. The pipeline does not use it: every entry is built at start
-([entries](#entries)).
+A different start must allow the requested page to build independently of the
+catalog size while preserving stable module/chunk identity and hot updates.
+Lazy compilation and incremental entry registration are candidates only when
+new pages, build errors, configuration replacement and already-open documents
+all meet their contracts. The implemented compiler declares and builds every
+entry; no alternative start is adopted.
 
-- **2026-10-12, Rspack pipeline lab, stage 1**
-  ([finding 9](../../labs/rspack-pipeline/README.md#findings)). Most
-  previews compiled on first request in 0.2–0.3 s. Rspack's middleware
-  expects a POST, and Workbench's server forwards only GET requests to the
-  worker. The first preview's request stalled, a compile error did not show
-  for a lazily built entry, and pages stopped loading after a config change.
-- **2026-10-13 to 2026-10-15, first page lab**
-  ([report](../../labs/first-page/README.md#report), synthetic fixtures, one
-  Intel host, headless Chrome). A prototype fixed those problems: its client
-  asks with GET, which the worker hands to Rspack's middleware as a POST;
-  build errors are reported for lazily built entries; and the client is
-  created again after a config change. With every entry declared and the
-  stable chunk layout ([discoveries](#discoveries)), it passed every
-  correctness check in three run sets: hot updates with state kept, no moved
-  modules, errors in pages not yet built, and config edits. On 600 pages,
-  against the shipping start, it showed the first page in about 4 s against
-  14 s, finished building in about 3 s against 13 s, applied edits in about
-  0.25 s against 0.9 s in the two run sets at moderate load, and its worker
-  used about a fifth of the memory.
-  Opening a page not yet built took about twice as long, 0.4 s against
-  0.2 s, which fails the 10% threshold. One config edit on 40 pages took
-  62 s, against 1.5–2.3 s in the other samples, and is unexplained.
-
-## Discoveries
-
-- **2026-10-15, first page lab.** Naming split chunks by package (one chunk
-  per `node_modules` package) and by project folder makes a module's chunk
-  independent of which entries exist. With that layout, entries joined the
-  build after the first page without moving a shared module, and hot updates
-  kept working; with Rspack's default splitting, one shared-module update
-  failed. Joining in batches made every later build slower on 600 pages:
-  the full build took 83–95 s against 13 s, edits about 4 s against 0.9 s,
-  and a config edit about 80 s against 11–13 s
-  ([report](../../labs/first-page/README.md#report)).
-
-- **2026-10-11, compiler speed lab.** On one Intel macOS host, Rspack 2.2.7 in
-  watch mode rebuilt the 40-page fixture in about 140 ms after a page or
-  shared edit, against about 450 ms for an esbuild context. Its cold split
-  build was 21–27% faster than esbuild's, and its development output is about
-  three times esbuild's size. On the 5-preview fixture it was 14–22 ms slower
-  than esbuild in sets 3 and 4, but faster than the shipping compiler in every
-  shape. The shipping compiler spends about 1.1 s of Workbench's own work
-  around esbuild for each cold preview
-  ([report](../../labs/compiler-speed/README.md#re-measurement-run-sets-3-and-4)).
-- **2026-10-13, packaging.** The darwin-x64 VSIX built with the pipeline is
-  167.6 MB, against 147.9 MB for Workbench 0.13.0. It carries the Rspack
-  binding in `preview/bin/` (50.4 MB unpacked) and webpack (2.5 MB), which
-  Vue Loader's Rspack plugin loads for its rule classes.
-- **2026-10-12, Rspack pipeline lab, stage 1.** The prototype compiler ran
-  every native format in two profiles, on Electron 44.2 (Node 24.20), with
-  output in memory and the persistent cache in the run's temporary folder.
-  The project tree hashed the same before and after each run
-  ([report](../../labs/rspack-pipeline/README.md#stage-1-report)).
+The [first-page lab](../../labs/first-page/README.md#report) and
+[compiler-host lab](../../labs/instant-first-page/README.md#stage-2-plan) hold
+candidate comparisons. Packaging requirements follow the
+[extension process boundary](../vscode-extension.md#process-boundaries) and
+[code-quality gates](../code-quality.md).
 
 ## Open questions
 
-- **The first page after a restart.** With the persistent cache warm, the
-  first page waits for every entry to be prepared and built: about 14 s on
-  600 synthetic pages against about 1.2 s on 5, in the
-  [first page lab](../../labs/first-page/README.md#report). No start the
-  lab tried keeps the first page independent of the page count
-  ([performance](performance.md#first-open-and-edits)). Lazy compilation came
-  closest, at about three times the 5-page time
-  ([lazy compilation](#lazy-compilation)).
+- **The first page after a restart.** The implemented eager start still
+  prepares and builds every entry. A start that meets the
+  [first-page target](performance.md#measured-interactions) without scaling
+  with catalog size remains open.
+
 - **Changing the entry set.** A preview or docs lens added or removed while
   pages are open changes the entry set. The proposed rule treats this like a
   configuration change: a new generation, with open documents reloading into
   a fresh warm host. Stage 1 did not cover it.
-- **Bounds.** In stage 2 the persistent cache held 142 MB for 40 pages and
-  389 MB for 200, and the worker peaked at 1.1–2.0 GB. Both need the bounds
-  [performance](performance.md#resource-bounds) asks for. The 200-page start
-  cells varied by up to two times between run sets and decide nothing.
+- **Bounds.** Compiler memory and persistent-cache storage need explicit
+  limits and eviction rules. Measure long sessions and large projects before
+  choosing them; page-index bounds do not bound compilation.

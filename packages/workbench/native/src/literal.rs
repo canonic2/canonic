@@ -11,9 +11,9 @@ fn value(expr: &ast::Expr) -> Option<Value> {
         Expr::Lit(Lit::Num(number)) => Number::from_f64(number.value).map(Value::Number),
         Expr::Lit(Lit::Bool(boolean)) => Some(Value::Bool(boolean.value)),
         Expr::Lit(Lit::Null(_)) => Some(Value::Null),
-        Expr::Tpl(template) if template.exprs.is_empty() => {
-            Some(Value::String(template.quasis.first()?.cooked.as_ref()?.as_str()?.into()))
-        }
+        Expr::Tpl(template) if template.exprs.is_empty() => Some(Value::String(
+            template.quasis.first()?.cooked.as_ref()?.as_str()?.into(),
+        )),
         Expr::Paren(inner) => value(&inner.expr),
         Expr::TsAs(inner) => value(&inner.expr),
         Expr::TsSatisfies(inner) => value(&inner.expr),
@@ -63,7 +63,10 @@ pub(crate) fn parse(source: String, tsx: bool) -> Option<Value> {
     let map = Lrc::<SourceMap>::default();
     let file = map.new_source_file(FileName::Anon.into(), source);
     let mut parser = Parser::new(
-        Syntax::Typescript(TsSyntax { tsx, ..Default::default() }),
+        Syntax::Typescript(TsSyntax {
+            tsx,
+            ..Default::default()
+        }),
         StringInput::from(&*file),
         None,
     );
@@ -136,6 +139,26 @@ pub(crate) fn parse(source: String, tsx: bool) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn preserves_escaped_strings_and_nested_literals(
+            text in ".{0,80}",
+            label in ".{0,80}",
+            enabled in any::<bool>(),
+        ) {
+            let raw = serde_json::json!({"text": text, "nested": [null, enabled, {"label": label}]});
+            prop_assert_eq!(extract(&raw.to_string()), Some(raw));
+        }
+
+        #[test]
+        fn executable_values_always_require_evaluation(name in "[a-zA-Z_][a-zA-Z0-9_]{0,30}") {
+            let body = format!("{{title: {name}()}}");
+            prop_assert!(extract(&body).is_none());
+        }
+    }
+
     fn extract(body: &str) -> Option<Value> {
         parse(
             format!(
@@ -171,12 +194,18 @@ mod tests {
             assert!(extract(body).is_none(), "{body}");
         }
         assert!(
-            parse("throw new Error('bad'); export default definePreview({});".into(), false)
-                .is_none()
+            parse(
+                "throw new Error('bad'); export default definePreview({});".into(),
+                false
+            )
+            .is_none()
         );
         assert!(
-            parse("import './side-effect'; export default definePreview({});".into(), false)
-                .is_none()
+            parse(
+                "import './side-effect'; export default definePreview({});".into(),
+                false
+            )
+            .is_none()
         );
         assert!(extract("{broken:").is_none());
     }

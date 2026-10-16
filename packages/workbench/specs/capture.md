@@ -144,10 +144,10 @@ local routes accept only the workbench origin. Capture dimensions match the
 preview's CSS pixels, including on Retina displays. The UI requests JPEG at
 quality 90. API callers may request PNG; without a format, PNG is the
 endpoint default. JPEG is lossy and has no transparency. Filenames follow the
-page's file, state or story, and lens, and repeated handoffs of one view get
+page's file, state or story, size key and lens, and repeated handoffs of one view get
 numbered suffixes.
 
-A handoff prompt names the page, state, width, saved screenshot, each
+A handoff prompt names the page, state, resolved size and dimensions, saved screenshot, each
 annotation with its position and the element under it, the lens's
 implementation and URL, and any code pointers or TypeScript preview source.
 The element under an annotation comes from the visible document for local
@@ -163,7 +163,7 @@ See [handoff.js](../handoff.js).
   A capture may still wait for first-load fonts, images, or a slow page.
 - A local page or bridged lens whose document contains an `iframe`,
   `object`, or `embed`, or a canvas or video whose pixels are origin-tainted
-  (no CORS), is still captured (decided 2026-10-03). Each such element keeps
+  (no CORS), must still be captured. Each such element keeps
   its layout box and renders blank; the rest of the page is captured as
   usual, and the export reference or handoff is produced.
 - The mirror cannot read closed shadow roots or browser-owned UI, such as
@@ -184,7 +184,7 @@ See [handoff.js](../handoff.js).
 - **Keep the OS motion preference in the helper.** Mirrors carry animation
   phases, and forcing reduced motion would select different CSS from the
   visible preview.
-- **One screenshot engine (2026-10-03).** The bundled helper is the only
+- **One screenshot engine.** The bundled helper is the only
   engine. Hosts that can't run it, such as Linux without a display (most
   remote workspaces) and macOS 12 and earlier, have no screenshots rather
   than a second engine that renders differently and needs its own
@@ -195,7 +195,7 @@ See [handoff.js](../handoff.js).
 ### Verified behavior
 
 The acquisition requirements below run within each artboard; full-canvas
-composition and real-browser support-harness handoffs are verified (2026-10-04). Not covered by automated tests: the macOS < 13 and display-less Linux
+composition and browser support-harness handoffs have recorded evidence. Not covered by automated tests: the macOS < 13 and display-less Linux
 cases, and embedded documents or tainted pixels.
 
 ### Implementation gaps
@@ -234,7 +234,7 @@ cases, and embedded documents or tainted pixels.
   [proxy.test.js](../proxy.test.js) covers bridge injection, header and cookie
   rewriting, redirects, request bodies, WebSocket upgrades, and a stopped
   implementation. [handoff.test.js](../handoff.test.js) covers the prompt.
-- Manual, on a desktop after `npm run bundle-runtime`:
+- Manual, on a desktop after `pnpm run bundle-runtime`:
   [smoke-capture.cjs](../scripts/smoke-capture.cjs) (warm reuse, reloads,
   resizing, implementation handoffs, Dock visibility, crash recovery),
   [smoke-mirror.cjs](../scripts/smoke-mirror.cjs) (live mirror fidelity and

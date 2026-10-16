@@ -42,7 +42,7 @@ the implementation moves.
 
 ## Current status
 
-The layout convention was agreed on 2026-10-04. Existing capabilities include
+Existing capabilities include
 `src/sizes/`, `src/canvas/` and other directories directly under `src/`; the
 host still includes CommonJS files such as `server.js`. These capabilities
 have not yet migrated to the target directory layout.
@@ -61,3 +61,12 @@ remains independent of the path migration. Server job orchestration, capture
 and preview compilation remain with their existing owners. The
 [multiple-artboard code plan](multiple-artboards-code-plan.md) distinguishes
 actual paths from future integration paths.
+
+The page index splits ownership at the process boundary. Rust capabilities in
+`native/src/` own discovery, saved records, literal parsing, validation and
+evaluation coordination. The TypeScript adapter in `src/modules/page-index/`,
+exposed through `index.ts`, owns host processes, temporary storage, answer
+ordering and fallback. See the [page-index contract](preview-pipeline/page-index.md)
+for lifecycle and [code quality](code-quality.md) for Rust engineering gates.
+This is one Cargo package with a library and binary; it establishes no Studio
+integration or Rust compiler-host API.

@@ -17,10 +17,10 @@ After mount and the `play` and `ready` hooks, readiness waits for:
   Readiness waits on `document.fonts.ready`, as the shipping runtime does.
   Checking `document.fonts.status` once is not enough: the status reads
   `loaded` before layout starts the page's own font downloads
-  ([stage 2](#discoveries)). A faster rule is [open](#open-questions) and
+  ([verification](#verification)). A faster rule is [open](#open-questions) and
   gets its own lab.
 - **Visible images**, only those not yet complete. Offscreen lazy images are
-  excluded, and the wait is capped at 3 seconds, as today.
+  excluded, and the wait is capped at 3 seconds.
 
 It adds no fixed delay. A capture still shows the final fonts and images.
 
@@ -53,28 +53,13 @@ Implemented: each phase on its own event, and loading frames rendered behind
 the visible one. Readiness still waits on `document.fonts.ready` and on every
 visible image until the font-wait lab settles a faster rule.
 
-## Discoveries
+## Verification
 
-- **2026-10-12, probe** in headless Chrome against the shipping server, a page
-  that loads no web fonts, compile cache warm. With durations read from the
-  following event, the font wait took about 130 ms and the image wait
-  130–215 ms for one SVG and one small JPEG, out of about 600 ms from
-  selection to ready. The probe suggests that previews mounting in a hidden
-  spare frame wait for rendering updates they rarely get; this is not
-  established ([lab evidence](../../labs/rspack-pipeline/README.md#evidence-so-far)).
-- **2026-10-13, stage 2.** Variant 1 (the shipping pipeline with the
-  status-only rule) marked all 26 pages of both walks on the web-font fixture
-  ready while their fonts were still loading, in both run sets. Its speed-up
-  there (about 1.3 s to 0.5 s) came from skipping that wait, and on the
-  system-font fixture it was no faster than the control. The pipeline
-  variants passed because their fonts were already loaded. With readiness
-  marked at mount (D3), new pages were about 20–30 ms faster on system fonts
-  and up to 130 ms faster on web fonts
-  ([report](../../labs/rspack-pipeline/README.md#stage-2-report)).
-- **2026-10-12, stage 1.** With these rules, every page and docs lens of the
-  formats fixture became ready in both pipeline variants. Screenshot parity
-  is checked in stage 2
-  ([report](../../labs/rspack-pipeline/README.md#stage-1-report)).
+[Preview runtime tests](../../preview-runtime.test.js) cover font/image waits,
+errors and hidden-frame progress. The [web-font fixture](../../labs/rspack-pipeline/README.md#stage-2-report)
+is the correctness boundary for any faster font rule: an independently observed
+font download must be complete before readiness. A status-only check before
+layout cannot establish that the page has started its own font loads.
 
 ## Open questions
 
@@ -84,6 +69,6 @@ visible image until the font-wait lab settles a faster rule.
   lab's readiness check to pass on the web-font fixture.
 
 - **Showing a page before readiness.** Should a page become visible when it
-  mounts, with full readiness kept for captures? Stage 2's D3 control
-  measures the remaining readiness cost
+  mounts, with full readiness kept for captures? Measure the visible-load
+  benefit and capture fidelity separately
   ([performance](performance.md#open-questions)).

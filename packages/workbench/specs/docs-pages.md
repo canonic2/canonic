@@ -4,9 +4,8 @@ Docs are a page written in Markdown, with live examples rendered through it.
 They document a component or a design-system foundation the way a component
 library's documentation site does: a title and introduction, sections,
 examples with captions and notes, hand-written props tables, and each
-example's code. They are meant to replace Storybook documentation pages such
-as a component's `Default` story built from page, section, panel, caption,
-and note helpers.
+example's code. A component's guide can present its variations and usage
+alongside the source that renders each example.
 
 Docs are a [lens](lenses.md). Any page can have docs and be read through a
 docs lens beside its design and its implementations, so a component's design,
@@ -14,9 +13,8 @@ its running code, and its documentation are one page in the page list. A page
 whose `src` is the Markdown file itself, a **Markdown page**, is its docs and
 nothing else: it has no design lens.
 
-This spec is the agreed contract (2026-10-04). **Status:** implemented and
-verified in the Acme demo; see [current status](#current-status) for what was
-checked and the remaining gaps. The user guide is
+**Status:** docs lenses, examples and export are implemented. See
+[current status](#current-status) for remaining integration and verification gaps. The user guide is
 [Docs](../docs/docs-pages.md). Shared navigation and problem reporting are in [core](core.md);
 compilation, adapters, and environments are in
 [TypeScript previews](previews.md); lenses are in [lenses](lenses.md) and
@@ -137,8 +135,9 @@ export default defineDocs({
   in `lenses`. `states` is accepted with the same shape as a preview's.
 - `id` and `title` follow the preview rules, and IDs are unique across
   previews and docs pages.
-- A preview definition can't declare docs: a preview gets them where
-  `workbench.yaml` places it, with `docs` and docs lenses on its entry.
+- A preview's inline `docs` text belongs to its preview controls. A full
+  Markdown docs lens is declared where YAML places the page, with `docs` and
+  docs-lens mappings. These are separate authoring surfaces.
 
 ## The canvas for docs
 
@@ -159,7 +158,7 @@ export default defineDocs({
 - **The default view** is 100%, horizontally centered, scrolled to the top.
   **Zoom to fit** and **100%** both return to 100%. **Recenter view** centers
   horizontally at the current zoom and keeps the scroll position.
-- The size switcher (Fit, Laptop, Mobile, Resizable) stays in the top bar,
+- The space's size switcher stays in the top bar,
   disabled with no size pressed ("docs fill the canvas"). The page keeps the
   sizes its design supports, and its design lens shows them again. `sizes` on
   a Markdown page is reported as a problem ("sizes don’t apply to a Markdown
@@ -169,8 +168,8 @@ export default defineDocs({
 
 ### In a multiple-artboard canvas
 
-Decided 2026-10-04, to be built with the
-[multiple-artboard canvas](multiple-artboards.md):
+The [multiple-artboard support APIs](multiple-artboards.md) provide isolated
+docs renderers. User-facing canvas integration follows this target behavior:
 
 - **One view, whole canvas.** A canvas showing a docs page and nothing else
   uses the docs canvas mode above.
@@ -207,7 +206,8 @@ Decided 2026-10-04, to be built with the
   page in Workbench. Other links behave as links in previews do: recorded under
   **Actions**, or followed through **Open on its own**.
 - Workbench supplies the docs stylesheet: neutral, light, system fonts, like
-  a plain documentation page. Projects do not override it in this version.
+  a plain documentation page. Project overrides of the docs stylesheet are
+  outside this contract.
 
 ### Placing an example
 
@@ -367,7 +367,7 @@ problems update when they arrive.
 
 ## System behavior
 
-- **Manifest.** `manifest.js` accepts `.md` sources, `lens`, and the `examples`
+- **Manifest.** `manifest.js` accepts `.md` sources, `lens`, and the `docs`
   kind, and rejects `!` in `src`, for the browser and the server alike.
 - **Serving.** The server serves a docs page at its Markdown path and renders
   the Markdown to HTML with example placeholders. Markdown parsing and syntax
@@ -422,8 +422,7 @@ collection; Colors is in **Design system**:
 - **Colors**: discovered from `defineDocs`, a foundation page whose live
   swatch example reads the stylesheet's custom properties.
 
-Migrating the Storybook documentation pages of a client project comes after
-the pilot and is not part of this contract.
+Client-project rollout is separate from this product contract.
 
 ## Acceptance criteria
 
@@ -449,166 +448,38 @@ the pilot and is not part of this contract.
   `defineDocs`, per-example mounting and readiness, and source-text extraction.
   Canvas behavior is checked in headless Chrome against the demo.
 
-## Decisions
+## Design constraints
 
-- **2026-10-04: no artboard.** A docs page is the canvas itself, not a tall
-  artboard on it. A full-height artboard would have made `position: fixed`
-  and `vh` resolve against the whole page, so a modal example would center on
-  a page thousands of pixels tall.
-- **2026-10-04: docs are a lens, one per renderer.** A page has one or more
-  lenses onto the same component, so its docs are a lens of it, not a kind of
-  page: a component's design, implementation, and documentation are one entry
-  in the page list and two artboards can compare them. Each renderer of the
-  examples, such as web and React Native Web, is its own docs lens with a
-  developer-chosen name, keeping one lens switcher and one concept; the
-  Markdown is the same in each. The implementation kind is `docs`. A page
-  with Markdown and no docs lens has the built-in Docs lens. The canvas mode
-  follows the lens.
-- **2026-10-04: a Markdown page stays.** A page whose `src` is its Markdown is
-  its docs, with no design lens, for foundations and guides that have no
-  design. It always shows one of its lenses, its own docs lens unless the
-  chosen one is another it has.
-- **2026-10-04: the lens decision is the docs module's.** Which lens a page
-  shows is pure TypeScript in `src/modules/docs/canvas/lenses.ts`, shared by
-  the canvas and tests; `manifest.js` keeps the `workbench.yaml` rules both
-  config readers share (the `docs` kind and key, `lens`, and their problems),
-  so the browser and the server still read one file.
-- **2026-10-04: examples don't come from a preview's states.** Docs examples
-  stay their own example sources; drawing them from a preview's states and
-  controls is out of scope for now.
-- **2026-10-04: themes are not lenses.** A lens says what renders a page;
-  a theme is a setting applied whatever renders it, and belongs with the
-  planned tweaks controls. The demo's Light and Dark lenses were removed.
-- **2026-10-04: both example layouts.** One file per example gives exact code
-  for **Show code**; named exports in one file need fewer files. Projects
-  choose per lens.
-- **2026-10-04: hand-written props tables.** Tables are Markdown; nothing is
-  generated from types.
-- **2026-10-04: Markdown with fenced example blocks, not MDX.** The Markdown
-  stays readable on its own and needs no MDX toolchain.
-- **2026-10-04: states are allowed but discouraged.** A component's docs page
-  should show its variations side by side.
-- **2026-10-04: named-export code is found by layout.** A named export's code
-  runs from its column-0 `export` (or the column-0 declaration an
-  `export { local as name }` names), with the comment and decorators directly
-  above it, to the line before the next column-0 statement. A lexer can't
-  stand in for a TypeScript and JSX parser (an apostrophe in JSX text is not a
-  quote), and a real parser would add megabytes to the extension. A multi-line
-  template literal with lines at column 0 can end the code early. The list of
-  exports itself comes from the compiler. See
-  [export-source.ts](../src/docs/export-source.ts).
-- **2026-10-04: canvas and artboard are separate terms.** A docs page has a
-  canvas but no artboard, so code and guides name the two apart. The canvas
-  element is `#canvas`, the region around it `.wb-main`, the artboard
-  `#artboard` with its clipped `#artboardContent`; "frame" means only the
-  preview iframe, in code, guides, specs, and the handoff prompt.
-- **2026-10-04: TypeScript without a build step.** Docs-page code is the first
-  TypeScript in Workbench, under `src/`, loaded by Node 24's type stripping. The
-  extension therefore requires VS Code 1.123 or later (the first release on
-  Node 24) and the standalone server Node 24. Browser modules are served with
-  types stripped by the server.
-
-- **2026-10-04: `previews: false` turns docs examples off too.** It means "run
-  no project code", and examples are project code. The Markdown still renders,
-  and every panel says why its example is missing.
-- **2026-10-04: one worker, one compiler path.** Docs bundles build in the
-  preview worker through the same compiler setup as previews (the
-  [preview pipeline](preview-pipeline/README.md) since 2026-10-13), so aliases,
-  plugins, Vue and HTML loading, styles, and environments behave alike. The
-  bundle exports `examples`, `adapter`, and `environment`; the page script
-  mounts them. The worker also starts for a project whose only compiled code
-  is docs examples.
-  React Native Web examples receive a column flex host in each stage, allowing
-  `flex: 1` to fill its available content area. Stage padding and content-based
-  height remain intact; the adapter does not impose viewport height on panels.
-- **2026-10-04: a docs page renders before its examples are built.** Markdown
-  renders in about a millisecond; building, listing, and starting the worker
-  took the rest of a cold page's time (0.5–1 s locally, several seconds in
-  VS Code). The page answers with its Markdown and asks for the bundle from
-  its script; the config shows listing problems once known instead of waiting
-  for them; and the extension warms the worker and every docs bundle when the
-  session starts. A portable export still embeds its bundle, having no server
-  to ask.
-- **2026-10-04: a declared page wins over a discovered one.** A `defineDocs`
-  definition whose Markdown file `workbench.yaml` also lists is skipped, and
-  the YAML's lenses apply.
-- **2026-10-04: prose styles stay out of panels by selector, not isolation.**
-  Every docs-page prose rule carries `:not(.wb-docs-example *)`, so examples
-  inherit the project's body styles as on a blank page, and the prose rules
-  outrank the project's element selectors (`h2 { … }`). A shadow root for the
-  prose was the alternative; it would have separated the page's anchors and
-  text from the canvas's annotations and capture, which read the light DOM. A
-  project rule with higher specificity or `!important` can still restyle the
-  prose. Settles the earlier style-isolation question.
-- **2026-10-04: nothing under a docs page in the page list.** Entries under a
-  page are its states everywhere else in Workbench; examples listed there
-  looked like states but only scrolled the page, so they were removed. A docs
-  page's states are picked from the top bar only. Settles the earlier question
-  of states under a docs page.
-- **2026-10-04: the docs canvas mode reuses the artboard machinery.** The
-  artboard element and its preview frames, sessions, readiness, and
-  annotation layer stay; in the docs canvas mode the artboard fills the canvas
-  ([docs-layout.ts](../src/docs/canvas/docs-layout.ts)): its layout width is the
-  canvas width, its height the canvas height divided by the zoom, so zoom
-  scales without reflowing and zooming out shows more page. The wheel scrolls
-  the page; over the white margins it scrolls it too. Annotations already
-  follow a frame's scroll, so they stay on the page.
-- **2026-10-04: a docs page beside other artboards is an artboard.** The
-  docs canvas mode serves reading one page; a review canvas compares several
-  views, and a docs page there behaves like a page in an artboard, scrolling
-  inside a viewport-sized box. A full-height artboard was rejected for the
-  same reason as before: fixed and `vh` content would resolve against the
-  whole page. Settles question 3 of the multiple-artboard spec.
-- **2026-10-04: export references from the page itself.** The capture
-  helper's export page path grows the window to the page's height (up to 8192
-  pixels) for the whole-page reference and crops to an example's panel
-  (`[data-wb-example-stage]`) for each example; one reference per example per
-  lens, and none for an example a lens lacks.
+- Docs shown alone use the canvas viewport so fixed-position content and `vh`
+  resolve against the reader's visible area. Beside other artboards they use
+  an ordinary sized viewport; full-page document height is reserved for export.
+- Prose and examples share the light DOM for annotations, anchors and capture.
+  Prose rules exclude `.wb-docs-example` descendants. Highly specific project
+  rules can still restyle prose; keep that limitation explicit.
+- Named-export source text is extracted by column-zero declaration boundaries,
+  including attached comments/decorators, without introducing a second parser.
+  The compiler lists export names. Re-exports and multiline templates require
+  dedicated source-location handling; see
+  [export-source.ts](../src/modules/docs/export-source.ts).
+- Browser and Node use erasable TypeScript with explicit ownership boundaries.
+  Node 24 loads host modules; the server strips browser modules in memory.
+- Previews and docs examples share compiler profiles, aliases, rules, plugins
+  and environments. React Native Web examples use a column flex stage without
+  imposing viewport height on panels.
+- A declared YAML page wins when a discovered docs definition claims the same
+  Markdown file. One Markdown file has one owning page.
+- The page list represents pages and states, not docs examples. Examples are
+  addressed within their page and navigated in the docs content.
+- Whole-page references use document height up to the capture limit;
+  per-example references crop to the rendered example stage.
 
 ## Current status
 
-Verified 2026-10-04:
-
-- **Automated:** the tests under [verification points](#verification-points).
-- **Headless Chrome, Acme demo** (`node server.js` on this repository): the
-  three pilot pages opened in the docs canvas mode on a white canvas with the
-  size switcher disabled and the artboard filling the canvas (1152 × 856 at
-  100%); switching
-  lenses re-rendered the examples and an example a lens lacked showed its
-  placeholder; `#demo/docs/button.md!disabled` opened the page scrolled to that
-  example, with nothing under the page in the page list; zooming to 50% kept the 1152-pixel
-  layout and showed 1712 page pixels; the defineDocs Colors page rendered its
-  seven swatches; returning to a page with an artboard restored the artboard; no
-  problems and no script errors.
-- **Headless Chrome, scratch project:** HTML and React lenses mounted, a
-  failing example stayed in its panel, project body styles reached examples but
-  not the prose, Show code returned a named export with an apostrophe in JSX.
-- **Live capture** with the bundled capture helper, scratch project in headless
-  Chrome: a rectangle drawn on an example moved 120 pixels with a 120-pixel
-  page scroll; the camera's capture answered; the handoff saved a 1152 × 856
-  JPEG of the part of the page in view with the annotation on the example, and
-  its prompt named the docs page, the lens, and both examples in view with
-  their files.
-- **Astro and the portable viewer**, scratch project in headless Chrome: an
-  Astro lens rendered its example with its scoped style on the live server;
-  the export's `browser/` directory, on a plain static server, listed both docs
-  pages, mounted their examples in each lens, showed code, and followed a link
-  between them.
-- **Real export** with the bundled capture helper rebuilt from source
-  (`pnpm run bundle-runtime`, macOS x64): whole-page references at 1056 pixels
-  wide and the page's height (Card 1426, Colors 1084), example references
-  cropped to their panels (958 × 129 to 958 × 288), a lens lacking one example
-  without a reference for it, no capture warnings.
-- **Docs as a lens**, headless Chrome against the Acme demo (`node server.js`
-  on this repository): Button opened on its Workbench design with sizes Laptop
-  and Mobile and the lens switcher showing Workbench and HTML; HTML switched
-  the canvas to the docs mode with no size enabled, its four examples ready,
-  and the address `#demo/previews/button.workbench.ts~html`; with HTML on,
-  Card showed its docs with its own lens left out of the address and Sign in
-  showed its design with its sizes; `!secondary~html` opened Button's docs;
-  Workbench brought the artboard and its size back; no script errors.
-  Annotations, the handoff, and the export through a docs lens of a page with
-  a design were checked by the server tests only, not in a live capture.
+Docs lenses, Markdown rendering, example compilation/mounting, source-code
+controls, annotations, capture, handoff and portable output have source tests
+and Acme browser evidence. Those checks do not establish every VS Code host,
+renderer combination or source-extraction edge case. See
+[verification points](#verification-points).
 
 ### Built
 
@@ -652,8 +523,7 @@ Verified 2026-10-04:
   panel; [render-markdown.ts](../src/modules/docs/render-markdown.ts) renders the
   Markdown; [docs-page.ts](../src/modules/docs/page/docs-page.ts) and
   [mount-examples.ts](../src/modules/docs/page/mount-examples.ts) mount the examples,
-  run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and reload on edits with
-  the scroll position kept.
+  run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and apply pushed Markdown/example updates with scroll position kept.
 - **The canvas.** The docs canvas mode in [zoom.js](../workbench/zoom.js) with
   the geometry from [docs-layout.ts](../src/modules/docs/canvas/docs-layout.ts) (loaded by
   [bootstrap.ts](../src/modules/docs/canvas/bootstrap.ts)); `.wb[data-canvas-mode="docs"]` styles in
@@ -673,21 +543,17 @@ Verified 2026-10-04:
 
 ### Implementation gaps
 
-- **VS Code itself is pending your check.** The build was packaged and
-  installed with `node scripts/install-workbench.mjs` on 2026-10-04 (VS Code
-  1.140, Electron 43.7.3), and its server loads under Node 24 from the
-  installed directory. Whether the extension host loads the `src/` TypeScript,
-  and how the editor tab behaves, needs a window reload and a person: the shell
-  policy here does not launch VS Code.
+- **VS Code acceptance.** Check docs routing, focus, examples, capture and
+  handoff in the real editor host. Packaged TypeScript loading and standalone
+  browser checks alone do not establish those interactions.
+
 - **Show code for an `export *` example** answers that the export isn't in
   the example source: the statement lives in the re-exported module, which the
   listing doesn't record.
-- **Support for docs pages in multiple artboards** uses an isolated renderer in each
-  instance, with its own dimensions, scroll, example state, and capture.
-  The [canvas support API](multiple-artboards.md) includes them in full
-  review/context output. The docs canvas mode remains renderer-level behavior.
-- **A preview definition can't declare its docs.** `definePreview` has no
-  docs field; a preview gets docs only where `workbench.yaml` places it.
+- **Multiple-artboard UI.** Isolated docs renderers participate in support
+  APIs, while user-facing multi-artboard composition and controls remain the
+  [canvas integration work](multiple-artboards.md#remaining-integration-plan).
+
 - **An address naming a page's Markdown** opens nothing when the Markdown
   belongs to a page with a design: the address names the page's own `src`.
 - **The portable viewer** lists each page's docs as an entry of its own with a

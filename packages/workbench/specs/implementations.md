@@ -166,7 +166,7 @@ Repeated artboards on one device/window share that external surface.
   over a streamed HTTP response, because VS Code does not promise an H.264
   decoder and its webview forwarding does not reliably keep a WebSocket
   upgrade. Both carry a private per-stream token on the loopback server.
-- Each open canvas keeps its own stream (decided 2026-10-03). A VS Code
+- Each open canvas keeps its own stream. A VS Code
   canvas and a browser canvas showing the same device, or two canvases showing
   different devices or windows, stream at the same time; opening one must not
   stop or replace another's stream. Requests for the same source and codec may
@@ -177,9 +177,6 @@ Repeated artboards on one device/window share that external surface.
   helper can't capture, the canvas says why.
 
 ## Current gaps
-
-Found on 2026-10-03 by reading the code and, where noted, by a server probe
-with a stubbed Simulator list and stream.
 
 - **Mapped devices are not checked.** Without `catalog: true`, a Simulator
   whose device isn't booted produces no entry in `problems`; the failure
@@ -214,13 +211,13 @@ with a stubbed Simulator list and stream.
   negotiation only for a configured device or declared window, and export
   warnings for implementation-only pages.
 - [simulator.test.js](../workbench/simulator.test.js) checks that a window lens
-  streams without starting WDA, and that an embedded workbench uses JPEG.
+  streams without starting a Simulator input session, and that an embedded workbench uses JPEG.
   [window-stream.test.js](../window-stream.test.js) checks each native producer's
   stream protocol, while `src/native-streams/pool.test.ts` covers producer sharing,
   token checks, HTTP framing, and that the packaged extension ships the
   helper source.
 - [lenses.test.js](../workbench/lenses.test.js) checks URL joining.
   [startup.test.js](../startup.test.js) checks start commands.
-- Manual: frame rates, Screen Recording prompts, WDA input, and macOS
+- Manual: frame rates, Screen Recording prompts, Simulator input, and macOS
   version support are checked on a Mac with a booted Simulator and a visible
   app window. No automated test covers them.

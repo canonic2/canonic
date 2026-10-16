@@ -1,12 +1,13 @@
 # Multiple artboards per canvas
 
-Support-system implementation in the working tree, 2026-10-04.
+Status: support APIs implemented; user-facing multi-artboard controls and
+canvas integration are future work.
 The current scope is infrastructure only. The existing Workbench UI, controls,
 styles, navigation, and default `index.html` entry point remain in place.
 UI proposals elsewhere in this spec are future design work, not shipping behavior.
 The [module plan](multiple-artboards-code-plan.md) records the implementation.
 
-## Implemented support system — 2026-10-04
+## Implemented support system
 
 TypeScript modules under `src/canvas/` provide serializable artboard descriptors,
 validated dimensions, insertion-order geometry, a controller with injected
@@ -19,7 +20,7 @@ isolated runtime ownership. Shell and annotation ports expose the existing
 renderer; closing/replacing an instance disposes its iframe and pending
 requests. The controller suppresses old-generation view reports and
 coordinates capture locks.
-The model permits 32 instances with dimensions of 320–8192 CSS pixels, subject
+The model permits 32 instances with dimensions of 1–8192 CSS pixels, subject
 to the page's authored `sizes`. Geometry includes a 48px row gap; a future host
 can use pure bounds/fit/zoom functions without changing the current camera.
 
@@ -44,14 +45,13 @@ These APIs have no layout persistence or shared configuration schema. The tempor
 browser acceptance harness drives the support through injected ports, not through
 production controls. Verification covers instance/state/size isolation, two-space
 context, combined image geometry, handoff persistence, and disposal, plus the Node
-suite and strict TypeScript check. Actual Screen Recording/WDA behavior requires
+suite and strict TypeScript check. Actual native capture and Simulator input require
 the appropriate host/devices; no performance benchmark has been performed.
 
 ## UI and integration scope
 
-No UI changes are authorized for this implementation. Adding user-facing artboard
-controls or wiring these support APIs into the existing canvas requires a separate
-UI assignment. The future workflows and acceptance criteria below remain design
+User-facing artboard controls and composition of these support APIs remain
+future integration work. The future workflows and acceptance criteria below remain design
 proposals; free positioning and row/grid arrangement remain phase 2. Persistence
 and sharing policy remain open.
 
@@ -83,68 +83,6 @@ restrict the tool to a particular comparison workflow.
 - **Unresolved: persistence and sharing.** Remembering an arrangement locally
   and storing a named arrangement in a shared project file are distinct
   options. Neither storage policy has been agreed.
-
-## Investigation findings before implementation
-
-These findings record the source inspected before implementation, not current
-support-system gaps or a performance measurement. The implementation record
-above describes the support now in place. Existing unrelated working-tree
-changes were present during investigation.
-
-- [Core](core.md) defines one selected page and one artboard. Its address
-  encodes source, state, width, and lens. In
-  [workbench.js](../workbench/workbench.js), those values, the rendered view,
-  pending load, and frame references are canvas-wide variables. Top bar,
-  sidebar, and iframe messages route through that selection.
-- [zoom.js](../workbench/zoom.js) transforms and fits one `artboard` element.
-  Multiple artboards need a common canvas coordinate system and bounds across
-  all artboards. The current minimum zoom and single-artboard pan bounds may
-  prevent fitting a large arrangement; they must be reconsidered.
-- [preview-sessions.js](../workbench/preview-sessions.js) retains one active
-  session and up to three inactive sessions for 15 minutes. Session keys in
-  `workbench.js` use the lens and URL; Storybook groups sessions by lens and
-  Storybook base URL. These identities cannot distinguish two copies of the
-  same view, or two independently displayed stories from one Storybook.
-- [preview-controls.js](../workbench/preview-controls.js) finds one
-  `iframe.is-active`. Message handlers in `workbench.js` likewise accept
-  navigation and keyboard commands from one frame. Selection and rendering
-  activity need separate identities.
-- [annotations.js](../workbench/annotations.js) owns one annotation list and capture
-  source. Changing source or state clears annotations; changing width or lens
-  preserves them for comparison. Capture dimensions come from one artboard.
-  Multiple artboards require explicit annotation and capture ownership.
-- [Interactive capture](capture.md) mirrors a live document into an inert
-  Electron surface. Capturing a canvas composed of several live views needs
-  additional composition behavior; it is not equivalent to capturing the
-  selected artboard. Background mirroring also needs a deliberate budget.
-- [reference.js](../workbench/reference.js) and
-  [agent-view.js](../agent-view.js) report one view. The editor sidebar uses
-  `wb-go` and `wb-here` for one selection. Full-canvas context needs an
-  expanded report while preserving a selected-artboard field for focus.
-- A page in a [docs lens](docs-pages.md) shown alone uses the docs canvas
-  mode, and is an ordinary artboard beside others
-  ([contract](docs-pages.md#in-a-multiple-artboard-canvas)). Space switching
-  currently changes the server address, so the agreed cross-space scope needs
-  space-aware routing and resource ownership within one canvas.
-- [Native streams](implementations.md#native-window-stream) have a verified
-  implementation gap: [window-stream.js](../window-stream.js) has one current
-  source/codec per manager; starting another stops the previous stream.
-  Concurrent artboards need independent subscriptions and concurrent source
-  ownership. Window lenses are view-only; Simulator input requires WDA. Two
-  artboards showing the same device/window share that external source's state.
-- [server.js](../server.js) refuses mutations from another space's origin.
-  A canvas served by space A cannot simply send existing capture, input,
-  or source-opening requests to space B. A space-aware host transport is
-  necessary; broadening the routes to arbitrary origins is not a solution.
-- [spaces.js](../spaces.js) identifies a space by configuration directory
-  and optional manifest key, not just its served root. Several spaces can
-  share a root and still have different configurations. Runtime space IDs
-  depend on local paths and are not portable team-sharing references.
-- The agent context reader validates the reporting server's root and consumes
-  `view.text`.
-  [Agent context](agent-context.md#finding-the-server) also notes that spaces
-  sharing a root share one announcement file. Multi-space publication must
-  account for this, and context transport needs changes beyond the canvas UI.
 
 ## Suggested phase 1 interactions
 
@@ -215,8 +153,10 @@ changes were present during investigation.
 
 ## Proposed system and edge-case contracts
 
-These are review recommendations, not additional agreed product decisions.
-They make the implementation boundaries concrete without narrowing content.
+The implemented support system above establishes the baseline for instance
+identity, geometry, capture and context. The contracts below guide user-facing
+composition. Interaction choices still needing a decision are marked proposed;
+those proposals do not reopen established support-API limits.
 
 ### Canvas and artboard ownership
 
@@ -292,12 +232,13 @@ They make the implementation boundaries concrete without narrowing content.
   Record per-artboard acquisition timestamps. Preserve the existing capture
   fidelity/unsupported-element contracts and label any URL fallback that
   represents a separate browser session.
-- Suggested first-release output: one composite JPEG download using canvas
+- The support API produces one composite JPEG using canvas
   bounds, background, labels, and annotations, excluding the top bar, toolbar,
   selection chrome, and camera cropping. Artboard coordinates use CSS pixels;
-  any output scale must be explicit and uniform. Choose image-size and memory
-  limits before implementation; never silently crop, omit, or reduce quality.
-- Suggested failure policy: loading/error/unavailable artboards appear as named
+  any output scale must be explicit and uniform. The implemented image bound
+  is 32 megapixels and 32767px per edge. Define the remaining memory budget
+  before UI delivery; never silently crop, omit or reduce quality.
+- The support capture policy represents loading/error/unavailable artboards as named
   status placeholders in the complete canvas image and handoff. An unexpected
   capture failure on a ready artboard fails the operation with its ID and reason;
   no successful handoff is emitted with that artboard silently absent. Empty
@@ -318,7 +259,7 @@ They make the implementation boundaries concrete without narrowing content.
   Keep selected-view compatibility fields for existing consumers, but existing
   hooks and MCP must consume the complete canvas text rather than only those
   fields. Match Copy reference to that same record.
-- Suggested discovery: publish the full canvas record to each participating
+- The support publisher sends the full canvas record to each participating
   space's context service, under the same canvas ID. Each service keeps its
   own root for the context reader's validation. Handle shared-root announcements explicitly
   rather than allowing space selection to decide which context survives.
@@ -329,65 +270,32 @@ They make the implementation boundaries concrete without narrowing content.
   loads and heartbeats must not steal precedence from a different canvas the
   user has subsequently used. Context stays available for partial loading and
   failure, and makes no claim that an agent has access to every referenced root.
-- Every artboard must survive server and reader size limits. Establish a bounded
-  format and explicit oversize error or complete retrieval mechanism; slicing
-  text and silently dropping later artboards violates the agreed requirement.
-- Suggested legacy-link behavior: an explicit single-view URL opens a fresh
+- Complete context is bounded at 32 artboards and 100,000 text characters.
+  Oversized reports fail explicitly; slicing text or silently dropping later
+  artboards violates the complete-context requirement. UI delivery must expose
+  that error without hiding other available review operations.
+- Suggested single-view link behavior: an explicit single-view URL opens a fresh
   one-artboard canvas; it does not merge into or overwrite a restored comparison.
   Browser Back/Forward routes within its owning artboard rather than appending
   artboards. Full-layout links and restoration history await a persistence
   decision. A zero-artboard canvas reports open with an empty list and no focus;
   closing the canvas reports closed.
 
-## Implementation plan
+## Remaining integration plan
 
-1. **Agree the interaction contract.** Resolve the questions below and create
-   a rendered prototype using Acme fixtures: laptop/mobile, two states, and
-   design/implementation, native streams, and mixed spaces. Verify selection,
-   adding, closing, automatic placement, and keyboard access in browser and
-   VS Code. Manual positioning and row/grid controls belong to phase 2.
-   Use the shared canvas/artboard [terminology](terminology.md) and coordinate with
-   the existing docs modules. Agree capture limits, failure/output policy,
-   host space ownership, and context discovery before implementation.
-2. **Extract artboard ownership while preserving one-artboard behavior.**
-   Introduce capability modules under `src/` for artboard descriptors,
-   selection, commands, and preview lifecycle. Keep DOM, host messages, and
-   persistence as explicit adapters. Give each instance a stable ID, space
-   owner, and its own pending-load sequence. Resolve catalog, source, origin,
-   server readiness, and native stream/input resources against that owner.
-   One space's refresh or server failure must not reset other spaces.
-   Bound this extraction to the affected workflow.
-3. **Render multiple artboards and add canvas geometry.** Use one world
-   transform, positions in CSS-pixel coordinates, shared bounds, and separate
-   selection. Adapt preview routing and controls to instance IDs. Visible
-   previews must not expire as inactive sessions merely because another
-   artboard is selected. Retained hidden sessions need a canvas-wide budget
-   rather than multiplying the current allowance by artboard count.
-4. **Integrate full-canvas review and recovery.** Bind annotations and
-   mirror/stream subscriptions to their artboard instances. Compose capture across all
-   renderers and spaces, and extend references, handoffs, and agent-context
-   reports to carry every artboard and the selected ID. The server's existing
-   text limit and single-space agent discovery require explicit compatibility
-   work; reports must not silently drop artboards. Snapshot artboard membership,
-   descriptors, and annotations when capture starts; selection changes must
-   not redirect it. Define errors and temporal consistency when several live
-   renderers are captured. If persistence is agreed, version and validate its
-   descriptors. Handle removed catalog entries visibly, and release resources
-   on closing, refresh, and space changes.
-5. **Validate and document.** Test instance isolation, superseded loads,
-   geometry, navigation, capture identity, persistence, and disposal with the
-   existing Node runner. Run the package tests and TypeScript check. Exercise
-   real browser and VS Code rendering for iframe focus, shortcuts, resizing,
-   cross-origin lenses, native streams, mixed-space lifecycle, and capture.
-   Verify full-canvas context through agent hooks and MCP readers.
-   Measure multi-artboard memory and input
-   responsiveness before selecting limits. Update core and affected specs,
-   public guides, website copy, and screenshots with the shipped behavior.
-   If saved canvases change YAML, update all schema references required by the
-   package instructions in that same implementation change.
-6. **Phase 2: arrangement.** Add free positioning and row/grid arrangement
-   with accessible movement controls. Preserve artboard identity, runtime
-   state, annotations, and full-canvas review output while positions change.
+1. Agree the user-facing add/duplicate/select/close interactions, keyboard
+   access, camera Fit operations and empty/error behavior. Use a rendered
+   Acme prototype without presenting proposed controls as shipped behavior.
+2. Compose the existing support APIs into a keyed canvas presentation. Connect
+   instance-scoped source, navigation, controls and native inputs through the
+   owning space. Preserve the shipping one-view path during bounded migration.
+3. Bind full-canvas capture, handoff and context to those controls. Verify all
+   participating renderers and spaces, capture races, cleanup and agent readers.
+   Resolve host storage and optional per-artboard image policy before delivery.
+4. Measure memory and interaction latency at the artboard limit in browser and
+   VS Code, then complete the acceptance criteria and public guides. Persistence
+   requires its own product decision. Phase 2 adds free positioning and row/grid
+   arrangement while preserving runtime identity and review output.
 
 ## Proposed acceptance criteria
 
@@ -420,7 +328,7 @@ They make the implementation boundaries concrete without narrowing content.
 - Closing or refreshing disposes owned listeners, timers, adapters, capture
   subscriptions, and streams. A hidden-session limit cannot evict a visible
   artboard. Rendered interaction remains usable at the agreed artboard limit.
-- A legacy page link still opens its named view. If layout restoration is
+- A single-view page link still opens its named view. If layout restoration is
   included, one missing space or source does not discard all valid artboards.
 - Phase 1 adds artboards with predictable automatic placement. Phase 2 allows
   free positioning and row/grid arrangement without remounting previews.
@@ -436,8 +344,9 @@ They make the implementation boundaries concrete without narrowing content.
   space; shared-root spaces and simultaneous editor/browser canvases do
   not overwrite one another's identities. Heartbeats and background readiness
   do not change which canvas the user last used.
-- Verify oversize capture/context behavior and cleanup at the chosen limits;
-  measurement targets and limits are release criteria still to be established.
+- Verify oversize capture/context behavior and cleanup at the implemented
+  limits. Memory and interaction-latency targets remain release criteria to
+  establish before user-facing delivery.
 
 ## Questions for product decisions
 
@@ -450,9 +359,7 @@ They make the implementation boundaries concrete without narrowing content.
    handoffs also include a full-resolution image of each artboard? All artboards
    are included either way. Large arrangements need a defined resolution and
    image-size policy.
-3. **Docs integration:** decided 2026-10-04 in
-   [docs](docs-pages.md#in-a-multiple-artboard-canvas).
-4. **Canvas ownership:** Where should a mixed-space handoff be saved, and
+3. **Canvas ownership:** Where should a mixed-space handoff be saved, and
    which space owns canvas-level actions such as export and configuration?
    Recommendation: a host space owns the handoff bundle; editing and export
    explicitly identify the space they target. Participant sources retain
@@ -480,10 +387,8 @@ feature ships. Maintain existing routes and update website navigation/search
 when adding a guide. Run website tests/build, inspect rendered guide content,
 and refresh overview screenshots only when shipped visible behavior changes.
 
-## Review status
+## Delivery boundary
 
-The implementation record above supersedes the investigation's proposed defaults
-where it gives concrete choices. Persistence/sharing remain unagreed, and manual
-arrangement is phase 2. The investigation and target design below remain useful
-for future migration and performance work; they are not claims of completed
-package-wide migration.
+The support APIs establish instance isolation, review composition and context
+publication. They do not establish user-facing multi-artboard acceptance.
+Persistence/sharing remain open, and manual arrangement belongs to phase 2.

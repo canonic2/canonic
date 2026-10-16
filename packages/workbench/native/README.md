@@ -58,15 +58,53 @@ invalidate the save. Read or write failures never prevent a page list.
 
 ## Checks and packaging
 
-From this directory with Rust 1.99.0:
+The pinned Rust 1.99.0 toolchain includes rustfmt, Clippy and LLVM tools.
+Install the same test, dependency and coverage tools used by the other Rust
+packages:
+
+```sh
+cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.9.1 cargo-insta@1.49.0
+```
+
+From this directory:
+
+```sh
+make check
+make coverage
+```
+
+`make check` runs all gates below with locked dependencies and all features.
+`make coverage` writes the HTML report to `target/llvm-cov/`.
+From the repository root, use `pnpm --dir packages/workbench run check:native`
+or `pnpm --dir packages/workbench run coverage:native`.
 
 ```sh
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo doc --no-deps --document-private-items
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo nextest run --locked --all-features
+cargo test --doc --locked --all-features
+cargo doc --locked --all-features --no-deps --document-private-items
 cargo deny check
 ```
+
+Formatting uses rustfmt defaults. `Cargo.toml` owns the shared Rust, Clippy
+and rustdoc lint policy; `clippy.toml` permits test-only unwraps.
+`.config/nextest.toml` reports every failure and terminates tests after two
+minutes. `deny.toml` uses the shared license allowlist with one archive-writer
+exception for SWC's build dependencies. The extension release workflow runs
+the native gates before packaging.
+
+Unit tests use proptest to exercise escaped strings, nested literals and the
+boundary that sends executable definitions to Node. The page-list entry has an
+insta JSON snapshot alongside behavioral assertions. Review intended output
+changes with `cargo insta review`. The CLI integration test uses assert_cmd,
+assert_fs and predicates with a temporary project and saved index that are
+cleaned up together. Coverage reports have no percentage gate, matching TUI
+and Shield.
+
+`make build` builds the local release executable. `CARGO_FLAGS=--offline`
+uses cached dependencies for Cargo build, lint, test, documentation and coverage
+commands; cargo-deny manages its own advisory cache.
 
 `node ../scripts/build-native.cjs` builds the host release executable into
 `bin/<VSIX target>/`. `--debug` builds the test executable. Packaging calls

@@ -1,0 +1,36 @@
+---
+source: src/definition.rs
+expression: entry
+---
+{
+  "id": "page",
+  "title": "page",
+  "adapter": "html",
+  "file": "page.workbench.ts",
+  "source": "page.html",
+  "states": [
+    {
+      "id": "a--b",
+      "label": "A- B"
+    },
+    {
+      "id": "-ready",
+      "label": " Ready"
+    },
+    {
+      "id": "empty",
+      "label": "Empty"
+    }
+  ],
+  "controls": {},
+  "docs": null,
+  "links": {
+    "/next": {
+      "preview": "page",
+      "state": "empty"
+    }
+  },
+  "sizes": [
+    "mobile"
+  ]
+}

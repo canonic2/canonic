@@ -7,23 +7,41 @@ workflows, system contracts, design decisions, and discoveries from investigatio
 They guide implementation and review rather than merely describe the current code.
 The [workbench README](../workbench/README.md) remains the setup and operations guide.
 
-Keep agreed requirements, proposals, verified behavior, and known implementation
-gaps distinct. Record discoveries with evidence and explain their implications;
-label hypotheses and open questions. Update the relevant topic when requirements,
+Specs describe the current desired product and its intended next steps. Keep
+implemented behavior, agreed future requirements, proposals and verification
+gaps distinct. Delete superseded designs, removed features and completed task
+lists; history belongs in release notes and lab reports. Keep rationale when it
+explains an active contract, and link supporting evidence without reproducing
+the investigation diary. Update the relevant topic when requirements,
 decisions, or findings change, and add new topics to the index below. Use the
 `product-specs` skill to write and maintain these specifications.
 
-## Multiple-artboard update
+## Reading order and ownership
 
-The [feature contract](multiple-artboards.md) and
-[TypeScript code plan](multiple-artboards-code-plan.md) are the authoritative
-support-system record and target architecture for this update. The current scope
-is infrastructure only: independent instance state/runtimes, mixed-space access,
-full-canvas capture/handoff/context APIs, and native producer ownership. Existing
-controls, styles, layout, and the default entry point are unchanged. A temporary
-programmatic harness verifies the support without adding production UI. Free positioning and row/grid arrangement are phase 2; persistence
-and shared layouts remain open. The feature contract records verification and
-limits, and the code plan distinguishes migrated modules from renderer debt.
+Start with [Core workbench](core.md) and [Terminology](terminology.md) for the
+product model. Feature topics own user-visible behavior. The
+[preview pipeline](preview-pipeline/README.md) owns discovery, compilation,
+delivery and runtime contracts; its index separates implemented capabilities
+from lab work.
+
+For the Rust page-index work, read [Page index](preview-pipeline/page-index.md)
+for correctness, lifecycle, cache bounds and acceptance; then
+[Performance](preview-pipeline/performance.md#page-listing) for measured results
+and target gaps, and [Code quality](code-quality.md) for the engineering gates.
+Each requirement has one owning topic. Cross-links connect the topics without
+copying acceptance criteria or treating lab results as shipped verification.
+
+## Delivery boundaries
+
+| Area | Current implementation and desired next step |
+| --- | --- |
+| Preview pipeline | Native listing and the Rspack worker are implemented. Complete-list and first-page targets still require work; compiler-host alternatives remain lab work |
+| Multiple artboards | Instance isolation, mixed-space support, review composition and context APIs are implemented. User-facing multi-artboard integration is future work; arrangement is phase 2 and persistence/sharing remain open |
+| Sizes and shell | Configurable sizes and migrated Web Components are implemented. Configure pages size cards, guide alignment and the canvas theme bridge remain gaps |
+
+Each owning topic supplies the detailed contract, acceptance criteria and
+verification limits. An implemented support API does not establish that its
+user-facing workflow is delivered.
 
 ## Topics
 
@@ -34,10 +52,10 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 | [Terminology](terminology.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
 | [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, the canvas and artboards, and failures shared by every page |
 | [Lenses](lenses.md) | Rendering kinds, customizable display labels for every lens including the authored preview, stable identity, defaults, and configuration precedence |
-| [Multiple artboards](multiple-artboards.md) | Investigation and proposed comparison canvas, artboard ownership, selection, persistence, implementation phases, and open product decisions |
-| [Artboard code plan](multiple-artboards-code-plan.md) | Planned TypeScript capability boundaries, state and runtime APIs, space transport, capture/context workflows, migration slices, and validation |
+| [Multiple artboards](multiple-artboards.md) | Implemented instance/review support, desired comparison workflows, remaining UI integration, arrangement phases and persistence decisions |
+| [Artboard code plan](multiple-artboards-code-plan.md) | Implemented TypeScript owners, target capability boundaries, state/runtime/space contracts, remaining integration and validation |
 | [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, adapters, controls, the `workbench` lens, and the portable build |
-| [Artboard sizes](sizes.md) | Proposed sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
+| [Artboard sizes](sizes.md) | Sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
 | [Docs](docs-pages.md) | Docs as a lens of any page: Markdown with live examples on the whole canvas, `docs` lenses one per renderer, Markdown pages, `defineDocs`, the docs canvas mode, and docs references in the export |
 | [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
@@ -47,10 +65,13 @@ limits, and the code plan distinguishes migrated modules from renderer debt.
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Page, collection and space scopes, ZIP/PDF/image/browser output, background captures, hashes, and warnings |
 | [Preview pipeline](preview-pipeline/README.md) | How native pages are compiled, served, kept warm, made ready and updated: [performance](preview-pipeline/performance.md) requirements and targets, the Rspack [compiler](preview-pipeline/compiler.md), [serving](preview-pipeline/serving.md), [hot updates](preview-pipeline/hot-updates.md), the [warm runtime](preview-pipeline/warm-runtime.md), [readiness](preview-pipeline/readiness.md) and [plugins](preview-pipeline/plugins.md) |
+| [Page index](preview-pipeline/page-index.md) | Native discovery and listing, literal/evaluated definition parity, invalidation, bounded saves, process lifecycle, fallback, packaging and acceptance evidence |
+| [Code quality](code-quality.md) | Rust tooling and lint policy, test conventions, dependency review, host integration and release checks |
 | [Labs](labs.md) | How engineering questions are settled by comparing working variants: plans, fixtures, boundaries, correctness checks, measurement, evidence and decisions |
 | [Module layout](modules.md) | Capability ownership under `src/modules/`, shared UI and infrastructure locations, and bounded migration requirements |
 
-The workbench is one implementation in `packages/workbench/workbench/`. Projects provide
+The browser canvas is in `packages/workbench/workbench/`, with host capabilities
+under `src/` and the Rust index in `native/`. Projects provide
 `workbench.yaml` and may override machine-specific values in the ignored
 `workbench.local.yaml`. They do not receive a copy of the workbench code.
 
