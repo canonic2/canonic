@@ -267,6 +267,12 @@ fn literal(expr: &ast::Expr) -> Option<Value> {
 
 /// The definition's `definePreview({...})` argument as JSON, when every
 /// value in it is a literal. Docs definitions and anything else need Node.
+/// A definition's `definePreview({...})` argument as JSON, when every value
+/// is a literal; stage 2's host generates entries from it.
+pub(crate) fn parse_definition(file: &Path) -> Option<Value> {
+    parse(file)
+}
+
 fn parse(file: &Path) -> Option<Value> {
     let source = fs::read_to_string(file).ok()?;
     let map: Lrc<SourceMap> = Default::default();

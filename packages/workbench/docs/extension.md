@@ -219,7 +219,7 @@ extensions in their own folder, such as `~/.cursor/extensions`.
 
 What works where:
 
-| | VS Code, or **Open Canvas in Browser** | `server.js` in a browser |
+| | VS Code, or **Open Canvas in Browser** | `server/node/server.js` in a browser |
 | --- | --- | --- |
 | Pages, states, sizes, zoom | Yes | Yes |
 | Lenses, including Simulator and window streams | Yes | Yes |

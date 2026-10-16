@@ -8,7 +8,7 @@ In a standalone browser it remains usable without any VS Code variables or API.
 The same [Web Components](web-components.md) serve both environments.
 
 **Status:** shared tokens and migrated controls implemented.
-`src/theme/defaults.css` supplies the space switcher's and size controls' tokens,
+`ui/src/theme/defaults.css` supplies the space switcher's and size controls' tokens,
 including the selected segment, error text and primary button roles, and direct
 webview host mappings. The sidebar maps host roles for this control; the canvas continues
 to use its existing palette. The canvas theme bridge and full-shell migration
@@ -21,7 +21,7 @@ layer owns the defaults and host mappings; components do not each maintain a
 palette or directly depend on `--vscode-*` variables. CSS custom properties
 inherit through component hosts into Shadow DOM.
 
-Keep theme assets under `src/theme/`, separate from components and host transport.
+Keep theme assets under `ui/src/theme/`, separate from components and host transport.
 Define defaults for every token used by migrated components. Start from the
 Workbench palette for standalone use. A theme picker, OS preference behavior
 and persisted theme settings are outside this contract.
@@ -131,11 +131,11 @@ accent colors; interactive control states use the host's semantic roles.
 
 Current source boundaries:
 
-- [sidebar.css](../workbench/sidebar.css) already maps panel/text variables but
+- [sidebar.css](../ui/legacy/sidebar.css) already maps panel/text variables but
   uses fixed blue accents and derived shades.
-- [workbench.css](../workbench/workbench.css) defines the canvas shell's fixed
+- [workbench.css](../ui/legacy/workbench.css) defines the canvas shell's fixed
   palette and forces `color-scheme: dark`.
-- [panel.js](../panel.js) embeds the server canvas as a separate-origin iframe;
+- [panel.js](../extension/panel.js) embeds the server canvas as a separate-origin iframe;
   its current message bridge does not forward theme values.
 
 Platform references:

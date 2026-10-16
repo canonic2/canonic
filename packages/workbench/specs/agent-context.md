@@ -4,7 +4,7 @@ This spec covers how AI chats in the editor learn which page the user has
 open in the workbench canvas. It builds on
 [Copy a reference](../docs/canvas.md#copy-a-reference), the
 [VS Code extension contract](vscode-extension.md), and the canvas host
-messages in [workbench.js](../workbench/workbench.js). Facts about each
+messages in [workbench.js](../ui/legacy/workbench.js). Facts about each
 agent live in the shared [AI agents research](../../../docs/research/agents/README.md).
 
 ## Purpose and scope
@@ -24,7 +24,7 @@ screenshots keep their own path, the
 
 The support API can publish a version-2 record with canvas ID, selected
 artboard ID, complete reference text, and every artboard's space/view/size/status.
-The publisher under `src/canvas/` serializes updates to participating spaces
+The publisher under `ui/src/canvas/` serializes updates to participating spaces
 and their shared-root siblings. User activity determines the current canvas;
 background readiness and heartbeats only update its report. Oversize reports
 fail explicitly without silently truncating artboards. The server validates
@@ -36,7 +36,7 @@ reference formatter can contribute each instance's reference to a future host;
 the singleton publisher is disabled only for an explicit isolated runtime.
 
 **Requirement (agreed):** the current view carries what
-[reference.js](../workbench/reference.js) puts in **Copy reference**:
+[reference.js](../ui/legacy/reference.js) puts in **Copy reference**:
 
 - the page's label and design file (`src`);
 - its story (label and id) on a Storybook lens, otherwise its state (label and
@@ -46,7 +46,7 @@ the singleton publisher is disabled only for an explicit isolated runtime.
 
 **Implemented publication behavior:**
 
-- [agent-context.js](../workbench/agent-context.js) builds the view with
+- [agent-context.js](../ui/legacy/agent-context.js) builds the view with
   `wbReference.text()`, the function behind **Copy reference**, so the two
   can't differ. It adds the ids: `src`, `state` or `story`, and `lens`.
 - Every canvas posts its view to `POST /_workbench/view` under a random
@@ -58,7 +58,7 @@ the singleton publisher is disabled only for an explicit isolated runtime.
   **Copy reference** says to wait.
 - A canvas posts `closed` on `pagehide`. One that stops reporting stops
   counting after 3 minutes.
-- [agent-view.js](../agent-view.js) keeps the views. `GET /_workbench/view`
+- [agent-view.js](../server/node/agent-view.js) keeps the views. `GET /_workbench/view`
   answers `{ root, open, view, changedAt }` for the canvas changed most
   recently. A heartbeat doesn't count as a change.
 - With no canvas open, `open` is false and agents are told nothing.
@@ -132,9 +132,9 @@ contract.
   `current_view` says no canvas is open.
 - The generated hook and MCP commands find the script from the project root
   and from nested folders, including a nested Git repository.
-- Automated: [agent-view.test.js](../agent-view.test.js) (latest canvas,
+- Automated: [agent-view.test.js](../server/node/agent-view.test.js) (latest canvas,
   heartbeats, closing, staleness, field filtering, the announcement file),
-  [server.test.js](../server.test.js) (the route and the file's lifecycle),
+  [server.test.js](../server/node/server.test.js) (the route and the file's lifecycle),
   and the context reader's, output's and loader's own tests in the package
   that generates the agent configuration.
 - Manual, not yet done: the hook and tool inside the Claude Code and Codex

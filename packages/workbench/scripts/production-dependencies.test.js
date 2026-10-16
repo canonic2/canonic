@@ -49,7 +49,7 @@ test('a missing required dependency stops packaging', () => {
 });
 
 test('the extension ships its runtime dependencies and none of its tooling', () => {
-  const names = productionDependencies(path.resolve(__dirname, '..')).map(dir => {
+  const names = productionDependencies(path.resolve(__dirname, "..")).map(dir => {
     const parts = dir.split(path.sep);
     const at = parts.lastIndexOf('node_modules');
     return parts[at + 1].startsWith('@') ? parts[at + 1] + '/' + parts[at + 2] : parts[at + 1];

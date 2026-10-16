@@ -306,11 +306,11 @@ a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
 
 ## Command-line tools
 
-The extension includes a command-line tool at `preview/cli.cjs` in its install
+The extension includes a command-line tool at `server/node/preview/cli.cjs` in its install
 folder. Run it with Node 24 or later:
 
 ```sh
-node ~/.vscode/extensions/canonic.canonic-workbench-<version>/preview/cli.cjs check .
+node ~/.vscode/extensions/canonic.canonic-workbench-<version>/server/node/preview/cli.cjs check .
 ```
 
 | Command | What it does |

@@ -7,7 +7,7 @@ var cp = require('node:child_process');
 var fs = require('node:fs');
 var path = require('node:path');
 var targets = require('./bundle-runtime.cjs').targets;
-var ROOT = path.resolve(__dirname, '..');
+var ROOT = path.resolve(__dirname, "..");
 var VERSION = require('../package.json').version;
 
 function plan(argv, host) {
@@ -24,7 +24,7 @@ function plan(argv, host) {
 
 function build(target, out) {
   var file = path.join(out, 'canonic-workbench-' + target + '-' + VERSION + '.vsix');
-  var result = cp.spawnSync(process.execPath, [path.join(__dirname, 'package.cjs'), '--target', target, '--out', file], {
+  var result = cp.spawnSync(process.execPath, [path.join(__dirname, "./package.cjs"), '--target', target, '--out', file], {
     cwd: ROOT, stdio: 'inherit',
   });
   return result.status === 0 ? file : null;

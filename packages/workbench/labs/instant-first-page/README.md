@@ -14,8 +14,8 @@ on 2026-10-15 and is [reported](#stage-1-report): every capability passes
 and the Rust host is faster in every build cell, but two proposed stage 2
 gates are missed. The owner decided on 2026-10-15 to implement the Rust
 page index as measured and to continue with stage 2 in parallel
-([decisions](../../specs/preview-pipeline/README.md#decisions)). The
-[stage 2 plan](#stage-2-plan) awaits the owner's agreement.
+([decisions](../../specs/preview-pipeline/README.md#decisions)). The owner
+agreed the [stage 2 plan](#stage-2-plan) the same day; it is being prepared.
 
 Amendment, 2026-10-15, after the smoke runs and before stage 1's run set:
 
@@ -419,9 +419,10 @@ load and the rebuild growth is the owner's decision.
 
 ## Stage 2 plan
 
-Status: planned 2026-10-15, after stage 1's report and the owner's decision
-to continue in parallel with the page index's implementation. Not agreed;
-no stage 2 run has started.
+Status: planned and agreed by the owner on 2026-10-15, after stage 1's
+report and the decision to continue in parallel with the page index's
+implementation, with the decisions below as listed (D2 included). No stage 2
+run has started.
 
 ### Question
 
@@ -442,24 +443,33 @@ From stage 1, measured without a browser:
 - adding a page or editing one grows with the pages the compiler holds:
   about 70 ms with 1, 120 ms with 20 and 235–320 ms with 100, in Rust.
 
-What stage 1 cannot say: what the canvas, the server, entry generation
-(evaluating the page's definition), the browser's module loading and the
-hot client add, and whether hot updates apply in a real document.
+What stage 1 cannot say: what the canvas, the server, entry generation, the
+browser's module loading and the hot client add, and whether hot updates
+apply in a real document.
+
+The Workbench server (`server.js`, the canvas, `workbench.yaml` and the
+config answer) is the same in every variant: the shipping one, with the
+page list from the Rust index as the page index implementation does. Moving
+it to Rust is a planned migration in the owner's direction, not a question
+for this lab; D1 measures what it adds per request as that migration's
+baseline. What varies is everything behind `/_workbench/previews/`, which
+the shipping server forwards to the preview worker.
 
 ### Variants
 
 | # | Variant | Supported subset and missing contracts |
 | --- | --- | --- |
 | 0 | **Control.** The shipping server, worker and pipeline, unchanged | Full |
-| R | **Page-only start in Rust.** The shipping server and canvas, with the config's page list from the Rust index (as the page index implementation does). The preview worker is replaced by a lab worker with the same HTTP routes, which owns entry generation (the shipping `previewEntry`, one definition at a time) and drives the Rust compiler host. The host starts with no page; a page becomes an entry when it is first requested. No pre-warming | React and plain-module previews. Missing: Vue, HTML, Astro and React Native Web previews, docs lenses, project Rspack plugins, Storybook catalogs |
+| R | **Page-only start in Rust.** The Rust host replaces the preview worker: it serves the preview routes (descriptor, page, preview module, built files, the event stream) and compiles. It starts with no page; a page becomes an entry when it is first requested. Its entry source is generated in Rust from the definition parsed as literals, the same parse the page index uses; a definition that is not all literals is evaluated by a Node subprocess with the shipping compiler, in one batch. No pre-warming | React and plain-module previews. Missing: Vue, HTML, Astro and React Native Web previews, docs lenses, project Rspack plugins, Storybook catalogs |
 | RN | **R with neighbours.** After a page shows and the host has been idle 500 ms, R adds up to 8 pages next to it in the page list, the rest of its group first, one per build. A page request goes ahead of them | As R |
 
 Diagnostic controls, not candidates:
 
-- **D1: request overhead.** Not a variant: in R, the lab worker and the
-  server record, per request, the time from receiving it to the first byte,
-  split into entry generation, waiting for a build and serving. It bounds
-  what moving the HTTP layer itself to Rust could save.
+- **D1: request overhead.** Not a variant: in every variant, the Workbench
+  server records, per request, the time from receiving it to the first
+  byte, and the time it spends forwarding preview requests; in R, the host
+  splits its own time into entry generation, waiting for a build and
+  serving. It is the baseline for moving the Workbench server to Rust.
 - **D2: an entry cap (proposed, optional).** R, with the compiler holding at
   most 20 pages: opening another removes the least recently opened one that
   no frame shows. It tests whether a cap stops S9's growth without breaking
@@ -467,9 +477,16 @@ Diagnostic controls, not candidates:
 
 ### What the prototype adds to stage 1's host
 
-- **Pushed builds:** the host reports each finished build on its own (one
-  line per build), with errors per entry, so the worker can push `built`
-  events to frames as the shipping pipeline does.
+- **HTTP:** the preview worker's routes, answered as the worker answers
+  them (the same descriptor, page, preview module and event stream), on a
+  loopback port the Workbench server forwards to.
+- **Entry generation in Rust:** the shipping `previewEntrySource`'s output
+  for a definition's adapter, states' sources, styles and environment, from
+  the parsed literal definition, checked against the shipping
+  `previewEntry` on every fixture page before the run set; the Node
+  subprocess for the rest.
+- **Pushed builds:** each finished build goes to frames as a `built` event,
+  with errors per entry, as the shipping pipeline sends them.
 - **Errors per entry:** each error is attributed to the entries whose chunks
   contain its module.
 - **Watching:** the host watches the files of every build, the config and
@@ -480,10 +497,10 @@ Diagnostic controls, not candidates:
   pipeline does.
 - A definition edit regenerates that page's entry source.
 
-The lab worker uses the shipping `Pipeline` only for `previewEntry` and the
-hot client source, and the shipping canvas, preview host and runtime as they
-are. Variants are overlays on a snapshot of the package, as in the earlier
-labs.
+The shipping canvas, preview host, preview runtime and hot client are used
+as they are. Variants are overlays on a snapshot of the package, as in the
+earlier labs; R's overlay points the preview service at the Rust host
+instead of the worker.
 
 ### Fixtures
 
@@ -528,7 +545,8 @@ back); a sample over 10 s keeps it in the report.
   cache (stage 1's B1), measured beside S1 on the same page.
 - **Selection to visible** (S4, S5, S5r, S9) and **edit to visible** (S6,
   S7), as the [methodology](../../specs/labs.md#boundaries) defines them.
-- **D1's request parts**, from the lab worker's and server's own events.
+- **D1's request parts**, from the Workbench server's and the host's own
+  events.
 
 ### Correctness checks
 
@@ -596,15 +614,11 @@ No network use beyond stage 1's (fixture dependencies and crates, cached).
 
 ### Decisions for the owner before any stage 2 run
 
-1. **The server stays Node for this stage** (recommended): the shipping
-   server and canvas, with the Rust index and the Rust compiler host behind
-   a lab worker. It measures the shape the product takes next, keeps the
-   canvas and config identical to the control, and D1 bounds what a Rust
-   HTTP layer could add. The alternative, a Rust server for the canvas and
-   config as stage 1's outline said, would port the config resolution and
-   manifest rules the browser shares with the server, for fixtures whose
-   configuration is previews alone.
-2. **RN's neighbours:** up to 8, the rest of the page's group first.
-3. **D2, the entry cap of 20:** include it, or leave long sessions to S9
+Settled 2026-10-15: the Workbench server is the shipping one in every
+variant, and the Rust host replaces the preview worker in R and RN; moving
+the Workbench server to Rust is planned separately.
+
+1. **RN's neighbours:** up to 8, the rest of the page's group first.
+2. **D2, the entry cap of 20:** include it, or leave long sessions to S9
    alone.
-4. **Docs lenses outside the subset,** with the other formats.
+3. **Docs lenses outside the subset,** with the other formats.

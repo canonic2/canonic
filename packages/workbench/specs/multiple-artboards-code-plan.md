@@ -9,16 +9,16 @@ implementation is infrastructure only; it does not change the shipping UI.
 
 | Modules | Ownership |
 | --- | --- |
-| `src/canvas/model.ts`, `geometry.ts` | Serializable state and pure geometry/size policy. |
-| `src/canvas/controller.ts` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, capture locks. |
-| `src/canvas/runtime.ts` | Per-iframe authenticated messaging, request deadlines, capture responses and cleanup. |
-| `src/canvas/legacy-runtime.ts` | Authenticated command/data adapter for the existing shell/annotation ports, without chrome or style changes. |
-| `src/canvas/review.ts` | Complete reference/context derivation and immutable full-canvas capture composition. |
-| `src/canvas/publication.ts` | Serialized participating-space publication, shared-root discovery policy, heartbeats and withdrawal. |
-| `src/spaces/coordinator.ts` | Registered-space, fixed-operation server access. |
-| `src/agent-context/report.ts` | Versioned context validation without silent text truncation. |
-| `src/canvas-review/prompt.ts` | Per-region handoff sections using the existing local annotation formatter. |
-| `src/native-streams/pool.ts` | Independent source/codec producers, subscriber ownership and idle cleanup. |
+| `ui/src/canvas/model.ts`, `geometry.ts` | Serializable state and pure geometry/size policy. |
+| `ui/src/canvas/controller.ts` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, capture locks. |
+| `ui/src/canvas/runtime.ts` | Per-iframe authenticated messaging, request deadlines, capture responses and cleanup. |
+| `ui/src/canvas/legacy-runtime.ts` | Authenticated command/data adapter for the existing shell/annotation ports, without chrome or style changes. |
+| `ui/src/canvas/review.ts` | Complete reference/context derivation and immutable full-canvas capture composition. |
+| `ui/src/canvas/publication.ts` | Serialized participating-space publication, shared-root discovery policy, heartbeats and withdrawal. |
+| `server/node/src/spaces/coordinator.ts` | Registered-space, fixed-operation server access. |
+| `contracts/src/agent-context/report.ts` | Versioned context validation without silent text truncation. |
+| `ui/src/canvas-review/prompt.ts` | Per-region handoff sections using the existing local annotation formatter. |
+| `capture/src/native-streams/pool.ts` | Independent source/codec producers, subscriber ownership and idle cleanup. |
 
 This migration keeps the existing renderer, preview compiler, annotation
 engine, and acquisition engine behind narrow ports. Singleton state is isolated by
@@ -281,8 +281,8 @@ HTML, images, or full handoff prompts.
 | Phase 2 arrangement | Extend geometry and interactions for free positioning and row/grid placement | Stable renderer state, capture mapping and accessible movement |
 
 Browser TypeScript delivery is implemented by
-[browser-modules.ts](../src/server/browser-modules.ts), and direct webview
-bundling by [webview-components.ts](../src/server/webview-components.ts).
+[browser-modules.ts](../server/node/src/server/browser-modules.ts), and direct webview
+bundling by [webview-components.ts](../extension/src/webview-components.ts).
 Further migrations preserve their restricted browser dependency graph, CSP,
 Node 24 loading and packaging. Portable and file-based paths retain their own
 runtime constraints.

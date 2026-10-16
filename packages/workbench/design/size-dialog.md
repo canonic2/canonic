@@ -4,7 +4,7 @@ The dialog **Custom size…** in the [size switcher](size-switcher.md)'s menu
 opens: a new size's name, width, height, icon, whether it is a button, and,
 from a page `workbench.yaml` lists, whether it is that page's own.
 
-`wb-size-dialog` in `src/components/size-dialog/` is a modal form. It checks
+`wb-size-dialog` in `ui/src/components/size-dialog/` is a modal form. It checks
 the fields as they are typed and asks to add the size; the canvas controller
 writes it to `workbench.yaml` through `/_workbench/sizes` and closes the
 dialog, or shows why it couldn't. Open each example with its button.

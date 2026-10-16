@@ -98,7 +98,7 @@ does not replace this compiler with the lab's Rust compiler host.
 - Rspack 2 is published as ES modules only. The CommonJS worker loads it
   through Node 24's `require` of ES modules.
 - Scope `NAPI_RS_NATIVE_LIBRARY_PATH` to loading the bundled Rspack binding
-  ([rspack.cjs](../../preview/rspack.cjs)). Other napi-rs modules share that
+  ([rspack.cjs](../../server/node/preview/rspack.cjs)). Other napi-rs modules share that
   environment key and must resolve their own bindings.
 - Each platform VSIX bundles the matching pinned Rspack native binding, as it
   does esbuild. The installed extension downloads no compiler, and projects
@@ -113,7 +113,7 @@ These keep esbuild, so the VSIX ships both compilers
 | Job | Why |
 | --- | --- |
 | Evaluating definitions and `workbench.config.ts` | A Node CommonJS bundle with packages external, built with only the `@canonic2/workbench` plugin. It runs no project plugins and needs no hot updates. Listing pages bundles every definition that needs evaluating in one build ([page listing](performance.md#page-listing)) |
-| The sidebar's component bundle and the docs page script | Workbench's own code, bundled in memory ([webview components](../../src/server/webview-components.ts)) |
+| The sidebar's component bundle and the docs page script | Workbench's own code, bundled in memory ([webview components](../../extension/src/webview-components.ts)) |
 
 The portable build and the export's docs examples use an Rspack production
 compiler with the same format handling and project plugins
@@ -121,8 +121,8 @@ compiler with the same format handling and project plugins
 
 ## Status
 
-Implemented in [pipeline.ts](../../src/modules/preview-pipeline/pipeline.ts)
-and [portable.ts](../../src/modules/preview-pipeline/portable.ts). Gaps:
+Implemented in [pipeline.ts](../../server/node/src/modules/preview-pipeline/pipeline.ts)
+and [portable.ts](../../server/node/src/modules/preview-pipeline/portable.ts). Gaps:
 
 - Live builds have no source maps. The lab measured builds without them, and
   turning them on is not yet measured.

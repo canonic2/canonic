@@ -233,7 +233,7 @@ start:
 ```
 
 Start commands run only in [trusted workspaces](https://code.visualstudio.com/docs/editor/workspace-trust),
-and only in VS Code. A standalone `server.js` doesn't run them. A local
+and only in VS Code. A standalone `server/node/server.js` doesn't run them. A local
 override replaces the whole `start` block, which is useful when your machine
 starts the app differently. Every key is listed in
 [Start commands](configuration.md#start-commands).

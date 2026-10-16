@@ -4,12 +4,14 @@
 //!       [--evaluator <evaluate.mjs>] [--node <node>] [--check walk|dirs]
 //!   host basic <project>
 //!   host serve      (the compiler host; see compile.rs)
+//!   host preview --options <json>   (stage 2's preview host; see serve.rs)
 //!
 //! `index` prints its timings as JSON, with `process_ms` from process start;
 //! `--out` writes the index for comparison with the shipping one.
 
 mod compile;
 mod index;
+mod serve;
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -59,6 +61,11 @@ fn main() {
         Some("serve") => {
             let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("runtime");
             runtime.block_on(rspack_tasks::within_compiler_context(std::sync::Arc::new(rspack_tasks::CompilerContext::new()), compile::serve()));
+        }
+        Some("preview") => {
+            let options: serve::Options = serde_json::from_str(&option(&args, "--options").expect("usage: host preview --options <json>")).expect("options");
+            let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("runtime");
+            runtime.block_on(rspack_tasks::within_compiler_context(std::sync::Arc::new(rspack_tasks::CompilerContext::new()), serve::run(options)));
         }
         Some("basic") => {
             let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("runtime");

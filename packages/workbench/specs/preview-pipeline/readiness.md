@@ -55,7 +55,7 @@ visible image until the font-wait lab settles a faster rule.
 
 ## Verification
 
-[Preview runtime tests](../../preview-runtime.test.js) cover font/image waits,
+[Preview runtime tests](../../ui/preview/preview-runtime.test.cjs) cover font/image waits,
 errors and hidden-frame progress. The [web-font fixture](../../labs/rspack-pipeline/README.md#stage-2-report)
 is the correctness boundary for any faster font rule: an independently observed
 font download must be complete before readiness. A status-only check before

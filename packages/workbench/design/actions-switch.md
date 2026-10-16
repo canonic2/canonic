@@ -4,10 +4,10 @@ Whether the page's links navigate and its forms submit, in the middle of the
 top bar after the [size switcher](size-switcher.md): a pointer icon and a
 switch. Off, the preview records a link or a submit instead of following it.
 
-`wb-actions-switch` in `src/components/actions-switch/` shows the setting and
-asks for a change. The canvas controller in `workbench/workbench.js` owns the
+`wb-actions-switch` in `ui/src/components/actions-switch/` shows the setting and
+asks for a change. The canvas controller in `ui/legacy/workbench.js` owns the
 setting, remembers it, and reloads the page with it; the preview's half is
-`workbench/actions.js`.
+`ui/legacy/actions.js`.
 
 ## Off
 

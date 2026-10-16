@@ -1,147 +1,17 @@
 {
-  "name": "canonic-workbench",
-  "displayName": "Canonic Workbench",
-  "description": "Renders a project's pages and component previews on one canvas at device widths, with annotations and screenshots for coding agents.",
+  "name": "workbench-development",
+  "private": true,
   "version": "0.13.1",
-  "publisher": "canonic",
-  "license": "SEE LICENSE IN LICENSE",
-  "homepage": "https://canonic.sh/workbench/",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/canonic2/canonic.git"
-  },
-  "bugs": {
-    "url": "https://github.com/canonic2/canonic/issues"
-  },
-  "icon": "icon.png",
-  "engines": {
-    "vscode": "^1.123.0",
-    "node": ">=24"
-  },
-  "categories": [
-    "Visualization",
-    "Other"
-  ],
-  "keywords": [
-    "design",
-    "design system",
-    "preview",
-    "screenshot",
-    "storybook",
-    "implementation",
-    "lens"
-  ],
-  "activationEvents": [
-    "workspaceContains:workbench.yaml",
-    "onStartupFinished"
-  ],
-  "main": "./extension.js",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "test": "node scripts/build-native.cjs --debug && node --test",
+    "test": "node scripts/build-server.cjs --debug && node --test",
     "check": "tsc -p tsconfig.json",
-    "check:native": "make -C native check",
-    "coverage:native": "make -C native coverage",
-    "serve": "node server.js",
+    "serve": "node server/node/server.js",
     "package": "node scripts/package.cjs",
     "package:all": "node scripts/package-all.cjs",
-    "bundle-runtime": "node scripts/bundle-runtime.cjs"
-  },
-  "devDependencies": {
-    "@electron/packager": "20.3.0",
-    "@types/node": "24.19.1",
-    "@types/react": "19.3.0",
-    "@vscode/vsce": "3.9.2",
-    "astro": "7.3.5",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "react-native-web": "0.21.3",
-    "typescript": "7.0.2",
-    "vue": "3.5.43"
-  },
-  "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "canonic",
-          "title": "Workbench",
-          "icon": "icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "canonic": [
-        {
-          "type": "webview",
-          "id": "canonic.sidebar",
-          "name": "Workbench",
-          "when": "canonic.hasWorkbench"
-        }
-      ]
-    },
-    "commands": [
-      {
-        "command": "canonic.openWorkbench",
-        "title": "Open Canvas",
-        "category": "Workbench",
-        "icon": "$(open-preview)"
-      },
-      {
-        "command": "canonic.openWorkbenchExternally",
-        "title": "Open Canvas in Browser",
-        "category": "Workbench"
-      },
-      {
-        "command": "canonic.copyWorkbenchUrl",
-        "title": "Copy Canvas URL",
-        "category": "Workbench"
-      },
-      {
-        "command": "canonic.refreshPages",
-        "title": "Refresh Pages",
-        "category": "Workbench",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "canonic.showWorkbenchLog",
-        "title": "Show Log",
-        "category": "Workbench"
-      },
-      {
-        "command": "canonic.addSpace",
-        "title": "Add Space…",
-        "category": "Workbench"
-      },
-      {
-        "command": "canonic.switchSpace",
-        "title": "Switch Space…",
-        "category": "Workbench"
-      }
-    ],
-    "menus": {
-      "commandPalette": [
-        {
-          "command": "canonic.switchSpace",
-          "when": "canonic.hasWorkbench"
-        },
-        {
-          "command": "canonic.refreshPages",
-          "when": "canonic.hasWorkbench"
-        }
-      ],
-      "view/title": [
-        {
-          "command": "canonic.openWorkbench",
-          "when": "view == canonic.sidebar",
-          "group": "navigation@1"
-        },
-        {
-          "command": "canonic.refreshPages",
-          "when": "view == canonic.sidebar",
-          "group": "navigation@2"
-        }
-      ]
-    }
+    "bundle-runtime": "node scripts/bundle-runtime.cjs",
+    "check:server": "make -C server check",
+    "coverage:server": "make -C server coverage"
   },
   "dependencies": {
     "@rspack/core": "2.2.7",
@@ -160,5 +30,17 @@
     "tar": "7.5.22",
     "vue-loader": "17.4.2",
     "webpack": "5.111.1"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@vscode/vsce": "3.9.2",
+    "astro": "7.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native-web": "0.21.3",
+    "typescript": "7.0.2",
+    "vue": "3.5.43"
   }
 }

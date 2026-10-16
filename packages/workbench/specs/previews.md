@@ -4,9 +4,9 @@ A Workbench preview renders a component or page from a project's own source,
 in named states, from a `.workbench.ts` or `.workbench.tsx` definition. The
 user guide is [Workbench previews](../docs/workbench-previews.md); this spec
 records the contract, how it is built, and what is still open. See
-[compiler.cjs](../preview/compiler.cjs), [worker.cjs](../preview/worker.cjs),
-[browser.js](../preview/browser.js), [server.js](../server.js), and
-[manifest.js](../workbench/manifest.js).
+[compiler.cjs](../server/node/preview/compiler.cjs), [worker.cjs](../server/node/preview/worker.cjs),
+[browser.js](../ui/preview/browser.js), [server.js](../server/node/server.js), and
+[manifest.js](../contracts/manifest.js).
 
 The sections below are the agreed contract. Where the code does not yet meet
 it, the gap is marked; unresolved choices are under
@@ -157,8 +157,8 @@ applies independently within each isolated artboard.
   `{ preview, state? }`. A target naming an unknown preview or state is a
   problem (`<file>: link <href> names unknown Workbench preview “<id>”.`, or
   `… names unknown state “<state>” of <id>.`); the other previews still load.
-- While a preview is mounted, the runtime ([browser.js](../preview/browser.js))
-  registers `wbPreviewActions.follow`, which [actions.js](../workbench/actions.js)
+- While a preview is mounted, the runtime ([browser.js](../ui/preview/browser.js))
+  registers `wbPreviewActions.follow`, which [actions.js](../ui/legacy/actions.js)
   calls for every link click and form submit with actions on, after in-page
   fragments and before its `.html` hand-off. A key matches when the link and
   the key, both resolved against `document.baseURI`, have the same origin,
@@ -189,7 +189,7 @@ applies independently within each isolated artboard.
 - `requests` (preview and state) maps keys `[METHOD] /path [Operation]` or a
   full URL to a response object or a function `(request, context)`.
   Validation checks key shape and value type. Matching
-  ([requests.js](../preview/requests.js)): the state's map before the
+  ([requests.js](../ui/preview/requests.js)): the state's map before the
   preview's, declaration order within each; a bare path matches any origin;
   `*` matches any characters; a key's query parameters must be present with
   those values; the operation is the body's `operationName`, or the name in
@@ -212,7 +212,7 @@ applies independently within each isolated artboard.
 - `workbench.config.ts` `environment` (a path from the project root, inside
   the project, or a map from adapter name to such a path, so React and Vue
   previews get environments of their own; an unlisted adapter gets none) is imported into every compiled preview and composed with the
-  preview's by `combine` in [browser.js](../preview/browser.js): project
+  preview's by `combine` in [browser.js](../ui/preview/browser.js): project
   `setup`/`mount` first with cleanups last, `ready` and `configure` in the
   same order, and `wrap` outermost.
 
@@ -257,7 +257,7 @@ reached through `node_modules` are listed by name and version.
 - Astro previews carry every authored state pre-rendered. Their controls are
   removed and a note is appended to their docs, since input edits need a live
   render.
-- `preview/cli.cjs` ships in the extension. `init` writes `workbench-env.d.ts`
+- `server/node/preview/cli.cjs` ships in the extension. `init` writes `workbench-env.d.ts`
   and a minimal `workbench.yaml` without overwriting. `check` evaluates and
   compiles every preview and exits nonzero on any failure. `build` refuses a
   nonempty output folder, writes successful previews, and exits nonzero when
@@ -283,7 +283,7 @@ reached through `node_modules` are listed by name and version.
   `controls`: known types; `select` needs nonempty `options`.
 - `styles`, `assets`, and `environment` resolve from the definition. Declared
   assets must stay inside the project.
-- [api.d.ts](../preview/api.d.ts) types state inputs against preview inputs.
+- [api.d.ts](../sdk/api.d.ts) types state inputs against preview inputs.
 - `preview/` is published to npm as `@canonic2/workbench` (`api.js`,
   `api.d.ts`) at the extension's version by each `workbench/v*` release, so
   `tsc` and editors resolve the import from an ordinary dev dependency. It
@@ -307,7 +307,7 @@ reached through `node_modules` are listed by name and version.
   `Unknown adapter`. Rules and plugins are Rspack rules and plugins, applied
   after Workbench's own ([plugins](preview-pipeline/plugins.md#project-plugins)).
 - Custom adapters, compiler plugins, live output, and portable output share the
-  same entry and [browser runtime](../preview/browser.js).
+  same entry and [browser runtime](../ui/preview/browser.js).
 
 ### Compile worker lifecycle and trust
 
@@ -367,7 +367,7 @@ and the installed extension downloads none.
 
 ## Acceptance criteria and verification points
 
-- [preview.test.js](../preview.test.js): discovery, ID and state validation, and
+- [preview.test.js](../server/node/preview.test.js): discovery, ID and state validation, and
   isolation of invalid definitions; HTML scripts, inline modules, CSS,
   `srcset`, and assets; React and Vue SFCs with project framework versions;
   custom adapters and plugins on the shared path; project escape and excluded
@@ -376,33 +376,33 @@ and the installed extension downloads none.
   placement (via `mergeCollections`); `workbench` lens state mapping; source
   closure hashing; authoring type checks; portable viewer and partial
   success; CLI `build` refusing nonempty output.
-- [preview-runtime.test.js](../preview-runtime.test.js): renderer disposal,
+- [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs): renderer disposal,
   font and image readiness, hidden-frame readiness, lifecycle merging and
   cleanup, failed cleanups, concurrent host commands, async adapter errors.
-- [preview-astro.test.js](../preview-astro.test.js): props, states, slots,
+- [preview-astro.test.js](../server/node/preview-astro.test.js): props, states, slots,
   assets, Node-only frontmatter, live input renders, portable states, missing
   dependencies and unsupported integrations, aliases and defines.
-- [workbench/preview-host.test.js](../workbench/preview-host.test.js): warm
+- [workbench/preview-host.test.js](../ui/legacy/preview-host.test.js): warm
   host reuse, superseded loads, style and import-time body node retention,
   module isolation, recovery after failed mounts, listener and timer release,
-  refusal of external pages. [workbench/preview.test.js](../workbench/preview.test.js)
+  refusal of external pages. [workbench/preview.test.js](../ui/legacy/preview.test.js)
   checks mounting into the warm spare frame.
-- [preview-scripts.test.js](../preview-scripts.test.js) checks the shared
+- [preview-scripts.test.js](../server/node/preview-scripts.test.js) checks the shared
   compatibility injection, and that in-page fragments scroll in both switch
   positions while a mounted preview's `follow` sees links and forms only with
   actions on.
-- [preview-runtime.test.js](../preview-runtime.test.js) "links open mapped
+- [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs) "links open mapped
   previews…" and "without the actions switch…" cover matching, state-only
   targets, logged links and forms, `navigate` with actions off, release of
-  `follow` on dispose, and the portable fallback. [preview.test.js](../preview.test.js)
+  `follow` on dispose, and the portable fallback. [preview.test.js](../server/node/preview.test.js)
   "preview links are validated…" covers validation, normalization, and the
   unknown-target problems.
-- [requests.test.js](../requests.test.js) covers key matching, precedence,
+- [requests.test.js](../ui/preview/requests.test.cjs) covers key matching, precedence,
   handler functions, GraphQL operations, logging, 404s for unmatched
   requests, Workbench bypass, and `pending`/`failed`/`delay`/`passthrough`.
-  [preview-runtime.test.js](../preview-runtime.test.js) covers activation per
-  render and `combine`; [preview-astro.test.js](../preview-astro.test.js)
-  covers frontmatter fetches per state. [preview.test.js](../preview.test.js) "the project environment
+  [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs) covers activation per
+  render and `combine`; [preview-astro.test.js](../server/node/preview-astro.test.js)
+  covers frontmatter fetches per state. [preview.test.js](../server/node/preview.test.js) "the project environment
   applies…" covers the single and per-adapter forms and a missing file.
 - Dedicated verification gaps include XMLHttpRequest replacement in a compiled
   preview, project environments with third-party clients/routers, and canvas
@@ -441,7 +441,7 @@ and the installed extension downloads none.
   preview is mapped or logged like a plain click, never opened in a new tab.
 
 - **Possible duplicate workers (hypothesis, from code reading).**
-  `importPreviews` in [server.js](../server.js) closes the old worker on a
+  `importPreviews` in [server.js](../server/node/server.js) closes the old worker on a
   `previews` change, then sets `previews = null` after an `await`. Two
   overlapping resolutions after a YAML edit (the sidebar's catalog request and
   the canvas refresh both resolve the config) could each pass that check; the

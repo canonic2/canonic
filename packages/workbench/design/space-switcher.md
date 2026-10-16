@@ -6,7 +6,7 @@ the current one checked.
 
 It sits at the top of the sidebar: always in VS Code's Workbench view, and
 in a standalone browser window when there is more than one space. It's drawn
-by `wb-space-switcher` in `src/components/space-switcher/`. The controller gets
+by `wb-space-switcher` in `ui/src/components/space-switcher/`. The controller gets
 spaces from the extension or the server's `/_workbench/spaces`; the component
 draws them and emits user intent. Its markup and styles live in open Shadow DOM.
 

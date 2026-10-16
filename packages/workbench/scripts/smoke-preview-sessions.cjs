@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { performance } = require('node:perf_hooks');
-const server = require('../server');
+const server = require('../server/node/server');
 const { Browser } = require('./chrome.cjs');
 
 async function main() {
@@ -41,7 +41,7 @@ async function main() {
   });
   await new Promise(resolve => app.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + app.address().port;
-  fs.symlinkSync(path.resolve(__dirname, '../node_modules'), path.join(root, 'node_modules'), 'junction');
+  fs.symlinkSync(path.resolve(__dirname, "../node_modules"), path.join(root, 'node_modules'), 'junction');
   fs.writeFileSync(path.join(root, 'page.workbench.ts'), `import {definePreview} from '@canonic2/workbench';
     export default definePreview({id:'pages/page',adapter:'react',source:{entry:'./page.tsx'},
       states:{default:{}},controls:{label:{type:'text'}},inputs:{label:'Original'}});`);

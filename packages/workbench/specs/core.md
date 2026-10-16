@@ -2,9 +2,9 @@
 
 This contract applies to every page: authored pages, discovered TypeScript
 previews, and imported catalog entries. The implementation is in
-[workbench.js](../workbench/workbench.js), [page-list.js](../workbench/page-list.js),
-[manifest.js](../workbench/manifest.js), [config.js](../workbench/config.js)
-(browser), and [config.js](../config.js) (server). The editor host, preview
+[workbench.js](../ui/legacy/workbench.js), [page-list.js](../ui/legacy/page-list.js),
+[manifest.js](../contracts/manifest.js), [config.js](../ui/legacy/config.js)
+(browser), and [config.js](../server/node/config.js) (server). The editor host, preview
 compilation, and screenshot processes have separate
 [extension](vscode-extension.md), [TypeScript preview](previews.md), and
 [capture](capture.md) contracts.
@@ -153,18 +153,18 @@ continues to describe the shipping single-view interface.
 
 - `previews` validation: `manifest.previews` returns `false` and adds a
   problem for a non-map, an empty or escaping `include`, or an absolute or
-  escaping `config` ([manifest.js](../workbench/manifest.js)).
+  escaping `config` ([manifest.js](../contracts/manifest.js)).
 - Merging a discovered preview into an authored page is done by
   `manifest.mergeCollections`, used by both the sidebar and the canvas.
 - Managed-preview readiness polls the host for up to 15 seconds before the
   frame swap proceeds anyway; visible images are awaited for at most 3 seconds
-  ([workbench.js](../workbench/workbench.js), [browser.js](../preview/browser.js)).
+  ([workbench.js](../ui/legacy/workbench.js), [browser.js](../ui/preview/browser.js)).
 
 ## Implementation gaps
 
 - **Dropped authored entries are invisible in VS Code.** Problems for dropped
   collections, groups, pages, and states go only to the canvas webview's
-  console. `config.js` on the server deliberately skips them, so the sidebar's
+  console. `server/node/config.js` on the server deliberately skips them, so the sidebar's
   problems list never shows them.
 - **No problems list in a standalone browser.** The canvas does not display
   `problems` from `/_workbench/config`; in a browser, catalog and preview
@@ -180,24 +180,24 @@ continues to describe the shipping single-view interface.
 
 ## Verification points
 
-- [address.test.js](../workbench/address.test.js) checks address parsing,
+- [address.test.js](../ui/legacy/address.test.js) checks address parsing,
   writing, and round trips.
-- [page-list.test.js](../workbench/page-list.test.js) checks listed states, imported titles,
+- [page-list.test.js](../ui/legacy/page-list.test.js) checks listed states, imported titles,
   and empty versus filtered lists.
-- [config.test.js](../config.test.js) checks YAML reading, the local merge,
+- [config.test.js](../server/node/config.test.js) checks YAML reading, the local merge,
   and server-resolved paths and problems;
-  [manifest.test.js](../workbench/manifest.test.js) checks the shared rules,
+  [manifest.test.js](../contracts/manifest.test.js) checks the shared rules,
   including sizes.
-- [preview.test.js](../workbench/preview.test.js) checks spare-iframe
+- [preview.test.js](../ui/legacy/preview.test.js) checks spare-iframe
   replacement, superseded loads, warm managed-preview swaps, width modes, and
   story switching.
-- [preview-host.test.js](../workbench/preview-host.test.js) and
-  [preview-runtime.test.js](../preview-runtime.test.js) check host reuse,
+- [preview-host.test.js](../ui/legacy/preview-host.test.js) and
+  [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs) check host reuse,
   disposal, hidden-iframe readiness, and lazy images.
-- [preview.test.js](../preview.test.js) checks preview serving at definition
+- [preview.test.js](../server/node/preview.test.js) checks preview serving at definition
   paths, `previews: false`, and merging a discovered preview into an authored
   page.
-- [server.test.js](../server.test.js) checks the config route and injection of
+- [server.test.js](../server/node/server.test.js) checks the config route and injection of
   `preview-compat.js` into served HTML.
 - Not covered: no test checks that the sidebar and canvas show the same
   problems list.

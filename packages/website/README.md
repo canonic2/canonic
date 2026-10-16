@@ -66,7 +66,7 @@ Every page and the page shell have Astro `.workbench.ts` definitions in
 `previews/`: Overview, Install, Changelog, and Docs, which has a state per
 guide in the docs sidebar. They are the **Website** space of the repository's
 `workbench.yaml`, served from this folder: pick **Website** in the Workbench
-view's space switcher, or run `node packages/workbench/server.js .` from the
+view's space switcher, or run `node packages/workbench/server/node/server.js .` from the
 repository root and open the address printed beside *Website*. The shell exposes
 editable props and a versioned state. These previews use the project's installed
 Astro compiler; they do not start the Astro application server.
@@ -186,7 +186,7 @@ When the workbench UI changes, regenerate the images from the repository root:
 node packages/website/screenshots/capture.cjs
 ```
 
-The script starts `packages/workbench/server.js` on the repository, whose first
+The script starts `packages/workbench/server/node/server.js` on the repository, whose first
 space is the Acme demo (`demo/` and the root `workbench.yaml`), drives headless
 Chrome through `packages/workbench/scripts/chrome.cjs`, and overwrites the screenshots
 in `public/images/`. Set `CHROME_PATH` to choose a browser. The screenshots show
@@ -228,9 +228,9 @@ to refresh the self-contained package copies and presentation variants.
 The website reads paths and view boxes from `public/icons/` and `public/logos/`.
 Studio and Link are stored for future use outside the current product navigation.
 
-Workbench also ships the mark in `../workbench/icon.svg` (white for VS Code),
-`../workbench/workbench/canonic.svg` (blue accent with a dark-theme fill),
-and `../workbench/icon-source.svg` / `icon.png` (128 px extension listing icon).
+Workbench also ships the mark in `../workbench/extension/icon.svg` (white for VS Code),
+`../workbench/ui/legacy/canonic.svg` (blue accent with a dark-theme fill),
+and `../workbench/extension/icon-source.svg` / `icon.png` (128 px extension listing icon).
 These and `public/canonic.svg` use the exported paths, with only presentation
 changes for their background, color, or size. Refresh those assets and the
 website screenshots when replacing the Workbench exports.

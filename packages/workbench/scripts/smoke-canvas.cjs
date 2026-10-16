@@ -4,8 +4,8 @@ var assert = require('node:assert/strict');
 var fs = require('node:fs');
 var os = require('node:os');
 var path = require('node:path');
-var server = require('../server');
-var spaces = require('../spaces');
+var server = require('../server/node/server');
+var spaces = require('../server/node/spaces');
 var Browser = require('./chrome.cjs').Browser;
 var wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); };
 
@@ -29,10 +29,10 @@ async function main() {
     var errors = []; t.on('Runtime.exceptionThrown', function (event) { errors.push(event.exceptionDetails.exception && event.exceptionDetails.exception.description || event.exceptionDetails.text); });
     await t.navigate(new URL('/harness.html', running.url).href);
     await t.evaluate('(async()=>{' +
-      'const {createController}=await import("/_workbench/src/canvas/controller.ts");' +
-      'const {createRuntime}=await import("/_workbench/src/canvas/runtime.ts");' +
-      'const {capture}=await import("/_workbench/src/canvas/review.ts");' +
-      'const {createPublisher}=await import("/_workbench/src/canvas/publication.ts");' +
+      'const {createController}=await import("/_workbench/ui/src/canvas/controller.ts");' +
+      'const {createRuntime}=await import("/_workbench/ui/src/canvas/runtime.ts");' +
+      'const {capture}=await import("/_workbench/ui/src/canvas/review.ts");' +
+      'const {createPublisher}=await import("/_workbench/ui/src/canvas/publication.ts");' +
       'window.registry=' + JSON.stringify(registry) + ';window.supportErrors=[];' +
       'window.controller=createController({' +
         'mount(board,callbacks){const r=createRuntime(board,callbacks);r.element.dataset.board=board.id;document.body.append(r.element);return r;},' +

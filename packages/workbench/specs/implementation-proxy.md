@@ -2,9 +2,9 @@
 
 URL and Storybook lenses load through a loopback proxy that the workbench
 server runs for each implementation origin. This spec explains why it exists,
-what it does, and how it preserves live-page capture without project setup. See [proxy.js](../proxy.js), the `proxied` config
-step in [server.js](../server.js), and `upstream` in
-[lenses.js](../workbench/lenses.js). The user-facing description is
+what it does, and how it preserves live-page capture without project setup. See [proxy.js](../server/node/proxy.js), the `proxied` config
+step in [server.js](../server/node/server.js), and `upstream` in
+[lenses.js](../ui/legacy/lenses.js). The user-facing description is
 [Embedding and sign-in](../docs/lenses.md#embedding-and-sign-in).
 
 ## The problem it solves
@@ -70,7 +70,7 @@ interaction state is not reconstructed in a separate application session.
 - **A stopped implementation answers 502** in the preview frame, naming the
   address that isn't answering.
 - **Capture accepts the proxy origins** alongside the configured ones
-  (`origins()` in [server.js](../server.js)).
+  (`origins()` in [server.js](../server/node/server.js)).
 
 ## Capture boundary
 
@@ -104,14 +104,14 @@ opened modal, appearing in the captured image without project changes.
 
 ## Verification points
 
-- [proxy.test.js](../proxy.test.js): bridge injection, header and cookie
+- [proxy.test.js](../server/node/proxy.test.js): bridge injection, header and cookie
   rewriting, redirects, request bodies and `Origin`, WebSocket upgrades, and a
   stopped implementation.
-- [server.test.js](../server.test.js): the config route's proxy addresses and
+- [server.test.js](../server/node/server.test.js): the config route's proxy addresses and
   `upstream`, including auto-detected Storybooks.
-- [lenses.test.js](../workbench/lenses.test.js): mapping proxy addresses back
+- [lenses.test.js](../ui/legacy/lenses.test.js): mapping proxy addresses back
   to `upstream`.
-- [capture-page.test.js](../workbench/capture-page.test.js): element names from
+- [capture-page.test.js](../ui/legacy/capture-page.test.js): element names from
   the mirrored copy.
 - Manual: [smoke-lenses.cjs](../scripts/smoke-lenses.cjs) for lens iframes
   and sessions through the proxy, and a running Storybook for an interaction-only

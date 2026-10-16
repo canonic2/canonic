@@ -1,72 +1,103 @@
-# Workbench module layout
+# Workbench structure and module ownership
 
-## Contract
+## Product parts
 
-New capability modules and substantial capability migrations use
-`src/modules/<capability>/`. A capability owns coherent behavior, state and
-lifecycle, rather than representing each importable file as a separate module.
-The shared [architecture rule](../../../.canonic/rules/module-architecture.md)
-and [Workbench guide](../../../.canonic/guides/workbench/AGENTS.md) define the
-engineering and runtime constraints.
+`packages/workbench/` owns the Workbench product. Applications and libraries are
+peers; the VS Code extension is one delivery host. The product root coordinates
+checks, builds, version consistency and releases, and holds product-wide specs,
+user docs, design fixtures and labs.
 
-| Location | Ownership |
+| Part | Responsibility and boundary |
 | --- | --- |
-| `src/modules/<capability>/` | Capability logic, workflows, dedicated adapters, types and behavioral tests |
-| `src/components/<name>/` | Shared browser presentation and interaction, following the [Web Components contract](web-components.md) |
-| `src/theme/` | Shared theme assets and host mappings, following the [theme contract](themes.md) |
-| `src/server/` | Shared server transport, browser asset serving and webview delivery |
-| Application entry points | Dependency composition, host registration and application shutdown |
+| `extension/` | VS Code activation, commands, webviews, trust input and lifecycle of editor-launched sessions; extension manifest and icons |
+| `server/` | Rust page index in `src/`; shipping Node HTTP server, project services and compiler worker in `node/` |
+| `capture/` | Electron screenshot renderer, runtime preparation, platform window capture and native stream pooling |
+| `ui/` | Browser canvas, components, themes, preview runtimes/adapters and portable viewer |
+| `sdk/` | Published definition helpers and authoring types, independently consumable by projects |
+| `contracts/` | Shared manifest/YAML interpretation, wire types and pure rules used across parts |
+| `scripts/` | Product build coordination, temporary distribution assembly and release tooling |
 
-Keep filesystem, HTTP, compiler and browser adapters dedicated to a capability
-with that capability. Infrastructure used across capabilities has an explicit
-owner outside the capability folders. A capability controller owns operations
-and passes inputs to components; components render and emit events.
+The server owns project state, definition discovery, compilation, output serving
+and subordinate compiler processes. The extension owns editor integration and
+the sessions it starts. Capture owns rendering resources. Browser controllers
+request operations through host contracts; elements render and emit events.
+Clients must not acquire server internals through incidental filesystem paths.
 
-Expose deliberate public entry points. Consumers use module contracts instead
-of private state or incidental files. Pure logic imports no DOM, Node or host
-frameworks; browser-safe entry points cannot import host-only adapters. Folder
-placement does not replace these dependency and ownership boundaries.
+The Rust server package is the destination for page indexing, HTTP serving and
+Rspack compilation. Its shipping Rust capability is the page index. HTTP and
+compilation currently run under `server/node/`; moving source files does not
+establish Rust serving/compiler acceptance. The [preview pipeline](preview-pipeline/README.md)
+owns those integration and performance requirements.
 
-## Migration
+## Dependencies and capability layout
 
-Migrate within the requested capability when a change substantially reworks it.
-Local fixes may stay in place. Move related ownership together without requiring
-a package-wide reorganization or creating empty architecture folders.
+The extension composes server and capture entry points. Server workflows use
+capture, shared contracts, SDK definitions and UI assets. UI runtime code depends
+on browser-safe contracts, never Node, Electron, VS Code or server services.
+The SDK stays independent of application hosts. Shared contracts own no sessions,
+DOM initialization, filesystem I/O or process lifecycle.
 
-A path migration updates callers, runtime imports, browser asset allowlists,
-webview resource loading/CSP and packaging references in the same change.
-Preserve public behavior, Node 24 loading, browser type stripping and the
-package's existing test conventions. Verify the affected entry points and
-delivery surfaces. Update source links and current-layout documentation when
-the implementation moves.
+JavaScript/TypeScript capability modules use the owning part's
+`src/modules/<capability>/`; current Node services use
+`server/node/src/modules/`. Shared UI presentation is `ui/src/components/`,
+themes are `ui/src/theme/`, and browser controllers are in `ui/src/`.
+Application entry points compose owners. Existing direct capability directories
+migrate in bounded steps; a move does not require splitting every function or
+introducing speculative shared packages. Rust follows Cargo's standard layout.
+The [shared architecture rule](../../../.canonic/rules/module-architecture.md)
+and [product guide](../../../.canonic/guides/workbench/AGENTS.md) define the contracts.
 
-## Current status
+Docs illustrate the cross-part boundary: shared parsing, lens and placement rules are
+in `contracts/src/docs/`, browser canvas/page modules in `ui/src/modules/docs/`,
+and rendering, source reading and portable export services in
+`server/node/src/modules/docs/`. The service exposes `index.ts`. Export and
+preview-pipeline Node workflows retain their own capability APIs.
 
-Existing capabilities include
-`src/sizes/`, `src/canvas/` and other directories directly under `src/`; the
-host still includes CommonJS files such as `server.js`. These capabilities
-have not yet migrated to the target directory layout.
+## Delivery and verification
 
-Docs are TypeScript under `src/modules/docs/`. The server, the compiler and
-the portable export use `index.ts`; the canvas loads `canvas/bootstrap.ts`,
-which hands the lens rules (`canvas/lenses.ts`) and the docs geometry to the
-classic scripts, and a docs page loads `page/docs-page.ts`. The
-`workbench.yaml` rules for docs stay in `workbench/manifest.js`, which both
-config readers share, and the canvas's use of the lens rules stays in
-`workbench/workbench.js`.
+The source extension manifest lives in `extension/package.json`; the product
+root's private package manifest coordinates tools and Node dependencies.
+`stage-extension.cjs` assembles a temporary distribution from the peer owners,
+rewrites extension resource paths for that root, includes production dependencies
+and selected server binaries, and checks product/extension/SDK versions match.
+Cargo sources, build caches, tests, labs and design fixtures do not ship.
 
-The design-system source and archive exporter is TypeScript under
-`src/modules/export/`, exposed through `index.ts`. Its [product contract](export.md)
-remains independent of the path migration. Server job orchestration, capture
-and preview compilation remain with their existing owners. The
-[multiple-artboard code plan](multiple-artboards-code-plan.md) distinguishes
-actual paths from future integration paths.
+Browser modules under `ui/src/` and `contracts/src/` are served with types
+stripped on demand. The legacy shell remains at `/_workbench/`; its manifest and
+YAML script routes use the shared contract implementation. VS Code webviews
+supply local resource roots and CSP for UI assets and shared contracts.
 
-The page index splits ownership at the process boundary. Rust capabilities in
-`native/src/` own discovery, saved records, literal parsing, validation and
-evaluation coordination. The TypeScript adapter in `src/modules/page-index/`,
-exposed through `index.ts`, owns host processes, temporary storage, answer
-ordering and fallback. See the [page-index contract](preview-pipeline/page-index.md)
-for lifecycle and [code quality](code-quality.md) for Rust engineering gates.
-This is one Cargo package with a library and binary; it establishes no Studio
-integration or Rust compiler-host API.
+Path migrations update imports, compiler runtime lookup, asset serving, webview
+resources/CSP, package assembly, release automation, design pages and source
+links together. Checks exercise the extension adapters, real browser interactions,
+server routes, native indexing and portable output. Distribution assembly tests
+cover manifests, dependencies, binaries and exclusion boundaries. A packaged
+launch confirms the assembled paths resolve outside the source tree.
+
+## Rust ownership
+
+The native package follows Cargo's layout, with role-specific submodules and
+one public CLI-oriented `run` entry point. Capabilities live directly under `server/src/`.
+
+| Role | Owner and dependency boundary |
+| --- | --- |
+| CLI composition | `main.rs` owns exit status; `lib.rs` exposes `run`; `cli.rs` parses arguments, transports JSON and supplies the evaluator |
+| Index application | `index.rs` coordinates one transaction; `index/definitions.rs`, `cache.rs` and `timings.rs` own input acquisition, cache decisions and diagnostics |
+| Pure definition rules | `definition.rs` is the facade; its private compatibility, validation and projection modules use supplied source-existence checks, with no filesystem or process I/O |
+| Literal extraction | `literal.rs` interprets conservative SWC syntax without evaluating project code |
+| External adapters | `discovery.rs` traverses directories; `evaluate.rs` owns evaluator execution; `saved.rs` owns persistence |
+| Answer projection | `protocol.rs` converts shared records into the native response shape |
+| Shared data and helpers | `model.rs` owns transaction inputs and observed records; `files.rs` owns filesystem stamps; `paths.rs` owns lexical path operations |
+
+Dependencies flow from the application to rules and adapters. The evaluator
+accepts explicit paths/options and exposes typed selection/evaluation methods;
+it does not import the index workflow. Discovery and persistence share neutral
+record types rather than importing each other's implementation. Generic shared
+operations belong in named crate-level helpers; capability-specific helpers
+remain private to their owner. No catch-all utilities module is required.
+
+The evaluator adapter owns and reaps its direct child on normal completion and
+early failures. The TypeScript host owns the enclosing process group, timeout
+and descendant cleanup. Record serialization and the CLI protocol remain
+independent of internal module paths. See [page-index acceptance](preview-pipeline/page-index.md#acceptance-and-evidence)
+and [code quality](code-quality.md) for the behavioral and engineering checks.

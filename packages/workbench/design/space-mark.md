@@ -4,7 +4,7 @@ The coloured square that stands for a space: in the
 [space switcher](space-switcher.md), and at the start of the top bar's
 breadcrumb when there is more than one space.
 
-`wb-space-mark` in `src/components/space-mark/` draws it from the
+`wb-space-mark` in `ui/src/components/space-mark/` draws it from the
 space's `color`, `icon`, and `image`, which come from its `workbench.yaml`, so
 the mark matches wherever the space is shown. It holds the space's image, else
 its Lucide icon, else the first letter of its name. Set the `space` property

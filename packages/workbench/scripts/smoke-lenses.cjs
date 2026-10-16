@@ -6,7 +6,7 @@ var fs = require('node:fs');
 var os = require('node:os');
 var path = require('node:path');
 var http = require('node:http');
-var server = require('../server');
+var server = require('../server/node/server');
 var Browser = require('./chrome.cjs').Browser;
 
 async function main() {

@@ -1,9 +1,9 @@
 # VS Code extension contract
 
 This spec covers the editor host around the [core workbench](core.md). Its
-implementation is in [extension.js](../extension.js), [spaces.js](../spaces.js), [panel.js](../panel.js),
-[sidebar-view.js](../sidebar-view.js), [startup.js](../startup.js),
-[server.js](../server.js), and [preview-service.js](../preview-service.js).
+implementation is in [extension.js](../extension/extension.js), [spaces.js](../server/node/spaces.js), [panel.js](../extension/panel.js),
+[sidebar-view.js](../extension/sidebar-view.js), [startup.js](../extension/startup.js),
+[server.js](../server/node/server.js), and [preview-service.js](../server/node/preview-service.js).
 The user-facing reference is [The VS Code extension](../docs/extension.md).
 
 ## Activation and ownership
@@ -50,7 +50,7 @@ Open Canvas in Browser and Copy Canvas URL act on the current space.
 
 The extension contributes no settings.
 
-**Open Canvas in Browser** and `node server.js <project>` serve the same
+**Open Canvas in Browser** and `node server/node/server.js <project>` serve the same
 canvas but differ in host. The browser command uses the extension's server, so
 handoffs copy to the VS Code clipboard, source actions open files in the
 editor, start commands and trust checks have already applied, and diagnostics
@@ -81,7 +81,7 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
 - Every completed route reports `wb-here`, including a docs page whose rendered
   preview is reused for an example selection or after a config refresh. Reusing
   a preview must still release sidebar picks waiting for that refresh. The
-  regression in `panel.test.js` exercises this canvas path through the panel relay.
+  regression in `extension/panel.test.js` exercises this canvas path through the panel relay.
 - Source actions ask the extension to open a file in the editor or reveal a
   directory; the server only opens paths the resolved config names. A handoff
   asks it to copy the generated prompt to the clipboard; the server has
@@ -95,8 +95,8 @@ Its space picker browses without closing instances. The extension's space
 switcher below still changes the editor's host space. Sidebar picks edit the
 selected instance; canvas context and handoffs cover every instance.
 
-Implemented in [spaces.js](../spaces.js), [extension.js](../extension.js),
-and the [space switcher element](../src/components/space-switcher/element.ts).
+Implemented in [spaces.js](../server/node/spaces.js), [extension.js](../extension/extension.js),
+and the [space switcher element](../ui/src/components/space-switcher/element.ts).
 Component and theme contracts: [Web Components](web-components.md) and
 [themes](themes.md). User guide:
 [Several spaces](../docs/spaces.md).
@@ -106,7 +106,7 @@ Component and theme contracts: [Web Components](web-components.md) and
   valid entry, each served from its `root` (relative to the file's folder,
   default that folder, so several may share one). Shared top-level keys are
   inherited, `implementations` merged by name; `name`, `color`, `icon`, and
-  `root` are not (`selectSpace` in [manifest.js](../workbench/manifest.js),
+  `root` are not (`selectSpace` in [manifest.js](../contracts/manifest.js),
   used by both readers). Folders are the window's that have a file, in folder
   order, then the folders the user added (stored in `globalState`, shared by
   every window). A folder in both is listed once, as the window's, and is not
@@ -131,7 +131,7 @@ Component and theme contracts: [Web Components](web-components.md) and
 - Removal acts on the added folder, so it removes every space its file
   lists. Its mark takes the manifest's `color` (named
   or hex) and `icon` (Lucide name or project image), validated by
-  `spaceMark` in [manifest.js](../workbench/manifest.js) for both readers,
+  `spaceMark` in [manifest.js](../contracts/manifest.js) for both readers,
   with `workbench.local.yaml` merged over them. Without a color, the color is
   derived from the id, except behind an image, which gets none. Images travel
   as data URIs of at most 256 KB, because every surface draws every
@@ -168,7 +168,7 @@ Component and theme contracts: [Web Components](web-components.md) and
 - The canvas shows the breadcrumb space and, outside the editor, a sidebar
   switcher only with two or more spaces. The editor's sidebar always shows
   the switcher, as the home of **Add a space…**.
-- `node server.js a b …` starts every space eagerly, shares one capture
+- `node server/node/server.js a b …` starts every space eagerly, shares one capture
   service, and prints one `workbench on <url>  <name>` line per space. One
   folder produces one server and one reported URL.
 
@@ -263,7 +263,7 @@ or handoff prompts.
 ## Implementation gaps
 
 - **Preview definitions are not watched.** The extension watches only the two
-  YAML files ([sidebar-view.js](../sidebar-view.js)). Adding, removing, or renaming a
+  YAML files ([sidebar-view.js](../extension/sidebar-view.js)). Adding, removing, or renaming a
   definition takes effect only after **Refresh Pages** or a YAML change, and
   the user guide documents that limitation; update the guide when this is
   fixed.
@@ -288,31 +288,31 @@ or handoff prompts.
 
 ## Verification points
 
-- [panel.test.js](../panel.test.js) checks the immediate loading tab, a closed
+- [panel.test.js](../extension/panel.test.js) checks the immediate loading tab, a closed
   loading tab staying closed, failed-startup recovery text, readiness when
   `wb-here` precedes iframe load, pick resends until acknowledged, and refresh
   ordering, including a refresh rejected for an invalid manifest.
-- [sidebar-view.test.js](../sidebar-view.test.js) checks that catalog problems and
+- [sidebar-view.test.js](../extension/sidebar-view.test.js) checks that catalog problems and
   catalog request failures reach the sidebar, and that showing the view opens
   the canvas.
-- [sidebar.test.js](../workbench/sidebar.test.js) checks the waiting text,
+- [sidebar.test.js](../ui/legacy/sidebar.test.js) checks the waiting text,
   disabled search, the problems list, preview-only catalog requests, and the
   immediate build when previews are off.
-- [spaces.test.js](../spaces.test.js) checks naming and fallback, ids,
+- [spaces.test.js](../server/node/spaces.test.js) checks naming and fallback, ids,
   deduplication, lazy and single starts, retry after a failed start, and
-  stopping on removal and close. [server.test.js](../server.test.js) checks
+  stopping on removal and close. [server.test.js](../server/node/server.test.js) checks
   the `/_workbench/spaces` routes, on-demand start through another server,
-  and the cross-origin refusal. [panel.test.js](../panel.test.js) checks
+  and the cross-origin refusal. [panel.test.js](../extension/panel.test.js) checks
   retargeting an open tab, a slower earlier load not winning, a closed tab
-  staying closed, and `wb-space` relay. [sidebar-view.test.js](../sidebar-view.test.js)
-  and [sidebar.test.js](../workbench/sidebar.test.js) check the
+  staying closed, and `wb-space` relay. [sidebar-view.test.js](../extension/sidebar-view.test.js)
+  and [sidebar.test.js](../ui/legacy/sidebar.test.js) check the
   `canonic-spaces` meta, watcher and resource retargeting, and the
   switcher's messages.
-- [startup.test.js](../startup.test.js) checks probes, terminal startup only
+- [startup.test.js](../extension/startup.test.js) checks probes, terminal startup only
   when the check fails, and skipping in untrusted workspaces.
-- [server.test.js](../server.test.js) checks that only config-resolved paths
+- [server.test.js](../server/node/server.test.js) checks that only config-resolved paths
   open and that handoff is advertised only when the editor provides it.
-- [preview.test.js](../preview.test.js) checks that the server starts, serves
+- [preview.test.js](../server/node/preview.test.js) checks that the server starts, serves
   through, and closes the worker, stops serving after `previews: false`, and
   never runs definitions when untrusted or disabled.
 - Manual, not automated: worker restart after it is killed, worker restart on

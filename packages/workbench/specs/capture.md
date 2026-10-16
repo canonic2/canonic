@@ -4,14 +4,14 @@ This spec covers the camera download and the screenshot-backed handoff from
 the current canvas, and the bundled Electron runtime that renders them. The
 [design-system export](export.md) uses the same capture service on its own
 schedule. [TypeScript previews](previews.md) run their compiler and server
-from the same runtime. See [annotations.js](../workbench/annotations.js),
-[dom-mirror.js](../workbench/dom-mirror.js),
-[capture-sync.js](../workbench/capture-sync.js),
-[capture-page.js](../workbench/capture-page.js),
-[electron-capture.js](../electron-capture.js),
-[electron-runtime.js](../electron-runtime.js),
-[capture-helper/main.cjs](../capture-helper/main.cjs), and the page scripts
-in [capture-scripts.js](../capture-scripts.js). The user-facing description is
+from the same runtime. See [annotations.js](../ui/legacy/annotations.js),
+[dom-mirror.js](../ui/legacy/dom-mirror.js),
+[capture-sync.js](../ui/legacy/capture-sync.js),
+[capture-page.js](../ui/legacy/capture-page.js),
+[electron-capture.js](../capture/electron-capture.js),
+[electron-runtime.js](../capture/electron-runtime.js),
+[capture-helper/main.cjs](../capture/app/main.cjs), and the page scripts
+in [capture-scripts.js](../capture/capture-scripts.js). The user-facing description is
 [Annotations and handoff](../docs/annotations-and-handoff.md#screenshots).
 
 ## Why a helper exists
@@ -33,7 +33,7 @@ web-page capture, not an operating-system screenshot of VS Code.
 ## Bundled Electron runtime
 
 - Packaging builds one platform- and architecture-specific Electron
-  application from `capture-helper/` with
+  application from `capture/app/` with
   [bundle-runtime.cjs](../scripts/bundle-runtime.cjs) and stores it in the
   VSIX as `electron-runtime/runtime.tar.gz`, beside a `runtime.json` that
   records the target, Electron version, and archive SHA-256. The archive is
@@ -85,7 +85,7 @@ web-page capture, not an operating-system screenshot of VS Code.
 ## What is captured
 
 The [multiple-artboard support API](multiple-artboards.md) captures every supplied artboard,
-including off-camera views and mixed spaces/content. `src/canvas/review.ts`
+including off-camera views and mixed spaces/content. `ui/src/canvas/review.ts`
 composes one labelled JPEG with local annotation coordinates mapped to
 regions. Limits are 32 megapixels and 32767px per edge. Loading/error views
 have explicit placeholders; a ready-view capture failure stops the operation.
@@ -152,9 +152,9 @@ annotation with its position and the element under it, the lens's
 implementation and URL, and any code pointers or TypeScript preview source.
 The element under an annotation comes from the visible document for local
 pages, from the mirrored copy on the capture surface for bridged lenses
-([capture-page.js](../workbench/capture-page.js)), and from the helper's page
+([capture-page.js](../ui/legacy/capture-page.js)), and from the helper's page
 for the URL fallback. The prompt says when elements could not be read.
-See [handoff.js](../handoff.js).
+See [handoff.js](../server/node/handoff.js).
 
 ## Failure behavior
 
@@ -203,37 +203,37 @@ cases, and embedded documents or tainted pixels.
 - **Embedded documents and tainted pixels fail the capture.** The mirror
   throws `Live capture cannot yet mirror nested frames or embedded documents`
   for an `iframe`, `object`, or `embed`, and fails on an origin-tainted canvas
-  or video ([dom-mirror.js](../workbench/dom-mirror.js)), instead of
+  or video ([dom-mirror.js](../ui/legacy/dom-mirror.js)), instead of
   rendering those regions blank. The user guides describe the current failure;
   update them with the fix.
 
 ## Verification points
 
-- [electron-runtime.test.js](../electron-runtime.test.js) covers extraction,
+- [electron-runtime.test.js](../capture/electron-runtime.test.js) covers extraction,
   link and permission preservation, concurrent hosts, pruning, damaged
-  archives, and target mismatch. [package-all.test.js](../package-all.test.js)
+  archives, and target mismatch. [package-all.test.js](../scripts/package-all.test.js)
   covers per-target packaging order.
-- [electron-capture.test.js](../electron-capture.test.js) covers the warm
+- [electron-capture.test.js](../capture/electron-capture.test.js) covers the warm
   process, speculative collapse, crash recovery, timeouts, the reason given
   on a host without the runtime, startup failures, JPEG transport, and the
   export pool.
-- [capture-helper.test.js](../capture-helper.test.js) covers readback
+- [capture-helper.test.js](../capture/capture-helper.test.js) covers readback
   priming, hover restoration, in-place Storybook switching, and scroll
   restoration for unbridged pages.
-- [capture-scripts.test.js](../capture-scripts.test.js) covers overlay
+- [capture-scripts.test.js](../capture/capture-scripts.test.js) covers overlay
   scrolling, export settling, and the Storybook switch script.
-- [annotations-capture.test.js](../workbench/annotations-capture.test.js),
-  [capture-sync.test.js](../workbench/capture-sync.test.js),
-  [capture-page.test.js](../workbench/capture-page.test.js), and
-  [dom-mirror.test.js](../workbench/dom-mirror.test.js) cover the browser
+- [annotations-capture.test.js](../ui/legacy/annotations-capture.test.js),
+  [capture-sync.test.js](../ui/legacy/capture-sync.test.js),
+  [capture-page.test.js](../ui/legacy/capture-page.test.js), and
+  [dom-mirror.test.js](../ui/legacy/dom-mirror.test.js) cover the browser
   request, flush, resync retry, no-DOM-fallback rule, Simulator rendering,
   preparation scheduling, the inert surface, and pointer revisions.
-- [server.test.js](../server.test.js) covers payload validation, origin
+- [server.test.js](../server/node/server.test.js) covers payload validation, origin
   checks, mirror validation, JPEG saving and handoff, warm-up, bridged
   captures, and proxied implementation addresses in the config.
-  [proxy.test.js](../proxy.test.js) covers bridge injection, header and cookie
+  [proxy.test.js](../server/node/proxy.test.js) covers bridge injection, header and cookie
   rewriting, redirects, request bodies, WebSocket upgrades, and a stopped
-  implementation. [handoff.test.js](../handoff.test.js) covers the prompt.
+  implementation. [handoff.test.js](../server/node/handoff.test.js) covers the prompt.
 - Manual, on a desktop after `pnpm run bundle-runtime`:
   [smoke-capture.cjs](../scripts/smoke-capture.cjs) (warm reuse, reloads,
   resizing, implementation handoffs, Dock visibility, crash recovery),

@@ -40,10 +40,10 @@ its own README describing what it generates and the pinned dependencies.
 
 - Labs belong to the public repository with the rest of the package, so
   everything committed under `labs/` follows the fixture and evidence rules
-  below. `.vscodeignore` excludes `labs/` from the VSIX. Product code, tests,
+  below. `extension/.vscodeignore` excludes `labs/` from the VSIX. Product code, tests,
   packaging and scripts never import, run or name anything in `labs/`.
 - Runners may load the shipping modules read-only, such as
-  `preview/compiler.cjs`, `preview/worker.cjs` and `server.js`. Variant logic
+  `server/node/preview/compiler.cjs`, `server/node/preview/worker.cjs` and `server/node/server.js`. Variant logic
   lives in the lab. A lab changes no product code; the winning variant is
   re-implemented in the product with its own tests.
 - Generated projects, installed fixture dependencies, build output, compiler

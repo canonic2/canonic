@@ -5,13 +5,13 @@ source closure of each selected page, reference screenshots, a guide per page,
 and, when the project has [TypeScript previews](previews.md), a portable
 `browser/` viewer. It is a server-backed operation available from the editor
 or a hosted browser; a `file://` workbench cannot export. See
-[server.js](../server.js), [export module](../src/modules/export/index.ts), and the
+[server.js](../server/node/server.js), [export module](../server/node/src/modules/export/index.ts), and the
 [capture contract](capture.md) for the renderer it uses. The user-facing
 description is [Design-system export](../docs/design-system-export.md).
 
 ## Module ownership
 
-The source and archive core lives under `src/modules/export/`, following the
+The source and archive core lives under `server/node/src/modules/export/`, following the
 [module layout contract](modules.md). Its public Node API is `index.ts`, with
 typed inputs and reports in `types.ts`, filesystem-backed source closure and
 page guides in `source.ts`, reference parsing in `references.ts`, and ZIP
@@ -236,40 +236,40 @@ regressions. Source, capture and portable warnings all contribute to the final
 export warning count.
 
 Space ownership is explicit in the implementation:
-[server.js](../server.js) reads `config.read(where)` for its selected space,
+[server.js](../server/node/server.js) reads `config.read(where)` for its selected space,
 and its export endpoint passes that resolved view into `beginExport`.
-[source.ts](../src/modules/export/source.ts) starts page records from `view.pages` and copies
+[source.ts](../server/node/src/modules/export/source.ts) starts page records from `view.pages` and copies
 the manifest through the source-root ownership check. Existing
-[server tests](../server.test.js) verify that a server selects only its
+[server tests](../server/node/server.test.js) verify that a server selects only its
 configured space's pages. The full multi-space export acceptance criteria
 above do not yet have a dedicated end-to-end test.
 
 ## Verification points
 
-- [server.test.js](../server.test.js) checks the capture plan for states and
+- [server.test.js](../server/node/server.test.js) checks the capture plan for states and
   imported stories, the four-worker pool, per-story worker reuse, progress,
   waiting for warm-up, coalesced jobs, retention and expiry (`404`), bounded
   retained bundles, cleanup warnings, job and part downloads, and the direct
   ZIP download.
-- [export tests](../src/modules/export/export.test.js) check the source closure, linked
+- [export tests](../server/node/src/modules/export/export.test.js) check the source closure, linked
   packages, Storybook configuration, page hashes, shared-directory guide and
   screenshot placement, and the split parts bundle. They also verify portable
   fallback, successful partial builds and archive failures after a portable
   failure. Server tests exercise a failed preview worker through job completion
   and ZIP download, and verify revision reuse within a job and refresh across jobs.
-- [preview.test.js](../preview.test.js) checks that preview states enter the
+- [preview.test.js](../server/node/preview.test.js) checks that preview states enter the
   capture plan, that a preview's compiler-resolved sources are hashed and its
   `browser/` files archived, and that the portable build keeps successful
   previews beside a failed one.
-  [preview-astro.test.js](../preview-astro.test.js) checks Astro reference
+  [preview-astro.test.js](../server/node/preview-astro.test.js) checks Astro reference
   states in portable output.
-- [capture-page.test.js](../workbench/capture-page.test.js) checks that
+- [capture-page.test.js](../ui/legacy/capture-page.test.js) checks that
   reference capture waits for a TypeScript preview to render and fails on a
-  render error. [preview-runtime.test.js](../preview-runtime.test.js) checks
+  render error. [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs) checks
   that missing states and render failures block readiness.
-- [electron-capture.test.js](../electron-capture.test.js),
-  [capture-helper.test.js](../capture-helper.test.js), and
-  [capture-scripts.test.js](../capture-scripts.test.js) check the export pool, in-place
+- [electron-capture.test.js](../capture/electron-capture.test.js),
+  [capture-helper.test.js](../capture/capture-helper.test.js), and
+  [capture-scripts.test.js](../capture/capture-scripts.test.js) check the export pool, in-place
   Storybook switching, and settling.
 - Not covered by automated tests: the `409` answer for an incomplete job,
   the missing-design and Simulator warnings, and the exclusion of `browser/`

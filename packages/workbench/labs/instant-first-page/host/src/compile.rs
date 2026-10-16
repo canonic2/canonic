@@ -47,7 +47,7 @@ pub struct Entry {
 #[derive(Deserialize)]
 pub struct Job {
     pub root: String,
-    /// Workbench's `preview/` folder: `api.js`, adapters, request mocks.
+    /// Workbench's `ui/preview/` folder: browser adapters and request mocks.
     pub preview_dir: String,
     pub cache_dir: String,
     pub generation: u32,
@@ -59,7 +59,7 @@ pub struct Job {
     pub stable_chunks: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Refresh {
     pub entry: String,
     pub runtime: String,
@@ -196,6 +196,10 @@ impl EntrySet {
         self.entries.entry(name.to_string()).or_insert_with(|| (requests.to_vec(), None));
     }
 
+    fn remove(&mut self, name: &str) {
+        self.entries.remove(name);
+    }
+
     fn dependencies(&mut self, context: &Context) -> Vec<(String, Vec<DependencyRef>)> {
         self.entries
             .iter_mut()
@@ -254,6 +258,28 @@ impl Plugin for RefreshRuntimePlugin {
         ctx.compilation_hooks.additional_tree_runtime_requirements.tap(refresh_runtime::new(self));
         Ok(())
     }
+}
+
+/// One entry's served files, as the shipping pipeline's snapshot keeps them.
+#[derive(Clone, Default, serde::Serialize)]
+pub struct EntryPoint {
+    pub files: Vec<String>,
+    pub runtime: Vec<String>,
+    pub css: Vec<(Value, String)>,
+    pub errors: Vec<String>,
+}
+
+/// One build's outcome.
+#[derive(Clone, Default, serde::Serialize)]
+pub struct Built {
+    pub ok: bool,
+    pub ms: f64,
+    pub error: Option<String>,
+    pub hash: Option<String>,
+    pub entrypoints: BTreeMap<String, EntryPoint>,
+    /// Which split chunk holds each project module, for the moved-module check.
+    pub chunk_of: BTreeMap<String, String>,
+    pub modules: usize,
 }
 
 // ------------------------------------------------------------- watching
@@ -518,6 +544,93 @@ impl Host {
         json!({ "ok": true, "ms": ms, "hash": hash, "errors": errors, "entrypoints": entrypoints, "assets": assets, "chunk_of": chunk_of, "modules": compilation.get_module_graph().modules().count() })
     }
 
+    // --------------------------------------------------------- stage 2
+
+    /// A build's outcome for serving: each entry's files, runtime files,
+    /// stylesheet chunks and the errors in its module graph, as the shipping
+    /// pipeline's `snapshot` copies them out.
+    pub fn built(&self, started: Instant, result: rspack_error::Result<()>) -> Built {
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        if let Err(error) = result {
+            return Built { ok: false, ms, error: Some(error.to_string()), ..Default::default() };
+        }
+        let compilation = &self.compiler.compilation;
+        let artifact = &compilation.build_chunk_graph_artifact;
+        let errors: Vec<(Option<String>, String)> = compilation.get_errors().map(|error| (error.module_identifier.map(|id| id.to_string()), error.message.clone())).collect();
+        let mut entrypoints = BTreeMap::new();
+        for (name, ukey) in compilation.entrypoints() {
+            let group = artifact.chunk_group_by_ukey.expect_get(ukey);
+            let runtime_chunk = artifact.chunk_by_ukey.expect_get(&group.get_runtime_chunk(&artifact.chunk_group_by_ukey));
+            let runtime_files: std::collections::HashSet<String> = runtime_chunk.files().iter().cloned().collect();
+            let mut point = EntryPoint::default();
+            let mut modules = std::collections::HashSet::new();
+            for chunk_ukey in &group.chunks {
+                let chunk = artifact.chunk_by_ukey.expect_get(chunk_ukey);
+                for module in artifact.chunk_graph.get_chunk_modules_identifier(chunk_ukey) {
+                    modules.insert(module.to_string());
+                }
+                for file in chunk.files() {
+                    if file.starts_with("hot/") || file.contains(".hot-update.") {
+                        continue;
+                    }
+                    point.files.push(file.clone());
+                    if file.ends_with(".css") {
+                        point.css.push((chunk.id().map(|id| json!(id.to_string())).unwrap_or(Value::Null), file.clone()));
+                    }
+                }
+            }
+            point.runtime = point.files.iter().filter(|file| runtime_files.contains(*file)).cloned().collect();
+            point.errors = errors.iter().filter(|(module, _)| module.as_ref().is_none_or(|module| modules.contains(module))).map(|(_, message)| message.clone()).collect();
+            entrypoints.insert(name.clone(), point);
+        }
+        let mut chunk_of = BTreeMap::new();
+        for chunk in artifact.chunk_by_ukey.values() {
+            let Some(name) = chunk.name() else { continue };
+            if !(name.starts_with("dir-") || name.starts_with("pkg-")) {
+                continue;
+            }
+            for module in artifact.chunk_graph.get_chunk_modules_identifier(&chunk.ukey()) {
+                let id = module.to_string();
+                if !id.contains("node_modules") {
+                    chunk_of.insert(id, name.to_string());
+                }
+            }
+        }
+        Built { ok: true, ms, error: None, hash: compilation.get_hash().map(str::to_string), entrypoints, chunk_of, modules: compilation.get_module_graph().modules().count() }
+    }
+
+    /// The first build, or a rebuild after files changed.
+    pub async fn build_files(&mut self, changed: Vec<String>, deleted: Vec<String>) -> Built {
+        let started = Instant::now();
+        let result = if self.builds == 0 { self.compiler.build().await } else { self.compiler.rebuild(changed.into_iter().collect(), deleted.into_iter().collect()).await };
+        self.builds += 1;
+        self.built(started, result)
+    }
+
+    /// Adds or replaces entry sources; the next build includes them.
+    pub fn put_entries(&mut self, entries: &[Entry]) -> Vec<String> {
+        self.add_entries(entries);
+        entries.iter().map(|entry| entry.file.clone()).collect()
+    }
+
+    /// Removes entries; the next build leaves them out.
+    pub fn remove_entries(&mut self, slugs: &[String]) {
+        let mut set = self.set.lock().expect("entries");
+        for slug in slugs {
+            set.remove(slug);
+        }
+    }
+
+    /// The compiler's in-memory output, shared for serving.
+    pub fn out(&self) -> Arc<MemoryFileSystem> {
+        self.out.clone()
+    }
+
+    /// Every file the last build read, outside `node_modules`.
+    pub fn file_dependencies(&self) -> Vec<String> {
+        self.compiler.compilation.file_dependencies().0.map(|file| file.to_string_lossy().into_owned()).filter(|file| !file.contains("/node_modules/")).collect()
+    }
+
     pub fn asset(&self, name: &str) -> Value {
         let compilation = &self.compiler.compilation;
         match compilation.assets().get(name).and_then(|asset| asset.get_source()) {
@@ -572,7 +685,7 @@ fn build_compiler(job: &Job, overlay: &Overlay, set: Arc<Mutex<EntrySet>>, conte
     let public_path = format!("/_workbench/previews/rspack/web/{}/", job.generation);
     let unique_name = "wb_web".to_string();
     let alias = vec![
-        ("@canonic2/workbench$".to_string(), vec![rspack_resolver::AliasValue::Path(format!("{}/api.js", job.preview_dir))]),
+        ("@canonic2/workbench$".to_string(), vec![rspack_resolver::AliasValue::Path(format!("{}/../../sdk/api.js", job.preview_dir))]),
         ("react-refresh".to_string(), vec![rspack_resolver::AliasValue::Path(job.refresh.runtime_dir.clone())]),
     ];
     let extensions = [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs", ".json", ".vue", ".html"].iter().map(|ext| ext.to_string()).collect();

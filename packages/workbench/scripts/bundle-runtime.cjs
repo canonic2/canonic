@@ -5,7 +5,7 @@ var os = require('node:os');
 var path = require('node:path');
 var crypto = require('node:crypto');
 var tar = require('tar');
-var ROOT = path.resolve(__dirname, '..');
+var ROOT = path.resolve(__dirname, "..");
 var VERSION = '44.2.0';
 var TARGETS = ['darwin-x64', 'darwin-arm64', 'win32-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'];
 
@@ -16,7 +16,7 @@ async function bundle(target) {
   try {
     var packager = (await import('@electron/packager')).packager;
     var results = await packager({
-      dir: path.join(ROOT, 'capture-helper'), out: work,
+      dir: path.join(ROOT, 'capture/app'), out: work,
       name: 'Canonic Capture', executableName: 'canonic-capture',
       appBundleId: 'com.canonic.capture', electronVersion: VERSION,
       platform: parts[0], arch: parts[1], overwrite: true, prune: false,
@@ -29,7 +29,7 @@ async function bundle(target) {
       electronZipDir: process.env.CANONIC_ELECTRON_ZIP_DIR || undefined,
       download: { cacheRoot: path.join(os.tmpdir(), 'canonic-electron-cache') },
     });
-    var destination = path.join(ROOT, 'electron-runtime');
+    var destination = path.join(ROOT, 'capture/runtime');
     fs.rmSync(destination, { recursive: true, force: true });
     fs.mkdirSync(destination, { recursive: true });
     var archive = path.join(destination, 'runtime.tar.gz');

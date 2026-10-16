@@ -4,9 +4,9 @@ var assert = require('node:assert/strict');
 var fs = require('node:fs');
 var path = require('node:path');
 var os = require('node:os');
-var runtime = require('../electron-runtime');
-var engine = require('../electron-capture');
-var server = require('../server');
+var runtime = require('../capture/electron-runtime');
+var engine = require('../capture/electron-capture');
+var server = require('../server/node/server');
 
 async function main() {
   var work = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-mirror-'));
@@ -40,7 +40,7 @@ async function main() {
   }
   var binary = await runtime.prepare(path.join(work, 'runtime'));
   var appDir = process.platform === 'darwin' ? path.resolve(binary, '../../Resources/app') : path.join(path.dirname(binary), 'resources/app');
-  var mainSource = fs.readFileSync(path.join(__dirname, '../capture-helper/main.cjs'), 'utf8');
+  var mainSource = fs.readFileSync(path.join(__dirname, "../capture/app/main.cjs"), 'utf8');
   mainSource += `\nif(process.env.CANONIC_MIRROR_TEST_SCALE) app.commandLine.appendSwitch('force-device-scale-factor', process.env.CANONIC_MIRROR_TEST_SCALE);`;
   mainSource += `\nvar originalHandle = handle; handle = function(request) {
     if (request.method === 'evaluate') return win.webContents.executeJavaScript(request.script);
@@ -132,7 +132,7 @@ async function main() {
     var payload = { url: new URL(page, base + '/').href, width: 1440, height: 1000,
       revision: 'live-test', format: 'jpeg', scroll: { x: 0, y: 0 }, annotations: '' };
     await source.preparePage(payload);
-    await evaluate(source, fs.readFileSync(path.join(__dirname, '../workbench/dom-mirror.js'), 'utf8') + '\nwindow.mirror = wbDOMMirror.create(document); true');
+    await evaluate(source, fs.readFileSync(path.join(__dirname, "../ui/legacy/dom-mirror.js"), 'utf8') + '\nwindow.mirror = wbDOMMirror.create(document); true');
     await target.warm(base);
     if (!process.argv[2]) await evaluate(source, `var animation=document.querySelector('x-card').shadowRoot.getAnimations()[0]; animation.pause(); animation.currentTime=700; true`);
     for (var i = 0; i < 4; i++) {

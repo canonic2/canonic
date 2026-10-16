@@ -11,7 +11,7 @@ This topic owns tooling, static checks, test conventions and dependency policy.
 Feature acceptance belongs to the relevant spec, including
 [page-index acceptance](preview-pipeline/page-index.md#acceptance-and-evidence).
 Commands and pinned tool-installation instructions live in the
-[native README](../native/README.md#checks-and-packaging) and the
+[native README](../server/README.md#checks-and-packaging) and the
 [package guide](../AGENTS.md#commands).
 
 The baseline follows the repository's Rust packages, including TUI and
@@ -33,8 +33,8 @@ introduce a root Cargo workspace or couple product releases.
 | Shipping | Build the target's native release executable with locked dependencies before packaging |
 | Host integration | Run the Workbench Node suite and TypeScript check alongside the native gates |
 
-`make -C native check` runs the Rust gates. The package-level
-`check:native` command delegates to it, and the extension release workflow
+`make -C server check` runs the Rust gates. The package-level
+`check:server` command delegates to it, and the extension release workflow
 runs it before packaging. Coverage is a separate developer command. CI installs
 the same pinned nextest and cargo-deny tools documented for local development.
 
@@ -83,5 +83,5 @@ and feature settings as the peer Rust packages. Changing a dependency or adding
 an exception requires reviewing the resulting lockfile and dependency checks.
 
 Builds, coverage reports and staged platform binaries remain under ignored
-`native/target/` and `native/bin/`. Only the selected platform executable enters
+`server/target/` and `server/bin/`. Only the selected platform executable enters
 the VSIX. Development tooling, source and reports do not ship in it.

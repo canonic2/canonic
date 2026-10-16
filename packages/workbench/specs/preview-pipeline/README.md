@@ -72,7 +72,7 @@ the targets the whole pipeline is measured against.
 
 | Capability | Implementation and evidence boundary |
 | --- | --- |
-| Native page listing | Implemented in `native/` and `src/modules/page-index/`; [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](performance.md#page-listing) do not establish canvas-paint acceptance |
+| Native page listing | Implemented in `server/` and `server/node/src/modules/page-index/`; [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](performance.md#page-listing) do not establish canvas-paint acceptance |
 | Rust engineering gates | Implemented; [code quality](../code-quality.md) owns tools, policy, test conventions and CI enforcement |
 | Rspack compilation and pre-warming | Implemented in the Node worker; retain their own listing and eager-entry start |
 | Rust compiler host | Prototype under the [instant first page lab's stage 2 plan](../../labs/instant-first-page/README.md#stage-2-plan); not a shipping compiler or adopted first-page solution |
@@ -81,7 +81,7 @@ The implemented page index follows this [design direction](#decisions).
 It lists pages independently of the compile worker; it does not change the
 compiler's entry preparation or pre-warming.
 
-The Rspack preview pipeline is implemented in [src/modules/preview-pipeline/](../../src/modules/preview-pipeline/)
+The Rspack preview pipeline is implemented in [server/node/src/modules/preview-pipeline/](../../server/node/src/modules/preview-pipeline)
 and the preview runtime, canvas and docs page. Each topic's status names what
 remains. The implementation passes the package's tests and the
 [Rspack pipeline lab](../../labs/rspack-pipeline/README.md)'s stage 1 checks

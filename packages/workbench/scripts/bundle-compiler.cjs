@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const tar = require('tar');
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(__dirname, "..");
 const targets = require('./bundle-runtime.cjs').targets;
 
 /* Rspack names its Linux and Windows bindings by C library and toolchain. */
@@ -80,7 +80,7 @@ async function bundle(target) {
   const specs = [specification(target), rspackSpecification(target)];
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-compiler-build-'));
   try {
-    const destination = path.join(ROOT, 'preview', 'bin');
+    const destination = path.join(ROOT, 'server/node/preview', 'bin');
     fs.rmSync(destination, { recursive: true, force: true });
     fs.mkdirSync(destination, { recursive: true });
     for (const spec of specs) {

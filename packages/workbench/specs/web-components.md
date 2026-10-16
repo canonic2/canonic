@@ -3,7 +3,7 @@
 ## Purpose and status
 
 Workbench's own browser interface uses Web Components as its target component
-architecture. Components live under `packages/workbench/src/components/` and work
+architecture. Components live under `packages/workbench/ui/src/components/` and work
 in the VS Code sidebar, the embedded canvas, and the standalone browser canvas.
 This contract concerns the tool's interface, not the framework used by pages it
 previews. It does not change the preview adapters or require projects to adopt
@@ -20,14 +20,14 @@ Related contracts: [themes](themes.md),
 ## Component structure
 
 The [module layout contract](modules.md) keeps shared components under
-`src/components/` and capability controllers and operations under
-`src/modules/<capability>/`. Components receive inputs and emit events across
+`ui/src/components/` and capability controllers and operations under
+`ui/src/modules/<capability>/`. Components receive inputs and emit events across
 that boundary; they do not own capability I/O or application state.
 
 - Use autonomous custom elements extending `HTMLElement`, with `wb-` tag names
   such as `wb-space-switcher`. Write erasable TypeScript ES modules with explicit
   `.ts` imports, following the package's existing source and serving conventions.
-- Give each component a named folder under `src/components/`, with its element
+- Give each component a named folder under `ui/src/components/`, with its element
   implementation, owned styles, and meaningful behavioral tests. Put component
   helpers beside their owner; extract shared behavior only when it has consumers.
 - Use open Shadow DOM for owned markup and styles. Slots expose intentionally
@@ -105,7 +105,7 @@ or actual interaction. Do not maintain a parallel mock component.
 
 ## Design pages
 
-Every element under `src/components/<name>/` has a docs page in this
+Every element under `ui/src/components/<name>/` has a docs page in this
 repository's **Workbench** space, under **Components**. The page ships in the
 same change as the element, and changes with it: a new or changed property,
 attribute, event, part, keyboard behavior, or visible state updates the page in
@@ -122,7 +122,7 @@ component folder:
 
 | File | Holds |
 | --- | --- |
-| `<name>.workbench.ts` | A `defineDocs` definition with `id: 'components/<name>'`, `title: 'Components/<Area>/<Label>'`, `icon: 'component'`, and one `docs` lens (`adapter: 'html'`) whose styles are `../src/theme/defaults.css` and `./design.css`. The space discovers it; `workbench.yaml` needs no entry. |
+| `<name>.workbench.ts` | A `defineDocs` definition with `id: 'components/<name>'`, `title: 'Components/<Area>/<Label>'`, `icon: 'component'`, and one `docs` lens (`adapter: 'html'`) whose styles are `../ui/src/theme/defaults.css` and `./design.css`. The space discovers it; `workbench.yaml` needs no entry. |
 | `<name>.md` | What the control is and where it appears, which module owns it and which controller owns its state, one section per meaningful state with an `example` block and a caption naming the inputs it shows, and a closing **Public API** section. |
 | `<name>.examples.ts` | One named export per example. Each renders the shipping element through its public inputs, and stands in for the controller by applying what the element asks for, so the example responds as the canvas would. |
 
@@ -160,31 +160,31 @@ element, not in the page.
 
 ## Evidence and implementation gaps
 
-- [Size switcher](../src/components/size-switcher/element.ts),
-  [Custom size](../src/components/size-dialog/element.ts),
-  [Edit sizes](../src/components/sizes-editor/element.ts), and the
-  [Actions switch](../src/components/actions-switch/element.ts) are registered for the
-  canvas only, by [canvas-bootstrap.ts](../src/components/canvas-bootstrap.ts);
+- [Size switcher](../ui/src/components/size-switcher/element.ts),
+  [Custom size](../ui/src/components/size-dialog/element.ts),
+  [Edit sizes](../ui/src/components/sizes-editor/element.ts), and the
+  [Actions switch](../ui/src/components/actions-switch/element.ts) are registered for the
+  canvas only, by [canvas-bootstrap.ts](../ui/src/components/canvas-bootstrap.ts);
   the sidebar's bundle registers the space controls. Their pure form and row
   logic is tested in Node beside each element.
 - Each element requires its [design page](#design-pages), a `defineDocs`
   definition in [design/](../design/size-switcher.workbench.ts);
-  [design-pages.test.ts](../src/components/design-pages.test.ts) fails an
+  [design-pages.test.ts](../ui/src/components/design-pages.test.ts) fails an
   element folder without the three files, the `components/<name>` ID, or a
   Public API section. It checks the page exists, not that it is current: a
   changed API without an updated page is a review finding.
-- [Space switcher](../src/components/space-switcher/element.ts) and
-  [space mark](../src/components/space-mark/element.ts) use the same contract.
+- [Space switcher](../ui/src/components/space-switcher/element.ts) and
+  [space mark](../ui/src/components/space-mark/element.ts) use the same contract.
   Their [public API and examples](../design/space-switcher.md) document properties,
   events, parts and keyboard behavior. Application operations remain in the
   existing sidebar and canvas controllers.
-- [browser-modules.ts](../src/server/browser-modules.ts) serves component modules
+- [browser-modules.ts](../server/node/src/server/browser-modules.ts) serves component modules
   and shared theme CSS with the existing type-stripping route, excluding tests
-  and server modules. [webview-components.ts](../src/server/webview-components.ts)
+  and server modules. [webview-components.ts](../extension/src/webview-components.ts)
   bundles the same registration entry in memory with the packaged compiler for
   the direct sidebar webview. A per-document CSP nonce authorizes that script.
   No compiled source copy is maintained. Owned styles use adopted stylesheets.
-- [Browser component tests](../src/components/space-switcher/element.test.ts)
+- [Browser component tests](../ui/src/components/space-switcher/element.test.ts)
   exercise source loading and nonce bootstrap, upgrade timing, events, keyboard
   focus, reconnect cleanup, defaults and token overrides. They require Chrome;
   real VS Code theme/host acceptance remains a separate manual check.

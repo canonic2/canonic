@@ -128,9 +128,9 @@ rule, errors per entry and docs pages updated in place. Gaps:
 
 ## Verification
 
-[Pipeline tests](../../src/modules/preview-pipeline/pipeline.test.ts),
-[preview integration tests](../../preview.test.js) and
-[docs integration tests](../../preview-docs.test.js) exercise the implemented
+[Pipeline tests](../../server/node/src/modules/preview-pipeline/pipeline.test.ts),
+[preview integration tests](../../server/node/preview.test.js) and
+[docs integration tests](../../server/node/preview-docs.test.js) exercise the implemented
 build, serving and docs paths. The [pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report)
 holds format-by-format edit and isolation evidence. Event-stream reconnects
 must still be tested against missed builds, and entry-set replacement must

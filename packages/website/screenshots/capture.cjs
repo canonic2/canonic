@@ -43,7 +43,7 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
 function serve() {
   return new Promise(function (resolve, reject) {
-    var server = cp.spawn(process.execPath, [path.join(EXTENSION, 'server.js'), REPOSITORY], { stdio: ['ignore', 'pipe', 'inherit'] });
+    var server = cp.spawn(process.execPath, [path.join(EXTENSION, 'server/node/server.js'), REPOSITORY], { stdio: ['ignore', 'pipe', 'inherit'] });
     var out = '';
     server.on('error', reject);
     server.on('exit', function (code) { reject(new Error('The workbench server exited with ' + code)); });

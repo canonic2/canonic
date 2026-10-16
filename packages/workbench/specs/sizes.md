@@ -402,23 +402,23 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 
 Tests: `manifest.test.js` for the schema, defaults, page limits and own
 sizes, the local merge, and problems; `address.test.js` for size keys;
-`preview.test.js` for the switcher, fill sizing, and fallbacks;
-`config.test.js` and `server.test.js` for both readers agreeing, writes
+`server/node/preview.test.js` for the switcher, fill sizing, and fallbacks;
+`server/node/config.test.js` and `server/node/server.test.js` for both readers agreeing, writes
 (including comments kept outside replaced blocks), and export plans;
-`handoff.test.js` for size lines and screenshot names;
-`src/canvas/canvas.test.ts` for multiple-artboard sizes. The size switcher,
+`server/node/handoff.test.js` for size lines and screenshot names;
+`ui/src/canvas/canvas.test.ts` for multiple-artboard sizes. The size switcher,
 menu, and dialogs need a browser check of keyboard use and focus with the
 [browser harness](../scripts/chrome.cjs).
 
 ## Current status
 
 - **Built:** the size model, schema, export sizes, and edits in
-  [src/sizes/](../src/sizes/), with tests beside each; the server reader and
-  writer in [config.js](../config.js); `/_workbench/sizes` in
-  [server.js](../server.js); the canvas's size choice, fill axes, keyed
+  [src/sizes/](../contracts/src/sizes), with tests beside each; the server reader and
+  writer in [config.js](../server/node/config.js); `/_workbench/sizes` in
+  [server.js](../server/node/server.js); the canvas's size choice, fill axes, keyed
   addresses, and pinned artboard sizes in
-  [workbench.js](../workbench/workbench.js) and [zoom.js](../workbench/zoom.js),
-  through the [bridge](../src/sizes/browser/bootstrap.ts); handoff size lines
+  [workbench.js](../ui/legacy/workbench.js) and [zoom.js](../ui/legacy/zoom.js),
+  through the [bridge](../ui/src/sizes/bootstrap.ts); handoff size lines
   and screenshot names; the export plan and README labels; preview keys and
   the portable viewer; the multiple-artboard model; the agent policy hook's pattern. This
   repository's Sidebar page opens at its `sidebar` size, checked in Chrome at
@@ -430,12 +430,12 @@ menu, and dialogs need a browser check of keyboard use and focus with the
   only.
 - **Configure pages** keeps a page's sizes as written, its own sizes
   included.
-- **Interface:** [`wb-size-switcher`](../src/components/size-switcher/element.ts),
-  [`wb-size-dialog`](../src/components/size-dialog/element.ts), and
-  [`wb-sizes-editor`](../src/components/sizes-editor/element.ts) are Web
+- **Interface:** [`wb-size-switcher`](../ui/src/components/size-switcher/element.ts),
+  [`wb-size-dialog`](../ui/src/components/size-dialog/element.ts), and
+  [`wb-sizes-editor`](../ui/src/components/sizes-editor/element.ts) are Web
   Components ([contract](web-components.md)), in the middle of the top bar
   beside the lens switcher. The canvas controller feeds them and posts to
-  `/_workbench/sizes`. Their docs pages are in [design/](../design/); a
+  `/_workbench/sizes`. Their docs pages are in [design/](../design); a
   real-Chrome test covers inputs, events, keyboard, focus, the dialogs, and
   reconnection. Checked end to end in Chrome on a copy of the Acme demo:
   picking, adding a Sidebar size from a page, and reordering in Edit sizes.
@@ -460,5 +460,5 @@ Configure pages), [Pages and states](../docs/pages-and-states.md),
 [TypeScript previews](../docs/workbench-previews.md), [Design-system
 export](../docs/design-system-export.md), the iOS Simulator and window guides,
 which recommend a mobile size for streamed lenses, the [workbench
-README](../workbench/README.md), the shared Workbench skill and rule, the
+README](../ui/legacy/README.md), the shared Workbench skill and rule, the
 website overview's size switcher and address text, and the changelog.

@@ -310,7 +310,7 @@ See [What screenshots can and can't include](annotations-and-handoff.md#what-scr
 
 Handoffs need the VS Code extension's server. They work in the editor and in a
 browser opened with **Workbench: Open Canvas in Browser**, but not with a server
-you started yourself with `node server.js`. Use the camera there instead.
+you started yourself with `node server/node/server.js`. Use the camera there instead.
 
 ## An agent can't find the handoff's screenshot
 

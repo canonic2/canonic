@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { Compiler } = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'preview', 'compiler.cjs'));
+const { Compiler } = require(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'server/node/preview', 'compiler.cjs'));
 
 const root = path.resolve(process.argv[2]);
 const outIndex = process.argv.indexOf('--out');

@@ -6,7 +6,7 @@
 var fs = require('node:fs');
 var path = require('node:path');
 
-var CHANGELOG = path.resolve(__dirname, '..', 'CHANGELOG.md');
+var CHANGELOG = path.resolve(__dirname, "../CHANGELOG.md");
 
 function notesFor(changelog, version) {
   var lines = String(changelog).split(/\r?\n/);

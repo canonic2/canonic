@@ -143,18 +143,18 @@ This work follows the iframe runtime ownership in the
 
 ## Verification points
 
-- [server.test.js](../server.test.js) checks catalog import, port discovery
+- [server.test.js](../server/node/server.test.js) checks catalog import, port discovery
   from package scripts, automatic detection, exact-title lookup with code
   paths, the not-running and not-a-Storybook errors, and export plans.
-- [manifest.test.js](../workbench/manifest.test.js) and
-  [config.test.js](../config.test.js) check automatic and catalogued
+- [manifest.test.js](../contracts/manifest.test.js) and
+  [config.test.js](../server/node/config.test.js) check automatic and catalogued
   implementations, start settings, and a story's state from its ID.
-  [page-list.test.js](../workbench/page-list.test.js) checks imported titles and their stories.
-- [lenses.test.js](../workbench/lenses.test.js) checks story URLs, address
+  [page-list.test.js](../ui/legacy/page-list.test.js) checks imported titles and their stories.
+- [lenses.test.js](../ui/legacy/lenses.test.js) checks story URLs, address
   picks, and channel messages.
-  [preview.test.js](../workbench/preview.test.js) checks channel reuse,
+  [preview.test.js](../ui/legacy/preview.test.js) checks channel reuse,
   navigation fallback, and fallback reporting.
-  [keys.test.js](../workbench/keys.test.js) checks that editor shortcuts are
+  [keys.test.js](../ui/legacy/keys.test.js) checks that editor shortcuts are
   accepted only from the active Storybook iframe and its origin.
-- [startup.test.js](../startup.test.js) checks start commands, trust, and
+- [startup.test.js](../extension/startup.test.js) checks start commands, trust, and
   readiness probes.

@@ -4,7 +4,7 @@ The dialog **Edit sizes…** in the [size switcher](size-switcher.md)'s menu
 opens: the space's sizes in order, each with its name, width, height, icon,
 and whether it is a button, to reorder or remove.
 
-`wb-sizes-editor` in `src/components/sizes-editor/` keeps a draft of the rows
+`wb-sizes-editor` in `ui/src/components/sizes-editor/` keeps a draft of the rows
 while it is open and asks to save them all at once; the canvas controller
 writes them to `workbench.yaml` through `/_workbench/sizes`. Open each example
 with its button.

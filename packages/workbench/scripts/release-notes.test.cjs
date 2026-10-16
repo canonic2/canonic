@@ -37,7 +37,7 @@ test('refuses a version without an entry, or with an empty one', function () {
 /* Bumping the version without writing its notes fails here, before a tag. */
 test('the package’s current version has notes', function () {
   var version = require('../package.json').version;
-  var result = childProcess.spawnSync(process.execPath, [path.join(__dirname, 'release-notes.cjs'), version], { encoding: 'utf8' });
+  var result = childProcess.spawnSync(process.execPath, [path.join(__dirname, "./release-notes.cjs"), version], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   assert.ok(result.stdout.trim().length > 0);
 });

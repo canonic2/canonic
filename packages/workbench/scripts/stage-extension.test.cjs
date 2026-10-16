@@ -1,0 +1,51 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { stageExtension } = require('./stage-extension.cjs');
+
+function fixture(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-workbench-package-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const write = (file, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), body);
+  };
+  write('package.json', JSON.stringify({ version: '1.0.0', dependencies: { 'acme-runtime': '1.0.0' } }));
+  write('extension/package.json', JSON.stringify({ name: 'acme-workbench', version: '1.0.0', main: './extension.js',
+    contributes: { viewsContainers: { activitybar: [{ icon: 'icon.svg' }] } } }));
+  write('sdk/package.json', JSON.stringify({ version: '1.0.0' }));
+  for (const file of ['extension/extension.js', 'extension/icon.svg', 'extension/.vscodeignore', 'capture/app/main.cjs',
+    'ui/legacy/index.html', 'ui/src/components/bootstrap.ts', 'contracts/manifest.js', 'server/node/server.js',
+    'server/bin/acme/workbench-native', 'README.md', 'LICENSE', 'CHANGELOG.md']) write(file, 'Acme');
+  write('server/target/debug/workbench-native', 'Build output');
+  write('server/node/server.test.js', 'Test source');
+  write('node_modules/acme-runtime/package.json', JSON.stringify({ name: 'acme-runtime', version: '1.0.0' }));
+  write('node_modules/acme-runtime/index.js', 'module.exports = 1;');
+  write('node_modules/acme-dev/package.json', JSON.stringify({ name: 'acme-dev', version: '1.0.0' }));
+  return { root, write };
+}
+
+test('the VSIX assembly preserves cross-part paths and includes only production dependencies and selected binaries', t => {
+  const { root } = fixture(t);
+  const stage = stageExtension(root);
+  t.after(() => fs.rmSync(stage, { recursive: true, force: true }));
+  const manifest = JSON.parse(fs.readFileSync(path.join(stage, 'package.json'), 'utf8'));
+  assert.equal(manifest.main, './extension/extension.js');
+  assert.equal(manifest.icon, 'extension/icon.png');
+  assert.equal(manifest.contributes.viewsContainers.activitybar[0].icon, 'extension/icon.svg');
+  for (const file of [manifest.main, 'server/node/server.js', 'ui/src/components/bootstrap.ts', 'contracts/manifest.js',
+    'server/bin/acme/workbench-native', 'node_modules/acme-runtime/index.js']) assert.ok(fs.existsSync(path.join(stage, file)), file);
+  for (const file of ['server/target', 'server/node/server.test.js', 'node_modules/acme-dev']) assert.ok(!fs.existsSync(path.join(stage, file)), file);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'extension/package.json'), 'utf8')).main, './extension.js');
+});
+
+test('a version mismatch or missing production dependency stops packaging', t => {
+  const { root, write } = fixture(t);
+  write('sdk/package.json', JSON.stringify({ version: '2.0.0' }));
+  assert.throws(() => stageExtension(root), /versions must match/);
+  write('sdk/package.json', JSON.stringify({ version: '1.0.0' }));
+  fs.rmSync(path.join(root, 'node_modules/acme-runtime'), { recursive: true });
+  assert.throws(() => stageExtension(root), /Missing production dependency acme-runtime/);
+});

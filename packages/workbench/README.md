@@ -96,7 +96,7 @@ the server, its ports, the screenshot helper, and workspace trust.
 
 Canonic is proprietary; all rights reserved. See [LICENSE](LICENSE).
 
-`workbench/modern-screenshot.js` is vendored from
+`ui/legacy/modern-screenshot.js` is vendored from
 [modern-screenshot](https://github.com/qq15725/modern-screenshot) (MIT, ©
 qq15725).
 
@@ -104,3 +104,10 @@ The bundled Electron runtime includes its MIT license and Chromium's third-party
 notices in `electron-runtime/runtime.tar.gz`, preserved in the extracted cache.
 
 Source and contributor notes: <https://github.com/canonic2/canonic>.
+
+## Source ownership
+
+This folder is the product root. `extension/`, `server/`, `capture/`, `ui/`,
+`sdk/` and `contracts/` own separate runtime or library responsibilities.
+[Developing Workbench](DEVELOPMENT.md) describes local commands;
+[module ownership](specs/modules.md) defines the boundaries and delivery layout.

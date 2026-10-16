@@ -6,9 +6,9 @@ var fs = require('node:fs');
 var os = require('node:os');
 var path = require('node:path');
 var assert = require('node:assert/strict');
-var runtime = require('../electron-runtime');
-var capture = require('../electron-capture');
-var server = require('../server');
+var runtime = require('../capture/electron-runtime');
+var capture = require('../capture/electron-capture');
+var server = require('../server/node/server');
 
 function dimensions(buffer, format) {
   if (format !== 'jpeg') return [buffer.readUInt32BE(16), buffer.readUInt32BE(20)];
@@ -63,7 +63,7 @@ async function main() {
   var appDir = process.platform === 'darwin'
     ? path.resolve(executable, '../../Resources/app')
     : path.join(path.dirname(executable), 'resources/app');
-  var source = fs.readFileSync(path.join(__dirname, '../capture-helper/main.cjs'), 'utf8');
+  var source = fs.readFileSync(path.join(__dirname, "../capture/app/main.cjs"), 'utf8');
   var mode = process.env.CANONIC_BENCH_CAPTURE || 'native';
   var samples = Number(process.env.CANONIC_BENCH_SAMPLES || 6);
   assert.ok(Number.isInteger(samples) && samples > 0 && samples <= 100, 'Invalid sample count');
@@ -90,7 +90,7 @@ async function main() {
     `;
   }
   if (mode === 'dom') {
-    var renderer = fs.readFileSync(path.join(__dirname, '../workbench/modern-screenshot.js'), 'utf8');
+    var renderer = fs.readFileSync(path.join(__dirname, "../ui/legacy/modern-screenshot.js"), 'utf8');
     var domStyles = process.env.CANONIC_BENCH_DOM_STYLES === 'resolved'
       ? 'includeStyleProperties:Array.from(getComputedStyle(document.documentElement)).filter(function(name) { return name.indexOf("--") !== 0; }),' : '';
     source += `

@@ -1,0 +1,25 @@
+# Paths are relative to the temporary product distribution root.
+.vscode/**
+.vscodeignore
+**/.DS_Store
+**/*.test.js
+**/*.test.cjs
+**/*.test.ts
+**/README.md
+!README.md
+extension/.vscodeignore
+extension/icon-source.svg
+capture/app/**
+capture/window-capture/simulator-demo/**
+server/target/**
+node_modules/**/README.md
+node_modules/**/*.map
+node_modules/**/*.d.ts
+node_modules/**/dist/esm/**
+node_modules/@esbuild/**
+# The target's binding ships in server/node/preview/bin/rspack.node.
+node_modules/@rspack/binding-*/**
+node_modules/lucide/**
+!node_modules/lucide/package.json
+!node_modules/lucide/LICENSE
+!node_modules/lucide/dist/umd/lucide.min.js

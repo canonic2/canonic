@@ -40,7 +40,7 @@ addresses follow [core.md](core.md#selection-and-navigation).
   The canvas mode follows the lens; see [docs](docs-pages.md).
 - The chosen lens carries across pages. A page without it shows its default
   lens: its design, its catalog implementation, or a Markdown page's own docs
-  lens. [lenses.ts](../src/modules/docs/canvas/lenses.ts) decides it.
+  lens. [lenses.ts](../contracts/src/docs/lenses.ts) decides it.
 
 ## Acceptance criteria
 
@@ -64,15 +64,15 @@ YAML. Both keys accept nonempty strings and trim surrounding whitespace.
 Invalid values produce named problems and leave the fallback available.
 Markdown pages reject page `lensLabel`, since they have no authored lens.
 
-The shared [manifest reader](../workbench/manifest.js) validates labels and
+The shared [manifest reader](../contracts/manifest.js) validates labels and
 resolves authored defaults. The server supplies the discovery label, and
 collection merging retains page overrides without duplicating the preview.
 The switcher, source menu, copied references, and authored handoffs use the
 resolved label. Addresses, saved preferences, and screenshot filenames retain
 their stable identities rather than incorporating renamed display labels.
 
-Behavioral coverage is in [manifest tests](../workbench/manifest.test.js),
-[configuration tests](../config.test.js), [preview integration tests](../preview.test.js),
-[switcher tests](../workbench/preview.test.js),
-[reference tests](../workbench/reference.test.js), and
-[handoff tests](../handoff.test.js).
+Behavioral coverage is in [manifest tests](../contracts/manifest.test.js),
+[configuration tests](../server/node/config.test.js), [preview integration tests](../server/node/preview.test.js),
+[switcher tests](../ui/legacy/preview.test.js),
+[reference tests](../ui/legacy/reference.test.js), and
+[handoff tests](../server/node/handoff.test.js).

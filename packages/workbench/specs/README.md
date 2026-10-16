@@ -5,7 +5,7 @@ These internal specifications are maintained separately from the
 They define what Workbench should do and how it should work: product requirements,
 workflows, system contracts, design decisions, and discoveries from investigation.
 They guide implementation and review rather than merely describe the current code.
-The [workbench README](../workbench/README.md) remains the setup and operations guide.
+The [workbench README](../ui/legacy/README.md) remains the setup and operations guide.
 
 Specs describe the current desired product and its intended next steps. Keep
 implemented behavior, agreed future requirements, proposals and verification
@@ -68,10 +68,11 @@ user-facing workflow is delivered.
 | [Page index](preview-pipeline/page-index.md) | Native discovery and listing, literal/evaluated definition parity, invalidation, bounded saves, process lifecycle, fallback, packaging and acceptance evidence |
 | [Code quality](code-quality.md) | Rust tooling and lint policy, test conventions, dependency review, host integration and release checks |
 | [Labs](labs.md) | How engineering questions are settled by comparing working variants: plans, fixtures, boundaries, correctness checks, measurement, evidence and decisions |
-| [Module layout](modules.md) | Capability ownership under `src/modules/`, shared UI and infrastructure locations, and bounded migration requirements |
+| [Module layout](modules.md) | Peer product parts, capability ownership, shared contracts, delivery and bounded migration requirements |
 
-The browser canvas is in `packages/workbench/workbench/`, with host capabilities
-under `src/` and the Rust index in `native/`. Projects provide
+The product root holds peer `extension/`, `server/`, `capture/`, `ui/`, `sdk/`
+and `contracts/` owners. The browser canvas is in `ui/`, and the server's
+Rust index and Node services are in `server/`. Projects provide
 `workbench.yaml` and may override machine-specific values in the ignored
 `workbench.local.yaml`. They do not receive a copy of the workbench code.
 

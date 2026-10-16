@@ -68,7 +68,7 @@ the worker's serial queue, so a long export or Astro input render delays them.
 
 ## Verification
 
-[Pipeline tests](../../src/modules/preview-pipeline/pipeline.test.ts) cover
+[Pipeline tests](../../server/node/src/modules/preview-pipeline/pipeline.test.ts) cover
 compiler output and serving. Shared-runtime isolation and stylesheet updates
 also have [pipeline lab evidence](../../labs/rspack-pipeline/README.md#stage-2-report).
 The remaining descriptor-queue gap must be closed without weakening build

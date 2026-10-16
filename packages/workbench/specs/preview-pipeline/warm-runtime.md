@@ -98,8 +98,8 @@ re-renders through the preview runtime without reloading its modules. Gaps:
 ## Verification
 
 Isolation and warm-host lifecycle are covered by
-[preview-host tests](../../workbench/preview-host.test.js) and
-[preview-runtime tests](../../preview-runtime.test.js). The
+[preview-host tests](../../ui/legacy/preview-host.test.js) and
+[preview-runtime tests](../../ui/preview/preview-runtime.test.cjs). The
 [pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report) holds design
 comparisons. Long-session heap bounds and real-host confirmation remain
 acceptance work, not properties established by those prototype runs.

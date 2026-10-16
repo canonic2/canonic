@@ -5,50 +5,43 @@ they are. The [internal specifications](specs/README.md) in `specs/` define the
 behavior the implementation and tests must satisfy; they are not published.
 Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-The workbench itself is `workbench/`, and it ships in the `.vsix`. It is plain
-HTML and script files with no build step; opening
-`workbench/index.html?root=file:///path/to/a/project/` in a browser started with
-`--allow-file-access-from-files` is enough to work on the tool.
+## Product layout
 
-| File | Job |
-| --- | --- |
-| `extension.js` | activation, the server's lifecycle, commands, clipboard handoff |
-| `panel.js` | the canvas: one webview holding one iframe |
-| `sidebar-view.js` | the Workbench view in the sidebar |
-| `startup.js` | checks configured implementations and starts their `start` commands |
-| `server.js` | the HTTP server, capture, export, preview and lens endpoints, and script injection — plain node |
-| `preview-scripts.js` | the `preview-compat.js` bundle (`keys.js`, `actions.js`, `states.js`) injected into served pages |
-| `preview-service.js` + `preview/` | the TypeScript preview worker: discovery, compilation, adapters, the browser runtime, request mocks, the portable viewer, and the `cli.cjs` command line |
-| `src/modules/export/` | the TypeScript design-system source and ZIP exporter; `index.ts` is its public Node API |
-| `electron-capture.js` + `capture-helper/` | bundled background screenshot renderer, preparation and crash recovery |
-| `capture-scripts.js` | scripts the screenshot helper runs in a page: the annotation overlay, element descriptions, and export settling |
-| `window-stream.js` + `window-capture/Capture.swift` | native ScreenCaptureKit and VideoToolbox stream of one app window, for the iOS Simulator and window lenses |
-| `electron-runtime.js` | verifies and unpacks the bundled Electron runtime, shared by capture and the preview worker, once into extension storage |
-| `remote.js` | fetches the configured Storybook's index |
-| `config.js` + `yaml.js` | reads `workbench.yaml` and `workbench.local.yaml` on this machine: absolute paths, implementation origins |
-| `handoff.js` | composes the prompt an agent is handed. Pure string work |
-| `workbench/` | the tool itself — see [its README](workbench/README.md) |
+Workbench has peer owners under one product root: `extension/` for VS Code,
+`server/` for Rust and `server/node/` for the shipping Node server/compiler,
+`capture/` for Electron and platform capture, `ui/` for the browser application,
+`sdk/` for the published definition API, and `contracts/` for shared pure rules
+and wire data. See [module ownership](specs/modules.md).
 
-`server.js`, `remote.js`, `handoff.js`, `config.js` and `yaml.js`
-never import `vscode`, so they run and are tested without an editor:
+`ui/legacy/` holds the HTML/script shell; `ui/src/` holds TypeScript browser
+controllers, components and themes. Use the local server to load the complete
+application with shared contract scripts and TypeScript transformation.
 
 ```sh
-pnpm test                                    # config parsing, prompt wording, routes, previews, the browser driver
-pnpm run check                               # type-check the TypeScript in src/
-pnpm run serve <folder>                      # the same server the extension runs, on its own
-node handoff.js                              # print the prompt for a sample canvas
-node config.js <folder>                      # what this machine resolves the config to
-node preview/cli.cjs check <folder>          # discover and build every TypeScript preview
+pnpm install --frozen-lockfile
+pnpm test
+pnpm run check
+pnpm run check:server
+pnpm run serve <folder>
+node server/node/config.js <folder>
+node server/node/preview/cli.cjs check <folder>
 ```
 
-`preview/cli.cjs` also has `init` and `build`; see the
+`server/node/preview/cli.cjs` also provides `init` and `build`; see the
 [command-line tools](docs/workbench-previews.md#command-line-tools).
+
+The extension manifest is `extension/package.json`. Packaging assembles a
+temporary product tree with that manifest, production dependencies, browser
+assets, compiler binaries, the Rust executable and Electron bundle. The source
+root remains a private development coordinator. Keep its version and the
+extension and SDK versions aligned. F5's launch configuration selects
+`extension/` as the extension development path.
 
 ## The two halves
 
 The workbench is one tool in two windows of the editor: the page list in the
 sidebar, the canvas in a tab. Neither talks to the other — both talk to
-`extension.js`, and what travels between them is the hash the workbench's
+`extension/extension.js`, and what travels between them is the hash the workbench's
 address bar would have carried, `pages/sign-in.html:error`:
 
 ```text
@@ -60,7 +53,7 @@ So picking a page in the sidebar and pasting a workbench URL are the same
 instruction, and following a link inside a live preview leaves the list showing
 wherever it ended up.
 
-The list is `workbench/sidebar.html` loaded into a webview, with a `<base>`
+The list is `ui/legacy/sidebar.html` loaded into a webview, with a `<base>`
 saying where that folder is and a `<meta>` saying where the project is — a
 webview's address is the editor's, so the page can work out neither by itself.
 It paints in VS Code's theme colours rather than the workbench's: it is standing
@@ -69,7 +62,7 @@ where a file tree usually does, so it dresses like one.
 The canvas is a webview holding one iframe rather than the built-in Simple
 Browser, because only the page that owns the frame can pass a pick into it.
 
-`workbenchRoot()` in `extension.js` picks the folder to serve: the first open
+`workbenchRoot()` in `extension/extension.js` picks the folder to serve: the first open
 folder with a `workbench.yaml`, which is also the `workspaceContains:`
 activation event.
 
@@ -96,7 +89,7 @@ until their window reloads. Reloading the preview or using **Refresh Pages**
 does not restart the extension. This also applies to `scripts/install-workbench.mjs`
 at the repository root.
 
-Building and running need Node 24 or later: the TypeScript in `src/` loads
+Building and running need Node 24 or later: the TypeScript in each part's `src/` loads
 through Node's type stripping, so the extension requires VS Code 1.123 or later,
 the first release on Node 24. `pnpm run package` bundles pinned Electron 44.2.0 and produces a
 platform-specific VSIX for the build host. `--target darwin-arm64` (or
@@ -111,7 +104,7 @@ Use native builders for release validation and signing.
 The download happens at build time only. `CANONIC_ELECTRON_ZIP_DIR` can point
 to a directory of official Electron ZIPs for an offline build.
 
-Packaging also writes the target's pinned native esbuild binary and Rspack binding to `preview/bin/`.
+Packaging also writes the target's pinned native esbuild binary and Rspack binding to `server/node/preview/bin/`.
 It copies the matching installed binary, or, when building another target,
 downloads the registry archive and checks it against the integrity recorded in
 `pnpm-lock.yaml`. The installed worker uses this bundled
@@ -135,15 +128,15 @@ native validation; Linux hosts without a display have no screenshots.
 The [extension workflow](../../.github/workflows/extension.yml) tests the extension
 and builds all six platform VSIX files on matching GitHub-hosted runners when a
 `workbench/v<version>` tag is pushed. Bump `version` in `package.json`,
-`preview/package.json`, and the lockfile, add a `## <version>` entry to
+`extension/package.json` and `sdk/package.json`, add a `## <version>` entry to
 [CHANGELOG.md](CHANGELOG.md), then push a matching tag (for example,
-`workbench/v1.0.1`). The workflow checks the tag against both package versions
+`workbench/v1.0.1`). The workflow checks the tag against all three versions
 and refuses a tag without a changelog entry
 (`node scripts/release-notes.cjs <version>` prints the entry, or fails the same
 way). It attaches all six VSIX files to a GitHub Release using stable,
 versionless asset names, with the changelog entry as its notes. It then
 publishes the same files to the Visual Studio Marketplace and Open VSX, publishes
-`preview/` to npm as `@canonic2/workbench`, and publishes the website. Build
+`sdk/` to npm as `@canonic2/workbench`, and publishes the website. Build
 files are also available as workflow artifacts for 14 days.
 Open VSX publishing uses the `canonic` namespace and GitHub trusted publishing
 through OIDC, with `extension.yml` registered as a trusted publisher. Already-published

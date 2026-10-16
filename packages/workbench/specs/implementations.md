@@ -146,13 +146,13 @@ Configuration: [App windows](../docs/windows.md#configure-it).
 ## Native window stream
 
 The [multiple-artboard support](multiple-artboards.md) owns native consumers
-per instance. `src/native-streams/pool.ts` creates independent producers by
+per instance. `capture/src/native-streams/pool.ts` creates independent producers by
 source and codec. Closing a consumer preserves subscribed peers; unused
 producers expire. Simulator input stays device-specific; windows are view-only.
 Repeated artboards on one device/window share that external surface.
 
 - Simulator and window lenses use one native helper built from
-  [Capture.swift](../window-capture/Capture.swift), which ships as source in
+  [Capture.swift](../capture/window-capture/Capture.swift), which ships as source in
   the extension. The first stream compiles it with `xcrun swiftc`, signs it ad
   hoc, and caches it until the source or `Info.plist` changes. It requires
   macOS 13 or later and Xcode; other platforms get "Native window streaming
@@ -184,7 +184,7 @@ Repeated artboards on one device/window share that external surface.
   [core.md](core.md#problem-reporting).
 - **Invalid authored entries are dropped silently.** A page whose `src`
   starts with `/` or contains `..`, `:`, or `~`, and a state whose ID isn't
-  kebab-case, are left out with no problem ([config.js](../config.js)
+  kebab-case, are left out with no problem ([config.js](../server/node/config.js)
   `page` and `states`), contrary to the reporting requirement in
   [core.md](core.md).
 - **Links to unlisted project pages do nothing.** With actions on, the page
@@ -199,25 +199,25 @@ Repeated artboards on one device/window share that external surface.
 
 ## Verification points
 
-- [config.test.js](../config.test.js) and
-  [manifest.test.js](../workbench/manifest.test.js) cover paths, state maps
+- [config.test.js](../server/node/config.test.js) and
+  [manifest.test.js](../contracts/manifest.test.js) cover paths, state maps
   (including a first state named by its own ID), implementation validation,
   window implementations, code pointers, and code for an implementation
   without a root.
-- [preview-scripts.test.js](../preview-scripts.test.js) checks that the bundle
+- [preview-scripts.test.js](../server/node/preview-scripts.test.js) checks that the bundle
   applies actions, states, and `noValidate` together, and that served HTML
-  and the compat route use the one injection. [server.test.js](../server.test.js)
+  and the compat route use the one injection. [server.test.js](../server/node/server.test.js)
   checks placement first in `<head>`, the Simulator catalog, stream
   negotiation only for a configured device or declared window, and export
   warnings for implementation-only pages.
-- [simulator.test.js](../workbench/simulator.test.js) checks that a window lens
+- [simulator.test.js](../ui/legacy/simulator.test.js) checks that a window lens
   streams without starting a Simulator input session, and that an embedded workbench uses JPEG.
-  [window-stream.test.js](../window-stream.test.js) checks each native producer's
-  stream protocol, while `src/native-streams/pool.test.ts` covers producer sharing,
+  [window-stream.test.js](../capture/window-stream.test.js) checks each native producer's
+  stream protocol, while `capture/src/native-streams/pool.test.ts` covers producer sharing,
   token checks, HTTP framing, and that the packaged extension ships the
   helper source.
-- [lenses.test.js](../workbench/lenses.test.js) checks URL joining.
-  [startup.test.js](../startup.test.js) checks start commands.
+- [lenses.test.js](../ui/legacy/lenses.test.js) checks URL joining.
+  [startup.test.js](../extension/startup.test.js) checks start commands.
 - Manual: frame rates, Screen Recording prompts, Simulator input, and macOS
   version support are checked on a Mac with a booted Simulator and a visible
   app window. No automated test covers them.

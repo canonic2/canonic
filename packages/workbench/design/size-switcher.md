@@ -6,11 +6,11 @@ the workbench server is running, **Custom size…** and **Edit sizes…**. See
 [Custom size](size-dialog.md) and [Edit sizes](sizes-editor.md) for the
 dialogs they open.
 
-`wb-size-switcher` in `src/components/size-switcher/` draws the sizes it is
+`wb-size-switcher` in `ui/src/components/size-switcher/` draws the sizes it is
 given and says what was asked for. The canvas controller in
-`workbench/workbench.js` supplies the space's sizes and the page's, owns the
+`ui/legacy/workbench.js` supplies the space's sizes and the page's, owns the
 current size, and handles every request. Sizes and their rules are in
-`src/sizes/`; the product contract is `specs/sizes.md`.
+`contracts/src/sizes/`; the product contract is `specs/sizes.md`.
 
 ## Buttons
 

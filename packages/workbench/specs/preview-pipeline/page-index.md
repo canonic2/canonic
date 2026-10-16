@@ -79,12 +79,14 @@ first page meets its render target.
 
 ### Process and resource ownership
 
-The stable Rust package in `native/` has a library and a thin binary entry
+The stable Rust package in `server/` has a library and a thin binary entry
 point. `workbench-native index` consumes one JSON request on stdin and writes
 one JSON response, then exits. The protocol is documented in
-[the native README](../../native/README.md#protocol).
+[the native README](../../server/README.md#protocol).
+The [native ownership contract](../modules.md#rust-ownership) separates
+pure definition rules, application stages, shared observations and adapters.
 
-The TypeScript adapter in `src/modules/page-index/` owns binary selection,
+The TypeScript adapter in `server/node/src/modules/page-index/` owns binary selection,
 temporary storage, process lifetime, ordering, duplicate IDs and recovery.
 It starts a native process per request. The bundled Electron runtime is
 prepared only when evaluation is requested; literal-only listing requires
@@ -113,7 +115,7 @@ builds locked release dependencies for that Rust target or uses an explicitly
 provided prebuilt executable. Missing target/linker prerequisites stop
 packaging. Ship the executable, excluding Rust source, Cargo caches and test
 reports. [Code quality](../code-quality.md) owns the build and verification
-policy; [the native README](../../native/README.md#checks-and-packaging) owns
+policy; [the native README](../../server/README.md#checks-and-packaging) owns
 developer commands.
 
 ## Acceptance and evidence
@@ -124,12 +126,12 @@ acceptance.
 
 | ID | Acceptance criterion | Existing evidence |
 | --- | --- | --- |
-| PI-01 | Native and compiler answers agree for literal/computed previews, docs, invalid definitions, duplicate IDs, custom globs and discovery order | [Adapter parity tests](../../src/modules/page-index/index.test.ts) and [answer tests](../../src/modules/page-index/answer.test.ts) |
-| PI-02 | Literal listing requires no JavaScript executable; executable definitions use evaluation | Adapter tests; [literal unit and property tests](../../native/src/literal.rs) |
-| PI-03 | Refresh observes additions, removals, renames, retitles and changed imported list fields | [Native CLI integration](../../native/tests/integration/main.rs) and adapter dependency-invalidation test |
-| PI-04 | Invalid saves rebuild, unchanged inputs reuse, and a corrupt ordered answer does not lose pages | [Saved-index unit test](../../native/src/saved.rs), native integration and adapter tests |
+| PI-01 | Native and compiler answers agree for literal/computed previews, docs, invalid definitions, duplicate IDs, custom globs and discovery order | [Adapter parity tests](../../server/node/src/modules/page-index/index.test.ts) and [answer tests](../../server/node/src/modules/page-index/answer.test.ts) |
+| PI-02 | Literal listing requires no JavaScript executable; executable definitions use evaluation | Adapter tests; [literal unit and property tests](../../server/src/literal.rs) |
+| PI-03 | Refresh observes additions, removals, renames, retitles and changed imported list fields | [Native CLI integration](../../server/tests/integration/main.rs) and adapter dependency-invalidation test |
+| PI-04 | Invalid saves rebuild, only matching generations reuse the complete answer, failed saves preserve successful listing, and a corrupt ordered answer does not lose pages | [Saved-index unit test](../../server/src/saved.rs), native CLI generation/handoff/save-failure tests and adapter tests |
 | PI-05 | Native failure or timeout logs a diagnostic and returns the fallback answer | Adapter missing/failing-binary and timeout test |
-| PI-06 | Trust and disabled-preview controls prevent project evaluation | [Preview server integration tests](../../preview.test.js) |
+| PI-06 | Trust and disabled-preview controls prevent project evaluation | [Preview server integration tests](../../server/node/preview.test.js) |
 | PI-07 | Cache eviction, byte bounds and process cleanup follow the resource table | Implemented bounds; dedicated boundary/eviction and descendant-cleanup assertions remain verification gaps |
 | PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [performance](performance.md#page-listing); acceptance on all six targets is not established by that probe |
 

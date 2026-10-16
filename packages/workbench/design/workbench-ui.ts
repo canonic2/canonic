@@ -1,10 +1,10 @@
 /* Design examples use the shipping elements and explicit icon input. */
 
 import { icon } from './icons.ts';
-import { registerSpaceComponents } from '../src/components/register.ts';
-import type { WbSpaceMark } from '../src/components/space-mark/element.ts';
-import type { WbSpaceSwitcher } from '../src/components/space-switcher/element.ts';
-import type { Space } from '../src/components/space-mark/space.ts';
+import { registerSpaceComponents } from '../ui/src/components/register.ts';
+import type { WbSpaceMark } from '../ui/src/components/space-mark/element.ts';
+import type { WbSpaceSwitcher } from '../ui/src/components/space-switcher/element.ts';
+import type { Space } from '../ui/src/components/space-mark/space.ts';
 import './spaces.js';
 
 export type { Space };

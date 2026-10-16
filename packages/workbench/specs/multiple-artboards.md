@@ -9,7 +9,7 @@ The [module plan](multiple-artboards-code-plan.md) records the implementation.
 
 ## Implemented support system
 
-TypeScript modules under `src/canvas/` provide serializable artboard descriptors,
+TypeScript modules under `ui/src/canvas/` provide serializable artboard descriptors,
 validated dimensions, insertion-order geometry, a controller with injected
 runtime and snapshot ports, authenticated iframe messaging, full-canvas review,
 and participating-space context publication. No replacement canvas page,

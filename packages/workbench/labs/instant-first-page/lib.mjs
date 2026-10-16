@@ -15,9 +15,9 @@ import { LOCKFILE } from '../fixtures/acme-app.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const workbench = path.resolve(here, '..', '..');
 const require = createRequire(import.meta.url);
-const { Compiler, validate, docsRequest, mockFetches } = require(path.join(workbench, 'preview', 'compiler.cjs'));
-const { Pipeline } = await import(path.join(workbench, 'src', 'modules', 'preview-pipeline', 'index.ts'));
-const { hotClientSource } = await import(path.join(workbench, 'src', 'modules', 'preview-pipeline', 'client-sources.ts'));
+const { Compiler, validate, docsRequest, mockFetches } = require(path.join(workbench, 'server/node/preview', 'compiler.cjs'));
+const { Pipeline } = await import(path.join(workbench, 'server/node/src', 'modules', 'preview-pipeline', 'index.ts'));
+const { hotClientSource } = await import(path.join(workbench, 'server/node/src', 'modules', 'preview-pipeline', 'client-sources.ts'));
 const log = message => console.log(`[${new Date().toISOString().slice(11, 19)}] ${message}`);
 
 // ---------------------------------------------------------------- host process
@@ -66,7 +66,7 @@ export const refresh = {
 export function entryMaker(root) {
   const compiler = new Compiler(root, {});
   const pipeline = new Pipeline(compiler, { validate, docsRequest, mockFetches, createAstro: () => { throw new Error('Astro is outside the lab subset'); } },
-    { previewDir: path.join(workbench, 'preview') });
+    { previewDir: path.join(workbench, 'ui/preview') });
   return {
     compiler,
     async entries(files) {
@@ -81,7 +81,7 @@ export function entryMaker(root) {
 }
 
 export function job(root, cacheDir, maker, entries, generation = 1) {
-  return { op: 'start', root, preview_dir: path.join(workbench, 'preview'), cache_dir: cacheDir, generation, hot_client: maker.hotClient(generation), entries, refresh, stable_chunks: true };
+  return { op: 'start', root, preview_dir: path.join(workbench, 'ui/preview'), cache_dir: cacheDir, generation, hot_client: maker.hotClient(generation), entries, refresh, stable_chunks: true };
 }
 
 // ---------------------------------------------------------------- fixtures

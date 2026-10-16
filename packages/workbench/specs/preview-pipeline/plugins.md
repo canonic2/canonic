@@ -101,7 +101,7 @@ private. An `aliases` entry stands in for an Astro application module, such as
 
 ## Verification
 
-[Preview integration tests](../../preview.test.js) cover project plugins,
+[Preview integration tests](../../server/node/preview.test.js) cover project plugins,
 module rules, format handling and portable builds. Plugin behavior in
 server-side definition and Astro evaluation must be assessed separately from
 browser compilation; successful browser output does not establish that path.

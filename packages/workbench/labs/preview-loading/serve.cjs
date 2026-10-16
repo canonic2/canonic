@@ -5,7 +5,7 @@
 const path = require('node:path');
 
 const [snapshot, fixture] = process.argv.slice(2).map(value => path.resolve(value));
-const server = require(path.join(snapshot, 'server.js'));
+const server = require(path.join(snapshot, 'server/node/server.js'));
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 
 server.start({
