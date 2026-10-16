@@ -59,8 +59,21 @@ project-registered adapters. They do not run a project's application server,
   in sorted order, skipping dot-prefixed entries, symbolic links, and
   `node_modules`, `dist`, `build`, and `coverage`.
   `previews.include` replaces the patterns; `previews: false` turns previews
-  off and closes the worker. Discovery is a file walk in the server process and
-  runs no project code.
+  off and closes the worker. The native page index walks and parses literal
+  definitions without running project code. Computed definitions and every
+  `defineDocs` definition use one batch of the compiler's esbuild evaluation
+  in the bundled Electron runtime as Node. The list does not wait for the
+  preview worker. Untrusted workspaces list no definitions.
+- A saved index lives under `canonic-workbench-index/<root digest>/` in the
+  system temporary folder. File stamps cover definitions, validated source
+  paths and the evaluated definitions' esbuild inputs. Warm reads stat known
+  directories and re-read only changed directories. Changes to the binary,
+  evaluator, compiler, API or include settings invalidate the save. Invalid or
+  unreadable saves rebuild; writes publish by atomic rename. The
+  [resource bounds](preview-pipeline/performance.md#resource-bounds) define
+  retention. Missing, failing or timed-out native indexes log a diagnostic
+  and use the worker's index. The manifest answer and definition contract
+  are identical on both paths.
 - A definition that fails to load or validate becomes one problem prefixed
   with its file; other previews still load. A second definition with an
   existing ID fails with `Duplicate preview id`.

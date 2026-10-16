@@ -10,8 +10,10 @@ This folder owns how they are built, delivered and kept current.
 
 ## The pipeline
 
-1. **Discover.** The server walks the project for definitions without running
-   project code ([previews](../previews.md#author-and-discover)).
+1. **Discover and list.** The native page index walks the project, parses
+   literal definitions, and evaluates computed definitions and docs in a
+   separate Node process. A saved index avoids re-reading unchanged inputs
+   ([previews](../previews.md#author-and-discover)).
 2. **Evaluate.** The compile worker evaluates definitions and
    `workbench.config.ts` in Node, bundled with esbuild. Every definition
    that needs evaluating is bundled in one build ([compiler](compiler.md#what-stays-on-esbuild)).
@@ -107,13 +109,31 @@ the targets the whole pipeline is measured against.
   - the first page's time must not grow with the number of pages, which the
     shipping start does not meet yet
     ([performance](performance.md#first-page)).
+- **2026-10-15, owner:** the first page shows within 500 ms of the canvas
+  opening, and the complete page list within 200 ms, at any page count, with
+  a warm cache; with a cold cache, the first page shows in about its own
+  build time ([performance](performance.md#measured-interactions)). Workbench
+  moves to Rust where it can, as a VS Code extension and as part of Studio;
+  Electron stays for screenshots.
+- **2026-10-15, owner:** on stage 1 of the
+  [instant first page lab](../../labs/instant-first-page/README.md#stage-1-report),
+  implement its Rust page index as measured: a saved index checked by file
+  and directory stamps, list fields parsed from literal definitions, and the
+  shipping evaluation for the rest. The lab's stage 2, the Rust compiler host
+  end to end, continues in parallel.
 
-The proposed targets in [performance](performance.md#measured-interactions)
+The other proposed targets in [performance](performance.md#measured-interactions)
 are not agreed yet.
 
 ## Status
 
-Implemented on 2026-10-13 in [src/modules/preview-pipeline/](../../src/modules/preview-pipeline/)
+The Rust page index is implemented in `native/`, with the server adapter in
+`src/modules/page-index/`, following the [2026-10-15 decision](#decisions).
+It lists pages independently of the compile worker. The compiler host remains
+the instant first page lab's stage 2 work; compilation and pre-warming keep
+their existing index and start behavior.
+
+The Rspack preview pipeline is implemented in [src/modules/preview-pipeline/](../../src/modules/preview-pipeline/)
 and the preview runtime, canvas and docs page. Each topic's status names what
 remains. The implementation passes the package's tests and the
 [Rspack pipeline lab](../../labs/rspack-pipeline/README.md)'s stage 1 checks
@@ -130,6 +150,17 @@ after a restart and, in the prototype, the warm document's state changes and
 returns.
 
 ## Open questions
+
+- Whether Studio should consume `workbench-native` as a Rust library when
+  the compiler host joins it. The package has one library and binary; no
+  Studio dependency is established.
+- Whether a resident index with a watcher can meet the page-list budget on
+  cold 10,000-page starts. The shipped index spawns once per request and
+  does not watch definitions.
+- Whether untrusted workspaces should list literal definitions. They list
+  none under the current trust contract.
+- Whether the worker's pre-warming should use the native file list. It
+  retains `Compiler.index()` pending stage 2.
 
 Each topic lists its own. The ones that change the plan:
 

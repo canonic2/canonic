@@ -32,7 +32,9 @@ var designExport = require('./src/modules/export/index.ts');
 var previewService = require('./preview-service');
 var previewScripts = require('./preview-scripts');
 var implementationProxy = require('./proxy');
+var pageIndex = require('./src/modules/page-index/index.ts');
 var previewCompiler = require('./preview/compiler.cjs');
+var indexRuntime = require('./electron-runtime');
 var windowStream = require('./window-stream');
 var agentView = require('./agent-view');
 var manifest = require('./workbench/manifest');
@@ -1171,30 +1173,39 @@ function start(options) {
       if (previews) { await previews.close(); previews = null; previewSettings = null; }
       return;
     }
-    var discovered = previewCompiler.discover(root, view.previews && view.previews.include).length > 0;
     if (options.isTrusted === false) {
-      if (discovered) problems.push('Workbench previews require a trusted workspace.');
+      if (previewCompiler.discover(root, view.previews && view.previews.include).length) problems.push('Workbench previews require a trusted workspace.');
       return;
     }
     /* Docs page examples compile in the same worker, so a space with docs
        lenses and no discovered previews starts it too. */
-    if (!discovered && !docsPages(view).some(function (page) { return page.lenses.length; })) return;
     try {
       var settings = JSON.stringify(view.previews || {});
       if (previews && settings !== previewSettings) { await previews.close(); previews = null; }
-      if (!previews) {
-        previews = previewService.create(root, { previews: view.previews, storage: options.captureStorage,
-          diagnostic: diagnostic,
-          log: function (message) { diagnostic('warn', 'preview.worker', { message: message }); } });
-        previewSettings = settings;
+      function worker() {
+        if (!previews) {
+          previews = previewService.create(root, { previews: view.previews, storage: options.captureStorage,
+            diagnostic: diagnostic,
+            log: function (message) { diagnostic('warn', 'preview.worker', { message: message }); } });
+          previewSettings = settings;
+        }
+        return previews;
       }
-      if (!discovered) return;
       var indexing = Date.now();
-      var index = await previews.index();
-      diagnostic(Date.now() - indexing >= 1000 ? 'warn' : 'info', 'previews.indexed', {
+      var indexed = await pageIndex.indexPages({ root: root, previews: view.previews || {},
+        executable: function () {
+          return indexRuntime.available() ? indexRuntime.prepare(options.captureStorage, null, function (event, details) {
+            diagnostic('info', event, Object.assign({ for: 'page-index' }, details));
+          }) : Promise.resolve(process.execPath);
+        },
+        fallback: function () { return worker().index(); }, diagnostic: diagnostic,
+      });
+      var index = indexed.answer;
+      if (indexed.timings.definitions || index.previews.length || index.docs.some(function (page) { return page.lenses.length; }) || docsPages(view).some(function (page) { return page.lenses.length; })) worker();
+      diagnostic(Date.now() - indexing >= 1000 ? 'warn' : 'info', 'previews.indexed', Object.assign({}, indexed.timings, {
         elapsedMs: Date.now() - indexing, previews: (index.previews || []).length,
         docs: (index.docs || []).length, errors: (index.errors || []).length,
-      });
+      }));
       problems.push.apply(problems, index.errors);
       /* Discovered Markdown pages go where their titles say, like previews.
          A page workbench.yaml gives the same Markdown file wins. */

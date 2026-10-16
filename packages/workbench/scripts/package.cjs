@@ -4,6 +4,7 @@ var args = process.argv.slice(2);
 var at = args.indexOf('--target');
 var target = at < 0 ? process.platform + '-' + process.arch : args[at + 1];
 if (at < 0) args.push('--target', target);
+require('./build-native.cjs').build(target);
 require('./bundle-compiler.cjs').bundle(target).then(function () {
   return require('./bundle-runtime.cjs').bundle(target);
 }).then(function () {

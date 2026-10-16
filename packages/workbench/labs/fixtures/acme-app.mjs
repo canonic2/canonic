@@ -32,6 +32,7 @@ export const DEPENDENCIES = {
 DEPENDENCIES['large-system'] = DEPENDENCIES.large;
 DEPENDENCIES.huge = DEPENDENCIES.large;
 DEPENDENCIES.giant = DEPENDENCIES.large;
+DEPENDENCIES.colossal = DEPENDENCIES.large;
 DEPENDENCIES['large-web'] = {
   ...DEPENDENCIES.large,
   '@fontsource-variable/inter': '5.3.0',
@@ -39,7 +40,7 @@ DEPENDENCIES['large-web'] = {
   '@fontsource-variable/material-symbols-outlined': '5.3.8',
   '@fontsource/jetbrains-mono': '5.3.0',
 };
-export const LOCKFILE = { small: 'small', large: 'large', 'large-system': 'large', huge: 'large', giant: 'large', 'large-web': 'large-web' };
+export const LOCKFILE = { small: 'small', large: 'large', 'large-system': 'large', huge: 'large', giant: 'large', colossal: 'large', 'large-web': 'large-web' };
 
 const SIZES = {
   small: { components: 5, features: 0, pages: 0, componentBytes: 2500 },
@@ -52,6 +53,9 @@ const SIZES = {
   huge: { components: 140, features: 60, pages: 200, componentBytes: 6000, sections: [14, 34], fonts: 'system', sentinels: true },
   // The first page lab's largest project.
   giant: { components: 140, features: 60, pages: 600, componentBytes: 6000, sections: [14, 34], fonts: 'system', sentinels: true },
+  // The instant first page lab's largest project: 10,000 lighter pages, one in
+  // 20 with its title or states computed by an imported module.
+  colossal: { components: 140, features: 60, pages: 10000, componentBytes: 6000, sections: [2, 4], fonts: 'system', sentinels: true, computed: true },
 };
 
 const NOUNS = ['job', 'quote', 'invoice', 'client', 'site', 'visit', 'crew', 'asset', 'part', 'estimate',
@@ -388,23 +392,25 @@ ${Array.from({ length: sections }, (_, section) => `      <${Name}Section${secti
 }
 `);
     const operation = `${pascal(pageFeatures[0])}ListQuery`;
+    // One page in 40 takes its title, and another its states, from a module.
+    const computed = !shape.computed ? null : index % 40 === 7 ? 'title' : index % 40 === 27 ? 'states' : null;
     writer.write(`${dir}/index.workbench.tsx`, `import { definePreview } from '@canonic2/workbench';
-
+${computed === 'title' ? "import { pageTitle } from '../../app/page-list';\n" : computed === 'states' ? "import { listStates } from '../../app/page-list';\n" : ''}
 export default definePreview({
   id: 'pages/${slug}',
-  title: 'Acme/Pages/${Name}',
+  title: ${computed === 'title' ? `pageTitle('${Name}')` : `'Acme/Pages/${Name}'`},
   adapter: 'react',
   source: { entry: './Page.tsx', export: 'Page' },
   requests: {
     'POST /graphql ${operation}': { body: { data: { items: ${JSON.stringify(records(rand, 12))} } } },
 ${shape.sentinels ? `    'GET /api/only-${slug}': { body: { owner: 'pages/${slug}' } },\n` : ''}  },
-  states: {
+  states: ${computed === 'states' ? `listStates('${operation}')` : `{
     default: {},
     empty: { requests: { 'POST /graphql ${operation}': { body: { data: { items: [] } } } } },
-  },
+  }`},
 });
 `);
-    pages.push({ id: `pages/${slug}`, file: `${dir}/index.workbench.tsx`, sections, selector: `[data-acme-page="${slug}"]`, ...(mono ? { mono: true } : {}), edit: { component: `${dir}/Interactive.tsx`, module: `${dir}/sections/Section0.tsx` } });
+    pages.push({ id: `pages/${slug}`, file: `${dir}/index.workbench.tsx`, sections, ...(computed ? { computed } : {}), selector: `[data-acme-page="${slug}"]`, ...(mono ? { mono: true } : {}), edit: { component: `${dir}/Interactive.tsx`, module: `${dir}/sections/Section0.tsx` } });
   }
   return pages;
 }
@@ -587,6 +593,16 @@ export const slowPlugin = {
   let previews = [];
   if (large) {
     const features = generateFeatures(writer, rand, shape.features, ui);
+    if (shape.computed) writer.write('src/app/page-list.ts', `// List fields some definitions compute instead of writing literally.
+export const pageTitle = (name: string) => 'Acme/Pages/' + name;
+
+export function listStates(operation: string) {
+  return {
+    default: {},
+    empty: { requests: { ['POST /graphql ' + operation]: { body: { data: { items: [] } } } } },
+  };
+}
+`);
     previews = generatePages(writer, rand, shape.pages, ui, features, shape.sections, shape);
     if (shape.sentinels) generateSentinels(writer, previews.map(preview => preview.id));
     previews.push(...generateBroken(writer));

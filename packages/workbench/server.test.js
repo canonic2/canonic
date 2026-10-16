@@ -14,6 +14,30 @@ var withPreviewScripts = server.withPreviewScripts;
 
 var SCRIPTS = '<script src="/_workbench/preview-compat.js"></script>';
 
+test('config lists literal previews without starting the worker and keeps untrusted workspaces unevaluated', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-index-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  fs.writeFileSync(path.join(root, 'page.html'), '<p>Acme</p>');
+  fs.writeFileSync(path.join(root, 'page.workbench.ts'), "import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'page',title:'Acme/Page',adapter:'html',source:{entry:'page.html'}});");
+  try {
+    for (var trusted of [true, false]) {
+      if (!trusted) fs.writeFileSync(path.join(root, 'page.workbench.ts'), "import fs from 'node:fs'; fs.writeFileSync(" + JSON.stringify(path.join(root, 'executed')) + ", 'Acme'); export default {};");
+      var events = [];
+      var running = await server.start({ root: root, isTrusted: trusted, capture: { close: function () {} },
+        onLog: function (record) { events.push(record); } });
+      try {
+        var answer = await get(running.port, server.CONFIG_PATH);
+        assert.equal(answer.status, 200);
+        assert.equal(JSON.stringify(answer.body).includes('page.workbench.ts'), trusted);
+        assert.ok(!events.some(function (entry) { return entry.event === 'preview.worker.starting'; }));
+        if (trusted) assert.ok(events.some(function (entry) { return entry.event === 'previews.indexed' && !entry.details.fallback; }));
+        else assert.ok(JSON.stringify(answer.body).includes('trusted workspace'));
+        assert.ok(!fs.existsSync(path.join(root, 'executed')));
+      } finally { await running.close(); }
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('puts one compatibility script first inside head', function () {
   var out = withPreviewScripts('<!doctype html><html><head><title>x</title></head><body></body></html>');
 

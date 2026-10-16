@@ -253,6 +253,9 @@ finds a new kind of runner defect.
   reported writes that never happened (stage 1).
 - **Build URLs with `new URL(path, base)`.** Joining strings doubled a path
   segment (stage 1).
+- **Compute a check's verdict last.** Spreading a build's result into a
+  check after its `ok` replaced the verdict with the build's own, so checks
+  passed with build errors (instant first page, stage 1 smoke, 2026-10-15).
 - **Keep every console entry and request failure.** Keeping only the first
   40 hid entries from the baseline comparison (stage 1).
 
@@ -321,4 +324,5 @@ A decision follows these steps:
 | [Preview loading](../labs/preview-loading/README.md) | How should a project's TypeScript previews compile, load and reuse frames so that switching pages in one project is fast, without losing isolation, freshness or error containment? | Run set 1 reported 2026-10-11; set 2 needed |
 | [Rspack pipeline](../labs/rspack-pipeline/README.md) | Can the proposed Rspack pipeline deliver the performance plan in one implementation, with hot updates for every native format, shared chunks, lazy compilation, a warm frame or document, pre-warming and readiness fixes, without breaking an existing contract? | Decided 2026-10-13: implement the pipeline with the warm document; implemented the same day; the confirmation run through the shipping server and the VS Code webview is pending |
 | [First page](../labs/first-page/README.md) | How can the first page after Workbench starts show in about its own build time, whatever the number of pages, while hot updates keep working? | Decided 2026-10-15 after three run sets: no variant passes the decision rule, and none is adopted |
+| [Instant first page](../labs/instant-first-page/README.md) | Can a Rust preview host, using Rspack's Rust crates directly, show the first page and the complete page list within the agreed instant targets on 5, 600 or 10,000 pages, starting from that page alone and a saved page index, while edits and page switches stay within the 10% rule? | Agreed 2026-10-15; stage 1 reported the same day. Rust page index implemented; stage 2 continues in parallel |
 | [Compiler speed](../labs/compiler-speed/README.md) | Does another bundler compile a project's previews substantially faster than esbuild, with output that renders the same? Which candidates provide HMR with React Fast Refresh? | Reported 2026-10-11 after four run sets; with the owner's 10% threshold, Rspack meets the large-fixture speed criterion; decision pending |

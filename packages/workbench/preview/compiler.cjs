@@ -379,25 +379,10 @@ class Compiler {
     for (const file of files) {
       try {
         const evaluated = await this.definition(file);
-        if (evaluated.value && evaluated.value.kind === 'docs') {
-          const page = validateDocs(evaluated.value, file, this.root);
-          if (ids.has(page.id)) throw new Error('Duplicate preview id: ' + page.id);
-          ids.add(page.id);
-          docs.push(page);
-          continue;
-        }
-        const definition = validate(evaluated.value, file, this.root);
-        if (ids.has(definition.id)) throw new Error('Duplicate preview id: ' + definition.id);
-        ids.add(definition.id);
-        const title = definition.title || definition.id;
-        previews.push({ id: definition.id, title, adapter: definition.adapter, file: slash(path.relative(this.root, file)),
-          source: slash(path.relative(this.root, path.resolve(path.dirname(file), definition.source.entry))),
-          states: Object.entries(definition.states).map(([id, state]) => ({ id, label: state.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
-          controls: definition.controls || {}, sizes: definition.sizes, docs: definition.docs || null,
-          ...(definition.icon ? { icon: definition.icon } : {}),
-          links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
-            typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.state ? { state: to.state } : {}) }])),
-        });
+        const { entry, docs: isDocs } = projectDefinition(evaluated.value, file, this.root);
+        if (ids.has(entry.id)) throw new Error('Duplicate preview id: ' + entry.id);
+        ids.add(entry.id);
+        (isDocs ? docs : previews).push(entry);
       } catch (error) { errors.push(slash(path.relative(this.root, file)) + ': ' + error.message); }
     }
     return { previews, docs, errors };
@@ -591,6 +576,23 @@ class Compiler {
 
 const ASTRO_FOLDER = 'Astro examples are one component per file: point the lens at a folder of .astro files.';
 
+// The list contract shared by the worker and the native index's evaluator.
+// Duplicate IDs belong to the caller, after discovery ordering.
+function projectDefinition(raw, file, root) {
+  if (raw && raw.kind === 'docs') return { docs: true, entry: validateDocs(raw, file, root) };
+  const definition = validate(raw, file, root);
+  return { docs: false, entry: {
+    id: definition.id, title: definition.title || definition.id, adapter: definition.adapter,
+    file: slash(path.relative(root, file)),
+    source: slash(path.relative(root, path.resolve(path.dirname(file), definition.source.entry))),
+    states: Object.entries(definition.states).map(([id, state]) => ({ id, label: state.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
+    controls: definition.controls || {}, sizes: definition.sizes, docs: definition.docs || null,
+    ...(definition.icon ? { icon: definition.icon } : {}),
+    links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
+      typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.state ? { state: to.state } : {}) }])),
+  } };
+}
+
 // A defineDocs({...}) definition, with its paths made relative to the project
 // root so it reads like a docs page declared in workbench.yaml.
 function validateDocs(raw, file, root) {
@@ -654,4 +656,4 @@ function docsRequest(raw, root) {
   };
 }
 
-module.exports = { Compiler, discover, validate, inside, docsRequest, mockFetches };
+module.exports = { Compiler, discover, validate, inside, docsRequest, mockFetches, projectDefinition };

@@ -25,6 +25,7 @@ directory, and install scripts do not run.
 | `large-web` | `large-system` plus the environment's web fonts (Inter variable, Noto Sans JP with 320 characters from across the CJK block, a variable icon font with ligatures), JetBrains Mono on every fourth page only, and a deterministic 1200×800 PNG of about 2.5 MB per page. Its own lockfile |
 | `huge` | `large-system` with 200 pages. Uses the `large` lockfile |
 | `giant` | `large-system` with 600 pages. Uses the `large` lockfile |
+| `colossal` | `large-system` with 10,000 pages of 2–4 sections each. One definition in 40 takes its title from `src/app/page-list.ts`, and another its states, so 5% of definitions compute their list fields. Uses the `large` lockfile |
 | `formats` | One preview or page in every native format: React pages, a Vue single-file component, an Astro component, an HTML page, a React Native Web screen, a preview through a project adapter, a docs page with web and React Native Web lenses, and 2 broken previews. Project plugins in esbuild and Rspack form, and named edit targets |
 
 Each large page has its own sections (14–34 modules), an Apollo query

@@ -65,6 +65,10 @@ Feature specs own the behavior that must not change while making it faster.
 
 - The page list appears from discovery without waiting for any page to
   compile. Discovery reads only what it needs to list pages.
+- The complete page list of Workbench definitions (every page's title,
+  group, states and icon) shows on the canvas's first paint, not filled in
+  progressively, and its time does not grow with the number of pages.
+  Storybook catalogs are outside this requirement.
 - The first page compiles on request. Compilation after a worker restart
   uses the persisted build cache when its inputs are unchanged.
 - The time to the first page after the server starts does not grow with the
@@ -114,6 +118,13 @@ caches, and any prepared spare runtimes each have a stated bound and an
 eviction rule in the owning feature spec. Speed achieved by unbounded
 retention does not meet these requirements.
 
+The saved page index is capped at 64 MiB per project (32 MiB of postcard data
+and a 32 MiB complete ordered answer) and 32 project directories
+under `canonic-workbench-index/` in the system temporary folder. Index requests
+evict inactive directories after seven days and the oldest directories beyond
+the count bound. Oversized saves are not persisted. Writes use a temporary
+file and atomic rename; an interrupted write cannot replace a complete save.
+
 ## Measured interactions
 
 Each interaction is measured from the user's action to the painted result, on
@@ -122,8 +133,13 @@ and on Apple silicon macOS in the VS Code webview. The **large** fixture has
 40 page previews sharing about 5 MB of dependencies and application code; the
 **small** fixture has 5 component previews.
 
-The targets below are **proposed, not agreed**. They become requirements when
-the owner accepts them, with the measured conditions recorded here.
+The targets below are **proposed, not agreed**, except the ones marked
+agreed. They become requirements when the owner accepts them, with the
+measured conditions recorded here.
+
+The owner agreed the warm first-page and page-list targets on 2026-10-15.
+They hold at any page count, not only on the large fixture. With a cold
+cache, the first page shows in about its own build time.
 
 | Interaction | Boundary | Proposed target (large fixture) |
 | --- | --- | --- |
@@ -135,9 +151,9 @@ the owner accepts them, with the measured conditions recorded here.
 | Edit a React component in the current page (hot update, state kept) | File write to visible | p50 ≤ 300 ms |
 | Edit a page's own source that needs a reload | File write to visible | p50 ≤ 1 s |
 | Edit code shared by every page | File write to visible | p50 ≤ 2 s |
-| Open the first page after the server starts, build cache warm | Selection to visible | p50 ≤ 1.5 s |
+| Open the first page after the server starts, build cache warm | Canvas opening to visible | **Agreed:** p50 ≤ 500 ms |
 | Open the first page after the server starts, build cache cold | Selection to visible | p50 ≤ 5 s |
-| List pages | Discovery request to page list | ≤ 500 ms |
+| List pages, build cache warm | Canvas opening to the complete page list | **Agreed:** ≤ 200 ms |
 
 On the small fixture, no interaction may be slower than the shipping behavior
 it replaces by more than 10%.
@@ -233,51 +249,83 @@ shipping server and the VS Code webview are the next step.
 
 ### Page listing
 
-The page list comes from evaluating every discovered definition in the
-compile worker. The canvas loads that list before it shows any page, so its
-time adds to every first page.
+The server's native Rust index lists pages before the compile worker starts.
+It parses literal previews, evaluates computed definitions and docs in one
+Node batch with the shipping compiler, and saves entries with their input
+file stamps. Warm reads check known directory stamps and re-read only changed
+directories. The worker retains its own index for pre-warming. Failures log
+`previews.index.fallback` and use the worker's listing.
 
-- The first page lab's smoke runs (2026-10-13, Intel host, synthetic
-  fixtures, single samples) measured listing at 0.8 s for 40 pages and 7.4 s
-  for 600, before any build started. In its run set 1, every variant that
-  still listed all pages first took about 14 s on the 600-page fixture to show
-  the first page with a warm build cache, against 1.1–1.4 s on the small
-  fixture
-  ([first page lab](../../labs/first-page/README.md)).
-- Each definition was bundled in its own esbuild build. A build costs
-  35–50 ms however little it holds, so 600 definitions cost 600 builds. A
-  probe on 2026-10-14 on the 600-page fixture (602 definitions, load 5–22 on
-  16 cores) measured:
+Stage 1 of the [instant first page lab](../../labs/instant-first-page/README.md#stage-1-report)
+(2026-10-15, one run set, synthetic Acme fixtures, Intel macOS, process-internal
+times) measured:
 
-  | Method | Time |
-  | --- | ---: |
-  | One build per definition, in sequence | 29 s |
-  | One build per definition, all at once | 16 s |
-  | Node 24's own loader with types stripped | 2.1 s |
-  | One build for every definition | 0.24–0.34 s |
-  | Running the 602 bundled definitions | 18–31 ms, 153 ms on a cold start |
+| Pages | Shipping Node, cold | Rust, cold | Rust, warm directory checks |
+| ---: | ---: | ---: | ---: |
+| 5 | 161 ms | 2.5 ms | 1.6 ms |
+| 40 | 229 ms | 6.1 ms | 2.6 ms |
+| 600 | 913 ms | 38 ms | 8.5 ms |
+| 10,000 | 12.9 s | 1.07 s | 108 ms |
 
-  Node's loader also refuses `.tsx` definitions, extensionless relative
-  imports and `tsconfig` paths, and keeps the first version of each module.
-- Listing bundles every definition that needs evaluating in one build. A
-  build that fails is split in halves until the broken definitions are alone,
-  so each reports its own error. On the same fixture, listing took 0.6 s
-  (1.1 s on the first run), 1.4 s with one definition that does not parse,
-  and 0.33 s again with nothing changed.
-- Of the unchanged listing, most of the time is the project walk (directory
-  reads) and the checks that each definition's source exists inside the
-  project, not evaluation.
-- At start, the server's page list and pre-warming both list the project.
-  Callers at the same time share one definitions build: a later caller waits
-  for the build in progress, then evaluates only what it left stale, so an
-  edit made meanwhile still appears.
+Process start added 12–25 ms in the lab. A newly placed macOS executable can
+take about 0.8 s once for the system's first-launch check, like the bundled
+runtime. These lab measurements establish the design; server measurements
+include process startup, adapter ordering and config assembly.
+
+Pre-install shipping-server probe, 2026-10-15 at about 20:54 EDT: Node 24.12.0, Intel
+macOS, release native executable, Acme seed 1. Each fixture had one cold read
+and three warm reads, with a fresh server instance per read and no eager
+pre-warming. Framework dependencies were not installed: listing evaluates
+definitions and config, not their preview sources. The bundled runtime was
+already extracted. One-minute host load was 7.79–8.05; these exploratory
+samples are not a lab run set or a canvas-paint measurement.
+
+| Definitions | Cold HTTP config | Warm native work | Warm `previews.indexed` | Warm `config.resolved` | Warm HTTP config |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 5 | 349 ms | 2 ms | 9 ms | 9 ms | 12 ms |
+| 42 | 251 ms | 3 ms | 10 ms | 10 ms | 13 ms |
+| 602 | 329 ms | 15 ms | 27 ms | 29 ms | 40 ms |
+| 10,002 | 2,435 ms | 162 ms | 243 ms | 295 ms | 467 ms |
+
+Warm columns are medians of the three reads. The large fixtures include two
+broken previews, whose definitions still list. The 10,002-definition warm
+HTTP responses ranged from 393 to 532 ms. Every config listed all definitions
+without starting a compile worker; unchanged reads parsed and evaluated none.
+Cold reads also evaluated `workbench.config.ts`, and the 10,002-definition
+fixture evaluated 500 computed definitions. Runtime preparation uses a second
+native pass, reusing literal results saved by the first pass.
+
+Measured source: public base `6d9d0b5`, private base `bd86d29b`, plus the
+uncommitted page-index implementation. SHA-256 prefixes identify the measured
+files: server `aac7f3b3951f`, compiler `4e9f7f3cadc7`, evaluator
+`e3c7efaaacb7`, TypeScript adapter `7a464917b48e`, native index application
+`0b467d3c834e`, release executable `b5459121478c`.
+
+A repeat at about 21:00 EDT used the installed release's executable after
+the custom-glob partial-save correction. One-minute host load was
+13.27–20.16. Warm HTTP medians were 35, 44, 48 and 1,198 ms for the same four
+fixtures; the 10,002-definition native work had a median of 181 ms and its
+HTTP responses ranged from 596 to 1,499 ms. No compile worker started.
+Single cold HTTP reads were 4,062, 3,373, 391 and 9,074 ms. Scheduling and
+process startup dominate some samples; this loaded-host repeat is correctness
+and diagnostic evidence, not a controlled speed comparison. Its measured
+SHA-256 prefixes are adapter `9c0efd4704a6`, native application `c0189a1d7c12`
+and executable `4ea1d096abc4`; server, compiler and evaluator match the first
+probe.
+
+The 200 ms complete-list target is not met on the 10,002-definition fixture.
+Process startup, saved-answer transport, collection assembly and the full
+config response add to native work. Canvas first paint and the VS Code
+webview boundary require a separate measurement; these server probes do not
+establish that target. A resident index remains an open question.
 
 ### First page
 
 The shipping pipeline does not meet the
 [first-open requirement](#first-open-and-edits): with a warm cache, its first
-page waits for every definition to be listed and every entry to be prepared
-and built. The [first page lab](../../labs/first-page/README.md#report)
+page waits for the pipeline’s entries to be prepared and built. The native
+page list is independent of the worker’s start; it does not change compiler
+start or pre-warming. The Rust compiler host remains stage 2 work. The [first page lab](../../labs/first-page/README.md#report)
 (2026-10-13 to 2026-10-15, three run sets, synthetic fixtures, one Intel
 host, headless Chrome) measured about 1.2 s on 5 pages and 14–16 s on 600.
 None of its starts kept the first page within 25% of the 5-page time; the

@@ -34,6 +34,18 @@ const definition = (adapter, entry, extra = '') => `import { definePreview } fro
 export default definePreview({ id: 'components/button', title: 'Components/Button', adapter: '${adapter}', source: { entry: '${entry}' },
 inputs: { label: 'Continue' }, states: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
 
+test('native listing matches the compiler on preview fixtures and validation edge cases', async t => {
+  const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
+  const { indexPages } = require('./src/modules/page-index/index.ts');
+  const cases = ['', "sizes: []", "sizes: ['123']", "sizes: ['small--wide']", "states: null", "states: []", "states: { default: null }", "states: { '1': {}, '10': {}, '2': {} }", "title: 42", "controls: { tone: {type: 'select', options: []} }", "controls: { tone: null }", "links: null", "links: {'/next': {state: 'ready'}}", "links: {'/next': {preview: 3}}", "requests: {'bad request': {}}", "requests: {'GET /acme': {body: {ok: true}}}", "states: { empty: { requests: {'GET /acme': []} } }", "states: { empty: { label: 42 } }"];
+  for (const fields of cases) {
+    fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields));
+    const expected = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+    const actual = await indexPages({ root, executable: async () => process.execPath, diagnostic() {}, fallback: async () => { throw new Error('Native parity fallback: ' + fields); } });
+    assert.deepEqual(actual.answer, expected, fields);
+  }
+});
+
 test('the server supplies discovered lens labels while retaining per-page overrides', async t => {
   const root = fixture(t, {
     'workbench.yaml': 'name: Acme\npreviews:\n  lensLabel: Design\ncollections:\n  - name: Components\n    items:\n      - label: My button\n        src: button.workbench.ts\n        lensLabel: Reference\n',

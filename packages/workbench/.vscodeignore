@@ -17,6 +17,8 @@ window-capture/simulator-demo/**
 docs/**
 specs/**
 labs/**
+native/**
+!native/bin/**
 design/**
 workbench/README.md
 DEVELOPMENT.md

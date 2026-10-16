@@ -34,6 +34,10 @@ project's whole setup is its `workbench.yaml`, plus an optional, ignored
 - `specs/`: internal product requirements, workflows, decisions, and discoveries;
   these are kept outside the published documentation.
 - `scripts/`: VSIX packaging, including the per-platform Electron runtime.
+- `native/`: the Rust page index (`workbench-native`), with its pinned Cargo
+  manifest, lockfile, toolchain, rustfmt, Clippy and cargo-deny configuration.
+- `src/modules/page-index/`: native index process, saved storage, ordering
+  and worker fallback, exposed through `index.ts`.
 
 ## Architecture direction
 
@@ -41,7 +45,7 @@ Apply the shared module, UI, testing and diagnostics contracts. Browser canvas
 code, extension/host transport, server I/O and manifest interpretation have
 different responsibilities; keep those boundaries explicit.
 
-New code is TypeScript under `src/`, run without a build step:
+New browser and Node host code is TypeScript under `src/`, run without a build step:
 
 - Node 24 loads `.ts` by stripping types, and the extension requires VS Code
   1.123 or later for the same reason. Use erasable syntax only (no `enum`,
@@ -113,7 +117,7 @@ page; `src/components/design-pages.test.ts` fails a component without one.
 - The workbench ships inside the extension. Projects supply only
   `workbench.yaml`; never copy the workbench into a project or add its scripts
   to a project's pages.
-- Keep the code project-agnostic. Write new code in TypeScript under `src/`;
+- Keep the code project-agnostic. Write new browser and Node host code in TypeScript under `src/`;
   edit the existing JavaScript, HTML, and CSS in the module style of each file.
   Use Acme and example.com in fixtures.
 - `workbench/manifest.js` supplies the manifest rules to both the browser and
@@ -137,11 +141,17 @@ agent shell calls use the repository-root form, which the repository's shell pol
 | --- | --- |
 | Extension or workbench behavior | `pnpm test` |
 | Type-check `src/` | `pnpm run check` |
+| Native Rust index (from `native/`) | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo doc --no-deps --document-private-items`, `cargo deny check` |
 | Run the server on a project | `node server.js <project>`, then open the reported workbench URL |
 | Packaging | `pnpm run package` (this host) or `pnpm run package:all <target>`, then inspect `dist/` |
 | Locked dependencies | `pnpm install --frozen-lockfile` |
 
-Packaging downloads a pinned Electron build of roughly 120–155 MB per target.
+Tests build a debug native index before running Node tests. Packaging builds
+`workbench-native` with Rust 1.99.0, `cargo build --release --locked` and the
+VSIX target’s Rust triple, then includes only `native/bin/<target>/`’s executable.
+Cross builds need that target and linker, or `WORKBENCH_NATIVE_BINARY` pointing
+to a prebuilt executable. Packaging downloads a pinned Electron build of roughly
+120–155 MB per target.
 Builds made for another platform are unsigned and untested there. Keep
 temporary fixtures and captures in a temporary directory.
 
@@ -199,6 +209,27 @@ Never push a tag without the user's go-ahead.
 - Remove temporary instrumentation when verification is complete unless it is
   deliberately retained as useful, documented diagnostics. Report remaining
   uncertainty rather than claiming a speculative fix.
+
+---
+
+# MCP server instructions and tool descriptions
+
+Agents choose tools from the server instructions and tool descriptions alone.
+Hosts show the instructions before any tool is loaded, often while the tools
+themselves are deferred.
+
+- Server instructions take a few sentences: what the server is for, when an
+  agent should reach for it (including what to do when it is blocked or stuck),
+  and what it cannot do, such as authorizing actions or acting without the user.
+- Each tool description is one short sentence on what the tool returns or
+  changes. Name side effects and required user steps; leave argument details to
+  the input schema.
+- Use plain words an agent would search for. Avoid internal terms such as
+  "normalized", "retained", "captured" or "owner-qualified" unless the schema
+  defines them.
+- Name only tools and commands that exist, and test that every tool named in the
+  instructions is in the tool list.
+- Shorten without dropping a trigger, a side effect or an authority limit.
 
 ---
 
@@ -293,6 +324,57 @@ locations, audience, publishing, and validation.
 - Check links and run the package's relevant validation. Do not add tests that
   merely assert documentation text. Writing a spec does not authorize implementing
   proposals; writing docs does not itself authorize publishing or distribution.
+
+---
+
+# Rust package architecture
+
+Rust packages apply the shared architecture principles with Rust's own
+conventions. Where this rule and the language-neutral rule differ on layout,
+this rule applies.
+
+- Use Cargo's standard layout: `src/main.rs` for the binary, `src/lib.rs` for
+  the library, `tests/` for integration tests, and `benches/` and `examples/`
+  when needed. Keep one package until its size or reuse justifies a workspace;
+  a workspace keeps its crates flat under `crates/`, with a virtual root manifest.
+- Keep `main.rs` thin: parse arguments, set up configuration, call the
+  library's `run`, and exit with its status. Output formatting and all other
+  logic live in the library, where they can be tested.
+- Start every module with a `//!` comment saying what it owns.
+- Build scripts write only inside `OUT_DIR`. Pass values to the code with
+  `cargo:rustc-env` and read them with `env!` rather than writing files beside
+  the build output.
+- Put capability modules directly under `src/`, referred to as
+  `crate::<capability>`. Do not add a `src/modules/` level. Use self-named
+  module files (`src/ownership.rs`, or `src/ownership.rs` with `src/ownership/`
+  for submodules) rather than `mod.rs`; enforce it with Clippy's
+  `mod_module_files` lint.
+- Layer dependencies inward. Domain modules hold pure rules and types with no
+  process, filesystem or terminal I/O. Application modules carry out one use
+  case each by coordinating domain and adapters. Adapter modules wrap external
+  systems such as processes, the filesystem and the CLI. Domain code never
+  depends on application or adapter code.
+- Split application code by use case or command family, not into one file of
+  every workflow.
+- Keep visibility as narrow as the design allows. Use `pub(crate)` for items
+  shared inside the package and `pub` only for the library's deliberate API.
+  Test internals with unit tests in the module (`#[cfg(test)] mod tests`, or a
+  `tests.rs` submodule once they outgrow the module); use `tests/` for behavior
+  through the public interface or the built binary. Build integration tests as
+  one binary, `tests/<name>/main.rs`, with a module per area and a shared
+  fixture module, rather than one crate per file.
+- Keep Clippy's `too_many_lines` on. A function that must stay long carries
+  `#[expect(clippy::too_many_lines, reason = "...")]`.
+- Add a trait only where a second implementation exists or a test needs to
+  replace an external boundary that cannot run for real. Do not add traits only
+  to mirror a layer diagram.
+- Return typed errors (`thiserror` enums) where callers or tests branch on the
+  kind of failure. Use `anyhow` with context in application code and at the
+  binary boundary.
+- Deny broken and private intra-doc links in `[lints.rustdoc]`, and build the
+  API docs with `cargo doc --no-deps --document-private-items` as a check.
+- Keep `Cargo.toml` `[lints]`, `rustfmt` and Clippy settings authoritative; the
+  package guide lists the commands and configuration files.
 
 ---
 

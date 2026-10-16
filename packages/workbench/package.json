@@ -38,7 +38,7 @@
   "main": "./extension.js",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "test": "node --test",
+    "test": "node scripts/build-native.cjs --debug && node --test",
     "check": "tsc -p tsconfig.json",
     "serve": "node server.js",
     "package": "node scripts/package.cjs",

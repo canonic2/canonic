@@ -268,9 +268,10 @@ If you add or remove a definition, or change its `title` or states, run
 Workbench compiles previews with [Rspack](https://rspack.rs/), bundled with the
 extension. It starts building when the project opens, and builds all of the
 project's previews and docs examples together, so code they share loads once:
-moving to another page loads only that page's own code. The build cache is kept
-in the system's temporary folder, never in your project, and is reused when
-Workbench restarts. Your project does not need to install a compiler.
+moving to another page loads only that page's own code. The saved page list and
+build cache are kept in the system's temporary folder, never in your project,
+and are reused when Workbench restarts. Your project does not need to install
+a compiler.
 
 ## Register other technologies
 

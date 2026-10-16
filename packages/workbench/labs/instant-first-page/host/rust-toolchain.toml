@@ -1,0 +1,6 @@
+# Rspack's own toolchain at v2.2.7: its crates enable nightly-only features
+# (regress's `pattern`), so they do not build on stable (finding C1).
+[toolchain]
+channel = "nightly-2026-04-16"
+profile = "minimal"
+components = ["rust-src", "clippy", "rustfmt"]
