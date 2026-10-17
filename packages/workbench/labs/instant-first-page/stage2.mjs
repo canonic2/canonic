@@ -1,7 +1,7 @@
 // Instant first page lab, stage 2 runner. See README.md, "Stage 2 plan".
 //
 //   node labs/instant-first-page/stage2.mjs --set <label> [--results <new directory>]
-//     [--variants 0,R,RN,D2] [--fixtures small,large-system,giant,colossal,formats]
+//     [--variants 0,R,RN] [--fixtures small,large-system,giant,colossal,formats]
 //     [--samples 10] [--warmups 3] [--session 5] [--quiet 8] [--smoke] [--keep]
 //
 // Every variant runs the shipping server and canvas from a snapshot of the
@@ -28,7 +28,8 @@ const flag = name => args.includes('--' + name);
 const smoke = flag('smoke');
 const settings = {
   set: option('set', smoke ? 'smoke' : null),
-  variants: option('variants', '0,R,RN,D2').split(','),
+  // D2 is left out of run sets (amendment of 2026-10-16); --variants can still name it.
+  variants: option('variants', '0,R,RN').split(','),
   fixtures: option('fixtures', 'small,large-system,giant,colossal,formats').split(','),
   samples: Number(option('samples', smoke ? 1 : 10)),
   warmups: Number(option('warmups', smoke ? 0 : 3)),
@@ -307,7 +308,9 @@ function restore(items) { for (const item of items) fs.writeFileSync(item.path, 
 
 // ---------------------------------------------------------------- sessions (S5–S9)
 
-async function timedEdit(target, file, next, checkExpression, timeout = 30000) {
+// Edits on the control's 10,000-page build take longer than 30 s; slower than
+// 120 s is a timeout.
+async function timedEdit(target, file, next, checkExpression, timeout = 120000) {
   const waiting = evaluate(target, `new Promise(resolve => { const start = Date.now();
     const tick = () => { let ok = false; try { const win = __labWin(); const doc = win.document; ok = win.__workbenchReady !== false && (${checkExpression}); } catch (_) {}
       if (ok) { requestAnimationFrame(() => requestAnimationFrame(() => resolve(Date.now()))); return; }
@@ -502,6 +505,8 @@ async function parityGroup(fx, variant, renders) {
 }
 
 function parityChecks(renders) {
+  // Parity needs the control's renders; a run without it records no verdict.
+  if (!renders['0']) { if (Object.keys(renders).length) record({ group: 'parity', sequence: 'parity', cell: 'skipped: no control in this run' }); return; }
   for (const [variant, bySize] of Object.entries(renders)) {
     if (variant === '0') continue;
     for (const [size, items] of Object.entries(bySize)) {

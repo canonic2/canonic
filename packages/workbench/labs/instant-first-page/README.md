@@ -15,7 +15,10 @@ and the Rust host is faster in every build cell, but two proposed stage 2
 gates are missed. The owner decided on 2026-10-15 to implement the Rust
 page index as measured and to continue with stage 2 in parallel
 ([decisions](../../specs/preview-pipeline/README.md#decisions)). The owner
-agreed the [stage 2 plan](#stage-2-plan) the same day; it is being prepared.
+agreed the [stage 2 plan](#stage-2-plan) the same day. Stage 2 ran two
+run sets on 2026-10-16 and is [reported](#stage-2-report): R is the leading
+variant, much faster than the control from 40 pages up, but no variant meets
+the agreed targets or the rule; the decision is the owner's.
 
 Amendment, 2026-10-15, after the smoke runs and before stage 1's run set:
 
@@ -421,8 +424,59 @@ load and the rebuild growth is the owner's decision.
 
 Status: planned and agreed by the owner on 2026-10-15, after stage 1's
 report and the decision to continue in parallel with the page index's
-implementation, with the decisions below as listed (D2 included). No stage 2
-run has started.
+implementation, with the decisions below as listed (D2 included). Run and
+[reported](#stage-2-report) on 2026-10-16, with the amendment below.
+
+Amendment, 2026-10-16, after the smoke runs and before any run set:
+
+- **The package was restructured during the smoke runs** (the Node server
+  and worker under `server/node/`, the preview adapters under `ui/preview/`,
+  the page index as the `server/` Rust package). The lab follows the new
+  paths; run sets measure the restructured package.
+- **The server starts the preview worker on the first preview request**, not
+  at startup, since the page index shipped. The control's pre-warming
+  therefore begins when the canvas asks for a page. The runner warms every
+  variant with a descriptor request instead of waiting for a pre-warming
+  event.
+- **On `colossal`, the control's first preview request fails** after the
+  Workbench server's own 120 s deadline ("Preview request timed out") while
+  the worker builds every page. The runner's warm-up asks again until the
+  build finishes, for at most 15 minutes. A start sample ends on the page's
+  own error and records it as an error with no time; a start has no
+  previous page whose error could end its wait.
+- **Cold samples do not unpack the bundled runtime.** The product keeps it in
+  extension storage, unpacked once; the runner's own launcher (`serve.cjs`)
+  gives the server a storage folder that outlives the samples, while every
+  cache in the system temporary folder stays per sample.
+- **Prototype fixes** (none changes a boundary):
+  - the host saves the evaluated `workbench.config.ts` with the stamps of
+    the files it read, and reuses it while none changed; evaluating it on
+    each start put 290 ms on the first page's path;
+  - RN adds up to 8 neighbours per page asked for; its allowance had grown
+    with the neighbours themselves, so it kept adding pages while idle;
+  - the host exits when the process that started it does;
+  - the entry parity check ignores the one difference by design, the
+    snapshot path Workbench's adapters are imported from;
+  - the browser launch is retried once and the retry recorded;
+  - the page index's Node fallback runs the bundled Electron runtime as Node
+    (\`ELECTRON_RUN_AS_NODE\`), as the host's own evaluator does; without
+    it, RN's page order on \`colossal\`, the one fixture with computed
+    definitions, made the host panic and restart, which showed as reloads
+    and timeouts. A failed evaluator is now each definition's error, not a
+    crash;
+  - RN's neighbours are the opened page's group by distance in the page
+    list, then the pages after it; ordering the group by list position had
+    picked the group's first pages;
+  - edits wait up to 120 s before they count as timeouts: on \`colossal\`,
+    the control's edits did not show within 30 s.
+- **D2 is left out of the run sets; its question is answered.** Removing a
+  page from the compiler sends a hot update that disposes that page's
+  modules in every document that loaded it. Returning to the page then
+  fails in the warm document with "factory is undefined" (Rspack's
+  "unexpected require … to disposed module"), so a cap that removes entries
+  breaks returning to them unless the preview runtime reloads such a page.
+  A probe with a cap of 3 on `large-system`, and the smoke's hot-update
+  check on `large-system` and `giant`, showed it.
 
 ### Question
 
@@ -622,3 +676,177 @@ the Workbench server to Rust is planned separately.
 2. **D2, the entry cap of 20:** include it, or leave long sessions to S9
    alone.
 3. **Docs lenses outside the subset,** with the other formats.
+
+## Stage 2 report
+
+Two run sets under the lab lock, each after smoke runs and the amendment
+above: set 1 on 2026-10-16 06:49–12:43 UTC, set 2 13:44–22:49 UTC. Variants
+0, R and RN; D2 left out, as amended. Each start cell has 3 warmups and 10
+samples; each session step has 5 (S8 and S9-S4 one). Every sample waited for
+a one-minute load average below 8 for at most ten minutes. In set 1 none
+started above it (load 7.7 at the start, 2.1 at the end). In set 2, 23
+samples started above it after the wait, most in the control's `colossal`
+cells, under other builds on the host (load 37.7 at the start, 8.7 at the
+end). The stage 2 runner did not record the measured source revision and
+file hashes, as stage 1's did; the lab's files did not change between the
+two sets. Evidence: [set 1](results/2026-10-16-stage2-set-1/summary.md),
+[set 2](results/2026-10-16-stage2-set-2/summary.md), each beside its
+`report.json`. Values are p50 in milliseconds by nearest rank, set 1 / set 2,
+recomputed from the raw samples.
+
+### Correctness
+
+R and RN pass every check on every fixture they were run on, in both sets:
+page list against the control's at every point (S2i, each S8 step), hot
+updates with state kept (also after S9), isolation, error containment,
+errors shown in their own frame, clean console, the page back after every
+config edit, no module moved between shared chunks, entry and hot-client
+parity, no project writes. Exceptions, none of them a defect in a variant:
+
+- **`formats` render parity** fails for R and RN in both sets: its React
+  pages use the fixture's project plugins, a missing contract of the subset
+  (stage 1 found the same). Its plain-module page passes entry parity.
+- **RN `large-system` render parity, set 2,** and one R `giant` S2i sample:
+  Chromium timed out creating a tab ("Target.createTarget"), before the
+  page was asked for. The runner retries a browser launch but not a tab.
+- **The control on `colossal`:** 3–6 of 10 samples per start cell end on
+  the server's own 120 s preview deadline, in set 2 only; one S4 sample did
+  not show within 600 s; the first S6 edit did not show within 120 s and the
+  session then stopped on a Chromium timeout, so set 2 has no control S6–S9
+  on `colossal`. In set 1 one control config edit on `giant` timed out.
+
+### Start
+
+| Fixture | Cell | 0 | R | RN | R's own build |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `small` | S2 first page | 1,220 / 1,234 | 390 / 372 | 370 / 374 | 65 / 62 |
+| `small` | S2 page list | 211 / 207 | 220 / 213 | 209 / 211 | |
+| `large-system` | S2 first page | 3,388 / 3,219 | 1,216 / 1,114 | 1,227 / 1,155 | 289 / 244 |
+| `large-system` | S2 page list | 240 / 231 | 228 / 217 | 239 / 224 | |
+| `giant` | S2 first page | 16,114 / 16,425 | 1,316 / 1,278 | 1,304 / 1,306 | 245 / 243 |
+| `giant` | S2 page list | 408 / 415 | 416 / 409 | 412 / 414 | |
+| `colossal` | S2 first page | 93,860 / 107,454 | 4,150 / 4,042 | 4,109 / 4,051 | 242 / 242 |
+| `colossal` | S2 page list | 2,831 / 3,022 | 2,917 / 2,858 | 2,954 / 2,862 | |
+| `small` | S1 first page, cold | 1,262 / 1,243 | 667 / 639 | 650 / 653 | |
+| `large-system` | S1 first page, cold | 2,736 / 2,627 | 1,699 / 1,524 | 1,716 / 1,554 | |
+| `giant` | S1 first page, cold | 10,714 / 10,886 | 1,691 / 1,671 | 1,698 / 1,700 | |
+| `colossal` | S1 first page, cold | 93,607 / 115,102 | 7,338 / 7,381 | 7,542 / 7,387 | |
+| `colossal` | S1 page list, cold | 6,015 / 6,580 | 6,177 / 6,231 | 6,274 / 6,101 | |
+
+S2i and S3 follow S2 within 10% for every variant. Where R's warm first page goes (set 2,
+p50 of the S2 samples):
+
+| Fixture | Config answer | Descriptor answer | Host's build | First page |
+| --- | ---: | ---: | ---: | ---: |
+| `small` | 18 | 63 | 29 | 372 |
+| `large-system` | 26 | 269 | 239 | 1,114 |
+| `giant` | 114 | 257 | 231 | 1,278 |
+| `colossal` | 793 | 828 | 481 | 4,042 |
+
+The control's descriptor answer is its whole start: 2.4 s on `large-system`,
+15 s on `giant` and 89–107 s on `colossal`, while the worker builds every
+page.
+
+### Session
+
+| Fixture | Cell | 0 | R | RN |
+| --- | --- | ---: | ---: | ---: |
+| `large-system` | S4 page not yet opened | 159 / 159 | 272 / 251 | 258 / 246 |
+| `large-system` | S5 walk | 140 / 144 | 231 / 217 | 327 / 251 |
+| `large-system` | S5r return | 118 / 126 | 126 / 107 | 188 / 150 |
+| `large-system` | S6 component, first page | 181 / 162 | 131 / 132 | 230 / 214 |
+| `large-system` | S7 config edit | 2,081 / 1,962 | 4,295 / 4,324 | 4,187 / 4,240 |
+| `large-system` | S9 then S4 | 146 / 140 | 347 / 340 | 334 / 338 |
+| `large-system` | S9 then S6 | 197 / 181 | 251 / 232 | 248 / 230 |
+| `giant` | S4 page not yet opened | 199 / 219 | 274 / 278 | 283 / 292 |
+| `giant` | S5 walk | 177 / 176 | 252 / 255 | 281 / 278 |
+| `giant` | S5r return | 125 / 111 | 129 / 145 | 243 / 234 |
+| `giant` | S6 component, first page | 813 / 798 | 145 / 144 | 212 / 202 |
+| `giant` | S7 config edit | 12,343 / 12,952 | 4,164 / 4,200 | 4,211 / 4,252 |
+| `giant` | S9 then S4 | 181 / 132 | 475 / 524 | 520 / 486 |
+| `giant` | S9 then S6 | 1,096 / 1,092 | 433 / 380 | 415 / 427 |
+| `colossal` | S4 page not yet opened | 867 / 955 | 640 / 647 | 670 / 629 |
+| `colossal` | S5 walk | 587 / 917 | 624 / 634 | 638 / 638 |
+| `colossal` | S5r return | 548 / 542 | 536 / 536 | 534 / 524 |
+| `colossal` | S6 component, first page | 24,000 / — | 163 / 166 | 352 / 303 |
+| `colossal` | S7 config edit | 95,767 / — | 4,221 / 4,305 | 4,452 / 4,228 |
+| `colossal` | S9 then S4 | 645 / — | 692 / 680 | 1,083 / 725 |
+| `colossal` | S9 then S6 | 24,333 / — | 386 / 394 | 1,485 / 753 |
+
+On `small`, S4 is 64 / 62 for the control and 72 / 63 for R. S8's add,
+rename and retitle are within 30 ms of the control on `large-system` and
+`giant` (one sample each; R's 92 ms retitle on `large-system` in set 2
+against 26 in set 1 is one sample). Peak memory in the session, set 2: the
+control 4.5 GB on `large-system`, 15.8 GB on `giant` and 20.6 GB on
+`colossal`; R 1.0, 1.9 and 1.5 GB; RN 1.0, 1.8 and 1.8 GB.
+
+### Analysis
+
+- **The start no longer grows with the project's build.** R's warm first
+  page is 4–13 times faster than the control's from `large-system` up, and
+  its host builds one page in 230–480 ms on every fixture. The two sets
+  agree within 10% in every R and RN start cell.
+- **What remains is outside the compiler.** On `large-system` and `giant`,
+  R answers the descriptor in 260–310 ms, its build included; about 0.8–0.9 s
+  of the first page is after that answer, in the frame loading and running
+  the page through the shipping preview host and runtime (the runner does not
+  split it further). On `colossal`, the Workbench server's config answer
+  takes 0.8 s and the canvas about 2 s more rendering 10,000 pages; the page
+  list is 2.9 s for every variant. These are the same in every variant by
+  design: the Workbench server, canvas and preview runtime are the shipping
+  ones.
+- **The page list is the canvas's, not the index's.** At 600 pages it is
+  about 410 ms in every variant; on `small` it is 207–220 ms, just over
+  200, of which the config answer is 18 ms.
+- **Cold, the page list on `colossal` is the cold index** (6.0–6.6 s), and
+  the first page follows it.
+- **Edits are faster and do not grow with the project:** R's hot updates
+  take 130–170 ms on every fixture, against 150–190 ms for the control on
+  `large-system`, 800 ms on `giant` and 24 s on `colossal`.
+- **A config edit costs R about 4.2 s on every fixture,** twice the
+  control's on `large-system`. Samples under 10 s keep no timeline, so the
+  split between R's new compiler, its first build and the frames' reload is
+  not measured.
+- **Opening a page is slower in R than the control on 40 and 600 pages**
+  (250–280 ms against 160–220 for S4), because the control has every page
+  built and R builds it on request. On `colossal` R is faster.
+- **Long sessions degrade** in both variants. After S9, R's S4 is 28–35% slower
+  on `large-system` and 73–88% on `giant`, and its S6 76–199% slower, the
+  growth stage 1 measured in the compiler. The control's S6 grows 9–37%.
+- **RN is not faster than R anywhere by 10%,** and is slower in S5, S5r and
+  S6, where its neighbour builds compete with the request.
+
+Threats to validity: one host; synthetic Acme fixtures; the Rust host's
+subset (React and plain modules, without project plugins); load above 8
+during part of set 2, mostly in control cells; a page list counted on the
+standalone server in headless Chrome, not the VS Code webview or Studio;
+the measured source not recorded by the runner.
+
+### Result against the stage 2 decision rule
+
+- **Correctness:** R and RN pass on their subset. The failures listed above
+  are the missing project-plugin contract and browser tab timeouts.
+- **Instant, first page within 500 ms (agreed):** met only on `small`
+  (372–390 ms). **Not met** on `large-system` (1.1–1.2 s), `giant`
+  (1.3 s) or `colossal` (4.0–4.2 s).
+- **Instant, page list within 200 ms (agreed):** **not met** on any fixture
+  in any variant: 209–220 ms on `small`, about 220 on `large-system`, 410 on
+  `giant`, 2.9 s on `colossal`.
+- **Own build time, S1 at most 25% over (proposed):** **not met;** S1 is 6
+  to 30 times the page's own build.
+- **Switching, S4 and S5 at most 300 ms (proposed):** met on `large-system`
+  and `giant`; **not met on `colossal`** (630–650 ms).
+- **No regressions:** S3, S6 and S5r on `large-system` and `colossal` pass.
+  **Not met:** S7 on `large-system` (4.3 s against 2.0–2.1 s) in both sets;
+  S5r on `giant` in set 2 (145 against 111, while set 1 is within 3%);
+  `small` S4 in set 1 (72 against 64, while set 2 is within 2%). The last
+  two are within the spread of the two sets.
+- **Long sessions:** **not met** by any variant.
+- **R against RN:** R wins: it has fewer moving parts and RN is not 10%
+  faster in S4 or S5.
+
+No variant meets the rule. R is the leading variant: a large gain on every
+fixture from 40 pages up, with the agreed targets missed, the config edit
+regressed and long sessions degrading. What the remaining time is spent on,
+and whether to adopt R, change a target or plan a stage 3, is the owner's
+decision.

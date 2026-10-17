@@ -222,6 +222,9 @@ product code. Runner defects must not appear as product timings or verdicts.
   attributes, so those attributes are not stable measurement markers.
 - Use events or tight polling with explicit deadlines. Report a timeout with
   the observed state, never as a successful latency sample.
+- Wait for a product state through a request the product answers, not for
+  a diagnostic it may never emit: when work starts lazily, the event
+  announcing it never comes.
 - Independently observe fonts, images and visible content when stopping a
   timer. The product's readiness flag alone is not the correctness oracle.
 
@@ -300,5 +303,5 @@ product contracts; a report or an unadopted variant is not a shipping interface.
 | [Preview loading](../labs/preview-loading/README.md) | Shared-build and runtime design evidence; current navigation requirements belong to [performance](preview-pipeline/performance.md) |
 | [Rspack pipeline](../labs/rspack-pipeline/README.md) | Evidence for the implemented compiler, warm document and hot updates; shipping-server/webview confirmation remains open |
 | [First page](../labs/first-page/README.md) | Startup-scaling comparisons; no replacement start is adopted by the active compiler contract |
-| [Instant first page](../labs/instant-first-page/README.md) | Evidence for the implemented [page index](preview-pipeline/page-index.md); compiler-host investigation remains separate. The lab owns its current plan and run status |
+| [Instant first page](../labs/instant-first-page/README.md) | Evidence for the implemented [page index](preview-pipeline/page-index.md), and the [compiler-host comparison](../labs/instant-first-page/README.md#stage-2-report) through the shipping canvas: reported, no variant meets the agreed targets, decision pending |
 | [Compiler speed](../labs/compiler-speed/README.md) | Compiler-selection evidence; the active development/portable compiler is Rspack |

@@ -486,21 +486,28 @@ pub fn index(options: &Options) -> (Vec<u8>, Timings) {
     let pending: Vec<&PathBuf> = files.iter().zip(&parsed).filter(|(_, saved)| saved.is_none()).map(|(file, _)| file).collect();
     let mut evaluated: HashMap<PathBuf, Saved> = HashMap::new();
     if !pending.is_empty() {
-        let mut child = Command::new(&options.node)
-            .arg(&options.evaluator)
-            .arg(&root)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("node evaluator");
-        {
-            use std::io::Write as _;
-            let mut stdin = child.stdin.take().expect("stdin");
-            let list: Vec<String> = pending.iter().map(|file| file.to_string_lossy().into_owned()).collect();
-            stdin.write_all(list.join("\n").as_bytes()).expect("write files");
-        }
-        let output = child.wait_with_output().expect("node evaluator output");
-        let result: Evaluated = serde_json::from_slice(&output.stdout).expect("evaluator JSON");
+        // The bundled Electron runtime runs as Node only with this set; plain
+        // Node ignores it (stage 2 smoke: without it the host panicked).
+        let list: Vec<String> = pending.iter().map(|file| file.to_string_lossy().into_owned()).collect();
+        let run = || -> Option<Evaluated> {
+            let mut child = Command::new(&options.node)
+                .arg(&options.evaluator)
+                .arg(&root)
+                .env("ELECTRON_RUN_AS_NODE", "1")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .ok()?;
+            {
+                use std::io::Write as _;
+                let mut stdin = child.stdin.take()?;
+                stdin.write_all(list.join("\n").as_bytes()).ok()?;
+            }
+            let output = child.wait_with_output().ok()?;
+            serde_json::from_slice(&output.stdout).ok()
+        };
+        // A failed evaluator is each pending definition's error, not a crash.
+        let result = run().unwrap_or_else(|| Evaluated { definitions: HashMap::new(), errors: HashMap::new() });
         for file in &pending {
             let saved_entry = if let Some(definition) = result.definitions.get(*file) {
                 let (entry, sources) = entry(&definition.value, file, &root, &real_root);

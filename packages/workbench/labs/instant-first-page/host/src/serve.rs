@@ -976,7 +976,11 @@ async fn neighbour(state: &State, held: &BTreeMap<String, String>, done: &mut Ha
     let group = |title: &str| title.rsplit_once('/').map(|(group, _)| group.to_string()).unwrap_or_default();
     let own = group(&order[at].1);
     let pages = state.pages.lock().await;
-    let mut candidates: Vec<&(String, String)> = order.iter().filter(|(_, title)| group(title) == own).collect();
+    // Next to the page first: its group's pages by distance in the list, then
+    // the pages after it (stage 2 smoke: list order picked the group's first).
+    let mut candidates: Vec<(usize, &(String, String))> = order.iter().enumerate().filter(|(_, (_, title))| group(title) == own).collect();
+    candidates.sort_by_key(|(index, _)| (index.abs_diff(at), *index < at));
+    let mut candidates: Vec<&(String, String)> = candidates.into_iter().map(|(_, item)| item).collect();
     candidates.extend(order.iter().skip(at + 1));
     let picked = candidates.into_iter().map(|(file, _)| file).find(|file| !pages.contains_key(*file) && !done.contains(*file))?.clone();
     drop(pages);
