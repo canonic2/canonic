@@ -2,7 +2,7 @@
 
 use super::{PermissionReview, ScopeCheck, State};
 use crate::{
-    text::{clean, elide, wrapped},
+    text::{clean, elide, wrapped, wrapped_prose},
     theme::{ColorMode, Presentation, Symbols},
     tool_call_card::{
         Output,
@@ -589,14 +589,20 @@ impl ScopeCheck {
         } else {
             self.scope.clone()
         };
-        let rows = wrapped(&scope, area.width);
+        // Words stay whole; a token longer than the row still splits.
+        let rows = wrapped_prose(&scope, area.width);
         self.total = rows.len();
         self.viewport = usize::from(area.height.saturating_sub(3)).max(1);
         self.offset = self.offset.min(rows.len().saturating_sub(self.viewport));
         let more = rows.len().saturating_sub(self.offset + self.viewport);
         let mut lines = vec![Line::styled(
             format!(
-                "Exact host scope{}",
+                "{}{}",
+                if self.prompt.is_empty() {
+                    "Exact host scope".to_owned()
+                } else {
+                    clean(&self.prompt, 4096, false)
+                },
                 if more > 0 {
                     format!(" · {more} more · pgdn")
                 } else {
@@ -609,7 +615,17 @@ impl ScopeCheck {
             rows.into_iter()
                 .skip(self.offset)
                 .take(self.viewport)
-                .map(|line| Line::styled(line, p.surface())),
+                // Without a surface color, a reversed block reads as a selection.
+                .map(|line| {
+                    Line::styled(
+                        line,
+                        if p.tokens().surface.is_some() {
+                            p.surface()
+                        } else {
+                            p.base().add_modifier(Modifier::BOLD)
+                        },
+                    )
+                }),
         );
         lines.push(Line::styled(
             " 1 Back",

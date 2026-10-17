@@ -25,6 +25,9 @@ pub struct Choice {
     pub detail: String,
     /// Exact supplied scope, preserved in confirmation and response.
     pub scope: String,
+    /// Host sentence introducing the scope in the wider-choice check, such as
+    /// "Acme may then edit, without asking again:". Empty uses a neutral label.
+    pub prompt: String,
     /// Response semantics.
     pub kind: Kind,
     /// Unavailable reason; disabled rows remain inspectable.
@@ -43,6 +46,7 @@ impl Choice {
             label: label.into(),
             detail: String::new(),
             scope: String::new(),
+            prompt: String::new(),
             kind,
             disabled: None,
             wider: false,
@@ -178,7 +182,7 @@ pub(super) fn validate(r: &Request) -> std::result::Result<(), Invalid> {
         if c.id.is_empty() || !ids.insert(&c.id) {
             return Err(Invalid::Identity);
         }
-        if c.scope.len() > 4096 {
+        if c.scope.len() > 4096 || c.prompt.len() > 4096 {
             return Err(Invalid::Limit);
         }
         if c.scope.chars().any(|c| c.is_control() && c != '\n')

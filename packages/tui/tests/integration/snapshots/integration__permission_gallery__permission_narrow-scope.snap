@@ -14,8 +14,8 @@ Edit 2 files in src/digest/
  ▸ details  diff · 2 files · +9 -3
  1┌ Allow for this session? ──────── ┐
   │Exact host scope                  │
- 2│edit · src/digest/** · until you q│
-  │uit                               │
+ 2│edit · src/digest/** · until you  │
+  │quit                              │
  3│ 1 Back                           │
   │ 2 Allow for this session         │
  4└ ── enter · esc back · pgdn scope ┘

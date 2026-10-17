@@ -130,5 +130,7 @@ local behavior; hosts own execution, authority, storage and request lifetime.
 
 The host owns request order and authority. Permission dismissal is a distinct
 outcome from Deny/Skip; wider-scope choices require another confirmation quoting
-the host's exact scope. Single-question answers submit explicitly on choosing;
+the host's exact scope, introduced by the host's own sentence when it supplies
+one, wrapped at word boundaries and set apart in bold when the terminal has no
+surface color. Single-question answers submit explicitly on choosing;
 multi-question answers pass through review, with required omissions shown there.

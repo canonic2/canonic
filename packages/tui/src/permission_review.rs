@@ -22,6 +22,7 @@ pub enum Intent {
 
 struct ScopeCheck {
     scope: String,
+    prompt: String,
     label: String,
     accept: bool,
     offset: usize,

@@ -236,6 +236,7 @@ impl PermissionReview {
         };
         let body = ScopeCheck {
             scope: c.scope.clone(),
+            prompt: c.prompt.clone(),
             label: c.label.clone(),
             accept: false,
             offset: 0,
