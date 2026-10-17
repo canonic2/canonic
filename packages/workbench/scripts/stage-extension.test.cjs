@@ -18,8 +18,8 @@ function fixture(t) {
   write('sdk/package.json', JSON.stringify({ version: '1.0.0' }));
   for (const file of ['extension/extension.js', 'extension/icon.svg', 'extension/.vscodeignore', 'capture/app/main.cjs',
     'ui/legacy/index.html', 'ui/src/components/bootstrap.ts', 'contracts/manifest.js', 'server/node/server.js',
-    'server/bin/acme/workbench-native', 'README.md', 'LICENSE', 'CHANGELOG.md']) write(file, 'Acme');
-  write('server/target/debug/workbench-native', 'Build output');
+    'server/bin/acme/workbench-server', 'README.md', 'LICENSE', 'CHANGELOG.md']) write(file, 'Acme');
+  write('server/target/debug/workbench-server', 'Build output');
   write('server/node/server.test.js', 'Test source');
   write('node_modules/acme-runtime/package.json', JSON.stringify({ name: 'acme-runtime', version: '1.0.0' }));
   write('node_modules/acme-runtime/index.js', 'module.exports = 1;');
@@ -36,7 +36,7 @@ test('the VSIX assembly preserves cross-part paths and includes only production 
   assert.equal(manifest.icon, 'extension/icon.png');
   assert.equal(manifest.contributes.viewsContainers.activitybar[0].icon, 'extension/icon.svg');
   for (const file of [manifest.main, 'server/node/server.js', 'ui/src/components/bootstrap.ts', 'contracts/manifest.js',
-    'server/bin/acme/workbench-native', 'node_modules/acme-runtime/index.js']) assert.ok(fs.existsSync(path.join(stage, file)), file);
+    'server/bin/acme/workbench-server', 'node_modules/acme-runtime/index.js']) assert.ok(fs.existsSync(path.join(stage, file)), file);
   for (const file of ['server/target', 'server/node/server.test.js', 'node_modules/acme-dev']) assert.ok(!fs.existsSync(path.join(stage, file)), file);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'extension/package.json'), 'utf8')).main, './extension.js');
 });

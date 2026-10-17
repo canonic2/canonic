@@ -1,11 +1,11 @@
 [package]
-name = "workbench-native"
+name = "workbench-server"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
 license-file = "../LICENSE"
-description = "Workbench page discovery and saved definition index"
+description = "Workbench server: page discovery and the saved definition index"
 
 [dependencies]
 anyhow = "=1.0.104"

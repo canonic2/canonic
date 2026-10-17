@@ -88,7 +88,7 @@ function invoke(binary: string, request: unknown, timeoutMs: number): Promise<un
 
 export async function indexPages(options: IndexOptions): Promise<{ answer: IndexAnswer; timings: { [key: string]: unknown } }> {
   try {
-    const binary = options.binary || path.join(extension, 'server/bin', process.platform + '-' + process.arch, 'workbench-native' + (process.platform === 'win32' ? '.exe' : ''));
+    const binary = options.binary || path.join(extension, 'server/bin', process.platform + '-' + process.arch, 'workbench-server' + (process.platform === 'win32' ? '.exe' : ''));
     const saved = await savedPath(options.root);
     const key = await identity(binary, options.previews || {});
     const answerFile = path.join(path.dirname(saved), 'answer.json');

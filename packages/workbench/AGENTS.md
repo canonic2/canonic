@@ -85,12 +85,12 @@ Node dependencies and no dependency install scripts.
 | VSIX packaging | `pnpm run package` or `pnpm run package:all <target>` |
 | Locked dependencies | `pnpm install --frozen-lockfile` |
 
-Tests build the debug Rust index. Packaging builds `workbench-native` with
+Tests build the debug Rust index. Packaging builds `workbench-server` with
 Rust 1.99.0 and locked dependencies for the VSIX target, bundles the compilers
 and Electron runtime, and assembles a temporary product tree with the extension
 manifest. Only `server/bin/<target>/` ships from Rust output; Cargo sources and
 `target/` do not. Cross builds need the Rust target and linker or an explicit
-`WORKBENCH_NATIVE_BINARY`. Electron downloads are roughly 120–155 MB per target.
+`WORKBENCH_SERVER_BINARY`. Electron downloads are roughly 120–155 MB per target.
 Cross-platform builds are unsigned and untested on the destination host.
 
 The root product version, `extension/package.json` and `sdk/package.json` must

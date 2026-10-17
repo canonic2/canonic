@@ -10,17 +10,17 @@ const triples = {
   'win32-arm64': 'aarch64-pc-windows-msvc', 'win32-x64': 'x86_64-pc-windows-msvc',
 };
 function build(target = process.platform + '-' + process.arch, debug = false) {
-  if (!triples[target]) throw new Error('Unsupported native Workbench target: ' + target);
+  if (!triples[target]) throw new Error('Unsupported Workbench server target: ' + target);
   const root = path.resolve(__dirname, "../server");
-  const name = 'workbench-native' + (target.startsWith('win32-') ? '.exe' : '');
-  let source = process.env.WORKBENCH_NATIVE_BINARY;
+  const name = 'workbench-server' + (target.startsWith('win32-') ? '.exe' : '');
+  let source = process.env.WORKBENCH_SERVER_BINARY;
   if (!source) {
     const local = path.join(os.homedir(), '.cargo/bin/cargo' + (process.platform === 'win32' ? '.exe' : ''));
     const cargo = fs.existsSync(local) ? local : 'cargo';
     const args = ['+1.99.0', 'build', '--locked', '--target', triples[target]];
     if (!debug) args.push('--release');
     const result = cp.spawnSync(cargo, args, { cwd: root, stdio: 'inherit' });
-    if (result.error || result.status !== 0) throw new Error('Cannot build workbench-native for ' + target + '. Install Rust 1.99.0, target ' + triples[target] + ' and its linker, or supply WORKBENCH_NATIVE_BINARY for this target.', { cause: result.error });
+    if (result.error || result.status !== 0) throw new Error('Cannot build workbench-server for ' + target + '. Install Rust 1.99.0, target ' + triples[target] + ' and its linker, or supply WORKBENCH_SERVER_BINARY for this target.', { cause: result.error });
     source = path.join(root, 'target', triples[target], debug ? 'debug' : 'release', name);
   }
   const bins = path.join(root, 'bin');

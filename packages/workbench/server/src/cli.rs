@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 pub(crate) fn run() -> Result<()> {
     ensure!(
         std::env::args().nth(1).as_deref() == Some("index"),
-        "expected: workbench-native index < request.json"
+        "expected: workbench-server index < request.json"
     );
     let mut input = String::new();
     std::io::stdin()

@@ -80,7 +80,7 @@ first page meets its render target.
 ### Process and resource ownership
 
 The stable Rust package in `server/` has a library and a thin binary entry
-point. `workbench-native index` consumes one JSON request on stdin and writes
+point. `workbench-server index` consumes one JSON request on stdin and writes
 one JSON response, then exits. The protocol is documented in
 [the native README](../../server/README.md#protocol).
 The [native ownership contract](../modules.md#rust-ownership) separates

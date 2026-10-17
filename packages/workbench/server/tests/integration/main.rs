@@ -12,7 +12,7 @@ fn request(root: &Path) -> Value {
     json!({"root":root,"saved":root.with_extension("postcard"),"identity":"test","evaluator":"unused","node":"","options":{}})
 }
 fn invoke(request: &Value) -> Value {
-    let output = Command::new(assert_cmd::cargo::cargo_bin!("workbench-native"))
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("workbench-server"))
         .arg("index")
         .write_stdin(request.to_string())
         .assert()
@@ -144,7 +144,7 @@ fn failed_cache_writes_leave_the_successful_list_available() {
 
 #[test]
 fn invalid_request_and_unavailable_evaluator_fail_at_the_cli_boundary() {
-    Command::new(assert_cmd::cargo::cargo_bin!("workbench-native"))
+    Command::new(assert_cmd::cargo::cargo_bin!("workbench-server"))
         .arg("index")
         .write_stdin("{partial")
         .assert()
@@ -158,7 +158,7 @@ fn invalid_request_and_unavailable_evaluator_fail_at_the_cli_boundary() {
     .unwrap();
     let mut input = request(&root);
     input["node"] = json!(root.join("missing-runtime"));
-    Command::new(assert_cmd::cargo::cargo_bin!("workbench-native"))
+    Command::new(assert_cmd::cargo::cargo_bin!("workbench-server"))
         .arg("index")
         .write_stdin(input.to_string())
         .assert()

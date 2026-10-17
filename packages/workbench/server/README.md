@@ -1,7 +1,7 @@
 # Workbench server
 
-`workbench-native` lists definitions for the server without starting the
-compile worker. It is one stable Rust package with a library and an `index`
+`workbench-server` is the Workbench server's Rust binary. It lists
+definitions without starting the compile worker. It is one stable Rust package with a library and an `index`
 command. The shipping HTTP server and compiler worker are under `node/`. Rust is the
 destination for those capabilities; their migration and acceptance remain in
 the [preview pipeline specifications](../specs/preview-pipeline/README.md).
@@ -33,7 +33,7 @@ before the server's workspace trust check.
 
 ## Protocol
 
-Spawn `workbench-native index` and send one JSON object on stdin:
+Spawn `workbench-server index` and send one JSON object on stdin:
 
 ```json
 {
@@ -131,7 +131,7 @@ commands; cargo-deny manages its own advisory cache.
 `node ../scripts/build-server.cjs` builds the host release executable into
 `bin/<VSIX target>/`. `--debug` builds the test executable. Packaging calls
 the same builder with a Rust target triple and ships only that target's binary.
-To package with a prebuilt executable, set `WORKBENCH_NATIVE_BINARY` to its
+To package with a prebuilt executable, set `WORKBENCH_SERVER_BINARY` to its
 path. Cross builds require the target's Rust standard library and linker;
 failure stops packaging with those prerequisites in the error.
 
