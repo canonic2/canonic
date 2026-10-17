@@ -247,4 +247,4 @@ To render the real components from your codebase instead of HTML copies, write
 [TypeScript previews](workbench-previews.md). To document each component on
 one page, with its examples, their code, and props tables, give the page
 [docs](docs-pages.md). If your components already have Storybook
-stories, consider [importing them](storybook.md#import-the-whole-catalog).
+stories, [map your pages to them](storybook.md#map-design-pages-to-stories).

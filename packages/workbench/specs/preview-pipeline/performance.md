@@ -68,7 +68,7 @@ Feature specs own the behavior that must not change while making it faster.
 - The complete page list of Workbench definitions (every page's title,
   group, states and icon) shows on the canvas's first paint, not filled in
   progressively, and its time does not grow with the number of pages.
-  Storybook catalogs are outside this requirement.
+  The story lists of pages mapped to Storybook are outside this requirement.
 - The first page compiles on request. Compilation after a worker restart
   uses the persisted build cache when its inputs are unchanged.
 - The time to the first page after the server starts does not grow with the

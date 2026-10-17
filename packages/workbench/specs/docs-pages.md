@@ -28,7 +28,7 @@ Beside other artboards on a [multiple-artboard canvas](multiple-artboards.md)
 they are an artboard like any other content; see
 [in a multiple-artboard canvas](#in-a-multiple-artboard-canvas).
 
-- Docs use the whole [canvas](terminology.md#canvas). There is no artboard:
+- Docs use the whole [canvas](glossary.md#canvas). There is no artboard:
   the page is centered on a white canvas and scrolls vertically until its end,
   like a documentation website. The canvas mode follows the lens: switching a
   page from its docs to its design brings its artboard and size back.

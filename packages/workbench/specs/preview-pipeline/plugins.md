@@ -18,28 +18,16 @@ compiler, before any project plugin:
 | `@canonic2/workbench` | Resolved to Workbench's bundled API module, whatever the project installs |
 | Preview runtime | `/_workbench/preview-runtime.js` is an external read from a window global set by the preview module, so every preview in a document shares one runtime |
 | TypeScript, JSX, TSX | Rspack's SWC loader, with React Refresh for project sources outside `node_modules` and generated entries |
-| Vue single-file components | Vue Loader, using Workbench's bundled `@vue/compiler-sfc`. Style blocks go through `style-loader` and `css-loader`, because Vue Loader's style proxy does not work with Rspack's native CSS ([finding 7](../../labs/rspack-pipeline/README.md#findings)). A `<style module>` block's class names are its default export, read as `$style` |
+| Vue single-file components | Vue Loader and its style loaders ([Vue adapter](../adapters/vue.md#build)) |
 | CSS | Rspack's native CSS, with hot updates. Files named `*.module.css` are CSS modules importable as a default object (`namedExports: false`) |
-| HTML previews | A Workbench loader that turns the HTML into a string module and turns its local references into imports: linked stylesheets, module scripts, and `src`, `poster` and `srcset` assets. It strips `<title>`, `<meta>` and `<base>` |
+| HTML previews | Workbench's HTML loader ([HTML adapter](../adapters/html.md#build)) |
 | Assets | Images, fonts and media imported by sources are emitted with content-hashed names |
 | `tsconfig.json` paths | The project's root `tsconfig.json`, with its references, resolves `paths` such as `@/*` |
 | Aliases | `aliases` from the config. Relative targets resolve from the project root, and keys match the whole specifier |
 | `dedupe` | Each listed package resolves to the project root's copy |
 | `define` | Merged with `process.env.NODE_ENV` set to `development` and Vue's feature flags |
-| React Native Web | The `react-native-web` profile ([compiler](compiler.md#one-compiler-per-project-and-profile)) |
-
-### Astro
-
-- Astro components render on the server in the compile worker, through the
-  Astro container, under the preview contract ([previews](../previews.md#data-request-mocks-and-the-project-environment)).
-- The rendered HTML and its client resources become virtual modules in the
-  compiler, handled by the HTML loader, so the client side gets hot updates
-  and shared chunks like any other format.
-- Root-relative URLs in the rendered HTML resolve against the project's
-  public folder.
-- The worker watches each Astro preview's dependencies. On a change it renders
-  again and replaces the virtual module only when the output changed; the
-  page then re-renders in place ([hot updates](hot-updates.md#edit-behavior)).
+| React Native Web | The `react-native-web` profile ([React Native Web adapter](../adapters/react-native-web.md#build)) |
+| Astro | Server rendering, then the HTML loader for the client side ([Astro adapter](../adapters/astro.md#build)) |
 
 ### Project plugins
 

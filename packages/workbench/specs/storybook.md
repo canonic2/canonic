@@ -1,7 +1,9 @@
 # Storybook contract
 
-Storybook is an opt-in implementation. A project can map an authored page to
-one exact Storybook title, import a whole Storybook catalog, or do both.
+Storybook is an opt-in implementation. A project maps an authored page in
+`workbench.yaml` to one exact Storybook title; Storybook does not add pages
+of its own. How the Workbench server runs Storybook is in the
+[Storybook adapter](adapters/storybook.md).
 Selection, addresses, and lens persistence are in [core.md](core.md); URL
 implementations, code pointers, and the page compatibility script are in
 [implementations.md](implementations.md).
@@ -22,35 +24,17 @@ The keys, their validation, and examples are in the
   refused. Detection never launches a process.
 - `start` launches Storybook in VS Code as described in
   [implementation startup](vscode-extension.md#implementation-startup). A
-  timeout is logged; the canvas still opens and the catalog reports its own
-  problem.
-- `catalog: true` imports the Storybook index. Without it, only explicitly
-  mapped authored pages use Storybook.
+  timeout is logged; the canvas still opens, and a mapped page's Storybook
+  lens shows the failure when it is opened.
+- `catalog` on a Storybook implementation is a problem
+  (`implementations › <key>: catalog is only available for iOS Simulator
+  implementations.`).
 
-## Catalog and story identity
-
-- Catalog page icons use the longest matching `catalog.icons` title prefix,
-  then `catalog.icon`, then `book-open`. Prefixes match complete `/` segments.
-  Collection lookup uses the collection name and retains whether its icon came
-  from a mapping, a configured fallback, or the built-in default. Shared
-  collections use the
-  [preview placement precedence](previews.md#sidebar-placement); conflicting
-  catalogs at equal priority choose the lexically first icon name.
+## Story identity
 
 - Only index entries with `type: story`, a string ID, and a title become
   selectable stories; docs entries are skipped. Entries are grouped by their
   exact `title`.
-- For a title such as `UI/Forms/Inputs/Text field`, `UI` becomes a collection,
-  `Forms / Inputs` becomes one group (groups don't nest), and `Text field`
-  becomes a page. A one-segment title goes in a collection named after the
-  implementation's label. Each story is one of the page's states, labeled
-  with the story's name; a one-story title is a page that doesn't expand.
-- An imported collection joins an authored collection with the same name.
-  Imported pages have a synthetic
-  `__storybook/<implementation>/<component>.html` address, open straight on the Storybook lens, and have no Design lens.
-  Groups with exactly the same name within that collection join the existing
-  group, including groups supplied by TypeScript previews. Pages retain
-  their own addresses, states, and lenses.
 - A story's workbench state is the part of its ID after `--`; the address
   stores that state and the story keeps its full Storybook ID. The preview URL
   is `<url>/iframe.html?id=<story-id>&viewMode=story`. **Open on its own**
@@ -60,8 +44,8 @@ The keys, their validation, and examples are in the
   a similar final segment under another prefix is not silently substituted.
   When only the prefix differs, the lookup error suggests the matching titles.
 - The Storybook lens shows the title's first story, or the one the address
-  names. On mapped and imported pages alike, the top bar's state switcher
-  lists the title's stories in place of the design's states.
+  names. The top bar's state switcher lists the title's stories in place of
+  the design's states.
 - The server fetches stories for the selected title through
   `/_workbench/stories`. The canvas keeps each title's list for the session.
   Source paths come from Storybook's `componentPath` and `importPath`,
@@ -111,12 +95,12 @@ This work follows the iframe runtime ownership in the
   `iframe.html`. Stories must not be framed from Storybook's own address or
   served from the workbench's origin instead; see that spec. Capture is in
   [capture.md](capture.md).
-- Design-system export plans a reference for each imported story at each of
-  the page's resolved sizes. Imported pages inherit the space's sizes;
-  Resizable is skipped under the [size export rule](sizes.md#design-system-export). A state without a story ID becomes a warning. An
-  authored page mapped to Storybook exports its design, not the story.
-  [Export capture](export.md) schedules background workers and does not drive
-  the visible workbench preview.
+- Design-system export captures a page mapped to Storybook as its design. An
+  export whose lens is the Storybook implementation captures each mapped
+  page's stories instead, at each of the page's resolved sizes; Resizable is
+  skipped under the [size export rule](sizes.md#design-system-export).
+  [Export capture](export.md#reference-capture-plan) schedules background
+  workers and does not drive the visible workbench preview.
 
 ## Decisions
 
@@ -129,11 +113,10 @@ This work follows the iframe runtime ownership in the
 
 ## Current gaps
 
-- **Mapped-only Storybooks are not checked up front.** Only catalog imports
-  and `url: auto` detection add to `problems`. When a Storybook used only by
-  mapped pages is stopped, the failure appears on the canvas when such a
-  page is opened, not in `problems`, short of the shared problems list in
-  [core.md](core.md#problem-reporting).
+- **Storybooks are not checked up front.** Only `url: auto` detection adds
+  to `problems`. When a Storybook is stopped, the failure appears on the
+  canvas when a mapped page is opened, not in `problems`, short of the shared
+  problems list in [core.md](core.md#problem-reporting).
 
 ## Open questions
 
@@ -143,13 +126,12 @@ This work follows the iframe runtime ownership in the
 
 ## Verification points
 
-- [server.test.js](../server/node/server.test.js) checks catalog import, port discovery
+- [server.test.js](../server/node/server.test.js) checks port discovery
   from package scripts, automatic detection, exact-title lookup with code
   paths, the not-running and not-a-Storybook errors, and export plans.
 - [manifest.test.js](../contracts/manifest.test.js) and
-  [config.test.js](../server/node/config.test.js) check automatic and catalogued
-  implementations, start settings, and a story's state from its ID.
-  [page-list.test.js](../ui/legacy/page-list.test.js) checks imported titles and their stories.
+  [config.test.js](../server/node/config.test.js) check automatic implementations, the `catalog` problem, start settings,
+  and a story's state from its ID.
 - [lenses.test.js](../ui/legacy/lenses.test.js) checks story URLs, address
   picks, and channel messages.
   [preview.test.js](../ui/legacy/preview.test.js) checks channel reuse,

@@ -39,7 +39,6 @@ The source package starts from the selected pages' entry points in the current s
 
 - the design page (`src`),
 - its [code pointers](lenses.md#point-at-the-code),
-- for Storybook, each story's file and component, from Storybook's index,
 - for a [TypeScript preview](workbench-previews.md), its definition, its source
   file, and the local files the compiler resolves for it,
 - for a page with [docs](docs-pages.md), its Markdown file and each docs
@@ -57,7 +56,7 @@ From there it follows local imports and referenced assets, and includes:
 | Asset folders referenced statically | `new URL("./assets/", import.meta.url)` includes the folder, which covers plugins that build sprites or font sets from a directory. |
 | SVG sprite sources | Source SVGs for a Vite `iconDirs` folder named through `path.resolve(process.cwd(), "…")`. |
 | Package configuration | The `package.json`, `tsconfig`/`jsconfig`, and Vite, Tailwind, and PostCSS configuration files the included sources need. |
-| Reference screenshots | One JPEG per design state, imported story, and TypeScript preview state, at each of the page's sizes, and per docs lens, one of the whole docs and one of each example. |
+| Reference screenshots | One JPEG per design state and TypeScript preview state, or per story when you export through a Storybook lens, at each of the page's sizes, and per docs lens, one of the whole docs and one of each example. |
 | Compiled TypeScript previews and docs | A `browser/` viewer you can open without Workbench. See [The browser viewer](#the-browser-viewer). |
 
 TypeScript imports written with `.js` extensions resolve to the `.ts` or
@@ -75,8 +74,7 @@ by this space are included even when other spaces also use them.
 ## Reference screenshots
 
 The export captures a reference JPEG for every declared state of every design
-page, every story of every imported Storybook title, and every state of every
-TypeScript preview, at each of the page's
+page and every state of every TypeScript preview, at each of the page's
 [`sizes`](pages-and-states.md#sizes):
 
 | Size | Captured at |
@@ -92,8 +90,9 @@ A page without `sizes` is captured at its space's sizes, except Resizable.
 Sizes that resolve to the same dimensions are captured once, using the first
 size's key and label.
 
-Design pages are captured as designed, with actions off; lenses on a design
-page aren't captured.
+Design pages are captured as designed, with actions off. Other lenses on a
+design page aren't captured, except Storybook: an export through a Storybook
+lens captures every story of each page's mapped title instead of its design.
 
 A page's [docs](docs-pages.md) have no sizes. For each docs lens of a page
 with docs, the export captures the whole docs at their 960-pixel layout, 1056

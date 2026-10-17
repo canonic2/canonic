@@ -9,11 +9,20 @@ compilation, and screenshot processes have separate
 [extension](vscode-extension.md), [TypeScript preview](previews.md), and
 [capture](capture.md) contracts.
 
+## Purpose
+
+Workbench is for designing inside the codebase. Pages are designed and
+reviewed with the project's own components, styles and data, at real device
+widths, beside their implementations, rather than in a separate design tool
+whose output is rebuilt in code. It renders in a browser: React Native
+components render through React Native Web, which is less exact than a
+device but keeps them on the same canvas as everything else.
+
 ## Terminology
 
 Space, collection, group, page, state, lens, and the parts of the interface
 (sidebar, top bar, canvas, artboard, toolbar, view controls) are defined in
-[terminology](terminology.md), which code, guides, and specs follow.
+[glossary](glossary.md), which code, guides, and specs follow.
 
 ## Configuration and serving
 
@@ -86,9 +95,8 @@ Space, collection, group, page, state, lens, and the parts of the interface
   address after routing to the view it actually shows.
 - The sidebar lists the collections, then the chosen collection's pages;
   search finds pages across collections, including state and group labels. A
-  page with multiple states expands to its states. An imported title is a page that
-  expands to its named states, which are the selectable stories. A
-  single-state authored page does not expand.
+  page with multiple states expands to its states. A single-state authored
+  page does not expand.
 - A lens choice persists across page picks. A page without that lens shows
   its design. An imported implementation-only page always uses its own lens;
   a discovered TypeScript preview uses its own authored lens. Every lens has
@@ -182,8 +190,8 @@ continues to describe the shipping single-view interface.
 
 - [address.test.js](../ui/legacy/address.test.js) checks address parsing,
   writing, and round trips.
-- [page-list.test.js](../ui/legacy/page-list.test.js) checks listed states, imported titles,
-  and empty versus filtered lists.
+- [page-list.test.js](../ui/legacy/page-list.test.js) checks listed states and empty
+  versus filtered lists.
 - [config.test.js](../server/node/config.test.js) checks YAML reading, the local merge,
   and server-resolved paths and problems;
   [manifest.test.js](../contracts/manifest.test.js) checks the shared rules,

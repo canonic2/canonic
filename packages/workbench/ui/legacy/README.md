@@ -5,7 +5,7 @@ it at a real device width, draw on it, and hand the picture to an agent.
 
 Nothing in this folder knows which project it is in. `workbench.yaml` configures
 its spaces; pages come from declared pages, discovered TypeScript preview
-definitions, and configured implementation catalogs.
+definitions, and an iOS Simulator catalog when one is configured.
 
 This folder ships inside the Workbench extension and is served from there, so no
 project holds a copy and no page in one points at it. Its browser entry points are HTML and script files, with TypeScript modules
@@ -167,7 +167,6 @@ implementations:
     kind: storybook           # workbench | url | storybook | ios-simulator | window
     url: auto                 # or an explicit http://localhost:6006
     root: ../product/packages/ui   # optional folder: where the code is, relative to this file or absolute
-    catalog: true             # optional: import its titles and stories into the workbench
     start:                    # optional: start it in VS Code when the check fails
       command: yarn storybook
       cwd: ../product         # relative to workbench.yaml; default is .
@@ -229,29 +228,11 @@ TypeScript previews. Renaming the authored lens changes its existing button
 and review label, without adding a lens or changing addresses. Docs lenses use
 their implementations' labels; a Markdown page has no authored lens.
 
-With `catalog: true`, a Storybook implementation can be the whole workbench;
-`collections` may be omitted. Workbench reads Storybook's live `/index.json`, turns
-each title into a page and each story under that title into a workbench state.
-The first title segment becomes a collection, any middle segments become one
-group, and the last segment labels the page. Generated pages open directly
-through Storybook and use its component and story paths as source pointers when
-`root` is configured. Handwritten collections can coexist with imported catalogs and are
-left unchanged. Without `catalog: true`, no Storybook content is imported.
-
-`catalog` may instead be a map. `icon` is the fallback Lucide icon, and
-`icons` maps Storybook title prefixes to icons. The longest match wins, so an
-exact title can override its category:
-
-```yaml
-    catalog:
-      icon: book-open
-      icons:
-        UI: palette
-        UI/Components: component
-        UI/Components/Button: mouse-pointer-click
-        UI/Modules: boxes
-        Auth: shield-check
-```
+Storybook pages are the pages listed in `collections` with a Storybook lens:
+each maps to one exact title, read from Storybook's live `/index.json`, and
+its stories replace the design's states in that lens. `catalog` is
+available only for `ios-simulator` implementations, as `true` or a map
+with a fallback `icon`.
 
 Handwritten pages may likewise set `icon: panel-top`; otherwise they use
 their collection's icon.
@@ -265,10 +246,9 @@ registry membership.
 An authored collection may contain only `name` and `icon` to style imported
 pages; the configuration editor preserves it, and it is hidden until filled.
 Collection icon precedence is: explicit handwritten icon, preview prefix mapping,
-catalog prefix mapping, configured preview fallback, configured catalog
-fallback, built-in default. Shared preview/Storybook collections default to
-`component`. Equal catalog priorities choose the alphabetically first icon
-name, so import order never selects the icon. See the
+configured preview fallback, built-in default. Preview collections default to
+`component`. Equal priorities choose the alphabetically first icon name, so
+import order never selects the icon. See the
 [configuration reference](../../docs/configuration.md#collections).
 Authored collections without explicit icons keep `file-text` against imported
 built-in defaults; mappings and configured fallbacks override it.
@@ -277,11 +257,11 @@ built-in defaults; mappings and configured fallbacks override it.
 activation, Workbench first checks the configured TCP port or HTTP(S) URL. If it
 is already available, it leaves it running. Otherwise it opens a VS Code
 terminal in `cwd` and runs `command`. It then waits up to `timeout` seconds
-for `ready` (or `check` when `ready` is omitted) before importing the catalog.
+for `ready` (or `check` when `ready` is omitted) before reading the implementation.
 For an HTTP check, put `url` under the check instead of `port`; only a
 successful HTTP response counts as ready. Start commands run only in trusted workspaces.
-If readiness times out, the workbench still opens and reports the catalog
-problem. A local override may replace the whole `start` block in
+If readiness times out, the workbench still opens, and the affected lens
+reports the problem. A local override may replace the whole `start` block in
 `workbench.local.yaml`.
 
 `url: auto` keeps Storybook opt-in while removing its machine-specific port.
@@ -575,7 +555,8 @@ secrets, tests, and source that is not reachable from the workbench. The button
 requires the local workbench server.
 
 The export also captures JPEGs for every declared design state and every
-imported Storybook story at each page's supported `sizes`, except Resizable.
+TypeScript preview state, or through a Storybook lens every story of each
+mapped page, at each page's supported `sizes`, except Resizable.
 Fixed sizes use their dimensions and filled axes use 1440 wide or 900 tall.
 A page whose only size is Resizable gets one 1440 × 900 reference. Duplicate
 dimensions are captured once. References live in a

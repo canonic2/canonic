@@ -117,13 +117,14 @@ Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
   of, or as well as, using a catalog. See the gap below.
 - The canvas shows the device through the native window stream described in
   [Native window stream](#native-window-stream). Taps and drags on the canvas
-  are sent through the Sandbox Rust CLI adapter, with explicit target authorization
-  in `.canonic/sandbox.json`. Each input invocation acquires and closes its owned
-  run/session. Missing binary or target configuration is an input setup error.
+  are sent through the Sandbox Rust CLI adapter with the displayed device's explicit
+  target ID. Sandbox needs no configuration file. Each input invocation acquires
+  and closes its owned run/session. A missing binary is an input setup error.
 - Simulator lenses have no state menu. `start` is reported as a problem;
   `root` and code pointers work as for other implementations.
 - Export reference screenshots are supported for authored design pages,
-  TypeScript preview states, and imported Storybook stories. An implementation-only Simulator page
+  TypeScript preview states, and, when the export's lens is a Storybook
+  implementation, the stories of each page mapped to it. An implementation-only Simulator page
   receives an export warning instead of a fabricated reference image.
   See the [export contract](export.md) for its capture plan and archive.
 

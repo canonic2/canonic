@@ -1,4 +1,4 @@
-# Terminology
+# Glossary
 
 One vocabulary for Workbench: the interface, its labels and accessible names,
 the code, the user guides, the specs, handoff prompts, payloads, and the agent
@@ -14,7 +14,8 @@ something listed here, it uses this word and no synonym.
 | **Space** | Collections of pages served together, with their own root and server: one `workbench.yaml`, or one entry in its `spaces`. The space switcher changes the space showing. |
 | **Collection** | A set of pages within a space, listed in the collection list. Pages discovered from previews, docs definitions, or catalogs join the collection their title names. `collections` in `workbench.yaml`. |
 | **Group** | A named set of pages within a collection. Groups don't nest. `group:` in `workbench.yaml`. |
-| **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a Markdown page, a Storybook story's title, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
+| **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a Markdown page, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
+| **Page tree** | Everything a space lists, in order: its collections, their groups and pages, and each page's states. The Workbench server answers it from `workbench.yaml` and the page index; the collection list and page list show it. |
 | **State** | One variation of a page, such as *Empty* or *Wrong password*. A page has one or more states; the first is the page as authored. |
 | **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
 | **Markdown page** | A page whose `src` is its Markdown: its docs, with no design lens. A `defineDocs` definition declares one. |
@@ -37,7 +38,7 @@ one.
 | **Implementation** | Somewhere a page is built, declared once under `implementations` in `workbench.yaml` and named by its key, such as `dev` or `storybook`. A page maps to it with a value that says where the page is in it, such as a path, a story title, a preview ID, or an example source, and the implementation becomes one of that page's lenses, labeled with its `label`. |
 | **Kind** | What an implementation is and how its lens renders: `url` (a running app), `storybook` (a Storybook story), `workbench` (a TypeScript preview of a design page), `ios-simulator` and `window` (a live stream of a device or a macOS window), and `docs` (a page's docs, its examples rendered with an adapter). |
 | **Docs lens** | A page's docs seen through one renderer of its examples: an implementation of kind `docs`, or the built-in **Docs** lens of a page with Markdown and no docs implementation. Only a page with Markdown has one. A Markdown page always shows one of its lenses, its own docs lens by default. |
-| **Catalog** | An implementation that lists pages of its own instead of lensing pages in `workbench.yaml`: `catalog: true` on a `storybook` or `ios-simulator` implementation. Its pages join the space with that implementation as their only lens. |
+| **Catalog** | An implementation that lists pages of its own instead of lensing pages in `workbench.yaml`: `catalog: true` on an `ios-simulator` implementation, one page per booted device. Its pages join the space with that implementation as their only lens. |
 
 Under a Storybook lens, the state switcher lists the title's stories instead
 of the page's states.
@@ -117,6 +118,15 @@ The bar across the top of the canvas, with controls for the page showing.
 link to another page of the product being designed. "Screenshot" is an image
 of the canvas or of a page. "Section" keeps its ordinary meaning for part of a
 document, such as a heading's section in docs or a guide.
+
+## Behind the canvas
+
+| Term | Meaning |
+| --- | --- |
+| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, holds the page index; the HTTP server and compile worker run in Node under `server/node/` and are moving into the binary ([adapters](adapters/README.md#decisions)). |
+| **Page index** | The part of the Workbench server that finds preview and docs definitions and keeps the saved index; see [page index](preview-pipeline/page-index.md). |
+| **Adapter** | What renders one kind of page: `html`, `react`, `react-native-web`, `vue`, `astro`, or a custom adapter registered in `workbench.config.ts`. A definition or docs lens names its adapter. Storybook stories are the adapter that renders through Storybook's own server; see [adapters](adapters/README.md). |
+| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions. |
 
 ## Naming across interfaces
 

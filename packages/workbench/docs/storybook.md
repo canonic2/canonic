@@ -2,12 +2,9 @@
 
 Workbench can show Storybook stories in its canvas without Storybook's own
 interface: one story at a time, at a real device width, with annotations and
-handoffs. There are two ways to use it, and you can combine them:
-
-- **Map design pages to stories.** A design page gets a Storybook lens, so
-  you can compare the design with the built component.
-- **Import the whole catalog.** Every story title becomes a page, and each of
-  its stories becomes a state. No design pages or hand-written list are needed.
+handoffs. You list the pages in `workbench.yaml` and map each one to a story
+title: the page gets a Storybook lens, so you can compare the design with the
+built component, and in that lens the state switcher lists the title's stories.
 
 Workbench reads Storybook's live `/index.json`, which Storybook 7 and later
 serve. Storybook has to be running, either started by you or by
@@ -29,7 +26,6 @@ implementations:
 | `url` | Storybook's origin, or `auto` to [detect it](#detect-the-port-with-url-auto). |
 | `root` | The folder Storybook runs from: the one containing `.storybook/`, relative to `workbench.yaml` or absolute. Optional, but needed for source links and exports. |
 | `label` | The lens button's label. Defaults to the name in sentence case, *Storybook*. |
-| `catalog` | `true`, or a map of icons, to [import every story](#import-the-whole-catalog). |
 | `start` | A command that [starts Storybook](#start-storybook-automatically). |
 
 The implementation name, `storybook` here, is any kebab-case key. Declare
@@ -69,97 +65,6 @@ The address records the story in the state slot, as the part of its id after
 `--`: the story `components-button--icon-only` is
 `#design/button.html:icon-only~storybook`.
 
-## Import the whole catalog
-
-```yaml
-implementations:
-  storybook:
-    kind: storybook
-    url: http://localhost:6006
-    root: packages/ui
-    catalog: true
-```
-
-With `catalog: true`, every story title becomes a page, and you don't need
-`collections`. This can be the whole `workbench.yaml`:
-
-```yaml
-name: Acme UI
-
-implementations:
-  storybook:
-    kind: storybook
-    url: auto
-    catalog: true
-```
-
-How titles become the sidebar:
-
-| Storybook title | Collection | Group | Page |
-| --- | --- | --- | --- |
-| `UI/Components/Button` | UI | Components | Button |
-| `UI/Forms/Inputs/Text field` | UI | Forms / Inputs | Text field |
-| `Auth/Sign in` | Auth | none | Sign in |
-| `Button` | Storybook (the implementation's label) | none | Button |
-
-- The first segment is the collection. A one-segment title goes in a
-  collection named after the implementation.
-- Middle segments become one group. Groups don't nest, so deeper levels are
-  joined with ` / `.
-- The last segment labels the page.
-- Each story under a title is one of the page's states, labeled with the
-  story's name. A title with one story is a page with no states listed under
-  it.
-- Only stories are imported. Storybook's docs entries are skipped.
-
-Imported pages are Storybook-only: they open straight in the Storybook lens
-and have no Design choice. Their source links come from Storybook's own
-`importPath` and `componentPath`, resolved against `root`.
-
-### Mixing imported and hand-written pages
-
-`catalog` and `collections` work together. An imported collection with the same
-name as a hand-written or preview collection is merged into it. Within that
-collection, groups with exactly the same name share one group, with imported
-pages added after the existing pages. You can put design pages and previews next
-to their stories:
-
-```yaml
-implementations:
-  storybook:
-    kind: storybook
-    url: http://localhost:6006
-    catalog: true
-
-collections:
-  - name: Components          # Storybook's Components/* titles are added here too
-    icon: component
-    items:
-      - label: Button (design)
-        src: design/button.html
-        implementations:
-          storybook: Components/Button
-```
-
-### Catalog icons
-
-By default, imported pages and collections use the `book-open` icon. Make
-`catalog` a map to choose icons by title prefix. The longest matching prefix
-wins, so a specific title can override its category:
-
-```yaml
-catalog:
-  icon: book-open                        # fallback
-  icons:
-    UI: palette
-    UI/Components: component
-    UI/Components/Button: mouse-pointer-click
-    UI/Modules: boxes
-    Auth: shield-check
-```
-
-Values are [Lucide](https://lucide.dev/icons/) icon names in kebab-case.
-
 ## Detect the port with `url: auto`
 
 `url: auto` finds a running Storybook instead of hard-coding its port, which
@@ -186,7 +91,6 @@ implementations:
   storybook:
     kind: storybook
     url: http://localhost:6006
-    catalog: true
     start:
       command: pnpm storybook --no-open
       cwd: packages/ui
@@ -199,14 +103,14 @@ implementations:
 
 When VS Code opens the project, Workbench checks the port. If Storybook isn't
 running, it opens a terminal in `cwd`, runs the command, and waits for `ready`
-before importing the catalog.
+before reading Storybook's index.
 
 - Use `ready` with the `/index.json` URL. Storybook listens on its port before
-  it has finished building, and the index is what the catalog needs.
+  it has finished building, and the index is what Workbench reads.
 - Raise `timeout` for large Storybooks. The maximum is 300 seconds.
 - Pass `--no-open` (or `--ci`) so Storybook doesn't open a browser tab.
-- If startup times out, the canvas still opens with your hand-written pages
-  and reports the catalog problem.
+- If startup times out, the canvas still opens with your pages, and their
+  Storybook lenses report the problem when you open them.
 
 Start commands run only in trusted workspaces, and only in VS Code. See
 [Start commands](configuration.md#start-commands) for every key.
@@ -237,19 +141,18 @@ cookies, storage, credentials, or code.
 
 ## Exports
 
-A [design-system export](design-system-export.md) includes each story's source
-and local imports, your Storybook configuration from `.storybook` or a
-`--config-dir` named in a package script, and a reference screenshot of every
-imported story at each of the page's `sizes`. Set `root` so sources can be
-found.
+A [design-system export](design-system-export.md) includes your Storybook
+configuration from `.storybook`, or a `--config-dir` named in a package script,
+when the exported sources need it. Exported through the Storybook lens, it
+captures a reference screenshot of every story of each mapped page at each of
+the page's `sizes`. Set `root` so sources can be found.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
 | No Storybook lens on a page | The title is exact. Ask the [stories route](troubleshooting.md#check-a-storybook-title), which lists near matches. |
-| Catalog is empty | Storybook isn't running, or isn't at `url`. The config route's `problems` says which. Open `<url>/index.json` in a browser. |
 | `url: auto` finds nothing | Storybook isn't on a scripted port or 6006 to 6010. Set `url` explicitly, or in `workbench.local.yaml`. |
-| Lens is blank | Open `<url>/iframe.html` directly, and check the frame's console. |
+| Lens is blank or shows an error | Check that Storybook is running at `url`: open `<url>/index.json` in a browser. Then open `<url>/iframe.html` directly, and check the frame's console. |
 | No source links | `root` is missing or points at the wrong folder. It should be the folder Storybook runs from. |
 | Screenshots don't match what you see | The story hadn't finished loading, so the bridge hadn't connected. Take the screenshot again. |

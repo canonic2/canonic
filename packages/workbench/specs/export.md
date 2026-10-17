@@ -66,8 +66,7 @@ viewer code and generated authoring types. Project sources and third-party
 components retain their own licensing.
 
 - Export starts from every page's entry points in the target space: the design page, its code
-  pointers, each imported Storybook story's file and component, and each
-  TypeScript preview's definition, source, and the local files its compiler
+  pointers, and each TypeScript preview's definition, source, and the local files its compiler
   resolves (including adapter and environment dependencies). It follows
   reachable local imports and assets and keeps project-relative paths.
   Sources outside the workspace go under `implementations/`.
@@ -130,10 +129,14 @@ filters. Browser-only output fails if no compiled previews or docs are available
 
 ## Reference capture plan
 
-- The plan covers every declared state of every authored design page, each
-  story of every imported Storybook title, and each state of every TypeScript
-  preview, at the page's sizes. Pages are planned once each, across
-  collections and imported catalogs.
+- The plan covers every declared state of every authored design page and
+  each state of every TypeScript preview, at the page's sizes. Pages are
+  planned once each, across collections and the iOS Simulator catalog.
+- An export whose lens (the request's `lens`, or the current lens for
+  current-view requests) is a Storybook implementation captures, for every
+  page mapped to that lens, each story of its mapped title at each of the
+  page's export sizes, from `<url>/iframe.html?id=<story>&viewMode=story`,
+  in place of the page's design references.
 - Capture each size the page supports, as resolved by its space. Fixed sizes
   use their dimensions; filled axes use 1440 wide or 900 tall. Fit uses
   1440 × 900. Resizable is skipped; a page whose only size is Resizable gets
@@ -143,14 +146,13 @@ filters. Browser-only output fails if no compiled previews or docs are available
   See the [sizes contract](sizes.md#design-system-export).
 - Design pages load as designed with actions off; the first state loads
   without a `state` parameter. Current-view or explicit lens requests use the
-  page's declared URL/workbench mapping; imported Storybook pages retain their
-  mapped stories. Native lenses do not support visual export.
+  page's declared URL/workbench mapping, or a Storybook lens's mapped stories.
+  Native lenses do not support visual export.
 - TypeScript preview states load the preview's page with `?state=<id>`. A
   capture waits up to 8 seconds for the preview to report it has rendered; a
   preview render error fails that reference instead of capturing an error
   page.
-- Implementation-only pages other than Storybook (iOS Simulator catalog
-  devices) and pages whose design file is missing produce warnings rather
+- Implementation-only pages (iOS Simulator catalog devices) and pages whose design file is missing produce warnings rather
   than invented images.
 
 ## Capture scheduling versus the camera
@@ -167,7 +169,7 @@ this export's own reference plan, scheduling, warnings, and archive contract.
 
 | | Interactive camera and handoff | Design-system export |
 | --- | --- | --- |
-| Target | Current visible selection, scroll, annotations, and live document state | Planned design states, TypeScript preview states, and imported Storybook stories at configured sizes |
+| Target | Current visible selection, scroll, annotations, and live document state | Planned design states, TypeScript preview states, and, with a Storybook lens, mapped pages' stories at configured sizes |
 | Preparation | Continuous live mirror into one warm view; flush on click | Direct background loads and settling for each planned reference |
 | Renderer use | Single queued helper | Up to four workers, each page's or story's references on one; the existing warm service is one of them |
 | Reuse | Reprepare the selected view | Keep all reference sizes of one URL on its worker; switch Storybook stories in a loaded `iframe.html` runtime when possible |
@@ -247,7 +249,7 @@ above do not yet have a dedicated end-to-end test.
 ## Verification points
 
 - [server.test.js](../server/node/server.test.js) checks the capture plan for states and
-  imported stories, the four-worker pool, per-story worker reuse, progress,
+  a Storybook lens's stories, the four-worker pool, per-story worker reuse, progress,
   waiting for warm-up, coalesced jobs, retention and expiry (`404`), bounded
   retained bundles, cleanup warnings, job and part downloads, and the direct
   ZIP download.

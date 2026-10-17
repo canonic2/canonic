@@ -1,6 +1,7 @@
 # Workbench documentation
 
-Workbench is a VS Code extension that renders a project's pages on one
+Workbench is a VS Code extension for designing inside your codebase: it
+renders a project's pages, built from its own components and code, on one
 canvas at device widths. You can draw on a page, compare it with its
 implementation, and copy a screenshot with your annotations and a description
 of them for a coding agent.
@@ -8,8 +9,8 @@ of them for a coding agent.
 A project's configuration is `workbench.yaml` at the project root. Pages can
 come from HTML design pages you list there, from Markdown pages with live
 examples, from TypeScript previews of your own components, or from a
-Storybook or Simulator catalog, and any page can have Markdown docs as a
-lens. The tool ships inside
+Simulator catalog. A page can also be mapped to a Storybook story, and any page
+can have Markdown docs as a lens. The tool ships inside
 the extension; in your project it writes only handoff screenshots and the
 collections you edit with **Configure pages**. See
 [Files and network access](extension.md#files-and-network-access).

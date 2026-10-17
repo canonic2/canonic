@@ -67,6 +67,9 @@ the targets the whole pipeline is measured against.
 - Rust is the direction for suitable host capabilities in the extension and
   Studio. Electron owns screenshot rendering. An additional Rust component
   needs a defined integration contract; a lab prototype does not establish it.
+- The Workbench server becomes one Rust runtime, with the page index and the
+  compiler, and Node only as an evaluator of project code; Astro and React
+  Native Web are required ([adapters](../adapters/README.md#decisions)).
 
 ## Status
 
@@ -75,7 +78,7 @@ the targets the whole pipeline is measured against.
 | Native page listing | Implemented in `server/` and `server/node/src/modules/page-index/`; [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](performance.md#page-listing) do not establish canvas-paint acceptance |
 | Rust engineering gates | Implemented; [code quality](../code-quality.md) owns tools, policy, test conventions and CI enforcement |
 | Rspack compilation and pre-warming | Implemented in the Node worker; retain their own listing and eager-entry start |
-| Rust compiler host | Prototype under the [instant first page lab's stage 2 plan](../../labs/instant-first-page/README.md#stage-2-plan); not a shipping compiler or adopted first-page solution |
+| Rust compiler host | Prototype in the [instant first page lab](../../labs/instant-first-page/README.md#stage-2-report), reported without meeting the agreed targets; not a shipping compiler or adopted first-page solution |
 
 The implemented page index follows this [design direction](#decisions).
 It lists pages independently of the compile worker; it does not change the

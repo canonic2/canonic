@@ -78,10 +78,9 @@ project-registered adapters. They do not run a project's application server,
   syntax isolates that definition; invalid configuration icon values are
   reported and ignored. Validation checks kebab-case syntax, not Lucide membership.
 - Collection icons resolve independently against the collection name. Highest
-  priority first: explicit authored icon, preview prefix mapping, catalog
-  prefix mapping, configured preview fallback, configured catalog fallback,
-  built-in default. Shared preview/Storybook collections default to
-  `component`. Conflicting catalogs at equal priority use lexical icon-name
+  priority first: explicit authored icon, preview prefix mapping, configured
+  preview fallback, built-in default. Preview collections default to
+  `component`. Conflicting values at equal priority use lexical icon-name
   order; import order cannot change the selected icon. The shared manifest
   owns prefix matching and collection icon merging, including provenance
   priorities. An authored collection with no explicit icon retains its
@@ -293,19 +292,15 @@ reached through `node_modules` are listed by name and version.
 
 ### Adapters and project configuration
 
-- Built-ins: `html`, `react`, `vue`, `astro`, and `react-native-web` (the
-  React runtime with `react-native` aliased to `react-native-web` and `.web.*`
-  extensions preferred). Its host uses a column flex layout, allowing a root
-  view with `flex: 1` to fill the frame at fixed and resizable sizes without
-  project CSS. Project styles can override these defaults. Other adapters keep
-  their existing host layout; custom runtimes own their host styling.
+- Built-ins: `html`, `react`, `vue`, `astro`, and `react-native-web`. Each
+  [adapter](adapters/README.md) has its own spec: its source, build,
+  project code on the server, browser mount and edit behavior. Project styles
+  can override an adapter's host layout; custom runtimes own their host styling.
 - `workbench.config.ts`, or `previews.config`, is evaluated like a definition.
-  Its `adapters` map a name to a `runtime` module (`mount(canvas, source,
-  context, environment)`) and optional `rules` and `plugins`; registering a
-  built-in name replaces it. It also sets global `rules`, `plugins`, `aliases`,
-  `dedupe`, `resolveExtensions`, and `define`. An unregistered name fails with
-  `Unknown adapter`. Rules and plugins are Rspack rules and plugins, applied
-  after Workbench's own ([plugins](preview-pipeline/plugins.md#project-plugins)).
+  Its `adapters` register [custom adapters](adapters/custom.md). It also sets
+  global `rules`, `plugins`, `aliases`, `dedupe`, `resolveExtensions`, and
+  `define`. Rules and plugins are Rspack rules and plugins, applied after
+  Workbench's own ([plugins](preview-pipeline/plugins.md#project-plugins)).
 - Custom adapters, compiler plugins, live output, and portable output share the
   same entry and [browser runtime](../ui/preview/browser.js).
 

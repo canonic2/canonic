@@ -96,8 +96,8 @@ See [preview icon settings](configuration.md#previews) and
 [collection precedence](configuration.md#collections).
 
 Collections and groups with exactly matching names are shared with your
-hand-written pages and imported Storybook catalogs. For example, a preview
-titled `Web App/Pages/Jobs` and a story titled `Web App/Pages/Account` appear
+hand-written pages. For example, a preview titled `Web App/Pages/Jobs` and a
+hand-written page in the **Pages** group of the **Web App** collection appear
 in one **Pages** group under **Web App**.
 
 A file that fails to load or has an invalid definition is reported with the

@@ -18,7 +18,7 @@ decisions, or findings change, and add new topics to the index below. Use the
 
 ## Reading order and ownership
 
-Start with [Core workbench](core.md) and [Terminology](terminology.md) for the
+Start with [Core workbench](core.md) and [Glossary](glossary.md) for the
 product model. Feature topics own user-visible behavior. The
 [preview pipeline](preview-pipeline/README.md) owns discovery, compilation,
 delivery and runtime contracts; its index separates implemented capabilities
@@ -49,15 +49,16 @@ user-facing workflow is delivered.
 | --- | --- |
 | [Web Components](web-components.md) | Target component structure, public APIs, Shadow DOM, lifecycle, host loading and bounded migration |
 | [Themes](themes.md) | Standalone defaults, semantic tokens, VS Code theme forwarding, live updates, accessibility and preview isolation |
-| [Terminology](terminology.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
+| [Glossary](glossary.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
 | [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, the canvas and artboards, and failures shared by every page |
 | [Lenses](lenses.md) | Rendering kinds, customizable display labels for every lens including the authored preview, stable identity, defaults, and configuration precedence |
 | [Multiple artboards](multiple-artboards.md) | Implemented instance/review support, desired comparison workflows, remaining UI integration, arrangement phases and persistence decisions |
 | [Artboard code plan](multiple-artboards-code-plan.md) | Implemented TypeScript owners, target capability boundaries, state/runtime/space contracts, remaining integration and validation |
-| [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, adapters, controls, the `workbench` lens, and the portable build |
+| [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, controls, the `workbench` lens, and the portable build |
+| [Adapters](adapters/README.md) | What each technology needs to render, one spec per adapter: [HTML](adapters/html.md), [React](adapters/react.md), [React Native Web](adapters/react-native-web.md), [Vue](adapters/vue.md), [Astro](adapters/astro.md), [Storybook](adapters/storybook.md) and [custom adapters](adapters/custom.md); how the Workbench server serves pages |
 | [Artboard sizes](sizes.md) | Sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
 | [Docs](docs-pages.md) | Docs as a lens of any page: Markdown with live examples on the whole canvas, `docs` lenses one per renderer, Markdown pages, `defineDocs`, the docs canvas mode, and docs references in the export |
-| [Storybook](storybook.md) | Explicit and imported stories, catalog lookup, story selection, preview reuse, and startup |
+| [Storybook](storybook.md) | Pages mapped to stories, story lookup, story selection, preview reuse, and startup |
 | [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
 | [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
 | [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, the agent hooks and MCP server, and proposed Copilot surfaces |
@@ -78,8 +79,8 @@ Rust index and Node services are in `server/`. Projects provide
 
 ## Page sources
 
-A page enters the page list from `workbench.yaml`, from an implementation catalog,
-or from preview discovery. TypeScript previews (`*.workbench.ts` and
+A page enters the page list from `workbench.yaml`, from the iOS Simulator
+catalog, or from preview discovery. TypeScript previews (`*.workbench.ts` and
 `*.workbench.tsx`) are discovered unless `previews: false`, compile in a managed
 worker, and render in the Workbench preview host; see
 [TypeScript previews](previews.md) and the [preview API guide](../docs/workbench-previews.md).
@@ -93,7 +94,6 @@ worker, and render in the Workbench preview host; see
 | Workbench mapping | A `kind: workbench` lens on an authored page | A named TypeScript preview's states beside the design |
 | URL implementation | A lens on an authored page | The configured external page in an iframe |
 | Storybook mapping | A lens on an authored page | One story from the mapped Storybook title |
-| Storybook catalog | `catalog: true` on a Storybook implementation | Imported titles and stories, without a design lens |
 | iOS Simulator mapping | A lens on an authored page | A stream from the selected booted device |
 | iOS Simulator catalog | `catalog: true` on a Simulator implementation | Imported booted devices, without a design lens |
 | Window mapping | A lens on an authored page | A stream of the named window from the configured macOS app |

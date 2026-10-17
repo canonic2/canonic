@@ -45,10 +45,6 @@ implementations:
     kind: storybook
     url: auto
     root: packages/ui
-    catalog:
-      icon: book-open
-      icons:
-        Forms: text-cursor-input
     start:
       command: pnpm storybook
       check:
@@ -218,15 +214,15 @@ collections:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | yes | The collection's label. [Previews](#previews), discovered [Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition), and [catalog](#catalogs) pages that belong in a collection with the same name are added to it. |
+| `name` | string | yes | The collection's label. [Previews](#previews), discovered [Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition), and [Simulator catalog](#catalogs) pages that belong in a collection with the same name are added to it. |
 | `icon` | Lucide icon name | no | Shown on the collection and on its pages that don't set their own. Defaults to `file-text`. |
-| `items` | list of [pages](#pages) and [groups](#groups) | unless `icon` is set | An icon-only collection styles previews and catalogs imported into the same collection. Collections that remain empty after imports are hidden. An empty collection without an icon is dropped and reported. |
+| `items` | list of [pages](#pages) and [groups](#groups) | unless `icon` is set | An icon-only collection styles previews and Markdown pages imported into the same collection. Collections that remain empty after imports are hidden. An empty collection without an icon is dropped and reported. |
 
 Icon names are [Lucide](https://lucide.dev/icons/) names in kebab-case, such as
 `file-text`, `component`, `layout-dashboard`, or `shield-check`. Every Lucide
 icon ships with the extension.
 
-To set the icon once for a collection shared by previews and catalogs:
+To set the icon once for a collection of previews:
 
 ```yaml
 collections:
@@ -235,16 +231,15 @@ collections:
 ```
 
 **Configure pages** preserves these declarations when saving. If discovery
-finds no matching pages or a catalog fails to load, the empty collection stays
+finds no matching pages, the empty collection stays
 in the configuration and is hidden from the collection list.
 
 Collection icons use the collection name as the prefix lookup target. Highest
 priority first: an explicit handwritten collection icon, a `previews.icons`
-mapping, a catalog `icons` mapping, configured `previews.icon`, configured
-catalog `icon`, then built-in defaults. A collection shared by previews and
-Storybook defaults to `component`; a Storybook-only collection defaults to
-`book-open`. Conflicting catalog mappings or fallbacks at the same priority
-use the alphabetically first icon name. Import order does not decide the icon.
+mapping, configured `previews.icon`, then built-in defaults. A collection of
+previews defaults to `component`. Conflicting mappings or fallbacks at the
+same priority use the alphabetically first icon name. Import order does not
+decide the icon.
 An authored collection without an explicit icon keeps `file-text` when
 imported sources use only built-in defaults; mappings and configured fallbacks
 override it.
@@ -373,7 +368,7 @@ implementations:
 | `environment` | `docs` | no | An [environment](preview-data.md#environments) around the examples, relative to the project root. |
 | `app` | `window` | yes | The macOS application whose window is streamed: its bundle ID, or part of it, such as `com.example.app`. Letters, digits, dots, and hyphens only. |
 | `root` | all but `workbench` and `docs` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
-| `catalog` | `storybook`, `ios-simulator` | no | Import pages automatically. See [Catalogs](#catalogs). |
+| `catalog` | `ios-simulator` | no | Import each booted device as a page. See [Catalogs](#catalogs). |
 | `start` | `url`, `storybook` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
 A `workbench` implementation shows this space's
@@ -526,27 +521,21 @@ VS Code. See [Start the server automatically](lenses.md#start-the-server-automat
 
 ## Catalogs
 
-`catalog` imports pages instead of listing them by hand.
+`catalog` on an **iOS Simulator** implementation imports each matching
+booted device as a page, instead of listing devices by hand. See
+[iOS Simulator](ios-simulator.md).
 
-- On a **Storybook** implementation it imports every story title as a page,
-  with its stories as states. See [Import the whole catalog](storybook.md#import-the-whole-catalog).
-- On an **iOS Simulator** implementation it imports each matching booted
-  device as a page. See [iOS Simulator](ios-simulator.md).
-
-`catalog: true` turns it on. A map turns it on and sets icons:
+`catalog: true` turns it on. A map turns it on and sets the icon of the
+imported pages:
 
 ```yaml
 catalog:
-  icon: book-open            # fallback for imported pages
-  icons:                     # Storybook title prefix -> icon; the longest match wins
-    UI: palette
-    UI/Components: component
-    UI/Components/Button: mouse-pointer-click
+  icon: tablet-smartphone    # defaults to smartphone
 ```
 
-The default icon is `book-open` for Storybook and `smartphone` for the
-Simulator. Other kinds don't take `catalog`; TypeScript previews are
-[discovered](#previews) without one.
+Other kinds don't take `catalog`. Storybook pages are the pages you list in
+`collections` and map to a story title; see [Storybook](storybook.md).
+TypeScript previews are [discovered](#previews) without one.
 
 ## Spaces
 
