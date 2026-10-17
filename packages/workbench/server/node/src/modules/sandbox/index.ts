@@ -5,11 +5,10 @@ import path from 'node:path';
 
 export function create(root: string) {
   const executable = path.join(root, '.canonic/sandbox/bin/sandbox');
-  const configuration = path.join(root, '.canonic/sandbox.json');
   function invoke(udid: string, args: string[]): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       if (!existsSync(executable)) { reject(new Error('Sandbox is not installed at .canonic/sandbox/bin/sandbox')); return; }
-      execFile(executable, ['ios', '--config', configuration, '--id', `simulator:${udid}`, ...args], {
+      execFile(executable, ['ios', '--id', `simulator:${udid}`, ...args], {
         cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 30000,
       }, (error, stdout, stderr) => {
         if (error) { reject(new Error(String(stderr || error.message).trim())); return; }

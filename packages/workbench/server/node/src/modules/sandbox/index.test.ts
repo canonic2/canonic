@@ -20,7 +20,7 @@ console.log(JSON.stringify({sourceWidth:1206,sourceHeight:2622}));
   const identity = 'Acme $(touch injected)';
   assert.deepEqual(await bridge.screen(identity), { width: 1206, height: 2622 });
   const read = () => JSON.parse(fs.readFileSync(path.join(root, 'invocation.json'), 'utf8'));
-  assert.deepEqual(read(), ['ios', '--config', path.join(root, '.canonic/sandbox.json'), '--id', `simulator:${identity}`, 'screenshot']);
+  assert.deepEqual(read(), ['ios', '--id', `simulator:${identity}`, 'screenshot']);
   assert.equal(fs.existsSync(path.join(root, 'injected')), false);
   await bridge.input(identity, { action: 'tap', x: 0.5, y: 0.2 });
   const tap = read();
