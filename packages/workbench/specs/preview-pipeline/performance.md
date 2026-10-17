@@ -255,7 +255,9 @@ The 200 ms complete-list target is not met on the 10,002-definition fixture.
 Process startup, saved-answer transport, collection assembly and the full
 config response add to native work. Canvas first paint and the VS Code
 webview boundary require a separate measurement; these server probes do not
-establish that target. A resident index remains an open question.
+establish that target. The front door's resident index removes the process
+per request and, while nothing changed, the disk check; it has not been
+measured yet ([server](../server.md#phase-1-the-front-door)).
 
 ### First page
 

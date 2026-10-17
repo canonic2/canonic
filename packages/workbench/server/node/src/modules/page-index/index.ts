@@ -21,6 +21,8 @@ export type IndexOptions = {
   diagnostic: Diagnostic;
   binary?: string;
   timeoutMs?: number;
+  /** The front door's resident index; a process per request when absent or failing. */
+  resident?: (request: unknown, timeoutMs: number) => Promise<unknown>;
 };
 
 async function identity(binary: string, options: unknown): Promise<string> {
@@ -101,13 +103,24 @@ export async function indexPages(options: IndexOptions): Promise<{ answer: Index
     } catch { /* An absent or corrupt saved answer is rebuilt from native records. */ }
     // Runtime extraction is lazy: literal-only indexes never need Electron.
     // Native requests evaluation through this executable only when necessary.
-    const request = { root: path.resolve(options.root), saved, identity: key, evaluator, node: '', options: options.previews || {}, cached_generation: cached?.generation || '' };
-    let raw = await invoke(binary, request, options.timeoutMs || 120000);
+    const timeoutMs = options.timeoutMs || 120000;
+    // The evaluator's own deadline, which the resident index needs: no process
+    // around it is killed at this one's deadline.
+    const request = { root: path.resolve(options.root), saved, identity: key, evaluator, node: '', options: options.previews || {}, cached_generation: cached?.generation || '', deadline_ms: timeoutMs };
+    const ask = async () => {
+      if (options.resident) {
+        try { return await options.resident(request, timeoutMs); } catch (error) {
+          options.diagnostic('warn', 'previews.index.resident.failed', { message: String(error instanceof Error ? error.message : error) });
+        }
+      }
+      return invoke(binary, request, timeoutMs);
+    };
+    let raw = await ask();
     let first: { [key: string]: unknown } | undefined;
     if (raw && typeof raw === 'object' && 'needs_evaluator' in raw && raw.needs_evaluator === true) {
       if ('timings' in raw && raw.timings && typeof raw.timings === 'object') first = raw.timings as { [key: string]: unknown };
       request.node = await options.executable();
-      raw = await invoke(binary, request, options.timeoutMs || 120000);
+      raw = await ask();
     }
     if (cached && raw && typeof raw === 'object' && 'reuse_answer' in raw && raw.reuse_answer === true && 'generation' in raw && raw.generation === cached.generation && 'timings' in raw && raw.timings && typeof raw.timings === 'object') return { answer: cached.answer, timings: raw.timings as { [key: string]: unknown } };
     const result = readAnswer(raw);

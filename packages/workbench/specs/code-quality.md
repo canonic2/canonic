@@ -12,7 +12,7 @@ Feature acceptance belongs to the relevant spec, including
 [page-index acceptance](preview-pipeline/page-index.md#acceptance-and-evidence).
 Commands and pinned tool-installation instructions live in the
 [native README](../server/README.md#checks-and-packaging) and the
-[package guide](../AGENTS.md#commands).
+[package guide](../AGENTS.md#commands-and-distribution).
 
 The baseline follows the repository's Rust packages, including TUI and
 Registry. Workbench keeps its own configuration and lockfile; it does not
@@ -73,9 +73,11 @@ parity as completed acceptance.
 
 Allow Apache-2.0, MIT and Unicode-3.0 licenses. Ignore the unpublished package's
 own license, warn on duplicate versions, deny wildcard versions and unknown
-Git/registry sources, and check advisories. The only package-specific license
-exception permits `Apache-2.0 WITH LLVM-exception` for `ar_archive_writer`, used
-by SWC's stacker/psm build dependencies.
+Git/registry sources, and check advisories. Package-specific license
+exceptions permit `Apache-2.0 WITH LLVM-exception` for `ar_archive_writer`, used
+by SWC's stacker/psm build dependencies; `CC0-1.0` for `notify` and `ISC` for
+`inotify` and `inotify-sys`, the file watcher and its Linux backend; and
+`BSD-3-Clause` for `matchit`, the HTTP router's path matcher.
 
 Runtime dependencies retain exact manifest pins to align parser inputs with
 the planned compiler-host evaluation. Test dependencies use the same tools

@@ -14,6 +14,18 @@ use definitions::Definitions;
 use std::time::Instant;
 use timings::Timings;
 
+/// Answers one request with its own evaluator child.
+pub(crate) fn answer(request: &Request) -> Result<Response> {
+    let evaluator = Evaluator::new(
+        &request.root,
+        &request.node,
+        &request.evaluator,
+        &request.options,
+        std::time::Duration::from_millis(request.deadline_ms),
+    );
+    index(request, &evaluator)
+}
+
 pub(crate) fn index(request: &Request, evaluator: &Evaluator<'_>) -> Result<Response> {
     let mut timings = Timings::new();
     let step = Instant::now();

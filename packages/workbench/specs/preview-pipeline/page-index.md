@@ -27,7 +27,10 @@ first page meets its render target.
   file-prefixed `Duplicate preview id` problem.
 - Default patterns are `**/*.workbench.ts` and `**/*.workbench.tsx`.
   `previews.include` replaces them. Skip dot-prefixed entries, symlinks,
-  `node_modules`, `dist`, `build` and `coverage`.
+  `node_modules`, `dist`, `build` and `coverage`. With natively matched
+  patterns, the walk starts at each pattern's literal leading folders
+  (`demo/**/*.workbench.ts` walks `demo/`), unless the skip rule would have
+  kept the full walk out of them; the files found are the same.
 - Ordering is a depth-first walk with each directory's children sorted by
   JavaScript `localeCompare`. It includes mixed case, punctuation, digits and
   non-ASCII names; sorting complete paths by Rust byte order is insufficient.
@@ -82,7 +85,7 @@ first page meets its render target.
 The stable Rust package in `server/` has a library and a thin binary entry
 point. `workbench-server index` consumes one JSON request on stdin and writes
 one JSON response, then exits. The protocol is documented in
-[the native README](../../server/README.md#protocol).
+[the server README](../../server/README.md#index-protocol).
 The [native ownership contract](../modules.md#rust-ownership) separates
 pure definition rules, application stages, shared observations and adapters.
 
@@ -95,10 +98,11 @@ native invocation, reusing the first invocation's parsed records.
 
 | Resource | Bound and release rule |
 | --- | --- |
-| Saved records | At most 32 MiB of versioned postcard data per project |
+| Saved records | At most 32 MiB of versioned postcard data per project; a larger index is not saved, and the timings report it as a save error |
 | Complete ordered answer | At most 32 MiB per project; oversized answers are not saved |
 | Project saves | At most 32 root-digest directories under `canonic-workbench-index/` in the system temporary folder; evict inactive directories after seven days and oldest directories beyond the count bound during index requests |
 | Native invocation | Default deadline of 120 seconds per invocation; terminate the process tree before falling back |
+| Evaluator run | The request's deadline, 120 seconds by default, in the one-process index and the [front door's resident index](../server.md#phase-1-the-front-door) alike; the evaluator is killed at the deadline. A resident request has the same deadline on the Node side and falls back to a one-process index |
 | Native stdout | At most 128 MiB per invocation; exceeding it terminates the process tree |
 | Captured stderr | At most 4,000 characters for failure diagnostics |
 
@@ -142,13 +146,11 @@ compiler evaluator. [Performance](performance.md#page-listing) owns measured
 results and target gaps; [lab evidence](../../labs/instant-first-page/README.md#stage-1-report)
 supports the architecture without defining the shipping interface.
 
-- Definition watching remains the gap owned by
-  [sidebar placement](../previews.md#sidebar-placement). The index observes
-  changes when requested; it does not initiate a refresh.
+- The [front door](../server.md#phase-1-the-front-door) keeps the index
+  resident with a watcher and reports changed listings; what still lacks a
+  notice is owned by [sidebar placement](../previews.md#sidebar-placement).
 - The worker's index and pre-warming remain independent. Sharing the native
   file list with them belongs to the compiler-host work.
-- A resident index and watcher may reduce process and transport costs; they
-  are open design choices, not implemented behavior.
 - Studio has no native-library integration contract. The presence of a Rust
   library does not establish an embeddable indexing API.
 - Metadata stamps do not establish content identity when both modification

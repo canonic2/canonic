@@ -1,4 +1,4 @@
-//! Native Workbench page indexing.
+//! The Workbench server: the front door to the Node server and the page index.
 //!
 //! Literal parsing and definition rules are pure. The index workflow coordinates
 //! filesystem discovery, saved state and JavaScript evaluation. CLI transport and
@@ -14,6 +14,7 @@ mod model;
 mod paths;
 mod protocol;
 mod saved;
+mod serve;
 
 /// Run the native CLI using process arguments and standard streams.
 ///

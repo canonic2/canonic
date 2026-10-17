@@ -5,11 +5,15 @@ edition = "2024"
 rust-version = "1.99"
 publish = false
 license-file = "../LICENSE"
-description = "Workbench server: page discovery and the saved definition index"
+description = "Workbench server: the front door to the Node server and the resident page index"
 
 [dependencies]
 anyhow = "=1.0.104"
+axum = { version = "=0.8.9", default-features = false, features = ["http1", "tokio"] }
 globset = "=0.4.16"
+hyper = { version = "=1.12.0", features = ["client", "http1"] }
+hyper-util = { version = "=0.1.21", features = ["client-legacy", "http1", "tokio"] }
+notify = { version = "=8.2.0", default-features = false, features = ["macos_fsevent"] }
 postcard = { version = "=1.1.3", features = ["alloc"] }
 rayon = "=1.12.0"
 regex = "=1.13.1"
@@ -18,6 +22,7 @@ serde_json = { version = "=1.0.150", features = ["preserve_order"] }
 swc_common = "=26.0.0"
 swc_ecma_ast = "=29.0.1"
 swc_ecma_parser = "=45.1.3"
+tokio = { version = "=1.53.1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 assert_cmd = "2.2"

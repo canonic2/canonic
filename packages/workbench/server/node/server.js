@@ -33,6 +33,7 @@ var previewService = require('./preview-service');
 var previewScripts = require('./preview-scripts');
 var implementationProxy = require('./proxy');
 var pageIndex = require('./src/modules/page-index/index.ts');
+var frontDoorModule = require('./src/modules/front-door/index.ts');
 var previewCompiler = require('./preview/compiler.cjs');
 var indexRuntime = require('../../capture/electron-runtime');
 var windowStream = require('../../capture/window-stream');
@@ -723,7 +724,7 @@ function start(options) {
      preview bridge and its live DOM reaches capture. */
   var proxies = implementationProxy.create({
     bridge: function () {
-      return 'http://127.0.0.1:' + server.address().port + WORKBENCH_PREFIX + 'preview-bridge.js';
+      return 'http://127.0.0.1:' + publicPort() + WORKBENCH_PREFIX + 'preview-bridge.js';
     },
   });
   var windowVideo = options.windowStream || nativePool.createPool(function () { return windowStream.create({
@@ -1008,6 +1009,19 @@ function start(options) {
     });
     return entry.pending;
   }
+  /* The front door re-indexes after a change on disk and reports only a page
+     tree that differs, so a save that only edits a component sends nothing. */
+  var pagesNotice = null;
+  function pagesChanged() {
+    if (pagesNotice || typeof options.onPagesChanged !== 'function') return;
+    pagesNotice = setTimeout(function () {
+      pagesNotice = null;
+      try { options.onPagesChanged(); } catch (error) {
+        diagnostic('warn', 'pages.notify.failed', { message: String(error.message || error) });
+      }
+    }, 50);
+  }
+
   var catalogNotice = null;
   function catalogChanged() {
     if (catalogNotice || typeof options.onCatalogChanged !== 'function') return;
@@ -1079,6 +1093,7 @@ function start(options) {
           }) : Promise.resolve(process.execPath);
         },
         fallback: function () { return worker().index(); }, diagnostic: diagnostic,
+        resident: frontDoor ? function (request, timeoutMs) { return frontDoor.index(request, timeoutMs); } : undefined,
       });
       var index = indexed.answer;
       if (indexed.timings.definitions || index.previews.length || index.docs.some(function (page) { return page.lenses.length; }) || docsPages(view).some(function (page) { return page.lenses.length; })) worker();
@@ -1219,7 +1234,7 @@ function start(options) {
     if (site && site !== 'same-origin' && site !== 'none') return false;
     var origin = req.headers.origin;
     if (!origin) return true;
-    var port = server.address().port;
+    var port = publicPort();
     return origin === 'http://127.0.0.1:' + port || origin === 'http://localhost:' + port;
   }
 
@@ -1433,9 +1448,8 @@ function start(options) {
 
   var server = http.createServer(function (req, res) {
     var url = new URL(req.url, 'http://127.0.0.1');
-    var address = server.address();
-    if (!address) { send(res, 503, 'Workbench is stopping.'); return; }
-    var baseUrl = 'http://127.0.0.1:' + address.port + '/';
+    if (!server.address()) { send(res, 503, 'Workbench is stopping.'); return; }
+    var baseUrl = 'http://127.0.0.1:' + publicPort() + '/';
 
     if (url.pathname === WORKBENCH_PREFIX + 'preview-compat.js') {
       send(res, 200, previewScripts.source, 'text/javascript; charset=utf-8');
@@ -1646,7 +1660,7 @@ function start(options) {
         .then(function (body) {
           var ask = JSON.parse(body.toString('utf8'));
           var id = String((ask && ask.id) || '');
-          if (id === spaceSelf) return { url: 'http://127.0.0.1:' + server.address().port + WORKBENCH_PATH };
+          if (id === spaceSelf) return { url: 'http://127.0.0.1:' + publicPort() + WORKBENCH_PATH };
           if (!spaceList) throw refused(404, 'That space isn’t in the Workbench list.');
           return Promise.resolve(spaceList.open(id)).then(function (opened) {
             diagnostic('info', 'space.opened', { space: id });
@@ -2111,28 +2125,91 @@ function start(options) {
 
   /* Loopback only — this serves a whole folder, and it isn't anybody else's
      business. */
-  function listen(ports) {
+  function listen(ports, target) {
+    target = target || server;
     return new Promise(function (resolve, reject) {
       var port = ports[0];
 
       function onError(err) {
-        server.removeListener('error', onError);
+        target.removeListener('error', onError);
         if (err.code === 'EADDRINUSE' && ports.length > 1) {
-          resolve(listen(ports.slice(1)));
+          resolve(listen(ports.slice(1), target));
           return;
         }
         reject(err);
       }
 
-      server.once('error', onError);
-      server.listen(port, '127.0.0.1', function () {
-        server.removeListener('error', onError);
-        resolve(server.address().port);
+      target.once('error', onError);
+      target.listen(port, '127.0.0.1', function () {
+        target.removeListener('error', onError);
+        resolve(target.address().port);
       });
     });
   }
 
-  return listen(PORTS).then(function (port) {
+  /* The Rust front door owns the public port and forwards here, to a private
+     one. Without its binary, or if it cannot start, this server listens
+     publicly itself. */
+  var frontDoor = null;
+  var publicAddress = null;
+  var stopping = false;
+  /* A front door that keeps stopping is replaced by this server listening on
+     the public port itself: at most RESTARTS restarts in RESTART_WINDOW_MS. */
+  var RESTARTS = 3;
+  var RESTART_WINDOW_MS = 60000;
+  var restarts = [];
+  var direct = null;
+  function listenDirectly(reason) {
+    if (direct || stopping) return Promise.resolve();
+    direct = http.createServer();
+    server.listeners('request').forEach(function (listener) { direct.on('request', listener); });
+    server.listeners('upgrade').forEach(function (listener) { direct.on('upgrade', listener); });
+    return listen([publicAddress].concat(PORTS), direct).then(function (port) {
+      if (port !== publicAddress) diagnostic('warn', 'front-door.port.moved', { from: publicAddress, to: port });
+      publicAddress = port;
+      diagnostic('warn', 'front-door.replaced', { port: port, reason: reason });
+    }, function (error) {
+      diagnostic('error', 'front-door.replace.failed', { message: String(error.message || error) });
+    });
+  }
+  function publicPort() {
+    return publicAddress || server.address().port;
+  }
+  function listenPublic() {
+    if (options.frontDoor === false || !frontDoorModule.available(options.frontDoorBinary)) return listen(PORTS);
+    return listen([0]).then(function (privatePort) {
+      return openFrontDoor(privatePort, PORTS).catch(function (error) {
+        diagnostic('warn', 'front-door.unavailable', { message: String(error.message || error) });
+        return new Promise(function (resolve) { server.close(resolve); }).then(function () { return listen(PORTS); });
+      });
+    });
+  }
+  function openFrontDoor(privatePort, ports) {
+    return frontDoorModule.start({
+      upstream: privatePort, ports: ports, binary: options.frontDoorBinary, diagnostic: diagnostic,
+      onChanged: pagesChanged,
+      onExit: function (error) {
+        frontDoor = null;
+        diagnostic('error', 'front-door.exited', { message: String(error.message || error) });
+        if (stopping) return;
+        var now = Date.now();
+        restarts = restarts.filter(function (at) { return now - at < RESTART_WINDOW_MS; });
+        if (restarts.length >= RESTARTS) { listenDirectly('restarts'); return; }
+        restarts.push(now);
+        openFrontDoor(privatePort, [publicAddress]).catch(function (again) {
+          diagnostic('error', 'front-door.restart.failed', { message: String(again.message || again) });
+          listenDirectly('restart failed');
+        });
+      },
+    }).then(function (door) {
+      frontDoor = door;
+      publicAddress = door.port;
+      diagnostic('info', 'front-door.started', { port: door.port, upstream: privatePort });
+      return door.port;
+    });
+  }
+
+  return listenPublic().then(function (port) {
     diagnostic('info', 'session.started', { port: port });
     try { shown.announce('http://127.0.0.1:' + port + '/'); } catch (error) {
       diagnostic('warn', 'view.announce.failed', { message: String(error.message || error) });
@@ -2162,8 +2239,11 @@ function start(options) {
 
       close: function () {
         diagnostic('info', 'session.stopping', { port: port });
+        stopping = true;
         shown.close();
-        return simulatorQueue.catch(function () {}).then(function () {
+        return Promise.resolve(frontDoor ? frontDoor.close() : null).catch(function () {}).then(function () {
+          return simulatorQueue.catch(function () {});
+        }).then(function () {
           return Promise.all([
             options.captureShared ? Promise.resolve() : Promise.resolve(capture.close()).catch(function () {}),
             Promise.resolve(windowVideo.close()).catch(function () {}),
@@ -2171,9 +2251,9 @@ function start(options) {
             previews ? previews.close() : Promise.resolve(),
           ]);
         }).then(function () {
-          return new Promise(function (resolve) {
-            server.close(resolve);
-          });
+          return Promise.all([server].concat(direct ? [direct] : []).map(function (listening) {
+            return new Promise(function (resolve) { listening.close(resolve); });
+          }));
         });
       },
     };

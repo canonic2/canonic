@@ -24,9 +24,10 @@ with annotations, screenshots and agent handoffs. Projects supply
 
 Read `ui/legacy/README.md` before changing the browser shell, and
 `specs/modules.md` for the ownership and dependency contracts. `server/README.md`
-owns Rust layout and tooling. The shipping server and compiler run in Node;
-Rust hosts the page index. Server/compiler migration into Rust is the agreed
-direction, not an implemented runtime contract.
+owns Rust layout and tooling. The shipping server and compiler run in Node,
+behind the Rust front door (`workbench-server serve`), which also keeps the
+page index resident. `specs/server.md` plans the rest of the server's move
+into Rust in phases.
 
 ## Engineering contracts
 

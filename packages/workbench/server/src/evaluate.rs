@@ -1,11 +1,15 @@
-//! Batched JavaScript evaluation and picomatch adapter; owns its child process.
-use anyhow::{Context, Result, ensure};
+//! Batched JavaScript evaluation and picomatch adapter; owns its child process
+//! and its deadline.
+use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{
     io::{Read, Write},
     path::Path,
     process::{Child, Command, Stdio},
+    sync::mpsc,
+    thread,
+    time::Duration,
 };
 
 #[derive(Deserialize)]
@@ -30,6 +34,8 @@ pub(crate) struct Evaluator<'a> {
     executable: &'a Path,
     script: &'a Path,
     options: &'a Value,
+    /// How long one evaluation may run before it is killed.
+    deadline: Duration,
 }
 impl<'a> Evaluator<'a> {
     pub(crate) fn new(
@@ -37,12 +43,14 @@ impl<'a> Evaluator<'a> {
         executable: &'a Path,
         script: &'a Path,
         options: &'a Value,
+        deadline: Duration,
     ) -> Self {
         Self {
             root,
             executable,
             script,
             options,
+            deadline,
         }
     }
     pub(crate) fn available(&self) -> bool {
@@ -71,28 +79,38 @@ impl<'a> Evaluator<'a> {
             .spawn()
             .context("start definition evaluator")?;
         let mut owned = EvaluationProcess(child);
-        owned
-            .0
-            .stdin
-            .take()
-            .context("evaluator stdin")?
-            .write_all(&input)?;
-        let mut output = Vec::new();
-        owned
-            .0
-            .stdout
-            .take()
-            .context("evaluator stdout")?
-            .read_to_end(&mut output)
-            .context("definition evaluator output")?;
+        let mut stdin = owned.0.stdin.take().context("evaluator stdin")?;
+        let mut stdout = owned.0.stdout.take().context("evaluator stdout")?;
+        // Both ends run on their own threads, so an evaluator that stops
+        // reading or never answers cannot outlast the deadline. Dropping
+        // `owned` on the way out kills it, which ends both threads.
+        let writer = thread::spawn(move || stdin.write_all(&input));
+        let (send, receive) = mpsc::channel();
+        thread::spawn(move || {
+            let mut output = Vec::new();
+            let read = stdout.read_to_end(&mut output).map(|_| output);
+            let _sent = send.send(read);
+        });
+        let output = match receive.recv_timeout(self.deadline) {
+            Ok(read) => read.context("definition evaluator output")?,
+            Err(_) => bail!(
+                "definition evaluator did not finish within {} seconds",
+                self.deadline.as_secs_f64()
+            ),
+        };
+        writer
+            .join()
+            .map_err(|_| anyhow::anyhow!("evaluator input writer panicked"))?
+            .context("evaluator input")?;
         let status = owned.0.wait().context("definition evaluator exit")?;
         ensure!(status.success(), "definition evaluator failed: {status}");
         serde_json::from_slice(&output).context("invalid evaluator JSON")
     }
 }
 
-/// Every early return kills and reaps this adapter's evaluator. The host owns
-/// the enclosing process group and its deadline, including evaluator descendants.
+/// Every early return, the deadline included, kills and reaps this adapter's
+/// evaluator. The host owns the enclosing process group, which holds the
+/// evaluator's own descendants.
 struct EvaluationProcess(Child);
 impl Drop for EvaluationProcess {
     fn drop(&mut self) {

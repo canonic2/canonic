@@ -148,9 +148,11 @@ function catalogFailure(error) {
    activity bar — so the canvas opens beside the list. `pickSpace(id)`,
    `addSpace()` and `removeSpace(id)` carry the switcher's choices.
 
-   Answers with { retarget() }, for when the space showing has changed or
-   the list of spaces has: the watcher moves to the current space's file
-   and the page is rebuilt. */
+   Answers with { retarget(), catalogChanged(), pagesChanged() }. `retarget`
+   is for when the space showing has changed or the list of spaces has: the
+   watcher moves to the current space's file and the page is rebuilt.
+   `catalogChanged` sends the server's latest imports; `pagesChanged` runs
+   the rebuild a workbench.yaml edit runs, for a definition change. */
 function register(context, options) {
   var open = options.open;
   var follow = options.follow;
@@ -363,7 +365,7 @@ function register(context, options) {
     );
   }
 
-  return { retarget: retarget, catalogChanged: sendCatalog };
+  return { retarget: retarget, catalogChanged: sendCatalog, pagesChanged: rebuild };
 }
 
 module.exports = { register: register };

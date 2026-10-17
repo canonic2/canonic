@@ -21,7 +21,7 @@ pub(crate) struct Record {
 }
 
 /// Inputs for one page-index transaction.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(crate) struct Request {
     pub(crate) root: PathBuf,
     pub(crate) saved: PathBuf,
@@ -34,4 +34,11 @@ pub(crate) struct Request {
     pub(crate) walk: bool,
     #[serde(default)]
     pub(crate) cached_generation: String,
+    /// How long one evaluator run may take, in milliseconds.
+    #[serde(default = "default_deadline")]
+    pub(crate) deadline_ms: u64,
+}
+
+fn default_deadline() -> u64 {
+    120_000
 }

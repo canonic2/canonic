@@ -79,6 +79,12 @@ function serve(context, space, diagnostics, shared) {
         if (shared.catalogChanged) shared.catalogChanged();
       },
 
+      /* A definition was added, removed, renamed or retitled: the same
+         rebuild a workbench.yaml edit runs, for the space being shown. */
+      onPagesChanged: function () {
+        if (shared.pagesChanged) shared.pagesChanged(space);
+      },
+
       /* A handoff is deliberately just a saved screenshot and a prompt on the
          clipboard. It does not move focus or depend on another extension. */
       onHandoff: function (prompt) {
@@ -128,6 +134,7 @@ function activate(context) {
     },
     hub: null,
     catalogChanged: null,
+    pagesChanged: null,
   };
   var hub = spaces.create({
     start: function (space) {
@@ -369,6 +376,10 @@ function activate(context) {
      the editor and picking it inside the workbench end up in the same place.
      No size is named: the workbench keeps the one the size switcher is set to. */
   shared.catalogChanged = function () { if (sidebar) sidebar.catalogChanged(); };
+  shared.pagesChanged = function (space) {
+    var shown = currentSpace();
+    if (sidebar && shown && shown.dir === space.dir && shown.key === space.key) sidebar.pagesChanged();
+  };
   sidebar = sidebarView.register(context, {
     space: function () {
       var space = currentSpace();

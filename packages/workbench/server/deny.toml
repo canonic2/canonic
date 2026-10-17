@@ -14,6 +14,24 @@ confidence-threshold = 0.9
 name = "ar_archive_writer"
 allow = ["Apache-2.0 WITH LLVM-exception"]
 
+# The file watcher and its Linux backend.
+[[licenses.exceptions]]
+name = "notify"
+allow = ["CC0-1.0"]
+
+[[licenses.exceptions]]
+name = "inotify"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "inotify-sys"
+allow = ["ISC"]
+
+# The HTTP router's path matcher.
+[[licenses.exceptions]]
+name = "matchit"
+allow = ["BSD-3-Clause"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

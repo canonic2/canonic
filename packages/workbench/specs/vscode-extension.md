@@ -222,8 +222,9 @@ Component and theme contracts: [Web Components](web-components.md) and
 
 ```text
 VS Code extension host
-  ├─ loopback workbench server ── project, workbench, and preview pages
-  │    ├─ native page index ── listing; separate Node evaluator when needed
+  ├─ loopback workbench server ── project, workbench, and preview pages, on a private port
+  │    ├─ Rust front door ── the public port, forwarded here; resident page index and watcher;
+  │    │                     separate Node evaluator when needed
   │    ├─ preview worker ── compiles and serves TypeScript previews (bundled runtime or Node)
   │    ├─ screenshot capture service ── bundled Electron helper
   │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS

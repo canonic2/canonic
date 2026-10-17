@@ -65,6 +65,7 @@ user-facing workflow is delivered.
 | [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
 | [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
 | [Design-system export](export.md) | Page, collection and space scopes, ZIP/PDF/image/browser output, background captures, hashes, and warnings |
+| [Workbench server](server.md) | The server's process model, its move into the Rust `workbench-server` binary in phases, and the route inventory |
 | [Preview pipeline](preview-pipeline/README.md) | How native pages are compiled, served, kept warm, made ready and updated: [performance](preview-pipeline/performance.md) requirements and targets, the Rspack [compiler](preview-pipeline/compiler.md), [serving](preview-pipeline/serving.md), [hot updates](preview-pipeline/hot-updates.md), the [warm runtime](preview-pipeline/warm-runtime.md), [readiness](preview-pipeline/readiness.md) and [plugins](preview-pipeline/plugins.md) |
 | [Page index](preview-pipeline/page-index.md) | Native discovery and listing, literal/evaluated definition parity, invalidation, bounded saves, process lifecycle, fallback, packaging and acceptance evidence |
 | [Code quality](code-quality.md) | Rust tooling and lint policy, test conventions, dependency review, host integration and release checks |

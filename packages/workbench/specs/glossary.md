@@ -123,7 +123,7 @@ document, such as a heading's section in docs or a guide.
 
 | Term | Meaning |
 | --- | --- |
-| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, holds the page index; the HTTP server and compile worker run in Node under `server/node/` and are moving into the binary ([adapters](adapters/README.md#decisions)). |
+| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, is the front door on the public port and holds the page index; the HTTP server and compile worker run in Node under `server/node/` behind it and are moving into the binary ([server](server.md)). |
 | **Page index** | The part of the Workbench server that finds preview and docs definitions and keeps the saved index; see [page index](preview-pipeline/page-index.md). |
 | **Adapter** | What renders one kind of page: `html`, `react`, `react-native-web`, `vue`, `astro`, or a custom adapter registered in `workbench.config.ts`. A definition or docs lens names its adapter. Storybook stories are the adapter that renders through Storybook's own server; see [adapters](adapters/README.md). |
 | **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions. |

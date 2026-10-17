@@ -48,7 +48,11 @@ impl Saved {
         self.identity = identity.into();
         let bytes = postcard::to_allocvec(self).map_err(std::io::Error::other)?;
         if bytes.len() as u64 > MAX_BYTES {
-            return Ok(());
+            return Err(std::io::Error::other(format!(
+                "the saved index would be {} MiB, over its {} MiB limit, so every request walks the project again",
+                bytes.len() / (1024 * 1024),
+                MAX_BYTES / (1024 * 1024)
+            )));
         }
         let Some(parent) = file.parent() else {
             return Ok(());

@@ -38,6 +38,22 @@ impl Response {
             reuse_answer: true,
         }
     }
+    /// The listed records of a complete answer, as one comparable string.
+    pub(crate) fn fingerprint(&self) -> Option<String> {
+        (!self.needs_evaluator && !self.reuse_answer)
+            .then(|| serde_json::to_string(&self.records).ok())
+            .flatten()
+    }
+
+    /// Whether the evaluator must be supplied before this request can be answered.
+    pub(crate) fn needs_evaluator(&self) -> bool {
+        self.needs_evaluator
+    }
+
+    /// The answer's generation, when it is complete or reused rather than waiting for an evaluator.
+    pub(crate) fn generation(&self) -> Option<&str> {
+        (!self.needs_evaluator && !self.generation.is_empty()).then_some(self.generation.as_str())
+    }
     pub(crate) fn complete(records: Vec<Listed>, generation: String, timings: Value) -> Self {
         Self {
             records,

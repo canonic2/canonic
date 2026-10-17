@@ -104,8 +104,11 @@ project-registered adapters. They do not run a project's application server,
   definition file matching discovery is added, removed, renamed, or changes
   its title, states, or sizes, without **Workbench: Refresh Pages**; see
   [the extension's refresh contract](vscode-extension.md#refresh).
-  **Gap:** only `workbench.yaml` and `workbench.local.yaml` are watched,
-  so definition changes need **Refresh Pages** or a YAML change.
+  In VS Code, the [front door](server.md#phase-1-the-front-door) watches
+  the space and the extension runs the same rebuild as a `workbench.yaml`
+  edit when the listed definitions change. **Gap:** the standalone canvas in
+  a browser gets no such notice and needs a reload, and a server running
+  without the front door binary watches nothing.
 
 ### Open, states, controls, and actions
 
@@ -403,7 +406,7 @@ and the installed extension downloads none.
   preview, project environments with third-party clients/routers, and canvas
   and portable-viewer navigation. Browser recipes are in
   [preview data](../docs/preview-data.md).
-- Definition watching, worker timeout/restart paths, CLI `check`/`init` beyond
+- Definition watching through the extension's rebuild, worker timeout/restart paths, CLI `check`/`init` beyond
   type generation, and installed cross-platform CLI use need dedicated
   acceptance coverage. See the [page-index evidence](preview-pipeline/page-index.md#acceptance-and-evidence)
   for native listing and packaging evidence.

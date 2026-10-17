@@ -1,4 +1,6 @@
 //! Native CLI behavior on isolated projects, without any evaluator process.
+mod serve;
+
 use assert_cmd::Command;
 use assert_fs::{TempDir, prelude::*};
 use predicates::prelude::*;
@@ -164,4 +166,37 @@ fn invalid_request_and_unavailable_evaluator_fail_at_the_cli_boundary() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("start definition evaluator"));
+}
+
+#[cfg(unix)]
+#[test]
+fn an_evaluator_that_never_answers_is_stopped_at_the_deadline() {
+    let (temp, root) = fixture();
+    fs::write(
+        root.join("a.workbench.ts"),
+        "import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'page',title:'Acme' + ' page',adapter:'html',source:{entry:'./page.html'}});",
+    )
+    .expect("native index fixture");
+    let script = temp.child("hang.sh");
+    script
+        .write_str("exec sleep 30\n")
+        .expect("native index fixture");
+    let mut request = request(&root);
+    request["node"] = json!("/bin/sh");
+    request["evaluator"] = json!(script.path());
+    request["deadline_ms"] = json!(300);
+    let started = std::time::Instant::now();
+    Command::new(assert_cmd::cargo::cargo_bin!("workbench-server"))
+        .arg("index")
+        .write_stdin(request.to_string())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "did not finish within 0.3 seconds",
+        ));
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
 }

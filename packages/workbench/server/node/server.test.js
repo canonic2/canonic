@@ -200,6 +200,73 @@ function stub(handler) {
   });
 }
 
+test('a definition added on disk is reported as a page change and listed', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-watch-'));
+  var definition = function (id, title) {
+    return "import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'" + id + "',title:'" + title + "',adapter:'html',source:{entry:'page.html'}});";
+  };
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  fs.writeFileSync(path.join(root, 'page.html'), '<p>Acme</p>');
+  fs.writeFileSync(path.join(root, 'page.workbench.ts'), definition('page', 'Acme/Page'));
+  var changed = 0;
+  var running = await server.start({ root: root, isTrusted: true, capture: { close: function () {} },
+    onPagesChanged: function () { changed++; } });
+  try {
+    var first = await get(running.port, server.CONFIG_PATH);
+    assert.ok(JSON.stringify(first.body).includes('page.workbench.ts'));
+    fs.writeFileSync(path.join(root, 'added.workbench.ts'), definition('added', 'Acme/Added'));
+    var deadline = Date.now() + 10000;
+    while (!changed && Date.now() < deadline) await new Promise(function (resolve) { setTimeout(resolve, 50); });
+    assert.equal(changed, 1, 'one page change after adding a definition');
+    var second = await get(running.port, server.CONFIG_PATH);
+    assert.ok(JSON.stringify(second.body).includes('added.workbench.ts'));
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a front door that keeps stopping is replaced by the server on the same port', { skip: process.platform === 'win32' && 'needs a POSIX shell' }, async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-restarts-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  var free = http.createServer();
+  await new Promise(function (resolve) { free.listen(0, '127.0.0.1', resolve); });
+  var port = free.address().port;
+  await new Promise(function (resolve) { free.close(resolve); });
+  // Starts like a front door on that port without listening, then stops.
+  var binary = path.join(root, 'stopping');
+  fs.writeFileSync(binary, '#!/bin/sh\nprintf \'{"type":"listening","port":' + port + '}\\n\'\nsleep 0.2\n', { mode: 0o755 });
+  var events = [];
+  var running = await server.start({ root: root, capture: { close: function () {} }, frontDoorBinary: binary,
+    onLog: function (entry) { events.push(entry.event); } });
+  try {
+    assert.equal(running.port, port);
+    var deadline = Date.now() + 10000;
+    while (!events.includes('front-door.replaced') && Date.now() < deadline) await new Promise(function (resolve) { setTimeout(resolve, 50); });
+    assert.equal(events.filter(function (event) { return event === 'front-door.exited'; }).length, 4, events.join(' '));
+    assert.ok(events.includes('front-door.replaced'), events.join(' '));
+    assert.equal((await get(port, server.CONFIG_PATH)).status, 200);
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('without the front door binary the server listens publicly itself', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-direct-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  var events = [];
+  var running = await server.start({ root: root, capture: { close: function () {} }, frontDoorBinary: path.join(root, 'missing'),
+    onLog: function (entry) { events.push(entry.event); } });
+  try {
+    assert.equal((await get(running.port, server.CONFIG_PATH)).status, 200);
+    assert.ok(!events.includes('front-door.started'));
+  } finally {
+    await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('funnels bounded browser diagnostics into the server session logger', async function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-log-test-'));
   var entries = [];
@@ -216,12 +283,12 @@ test('funnels bounded browser diagnostics into the server session logger', async
     });
     assert.strictEqual(answer.status, 200);
     assert.deepStrictEqual(entries.map(function (entry) { return entry.event; }), [
-      'session.started', 'handoff.browser.failed',
+      'front-door.started', 'session.started', 'handoff.browser.failed',
     ]);
-    assert.strictEqual(entries[1].level, 'error');
-    assert.strictEqual(entries[1].details.phase, 'send');
-    assert.strictEqual(entries[1].details.message.length, 2000);
-    assert.strictEqual(entries[1].details.count, 2);
+    assert.strictEqual(entries[2].level, 'error');
+    assert.strictEqual(entries[2].details.phase, 'send');
+    assert.strictEqual(entries[2].details.message.length, 2000);
+    assert.strictEqual(entries[2].details.count, 2);
   } finally {
     await running.close();
     fs.rmSync(root, { recursive: true, force: true });
