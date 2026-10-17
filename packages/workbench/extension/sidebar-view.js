@@ -142,8 +142,8 @@ function catalogFailure(error) {
    the file lists several. `open` is given
    { src, state } and puts it on the canvas. `follow` takes a listener called
    with { src, state } whenever the canvas moves, and answers with the way to
-   stop listening. `catalog` asks the running server for any Storybook
-   collections it imported, which the webview cannot fetch cross-origin. `shown`
+   stop listening. `catalog` asks the running server for the collections it
+   imported (previews, docs and Simulator catalogs), which the webview cannot fetch cross-origin. `shown`
    is called whenever the view comes into sight — selecting Workbench in the
    activity bar — so the canvas opens beside the list. `pickSpace(id)`,
    `addSpace()` and `removeSpace(id)` carry the switcher's choices.

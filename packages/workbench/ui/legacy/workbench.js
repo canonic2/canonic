@@ -6,8 +6,8 @@
    Nothing in here is about any one space. What it knows about the space
    arrives as the config: a name, and collections of pages. Two constraints
    shape the rest:
-   - the config is the index, except for a Storybook catalog it explicitly
-     imports. A page in neither isn't in the sidebar;
+   - the config is the index, with the pages the server adds to it:
+     previews, docs and Simulator catalogs. No other page is in the sidebar;
    - the iframe can be a foreign origin (a workbench opened off file://), so
      nothing here reads into it. Reload re-assigns src instead of calling into
      contentWindow.

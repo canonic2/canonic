@@ -507,25 +507,18 @@ test('downloads the resolved workbench as a ZIP', async function () {
   }
 });
 
-test('plans every local state and imported Storybook story for export capture', function () {
+test('plans every local state for export capture, and warns for a catalogued Simulator page', function () {
   var view = {
-    implementations: { storybook: { kind: 'storybook', url: 'http://127.0.0.1:6006' } },
+    implementations: { ios: { kind: 'ios-simulator', device: 'booted', catalog: true } },
     collections: [{ items: [{
       label: 'Sign in', src: 'pages/sign-in.html',
       sizes: ['laptop', 'mobile', 'resizable', 'fit'],
       states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Error' }],
     }] }],
     catalogCollections: [{ items: [{
-      label: 'Button', src: '__storybook/storybook/button.html', implementationOnly: 'storybook',
-      sizes: ['mobile'],
-      states: [{ id: 'default', label: 'Default' }, { id: 'icon-only', label: 'Icon Only' }],
+      label: 'iPhone 17', src: '__ios-simulator/ios/SIM-1.html', implementationOnly: 'ios',
     }] }],
-    pages: {
-      '__storybook/storybook/button.html': { stories: [
-        { id: 'button--default', state: 'default', label: 'Default' },
-        { id: 'button--icon-only', state: 'icon-only', label: 'Icon Only' },
-      ] },
-    },
+    pages: {},
   };
   var plan = server.exportCapturePlan(view, 'http://127.0.0.1:3579/');
   assert.deepStrictEqual(plan.captures.map(function (capture) {
@@ -537,12 +530,9 @@ test('plans every local state and imported Storybook story for export capture', 
     ['pages/sign-in.html', 'error', 'laptop', 1512, 982, false],
     ['pages/sign-in.html', 'error', 'mobile', 393, 852, false],
     ['pages/sign-in.html', 'error', 'fit', 1440, 900, false],
-    ['__storybook/storybook/button.html', 'default', 'mobile', 393, 852, true],
-    ['__storybook/storybook/button.html', 'icon-only', 'mobile', 393, 852, true],
   ]);
   assert.match(plan.captures[3].url, /state=error/);
-  assert.match(plan.captures[7].url, /button--icon-only/);
-  assert.deepStrictEqual(plan.warnings, []);
+  assert.deepStrictEqual(plan.warnings, ['iPhone 17: reference screenshots are not supported for ios-simulator.']);
 });
 
 test('captures export references through four reusable workers', async function () {
@@ -857,81 +847,36 @@ test('bounds retained completed export bundles', async function () {
   }
 });
 
-test('imports an opted-in Storybook catalog as pages and states', async function () {
+test('a Storybook implementation imports no pages: a catalog on it is a problem', async function () {
+  var requested = [];
   var storybook = await stub(function (req, res) {
-    if (req.url !== '/index.json') {
-      res.writeHead(404);
-      res.end();
-      return;
-    }
+    requested.push(req.url);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ entries: {
-      'components-inputs-button--default': {
-        id: 'components-inputs-button--default', title: 'Components/Inputs/Button', name: 'Default', type: 'story',
-        importPath: './src/button/button.stories.tsx', componentPath: './src/button/button.tsx',
-      },
-      'components-inputs-button--icon-only': {
-        id: 'components-inputs-button--icon-only', title: 'Components/Inputs/Button', name: 'Icon Only', type: 'story',
-        importPath: './src/button/button.stories.tsx', componentPath: './src/button/button.tsx',
-      },
-      'components-inputs-button--docs': {
-        id: 'components-inputs-button--docs', title: 'Components/Inputs/Button', name: 'Docs', type: 'docs',
-      },
+      'components-button--default': { id: 'components-button--default', title: 'Components/Button', name: 'Default', type: 'story' },
     } }));
   });
   var made = project(storybook.url);
   fs.writeFileSync(path.join(made.root, 'workbench.yaml'), [
-    'name: Acme catalog',
+    'name: Acme stories',
+    'collections:',
+    '  - name: Pages',
+    '    items:',
+    '      - { label: Sign in, src: pages/sign-in.html }',
     'implementations:',
     '  storybook:',
     '    kind: storybook',
     '    url: ' + storybook.url,
-    '    root: product',
-    '    catalog:',
-    '      icon: book-open',
-    '      icons:',
-    '        Components: layout-grid',
-    '        Components/Inputs: form-input',
+    '    catalog: true',
   ].join('\n'));
-  var opened = [];
-  var running = await server.start({
-    root: made.root,
-    capture: { close: function () {} },
-    onOpen: function (file) { opened.push(file); },
-  });
+  var running = await server.start({ root: made.root, capture: { close: function () {} } });
   try {
     var answer = await get(running.port, server.CONFIG_PATH);
     assert.strictEqual(answer.status, 200);
-    assert.deepStrictEqual(answer.body.catalogCollections, [{
-      name: 'Components',
-      icon: 'layout-grid',
-      iconPriority: 5,
-      items: [{
-        group: 'Inputs',
-        items: [{
-          label: 'Button',
-          src: '__storybook/storybook/components-inputs-button.html',
-          icon: 'form-input',
-          states: [{ id: 'default', label: 'Default' }, { id: 'icon-only', label: 'Icon Only' }],
-          implementations: { storybook: { title: 'Components/Inputs/Button' } },
-          implementationOnly: 'storybook',
-        }],
-      }],
-    }]);
-    var page = answer.body.pages['__storybook/storybook/components-inputs-button.html'];
-    assert.strictEqual(page.design, null);
-    assert.deepStrictEqual(page.code.map(function (entry) { return [entry.relative, entry.exists]; }), [
-      ['./src/button/button.tsx', true],
-      ['./src/button/button.stories.tsx', true],
-    ]);
-    assert.deepStrictEqual(answer.body.problems, []);
-
-    var source = await post(running.port, server.OPEN_PATH, {
-      src: '__storybook/storybook/components-inputs-button.html',
-      path: path.join(made.product, 'src', 'button', 'button.tsx'),
-    });
-    assert.strictEqual(source.status, 200);
-    assert.deepStrictEqual(opened, [path.join(made.product, 'src', 'button', 'button.tsx')]);
+    assert.deepStrictEqual(answer.body.catalogCollections, []);
+    assert.ok(!Object.keys(answer.body.pages).some(function (src) { return src.indexOf('__storybook/') === 0; }));
+    assert.ok(answer.body.problems.indexOf('implementations › storybook: catalog is only available for iOS Simulator implementations.') !== -1);
+    assert.ok(!requested.includes('/index.json'), 'the Storybook index is not read for pages');
   } finally {
     await running.close();
     await storybook.close();
@@ -959,7 +904,6 @@ test('automatically detects a running Storybook from the project script', async 
     '  storybook:',
     '    kind: storybook',
     '    url: auto',
-    '    catalog: true',
   ].join('\n'));
   var running = await server.start({ root: made.root, capture: { close: function () {} } });
   try {
@@ -967,7 +911,6 @@ test('automatically detects a running Storybook from the project script', async 
     assert.strictEqual(answer.status, 200);
     assert.strictEqual(answer.body.implementations.storybook.upstream, storybook.url);
     assert.match(answer.body.implementations.storybook.url, /^http:\/\/127\.0\.0\.1:\d+$/);
-    assert.strictEqual(answer.body.catalogCollections[0].items[0].label, 'Button');
   } finally {
     await running.close();
     await storybook.close();

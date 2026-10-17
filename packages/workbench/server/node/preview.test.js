@@ -103,30 +103,21 @@ test('preview icons pass through discovery, override maps, and isolate invalid n
   assert.equal(manifest.mergeCollections(manual, resolved.catalogCollections)[0].icon, 'star');
 });
 
-test('preview and live Storybook collection icons respect mappings and configured fallbacks', async t => {
-  const http = require('node:http');
-  const catalog = http.createServer((req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ entries: { customers: { id: 'customers', type: 'story', title: 'Web App/Pages/Customers', name: 'Default' } } }));
-  });
-  await new Promise(resolve => catalog.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise(resolve => catalog.close(resolve)));
+test('preview collection and page icons respect mappings and configured fallbacks', async t => {
   const root = fixture(t, {
     'jobs.workbench.ts': definition('html', './jobs.ts').replace('Components/Button', 'Web App/Pages/Jobs'),
     'jobs.ts': 'export default function() {}',
   });
   const cases = [
-    ['', 'true', 'component', 'component'],
-    ['', '\n      icons:\n        Web App: monitor', 'monitor', 'component'],
-    ['previews:\n  icon: boxes\n', '\n      icon: book-open', 'boxes', 'boxes'],
-    ['previews:\n  icon: boxes\n', '\n      icons:\n        Web App: monitor', 'monitor', 'boxes'],
-    ['previews:\n  icons:\n    Web App: app-window\n    Web App/Pages: monitor\n', '\n      icons:\n        Web App: palette', 'app-window', 'monitor'],
+    ['', 'component', 'component'],
+    ['previews:\n  icon: boxes\n', 'boxes', 'boxes'],
+    ['previews:\n  icons:\n    Web App: app-window\n    Web App/Pages: monitor\n', 'app-window', 'monitor'],
   ];
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
-  for (const [previews, icons, collectionIcon, pageIcon] of cases) {
-    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n' + previews + 'implementations:\n  storybook:\n    kind: storybook\n    url: http://127.0.0.1:' + catalog.address().port + '\n    catalog: ' + icons + '\n');
+  for (const [previews, collectionIcon, pageIcon] of cases) {
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n' + previews);
     const resolved = await running.config();
     assert.deepEqual(resolved.problems, []);
     assert.equal(resolved.catalogCollections.length, 1);

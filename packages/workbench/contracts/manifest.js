@@ -101,30 +101,17 @@
 
   function catalog(raw, where, problems) {
     if (raw === undefined || raw === null || raw === false) return null;
-    if (raw === true) return { icon: 'book-open', icons: {} };
+    if (raw === true) return { icon: 'smartphone' };
     if (!isMap(raw)) {
-      problems.push(where + ': catalog must be true, false, or a map of icon settings.');
+      problems.push(where + ': catalog must be true, false, or a map with an icon.');
       return null;
     }
-    var fallback = text(raw.icon) || 'book-open';
-    if (!KEY.test(fallback)) {
-      problems.push(where + ': catalog icon “' + fallback + '” must be a kebab-case Lucide icon name.');
-      fallback = 'book-open';
+    var icon = text(raw.icon) || 'smartphone';
+    if (!KEY.test(icon)) {
+      problems.push(where + ': catalog icon “' + icon + '” must be a kebab-case Lucide icon name.');
+      icon = 'smartphone';
     }
-    var icons = {};
-    if (raw.icons !== undefined && !isMap(raw.icons)) {
-      problems.push(where + ': catalog icons must map Storybook title prefixes to Lucide icon names.');
-    } else {
-      Object.keys(raw.icons || {}).forEach(function (prefix) {
-        var icon = text(raw.icons[prefix]);
-        if (!text(prefix) || !KEY.test(icon)) {
-          problems.push(where + ': catalog icon for “' + prefix + '” must be a kebab-case Lucide icon name.');
-          return;
-        }
-        icons[text(prefix).replace(/\/+$/, '')] = icon;
-      });
-    }
-    return Object.assign({ icon: fallback, icons: icons }, text(raw.icon) && KEY.test(text(raw.icon)) ? { iconExplicit: true } : {});
+    return { icon: icon };
   }
 
   /* A local command may bring an implementation up before its catalog is
@@ -363,14 +350,12 @@
 
       var imported = catalog(spec.catalog, where, problems);
       if (imported) {
-        if (kind !== 'storybook' && kind !== 'ios-simulator') {
-          problems.push(where + ': catalog is only available for Storybook and iOS Simulator implementations.');
+        if (kind !== 'ios-simulator') {
+          problems.push(where + ': catalog is only available for iOS Simulator implementations.');
         }
         else {
           impl.catalog = true;
-          impl.catalogIcon = kind === 'ios-simulator' && imported.icon === 'book-open' ? 'smartphone' : imported.icon;
-          impl.catalogIcons = imported.icons;
-          if (imported.iconExplicit) impl.catalogIconExplicit = true;
+          impl.catalogIcon = imported.icon;
         }
       }
 
@@ -417,8 +402,7 @@
   }
 
   function mergeCollectionIcon(target, incoming) {
-    // 7 authored, 6 preview map, 5 catalog map, 4 preview fallback,
-    // 3 catalog fallback, 2 authored default, 1 preview default, 0 catalog default.
+    // 7 authored, 6 preview map, 4 preview fallback, 2 authored default, 1 preview default.
     var priority = target.iconPriority === undefined ? 7 : target.iconPriority;
     var next = incoming.iconPriority === undefined ? 7 : incoming.iconPriority;
     // Equal imported priorities use lexical icon order, independent of import timing.

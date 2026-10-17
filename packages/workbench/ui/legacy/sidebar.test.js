@@ -25,7 +25,7 @@ function loadSidebar(overrides, spaces) {
   var config = Object.assign({
     name: 'Acme',
     collections: [],
-    implementations: { storybook: { catalog: true } },
+    implementations: { simulator: { kind: 'ios-simulator', catalog: true } },
   }, overrides);
   var window = {
     addEventListener: function (type, listener) { listeners[type] = listener; },
@@ -110,7 +110,7 @@ test('the sidebar shows catalog diagnostics while still building imported pages'
   var sidebar = loadSidebar();
   assert.equal(sidebar.posted[0].type, 'canonic-catalog-request');
   assert.equal(sidebar.loading.hidden, false);
-  assert.equal(sidebar.loadingText.textContent, 'Waiting for storybook…');
+  assert.equal(sidebar.loadingText.textContent, 'Waiting for simulator…');
   assert.equal(sidebar.search.disabled, true);
 
   var collections = [{ name: 'Components', items: [{ label: 'Button', src: 'button' }] }];

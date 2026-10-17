@@ -275,7 +275,7 @@ test('answers null for a project without a workbench.yaml', function () {
   }
 });
 
-test('accepts a Storybook catalog without handwritten collections', function () {
+test('reports a catalog on a Storybook implementation and keeps the implementation', function () {
   var root = project({
     'workbench.yaml': [
       'name: Acme stories',
@@ -288,11 +288,10 @@ test('accepts a Storybook catalog without handwritten collections', function () 
   });
   try {
     var read = config.read(root);
-    assert.equal(read.implementations.storybook.catalog, true);
-    assert.equal(read.implementations.storybook.catalogIcon, 'book-open');
-    assert.deepEqual(read.implementations.storybook.catalogIcons, {});
+    assert.equal(read.implementations.storybook.url, 'http://localhost:6006');
+    assert.equal(read.implementations.storybook.catalog, undefined);
     assert.deepEqual(read.collections, []);
-    assert.deepEqual(read.problems, []);
+    assert.deepEqual(read.problems, ['implementations › storybook: catalog is only available for iOS Simulator implementations.']);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -328,14 +327,13 @@ test('reads a configurable implementation command and readiness check', function
   }
 });
 
-test('accepts automatic Storybook and Simulator catalogs without handwritten collections', function () {
+test('accepts an automatic Storybook and a Simulator catalog without handwritten collections', function () {
   var root = project({
     'workbench.yaml': [
       'implementations:',
       '  storybook:',
       '    kind: storybook',
       '    url: auto',
-      '    catalog: true',
       '  simulator:',
       '    kind: ios-simulator',
       '    device: booted',

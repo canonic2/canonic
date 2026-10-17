@@ -281,7 +281,7 @@ function pageItems(collections, out) {
   return out;
 }
 
-/* Stable reference sizes for every declared state or Storybook story: each
+/* Stable reference sizes for every declared state: each
    size the page supports but Resizable (see src/sizes/export.ts). The
    background renderer loads these directly, so exporting never drives or
    annotates the visible workbench canvas. */
@@ -315,27 +315,7 @@ function exportCapturePlan(view, baseUrl) {
       return;
     }
     if (implementationKey) {
-      if (!implementation || implementation.kind !== 'storybook') {
-        warnings.push(item.label + ': reference screenshots are not supported for ' + (implementation && implementation.kind || 'this implementation') + '.');
-        return;
-      }
-      variants.forEach(function (state) {
-        var story = view.pages[item.src] && (view.pages[item.src].stories || []).find(function (candidate) {
-          return candidate.state === state.id;
-        });
-        if (!story) {
-          warnings.push(item.label + ' — ' + state.label + ': Storybook did not provide a story id.');
-          return;
-        }
-        sizes.forEach(function (size) {
-          captures.push({
-            page: item.src, state: state.id, variant: state.id + '-' + size.key, label: state.label,
-            size: size.key, sizeLabel: size.label,
-            url: implementation.url + '/iframe.html?id=' + encodeURIComponent(story.id) + '&viewMode=story',
-            external: true, width: size.width, height: size.height,
-          });
-        });
-      });
+      warnings.push(item.label + ': reference screenshots are not supported for ' + (implementation && implementation.kind || 'this implementation') + '.');
       return;
     }
     var resolvedPage = view.pages && view.pages[item.src];
@@ -512,85 +492,6 @@ function storybookIndex(impl) {
       throw refused(503, 'Storybook at ' + impl.url + ' isn’t answering — is it running?');
     }
   );
-}
-
-/* Turn Storybook's own hierarchy into the two levels the workbench has: the
-   first title segment is a collection, any middle segments are one joined group,
-   and the leaf is the page. Each story under that title is one state. The
-   src is deliberately synthetic and stable; imported pages have no design
-   file and always open through their Storybook implementation. */
-function catalogIcon(impl, title) {
-  return manifest.titleIcon({ icon: impl.catalogIcon, icons: impl.catalogIcons }, title, 'book-open').icon;
-}
-
-function storybookCatalog(index, key, impl) {
-  var byTitle = {};
-  storyEntries(index, impl).forEach(function (entry) {
-    if (!byTitle[entry.title]) byTitle[entry.title] = [];
-    byTitle[entry.title].push(entry);
-  });
-
-  var collections = [];
-  var byCollection = {};
-  var pages = {};
-
-  Object.keys(byTitle).forEach(function (title) {
-    var entries = byTitle[title];
-    var parts = title.split('/').filter(Boolean);
-    var collectionName = parts.length > 1 ? parts.shift() : impl.label;
-    var label = parts.length ? parts.pop() : title;
-    var groupName = parts.join(' / ');
-    var componentId = entries[0].id.split('--')[0];
-    if (!/^[a-z0-9-]+$/.test(componentId)) {
-      componentId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'stories';
-    }
-    var src = '__storybook/' + key + '/' + componentId + '.html';
-    var item = {
-      label: label,
-      src: src,
-      icon: catalogIcon(impl, title),
-      states: entries.map(function (entry) {
-        return { id: manifest.storyState(entry.id), label: entry.name || manifest.storyState(entry.id) };
-      }),
-      implementations: {},
-      implementationOnly: key,
-    };
-    item.implementations[key] = { title: title };
-
-    var collection = byCollection[collectionName];
-    if (!collection) {
-      var selected = manifest.titleIcon({ icon: impl.catalogIcon, icons: impl.catalogIcons }, collectionName, 'book-open');
-      collection = { name: collectionName, icon: selected.icon, iconPriority: selected.mapped ? 5 : impl.catalogIconExplicit ? 3 : 0, items: [] };
-      byCollection[collectionName] = collection;
-      collections.push(collection);
-    }
-    if (groupName) {
-      var group = collection.items.find(function (candidate) { return candidate.group === groupName; });
-      if (!group) {
-        group = { group: groupName, items: [] };
-        collection.items.push(group);
-      }
-      group.items.push(item);
-    } else {
-      collection.items.push(item);
-    }
-
-    var code = [];
-    entries.forEach(function (entry) {
-      [entry.componentPath, entry.importPath].forEach(function (relative) {
-        if (!impl.root || typeof relative !== 'string' || !relative) return;
-        var absolute = path.resolve(impl.root, relative);
-        if (code.some(function (candidate) { return candidate.path === absolute; })) return;
-        code.push({ implementation: key, path: absolute, relative: relative, exists: fs.existsSync(absolute) });
-      });
-    });
-    pages[src] = {
-      label: label, design: null, code: code,
-      stories: entries.map(function (entry) { return { id: entry.id, state: manifest.storyState(entry.id), label: entry.name || manifest.storyState(entry.id) }; }),
-    };
-  });
-
-  return { collections: collections, pages: pages };
 }
 
 function storybookPorts(root) {
@@ -891,9 +792,9 @@ function start(options) {
     return config.resolve(root, config.read(where));
   }
 
-  /* Catalog imports are the one asynchronous part of configuration: the
-     manifest names the Storybook, then its live index supplies the pages.
-     A stopped catalog leaves manual pages usable and reports one problem. */
+  /* Previews, Storybook detection, Simulator catalogs and docs are the
+     asynchronous part of configuration. A stopped Storybook or Simulator
+     leaves the other pages usable and reports one problem. */
   function resolvedWithCatalogs() {
     var view = resolved();
     if (!view) return Promise.resolve(null);
@@ -921,27 +822,6 @@ function start(options) {
         });
       });
     }, Promise.resolve()).then(function () {
-      var keys = Object.keys(implementations).filter(function (key) {
-        var impl = implementations[key];
-        return impl.kind === 'storybook' && impl.catalog && impl.url !== 'auto';
-      });
-      return keys.reduce(function (pending, key) {
-      return pending.then(function () {
-        var impl = implementations[key];
-        return storybookIndex(impl).then(function (index) {
-          var imported = storybookCatalog(index, key, impl);
-          imported.collections.forEach(function (collection) {
-            var existing = collections.find(function (candidate) { return candidate.name === collection.name; });
-            if (existing) { manifest.mergeCollectionIcon(existing, collection); existing.items = existing.items.concat(collection.items); }
-            else collections.push(collection);
-          });
-          Object.assign(pages, imported.pages);
-        }).catch(function (error) {
-          problems.push('implementations › ' + key + ': couldn’t import its catalog — ' + String(error.message || error));
-        });
-      });
-      }, Promise.resolve());
-    }).then(function () {
       var simulatorKeys = Object.keys(implementations).filter(function (key) {
         var impl = implementations[key];
         return impl.kind === 'ios-simulator' && impl.catalog;

@@ -61,21 +61,20 @@ test('preview icon maps validate and match complete title prefixes', function ()
 test('shared collection icons use precedence in either import order and retain manual overrides', function () {
   var collection = function (icon, priority, src) { return { name: 'Web App', icon: icon, iconPriority: priority, items: [{ src: src }] }; };
   var preview = collection('component', 1, 'jobs.workbench.ts');
-  var catalog = collection('monitor', 5, 'customers.html');
-  for (var pair of [[preview, catalog], [catalog, preview]]) {
+  var mapped = collection('monitor', 6, 'customers.workbench.ts');
+  for (var pair of [[preview, mapped], [mapped, preview]]) {
     assert.equal(manifest.mergeCollections([pair[0]], [pair[1]])[0].icon, 'monitor');
   }
-  assert.equal(manifest.mergeCollections([collection('app-window', 6, 'jobs.workbench.ts')], [catalog])[0].icon, 'app-window');
-  assert.equal(manifest.mergeCollections([preview], [collection('book-open', 0, 'customers.html')])[0].icon, 'component');
-  assert.equal(manifest.mergeCollections([collection('boxes', 4, 'jobs.workbench.ts')], [catalog])[0].icon, 'monitor');
+  assert.equal(manifest.mergeCollections([collection('boxes', 4, 'jobs.workbench.ts')], [preview])[0].icon, 'boxes');
+  assert.equal(manifest.mergeCollections([collection('boxes', 4, 'jobs.workbench.ts')], [mapped])[0].icon, 'monitor');
   assert.equal(manifest.mergeCollections([collection('file-text', 2, 'authored.html')], [preview])[0].icon, 'file-text');
-  assert.equal(manifest.mergeCollections([collection('file-text', 2, 'authored.html')], [catalog])[0].icon, 'monitor');
+  assert.equal(manifest.mergeCollections([collection('file-text', 2, 'authored.html')], [mapped])[0].icon, 'monitor');
   var manual = { name: 'Web App', icon: 'star', items: [] };
-  assert.equal(manifest.mergeCollections([manual], [preview, catalog])[0].icon, 'star');
+  assert.equal(manifest.mergeCollections([manual], [preview, mapped])[0].icon, 'star');
   assert.deepEqual(manifest.mergeCollections([manual], []), []);
   assert.deepEqual(manual.items, []);
-  var first = collection('monitor', 5, 'first.html');
-  var second = collection('app-window', 5, 'second.html');
+  var first = collection('monitor', 4, 'first.workbench.ts');
+  var second = collection('app-window', 4, 'second.workbench.ts');
   assert.equal(manifest.mergeCollections([first], [second])[0].icon, manifest.mergeCollections([second], [first])[0].icon);
 });
 
@@ -122,49 +121,49 @@ test('merge copes with a missing side', function () {
 test('merges imported items into a manual collection with the same name', function () {
   var manual = [{ name: 'Components', icon: 'star', items: [{ src: 'button.html' }] }];
   var imported = [
-    { name: 'Components', icon: 'component', items: [{ src: '__storybook/card.html' }] },
-    { name: 'Foundations', icon: 'component', items: [{ src: '__storybook/color.html' }] },
+    { name: 'Components', icon: 'component', items: [{ src: 'card.workbench.tsx' }] },
+    { name: 'Foundations', icon: 'component', items: [{ src: 'color.workbench.tsx' }] },
   ];
   assert.deepEqual(manifest.mergeCollections(manual, imported), [
-    { name: 'Components', icon: 'star', items: [{ src: 'button.html' }, { src: '__storybook/card.html' }] },
-    { name: 'Foundations', icon: 'component', items: [{ src: '__storybook/color.html' }] },
+    { name: 'Components', icon: 'star', items: [{ src: 'button.html' }, { src: 'card.workbench.tsx' }] },
+    { name: 'Foundations', icon: 'component', items: [{ src: 'color.workbench.tsx' }] },
   ]);
   assert.equal(manual[0].items.length, 1);
 });
 
-test('merges preview and Storybook groups by exact name within their collection without mutating inputs', function () {
+test('merges imported groups by exact name within their collection without mutating inputs', function () {
   var previews = [{ name: 'Web App', icon: 'component', items: [
     { group: 'Pages', icon: 'folder', items: [{ label: 'Jobs', src: 'jobs.workbench.ts', workbench: true }] },
     { label: 'Welcome', src: 'welcome.html' },
   ] }];
-  var stories = [{ name: 'Web App', icon: 'monitor', items: [
-    { group: 'Pages', icon: 'book-open', items: [{ label: 'Account', src: '__storybook/account.html' }] },
-    { group: 'Forms', items: [{ label: 'Contact', src: '__storybook/contact.html' }] },
-    { group: 'pages', items: [{ label: 'Other', src: '__storybook/other.html' }] },
+  var docs = [{ name: 'Web App', icon: 'monitor', items: [
+    { group: 'Pages', icon: 'book-open', items: [{ label: 'Account', src: 'account.workbench.tsx' }] },
+    { group: 'Forms', items: [{ label: 'Contact', src: 'contact.workbench.tsx' }] },
+    { group: 'pages', items: [{ label: 'Other', src: 'other.workbench.tsx' }] },
   ] }, { name: 'Auth', items: [
-    { group: 'Pages', items: [{ label: 'Sign in', src: '__storybook/sign-in.html' }] },
+    { group: 'Pages', items: [{ label: 'Sign in', src: 'sign-in.workbench.tsx' }] },
   ] }];
-  var before = JSON.stringify([previews, stories]);
-  var merged = manifest.mergeCollections(previews, stories);
+  var before = JSON.stringify([previews, docs]);
+  var merged = manifest.mergeCollections(previews, docs);
   assert.equal(merged[0].icon, 'component');
   assert.deepEqual(merged[0].items.map(function (item) { return item.group || item.label; }), ['Pages', 'Welcome', 'Forms', 'pages']);
   assert.equal(merged[0].items[0].icon, 'folder');
   assert.deepEqual(merged[0].items[0].items.map(function (item) { return item.label; }), ['Jobs', 'Account']);
   assert.equal(merged[1].items[0].items[0].label, 'Sign in');
-  assert.equal(JSON.stringify([previews, stories]), before);
+  assert.equal(JSON.stringify([previews, docs]), before);
   var again = manifest.mergeCollections(merged, [{ name: 'Web App', items: [
     { group: 'Forms', items: [{ label: 'Search', src: 'search.workbench.ts', workbench: true }] },
   ] }]);
   assert.deepEqual(again[0].items[2].items.map(function (item) { return item.label; }), ['Contact', 'Search']);
   assert.equal(merged[0].items[2].items.length, 1);
-  assert.equal(stories[0].items[1].items.length, 1);
+  assert.equal(docs[0].items[1].items.length, 1);
 });
 
 test('reads the declared implementations', function () {
   var problems = [];
   var impls = manifest.implementations(
     {
-      storybook: { kind: 'storybook', url: 'http://localhost:6006/', root: '../acme/packages/ui', label: 'Stories', catalog: true },
+      storybook: { kind: 'storybook', url: 'http://localhost:6006/', root: '../acme/packages/ui', label: 'Stories' },
       dev: { kind: 'url', base: 'http://localhost:3710' },
       staging: { kind: 'url', base: 'https://staging.example.com' },
     },
@@ -174,7 +173,7 @@ test('reads the declared implementations', function () {
   assert.deepEqual(problems, []);
   assert.deepEqual(impls.storybook, {
     key: 'storybook', label: 'Stories', kind: 'storybook', url: 'http://localhost:6006',
-    root: '../acme/packages/ui', catalog: true, catalogIcon: 'book-open', catalogIcons: {},
+    root: '../acme/packages/ui',
   });
   assert.deepEqual(impls.dev, {
     key: 'dev', label: 'Dev', kind: 'url', base: 'http://localhost:3710', root: null,
@@ -193,12 +192,14 @@ test('names every problem with an implementation and keeps the rest', function (
       docs: { kind: 'wiki', url: 'http://localhost:1' },
       bare: 'http://localhost:2',
       staging: { kind: 'url', base: 'https://staging.example.com', render: 'popup', root: 'file:///x', catalog: true },
-      odd: { kind: 'storybook', url: 'http://localhost:3', catalog: 'yes' },
+      odd: { kind: 'ios-simulator', catalog: 'yes' },
+      catalogued: { kind: 'storybook', url: 'http://localhost:4', catalog: true },
     },
     problems
   );
 
-  assert.deepEqual(Object.keys(impls), ['staging', 'odd']);
+  assert.deepEqual(Object.keys(impls), ['staging', 'odd', 'catalogued']);
+  assert.equal(impls.catalogued.catalog, undefined);
   assert.equal(impls.staging.render, undefined);
   assert.equal(impls.staging.root, null);
   assert.deepEqual(problems, [
@@ -207,28 +208,30 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
     'implementations › docs: kind must be url, storybook, workbench, docs, ios-simulator, or window.',
     'implementations › bare: needs a kind, and a url or base.',
-    'implementations › staging: catalog is only available for Storybook and iOS Simulator implementations.',
+    'implementations › staging: catalog is only available for iOS Simulator implementations.',
     'implementations › staging: render is no longer used; remove it. URL and Storybook implementations use iframes.',
     'implementations › staging: root must be a folder path, not a URL.',
-    'implementations › odd: catalog must be true, false, or a map of icon settings.',
+    'implementations › odd: catalog must be true, false, or a map with an icon.',
+    'implementations › catalogued: catalog is only available for iOS Simulator implementations.',
   ]);
 });
 
 test('accepts automatic Storybook and catalogued iOS Simulator implementations', function () {
   var problems = [];
   var implementations = manifest.implementations({
-    stories: { kind: 'storybook', url: 'auto', catalog: true },
+    stories: { kind: 'storybook', url: 'auto' },
     simulator: { kind: 'ios-simulator', device: 'booted', catalog: true },
+    tablets: { kind: 'ios-simulator', device: 'booted', catalog: { icon: 'tablet' } },
   }, problems);
   assert.deepEqual(problems, []);
   assert.deepEqual(implementations.stories, {
-    key: 'stories', label: 'Stories', kind: 'storybook', root: null,
-    url: 'auto', auto: true, catalog: true, catalogIcon: 'book-open', catalogIcons: {},
+    key: 'stories', label: 'Stories', kind: 'storybook', root: null, url: 'auto', auto: true,
   });
   assert.deepEqual(implementations.simulator, {
     key: 'simulator', label: 'Simulator', kind: 'ios-simulator', root: null,
-    device: 'booted', catalog: true, catalogIcon: 'smartphone', catalogIcons: {},
+    device: 'booted', catalog: true, catalogIcon: 'smartphone',
   });
+  assert.equal(implementations.tablets.catalogIcon, 'tablet');
 });
 
 test('accepts a window implementation by application, and pages map it to a window title', function () {
@@ -247,7 +250,7 @@ test('accepts a window implementation by application, and pages map it to a wind
   assert.deepEqual(problems, [
     'implementations › blank: needs an app — the application’s bundle ID, or part of it, such as com.example.app.',
     'implementations › spaced: needs an app — the application’s bundle ID, or part of it, such as com.example.app.',
-    'implementations › started: catalog is only available for Storybook and iOS Simulator implementations.',
+    'implementations › started: catalog is only available for iOS Simulator implementations.',
     'implementations › started: start is available for URL and Storybook implementations.',
   ]);
 
