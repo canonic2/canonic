@@ -1,15 +1,31 @@
 //! Parallel directory discovery, reusing only unchanged real directories.
+//!
+//! The walk skips a fixed set of folders and what the project's `.gitignore`
+//! files ignore: each applies to its own folder, a deeper one decides first,
+//! and a negation cannot bring back a path inside an ignored folder, as in
+//! Git. Global and repository-local exclude files do not apply.
 use crate::{files::stamp, model::Directory};
 use anyhow::Result;
 use globset::{GlobBuilder, GlobSetBuilder};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rayon::prelude::*;
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 pub(crate) struct Discovery {
     pub(crate) files: Vec<String>,
     pub(crate) directories: HashMap<String, Directory>,
     pub(crate) reads: usize,
+    /// The `.gitignore` files that applied, relative to the root and sorted.
+    pub(crate) ignores: Vec<String>,
 }
+
+/// The `.gitignore` rules that apply in a folder, outermost first.
+pub(crate) type Rules = Vec<Arc<Gitignore>>;
 
 pub(crate) fn discover(
     root: &Path,
@@ -22,6 +38,7 @@ pub(crate) fn discover(
         dir: &str,
         known: &HashMap<String, Directory>,
         walk: bool,
+        rules: &Rules,
     ) -> Result<Discovery> {
         let path = root.join(dir);
         let current = stamp(&path);
@@ -32,10 +49,14 @@ pub(crate) fn discover(
             record.clone()
         } else {
             let mut children = Vec::new();
+            let mut gitignore = false;
             for child in fs::read_dir(&path)? {
                 let child = child?;
                 let name = child.file_name().to_string_lossy().into_owned();
                 let kind = child.file_type()?;
+                if name == ".gitignore" && kind.is_file() {
+                    gitignore = true;
+                }
                 if skipped(&name) || kind.is_symlink() {
                     continue;
                 }
@@ -44,24 +65,31 @@ pub(crate) fn discover(
             Directory {
                 stamp: Some(current),
                 children,
+                gitignore,
             }
         };
+        let mut rules = rules.clone();
+        let mut ignores = vec![];
+        if record.gitignore
+            && let Some(own) = gitignore_in(&path)
+        {
+            rules.push(own);
+            ignores.push(relative(dir, ".gitignore"));
+        }
         let subtrees: Vec<_> = record
             .children
             .par_iter()
+            .filter(|(name, directory)| !ignored(&rules, &path.join(name), *directory))
             .map(|(name, directory)| {
-                let relative = if dir.is_empty() {
-                    name.clone()
-                } else {
-                    format!("{dir}/{name}")
-                };
+                let relative = relative(dir, name);
                 if *directory {
-                    visit(root, &relative, known, walk)
+                    visit(root, &relative, known, walk, &rules)
                 } else {
                     Ok(Discovery {
                         files: vec![relative],
                         directories: HashMap::new(),
                         reads: 0,
+                        ignores: vec![],
                     })
                 }
             })
@@ -70,13 +98,11 @@ pub(crate) fn discover(
             files: vec![],
             directories: HashMap::new(),
             reads: usize::from(reused.is_none()),
+            ignores,
         };
         result.directories.insert(dir.into(), record);
         for subtree in subtrees {
-            let subtree = subtree?;
-            result.files.extend(subtree.files);
-            result.directories.extend(subtree.directories);
-            result.reads += subtree.reads;
+            result.merge(subtree?);
         }
         Ok(result)
     }
@@ -84,16 +110,17 @@ pub(crate) fn discover(
         files: vec![],
         directories: HashMap::new(),
         reads: 0,
+        ignores: vec![],
     };
     for base in bases(patterns) {
-        if !reachable(root, &base) {
+        let Some((rules, ignores)) = reach(root, &base) else {
             continue;
-        }
-        let subtree = visit(root, &base, known, walk)?;
-        result.files.extend(subtree.files);
-        result.directories.extend(subtree.directories);
-        result.reads += subtree.reads;
+        };
+        result.ignores.extend(ignores);
+        result.merge(visit(root, &base, known, walk, &rules)?);
     }
+    result.ignores.sort();
+    result.ignores.dedup();
     if let Some(patterns) = patterns {
         let mut builder = GlobSetBuilder::new();
         for pattern in patterns {
@@ -105,9 +132,54 @@ pub(crate) fn discover(
     Ok(result)
 }
 
+impl Discovery {
+    fn merge(&mut self, other: Self) {
+        self.files.extend(other.files);
+        self.directories.extend(other.directories);
+        self.reads += other.reads;
+        self.ignores.extend(other.ignores);
+    }
+}
+
+fn relative(dir: &str, name: &str) -> String {
+    if dir.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
 /// A folder the walk never enters.
 pub(crate) fn skipped(name: &str) -> bool {
     name.starts_with('.') || ["node_modules", "dist", "build", "coverage"].contains(&name)
+}
+
+/// The rules of the `.gitignore` in `folder`, if it has a readable one. A line
+/// that is not a valid pattern is left out, and the rest still apply.
+pub(crate) fn gitignore_in(folder: &Path) -> Option<Arc<Gitignore>> {
+    let file = folder.join(".gitignore");
+    // A regular file only, as the walk counts it: not a link.
+    if !fs::symlink_metadata(&file).is_ok_and(|metadata| metadata.is_file()) {
+        return None;
+    }
+    let mut builder = GitignoreBuilder::new(folder);
+    let _partial = builder.add(&file);
+    builder.build().ok().map(Arc::new)
+}
+
+/// Whether `rules` ignore this path itself; its folders are checked as the
+/// walk reaches them. The deepest rule that matches decides.
+pub(crate) fn ignored(rules: &[Arc<Gitignore>], path: &Path, is_dir: bool) -> bool {
+    for rules in rules.iter().rev() {
+        let matched = rules.matched(path, is_dir);
+        if matched.is_ignore() {
+            return true;
+        }
+        if matched.is_whitelist() {
+            return false;
+        }
+    }
+    false
 }
 
 /// The folders a walk must start from to find every match: each pattern's
@@ -141,26 +213,39 @@ pub(crate) fn bases(patterns: Option<&[String]>) -> Vec<String> {
     bases
 }
 
-/// Whether the full walk would reach this base: a relative folder inside the
-/// root, with no skipped or linked folder on the way. An absolute pattern's
-/// base starts with an empty segment and is never reached, as the full walk
-/// never matches it.
-fn reachable(root: &Path, base: &str) -> bool {
+/// Whether the full walk would reach this base, and with which rules: a
+/// relative folder inside the root, with no skipped, linked or ignored folder
+/// on the way. Answers the rules of the folders above the base, which the walk
+/// from the base does not read itself, and their `.gitignore` files. An
+/// absolute pattern's base starts with an empty segment and is never reached,
+/// as the full walk never matches it.
+fn reach(root: &Path, base: &str) -> Option<(Rules, Vec<String>)> {
+    let mut rules = Rules::new();
+    let mut ignores = vec![];
     if base.is_empty() {
-        return true;
+        return Some((rules, ignores));
     }
-    let mut path = root.to_path_buf();
+    let mut path: PathBuf = root.to_path_buf();
+    let mut dir = String::new();
     for segment in base.split('/') {
         if segment.is_empty() || skipped(segment) {
-            return false;
+            return None;
+        }
+        if let Some(own) = gitignore_in(&path) {
+            rules.push(own);
+            ignores.push(relative(&dir, ".gitignore"));
         }
         path.push(segment);
+        dir = relative(&dir, segment);
         match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.is_dir() => {}
-            _ => return false,
+            _ => return None,
+        }
+        if ignored(&rules, &path, true) {
+            return None;
         }
     }
-    true
+    Some((rules, ignores))
 }
 
 /// Includes and the subset that globset can preserve without picomatch.
@@ -259,6 +344,56 @@ mod tests {
         fs::create_dir_all(root.join("acme")).unwrap();
         let outside = format!("{}/**/*.workbench.ts", root.join("demo").display());
         assert_eq!(found(&[outside.as_str()]), Vec::<String>::new());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn gitignore_files_leave_out_what_git_would() {
+        let root = std::env::temp_dir().join(format!("workbench-gitignore-{}", std::process::id()));
+        let _cleared = fs::remove_dir_all(&root);
+        let write = |file: &str, body: &str| {
+            let path = root.join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, body).unwrap();
+        };
+        write(
+            ".gitignore",
+            "target/\ngenerated/*.workbench.ts\n!generated/kept.workbench.ts\nignored/\n!ignored/back.workbench.ts\n",
+        );
+        write("sub/.gitignore", "local.workbench.ts\n");
+        for file in [
+            "demo/a.workbench.ts",
+            "target/debug/a.workbench.ts",
+            "generated/x.workbench.ts",
+            "generated/kept.workbench.ts",
+            "ignored/back.workbench.ts",
+            "sub/local.workbench.ts",
+            "sub/keep.workbench.ts",
+        ] {
+            write(file, "");
+        }
+        let found = |patterns: &[&str]| {
+            let patterns: Vec<String> = patterns.iter().map(ToString::to_string).collect();
+            let found = discover(&root, &HashMap::new(), true, Some(&patterns)).unwrap();
+            let mut files = found.files;
+            files.sort();
+            (files, found.ignores)
+        };
+        let (files, ignores) = found(&["**/*.workbench.ts"]);
+        assert_eq!(
+            files,
+            vec![
+                "demo/a.workbench.ts",
+                "generated/kept.workbench.ts",
+                "sub/keep.workbench.ts"
+            ]
+        );
+        assert_eq!(ignores, vec![".gitignore", "sub/.gitignore"]);
+        // A narrowed walk applies the rules of the folders above it.
+        let (files, ignores) = found(&["generated/*.workbench.ts"]);
+        assert_eq!(files, vec!["generated/kept.workbench.ts"]);
+        assert_eq!(ignores, vec![".gitignore"]);
+        assert_eq!(found(&["target/**/*.workbench.ts"]).0, Vec::<String>::new());
         fs::remove_dir_all(root).unwrap();
     }
 }

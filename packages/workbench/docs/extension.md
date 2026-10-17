@@ -57,7 +57,7 @@ port. See [Several spaces](spaces.md).
 | **Workbench: Open Canvas** | Opens the canvas in an editor tab. |
 | **Workbench: Open Canvas in Browser** | Opens the same canvas in your default browser. |
 | **Workbench: Copy Canvas URL** | Copies the canvas address, for a bookmark, a script, or an agent. |
-| **Workbench: Refresh Pages** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) and [`defineDocs`](docs-pages.md#declare-a-markdown-page-in-a-definition) Markdown pages again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes. Run it after you add or remove a `*.workbench.ts` file. |
+| **Workbench: Refresh Pages** | Re-reads `workbench.yaml` and `workbench.local.yaml`, finds [TypeScript previews](workbench-previews.md) and [`defineDocs`](docs-pages.md#declare-a-markdown-page-in-a-definition) Markdown pages again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes, and when a `*.workbench.ts` file is added, removed, renamed or retitled. |
 | **Workbench: Switch Space…** | Lists the [spaces](spaces.md) and shows the one you pick. |
 | **Workbench: Add Space…** | Adds a folder with a `workbench.yaml` to the spaces and switches to it. |
 | **Workbench: Show Log** | Opens the Workbench output log. |

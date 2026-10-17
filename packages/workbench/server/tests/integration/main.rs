@@ -200,3 +200,21 @@ fn an_evaluator_that_never_answers_is_stopped_at_the_deadline() {
         started.elapsed()
     );
 }
+
+#[test]
+fn a_gitignore_edit_changes_the_listing_without_a_folder_change() {
+    let (_temp, root) = fixture();
+    page(&root, "b.workbench.ts", "Second");
+    fs::write(root.join(".gitignore"), "# nothing yet\n").expect("native index fixture");
+    let first = run(&root);
+    assert_eq!(first["records"].as_array().map(Vec::len), Some(2));
+    // The same size, so only the stamp's time can tell the edit.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::write(root.join(".gitignore"), "b.workbench.ts\n").expect("native index fixture");
+    let mut cached = request(&root);
+    cached["cached_generation"] = first["generation"].clone();
+    let second = invoke(&cached);
+    assert_eq!(second["reuse_answer"], false, "{second}");
+    assert_eq!(second["records"][0]["file"], "a.workbench.ts");
+    assert_eq!(second["records"].as_array().map(Vec::len), Some(1));
+}

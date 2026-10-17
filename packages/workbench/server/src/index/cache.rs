@@ -75,10 +75,11 @@ pub(super) fn store(
     records: HashMap<String, Record>,
     directories: HashMap<String, Directory>,
     settings: Vec<(String, Stamp)>,
+    ignores: Vec<(String, Stamp)>,
     generation: String,
     timings: &mut Timings,
 ) {
-    let mut saved = Saved::new(records, directories, settings, generation);
+    let mut saved = Saved::new(records, directories, settings, ignores, generation);
     if let Err(error) = saved.save(&request.saved, &request.identity) {
         timings.save_error(&error);
     }

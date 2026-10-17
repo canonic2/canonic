@@ -20,7 +20,7 @@ binary is planned in phases in the [server spec](../specs/server.md).
 | `index.rs`, `index/` | One index transaction; private stages own definition acquisition, cache decisions and phase diagnostics |
 | `definition.rs`, `definition/` | Pure literal-definition rules: compatibility with JavaScript, ordered validation and list projection |
 | `literal.rs` | Side-effect-free SWC extraction of literal values |
-| `discovery.rs` | Filesystem traversal, directory reuse and native matching policy |
+| `discovery.rs` | Filesystem traversal, directory reuse, the walk's skip and `.gitignore` rules, and native matching policy |
 | `evaluate.rs` | Typed select/evaluate requests and ownership of the evaluator child |
 | `saved.rs` | Bounded versioned persistence and atomic publication |
 | `protocol.rs` | Response representation and conversion of records to the CLI answer |

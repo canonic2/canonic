@@ -75,10 +75,14 @@ struct Clean {
 
 /// Paths whose changes can alter an answer.
 struct Scope {
-    /// Folders the walk starts from; anything below them counts.
+    root: PathBuf,
+    /// Folders the walk starts from; what the walk can reach below them counts.
     folders: Vec<PathBuf>,
-    /// Files the definitions read, and the configuration.
+    /// Files the definitions read, the configuration and the `.gitignore`
+    /// files that applied.
     files: HashSet<PathBuf>,
+    /// The rules of those `.gitignore` files, outermost first.
+    rules: discovery::Rules,
 }
 
 impl Scope {
@@ -112,7 +116,14 @@ impl Scope {
             .values()
             .flat_map(|record| record.watched.iter().map(|(file, _)| root.join(file)))
             .chain(saved.settings.iter().map(|(file, _)| root.join(file)))
+            .chain(saved.ignores.iter().map(|(file, _)| root.join(file)))
             .collect();
+        let mut rules: discovery::Rules = saved
+            .ignores
+            .iter()
+            .filter_map(|(file, _)| discovery::gitignore_in(root.join(file).parent()?))
+            .collect();
+        rules.sort_by_key(|rules| rules.path().components().count());
         files.insert(
             root.join(
                 request
@@ -122,21 +133,57 @@ impl Scope {
                     .unwrap_or("workbench.config.ts"),
             ),
         );
-        Some(Self { folders, files })
+        Some(Self {
+            root,
+            folders,
+            files,
+            rules,
+        })
     }
 
     /// A file a definition read, or a path the walk can reach: below a folder,
-    /// and not inside a folder the walk skips.
+    /// not inside a folder the walk skips and not ignored. A `.gitignore` the
+    /// walk can reach counts too, as it changes what the walk lists.
     fn contains(&self, path: &Path) -> bool {
-        self.files.contains(path)
-            || self.folders.iter().any(|folder| {
-                path.strip_prefix(folder).is_ok_and(|rest| {
-                    !rest.components().any(|part| match part {
-                        Component::Normal(name) => discovery::skipped(&name.to_string_lossy()),
-                        _ => false,
-                    })
+        if self.files.contains(path) {
+            return true;
+        }
+        let gitignore = path.file_name().is_some_and(|name| name == ".gitignore");
+        self.folders.iter().any(|folder| {
+            path.strip_prefix(folder).is_ok_and(|rest| {
+                let parts: Vec<_> = rest.components().collect();
+                parts.iter().enumerate().all(|(at, part)| match part {
+                    Component::Normal(name) => {
+                        (gitignore && at + 1 == parts.len())
+                            || !discovery::skipped(&name.to_string_lossy())
+                    }
+                    _ => true,
                 })
             })
+        }) && !self.ignored(path)
+    }
+
+    /// Whether `.gitignore` rules leave out this path or a folder above it.
+    fn ignored(&self, path: &Path) -> bool {
+        let Ok(rest) = path.strip_prefix(&self.root) else {
+            return false;
+        };
+        let parts: Vec<_> = rest.components().collect();
+        let mut current = self.root.clone();
+        for (at, part) in parts.iter().enumerate() {
+            current.push(part);
+            let is_dir = at + 1 < parts.len() || current.is_dir();
+            let above: discovery::Rules = self
+                .rules
+                .iter()
+                .filter(|rules| current.starts_with(rules.path()) && current != rules.path())
+                .cloned()
+                .collect();
+            if discovery::ignored(&above, &current, is_dir) {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -386,6 +433,8 @@ mod tests {
     #[test]
     fn a_scope_counts_its_folders_and_the_files_definitions_read() {
         let scope = Scope {
+            root: PathBuf::from("/acme"),
+            rules: vec![],
             folders: vec![PathBuf::from("/acme/demo")],
             files: [
                 PathBuf::from("/acme/src/titles.ts"),
@@ -418,5 +467,38 @@ mod tests {
             .set_flag(Flag::Rescan)
             .add_path(PathBuf::from("/acme"));
         assert!(relevant(&rescan, Some(&scope)));
+    }
+
+    #[test]
+    fn ignored_paths_are_outside_the_scope_and_gitignore_edits_inside() {
+        let root = std::env::temp_dir().join(format!("workbench-scope-{}", std::process::id()));
+        let _cleared = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("target/debug")).unwrap();
+        std::fs::write(root.join(".gitignore"), "target/\n*.log\n").unwrap();
+        let scope = Scope {
+            root: root.clone(),
+            folders: vec![root.clone()],
+            files: [root.join(".gitignore")].into(),
+            rules: crate::discovery::gitignore_in(&root).into_iter().collect(),
+        };
+        let path = |file: &str| root.join(file).to_string_lossy().into_owned();
+        assert!(!relevant(
+            &at(CREATE, &path("target/debug/x.o")),
+            Some(&scope)
+        ));
+        assert!(!relevant(
+            &at(CREATE, &path("demo/build.log")),
+            Some(&scope)
+        ));
+        assert!(relevant(
+            &at(CREATE, &path("demo/a.workbench.ts")),
+            Some(&scope)
+        ));
+        assert!(relevant(&at(CREATE, &path(".gitignore")), Some(&scope)));
+        assert!(relevant(
+            &at(CREATE, &path("demo/.gitignore")),
+            Some(&scope)
+        ));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

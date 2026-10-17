@@ -5,6 +5,7 @@ mod timings;
 use crate::{
     discovery::{self, Discovery, Includes},
     evaluate::Evaluator,
+    files::stamp,
     model::Request,
     protocol::{self, Response},
     saved::Saved,
@@ -39,6 +40,16 @@ pub(crate) fn index(request: &Request, evaluator: &Evaluator<'_>) -> Result<Resp
         request.walk,
         includes.native(),
     )?;
+    // Rules change what a reused folder lists, so a changed `.gitignore`
+    // counts as a folder read.
+    let ignores: Vec<_> = discovered
+        .ignores
+        .iter()
+        .map(|file| (file.clone(), stamp(&request.root.join(file))))
+        .collect();
+    if ignores != previous.ignores {
+        discovered.reads = discovered.reads.max(1);
+    }
     timings.elapsed("walkMs", step);
     timings.count("directories", discovered.directories.len());
     timings.count("directoriesRead", discovered.reads);
@@ -77,6 +88,7 @@ pub(crate) fn index(request: &Request, evaluator: &Evaluator<'_>) -> Result<Resp
                     definitions.records,
                     discovered.directories,
                     settings,
+                    ignores,
                     String::new(),
                     &mut timings,
                 );
@@ -96,6 +108,7 @@ pub(crate) fn index(request: &Request, evaluator: &Evaluator<'_>) -> Result<Resp
             definitions.records,
             discovered.directories,
             settings,
+            ignores,
             generation.clone(),
             &mut timings,
         );

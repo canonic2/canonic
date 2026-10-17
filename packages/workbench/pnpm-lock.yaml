@@ -26,6 +26,9 @@ importers:
       highlight.js:
         specifier: 11.12.0
         version: 11.12.0
+      ignore:
+        specifier: 7.0.12
+        version: 7.0.12
       lucide:
         specifier: 1.33.0
         version: 1.33.0

@@ -3,7 +3,7 @@ use crate::model::{Directory, Record, Stamp};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path};
 
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const MAX_BYTES: u64 = 32 * 1024 * 1024;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -13,6 +13,8 @@ pub(crate) struct Saved {
     pub(crate) directories: HashMap<String, Directory>,
     pub(crate) records: HashMap<String, Record>,
     pub(crate) settings: Vec<(String, Stamp)>,
+    /// The `.gitignore` files the walk applied, with their stamps.
+    pub(crate) ignores: Vec<(String, Stamp)>,
     pub(crate) generation: String,
 }
 
@@ -21,12 +23,14 @@ impl Saved {
         records: HashMap<String, Record>,
         directories: HashMap<String, Directory>,
         settings: Vec<(String, Stamp)>,
+        ignores: Vec<(String, Stamp)>,
         generation: String,
     ) -> Self {
         Self {
             directories,
             records,
             settings,
+            ignores,
             generation,
             ..Self::default()
         }

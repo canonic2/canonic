@@ -8,7 +8,10 @@ pub(crate) struct Stamp(pub(crate) Option<(u128, u64, bool)>);
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Directory {
     pub(crate) stamp: Option<Stamp>,
+    /// Entries the walk may enter, before `.gitignore` rules apply.
     pub(crate) children: Vec<(String, bool)>,
+    /// Whether the folder has a `.gitignore` file.
+    pub(crate) gitignore: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -91,3 +91,32 @@ test('source aliases and JavaScript whitespace validation keep compiler parity',
     assert.deepEqual(actual.answer, JSON.parse(JSON.stringify(await new Compiler(root).index())));
   }
 });
+
+test('native listing and the compiler leave out the same .gitignore paths', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'acme-page-index-gitignore-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const write = async (file: string, body: string) => {
+    await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await fs.writeFile(path.join(root, file), body);
+  };
+  const literal = (id: string) => `import {definePreview} from '@canonic2/workbench';\nexport default definePreview({id:'${id}',adapter:'html',source:{entry:'../page.html'}});`;
+  await write('page.html', '<p>Acme</p>');
+  await write('.gitignore', 'target/\ngenerated/*.workbench.ts\n!generated/kept.workbench.ts\nignored/\n!ignored/back.workbench.ts\n# a comment\n');
+  await write('sub/.gitignore', 'local.workbench.ts\n');
+  for (const [file, id] of [['demo/a.workbench.ts', 'demo-a'], ['target/debug/a.workbench.ts', 'target-a'], ['generated/x.workbench.ts', 'generated-x'],
+    ['generated/kept.workbench.ts', 'generated-kept'], ['ignored/back.workbench.ts', 'ignored-back'], ['sub/local.workbench.ts', 'sub-local'],
+    ['sub/keep.workbench.ts', 'sub-keep'], ['sub/deep/local.workbench.ts', 'sub-deep-local']]) await write(file, literal(id));
+  const ids = (answer: { previews: { id: string }[] }) => answer.previews.map(entry => entry.id).sort();
+  for (const include of [undefined, ['generated/*.workbench.ts'], ['**/*.{workbench,preview}.ts']]) {
+    const options = include ? { include } : {};
+    const native = await indexPages({ root, previews: options, executable: async () => process.execPath,
+      fallback: async () => { throw new Error('Native parity must not fall back'); }, diagnostic: () => {} });
+    const expected = JSON.parse(JSON.stringify(await new Compiler(root, options).index()));
+    assert.deepEqual(native.answer, expected);
+    if (!include || include[0].startsWith('**')) assert.deepEqual(ids(native.answer), ['demo-a', 'generated-kept', 'sub-keep']);
+    else assert.deepEqual(ids(native.answer), ['generated-kept']);
+  }
+  assert.throws(() => new Compiler(root).declared('target/debug/a.workbench.ts'), /declared/);
+  assert.throws(() => new Compiler(root).declared('sub/deep/local.workbench.ts'), /declared/);
+  assert.doesNotThrow(() => new Compiler(root).declared('generated/kept.workbench.ts'));
+});

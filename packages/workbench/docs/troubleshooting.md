@@ -125,10 +125,13 @@ and the previews and docs pages that `*.workbench.ts` files define.
   `source.entry` that doesn't exist. The other previews still show.
 - **Never discovered:** the file must end in `.workbench.ts` or
   `.workbench.tsx`, match `previews.include` when you set it, and sit outside
-  hidden folders, `node_modules`, and build output such as `dist` and `build`.
-  `previews: false` turns discovery off.
-- **Added or removed a file:** run **Workbench: Refresh Pages**. Only changes
-  to the YAML files refresh the list on their own.
+  hidden folders, `node_modules`, build output such as `dist` and `build`,
+  and anything a `.gitignore` in the project ignores. `previews: false` turns
+  discovery off.
+- **Added or removed a file:** in VS Code the list updates on its own when a
+  definition is added, removed, renamed or retitled; **Workbench: Refresh
+  Pages** does the same by hand. A canvas opened in a browser from the
+  standalone server needs a reload.
 - **`Workbench previews: …`** The worker or `workbench.config.ts` failed. The
   log's `preview.worker` entries hold the worker's error output.
 - **`unknown Workbench preview “…”`** A page's `kind: workbench` lens names an

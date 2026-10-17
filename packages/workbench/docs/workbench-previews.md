@@ -76,8 +76,9 @@ You need:
    other page.
 
 Workbench finds every `*.workbench.ts` and `*.workbench.tsx` file in the
-project. It skips hidden folders and `node_modules`, `dist`, `build`, and
-`coverage`. To choose other files or turn previews off, see
+project. It skips hidden folders, `node_modules`, `dist`, `build`, and
+`coverage`, and whatever your project's `.gitignore` files ignore, such as
+Rust's `target` folder. To choose other files or turn previews off, see
 [Previews in the configuration reference](configuration.md#previews).
 
 The `title` places the preview in the sidebar. Its first segment names the

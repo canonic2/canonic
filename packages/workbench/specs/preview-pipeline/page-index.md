@@ -27,7 +27,14 @@ first page meets its render target.
   file-prefixed `Duplicate preview id` problem.
 - Default patterns are `**/*.workbench.ts` and `**/*.workbench.tsx`.
   `previews.include` replaces them. Skip dot-prefixed entries, symlinks,
-  `node_modules`, `dist`, `build` and `coverage`. With natively matched
+  `node_modules`, `dist`, `build` and `coverage`, and what the project's
+  `.gitignore` files ignore: each regular `.gitignore` applies to its own
+  folder, the deepest one with a matching rule decides, and a negation cannot
+  bring back a path inside an ignored folder, as in Git. Global and
+  `.git/info/exclude` files do not apply, so the list does not depend on the
+  machine. Both the native index and the compiler apply the rules, and the
+  saved index records the `.gitignore` files it applied, so an edit to one
+  invalidates the saved answer. With natively matched
   patterns, the walk starts at each pattern's literal leading folders
   (`demo/**/*.workbench.ts` walks `demo/`), unless the skip rule would have
   kept the full walk out of them; the files found are the same.

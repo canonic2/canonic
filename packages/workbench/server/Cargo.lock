@@ -1946,6 +1946,7 @@ dependencies = [
  "globset",
  "hyper",
  "hyper-util",
+ "ignore",
  "insta",
  "notify",
  "postcard",

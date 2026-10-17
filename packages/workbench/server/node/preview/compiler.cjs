@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const Module = require('node:module');
 const esbuild = require('./engine.cjs');
 const picomatch = require('picomatch');
+const ignore = require('ignore');
 const API = path.join(__dirname, "../../../sdk/api.js");
 const BROWSER_RUNTIME = path.resolve(__dirname, '../../../ui/preview');
 const OMIT = new Set(['node_modules', '.git', '.canonic', '.claude', '.codex', 'dist', 'build', 'coverage', '.next', '.astro']);
@@ -26,30 +27,57 @@ const inside = (root, file) => {
 const slash = file => file.split(path.sep).join('/');
 const stamp = file => { try { const s = fs.statSync(file); return s.mtimeMs + ':' + s.size; } catch (_) { return 'missing'; } };
 
+/* The project's .gitignore files leave out what Git would, as the native
+   index does: each applies to its own folder, the deepest one with an opinion
+   decides, and nothing inside an ignored folder comes back. Only regular
+   .gitignore files count; global and repository-local excludes do not. */
+function gitignoreIn(dir) {
+  const file = path.join(dir, '.gitignore');
+  try { if (!fs.lstatSync(file).isFile()) return null; } catch (_) { return null; }
+  return { dir, rules: ignore().add(fs.readFileSync(file, 'utf8')) };
+}
+function gitignored(stack, file, isDirectory) {
+  for (let at = stack.length - 1; at >= 0; at--) {
+    const result = stack[at].rules.test(slash(path.relative(stack[at].dir, file)) + (isDirectory ? '/' : ''));
+    if (result.ignored) return true;
+    if (result.unignored) return false;
+  }
+  return false;
+}
+
 function discover(root, include) {
   const matches = picomatch(include || ['**/*.workbench.ts', '**/*.workbench.tsx']);
   const files = [];
-  function walk(dir) {
+  function walk(dir, stack) {
+    const own = gitignoreIn(dir);
+    if (own) stack = stack.concat(own);
     for (const item of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       if (item.name.startsWith('.') || OMIT.has(item.name) || item.isSymbolicLink()) continue;
       const file = path.join(dir, item.name);
-      if (item.isDirectory()) walk(file);
+      if (gitignored(stack, file, item.isDirectory())) continue;
+      if (item.isDirectory()) walk(file, stack);
       else if (matches(slash(path.relative(root, file)))) files.push(file);
     }
   }
-  walk(root);
+  walk(root, []);
   return files;
 }
 
 // A request for one known definition does not need to walk the whole project.
-// Apply the same glob, hidden-folder, output-folder and symlink rules as index.
+// Apply the same glob, hidden-folder, output-folder, symlink and .gitignore
+// rules as index.
 function discoveredFile(root, file, include) {
   const relative = path.relative(root, file);
   if (!picomatch(include || ['**/*.workbench.ts', '**/*.workbench.tsx'])(slash(relative))) return false;
+  const names = relative.split(path.sep);
   let current = root;
-  return relative.split(path.sep).every(name => {
+  let stack = [];
+  return names.every((name, at) => {
+    const own = gitignoreIn(current);
+    if (own) stack = stack.concat(own);
     current = path.join(current, name);
-    return !name.startsWith('.') && !OMIT.has(name) && !fs.lstatSync(current).isSymbolicLink();
+    if (name.startsWith('.') || OMIT.has(name) || fs.lstatSync(current).isSymbolicLink()) return false;
+    return !gitignored(stack, current, at + 1 < names.length);
   });
 }
 
