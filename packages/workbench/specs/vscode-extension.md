@@ -140,6 +140,11 @@ Component and theme contracts: [Web Components](web-components.md) and
   problem.
 - The sidebar rereads the list on every build, and the canvas on every config
   load or refresh, so an edited name, color, or icon shows without a reload.
+- Sidebar and canvas icons use the complete pinned Lucide library bundled in
+  the extension. The sidebar loads it through an explicit webview resource URL;
+  the server serves the same local dependency for the canvas. Icon rendering
+  requires that library and reports a loading error if it is absent. No network
+  download or separately maintained SVG set supplies icons.
 - One space is current per window. The window remembers it in
   `workspaceState` by path; otherwise, and when the remembered one leaves the
   list, the first listed space is current.

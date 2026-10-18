@@ -128,7 +128,7 @@ previews:
   lensLabel: Design
 ```
 
-This changes the default **Workbench** label to **Design** for discovered
+This changes the default **Preview** label to **Design** for discovered
 previews. An explicitly listed page can set its own `lensLabel` to override
 that value. These are YAML settings, separate from the preview definition's
 `title`, which places and names the page in the sidebar. They rename the

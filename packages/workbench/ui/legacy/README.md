@@ -63,7 +63,7 @@ icon: brand/logo.svg          # optional: a Lucide icon name, or a project image
 #     collections: [...]      # space's implementations merge over the shared ones by name
 
 previews:                     # optional: TypeScript preview discovery; false turns it off
-  lensLabel: Design           # optional: authored preview lens label; default Workbench
+  lensLabel: Design           # optional: authored preview lens label; default Preview
   icon: component             # fallback for preview pages and collections
   icons:                      # longest matching title prefix wins
     Pages: monitor
@@ -134,7 +134,9 @@ examples with fenced `example <id>` blocks, and each `docs` implementation the
 page maps is a docs lens that renders them with its adapter. A page with
 Markdown and no docs lens gets the built-in **Docs** lens, keyed `docs`. The
 canvas mode follows the lens: in a docs lens the docs fill the canvas and the
-size switcher is disabled. A page whose `src` is `.md` is a Markdown page: it
+size switcher is disabled. Docs lenses come first in the lens switcher, before
+the page's design and other implementations, and a page with docs opens on its
+first docs lens. A page whose `src` is `.md` is a Markdown page: it
 has no design lens, no `sizes`, and no `lensLabel`, and opens on its `lens` or
 first docs lens. A `.workbench.ts` file can declare one with `defineDocs`. See
 [Docs](../../docs/docs-pages.md); the server code is in `server/node/src/modules/docs/`, browser code in
@@ -223,7 +225,7 @@ them, so the two never disagree about which lens a page has.
 Every lens has a customizable display label. Implementations of every kind
 use `label`; authored pages use `lensLabel`. For discovered TypeScript previews,
 `previews.lensLabel` supplies the fallback, and an explicit page's `lensLabel`
-takes precedence. Defaults remain **Design** for HTML and **Workbench** for
+takes precedence. Defaults are **Design** for HTML and **Preview** for
 TypeScript previews. Renaming the authored lens changes its existing button
 and review label, without adding a lens or changing addresses. Docs lenses use
 their implementations' labels; a Markdown page has no authored lens.
@@ -611,10 +613,12 @@ page, in the same state, at the same width, through the same lens:
                           fit, a device width, or resizable
 ```
 
-The default state and the design lens are addressed by leaving them out. Under
-a Storybook lens the state slot carries the story. The lens is the canvas's to
-keep, like the width: a pick that names none keeps the one the lens switcher is on,
-and a page without it shows its design. Once the canvas has settled, the
+The default state and the page's default lens are addressed by leaving them
+out: its first docs lens, or its design when it has no docs. The design of a
+page with docs is `~design`, so `design` is reserved as an implementation name.
+Under a Storybook lens the state slot carries the story. The lens is the
+canvas's to keep, like the width: a pick that names none keeps the one the lens
+switcher is on, and a page without it shows its default lens. Once the canvas has settled, the
 address is rewritten to say exactly what's showing.
 
 **Fit** alone follows the available workbench space. Device presets keep their

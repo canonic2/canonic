@@ -4,9 +4,9 @@
    page with the geometry. */
 
 import { centeredX, docsLayout, scrollAfterZoom } from './docs-layout.ts';
-import { addressLens, canvasMode, chooseLens, docsLinkLens, hasDesignLens, hasLens, isDocsLens, isMarkdownPage, pageLenses } from '../../../../../contracts/src/docs/lenses.ts';
+import { DESIGN_KEY, addressLens, canvasMode, chooseLens, docsLinkLens, hasDesignLens, hasLens, isDocsLens, isMarkdownPage, pageLenses } from '../../../../../contracts/src/docs/lenses.ts';
 
-const lenses = { addressLens, canvasMode, chooseLens, docsLinkLens, hasDesignLens, hasLens, isDocsLens, isMarkdownPage, pageLenses };
+const lenses = { DESIGN_KEY, addressLens, canvasMode, chooseLens, docsLinkLens, hasDesignLens, hasLens, isDocsLens, isMarkdownPage, pageLenses };
 
 declare global {
   interface Window {

@@ -7,8 +7,15 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
-## Unreleased
+## 0.14.0
 
+- Astro previews whose states use names other than `default` compile and render with their request mocks in live and portable builds.
+- Concurrent Astro renders keep request mocks isolated by state and restore normal requests after rendering failures.
+- HTML and Astro previews preserve asset-like text in documentation code samples instead of trying to bundle it as files.
+- Action needed: `design` is reserved as an implementation name, for a page's own lens in its address. Rename an implementation called `design` in `workbench.yaml` and `workbench.local.yaml`. See Lenses.
+- A page with docs opens on its docs. The lens switcher lists the docs lenses first, then the page's own lens, then its implementations. A page's own lens is addressed as `~design` when its docs are its default. See Docs.
+- A TypeScript preview's own lens is called **Preview**. Set `previews.lensLabel` or a page's `lensLabel` to name it differently. See Workbench previews.
+- Picking a collection or a group in the page list opens its first page, unless the page showing already belongs to it. A group's arrow still only expands or collapses it. See The canvas.
 - The page list uses a native Rust index with a saved list in the system temporary folder. Unchanged definitions avoid evaluation, and listing pages does not wait for the preview compiler to start.
 
 ## 0.13.1

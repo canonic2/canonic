@@ -226,9 +226,10 @@
     return window.wbAddress.parse(location.hash);
   }
 
-  /* The default state and the design lens are addressed by leaving them out,
-     so the hash for a page with states and the hash for one without look
-     the same. A pick that names no lens keeps the one the top bar is on. */
+  /* The default state and the page's default lens are addressed by leaving
+     them out, so the hash for a page with states and the hash for one
+     without look the same. A pick that names no lens keeps the one the top
+     bar is on. */
   function writeHash(src, state, size, lens, example) {
     /* A docs lens has no size, and only a docs lens has examples. */
     var docs = lensRules.isDocsLens(lensRules.chooseLens(index[src], config.implementations, lens || lensPref));
@@ -243,7 +244,7 @@
      it there again. */
   function syncHash() {
     var have = window.wbAddress.parse(location.hash);
-    /* A page's default lens is left out: the design, or a Markdown page's own docs lens. */
+    /* A page's default lens is left out: its first docs lens, or its design when it has no docs. */
     var lens = view ? lensRules.addressLens(view.item, config.implementations, view.lens) : null;
     var docs = !!view && lensRules.isDocsLens(view.lens);
     var size = docs ? null : canvas.dataset.size || null;
@@ -289,6 +290,7 @@
      load and docs can't render, so pages have their other lenses only. */
   var lensRules = null;
   var NO_DOCS = {
+    DESIGN_KEY: 'design',
     pageLenses: function (item, impls) {
       if (!item) return [];
       return Object.keys(impls).filter(function (key) { return !!(item.implementations && item.implementations[key]) && impls[key].kind !== 'docs'; })
@@ -457,19 +459,23 @@
      A Markdown page has no design: its docs lenses come first. */
   function drawLenses(item, lens) {
     lensesBox.innerHTML = '';
+    /* Docs first, then the page's own design, then its implementations. */
     var lenses = lensesOf(item);
-    var choices = lensRules.hasDesignLens(item) ? [null].concat(lenses) : lenses;
+    var docs = lenses.filter(lensRules.isDocsLens);
+    var others = lenses.filter(function (impl) { return !lensRules.isDocsLens(impl); });
+    var choices = lensRules.hasDesignLens(item) ? docs.concat([null], others) : lenses;
     lensesBox.hidden = choices.length < 2;
     if (lensesBox.hidden) return;
+    var showing = lens ? lens.key : lensRules.DESIGN_KEY;
     choices.forEach(function (impl) {
-      var key = impl ? impl.key : null;
+      var key = impl ? impl.key : lensRules.DESIGN_KEY;
       var button = document.createElement('button');
       button.className = 'wb-lens';
       button.type = 'button';
-      button.dataset.lens = key || '';
+      button.dataset.lens = key;
       button.textContent = impl ? impl.label : window.wbManifest.authoredLensLabel(item);
       button.title = impl ? 'This page as ' + impl.label + ' has it' : 'This page as designed';
-      button.setAttribute('aria-pressed', String((lens ? lens.key : null) === key));
+      button.setAttribute('aria-pressed', String(showing === key));
       button.addEventListener('click', function () {
         setLensPref(key);
         writeHash(current, currentState, canvas.dataset.size, key, currentExample);
@@ -1786,7 +1792,7 @@
       /* no storage; fall back to the defaults below. */
     }
     /* The lens is checked against the config where it's used, so a name from
-       another space's top bar just means the design here. */
+       another space's top bar just means each page's default lens here. */
     lensPref = saved.lens || null;
     if (saved.resizableWidth) resizableWidth = parseInt(saved.resizableWidth, 10) || RESIZABLE_DEFAULT_WIDTH;
     if (saved.resizableHeight) resizableHeight = parseInt(saved.resizableHeight, 10) || RESIZABLE_DEFAULT_HEIGHT;

@@ -21,13 +21,15 @@ addresses follow [core.md](core.md#selection-and-navigation).
   project-chosen name. Storybook and Workbench preview lenses have the same
   freedom, including calling a Workbench preview **Design**.
 - Labels are optional. Without an override, the authored lens defaults to
-  **Design** for HTML and **Workbench** for a TypeScript preview.
+  **Design** for HTML and **Preview** for a TypeScript preview.
   Implementations use their configured `label`, falling back to their key.
 - Renaming the authored lens changes that existing lens's label. It does not
   require creating an implementation or add a second button for the same view.
 - A label is display text, separate from lens identity. Changing it preserves
   the selected view, mappings, saved lens preference, and copied addresses.
-  The authored lens remains the default view omitted from the address.
+  A page's default lens is omitted from the address: its first docs lens, or
+  the authored lens of a page without docs. The authored lens of a page with
+  docs is addressed `~design`, so `design` is a reserved implementation name.
 - Lens names shown by the interface and in review outputs use the resolved
   display label consistently. Rendering, startup, actions, states, and capture
   behavior continue to depend on kind and configuration.
@@ -37,6 +39,8 @@ addresses follow [core.md](core.md#selection-and-navigation).
   two lenses; customizing a label does not change that count.
 - Docs are a lens: a page with Markdown is read through one docs lens per
   renderer of its examples, or the built-in **Docs** lens when it maps none.
+  The switcher lists docs lenses first, then the authored lens, then the
+  other implementations, and a page with docs opens on its first docs lens.
   The canvas mode follows the lens; see [docs](docs-pages.md).
 - The chosen lens carries across pages. A page without it shows its default
   lens: its design, its catalog implementation, or a Markdown page's own docs

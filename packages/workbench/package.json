@@ -1,7 +1,7 @@
 {
   "name": "workbench-development",
   "private": true,
-  "version": "0.13.1",
+  "version": "0.14.0",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "test": "node scripts/build-server.cjs --debug && node --test",

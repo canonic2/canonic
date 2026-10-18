@@ -77,7 +77,7 @@ function resolveView(visible, overrides) {
     if (name === './src/webview-components.ts') return require(name);
     throw new Error('unexpected require: ' + name);
   };
-  fakeRequire.resolve = function () { return '/lucide/dist/umd/lucide.min.js'; };
+  fakeRequire.resolve = require.resolve;
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), {
     module: module, exports: module.exports, require: fakeRequire, console: console, __dirname: __dirname,
   }, { filename: file });
@@ -160,6 +160,39 @@ test('the page inlines the component bundle exactly as built', function () {
   assert.ok(bundle.includes('$&'), 'the bundle has a replacement pattern to preserve');
   assert.ok(html.includes('">' + bundle + '</script>'));
   assert.ok(!html.includes('/_workbench/ui/src/components/bootstrap.ts'));
+});
+
+test('the sidebar loads its local Lucide library, draws icons and reports a missing library', function () {
+  var sidebar = resolveView(true);
+  var html = sidebar.view.webview.html;
+  var base = /<base href="([^"]+)"/.exec(html)[1];
+  var sources = Array.from(html.matchAll(/<script src="([^"]+)"/g), function (match) {
+    return path.resolve(base, match[1]);
+  });
+  var library = sources.find(function (file) { return path.basename(file) === 'lucide.min.js'; });
+  assert.equal(library, require.resolve('lucide/dist/umd/lucide.min.js'));
+  assert.ok(sidebar.view.webview.options.localResourceRoots.some(function (uri) {
+    return uri.fsPath === path.dirname(library);
+  }));
+  var state = {
+    document: {
+      createElementNS: function () {
+        return { children: [], setAttribute: function () {}, appendChild: function (child) { this.children.push(child); } };
+      },
+    },
+  };
+  state.window = state;
+  vm.createContext(state);
+  for (var file of [library, sources.find(function (file) { return path.basename(file) === 'icons.js'; })]) {
+    vm.runInContext(fs.readFileSync(file, 'utf8'), state, { filename: file });
+  }
+  for (var name of ['search', 'component', 'code-xml', 'layout-template', 'blocks']) {
+    assert.ok(state.wbIcon(name).children.length > 0, name + ' must draw SVG paths');
+  }
+  assert.equal(state.wbIcon().children.length, 0, 'an optional icon can be omitted');
+  assert.equal(state.wbIcon('acme-unknown-icon').children.length, 0, 'an unknown configured icon stays empty');
+  state.lucide = undefined;
+  assert.throws(function () { state.wbIcon('search'); }, /bundled Lucide icon library/);
 });
 
 test('switching spaces moves the page, its resources and the watcher to the new root', function () {

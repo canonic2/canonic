@@ -31,6 +31,44 @@ function pick(item, state, index) {
   return context.statePick(item, state, index);
 }
 
+function picking() {
+  var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
+  var start = source.indexOf('  function statePick(');
+  var end = source.indexOf('\n\n  function emptyText', start);
+  var context = {};
+  vm.runInNewContext(source.slice(start, end), context);
+  return context;
+}
+
+test('a collection or group opens on its first page as authored', function () {
+  var first = picking().firstPick([
+    { src: 'pages/home.html', states: [{ id: 'default' }, { id: 'dark' }] },
+    { src: 'pages/pricing.html' },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'pages/home.html', state: null });
+});
+
+test('an imported title with no page of its own opens on its first named state', function () {
+  var first = picking().firstPick([
+    { src: 'Components/Button', implementationOnly: 'storybook', states: [{ id: 'primary' }, { id: 'ghost' }] },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'Components/Button', state: 'primary' });
+});
+
+test('a collection or group without pages opens nothing', function () {
+  assert.equal(picking().firstPick([]), null);
+});
+
+test('a group header opens its first page unless it folds', function () {
+  var groupHeadAction = picking().groupHeadAction;
+  var label = { closest: function () { return null; } };
+  var caret = { closest: function (selector) { return selector === '.wb-fold' ? {} : null; } };
+
+  assert.equal(groupHeadAction(label, false), 'pick');
+  assert.equal(groupHeadAction(label, true), 'toggle');
+  assert.equal(groupHeadAction(caret, false), 'toggle');
+});
+
 test('the disclosure caret folds a state branch without selecting its page', function () {
   var caret = {};
   var pathInsideCaret = {

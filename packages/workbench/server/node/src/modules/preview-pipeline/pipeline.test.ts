@@ -45,6 +45,16 @@ test('an inline style or script is served by query, and scripts run again on eac
   assert.equal((module.match(/data-workbench-script=/g) || []).length, 1);
 });
 
+test('HTML asset discovery leaves escaped code examples and comments as text', () => {
+  const examples = '<pre><code>&lt;img src="missing.svg" srcset="missing@2x.svg 2x"&gt;</code></pre>' +
+    '<p>Use src="undefined" and poster="..." in your example.</p>' +
+    '<!-- <img src="comment-only.svg"> -->';
+  const module = transformHtml(examples + '<img alt="a > b" src="real.svg">', page, root);
+  assert.ok(module.includes(JSON.stringify(examples).slice(1, -1)), 'the example text is preserved');
+  assert.ok(module.includes('import url0 from ' + JSON.stringify(path.join(root, 'pages/real.svg'))));
+  assert.doesNotMatch(module, /import url1|from .*missing|from .*undefined|from .*comment-only/);
+});
+
 test('only leading imports stay outside the per-render function', () => {
   assert.equal(runnableScript('import "./a.css"; import { b } from "./b.ts"; run(b); import("./lazy.ts");'),
     'import "./a.css";\nimport { b } from "./b.ts";\nexport default async function workbenchScript() {\n run(b); import("./lazy.ts");\n}\n');

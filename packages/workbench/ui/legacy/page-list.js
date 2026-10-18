@@ -50,6 +50,23 @@
     return item && item.implementationOnly ? state.id : index === 0 ? null : state.id;
   }
 
+  /* A group header folds from its caret, and folds when it holds the page
+     showing. Elsewhere it opens the group on its first page. */
+  function groupHeadAction(target, holdsCurrent) {
+    var caret = target && target.closest && target.closest('.wb-fold');
+    return caret || holdsCurrent ? 'toggle' : 'pick';
+  }
+
+  /* The page a collection or group opens on: its first page, as authored,
+     or the first named state of an imported title that has no page of its
+     own. Null when it holds no pages. */
+  function firstPick(pages) {
+    var item = pages[0];
+    if (!item) return null;
+    var states = item.implementationOnly && item.states && item.states.length ? item.states : null;
+    return { src: item.src, state: states ? statePick(item, states[0], 0) : null };
+  }
+
   function emptyText(filter) {
     return (filter || '').trim()
       ? 'Nothing matches “' + filter + '”.'
@@ -116,7 +133,7 @@
         count.textContent = String(pagesIn(g.items).length);
         row.appendChild(count);
         row.addEventListener('click', function () {
-          setCollection(g.name);
+          chooseCollection(g);
         });
         collectionList.appendChild(row);
       });
@@ -134,6 +151,20 @@
     function setCollection(name) {
       showing = name;
       render(search ? search.value : '');
+    }
+
+    /* Switching to another collection also opens its first page, unless the
+       page showing is already one of its own. */
+    function chooseCollection(g) {
+      if (g.name === showing) return;
+      setCollection(g.name);
+      openFirst(pagesIn(g.items));
+    }
+
+    function openFirst(pages) {
+      var holdsCurrent = pages.some(function (item) { return item.src === current; });
+      var first = holdsCurrent ? null : firstPick(pages);
+      if (first) onPick(first.src, first.state);
     }
 
     /* ------------------------------------------------------------ panel */
@@ -229,8 +260,9 @@
       markCurrent();
     }
 
-    /* A group of pages that belong to one flow. Its header only folds —
-       there is nothing to put on the canvas for "Auth" itself. */
+    /* A group of pages that belong to one flow. There is nothing to put on
+       the canvas for "Auth" itself, so selecting its header opens its first
+       page; the caret, or the header of the group already showing, folds. */
     function groupFold(entry, g, depth) {
       var parts = fold({
         className: 'wb-group',
@@ -242,8 +274,16 @@
       });
 
       parts.head.dataset.group = entry.group;
-      parts.head.addEventListener('click', function () {
-        toggleFold(parts.box);
+      parts.head.addEventListener('click', function (e) {
+        var pages = pagesIn(entry.items);
+        var holdsCurrent = pages.some(function (item) { return item.src === current; });
+        if (groupHeadAction(e.target, holdsCurrent) === 'toggle') {
+          toggleFold(parts.box);
+          return;
+        }
+        opened[parts.box.dataset.foldKey] = true;
+        markCurrent();
+        openFirst(pages);
       });
 
       entry.items.forEach(function (item) {

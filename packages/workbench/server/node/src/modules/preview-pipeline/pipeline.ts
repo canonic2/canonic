@@ -41,7 +41,7 @@ export interface ProjectCompiler {
   docsExamples(request: Any): Promise<{ examples: Array<{ id: string; file: string; export: string }>; problems: string[] }>;
 }
 
-interface AstroRenderer { dependencies: string[]; resources: Map<string, { contents: string; resolveDir?: string }>; publicDir: string | null; render(inputs: unknown, exportName?: string): Promise<string> }
+interface AstroRenderer { dependencies: ReadonlySet<string>; resources: Map<string, { contents: string; resolveDir?: string }>; publicDir: string | null; render(inputs: unknown, exportName?: string): Promise<string> }
 
 /** Helpers the worker supplies from its CommonJS modules. */
 export interface PipelineHelpers {
@@ -268,7 +268,7 @@ export class Pipeline {
         const key = slug + '-' + example.id;
         await this.writeAstro(key, 'default', example.file, await renderer.render({}, 'default'), renderer.resources, {}, renderer.publicDir);
         modules.push({ id: example.id, module: path.join(this.virtualDir, 'astro', key + '-default.js') });
-        this.watchFiles(renderer.dependencies.filter(dependency => !/[\\/]node_modules[\\/]/.test(dependency) && fs.existsSync(dependency)),
+        this.watchFiles(Array.from(renderer.dependencies).filter(dependency => !/[\\/]node_modules[\\/]/.test(dependency) && fs.existsSync(dependency)),
           () => { this.docsEntry(raw).catch(error => this.log('preview.pipeline.astro.failed', { slug, message: String(error.message || error) })); });
       }
       examples = { kind: 'astro', examples: modules };

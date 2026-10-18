@@ -7,8 +7,8 @@ write the docs in Markdown and the examples in your own source files.
 Workbench renders the examples with the same adapters as
 [TypeScript previews](workbench-previews.md).
 
-Docs are a lens. Any page can have docs, read beside its design and its other
-implementations in the lens switcher. A page whose `src` is a Markdown file is
+Docs are a lens. Any page can have docs, listed first in the lens switcher
+before its design and its other implementations, and the page opens on them. A page whose `src` is a Markdown file is
 a Markdown page: it is its own docs and has no design.
 
 In a docs lens, the docs use the whole canvas on white, at most 960 pixels
@@ -64,10 +64,10 @@ export default function Basic() {
 }
 ```
 
-Open **Components › Card**. The page opens on its design, here the
-TypeScript preview. Choose **Web** in the lens switcher: the docs fill the
-canvas, with the example mounted in its panel. Choose the design lens again to
-return to the artboard at the size it had.
+Open **Components › Card**. The page opens on its first docs lens, **Web**:
+the docs fill the canvas, with the example mounted in its panel. Choose
+**Preview**, the TypeScript preview's own lens, to see the artboard at its
+size, and **Web** again to return to the docs.
 
 A page with `docs` and no `docs` implementation mapped still has a docs lens:
 the built-in **Docs** lens, keyed `docs`. Its Markdown renders, and each
@@ -163,7 +163,8 @@ A `docs` implementation is declared once and used by any page with docs:
 Each `docs` implementation a page maps is one docs lens, such as **Web** with
 React and **React Native Web** with React Native Web. The Markdown is the same
 in every docs lens; the lens says what renders the examples. The lens switcher
-lists the page's design lens, its other implementations, and its docs lenses.
+lists the page's docs lenses, then its design lens, then its other
+implementations. A page with docs opens on its first docs lens.
 
 | Page key | Description |
 | --- | --- |
@@ -172,8 +173,8 @@ lists the page's design lens, its other implementations, and its docs lenses.
 | `lens` | A Markdown page only: the docs lens it opens with. Defaults to its first. |
 
 The lens the top bar is on stays when you open another page that has it. A
-page without it shows its default lens: its design, or a Markdown page's own
-docs lens.
+page without it shows its default lens: its first docs lens (a Markdown page's
+`lens`), or its design when it has no docs.
 
 An example the docs place but the current lens doesn't have shows
 *Not available in* and the lens's label, so switching lenses never moves the
@@ -261,13 +262,17 @@ The address names the page by its `src`, not its Markdown. In a docs lens it
 has no width. `!` names an example and `~` a lens:
 
 ```text
-#src/components/card/card.workbench.ts!with-custom-style~web
+#src/components/card/card.workbench.ts!with-custom-style
 #docs/card.md!with-custom-style~native
+#src/components/card/card.workbench.ts@1512~design
 ```
 
-The docs open scrolled to the example. `!example` applies only in a docs lens.
-A Markdown page's own docs lens is left out of its address, as the design lens
-is for other pages, and scrolling doesn't change the address. Because `!`
+The first opens Card in its default docs lens, **Web**; the second a Markdown
+page in its **native** docs lens; the third Card's own TypeScript preview at
+1512 pixels. The docs open scrolled to the example. `!example` applies only in a docs lens.
+A page's default lens is left out of its address: its first docs lens (a
+Markdown page's `lens`), or the design of a page without docs. The design of a
+page with docs is `~design`. Scrolling doesn't change the address. Because `!`
 marks the example, no `src` can contain it.
 
 ## Export

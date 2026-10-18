@@ -11,7 +11,7 @@ test('authored lens labels validate and retain defaults on invalid configuration
   var item = { src: 'button.html' };
   manifest.pageLensLabel(' Reference ', item, 'Pages › Button', problems);
   assert.equal(manifest.authoredLensLabel(item), 'Reference');
-  assert.equal(manifest.authoredLensLabel({ workbench: true }), 'Workbench');
+  assert.equal(manifest.authoredLensLabel({ workbench: true }), 'Preview');
   assert.equal(manifest.authoredLensLabel({}), 'Design');
   assert.deepEqual(manifest.previews({ lensLabel: ' Design ' }, problems), { lensLabel: 'Design' });
   assert.deepEqual(problems, []);
@@ -187,6 +187,7 @@ test('names every problem with an implementation and keeps the rest', function (
   var impls = manifest.implementations(
     {
       'Dev Server': { kind: 'url', base: 'http://localhost:3000' },
+      design: { kind: 'url', base: 'http://localhost:3001' },
       dev: { kind: 'url', base: 'localhost:3000' },
       stories: { kind: 'storybook', base: 'http://localhost:6006' },
       docs: { kind: 'wiki', url: 'http://localhost:1' },
@@ -204,6 +205,7 @@ test('names every problem with an implementation and keeps the rest', function (
   assert.equal(impls.staging.root, null);
   assert.deepEqual(problems, [
     'implementations: “Dev Server” must be kebab-case — it travels in a URL.',
+    'implementations: “design” is reserved for a page’s own lens; choose another name.',
     'implementations › dev: needs a base starting with http:// or https://.',
     'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
     'implementations › docs: kind must be url, storybook, workbench, docs, ios-simulator, or window.',

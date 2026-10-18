@@ -100,11 +100,11 @@ async function main() {
         JSON.stringify(selector) + ').getBoundingClientRect();return {x:o.x+r.x*s,y:o.y+r.y*s,w:r.width*s,h:r.height*s};})()');
     }
 
-    await open('#demo/pages/sign-in.html', W);
+    await open('#pages/sign-in.html', W);
     await shot('overview.jpg');
     writeRegions(await t.evaluate('(' + measureRegions + ')()'));
 
-    await open('#demo/pages/sign-in.html', W, CONTROLS_SCALE);
+    await open('#pages/sign-in.html', W, CONTROLS_SCALE);
     var page = fs.readFileSync(PAGE, 'utf8'), strip = [];
     for (var g = 0; g < CONTROLS.length; g++) {
       var group = CONTROLS[g];
@@ -123,10 +123,10 @@ async function main() {
     }
     writeData('controls', strip);
 
-    await open('#demo/pages/sign-in.html:error@mobile', SIDE);
+    await open('#pages/sign-in.html:error@mobile', SIDE);
     await shot('states.jpg');
 
-    await open('#demo/pages/sign-in.html:error@mobile', SIDE);
+    await open('#pages/sign-in.html:error@mobile', SIDE);
     var alert = await rectOf('.alert');
     var field = await rectOf('input[type=password]');
     await tool('#shapeTool');
@@ -143,7 +143,7 @@ async function main() {
     await mouse('mouseReleased', 400, 700);
     await wait(300);
     await shot('annotations.jpg');
-    await open('#demo/previews/button.workbench.ts@laptop', SIDE);
+    await open('#previews/button.workbench.ts@laptop~design', SIDE);
     await t.evaluate(`(async function () {
       var deadline = Date.now() + 8000;
       while (document.getElementById('previewControls').hidden) {
@@ -155,8 +155,8 @@ async function main() {
     await wait(200);
     await shot('workbench-previews.jpg');
 
-    // The same Button through its HTML docs lens, once every example has mounted.
-    await open('#demo/previews/button.workbench.ts~html', SIDE);
+    // The same Button through its Docs lens, once every example has mounted.
+    await open('#previews/button.workbench.ts~html', SIDE);
     await t.evaluate(`(async function () {
       var deadline = Date.now() + 15000;
       for (;;) {
@@ -187,12 +187,16 @@ function measureRegions() {
   var side = box(document.querySelector('.wb-sidebar'));
   var list = document.getElementById('pageList');
   var pages = box(list.lastElementChild || list);
+  var search = box(document.querySelector('.wb-sidebar .wb-search'));
+  // The final row can extend below the scroll viewport; keep the whole badge
+  // inside the visible sidebar and clear of its search control.
+  var pagePinY = Math.max(side.y + 24, Math.min(pages.y + pages.h + 40, search.y - 24, side.y + side.h - 24, innerHeight - 24));
   var canvas = box(document.querySelector('.wb-canvas'));
   var toolbar = box(document.getElementById('toolbar'));
   return {
     width: innerWidth, height: innerHeight,
     regions: [
-      { n: 1, name: 'page list', box: side, at: [side.x + side.w / 2, pages.y + pages.h + 40] },
+      { n: 1, name: 'page list', box: side, at: [side.x + side.w / 2, pagePinY] },
       { n: 2, name: 'top bar', box: top, at: [(crumb.x + crumb.w + center.x) / 2, top.y + top.h / 2] },
       { n: 3, name: 'canvas', box: canvas, at: [canvas.x + 40, canvas.y + canvas.h * 0.22] },
       { n: 4, name: 'toolbar', box: toolbar, at: [toolbar.x - 28, toolbar.y + toolbar.h / 2] },
@@ -279,4 +283,5 @@ function writeData(key, value) {
   console.log('wrote src/data/screenshots.json ' + key);
 }
 
-main().catch(function (error) { console.error(error); process.exitCode = 1; });
+if (require.main === module) main().catch(function (error) { console.error(error); process.exitCode = 1; });
+module.exports = { measureRegions };

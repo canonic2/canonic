@@ -1,5 +1,5 @@
 /* The Lucide icons the design examples draw, imported one file each and set
-   where workbench/icons.js looks for them. The whole set would be compiled
+   where ui/legacy/icons.js looks for them. The whole set would be compiled
    into every docs page's examples, with a multi-megabyte source map; these
    are the sample sizes' and spaces' icons, the components' own, and a few
    common size icons to type into Custom size… and Edit sizes…. */
@@ -30,7 +30,7 @@ import Tablet from 'lucide/dist/esm/icons/tablet.mjs';
 import Trash2 from 'lucide/dist/esm/icons/trash-2.mjs';
 import Tv from 'lucide/dist/esm/icons/tv.mjs';
 import X from 'lucide/dist/esm/icons/x.mjs';
-import '../workbench/icons.js';
+import '../ui/legacy/icons.js';
 
 type IconNode = [string, Record<string, string>][];
 

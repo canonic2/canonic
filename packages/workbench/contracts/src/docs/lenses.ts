@@ -2,16 +2,22 @@
    ----------------------
    Docs are a lens: a page with Markdown can be read as its docs beside its
    design and its implementations, and the Markdown is the same in each docs
-   lens; the lens says what renders the examples. A page whose src is its
-   Markdown has no design lens, so a docs lens is its default. A page with
-   Markdown that maps no docs implementation still has one: the built-in Docs
-   lens, with no examples.
+   lens; the lens says what renders the examples. Docs lenses come first, and
+   a page with docs opens on them; its design is one choice away. A page whose
+   src is its Markdown has no design lens. A page with Markdown that maps no
+   docs implementation still has one: the built-in Docs lens, with no
+   examples.
 
    The lens the top bar is on carries across pages; a page that doesn't have
-   it shows its default. Pure: the canvas and the multiple-artboard runtime
-   decide with it, and Node tests check it. See specs/docs-pages.md. */
+   it shows its default. Null is a page's design, and DESIGN_KEY names it in
+   the address and the top bar's choice. Pure: the canvas and the
+   multiple-artboard runtime decide with it, and Node tests check it. See
+   specs/docs-pages.md. */
 
 export const DOCS_KIND = 'docs';
+
+/** The key that names a page's own design lens, in the address and the top bar's choice. */
+export const DESIGN_KEY = 'design';
 
 /** The lens of a page with Markdown that maps no docs implementation. */
 export const BUILT_IN_DOCS = Object.freeze({ key: 'docs', label: 'Docs', kind: DOCS_KIND });
@@ -57,10 +63,11 @@ export function hasDesignLens(page: LensPage | null | undefined): boolean {
 }
 
 /**
- * A page's lenses besides its design, in order: a definition's docs lenses,
- * then the implementations it maps in the order the config declares them,
- * then the built-in Docs lens when it has Markdown and no docs lens. A
- * Markdown page's docs lenses come first, where another page's design is.
+ * A page's lenses besides its design, in order: its docs lenses (a
+ * definition's, then those it maps in the order the config declares them, or
+ * the built-in Docs lens when it has Markdown and no docs lens), then its
+ * other implementations in the order the config declares them. The top bar
+ * puts the design between the two.
  */
 export function pageLenses(page: LensPage | null | undefined, implementations: Implementations): Lens[] {
   if (!page) return [];
@@ -69,7 +76,6 @@ export function pageLenses(page: LensPage | null | undefined, implementations: I
     if (page.implementations?.[key] && !out.some(lens => lens.key === key)) out.push(implementations[key]!);
   }
   if (page.markdown && !out.some(isDocsLens) && !out.some(lens => lens.key === BUILT_IN_DOCS.key)) out.push({ ...BUILT_IN_DOCS });
-  if (!isMarkdownPage(page)) return out;
   return out.filter(isDocsLens).concat(out.filter(lens => !isDocsLens(lens)));
 }
 
@@ -77,19 +83,19 @@ export function docsLenses(page: LensPage | null | undefined, implementations: I
   return pageLenses(page, implementations).filter(isDocsLens);
 }
 
-/** The lens a page shows by default: null for its design; a Markdown page's `lens`, else its first docs lens. */
+/** The lens a page shows by default: a Markdown page's `lens`, else its first docs lens, else null for its design. */
 export function defaultLens(page: LensPage | null | undefined, implementations: Implementations): Lens | null {
   if (!page) return null;
   if (page.implementationOnly) return implementations[page.implementationOnly] ?? null;
-  if (!isMarkdownPage(page)) return null;
   const docs = docsLenses(page, implementations);
-  return docs.find(lens => lens.key === page.lens) ?? docs[0] ?? null;
+  return (isMarkdownPage(page) ? docs.find(lens => lens.key === page.lens) : undefined) ?? docs[0] ?? null;
 }
 
-/** The lens a page shows: `wanted` when the page has it, else its default. Null is its design. */
+/** The lens a page shows: `wanted` when the page has it, else its default. Null is its design, which DESIGN_KEY asks for. */
 export function chooseLens(page: LensPage | null | undefined, implementations: Implementations, wanted: string | null | undefined): Lens | null {
   if (!page) return null;
   if (page.implementationOnly) return defaultLens(page, implementations);
+  if (wanted === DESIGN_KEY && hasDesignLens(page)) return null;
   const found = wanted ? pageLenses(page, implementations).find(lens => lens.key === wanted) : undefined;
   return found ?? defaultLens(page, implementations);
 }
@@ -100,14 +106,17 @@ export function docsLinkLens(page: LensPage | null | undefined, implementations:
   return docs.find(lens => lens.key === wanted) ?? docs.find(lens => lens.key === page?.lens) ?? docs[0] ?? null;
 }
 
-/** The lens key the address names: null for the design and for a Markdown page's own docs lens, which are left out. */
+/** The lens key the address names: null for the page's default lens, which is left out; DESIGN_KEY for a design that isn't its default. */
 export function addressLens(page: LensPage | null | undefined, implementations: Implementations, lens: Lens | null | undefined): string | null {
-  if (!lens) return null;
-  const own = isMarkdownPage(page) ? defaultLens(page, implementations) : null;
+  /* An imported page's only lens is what its address names. */
+  if (page?.implementationOnly) return lens ? lens.key : null;
+  const own = defaultLens(page, implementations);
+  if (!lens) return own ? DESIGN_KEY : null;
   return own && own.key === lens.key ? null : lens.key;
 }
 
-/** Whether a key names a lens the page has, a docs lens included. */
+/** Whether a key names a lens the page has, a docs lens and its design included. */
 export function hasLens(page: LensPage | null | undefined, implementations: Implementations, key: string | null | undefined): boolean {
+  if (key === DESIGN_KEY) return hasDesignLens(page);
   return !!key && pageLenses(page, implementations).some(lens => lens.key === key);
 }

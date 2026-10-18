@@ -398,12 +398,12 @@ test('the lens switcher only appears when there are two lenses to switch between
   );
 });
 
-test('docs are lenses: a page with a design lists them after it, a Markdown page lists its own', function () {
+test('docs are lenses: docs come first, then the design, then implementations; a Markdown page lists its own', function () {
   assert.deepEqual(
     lensSwitcher({ src: 'a.html', markdown: 'docs/a.md', implementations: { dev: '/a', web: { examples: 'docs/a/' } } }),
-    { hidden: false, labels: ['Design', 'Dev', 'Web'] }
+    { hidden: false, labels: ['Web', 'Design', 'Dev'] }
   );
-  assert.deepEqual(lensSwitcher({ src: 'b.html', markdown: 'docs/b.md' }), { hidden: false, labels: ['Design', 'Docs'] },
+  assert.deepEqual(lensSwitcher({ src: 'b.html', markdown: 'docs/b.md' }), { hidden: false, labels: ['Docs', 'Design'] },
     'Markdown without a docs implementation has the built-in Docs lens');
   assert.deepEqual(lensSwitcher({ src: 'docs/c.md', markdown: 'docs/c.md' }), { hidden: true, labels: [] },
     'a Markdown page with only its own docs has nothing to switch between');
@@ -415,7 +415,7 @@ test('docs are lenses: a page with a design lists them after it, a Markdown page
 
 test('renaming the authored preview lens changes its button without adding a lens', function () {
   var item = { src: 'button.workbench.ts', workbench: true, implementations: { dev: '/button' } };
-  assert.deepEqual(lensSwitcher(item), { hidden: false, labels: ['Workbench', 'Dev'] });
+  assert.deepEqual(lensSwitcher(item), { hidden: false, labels: ['Preview', 'Dev'] });
   item.lensLabel = 'Design';
   assert.deepEqual(lensSwitcher(item), { hidden: false, labels: ['Design', 'Dev'] });
   assert.deepEqual(lensSwitcher({ src: 'button.workbench.ts', workbench: true, lensLabel: 'Design' }), { hidden: true, labels: [] });

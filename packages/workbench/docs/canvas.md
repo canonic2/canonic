@@ -25,9 +25,11 @@ editor's theme, and the canvas tab doesn't repeat it.
 ## The sidebar
 
 - **The collection list**, headed **Collections**, is at the top. Pick a
-  collection to show its pages in the page list.
-- **Groups** in the page list hold related pages. Select a group to expand or
-  collapse it.
+  collection to show its pages in the page list and open its first page. When
+  the page showing already belongs to that collection, it stays.
+- **Groups** in the page list hold related pages. Select a group to expand it
+  and open its first page. Selecting the group of the page showing, or a
+  group's arrow, expands or collapses it.
 - **Pages** with two or more states expand to show them. Pick a state to show
   it; the first is the page as authored. Selecting the page itself shows its
   first state, and selecting it again while it is showing collapses it. A
@@ -55,7 +57,7 @@ reset the width. The width is remembered.
 | --- | --- |
 | **Breadcrumb: space** | The space's mark and name, before the page. Select it to switch to another [space](spaces.md). Shown when there is more than one space. |
 | **Breadcrumb: page and state** | The page's name, then the state showing. The state is the state switcher: select it to pick another state. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
-| **Lens switcher** | Switches between the authored page and each [implementation](lenses.md) the page has. Shown when the page has two or more lenses. The authored lens defaults to **Design**, or **Workbench** for a TypeScript preview. [Every label is customizable](lenses.md#customize-lens-labels). A page with [docs](docs-pages.md) also lists its docs lenses, one for each renderer of its examples. |
+| **Lens switcher** | Switches between the page's [docs](docs-pages.md) lenses, the authored page, and each [implementation](lenses.md) the page has, in that order. Shown when the page has two or more lenses. A page with docs opens on its first docs lens, one for each renderer of its examples. The authored lens defaults to **Design**, or **Preview** for a TypeScript preview. [Every label is customizable](lenses.md#customize-lens-labels). |
 | **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Artboard sizes](#artboard-sizes). Disabled in a docs lens, because the docs fill the canvas. |
 | **Actions** (pointer icon and switch) | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
 | **Reload** | Reloads the current page. |
@@ -207,7 +209,7 @@ copied link lands on the same page, state, size, and lens:
 | `:state` | A state id, or on a Storybook lens the part of the story's id after `--` | The first state is showing, or the page has no states |
 | `!example` | In a docs lens, an example's ID; the docs open scrolled to that example | No example is named, or the lens isn't a docs lens |
 | `@width` | `fit`, `1512`, `393`, or `resizable` | In a docs lens, which has no width. Elsewhere the workbench always writes it, though a link you type may omit it |
-| `~lens` | An implementation name | The Design lens is showing, or on a Markdown page, its own docs lens |
+| `~lens` | An implementation name, or `design` for the authored lens of a page with docs | The page's default lens is showing: its first docs lens (a Markdown page's `lens`), or the authored lens of a page without docs |
 
 The src is always the page's `src`, also in a docs lens of a page with a
 design. See [Addresses](docs-pages.md#addresses) for examples of addresses in a

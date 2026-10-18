@@ -6,6 +6,6 @@ export default defineDocs({
   icon: 'component',
   docs: './sizes-editor.md',
   lenses: {
-    docs: { label: 'Docs', adapter: 'html', examples: './sizes-editor.examples.ts', styles: ['../src/theme/defaults.css', './design.css'] },
+    docs: { label: 'Docs', adapter: 'html', examples: './sizes-editor.examples.ts', styles: ['../ui/src/theme/defaults.css', './design.css'] },
   },
 });

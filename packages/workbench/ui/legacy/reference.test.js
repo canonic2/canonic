@@ -66,7 +66,7 @@ test('authored references use the preview default or custom label without changi
   view.src = 'button.workbench.ts';
   view.item.workbench = true;
   var format = load().text;
-  assert.match(format(view), /Lens: Workbench$/);
+  assert.match(format(view), /Lens: Preview$/);
   view.item.lensLabel = 'Design';
   assert.match(format(view), /Lens: Design$/);
   view.item.lensLabel = 'Reference';

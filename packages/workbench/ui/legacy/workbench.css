@@ -1400,6 +1400,9 @@ textarea,
 .wb-artboard-content {
   /* The annotation layer pins to this box — see annotations.css. */
   position: relative;
+  /* Keeps the frames' z-index ordering inside this box, so the annotation
+     layer beside it stays above the visible frame. */
+  isolation: isolate;
   width: 100%;
   height: 100%;
   overflow: hidden;

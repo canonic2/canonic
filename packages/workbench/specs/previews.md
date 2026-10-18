@@ -122,7 +122,7 @@ contracts through explicit runtime adapters. The renderer behavior below
 applies independently within each isolated artboard.
 
 - A discovered page's design lens is the preview itself. Its customizable
-  label defaults to **Workbench**; `previews.lensLabel` sets the discovery
+  label defaults to **Preview**; `previews.lensLabel` sets the discovery
   fallback and an explicit page's `lensLabel` overrides it under the
   [lens contract](lenses.md). Its address is the definition path; `?state=<id>` selects a
   state and the first state is the default. An unknown state renders an error.

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Compiler } = require('./preview/compiler.cjs');
+const { Compiler, mockFetches } = require('./preview/compiler.cjs');
 const server = require('./server');
 const portable = require('./preview/portable.cjs');
 
@@ -95,6 +95,35 @@ test('Astro frontmatter fetches are answered by the state request mocks', async 
   assert.match(built.rendered.failed.html, /Plans could not load/);
 });
 
+test('concurrent Astro renders isolate state request mocks and restore fetch after failure', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const definition = { id: 'pages/guide', states: {
+    overview: { requests: { 'GET /api/message': { body: { text: 'Overview' } } } },
+    details: { requests: { 'GET /api/message': { body: { text: 'Details' } } } },
+    plain: {},
+  } };
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let releaseFirst, releaseSecond;
+  const firstGate = new Promise(resolve => { releaseFirst = resolve; });
+  const secondGate = new Promise(resolve => { releaseSecond = resolve; });
+  const message = async () => (await (await fetch('/api/message')).json()).text;
+  const first = mockFetches(definition, 'overview', {}, async () => { entered(); await firstGate; return message(); });
+  await started;
+  const second = mockFetches(definition, 'details', {}, async () => { await secondGate; return message(); });
+  const plain = mockFetches(definition, 'plain', {}, async () => {
+    assert.equal(globalThis.fetch, original, 'a render without mocks cannot inherit another render’s fetch');
+    return 'Plain';
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  releaseFirst(); releaseSecond();
+  assert.deepEqual(await Promise.all([first, second, plain]), ['Overview', 'Details', 'Plain']);
+  await assert.rejects(mockFetches(definition, 'overview', {}, async () => { throw new Error('render failed'); }), /render failed/);
+  assert.equal(await mockFetches(definition, 'details', {}, message), 'Details');
+  assert.equal(globalThis.fetch, original);
+});
+
 test('live Astro input renders have their own served assets and validate state and input requests', async t => {
   const root = fixture(t);
   const running = await server.start({ root, capture: { close: async () => {} } });
@@ -114,6 +143,29 @@ test('live Astro input renders have their own served assets and validate state a
   assert.equal((await render('default', [])).status, 500);
   const config = await (await fetch(base + '/_workbench/config')).json();
   assert.deepEqual(config.problems, []);
+});
+
+test('Astro previews without a default state render their base and named request mocks', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': `export default { id: 'pages/guide', adapter: 'astro', source: { entry: './Guide.astro' },
+      inputs: { title: 'Base' }, requests: { 'GET /api/message': { body: { text: 'Base response' } } },
+      states: { index: { inputs: { title: 'Overview' }, requests: { 'GET /api/message': { body: { text: 'Overview response' } } } },
+        details: { inputs: { title: 'Details' } } } };`,
+    'Guide.astro': `---
+      const { title } = Astro.props;
+      const { text } = await (await fetch('/api/message')).json();
+      ---
+      <h1>{title}</h1><p>{text}</p>`,
+  });
+  const built = await build(t, root, 'button.workbench.ts');
+  assert.match(built.rendered.default.html, /<h1>Base<\/h1><p>Base response<\/p>/);
+  assert.match(built.rendered.index.html, /<h1>Overview<\/h1><p>Overview response<\/p>/);
+  assert.match(built.rendered.details.html, /<h1>Details<\/h1><p>Base response<\/p>/);
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const response = await fetch('http://127.0.0.1:' + running.port + '/_workbench/previews/render?file=button.workbench.ts&state=index&inputs=%7B%7D');
+  assert.equal(response.status, 200);
+  assert.match((await response.json()).html, /<h1>Overview<\/h1><p>Overview response<\/p>/);
 });
 
 test('portable Astro exports retain all reference states without requiring a rendering server', async t => {
@@ -177,6 +229,8 @@ test('Astro frontmatter honors Workbench aliases and environment defines', async
 
 test('docs examples render Astro components from a folder, with their assets made absolute', async t => {
   const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\nimplementations:\n  astro:\n    kind: docs\n    adapter: astro\ncollections:\n  - name: Docs\n    items:\n      - label: Guide\n        src: guide.md\n        implementations:\n          astro: examples/\n',
+    'guide.md': '# Guide\n\n```example primary\n```\n',
     'examples/primary.astro': "---\nimport Frame from '../nested/Frame.astro';\nimport { secret } from '../server.ts';\n---\n<Frame><button data-secret-length={secret.length}>Continue</button></Frame>\n<style>button { color: purple; }</style>",
     'examples/plain.astro': '<p>Plain</p>',
     'one.astro': '<p>One</p>',
@@ -198,4 +252,43 @@ test('docs examples render Astro components from a folder, with their assets mad
   assert.ok(assetRef[1].startsWith(require('node:url').pathToFileURL(fs.realpathSync(path.dirname(bundle))).href + '/assets/'), assetRef[1]);
   assert.ok(Array.from(compiled.outputs.keys()).some(name => name.startsWith('assets/') && name.endsWith('.svg')));
   await assert.rejects(compiler.compileDocs({ adapter: 'astro', examples: 'one.astro' }), /point the lens at a folder of \.astro files/);
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const base = 'http://127.0.0.1:' + running.port;
+  const html = await (await fetch(base + '/guide.md')).text();
+  const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]);
+  const info = await (await fetch(base + options.bundle.info)).json();
+  assert.equal(info.error, null);
+  assert.deepEqual(info.examples, ['plain', 'primary']);
+  assert.equal((await fetch(base + info.module)).status, 200, 'live Astro docs handle the renderer dependency set');
+});
+
+test('a live Astro docs lens builds its examples and watches what they read', async t => {
+  const root = fixture(t, {
+    'workbench.yaml': [
+      'name: Acme',
+      'implementations:',
+      '  site:',
+      '    kind: docs',
+      '    adapter: astro',
+      'collections:',
+      '  - name: Components',
+      '    items:',
+      '      - label: Card',
+      '        src: docs/card.md',
+      '        implementations:',
+      '          site: examples/',
+      '',
+    ].join('\n'),
+    'docs/card.md': '# Card\n\n```example plain\n```\n',
+    'examples/plain.astro': "---\nimport Frame from '../nested/Frame.astro';\n---\n<Frame><p>Plain</p></Frame>",
+  });
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const response = await fetch('http://127.0.0.1:' + running.port + '/_workbench/docs/bundle?page=docs%2Fcard.md&lens=site');
+  assert.equal(response.status, 200);
+  const info = await response.json();
+  assert.equal(info.error, null);
+  assert.deepEqual(info.examples, ['plain']);
+  assert.ok(info.module);
 });

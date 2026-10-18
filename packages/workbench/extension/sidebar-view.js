@@ -72,6 +72,10 @@ function attribute(value) {
    built. */
 function page(webview, dir, space, build, spaces) {
   var body = fs.readFileSync(path.join(dir.fsPath, PAGE), 'utf8');
+  var lucide = vscode.Uri.file(require.resolve('lucide/dist/umd/lucide.min.js'));
+  body = body.replace('src="../node_modules/lucide/dist/umd/lucide.min.js"', function () {
+    return 'src="' + webview.asWebviewUri(lucide).toString() + '"';
+  });
   for (var script of ['manifest.js', 'yaml.js']) {
     var resource = vscode.Uri.file(path.resolve(__dirname, '../contracts', script));
     body = body.replace('src="' + script + '"', 'src="' + webview.asWebviewUri(resource).toString() + '"');

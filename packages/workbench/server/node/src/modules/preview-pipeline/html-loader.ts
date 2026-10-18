@@ -93,12 +93,16 @@ export function transformHtml(source: string, resourcePath: string, root: string
     return '<script' + kept + ' data-workbench-script="' + id + ':' + (scripts.length - 1) + '"></script>';
   });
   const placeholder = (value: string): string => { urls.push(request(value)); return '__WB_URL_' + (urls.length - 1) + '__'; };
-  html = html.replace(/\b(src|poster)\s*=\s*(["'])([^"']+)\2/gi, (match, attribute: string, quote: string, value: string) =>
-    external(value) ? match : attribute + '=' + quote + placeholder(value) + quote);
-  html = html.replace(/\bsrcset\s*=\s*(["'])([^"']+)\1/gi, (_match, quote: string, value: string) => 'srcset=' + quote + value.split(',').map(item => {
-    const [url, ...size] = item.trim().split(/\s+/);
-    return (external(url) ? url : placeholder(url)) + (size.length ? ' ' + size.join(' ') : '');
-  }).join(', ') + quote);
+  // Attribute-like text in Markdown code samples is not an asset reference.
+  html = html.replace(/<!--[\s\S]*?-->|<[a-z](?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, tag => {
+    if (tag.startsWith('<!--')) return tag;
+    return tag.replace(/\b(src|poster)\s*=\s*(["'])([^"']+)\2/gi, (match, attribute: string, quote: string, value: string) =>
+      external(value) ? match : attribute + '=' + quote + placeholder(value) + quote)
+      .replace(/\bsrcset\s*=\s*(["'])([^"']+)\1/gi, (_match, quote: string, value: string) => 'srcset=' + quote + value.split(',').map(item => {
+        const [url, ...size] = item.trim().split(/\s+/);
+        return (external(url) ? url : placeholder(url)) + (size.length ? ' ' + size.join(' ') : '');
+      }).join(', ') + quote);
+  });
   html = html.replace(/<title>[\s\S]*?<\/title>|<meta\b[^>]*>|<base\b[^>]*>/gi, '');
   const pieces = html.split(/__WB_URL_(\d+)__/).map((part, index) => index % 2 ? 'url' + part : JSON.stringify(part));
   return imports.join('\n') + '\n' +

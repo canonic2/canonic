@@ -8,7 +8,7 @@ example's code. A component's guide can present its variations and usage
 alongside the source that renders each example.
 
 Docs are a [lens](lenses.md). Any page can have docs and be read through a
-docs lens beside its design and its implementations, so a component's design,
+docs lens listed before its design and its implementations, so a component's design,
 its running code, and its documentation are one page in the page list. A page
 whose `src` is the Markdown file itself, a **Markdown page**, is its docs and
 nothing else: it has no design lens.
@@ -102,7 +102,10 @@ collections:
 - A Markdown page has no design lens and may map other implementations too.
   `lens` names its docs lens selected by default; without it, the first docs
   lens it maps is the default. `lens` on any other page is a problem: a page
-  with a design opens on its design.
+  with a design opens on its first docs lens when it has docs, otherwise on
+  its design.
+- The lens switcher lists a page's docs lenses first, then its design, then
+  its other implementations.
 
 ### Discovered from a definition
 
@@ -310,16 +313,18 @@ example Ant Design's):
 
 - A page has no entries for its examples in the page list.
 - The address is `#<src>[:<state>][!<example>][~<lens>]`, with the page's own
-  `src`: `#src/button/button.workbench.ts!disabled~web` for a page with a
+  `src`: `#src/button/button.workbench.ts!disabled~native` for a page with a
   design, `#docs/card.md!with-custom-style~native` for a Markdown page. An
   address that names an example opens the docs scrolled to it; `!` applies
   only in a docs lens. A docs lens has no width part; one given by hand is
   ignored. The default state is omitted, and so is a page's default lens: its
-  design, or a Markdown page's own docs lens. `!` joins `:`, `@`, and `~` as
+  first docs lens (a Markdown page's `lens`), or the design of a page without
+  docs. The design of a page with docs is `~design`, and `design` is reserved
+  as an implementation name. `!` joins `:`, `@`, and `~` as
   characters a `src` cannot contain. Scrolling does not rewrite the address.
 - The lens choice persists across pages as for every lens. A page that
-  lacks the chosen lens shows its default lens: its design, or a Markdown
-  page's own docs lens. A Markdown page always shows one of its lenses.
+  lacks the chosen lens shows its default lens: its first docs lens, or its
+  design when it has no docs. A Markdown page always shows one of its lenses.
 - A link in the docs to another page's Markdown opens that page in a docs
   lens: the one showing when that page has it, else its default docs lens.
 
@@ -426,12 +431,12 @@ Client-project rollout is separate from this product contract.
 
 ## Acceptance criteria
 
-- The Acme demo's three docs open on a white canvas, centered at a
+- The Acme demo's docs open on a white canvas, centered at a
   960-pixel maximum, scrolled to the top at 100%, and scroll to their end.
-- Button opens on its design with Workbench and HTML in the lens switcher;
-  HTML shows its docs with the size switcher disabled, and Workbench brings
-  its artboard and size back. With HTML on, Card shows its docs and Sign in,
-  which has no docs, its design.
+- Button opens on its docs with Docs before Preview in the lens switcher and
+  the size switcher disabled; Preview brings its artboard and size back, and
+  its address carries `~design`. With Docs on, Card shows its docs and Sign
+  in, which has no docs, its design.
 - Zooming out shows more of the page without reflowing it; annotations drawn
   on an example stay on it while scrolling and zooming.
 - Switching lenses re-renders the examples without moving the text; an

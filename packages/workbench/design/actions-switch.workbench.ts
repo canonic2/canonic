@@ -6,6 +6,6 @@ export default defineDocs({
   icon: 'component',
   docs: './actions-switch.md',
   lenses: {
-    docs: { label: 'Docs', adapter: 'html', examples: './actions-switch.examples.ts', styles: ['../src/theme/defaults.css', './design.css'] },
+    docs: { label: 'Docs', adapter: 'html', examples: './actions-switch.examples.ts', styles: ['../ui/src/theme/defaults.css', './design.css'] },
   },
 });

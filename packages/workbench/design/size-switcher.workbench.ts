@@ -6,6 +6,6 @@ export default defineDocs({
   icon: 'component',
   docs: './size-switcher.md',
   lenses: {
-    docs: { label: 'Docs', adapter: 'html', examples: './size-switcher.examples.ts', styles: ['../src/theme/defaults.css', './design.css'] },
+    docs: { label: 'Docs', adapter: 'html', examples: './size-switcher.examples.ts', styles: ['../ui/src/theme/defaults.css', './design.css'] },
   },
 });

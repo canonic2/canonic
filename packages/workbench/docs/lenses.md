@@ -23,16 +23,17 @@ implementation, and how to point a design page at a
 ## How lenses work
 
 A page that lists any implementations gets a **lens switcher** in the
-top bar: the authored page, then one button per implementation the page has.
-The authored page's button defaults to **Design**. On a
-page whose `src` is a `.workbench.ts` or `.workbench.tsx` file, the first
-button defaults to **Workbench** instead. The switcher shows only when there
-are two or more lenses to choose from, so a page imported from a single catalog,
-with no design, has none.
+top bar: the page's [docs lenses](#docs-lenses) first, then the authored page,
+then one button per implementation the page has. The authored page's button
+defaults to **Design**. On a page whose `src` is a `.workbench.ts` or
+`.workbench.tsx` file, it defaults to **Preview** instead. The switcher shows
+only when there are two or more lenses to choose from, so a page imported from
+a single catalog, with no design, has none.
 
+- **A page opens on its default lens:** its first docs lens when it has docs,
+  otherwise the authored page.
 - **The choice sticks** as you move between pages, like the artboard size.
-  A page that doesn't have the chosen lens shows its default: its design, or
-  a Markdown page's own docs lens.
+  A page that doesn't have the chosen lens shows its default lens.
 - **The address includes it.** `#pages/sign-in.html:error@393~staging` is the
   sign-in page in its error state, at mobile width, on staging. A copied link
   opens the same view. See [Links and the address](canvas.md#links-and-the-address).
@@ -80,7 +81,7 @@ the page in the sidebar.
 The page's `lensLabel` takes precedence over `previews.lensLabel`. Renaming
 changes the existing button; it does not add another lens or change copied
 addresses. Without overrides, HTML pages use **Design** and TypeScript previews
-use **Workbench**. Docs lenses use their implementation's `label`.
+use **Preview**. Docs lenses use their implementation's `label`.
 
 `lensLabel` values must be nonempty strings; surrounding whitespace is
 trimmed. Invalid values are reported in `problems` and the fallback label is
@@ -91,8 +92,8 @@ in the configuration reference.
 ### Docs lenses
 
 A page with [docs](docs-pages.md) has a docs lens for each `docs`
-implementation it maps, beside its design and its other implementations. Each
-docs lens shows the page's Markdown with its examples rendered by the lens's
+implementation it maps, listed before its design and its other
+implementations, and it opens on the first. Each docs lens shows the page's Markdown with its examples rendered by the lens's
 adapter, such as React or React Native Web. The Markdown is the same in every
 docs lens. In a docs lens, the docs fill the canvas instead of an artboard, and
 the size switcher is disabled. A Markdown page, whose `src` is its Markdown,

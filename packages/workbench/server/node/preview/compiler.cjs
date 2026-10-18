@@ -124,10 +124,19 @@ function validate(raw, file, root) {
 }
 
 // Astro frontmatter runs here, in Node, so its fetch calls get the same
-// request mocks the browser does. The worker renders one preview at a time,
-// which is what makes swapping globalThis.fetch for the render safe.
-async function mockFetches(definition, state, inputs, render) {
-  const spec = definition.states[state];
+// request mocks the browser does. Background builds and requested renders
+// share globalThis.fetch, so every render must wait for the previous one.
+let astroRenderQueue = Promise.resolve();
+function mockFetches(definition, state, inputs, render) {
+  const pending = astroRenderQueue.then(() => renderWithFetches(definition, state, inputs, render));
+  astroRenderQueue = pending.then(() => undefined, () => undefined);
+  return pending;
+}
+
+async function renderWithFetches(definition, state, inputs, render) {
+  // The pipeline also renders a base source named "default", even when
+  // the preview's authored states use other IDs. That base has no overrides.
+  const spec = definition.states[state] || {};
   if (!spec.requests && !definition.requests) return render();
   const { mockedFetch, requestMocks } = await import(require('node:url').pathToFileURL(path.join(__dirname, "../../../ui/preview/requests.js")).href);
   const original = globalThis.fetch;

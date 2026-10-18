@@ -115,7 +115,7 @@ const docsMarkdown = [
                 <dl class="controls">
                   <div><dt>Space switcher</dt><dd>At the top of the VS Code sidebar, and in the canvas breadcrumb when several spaces are available. Pick a space with the pointer or arrow keys; Escape closes the menu and Tab moves to the next control.</dd></div>
                   <div><dt>State switcher</dt><dd>Beside the page’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview.</dd></div>
-                  <div><dt>Lens switcher</dt><dd>The authored page followed by additional implementations declared in <code>workbench.yaml</code>. Every lens label is customizable; defaults are Workbench for TypeScript previews and Design for HTML pages. See <a href="#lenses">Lenses</a>.</dd></div>
+                  <div><dt>Lens switcher</dt><dd>The page’s docs, then the authored page, then additional implementations declared in <code>workbench.yaml</code>. A page with docs opens on them. Every lens label is customizable; defaults are Preview for TypeScript previews and Design for HTML pages. See <a href="#lenses">Lenses</a>.</dd></div>
                   <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected state, inspect actions, and read documentation. Changes stay temporary.</dd></div>
                   <div><dt>Copy handoff</dt><dd>In VS Code only, at the end of the toolbar, beside a count of your annotations. See <a href="#annotations">Annotations and handoff</a>.</dd></div>
                 </dl>
@@ -202,15 +202,15 @@ const docsMarkdown = [
               <tr><td><code>pages/sign-in.html</code></td><td>the page’s design file</td></tr>
               <tr><td><code>:error</code></td><td>the state, left out for the default</td></tr>
               <tr><td><code>@393</code></td><td>the size: a device width, <code>fit</code>, or a resizable size</td></tr>
-              <tr><td><code>~staging</code></td><td>the lens, left out for the design</td></tr>
+              <tr><td><code>~staging</code></td><td>the lens, left out for the page’s default lens</td></tr>
             </tbody>
           </table>
         </div>
       </Feature>
       <Feature id="docs" kicker="Docs" title="Component documentation with live examples">
-          <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. Docs are a lens: any page can have them beside its design and implementations, and in a docs lens they fill the canvas, on white, and scroll like a web page.</p>
+          <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. Docs are a lens: any page can have them, listed first before its design and implementations, and the page opens on them. In a docs lens they fill the canvas, on white, and scroll like a web page.</p>
           <p>Docs lenses render the same examples in different ways, such as React and React Native Web. Annotations, handoffs, and export work in docs lenses too. Export a page, selected pages, a collection, or the whole space as a source ZIP, PDF, image ZIP, or portable browser viewer. PDFs preserve visual page dimensions and paginate documentation on A4 or Letter paper. See <a href={`${pages.docs}docs-pages/`}>Docs</a>.</p>
-          <img src={`${base}images/docs.jpg`} alt="The Acme Button through its HTML docs lens: the Markdown fills the canvas with live Primary and Secondary examples, and the size switcher is off" loading="lazy" />
+          <img src={`${base}images/docs.jpg`} alt="The Acme Button through its Docs lens: the Markdown fills the canvas with live examples of every button variant, and the size switcher is off" loading="lazy" />
         <div class="feature-media" slot="media">
           <CodeBlock file="docs/card.md" code={docsMarkdown} copies="the docs page example" />
         </div>

@@ -215,8 +215,8 @@ the same demo people try in the editor, so a change to the demo can change them.
   mobile artboard to fit, and the script scales page coordinates to that zoom
   when it draws the annotations.
 - The Workbench previews and Docs shots are 1120 × 860: the demo's Button
-  preview with its controls open, then the same page through its HTML docs
-  lens once every example has rendered.
+  preview with its controls open, then the same page through its Docs lens
+  once every example has rendered.
 
 Keep the demo on Acme and example.com placeholders.
 

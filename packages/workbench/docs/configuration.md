@@ -157,7 +157,7 @@ previews:
 | --- | --- | --- | --- |
 | `include` | list of glob patterns | no | Which files are preview definitions, relative to the project root. Replaces the default patterns. Patterns can't start with `/` or contain `..`. |
 | `config` | path | no | The preview configuration file, relative to the project root. Defaults to `workbench.config.ts`. See [Custom adapters](custom-adapters.md#configuration-file). |
-| `lensLabel` | nonempty string | no | Label of discovered previews' authored lens. Defaults to **Workbench**. An explicit page's `lensLabel` takes precedence. Does not rename docs lenses or `workbench` implementations, which use implementation `label`. |
+| `lensLabel` | nonempty string | no | Label of discovered previews' authored lens. Defaults to **Preview**. An explicit page's `lensLabel` takes precedence. Does not rename docs lenses or `workbench` implementations, which use implementation `label`. |
 | `icon` | Lucide icon name | no | Fallback for discovered preview pages and collections. Defaults to `component`. |
 | `icons` | map of title prefix to Lucide icon name | no | The longest matching prefix wins; matches end at a `/` boundary or the whole title. |
 
@@ -269,7 +269,7 @@ items:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `label` | string | yes | The page's name in the sidebar, in screenshots, and in handoffs. |
-| `lensLabel` | nonempty string | no | Label of this page's authored lens. Defaults to **Design** for HTML, or `previews.lensLabel` then **Workbench** for a discovered TypeScript preview. Renames the existing lens without changing its identity. Docs lenses use implementation `label` instead. A Markdown page has no authored lens; `lensLabel` on one is reported. |
+| `lensLabel` | nonempty string | no | Label of this page's authored lens. Defaults to **Design** for HTML, or `previews.lensLabel` then **Preview** for a discovered TypeScript preview. Renames the existing lens without changing its identity. Docs lenses use implementation `label` instead. A Markdown page has no authored lens; `lensLabel` on one is reported. |
 | `src` | path | yes | The HTML file, [preview definition](#previews), or Markdown file of a [Markdown page](docs-pages.md#a-markdown-page), relative to the project root. |
 | `docs` | path | no | The page's [docs](docs-pages.md): a `.md` file relative to the project root. Gives the page its docs lenses. Reported on a Markdown page, which is its own docs. |
 | `icon` | Lucide icon name | no | Overrides the collection's icon for this page. |
@@ -347,7 +347,8 @@ sizes:
 Declared once at the top level, then referred to by name from pages. The
 name is a kebab-case key, and it is also the lens's label in the lens switcher
 unless
-`label` says otherwise (`local-dev` is shown as *Local dev*).
+`label` says otherwise (`local-dev` is shown as *Local dev*). `design` is
+reserved: the address uses it for a page's own lens.
 
 ```yaml
 implementations:

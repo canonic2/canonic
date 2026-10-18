@@ -270,7 +270,7 @@
   }
 
   function authoredLensLabel(item) {
-    return text(item && item.lensLabel) || (item && item.workbench ? 'Workbench' : 'Design');
+    return text(item && item.lensLabel) || (item && item.workbench ? 'Preview' : 'Design');
   }
 
   function implementations(raw, problems) {
@@ -285,6 +285,11 @@
       var spec = raw[key];
       if (!KEY.test(key)) {
         problems.push('implementations: “' + key + '” must be kebab-case — it travels in a URL.');
+        return;
+      }
+      /* The address names a page's own design lens “design”. */
+      if (key === 'design') {
+        problems.push('implementations: “design” is reserved for a page’s own lens; choose another name.');
         return;
       }
       if (!isMap(spec)) {
