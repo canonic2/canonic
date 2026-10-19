@@ -67,7 +67,7 @@ async function main() {
       t.pageUrl = null;
       await t.navigate('about:blank');
       await t.navigate(server.url + hash);
-      await wait(1800);
+      await t.evaluate(`(async()=>{for(let i=0;i<180;i++){const s=document.getElementById('artboards')?.state;if(s?.artboards.length && s.artboards.every(b=>b.view?.ready))return;await new Promise(r=>setTimeout(r,100));}throw Error('Artboards did not settle');})()`);
     }
     async function shot(name) {
       var r = await t.send('Page.captureScreenshot', { format: 'jpeg', quality: 86 });
@@ -96,7 +96,7 @@ async function main() {
     // An element's box inside the preview, in workbench coordinates. The
     // canvas may be zoomed, so the page's own pixels are scaled to it.
     function rectOf(selector) {
-      return t.evaluate('(function(){var f=document.getElementById("frame"),o=f.getBoundingClientRect(),s=o.width/f.offsetWidth,r=f.contentDocument.querySelector(' +
+      return t.evaluate('(function(){var canvas=document.getElementById("artboards"),outer=Array.from(canvas.children).find(f=>f.slot===canvas.state.selected),f=outer.contentDocument.querySelector("iframe.is-active"),o=outer.getBoundingClientRect(),s=o.width/outer.offsetWidth,r=f.contentDocument.querySelector(' +
         JSON.stringify(selector) + ').getBoundingClientRect();return {x:o.x+r.x*s,y:o.y+r.y*s,w:r.width*s,h:r.height*s};})()');
     }
 
@@ -123,7 +123,7 @@ async function main() {
     }
     writeData('controls', strip);
 
-    await open('#pages/sign-in.html:error@mobile', SIDE);
+    await open('#previews/alert.workbench.ts~design', SIDE);
     await shot('states.jpg');
 
     await open('#pages/sign-in.html:error@mobile', SIDE);
@@ -161,7 +161,7 @@ async function main() {
       var deadline = Date.now() + 15000;
       for (;;) {
         var page = null;
-        try { page = document.querySelector('iframe.is-active').contentDocument; } catch (e) {}
+        try { page = document.querySelector('wb-canvas > iframe').contentDocument.querySelector('iframe.is-active').contentDocument; } catch (e) {}
         var panels = page ? Array.from(page.querySelectorAll('[data-wb-example]')) : [];
         if (panels.length && panels.every(function (panel) { return panel.dataset.status === 'ready'; })) return;
         if (Date.now() > deadline) throw new Error('The docs examples did not become ready');

@@ -91,7 +91,7 @@ const docsMarkdown = [
         <ol class="areas">
           <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s states are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
           <li><span class="n">02</span><h3>Top bar</h3><p>The page and its state on the left. The lens switcher, the size switcher, and the Actions switch in the middle; the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
-          <li><span class="n">03</span><h3>Canvas</h3><p>The page, rendered live in an artboard of the selected size. Zoom and pan change the view; the page keeps its layout width. The current page stays visible while the next one loads.</p></li>
+          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. States remain alternatives selected with the state switcher. Zoom and pan keep each page’s layout width.</p></li>
           <li><span class="n">04</span><h3>Toolbar</h3><p>Annotation tools and the handoff, under the artboard. Select returns to using the page.</p></li>
         </ol>
       </div>
@@ -114,7 +114,7 @@ const docsMarkdown = [
                 <h3>Only in some setups</h3>
                 <dl class="controls">
                   <div><dt>Space switcher</dt><dd>At the top of the VS Code sidebar, and in the canvas breadcrumb when several spaces are available. Pick a space with the pointer or arrow keys; Escape closes the menu and Tab moves to the next control.</dd></div>
-                  <div><dt>State switcher</dt><dd>Beside the page’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview.</dd></div>
+                  <div><dt>State switcher</dt><dd>Beside the page’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview, with one loading status until the requested story is ready. Page and story names stay consistent across the breadcrumb, tab, and artboard label.</dd></div>
                   <div><dt>Lens switcher</dt><dd>The page’s docs, then the authored page, then additional implementations declared in <code>workbench.yaml</code>. A page with docs opens on them. Every lens label is customizable; defaults are Preview for TypeScript previews and Design for HTML pages. See <a href="#lenses">Lenses</a>.</dd></div>
                   <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected state, inspect actions, and read documentation. Changes stay temporary.</dd></div>
                   <div><dt>Copy handoff</dt><dd>In VS Code only, at the end of the toolbar, beside a count of your annotations. See <a href="#annotations">Annotations and handoff</a>.</dd></div>
@@ -173,12 +173,13 @@ const docsMarkdown = [
 
   <section class="features">
     <div class="wrap">
-      <Feature id="states" kicker="States" title="Pages with several states">
+      <Feature id="states" kicker="States and artboards" title="Several views of a page">
           <p>A page can have several states, such as a sign-in form when empty and after a wrong password. States are listed under their page, like stories under a component in Storybook.</p>
           <p>An HTML page reads its state from <code>html[data-wb-state]</code>. Match CSS on <code>html[data-wb-state="error"]</code>, keep an element only in some states with <code>data-wb-state-only="error"</code>, or set a value with <code>data-wb-set-error="value=…"</code>. No scripts are added to your pages.</p>
           <CodeBlock file="workbench.yaml" code={statesYaml} copies="the states example" />
+          <p>A preview page can also declare several artboards shown together. The Feedback page, pictured here, contains Info, Success, Warning, Danger, and Autopilot artboards. These are children of one page; its variants are not states in the sidebar. Each preview fills its artboard; the grid belongs to the surrounding canvas.</p>
         <figure class="feature-media shot" slot="media">
-          <img src={`${base}images/states.jpg`} width="1120" height="860" loading="lazy" alt="The Wrong password state of the sign-in page at mobile width: an error message above filled-in fields, with the password field outlined in red.">
+          <img src={`${base}images/states.jpg`} width="1120" height="860" loading="lazy" alt="One Feedback page containing five independently sized artboards, with the existing Workbench toolbar and sidebar.">
         </figure>
       </Feature>
 
@@ -208,7 +209,7 @@ const docsMarkdown = [
         </div>
       </Feature>
       <Feature id="docs" kicker="Docs" title="Component documentation with live examples">
-          <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. Docs are a lens: any page can have them, listed first before its design and implementations, and the page opens on them. In a docs lens they fill the canvas, on white, and scroll like a web page.</p>
+          <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. Docs are a lens: any page can have them, listed first before its design and implementations, and the page opens on them. In a docs lens they fill the canvas, on white, without an artboard label or selection border, and scroll like a web page.</p>
           <p>Docs lenses render the same examples in different ways, such as React and React Native Web. Annotations, handoffs, and export work in docs lenses too. Export a page, selected pages, a collection, or the whole space as a source ZIP, PDF, image ZIP, or portable browser viewer. PDFs preserve visual page dimensions and paginate documentation on A4 or Letter paper. See <a href={`${pages.docs}docs-pages/`}>Docs</a>.</p>
           <img src={`${base}images/docs.jpg`} alt="The Acme Button through its Docs lens: the Markdown fills the canvas with live examples of every button variant, and the size switcher is off" loading="lazy" />
         <div class="feature-media" slot="media">

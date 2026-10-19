@@ -211,8 +211,9 @@ the same demo people try in the editor, so a change to the demo can change them.
   `data-label` attributes in `index.astro` match the workbench's control labels
   in order, and stops with both lists if they don't. When a control is added,
   removed, or renamed, update the list, then rerun.
-- The States and Annotations shots are 1120 × 860. The canvas zooms the
-  mobile artboard to fit, and the script scales page coordinates to that zoom
+- The States and Annotations shots are 1120 × 860. States shows Feedback's
+  five artboards together. Annotations shows the sign-in page's Wrong password
+  state at mobile width; the script scales page coordinates to the canvas zoom
   when it draws the annotations.
 - The Workbench previews and Docs shots are 1120 × 860: the demo's Button
   preview with its controls open, then the same page through its Docs lens
