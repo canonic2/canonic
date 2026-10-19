@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { choose, describe, supported } from './choice.ts';
-import { accepts, clamp, dimensions, exportDimensions, fills } from './geometry.ts';
-import { defaultSizes, isSizeKey } from './size.ts';
-import type { ResolvedSize } from './size.ts';
+import { choose, describe, supported } from './choice.js';
+import { accepts, clamp, dimensions, exportDimensions, fills } from './geometry.js';
+import { defaultSizes, isSizeKey } from './size.js';
+import type { ResolvedSize } from './size.js';
 
 const sidebar: ResolvedSize = { key: 'sidebar', label: 'Sidebar', icon: 'panel-left', button: true, kind: 'fixed', width: 340, height: 'fill' };
 const banner: ResolvedSize = { key: 'banner', label: 'Banner', icon: 'frame', button: false, kind: 'fixed', width: 'fill', height: 90 };

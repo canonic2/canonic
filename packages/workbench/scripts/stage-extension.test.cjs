@@ -17,7 +17,12 @@ function fixture(t) {
     contributes: { viewsContainers: { activitybar: [{ icon: 'icon.svg' }] } } }));
   write('sdk/package.json', JSON.stringify({ version: '1.0.0' }));
   for (const file of ['extension/extension.js', 'extension/icon.svg', 'extension/.vscodeignore', 'capture/app/main.cjs',
-    'ui/legacy/index.html', 'ui/src/components/bootstrap.ts', 'contracts/manifest.js', 'server/node/server.js',
+    'ui/legacy/index.html', 'ui/legacy/content.html', 'ui/legacy/content.css', 'ui/legacy/content-frames.js',
+    'ui/src/modules/preview-sessions/content.js', 'ui/src/modules/preview-sessions/renderer-bridge.js',
+    'ui/src/bootstrap/sidebar.js', 'ui/src/bootstrap/renderer.js',
+    'ui/src/modules/preview-sessions/index.js', 'ui/src/modules/navigation/index.js',
+    'ui/src/modules/canvas/index.js', 'ui/src/modules/review/index.js', 'server/node/src/modules/review/prompt.ts',
+    'contracts/manifest.js', 'server/node/server.js',
     'server/bin/acme/workbench-server', 'README.md', 'LICENSE', 'CHANGELOG.md']) write(file, 'Acme');
   write('server/target/debug/workbench-server', 'Build output');
   write('server/node/server.test.js', 'Test source');
@@ -35,7 +40,11 @@ test('the VSIX assembly preserves cross-part paths and includes only production 
   assert.equal(manifest.main, './extension/extension.js');
   assert.equal(manifest.icon, 'extension/icon.png');
   assert.equal(manifest.contributes.viewsContainers.activitybar[0].icon, 'extension/icon.svg');
-  for (const file of [manifest.main, 'server/node/server.js', 'ui/src/components/bootstrap.ts', 'contracts/manifest.js',
+  for (const file of [manifest.main, 'server/node/server.js', 'ui/legacy/content.html', 'ui/legacy/content.css', 'ui/legacy/content-frames.js',
+    'ui/src/modules/preview-sessions/content.js', 'ui/src/modules/preview-sessions/renderer-bridge.js',
+    'ui/src/bootstrap/sidebar.js', 'ui/src/bootstrap/renderer.js',
+    'ui/src/modules/preview-sessions/index.js', 'ui/src/modules/navigation/index.js',
+    'ui/src/modules/canvas/index.js', 'ui/src/modules/review/index.js', 'server/node/src/modules/review/prompt.ts', 'contracts/manifest.js',
     'server/bin/acme/workbench-server', 'node_modules/acme-runtime/index.js']) assert.ok(fs.existsSync(path.join(stage, file)), file);
   for (const file of ['server/target', 'server/node/server.test.js', 'node_modules/acme-dev']) assert.ok(!fs.existsSync(path.join(stage, file)), file);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'extension/package.json'), 'utf8')).main, './extension.js');

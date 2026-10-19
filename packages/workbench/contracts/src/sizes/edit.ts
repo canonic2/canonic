@@ -6,8 +6,8 @@
    job (config.js); this decides what to write and refuses what can't be
    written. See specs/sizes.md. */
 
-import { DEFAULT_SIZES } from './browser/size.ts';
-import type { Length } from './browser/size.ts';
+import { DEFAULT_SIZES } from './browser/size.js';
+import type { Length } from './browser/size.js';
 import { keyForName, labelOf, readSize } from './schema.ts';
 
 export type RawSize = true | Record<string, unknown>;

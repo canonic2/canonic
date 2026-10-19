@@ -350,23 +350,25 @@
   /* The page into the iframe, the usual way. */
   function showFrame(url) {
     if (window.wbMultiCanvas) {
-      blank.hidden = true;
-      window.wbMultiCanvas.show({ src: current, state: currentState, lens: view.lens ? view.lens.key : null,
+      var sequence = showSeq;
+      var declared = (!view.lens || view.lens.kind === 'workbench') && resolved && resolved.pages[current] && resolved.pages[current].preview ? resolved.pages[current].preview.artboards : undefined;
+      window.wbMultiCanvas.show({ src: current, label: titleParts(view.item, view.stateLabel, view.lens).join(' / '), pageLabel: view.item.label, state: currentState, lens: view.lens ? view.lens.key : null,
         example: currentExample, docs: lensRules.isDocsLens(view.lens), size: sizeByKey(canvas.dataset.size) || spaceSizes[0], actions: actionsOn,
-        artboards: (!view.lens || view.lens.kind === 'workbench') && resolved && resolved.pages[current] && resolved.pages[current].preview ? resolved.pages[current].preview.artboards : undefined,
+        artboards: declared,
         select: function (state, size, actions, src, lens) {
           if (actions !== undefined) setActions(actions);
           var preset = sizesOf(view.item).find(function (entry) { return entry.kind === 'fixed' && entry.width === size.width && entry.height === size.height; });
           if (preset) canvas.dataset.size = preset.key;
           if ((src && src !== current) || currentState !== state) writeHash(src || current, state, canvas.dataset.size, lens || (view.lens ? view.lens.key : null), currentExample);
         },
-      }).catch(function (error) { say(String(error.message || error)); });
+      }).catch(function (error) { if (sequence === showSeq) window.wbMultiCanvas.fail(error); });
       if (url) openLink.href = view && view.lens ? window.wbLenses.upstream(view.lens, url) : url;
       else openLink.removeAttribute('href');
       return;
     }
     window.wbSimulator.hide();
     blank.hidden = true;
+    blank.classList.remove('is-loading');
     /* With no current document, keep the whole canvas out of sight until the
        first styled page is ready. Later navigation leaves it visible while
        the spare iframe loads behind it. */
@@ -413,6 +415,7 @@
     if (!target) return false;
     window.wbSimulator.hide();
     blank.hidden = true;
+    blank.classList.remove('is-loading');
     target.wbRequestedUrl = window.wbLenses.storyUrl(lens, storyId);
     if (target !== frame || !frameReady) {
       cancelPendingFrame();
@@ -569,7 +572,7 @@
     stateMenu.innerHTML = '';
     openStates(false);
     stateControl.hidden = !rows;
-    if (!rows) return;
+    if (!rows) { stateName.textContent = ''; stateButton.removeAttribute('title'); return; }
     var picked = rows.filter(function (row) { return row.current; })[0] || rows[0];
     stateName.textContent = picked.label;
     stateButton.title = (kind === 'story' ? 'Story: ' : 'State: ') + picked.label + ' — pick another';
@@ -628,13 +631,14 @@
      count; an answer for a page that's no longer up is dropped. */
   function loadStory(item, lens, state, seq, previousView) {
     var ref = item.implementations[lens.key];
-    var slow = setTimeout(function () {
-      if (seq === showSeq) say('Asking ' + lens.label + '…');
-    }, 400);
+    if (!window.wbMultiCanvas) {
+      blank.textContent = 'Loading preview…';
+      blank.classList.add('is-loading');
+      blank.hidden = false;
+    }
 
     stories(lens, ref.title).then(
       function (list) {
-        clearTimeout(slow);
         if (seq !== showSeq) return;
         var picked = window.wbLenses.pick(list, state);
         currentState = picked.state;
@@ -643,14 +647,13 @@
         view.stateLabel = picked.name;
         view.url = window.wbLenses.storyUrl(lens, picked.id);
         view.code = codeFor(item, picked);
-        if (!reuseStoryFrame(previousView, lens, picked.id, seq)) showFrame(view.url);
-        openLink.href = window.wbLenses.upstream(lens, window.wbLenses.storyOpenUrl(lens, picked.id));
         drawStories(list, picked, lens);
         setTitle(item, picked.name, lens);
         syncHash();
+        if (!reuseStoryFrame(previousView, lens, picked.id, seq)) showFrame(view.url);
+        openLink.href = window.wbLenses.upstream(lens, window.wbLenses.storyOpenUrl(lens, picked.id));
       },
       function (error) {
-        clearTimeout(slow);
         if (seq !== showSeq) return;
         currentState = null;
         artboard.hidden = true;
@@ -658,7 +661,9 @@
         parkPreview();
         openLink.removeAttribute('href');
         blank.textContent = String(error.message || error);
+        blank.classList.remove('is-loading');
         blank.hidden = false;
+        if (window.wbMultiCanvas) window.wbMultiCanvas.fail(error);
         tellHost(null, null, null);
         setTitle(item, null, lens);
         syncHash();
@@ -745,17 +750,23 @@
 
   var showSeq = 0;
 
+  function titleParts(item, stateLabelText, lens) {
+    var states = statesOf(item);
+    var shown = stateLabelText || (states && !lens ? states[0].label : null);
+    return [item.label, shown].filter(Boolean);
+  }
+
   function setTitle(item, stateLabelText, lens) {
     /* The state and the lens are part of what you're looking at, so they
        belong in the tab title next to the page's name. */
-    document.title = [item.label, stateLabelText, lens ? lens.label : null, config.name]
+    var parts = titleParts(item, stateLabelText, lens);
+    document.title = parts.concat([lens ? lens.label : null, config.name])
       .filter(Boolean)
       .join(' · ');
     /* Above the frame, a page with states always names the one showing,
        its first included — the breadcrumb does the same. */
-    var states = statesOf(item);
-    var shown = stateLabelText || (states && !lens ? states[0].label : null);
-    artboardName.textContent = [item.label, shown].filter(Boolean).join(' / ');
+    artboardName.textContent = parts.join(' / ');
+    window.dispatchEvent(new Event('wb-view-change'));
   }
 
   /* The canvas mode follows the lens: 'docs' for a docs lens, whose page
@@ -835,6 +846,7 @@
       tellHost(src, nextState, nextLens ? nextLens.key : null);
       return;
     }
+    if (window.wbMultiCanvas) window.wbMultiCanvas.begin();
     currentExample = docsItem ? example || null : null;
     exampleToReveal = currentExample;
     holdLayout();
@@ -881,6 +893,7 @@
       frameReady = false;
       parkPreview();
       blank.textContent = BLANK_TEXT;
+      blank.classList.remove('is-loading');
       blank.hidden = false;
       openLink.removeAttribute('href');
       document.title = config.name;
@@ -900,6 +913,7 @@
     };
 
     if (story) {
+      setTitle(item, null, lens);
       commitLayout();
       loadStory(item, lens, state, seq, previousView);
       return;
@@ -1443,11 +1457,10 @@
       : sizes ? sizes.defaultSizes() : FIT_ONLY;
   }
 
-  /* The sizes a page supports: none for a Markdown page; otherwise the
-     space's, limited and added to by what the server resolved for the page. */
+  /* Page size support is independent of its source format. A Markdown page
+     can also have a Storybook or URL lens. showSizes disables only docs lenses. */
   function sizesOf(item) {
     if (!item) return spaceSizes;
-    if (lensRules.isMarkdownPage(item)) return [];
     var page = resolved && resolved.pages ? resolved.pages[item.src] : null;
     return window.wbSizes ? window.wbSizes.supported(spaceSizes, page) : spaceSizes;
   }
@@ -1952,8 +1965,8 @@
     });
   }
 
-  /* The canvas decides sizes with src/sizes/ and lenses with
-     src/modules/docs/, modules that load after this script; it waits for
+  /* Size and docs bootstraps load their capability rules after this script;
+     it waits for
      one, or for it to fail to load. */
   function whenModule(present, event, script, then) {
     if (present() || location.protocol === 'file:') { then(); return; }
@@ -1966,13 +1979,11 @@
   }
 
   function whenRules(then) {
-    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'sizes/browser/bootstrap.ts', function () {
-      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'docs/canvas/bootstrap.ts', function () {
+    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'bootstrap/sizes.js', function () {
+      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'bootstrap/docs.js', function () {
         lensRules = window.wbDocsLenses || NO_DOCS;
-        if (window.wbMultiArtboardHost) whenModule(function () { return !!window.wbMultiCanvas; }, 'wb-multi-ready', 'components/canvas-bootstrap.ts', then);
-        else if (new URLSearchParams(location.search).has('artboard-runtime')) {
-          whenModule(function () { return !!window.wbRequestStories; }, 'wb-artboard-ready', 'canvas/legacy-runtime.ts', then);
-        } else then();
+        if (window.wbMultiArtboardHost) whenModule(function () { return !!window.wbMultiCanvas; }, 'wb-multi-ready', 'bootstrap/workbench.js', then);
+        else then();
       });
     });
   }
@@ -1995,6 +2006,7 @@
   /* No config, no workbench — say which file and why, where the pages would
      have been. The top bar stays; it just has nothing to act on. */
   function refuse(error) {
+    if (window.wbMultiCanvas) window.wbMultiCanvas.fail(error);
     blank.classList.remove('is-loading');
     blank.textContent = String(error.message || error);
     blank.hidden = false;
@@ -2003,48 +2015,5 @@
     loadSpaces();
   }
 
-  /* Explicit adapter for isolated artboard runtimes. The canvas coordinator
-     never reaches into shell variables or the preview host's private state. */
-  window.wbArtboardShell = {
-    problem: function () { return !blank.hidden && !blank.classList.contains('is-loading') && blank.textContent !== BLANK_TEXT ? blank.textContent : null; },
-    read: function () {
-      if (!view) return null;
-      var artboardId = new URLSearchParams(location.search).get('artboard');
-      var preview = resolved && resolved.pages[current] && resolved.pages[current].preview;
-      var artboardInfo = preview && (preview.artboards || []).find(function (board) { return board.id === artboardId; });
-      var ready = frameReady && !pendingFrame && !pendingStorySwitch && frame.wbRequestedUrl === view.url;
-      if (view.lens && view.lens.kind === 'storybook') {
-        ready = ready && renderedStory && renderedStory.frame === frame && renderedStory.seq === showSeq &&
-          view.story && renderedStory.id === view.story.id;
-      }
-      return { src: current, state: currentState, lens: view.lens ? view.lens.key : null,
-        sizes: view.item && !lensRules.isDocsLens(view.lens) ? sizesOf(view.item) : undefined,
-        actions: { checked: actionsToggle.checked, disabled: actionsToggle.disabled },
-        label: artboardInfo ? view.item.label + ' / ' + artboardInfo.label : artboardName.textContent || (view.item && view.item.label) || current,
-        hash: location.hash, ready: !!view.lens && window.wbManifest.streamed(view.lens) ? !!(window.wbSimulator && window.wbSimulator.ready()) : !!ready,
-        states: Array.from(stateMenu.querySelectorAll('button')).map(function (b, i) { return { id: String(i), target: b.dataset.state || null, label: b.textContent, current: b.getAttribute('aria-current') === 'true' }; }),
-        lenses: Array.from(lensesBox.querySelectorAll('button')).map(function (b) { return { id: b.dataset.lens, label: b.textContent }; }) };
-    },
-    navigate: function (target) {
-      if (!config) throw new Error('The space is still loading.');
-      var lens = target.lens || 'design';
-      setLensPref(lens);
-      var before = location.hash;
-      writeHash(target.src, target.state || null, null, lens, target.example || null);
-      if (location.hash === before) route();
-    },
-    /* The artboard's CSS size, set directly, whatever sizes the space lists. */
-    size: function (width, height) {
-      resizableWidth = width; resizableHeight = height; pinnedSize = true;
-      applySize(sizeByKey('resizable') || { key: 'resizable', label: 'Resizable', icon: 'scaling', button: false, kind: 'resizable', width: null, height: null });
-    },
-    pickState: function (id) { var b = stateMenu.querySelectorAll('button')[Number(id)]; if (b) b.click(); },
-    lens: function (key) { setLensPref(key || null); writeHash(current, currentState, sizeKey(), key || null, currentExample); },
-    reload: function () { reload.click(); },
-    refresh: function () { window.wbConfig.load(refreshConfig, refuse); },
-    action: function (name, value) {
-      if (name === 'actions') { setActions(!!value); show(current, currentState); }
-    },
-  };
   window.wbConfig.load(start, refuse);
 })();

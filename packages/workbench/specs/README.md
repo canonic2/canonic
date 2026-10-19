@@ -19,7 +19,9 @@ decisions, or findings change, and add new topics to the index below. Use the
 ## Reading order and ownership
 
 Start with [Core workbench](core.md) and [Glossary](glossary.md) for the
-product model. Feature topics own user-visible behavior. The
+product model, and [UI/backend independence](modules.md#ui-and-backend-independence)
+for the mandatory architecture boundary. [Rendering flow](rendering-flow.md)
+defines the shell, content renderer and backend/host roles. Feature topics own user-visible behavior. The
 [preview pipeline](preview-pipeline/README.md) owns discovery, compilation,
 delivery and runtime contracts; its index separates implemented capabilities
 from lab work.
@@ -35,6 +37,8 @@ copying acceptance criteria or treating lab results as shipped verification.
 
 | Area | Current implementation and desired next step |
 | --- | --- |
+| Shell/content boundary | One Workbench shell and dedicated content-only renderers; startup request/markup assertions and retained Storybook checks cover the boundary. See [rendering flow](rendering-flow.md) |
+| UI/backend independence | UI owns presentation; backend owns data/operations and project previews. Generic asset hosting is separate. Independent UI/backend acceptance remains unverified |
 | Preview pipeline | Native listing and the Rspack worker are implemented. Complete-list and first-page targets still require work; compiler-host alternatives remain lab work |
 | Multiple artboards | Instance isolation, mixed-space support, review composition and context APIs are implemented. User-facing multi-artboard integration is future work; arrangement is phase 2 and persistence/sharing remain open |
 | Sizes and shell | Configurable sizes and migrated Web Components are implemented. Configure pages size cards, guide alignment and the canvas theme bridge remain gaps |
@@ -47,13 +51,14 @@ user-facing workflow is delivered.
 
 | Spec | Covers |
 | --- | --- |
+| [Rendering flow](rendering-flow.md) | Required shell/content/backend flow, nested-shell defect, refactor scope and acceptance gaps |
 | [Web Components](web-components.md) | Target component structure, public APIs, Shadow DOM, lifecycle, host loading and bounded migration |
 | [Themes](themes.md) | Standalone defaults, semantic tokens, VS Code theme forwarding, live updates, accessibility and preview isolation |
 | [Glossary](glossary.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
 | [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, the canvas and artboards, and failures shared by every page |
 | [Lenses](lenses.md) | Rendering kinds, customizable display labels for every lens including the authored preview, stable identity, defaults, and configuration precedence |
 | [Multiple artboards](multiple-artboards.md) | Implemented instance/review support, desired comparison workflows, remaining UI integration, arrangement phases and persistence decisions |
-| [Artboard code plan](multiple-artboards-code-plan.md) | Implemented TypeScript owners, target capability boundaries, state/runtime/space contracts, remaining integration and validation |
+| [Artboard code plan](multiple-artboards-code-plan.md) | JavaScript UI owners, target capability boundaries, state/runtime/space contracts, remaining integration and validation |
 | [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, controls, the `workbench` lens, and the portable build |
 | [Adapters](adapters/README.md) | What each technology needs to render, one spec per adapter: [HTML](adapters/html.md), [React](adapters/react.md), [React Native Web](adapters/react-native-web.md), [Vue](adapters/vue.md), [Astro](adapters/astro.md), [Storybook](adapters/storybook.md) and [custom adapters](adapters/custom.md); how the Workbench server serves pages |
 | [Artboard sizes](sizes.md) | Sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
@@ -68,7 +73,7 @@ user-facing workflow is delivered.
 | [Workbench server](server.md) | The server's process model, its move into the Rust `workbench-server` binary in phases, and the route inventory |
 | [Preview pipeline](preview-pipeline/README.md) | How native pages are compiled, served, kept warm, made ready and updated: [performance](preview-pipeline/performance.md) requirements and targets, the Rspack [compiler](preview-pipeline/compiler.md), [serving](preview-pipeline/serving.md), [hot updates](preview-pipeline/hot-updates.md), the [warm runtime](preview-pipeline/warm-runtime.md), [readiness](preview-pipeline/readiness.md) and [plugins](preview-pipeline/plugins.md) |
 | [Page index](preview-pipeline/page-index.md) | Native discovery and listing, literal/evaluated definition parity, invalidation, bounded saves, process lifecycle, fallback, packaging and acceptance evidence |
-| [Code quality](code-quality.md) | Rust tooling and lint policy, test conventions, dependency review, host integration and release checks |
+| [Code quality](code-quality.md) | UI lint, formatting, types and browser tests; component structure review; Rust tooling, dependency review and release checks |
 | [Labs](labs.md) | How engineering questions are settled by comparing working variants: plans, fixtures, boundaries, correctness checks, measurement, evidence and decisions |
 | [Module layout](modules.md) | Peer product parts, capability ownership, shared contracts, delivery and bounded migration requirements |
 

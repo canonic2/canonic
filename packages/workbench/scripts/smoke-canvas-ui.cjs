@@ -47,6 +47,16 @@ collections:
   try {
     running = await server.start({ root: folder, onHandoff(text, payload) { handoff = { text, payload }; } });
     await browser.launch(); const target = await browser.createTarget(); await target.enable();
+    // Observe document requests from startup, before any renderer can hide chrome.
+    const applicationDocuments = [];
+    const nestedApplicationResources = [];
+    const mainFrame = (await target.send('Page.getFrameTree')).frameTree.frame.id;
+    await target.send('Network.enable');
+    target.on('Network.requestWillBeSent', event => {
+      const url = new URL(event.request.url);
+      if (event.type === 'Document' && /^\/_workbench\/(?:index\.html)?$/.test(url.pathname)) applicationDocuments.push(event.request.url);
+      if (event.frameId !== mainFrame && /^\/_workbench\/(?:index\.html|workbench\.js|page-list\.js|zoom\.js|top-bar\.js|ui\/src\/bootstrap\/workbench\.js)$/.test(url.pathname)) nestedApplicationResources.push(event.request.url);
+    });
     const errors = []; target.on('Runtime.exceptionThrown', e => errors.push(e.exceptionDetails.exception?.description || e.exceptionDetails.text));
     async function until(expression) {
       for (let i = 0; i < 180; i++) { if (await target.evaluate(expression)) return; await wait(100); }
@@ -59,6 +69,9 @@ collections:
     assert.equal(await target.evaluate("getComputedStyle(document.getElementById('artboards')).display"), 'none', 'the shell alone renders the empty message');
     await target.evaluate('location.hash="#form.html@mobile"');
     await until(`${state}?.artboards.length===1 && ${state}.artboards[0].view?.ready`);
+    assert.equal(applicationDocuments.length, 1, 'artboards never request another Workbench application document');
+    assert.deepEqual(nestedApplicationResources, [], 'content startup cannot initialize hidden application modules');
+    assert.equal(await target.evaluate(`[...${frames}].every(f=>!f.contentDocument.querySelector('.wb,.wb-canvas,.wb-topbar,#toolbar,#pageList,script[src="workbench.js"]'))`), true, 'content documents contain no hidden application shell');
     assert.equal(await target.evaluate("getComputedStyle(document.getElementById('artboards')).display"), 'block');
     assert.equal(await target.evaluate("document.getElementById('blank').hidden"), true);
     await target.evaluate('location.hash=""');
@@ -148,7 +161,10 @@ collections:
     assert.ok(canvasPage, 'the component design page is discovered');
     await target.navigate(design.url + '#' + canvasPage + '~docs');
     await until(`${state}?.artboards.length===1 && ${state}.artboards[0].view?.ready`);
-    await until(`(()=>{const page=${frames}[0].contentDocument.querySelector('iframe.is-active')?.contentDocument;const examples=page?.querySelectorAll('[data-wb-example]');return examples?.length===3 && [...examples].every(e=>e.dataset.status==='ready')})()`);
+    await until(`(()=>{const page=${frames}[0].contentDocument.querySelector('iframe.is-active')?.contentDocument;const examples=page?.querySelectorAll('[data-wb-example]');return examples?.length===5 && [...examples].every(e=>e.dataset.status==='ready')})()`);
+    assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="reading"] wb-canvas').reading`), true, 'the reading example uses the shipping public input');
+    assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="loading"] wb-canvas').shadowRoot.querySelector('section button').textContent`), 'Feedback / Info · 320 × 180 · Loading…', 'a standalone pending canvas uses the supplied name instead of its source filename');
+    assert.deepEqual(nestedApplicationResources, [], 'no transition or artboard starts the Workbench application inside content');
     assert.deepEqual(errors, []);
     console.log('Page artboards passed: ordinary HTML and Button states remain single views; Feedback has five declared artboards with no variant states; independent sizes, controls, annotations, handoff and design examples work.');
   } finally { await browser.close(); await running?.close(); await demo?.close(); await design?.close(); fs.rmSync(folder, { recursive: true, force: true }); }

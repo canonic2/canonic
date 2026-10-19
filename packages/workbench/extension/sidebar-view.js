@@ -30,7 +30,6 @@ var vscode = require('vscode');
 var path = require('path');
 var fs = require('fs');
 var crypto = require('node:crypto');
-var components = require('./src/webview-components.ts');
 
 var VIEW_ID = 'canonic.sidebar';
 var PAGE = 'sidebar.html';
@@ -56,8 +55,8 @@ function policy(webview, nonce) {
    the workbench folder is, the policy saying what the page may load, the
    space's root — which the page can't work out for itself, because a webview's
    address is the editor's — the spaces to switch between, and which build
-   this is. Configuration stays in metadata; the component bootstrap is bundled
-   from source in memory and authorized with its own CSP nonce.
+   this is. Configuration stays in metadata; the component bootstrap is loaded
+   as an unmodified JavaScript module from the extension's resource origin.
 
    The build number is there to make the string differ. Assigning `webview.html`
    only takes when the value changes; an identical one is dropped, so without a
@@ -81,13 +80,13 @@ function page(webview, dir, space, build, spaces) {
     body = body.replace('src="' + script + '"', 'src="' + webview.asWebviewUri(resource).toString() + '"');
   }
   var nonce = crypto.randomBytes(18).toString('base64');
-  /* Replacer functions, because a replacement string reads `$&` and the
-     like as patterns, and the bundled code contains them. */
+  /* Resource URLs are host configuration, not source rewriting. */
   body = body.replace('href="/_workbench/ui/src/theme/defaults.css"', function () {
     return 'href="' + webview.asWebviewUri(vscode.Uri.file(path.join(dir.fsPath, '../src/theme/defaults.css'))).toString() + '"';
   });
-  body = body.replace('<script type="module" src="/_workbench/ui/src/components/bootstrap.ts"></script>', function () {
-    return '<script nonce="' + nonce + '">' + components.webviewComponents() + '</script>';
+  body = body.replace('<script type="module" src="/_workbench/ui/src/bootstrap/sidebar.js"></script>', function () {
+    var resource = vscode.Uri.file(path.join(dir.fsPath, '../src/bootstrap/sidebar.js'));
+    return '<script type="module" nonce="' + nonce + '" src="' + webview.asWebviewUri(resource).toString() + '"></script>';
   });
   var root = vscode.Uri.file(space.root);
   /* A space whose workbench.yaml isn't at its root, or is one of several
@@ -185,7 +184,7 @@ function register(context, options) {
      and the folder of its workbench.yaml — which change with the space, so
      they are set on every build. */
   function resources() {
-    var roots = [dir, lucideDir, vscode.Uri.file(path.resolve(__dirname, '../ui/src/theme')), vscode.Uri.file(path.resolve(__dirname, '../contracts'))];
+    var roots = [dir, lucideDir, vscode.Uri.file(path.resolve(__dirname, '../ui/src')), vscode.Uri.file(path.resolve(__dirname, '../contracts'))];
     if (space) {
       roots.push(vscode.Uri.file(space.root));
       if (space.dir && space.dir !== space.root) roots.push(vscode.Uri.file(space.dir));

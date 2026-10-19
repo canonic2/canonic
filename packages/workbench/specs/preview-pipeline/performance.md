@@ -54,8 +54,10 @@ Feature specs own the behavior that must not change while making it faster.
   change resizes the frame.
 - Returning to a page the canvas still retains shows it without compiling,
   loading or mounting again.
-- The previous page stays visible and responsive until its replacement is
-  ready. A new selection cancels an older one that is still loading, and the
+- Retain the previous page's live state until its replacement is ready. It may
+  stay visible only under its actual identity; conceal it before showing the next
+  destination's labels, as [rendering flow](../rendering-flow.md) requires.
+  A new selection cancels an older one that is still loading, and the
   older one never replaces the newer.
 - Readiness waits only for what a capture needs: the render, fonts and
   visible images. It adds no fixed delays, and its time is measured

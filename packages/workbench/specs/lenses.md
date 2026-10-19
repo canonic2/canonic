@@ -44,7 +44,7 @@ addresses follow [core.md](core.md#selection-and-navigation).
   The canvas mode follows the lens; see [docs](docs-pages.md).
 - The chosen lens carries across pages. A page without it shows its default
   lens: its design, its catalog implementation, or a Markdown page's own docs
-  lens. [lenses.ts](../contracts/src/docs/lenses.ts) decides it.
+  lens. [lenses.js](../contracts/src/docs/lenses.js) decides it.
 
 ## Acceptance criteria
 

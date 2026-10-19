@@ -6,28 +6,37 @@ records support APIs, limits, verification, and remaining work. The current
 implementation composes explicitly declared page artboards inside the existing canvas region,
 preserving the shipping shell's markup, controls and layout.
 
+The [rendering-flow contract](rendering-flow.md) is authoritative: one application
+shell, dedicated content-only renderers, no shell bootstrap or CSS-hidden shell
+inside an artboard. The dedicated content entry point implements that boundary.
+
 ## Actual module boundaries
 
 | Modules | Ownership |
 | --- | --- |
-| `ui/src/modules/canvas/host.ts` | Explicit page artboards, selected-instance commands, preview controls, review and publication in the existing shell; states remain alternatives. |
-| `ui/src/components/canvas/element.ts` | Keyed artboard shells, labels, resizing and shared camera; no chrome or server operations. |
-| `ui/src/canvas/model.ts`, `geometry.ts` | Serializable state and pure geometry/size policy. |
-| `ui/src/canvas/controller.ts` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, park/resume outside visible state, capture locks. |
-| `ui/src/modules/canvas/story-catalog.ts` | Canvas-owned catalog cache and authenticated renderer requests; concurrent lookup sharing, retry and cleanup. |
-| `ui/src/canvas/runtime.ts` | Per-iframe authenticated messaging, request deadlines, capture responses and cleanup. |
-| `ui/src/canvas/legacy-runtime.ts` | Authenticated command/data adapter for the existing shell/annotation ports, without chrome or style changes. |
-| `ui/src/canvas/review.ts` | Complete reference/context derivation and immutable full-canvas capture composition. |
-| `ui/src/canvas/publication.ts` | Serialized participating-space publication, shared-root discovery policy, heartbeats and withdrawal. |
+| `ui/src/bootstrap/canvas.js` | Explicit page artboards, selected-instance commands, preview controls, review and publication in the existing shell; states remain alternatives. |
+| `ui/src/components/canvas/element.js` | Keyed artboard shells, labels, resizing and shared camera; no chrome or server operations. |
+| `ui/src/modules/canvas/model.js`, `geometry.js` | Serializable state and pure geometry/size policy. |
+| `ui/src/modules/canvas/controller.js` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, park/resume outside visible state, capture locks. |
+| `ui/src/modules/navigation/controller.js` | Requested destination, pending transitions, supersession, retry and shutdown invalidation. |
+| `ui/src/modules/preview-sessions/controller.js` | Ordinary-renderer retention, expiry, declared-artboard activation and cleanup, catalog sharing and refresh. |
+| `ui/src/modules/preview-sessions/story-catalog.js` | Canvas-owned catalog cache and authenticated renderer requests; concurrent lookup sharing, retry and cleanup. |
+| `ui/src/modules/preview-sessions/runtime.js` | Per-iframe authenticated messaging, request deadlines, capture responses and cleanup. |
+| `ui/src/modules/preview-sessions/content.js` | Content selection, model-derived metadata, generation/readiness ownership and injected configuration/catalog access. |
+| `ui/src/modules/preview-sessions/renderer-bridge.js` | Authenticated content commands, capture locks, metadata and input forwarding; no application chrome. |
+| `ui/legacy/content-frames.js` | Factory owning warm content documents, Storybook channel switching, frame promotion, retention and disposal. |
+| `ui/src/modules/review/capture.js`, `reference.js` | Immutable full-canvas capture composition and pure reference/context derivation. |
+| `ui/src/modules/review/controller.js`, `browser.js` | Capture/handoff sequencing, locks and partial failure; HTTP and download resources behind browser ports. |
+| `ui/src/modules/canvas/publication.js` | Serialized participating-space publication, shared-root discovery policy, heartbeats and withdrawal. |
 | `server/node/src/spaces/coordinator.ts` | Registered-space, fixed-operation server access. |
-| `contracts/src/agent-context/report.ts` | Versioned context validation without silent text truncation. |
-| `ui/src/canvas-review/prompt.ts` | Per-region handoff sections using the existing local annotation formatter. |
+| `contracts/src/agent-context/report.js` | Versioned context validation without silent text truncation. |
+| `server/node/src/modules/review/prompt.ts` | Per-region handoff sections using the existing local annotation formatter. |
 | `capture/src/native-streams/pool.ts` | Independent source/codec producers, subscriber ownership and idle cleanup. |
 
-This migration keeps the existing renderer, preview compiler, annotation
-engine, and acquisition engine behind narrow ports. Singleton state is isolated by
-renderer instance. Their deeper TypeScript extraction is architectural follow-up;
-the remaining extraction is scoped to integration needs. The capability map and contracts
+Keep project preview compilation and pixel acquisition behind their existing
+contracts. The content-only entry point composes annotation/capture factories through
+explicit ports and retains ordinary content sessions and independent artboard state.
+The capability map and contracts
 below describe that target direction. New canvas state and its lifecycle have
 one controller owner; renderer handles never enter serializable state.
 
@@ -49,14 +58,14 @@ implementation, review-module for boundary/lifecycle review, create-ui-component
 for presentation, and write-tests for behavioral verification.
 
 - New and substantially reworked capabilities live under
-  `src/modules/<capability>/` as TypeScript ES modules. Use strict checking,
-  erasable syntax, explicit `.ts` imports, and
-  `import type`. No enums, namespaces, parameter properties, top-level await,
-  or import-time effects. Existing CommonJS hosts load synchronous ESM modules
-  under the package's Node 24 contract; asynchronous work starts through APIs.
-- Browser TypeScript is stripped and served as JavaScript by the local server,
-  with no maintained compiled copy. Node-only adapters are never reachable
-  through browser imports. Preserve existing JS assets needed by injected
+  `ui/src/modules/<capability>/` as browser-native JavaScript ES modules with
+  explicit `.js` imports. Registration and lifecycle start through entry points;
+  importing a component does not register or mount it. Node-only hosts retain
+  their separate TypeScript contract.
+- UI asset tooling/delivery is host infrastructure, independent of project
+  compiler configuration and lifecycle. Serve or copy authored JavaScript/CSS
+  unchanged, with no UI build, type stripping or bundling. Node-only
+  adapters are never browser imports. Preserve existing JS assets needed by injected
   previews, portable viewers, and file-based use until their separate delivery
   paths support any migration.
 - Use the existing Node runner, pnpm scripts, DOM/CSS vocabulary, and manifest
@@ -79,19 +88,20 @@ constraints are the contract.
 
 | Capability | Proposed files | Responsibility and public API |
 | --- | --- | --- |
-| Canvas model | `src/modules/canvas/model.ts` | View descriptors, IDs, canvas snapshot, validated pure command transitions; `createCanvasState`, `applyCanvasCommand`, `validateCanvasDescriptor` |
-| Canvas geometry | `src/modules/canvas/geometry.ts` | Bounds, automatic placement, CSS-pixel camera math and Fit operations; pure functions, no DOM |
-| Canvas workflows | `src/modules/canvas/controller.ts` | Sole owner of mutable canvas state; add/select/replace/close/reload/refresh; coordinates runtimes and emits snapshots |
-| Canvas presentation | `src/components/canvas/` | Keyed artboard shells, labels/status, selected outline, focus, pan/zoom and resize input; emits commands, never performs space I/O |
-| Content runtimes | `src/modules/artboards/runtime.ts`, `src/modules/artboards/iframe.ts`, `src/modules/artboards/native.ts` | Renderer contracts and owned instances; mount/update/readiness, source verification, capture acquisition, disposal |
-| Space access | `src/modules/spaces/access.ts`, `src/modules/spaces/host.ts` | Public space-scoped request contract, registry lookup and host/server dispatch; uses existing space services rather than a second registry |
-| Annotation state/UI | `src/modules/annotations/model.ts`, `src/components/annotations/` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
-| Canvas review | `src/modules/canvas-review/model.ts`, `src/modules/canvas-review/controller.ts` | Immutable capture manifest, full-canvas reference/context derivation, acquisition workflow, review result and errors |
-| Capture composition | `src/modules/capture/composition.ts`, `src/modules/capture/service.ts` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
-| Agent publication | `src/modules/agent-context/report.ts`, `src/modules/agent-context/publisher.ts` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and agent context reader |
-| Browser/host entry points | Browser bootstrap and existing server/extension entry points outside `src/modules/` | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
+| Canvas model | `ui/src/modules/canvas/model.js` | View descriptors, IDs, canvas snapshot, validated pure command transitions; `createCanvasState`, `applyCanvasCommand`, `validateCanvasDescriptor` |
+| Canvas geometry | `ui/src/modules/canvas/geometry.js` | Bounds, automatic placement, CSS-pixel camera math and Fit operations; pure functions, no DOM |
+| Canvas workflows | `ui/src/modules/canvas/controller.js` | Sole owner of mutable canvas state; add/select/replace/close/reload/refresh; coordinates runtimes and emits snapshots |
+| Content-only renderer | `ui/src/modules/preview-sessions/`, `ui/legacy/content.html` | Dedicated viewport, model metadata, frame sessions and annotation/capture ports; no application embedding |
+| Canvas presentation | `ui/src/components/canvas/` | Keyed artboard shells, labels/status, selected outline, focus, pan/zoom and resize input; emits commands, never performs space I/O |
+| Content runtimes | `ui/src/modules/preview-sessions/` | Renderer contracts and owned instances; mount/update/readiness, source verification, capture acquisition, disposal |
+| Space access | `ui/src/modules/spaces/access.js`, `ui/src/modules/spaces/host.js` | Public space-scoped request contract, registry lookup and host/server dispatch; uses existing space services rather than a second registry |
+| Annotation state/UI | `ui/src/modules/annotations/model.js`, `ui/src/components/annotations/` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
+| Canvas review | `ui/src/modules/review/` | Immutable capture manifest, full-canvas reference/context derivation, acquisition workflow, review result and errors |
+| Capture composition | `ui/src/modules/capture/composition.js`, `ui/src/modules/capture/service.js` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
+| Agent publication | `ui/src/modules/agent-context/report.js`, `ui/src/modules/agent-context/publisher.js` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and agent context reader |
+| Browser/host entry points | Browser bootstrap and existing server/extension entry points outside `ui/src/modules/` | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
 
-Persistence is a conditional capability under `src/modules/canvas-storage/`, created
+Persistence is a conditional capability under `ui/src/modules/canvas-storage/`, created
 only after its product policy is agreed. It receives descriptors through an
 explicit port; it never serializes renderer handles or observes DOM to infer
 state. Phase 2 extends geometry/interactions for free placement and Arrange;
@@ -200,8 +210,8 @@ mount/reset and bridge APIs behind explicit adapters; do not rewrite compiler
 or framework mounts for this feature.
 
 Native runtime owns decoder/client subscriptions, not the device/window itself.
-Move the substantially changed stream manager into TypeScript under a coherent
-`src/modules/native-streams/` capability. Its server-side producer pool is keyed by
+Move the substantially changed stream manager into JavaScript under a coherent
+`ui/src/modules/native-streams/` capability. Its server-side producer pool is keyed by
 validated source and codec, with reference-counted subscriptions. Closing the
 last subscriber stops owned capture resources; other devices/codecs/subscribers
 continue. Simulator input is space/device-qualified. Window runtime exposes
@@ -228,7 +238,9 @@ checks. Surface server, startup, and trust failures per space/artboard.
    instances remain keyed by ID. Derive top bar/catalog state and notify the
    host. Size/lens/state edits target a named artboard, not a global frame.
 3. **Navigate or reload:** increment that instance's generation, cancel its old
-   pending work, and keep its settled preview visible until replacement is ready.
+   pending work, and retain its settled runtime until replacement is ready.
+   Outgoing pixels may stay visible only under their outgoing identity; conceal
+   them before publishing the replacement's labels.
    Ignore superseded completions/messages. A problem preserves any usable
    outgoing view under its actual identity. Navigation from content routes to
    its own space/artboard and does not steal focus after a later user selection.
@@ -276,6 +288,22 @@ updated once per subscription; disposal is idempotent. Diagnostics carry canvas,
 artboard, space, operation and generation IDs with bounded errors, not page
 HTML, images, or full handoff prompts.
 
+## Renderer acceptance
+
+1. The browser regression inspects initial requests and child documents,
+   not just visible pixels. It must fail when an artboard requests Workbench's
+   application entry point or runs its shell bootstrap, even if CSS later hides it.
+2. Content resolution/mounting and per-instance annotation/capture use explicit ports.
+   Renderer state and metadata come from those models, not hidden shell controls.
+3. `createRuntime` loads the dedicated content entry point. Preserve typed commands,
+   origin/source checks, readiness identity and disposal.
+4. Keep the warm ordinary renderer/content cache and Storybook channel alive across
+   page/lens changes within their bounds; separate artboards keep separate documents.
+5. Child documents contain no shell startup/markup, duplicate canvas/controls or
+   CSS chrome suppression. Verify every adapter, transition, size, failure, capture and editor
+   relay against [rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps).
+   Preserve the outer UI layout. Do not substitute a UI language/build rewrite.
+
 ## Remaining delivery sequence
 
 | Slice | Integration work | Acceptance evidence |
@@ -286,23 +314,22 @@ HTML, images, or full handoff prompts.
 | Product completion | Resolve storage policy, recovery, host limits and public guides | Phase 1 acceptance in browser and VS Code |
 | Phase 2 arrangement | Extend geometry and interactions for free positioning and row/grid placement | Stable renderer state, capture mapping and accessible movement |
 
-Browser TypeScript delivery is implemented by
-[browser-modules.ts](../server/node/src/server/browser-modules.ts), and direct webview
-bundling by [webview-components.ts](../extension/src/webview-components.ts).
-Further migrations preserve their restricted browser dependency graph, CSP,
-Node 24 loading and packaging. Portable and file-based paths retain their own
-runtime constraints.
+The browser host serves authored JavaScript/CSS bytes through
+[browser-modules.ts](../server/node/src/server/browser-modules.ts). The sidebar
+loads its module through a VS Code resource URL; portable docs copy their modules.
+No UI compiler or bundler participates. Preserve native module resolution, CSP,
+resource roots and packaging while maintaining the content-only rendering boundary.
 
 ## Verification plan
 
-- Pure TypeScript tests next to model, geometry, annotation, report, and
+- UI-owned unit tests next to model, geometry, annotation, report, and
   composition modules: invalid descriptors, command invariants, selection,
   bounds, ordering, complete reports, and coordinate mapping.
 - Workflow tests with controlled async renderer/transport boundaries: superseded
   loads, no cross-instance mutation, capture leases, close/cancel/reload races,
   full/failed review output, space reconciliation, and cleanup errors.
 - Server/host tests exercise real space fixtures, origins, source validation,
-  `.ts` serving, runtime ESM loading, view publication, and review storage.
+  unchanged JavaScript/CSS serving, runtime ESM loading, view publication, and review storage.
   Extend existing capture/preview/window/space test boundaries; replace
   source-slice tests only where the extracted public API replaces that behavior.
 - Real browser and VS Code validation: keyboard/iframe focus, external lenses,

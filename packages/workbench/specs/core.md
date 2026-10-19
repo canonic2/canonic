@@ -108,23 +108,29 @@ Space, collection, group, page, state, lens, and the parts of the interface
 
 ## Canvas and artboard
 
-The [multiple-artboard support system](multiple-artboards.md) provides instance
-state, runtime ownership, geometry and review/context APIs through injected ports.
-It does not change the existing canvas UI or its controls. The behavior below
-continues to describe the shipping single-view interface.
+The [rendering-flow contract](rendering-flow.md) requires one Workbench shell and
+content-only renderers. Canvas labels, grid, camera and global controls belong
+to that shell; none is mounted inside an artboard. The backend provides project
+data and compiled/rendered/proxied content, not Workbench application markup.
+The [multiple-artboard system](multiple-artboards.md) owns instance state,
+geometry and review/context. Ordinary states remain alternatives; only explicit
+page artboards create a group. Outer control layout stays unchanged by this refactor.
 
 - Config and catalog discovery show **Loading pages…**. The first iframe
-  preview shows **Loading preview…** until it is ready; later navigations keep
-  the outgoing preview visible. Loading indicators honor reduced motion.
+  preview shows **Loading preview…** until the target content is ready. A later
+  transition may retain outgoing content only under its actual settled identity;
+  it is concealed before new destination labels are displayed. The shell owns
+  application loading status. Loading indicators honor reduced motion.
 - The size switcher uses the space's ordered sizes and each page's supported
   sizes, including page-specific sizes. With no space configuration the
   defaults are Fit, Laptop, Mobile and Resizable. Filled axes follow the
   available canvas; fixed dimensions remain fixed when the editor is smaller.
   The [sizes contract](sizes.md) owns the schema, menu, editing and defaults.
 
-- An ordinary iframe navigation uses a spare iframe. The current preview stays
-  visible until its replacement loads, then the frames exchange roles. A
-  superseded load must not replace a newer selection.
+- A content renderer may prepare a replacement in a spare content iframe. It
+  must not use a spare Workbench application document. Promotion waits for
+  matching destination readiness; superseded loads cannot replace a newer selection
+  or put outgoing pixels beneath the new destination's label.
 - Retained preview sessions preserve their attached iframe
   across selections: one active session and up to three inactive
   sessions for 15 minutes after departure. Returning preserves form edits,

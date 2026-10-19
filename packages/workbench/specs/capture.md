@@ -85,7 +85,7 @@ web-page capture, not an operating-system screenshot of VS Code.
 ## What is captured
 
 The [multiple-artboard support API](multiple-artboards.md) captures every supplied artboard,
-including off-camera views and mixed spaces/content. `ui/src/canvas/review.ts`
+including off-camera views and mixed spaces/content. `ui/src/modules/review/capture.js`
 composes one labelled JPEG with local annotation coordinates mapped to
 regions. Limits are 32 megapixels and 32767px per edge. Loading/error views
 have explicit placeholders; a ready-view capture failure stops the operation.
@@ -93,9 +93,12 @@ The controller locks ready instances and verifies identity before/after
 sequential acquisition. Only captured annotations are cleared, after handoff
 success.
 
-These APIs are verified through a temporary harness; existing screenshot and
-handoff controls keep their single-view behavior. The acquisition paths below
-can run independently within each isolated renderer.
+The shipping screenshot/handoff controls use the complete canvas snapshot; a
+single ordinary view is one region. The acquisition paths below run independently
+within each [content-only renderer](rendering-flow.md). They must not acquire a
+nested Workbench shell or depend on hidden global screenshot/annotation controls.
+Content and annotation factories supply explicit acquisition ports. Canvas
+acceptance checks startup requests and child markup alongside full-canvas handoff.
 
 - **Local authored pages and TypeScript previews.** Both are served on the
   workbench origin; a TypeScript preview renders in the workbench's preview

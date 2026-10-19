@@ -1,11 +1,10 @@
 /* Docs pages for the portable export's browser/ folder: each page in each
    lens becomes a static page beside its production examples bundle, with the
-   page script compiled once, every example's code for Show code as a JSON
+   page script copied unchanged, every example's code for Show code as a JSON
    file, and the images its Markdown references. A static server opens them;
    nothing is rebuilt or fetched from Workbench. */
 
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { highlight, languageOf } from './code-highlight.ts';
@@ -56,19 +55,14 @@ function copyImages(html: string, root: string, directory: string, add: Add): st
   });
 }
 
-async function pageScript(): Promise<string> {
-  const esbuild = createRequire(import.meta.url)('../../../preview/engine.cjs');
-  const result = await esbuild.build({ entryPoints: [path.join(HERE, "../../../../../ui/src/modules/docs/page/docs-page.ts")], bundle: true, write: false,
-    format: 'esm', platform: 'browser', target: 'es2020', logLevel: 'silent' });
-  return result.outputFiles[0].text;
-}
-
 export async function portableDocs(compiler: PortableCompiler, entries: readonly DocsPageEntry[], add: Add): Promise<{ pages: PortableDocsPage[]; warnings: string[] }> {
   const pages: PortableDocsPage[] = [];
   const warnings: string[] = [];
   if (!entries.length) return { pages, warnings };
   const root = compiler.root;
-  add('docs/page.js', await pageScript());
+  const browser = path.join(HERE, '../../../../../ui/src/modules/docs/page');
+  add('docs/page.js', fs.readFileSync(path.join(browser, 'docs-page.js')));
+  add('docs/mount-examples.js', fs.readFileSync(path.join(browser, 'mount-examples.js')));
   add('docs/docs-page.css', fs.readFileSync(path.join(HERE, "../../../../../ui/src/modules/docs/page/docs-page.css")));
   const docsPages = new Set(entries.map(entry => entry.src));
   const readFile = async (file: string) => {

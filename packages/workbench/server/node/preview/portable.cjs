@@ -35,8 +35,8 @@ async function build(compiler, builder, options) {
   try { config = require('../config').read(compiler.root); } catch (error) { warnings.push('workbench.yaml: ' + error.message); }
   // Each preview carries its sizes as the space resolves them, so the viewer needs no space.
   const { readPageSizes } = require('../../../contracts/src/sizes/schema.ts');
-  const { supported } = require('../../../contracts/src/sizes/browser/choice.ts');
-  const { defaultSizes } = require('../../../contracts/src/sizes/browser/size.ts');
+  const { supported } = require('../../../contracts/src/sizes/browser/choice.js');
+  const { defaultSizes } = require('../../../contracts/src/sizes/browser/size.js');
   const spaceSizes = config && config.sizes || defaultSizes();
   for (const preview of previews) {
     preview.sizes = supported(spaceSizes, readPageSizes(preview.sizes, spaceSizes, preview.file, warnings));

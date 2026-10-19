@@ -35,6 +35,8 @@ jobs:
         working-directory: packages/workbench
       - run: pnpm run check
         working-directory: packages/workbench
+      - run: pnpm run check:ui
+        working-directory: packages/workbench
       - run: pnpm test
         working-directory: packages/workbench
 

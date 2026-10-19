@@ -1,8 +1,8 @@
 /* Actions switch examples, one per named export: the shipping
    wb-actions-switch as the canvas's top bar draws it. */
 
-import { registerActionsComponents } from '../ui/src/components/register.ts';
-import type { WbActionsSwitch } from '../ui/src/components/actions-switch/element.ts';
+import { registerActionsComponents } from '../ui/src/bootstrap/register.js';
+import type { WbActionsSwitch } from '../ui/src/components/actions-switch/element.js';
 import { icon, sizeSwitcher, topBar } from './sizes-ui.ts';
 
 registerActionsComponents();

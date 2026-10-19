@@ -50,6 +50,11 @@ project-registered adapters. They do not run a project's application server,
 
 ## Workflows
 
+All adapters mount project content through the [content-only renderer contract](rendering-flow.md).
+Project compilation, evaluation and server rendering remain backend responsibilities.
+The resulting preview must not initialize Workbench's application shell inside
+an artboard, even while loading or displaying errors.
+
 ### Author and discover
 
 - A definition default-exports `definePreview({...})` from

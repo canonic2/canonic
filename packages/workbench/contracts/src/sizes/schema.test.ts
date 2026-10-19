@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { keyForName, readPageSizes, readSpaceSizes } from './schema.ts';
-import { defaultSizes } from './browser/size.ts';
+import { defaultSizes } from './browser/size.js';
 
 test('a space without sizes, or with none usable, gets the default sizes', () => {
   const problems: string[] = [];

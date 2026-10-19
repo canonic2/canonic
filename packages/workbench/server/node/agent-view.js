@@ -16,7 +16,7 @@ var path = require('node:path');
 var VIEW_PATH = '/_workbench/view';
 var ANNOUNCE_FILE = path.join('.canonic', '.workbench', 'server.json');
 var STALE_MS = 3 * 60 * 1000;
-var cleanView = require('../../contracts/src/agent-context/report.ts').cleanView;
+var cleanView = require('../../contracts/src/agent-context/report.js').cleanView;
 var MAX_CLIENTS = 32;
 
 function create(options) {

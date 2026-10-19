@@ -15,6 +15,18 @@ between declared artboards. Screenshots, references, and handoffs include
 every artboard. The existing sidebar, top bar, toolbar, and view controls keep
 their layout.
 
+When you switch pages, states, or lenses, the outgoing preview stays hidden
+until the requested content is ready. Its session remains attached for reuse.
+Screenshots and handoffs wait for the requested page to finish loading.
+The canvas shows **Loading preview…** through story lookup and rendering,
+then clears it when the requested content is ready. A lookup failure replaces
+the loading message with the error.
+Labels use the page's name and the selected story or state. Declared artboards
+include their own names while loading. During a Storybook lookup, the tab names
+the destination page; the story name joins it once resolved.
+The grid belongs to the main canvas. Each embedded preview fills its artboard
+without adding another canvas grid or inner frame shadow.
+
 For a component with no surrounding page, mark its origin-aligned root with
 `data-wb-fit-content` and remove page padding, viewport minimum heights, and
 backgrounds. With Fit or Resizable supported, its artboard follows the content's

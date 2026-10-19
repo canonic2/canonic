@@ -1,7 +1,7 @@
 # Code quality
 
-Status: implemented engineering baseline for Workbench's Rust page index and
-its Node integration. Passing these checks is distinct from meeting the
+Status: implemented engineering baselines for the JavaScript UI, Rust page index and
+Node integration. Passing these checks is distinct from meeting the
 [performance targets](preview-pipeline/performance.md#measured-interactions)
 or accepting the compiler-host prototype.
 
@@ -19,6 +19,80 @@ Registry. Workbench keeps its own configuration and lockfile; it does not
 introduce a root Cargo workspace or couple product releases.
 
 ## Required gates
+
+### Browser UI
+
+Run `pnpm --dir packages/workbench run check:ui` from the repository root.
+The gate runs these commands in order and stops at the first failure:
+
+| Command | Scope |
+| --- | --- |
+| `lint` | ESLint recommended JavaScript checks over `ui/src/**/*.js`, browser/host import boundaries, forbidden TypeScript imports, and Web Component rules on elements |
+| `format:check` | Prettier over `ui/src` and the UI lint/test tooling; `format` applies the same formatting |
+| `test:ui` | Colocated UI pure/controller tests and real-Chrome component interaction tests, plus executable lint-boundary checks |
+
+Chrome or Chromium must be installed; `CHROME_PATH` can select its executable.
+The UI gate fails before running tests when no browser is available. It does
+not treat skipped browser tests as acceptance. Browser tests use owned temporary
+profiles and loopback fixtures. Run this gate with host access in an agent sandbox.
+The existing Node test runner and Chrome harness remain the test infrastructure;
+there is no DOM emulator or separate framework-specific component runner.
+
+The UI requires no TypeScript compiler or typed parser. The separate `check` and
+`typecheck` commands check backend/extension/capture TypeScript and shared declarations.
+Lint, formatting and backend tools remain pinned in the product lockfile.
+
+Production browser code cannot import Node, VS Code, Electron or the server,
+extension and capture implementations. Component elements and their helpers
+also cannot import capability controllers or legacy shell scripts, or call
+the global network APIs. Bootstrap/registration entry points compose dependencies;
+tests may import host fixture infrastructure. The pure canvas `presentation.js`
+entry supplies component data and geometry. These checks cover explicit imports and
+direct global network calls; they cannot prove that every dependency is pure.
+
+The `Workbench UI quality` workflow runs the gate on matching pull requests and
+pushes to `main`; extension releases also run it before packaging. Legacy shell
+JavaScript, preview adapters and the portable viewer remain outside this UI
+lint/format baseline. Their existing product tests still run through `pnpm test`.
+Passing the UI gate does not establish architectural conformance of those surfaces.
+It also does not establish [UI/backend independence](modules.md#ui-and-backend-independence):
+component fixtures serve authored JavaScript/CSS directly without backend/compiler
+imports. That proves standalone component hosting; complete application/API
+independence still needs its own acceptance.
+Browser canvas acceptance rejects application document/module requests inside
+content and inspects child markup; that assertion failed against the shell-backed
+renderer. [Rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps)
+records the remaining independent-host and live adapter verification scope.
+
+### Structure review and remaining gaps
+
+The October 2026 comparison with the reference React UI library examined its
+component directories, typed inputs, local styles, helper modules, colocated
+behavior tests, examples, and separate quality commands. Workbench's migrated
+elements use equivalent boundaries through properties, composed intent events,
+owned Shadow DOM and connection-scoped lifecycle; framework-specific React
+hooks, JSX lint rules and native-platform runners do not apply.
+
+| Area | Current evidence and limitation |
+| --- | --- |
+| Component organization | Element folders own presentation, styles and helpers; design pages load shipping implementations. Shared modal styles live under `components/shared/`; startup and registration live under `bootstrap/` |
+| Behavior testing | Existing browser tests cover upgrade-time inputs, independent instances, reconnects, events, keyboard/focus and CSP for migrated controls. Canvas interaction also has a separate browser smoke script; this is not complete keyboard/accessibility coverage for every element |
+| Registration | Elements register through explicit bootstrap functions, including the export dialog. Browser tests verify importing its class is silent and registration is repeatable |
+| Application state | Navigation owns requested destinations and supersession. The content controller derives renderer routes, states, lenses and labels from project data; the outer shell owns its visible controls |
+| Renderer isolation | Artboards load `content.html` with a dedicated bootstrap, viewport and annotation/capture ports. Browser assertions reject nested application startup |
+| Lifecycle and dependencies | Controllers expose runtime/disposal ports, and migrated elements release connection resources. Global shell APIs, event interception and renderer polling remain integration debt |
+
+Preserve the existing visible controls and warm preview sessions during migration.
+The JavaScript modules own navigation, retention and review workflows through
+explicit ports; the legacy chrome adapter owns current DOM control wiring.
+The content-only renderer preserves retained Storybook sessions and the outer UI.
+Frame lifecycle, native surfaces and annotation internals remain bounded legacy
+modules; their further separation must preserve destination sizing, docs presentation
+and capture behavior. The detailed contracts remain in [modules](modules.md),
+[Web Components](web-components.md), [docs](docs-pages.md) and
+[warm runtime](preview-pipeline/warm-runtime.md).
+
+### Native server
 
 | Area | Contract |
 | --- | --- |

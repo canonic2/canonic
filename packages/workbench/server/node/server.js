@@ -46,8 +46,8 @@ var canvasSpaces = require('./src/spaces/coordinator.ts');
 var nativePool = require('../../capture/src/native-streams/pool.ts');
 var sizeSchema = require('../../contracts/src/sizes/schema.ts');
 var sizeExport = require('../../contracts/src/sizes/export.ts');
-var sizeChoice = require('../../contracts/src/sizes/browser/choice.ts');
-var sizeModel = require('../../contracts/src/sizes/browser/size.ts');
+var sizeChoice = require('../../contracts/src/sizes/browser/choice.js');
+var sizeModel = require('../../contracts/src/sizes/browser/size.js');
 var sizeEdit = require('../../contracts/src/sizes/edit.ts');
 
 var SHOT_PATH = '/_workbench/shot';
@@ -958,11 +958,7 @@ function start(options) {
     return docsResolution.then(function () { return resolved(); });
   }
 
-  var serveBrowserModule = browserModules.createBrowserModules(path.resolve(__dirname, '../..'), function (code, file) {
-    return require('./preview/engine.cjs').transform(code, {
-      loader: 'ts', format: 'esm', target: 'es2022', sourcefile: file, sourcemap: 'inline',
-    }).then(function (result) { return result.code; });
-  });
+  var serveBrowserModule = browserModules.createBrowserModules(path.resolve(__dirname, '../..'));
 
   /* A docs page's references, per lens: the whole page at its 960-pixel
      layout, and each example that lens renders, cropped to its panel. */

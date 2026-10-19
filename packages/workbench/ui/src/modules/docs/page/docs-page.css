@@ -10,8 +10,9 @@
   --wb-docs-tint: #f6f8fa;
   --wb-docs-accent: #0969da;
   --wb-docs-code: #eff2f5;
-  --wb-docs-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
-  --wb-docs-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --wb-docs-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --wb-docs-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 html {
@@ -31,10 +32,16 @@ body.wb-docs-body {
 }
 
 @media (max-width: 640px) {
-  .wb-docs { padding: 24px 16px 64px; }
+  .wb-docs {
+    padding: 24px 16px 64px;
+  }
 }
 
-.wb-docs :is(h1, h2, h3, h4, h5, h6, p, li, td, th, blockquote, dt, dd, figcaption):not(.wb-docs-example *, .wb-docs-caption) {
+.wb-docs
+  :is(h1, h2, h3, h4, h5, h6, p, li, td, th, blockquote, dt, dd, figcaption):not(
+    .wb-docs-example *,
+    .wb-docs-caption
+  ) {
   color: var(--wb-docs-text);
   font-family: var(--wb-docs-font);
 }
@@ -46,21 +53,46 @@ body.wb-docs-body {
   scroll-margin-top: 24px;
 }
 
-.wb-docs h1:not(.wb-docs-example *) { margin-top: 0; font-size: 2.25rem; letter-spacing: -0.01em; }
-.wb-docs h2:not(.wb-docs-example *) { font-size: 1.6rem; }
-.wb-docs h3:not(.wb-docs-example *) { font-size: 1.25rem; }
-.wb-docs h4:not(.wb-docs-example *) { font-size: 1rem; }
+.wb-docs h1:not(.wb-docs-example *) {
+  margin-top: 0;
+  font-size: 2.25rem;
+  letter-spacing: -0.01em;
+}
+.wb-docs h2:not(.wb-docs-example *) {
+  font-size: 1.6rem;
+}
+.wb-docs h3:not(.wb-docs-example *) {
+  font-size: 1.25rem;
+}
+.wb-docs h4:not(.wb-docs-example *) {
+  font-size: 1rem;
+}
 
 .wb-docs :is(p, li, td, th, blockquote, dd):not(.wb-docs-example *, .wb-docs-caption) {
   font-size: 1rem;
   line-height: 1.6;
 }
 
-.wb-docs p:not(.wb-docs-example *, .wb-docs-caption) { margin: 0 0 1em; }
-.wb-docs :is(ul, ol):not(.wb-docs-example *) { margin: 0 0 1em; padding-left: 1.5em; }
-.wb-docs a:not(.wb-docs-example *) { color: var(--wb-docs-accent); text-decoration: underline; text-underline-offset: 0.15em; }
-.wb-docs img:not(.wb-docs-example *) { max-width: 100%; }
-.wb-docs hr:not(.wb-docs-example *) { border: 0; border-top: 1px solid var(--wb-docs-line); margin: 2em 0; }
+.wb-docs p:not(.wb-docs-example *, .wb-docs-caption) {
+  margin: 0 0 1em;
+}
+.wb-docs :is(ul, ol):not(.wb-docs-example *) {
+  margin: 0 0 1em;
+  padding-left: 1.5em;
+}
+.wb-docs a:not(.wb-docs-example *) {
+  color: var(--wb-docs-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.wb-docs img:not(.wb-docs-example *) {
+  max-width: 100%;
+}
+.wb-docs hr:not(.wb-docs-example *) {
+  border: 0;
+  border-top: 1px solid var(--wb-docs-line);
+  margin: 2em 0;
+}
 
 .wb-docs blockquote:not(.wb-docs-example *) {
   margin: 0 0 1em;
@@ -92,7 +124,10 @@ body.wb-docs-body {
   font-size: 0.875rem;
 }
 
-.wb-docs th:not(.wb-docs-example *) { background: var(--wb-docs-tint); font-weight: 600; }
+.wb-docs th:not(.wb-docs-example *) {
+  background: var(--wb-docs-tint);
+  font-weight: 600;
+}
 
 /* Fenced code in the prose, and an example's code under its panel. */
 .wb-docs-code,
@@ -110,7 +145,9 @@ body.wb-docs-body {
 }
 
 .wb-docs-code code,
-.wb-docs-example-code code { font: inherit; }
+.wb-docs-example-code code {
+  font: inherit;
+}
 
 /* An example: a framed panel, its tools below it, its code below them. The
    panel contains its fixed-position content, so a modal opens inside it. */
@@ -169,13 +206,28 @@ body.wb-docs-body {
 }
 
 .wb-docs-tool:hover,
-.wb-docs-tool[aria-expanded="true"] { background: var(--wb-docs-tint); color: var(--wb-docs-text); }
-.wb-docs-tool:focus-visible { outline: 2px solid var(--wb-docs-accent); outline-offset: 1px; }
-.wb-docs-tool.is-done { color: #1a7f37; }
+.wb-docs-tool[aria-expanded='true'] {
+  background: var(--wb-docs-tint);
+  color: var(--wb-docs-text);
+}
+.wb-docs-tool:focus-visible {
+  outline: 2px solid var(--wb-docs-accent);
+  outline-offset: 1px;
+}
+.wb-docs-tool.is-done {
+  color: #1a7f37;
+}
 
-.wb-docs-example-code { border-top: 1px dashed var(--wb-docs-line); }
-.wb-docs-example-code[hidden] { display: none; }
-.wb-docs-example-code pre { margin: 0; border-radius: 0; }
+.wb-docs-example-code {
+  border-top: 1px dashed var(--wb-docs-line);
+}
+.wb-docs-example-code[hidden] {
+  display: none;
+}
+.wb-docs-example-code pre {
+  margin: 0;
+  border-radius: 0;
+}
 
 .wb-docs-caption {
   margin: 0 0 1em;
@@ -185,11 +237,44 @@ body.wb-docs-body {
 }
 
 /* highlight.js tokens, in GitHub's light colors. */
-.hljs-comment, .hljs-quote { color: #59636e; font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #cf222e; }
-.hljs-string, .hljs-regexp, .hljs-addition { color: #0a3069; }
-.hljs-number, .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable { color: #0550ae; }
-.hljs-title, .hljs-title.function_, .hljs-section { color: #6639ba; }
-.hljs-name, .hljs-tag, .hljs-built_in, .hljs-selector-class, .hljs-selector-id { color: #116329; }
-.hljs-deletion { color: #82071e; }
-.hljs-meta { color: #0550ae; }
+.hljs-comment,
+.hljs-quote {
+  color: #59636e;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: #cf222e;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #0a3069;
+}
+.hljs-number,
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: #0550ae;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: #6639ba;
+}
+.hljs-name,
+.hljs-tag,
+.hljs-built_in,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: #116329;
+}
+.hljs-deletion {
+  color: #82071e;
+}
+.hljs-meta {
+  color: #0550ae;
+}

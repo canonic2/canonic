@@ -11,7 +11,13 @@
     "package:all": "node scripts/package-all.cjs",
     "bundle-runtime": "node scripts/bundle-runtime.cjs",
     "check:server": "make -C server check",
-    "coverage:server": "make -C server coverage"
+    "coverage:server": "make -C server coverage",
+    "lint": "eslint ui/src --max-warnings=0",
+    "format": "prettier --write ui/src eslint.config.mjs .prettierrc.json scripts/run-ui-tests.cjs scripts/ui-quality.test.cjs",
+    "format:check": "prettier --check ui/src eslint.config.mjs .prettierrc.json scripts/run-ui-tests.cjs scripts/ui-quality.test.cjs",
+    "typecheck": "pnpm run check",
+    "test:ui": "node scripts/run-ui-tests.cjs",
+    "check:ui": "pnpm run lint && pnpm run format:check && pnpm run test:ui"
   },
   "dependencies": {
     "@rspack/core": "2.2.7",
@@ -34,14 +40,19 @@
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
+    "@eslint/js": "10.0.1",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@vscode/vsce": "3.9.2",
     "astro": "7.3.5",
+    "eslint": "10.13.0",
+    "eslint-plugin-wc": "3.1.0",
+    "prettier": "3.9.10",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native-web": "0.21.3",
-    "typescript": "7.0.2",
-    "vue": "3.5.43"
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vue": "3.5.43",
+    "@typescript/native": "npm:typescript@7.0.2"
   }
 }

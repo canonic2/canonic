@@ -13,9 +13,9 @@ with annotations, screenshots and agent handoffs. Projects supply
 | `extension/` | VS Code activation, commands, sidebar/webview integration and extension manifest |
 | `server/` | Rust Cargo package and page index; `server/node/` owns the shipping Node HTTP server, compiler worker and host services |
 | `capture/` | Electron screenshot helper (`app/`), runtime acquisition (`runtime/` bundle), window capture and native stream lifecycle |
-| `ui/` | Browser canvas (`legacy/`), TypeScript controllers, shared Web Components (`src/components/`), themes (`src/theme/`), preview adapters/runtime (`preview/`) and portable viewer (`viewer/`) |
+| `ui/` | Browser-native JavaScript controllers, Web Components (`src/components/`), themes (`src/theme/`), canvas/content documents (`legacy/`), preview adapters (`preview/`) and portable viewer (`viewer/`) |
 | `sdk/` | Published `@canonic2/workbench` definition helpers and authoring types |
-| `contracts/` | Shared manifest/YAML interpretation and pure TypeScript data and rules consumed across parts |
+| `contracts/` | Shared manifest/YAML interpretation and pure data/rules; browser runtime modules are JavaScript with declarations for backend TypeScript consumers |
 | `scripts/` | Product checks, temporary VSIX assembly, per-platform builds and releases |
 | `design/` | Internal design pages loading shipping components; not packaged |
 | `specs/` | Internal requirements, architecture, acceptance evidence and implementation gaps |
@@ -31,7 +31,21 @@ into Rust in phases.
 
 ## Engineering contracts
 
-- Put new browser and Node code in the owning part's `src/` as erasable
+- The UI is independent of the backend. Read `specs/modules.md#ui-and-backend-independence`.
+  The UI owns components, page-list/artboard presentation, navigation and rendering.
+  The backend provides project data, operations and previewed content through APIs;
+  backend domain services must not import UI runtime code, initialize components,
+  or depend on their DOM or presentation state.
+  Hosts load the UI and inject a data/operation client. The UI is plain JavaScript,
+  Web Components, HTML and CSS, ready for direct browser use. Do not add TypeScript,
+  transpilation, bundling or generated source copies to UI delivery. Hosts serve
+  or copy authored assets unchanged; project preview compilation remains separate.
+- Read `specs/rendering-flow.md`: one Workbench shell owns the canvas. Each
+  artboard loads only project content through a dedicated renderer, never the
+  application `index.html`, shell bootstrap, or a full shell hidden with CSS.
+  Backend compilation/rendering of project React, docs and Storybook is expected.
+  Preserve warm content sessions, independent artboard state and existing outer UI.
+- Put new Node code in the owning part's `src/` as erasable
   TypeScript. Use `import type`, explicit `.ts` relative imports, and no enums,
   namespaces, parameter properties or import assignments. Node 24 strips types;
   VS Code requires 1.123 or later. Each TypeScript source root declares ESM;
@@ -48,14 +62,14 @@ into Rust in phases.
   services own project state and their subordinate compiler processes. Capture
   owns rendering/native capture resources. Explicit lifecycle contracts cover
   startup, errors, cancellation and shutdown.
-- Browser TypeScript is stripped on demand; no maintained compiled UI copy.
-  Server asset routes expose only `ui/src/` and `contracts/src/`, excluding tests.
-  Update imports, asset routes, webview resources/CSP, compiler paths, packaging
-  and source links together when moving files.
-- `extension/src/webview-components.ts` bundles the shared sidebar bootstrap in
-  memory using the packaged compiler and a CSP nonce. Components use adopted
-  stylesheets. Theme resources load locally, with validated live theme
-  forwarding across the iframe boundary; project previews remain independent.
+- UI-owned tooling supplies browser-executable assets independently of backend
+  services and the project-preview compiler. Host infrastructure loads those assets;
+  generic static delivery does not make the application backend their owner.
+  Verify independent fixture-client UI loading and backend startup without UI files.
+  Update imports, host resource URLs/CSP, UI tooling, packaging and source links together.
+- The extension hosts the sidebar and supplies CSP/resource roots and editor
+  capabilities. It loads the authored sidebar module directly. Components use adopted stylesheets;
+  validated theme forwarding remains host-owned and project previews stay independent.
 - `contracts/manifest.js` supplies browser/server manifest rules. Schema changes
   update `ui/legacy/README.md`, `docs/configuration.md`,
   `shared/skills/canonic-workbench/SKILL.md` and
@@ -80,6 +94,8 @@ Node dependencies and no dependency install scripts.
 | --- | --- |
 | Behavior across parts | `pnpm test` |
 | TypeScript across source owners | `pnpm run check` |
+| JavaScript/Web Component lint, formatting and unit/browser tests | `pnpm run check:ui` |
+| UI lint / formatting / unit tests separately | `pnpm run lint`, `pnpm run format:check`, `pnpm run test:ui` |
 | Rust format, strict Clippy, nextest, doctests, private rustdoc and cargo-deny | `pnpm run check:server` |
 | Rust coverage | `pnpm run coverage:server` (HTML under `server/target/llvm-cov/`) |
 | Standalone server | `pnpm run serve <project>` |
@@ -353,9 +369,29 @@ Apply to Workbench-owned browser presentation, not the frameworks of previewed
 projects. The target contracts are `packages/workbench/specs/web-components.md`
 and `packages/workbench/specs/themes.md`; read them before component or theme work.
 
+- The UI is independent of the backend; the required contract is
+  `packages/workbench/specs/modules.md#ui-and-backend-independence`. The backend
+  supplies project data, operations and previewed content through APIs. It does
+  not import UI runtime code, initialize components, or depend on their DOM or
+  presentation state. Hosts load the UI and inject a data/operation
+  client. UI-owned fixtures/tooling must support UI rendering without starting
+  backend services; backend domain services must work without UI files. Generic
+  UI asset delivery may share the API host and compiler libraries, but UI tooling
+  remains independent of project compiler configuration, caches and lifecycle.
+- Follow `packages/workbench/specs/rendering-flow.md`: one application shell per
+  canvas document; artboards load dedicated content-only renderers. Never load
+  the application entry point or bootstrap a shell inside an artboard, including
+  a shell hidden with CSS. Project compilation/rendering is backend work;
+  artboard composition is UI work. Preserve outer controls and warm content sessions.
+  Verify child requests and document initialization before CSS suppression,
+  alongside sizing, capture, disposal and independent instance behavior.
+
+- Workbench UI files are browser-native JavaScript, HTML and CSS. No TypeScript,
+  transpilation, bundling or generated implementation participates in UI delivery.
+  Runtime imports, including shared browser rules, resolve directly to JavaScript.
 - New components and substantial component migrations use autonomous Web
-  Components in `ui/src/components/<name>/`, written in erasable TypeScript. Use
-  `wb-` tags, open Shadow DOM, owned styles, explicit inputs, and typed public
+  Components in `ui/src/components/<name>/`. Use
+  `wb-` tags, open Shadow DOM, owned styles, explicit inputs, and documented public
   events. Register at browser entry points; keep DOM modules out of Node imports.
 - Controllers own application state and product operations. Elements own rendering
   and interaction, release connection resources on disconnect, and reconnect
@@ -369,7 +405,7 @@ and `packages/workbench/specs/themes.md`; read them before component or theme wo
   snapshot replacement. Keep themes document-scoped and out of project previews,
   captures, configuration and server state.
 - Verify native semantics, keyboard and focus in a real browser; cover defaults,
-  custom host colors and high contrast. Check direct webview and server asset
+  custom host colors and high contrast. Check direct webview and independent browser-host asset
   loading, CSP, and packaging for migrated components and styles.
 - Every element in `ui/src/components/<name>/` has its docs page in the Workbench
   space, in the same change: `design/<name>.md` with one section per meaningful

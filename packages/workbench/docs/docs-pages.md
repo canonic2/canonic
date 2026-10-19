@@ -12,7 +12,9 @@ before its design and its other implementations, and the page opens on them. A p
 a Markdown page: it is its own docs and has no design.
 
 In a docs lens, the docs use the whole canvas on white, at most 960 pixels
-wide and centered, and scroll like a page in a browser.
+wide and centered, and scroll like a page in a browser. They open at 100%
+without an artboard label or selection border. Screenshots capture the docs
+viewport without canvas framing.
 
 ## Add docs to a page
 

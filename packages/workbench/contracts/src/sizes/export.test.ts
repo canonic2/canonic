@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exportSizes } from './export.ts';
-import { defaultSizes } from './browser/size.ts';
-import type { ResolvedSize } from './browser/size.ts';
+import { defaultSizes } from './browser/size.js';
+import type { ResolvedSize } from './browser/size.js';
 
 const [fit, laptop, mobile, resizable] = defaultSizes() as [ResolvedSize, ResolvedSize, ResolvedSize, ResolvedSize];
 const sidebar: ResolvedSize = { key: 'sidebar', label: 'Sidebar', icon: 'panel-left', button: true, kind: 'fixed', width: 340, height: 'fill' };

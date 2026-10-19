@@ -509,7 +509,7 @@ test('refreshing a rendered docs page releases the next sidebar pick without rel
   });
   var lens = { key: 'html', label: 'HTML', kind: 'docs' };
   child = vm.createContext({
-    lensRules: require('../contracts/src/docs/lenses.ts'),
+    lensRules: require('../contracts/src/docs/lenses.js'),
     index: { 'docs/card.md': { src: 'docs/card.md', markdown: 'docs/card.md' } },
     view: { src: 'docs/card.md', state: null, lens: lens },
     frameReady: true,

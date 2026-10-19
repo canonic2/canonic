@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addressLens, canvasMode, chooseLens, docsLinkLens, hasDesignLens, hasLens, pageLenses, type Lens, type LensPage } from './lenses.ts';
+import { addressLens, canvasMode, chooseLens, docsLinkLens, hasDesignLens, hasLens, pageLenses, type Lens, type LensPage } from './lenses.js';
 
 const impls: Record<string, Lens> = {
   dev: { key: 'dev', label: 'Dev', kind: 'url' },

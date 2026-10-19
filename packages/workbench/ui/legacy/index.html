@@ -327,11 +327,11 @@
   <script src="config-editor.js"></script>
   <script src="zoom.js"></script>
   <wb-export-dialog id="exportDialog"></wb-export-dialog>
-  <script type="module" src="/_workbench/ui/src/components/canvas-bootstrap.ts"></script>
+  <script type="module" src="/_workbench/ui/src/bootstrap/workbench.js"></script>
   <script src="preview-sessions.js"></script>
   <!-- Sizes and docs lenses load before the shell, which waits for them; see workbench.js whenRules. -->
-  <script type="module" src="/_workbench/ui/src/sizes/bootstrap.ts"></script>
-  <script type="module" src="/_workbench/ui/src/modules/docs/canvas/bootstrap.ts"></script>
+  <script type="module" src="/_workbench/ui/src/bootstrap/sizes.js"></script>
+  <script type="module" src="/_workbench/ui/src/bootstrap/docs.js"></script>
   <script src="workbench.js"></script>
   <script src="capture-sync.js"></script>
   <script src="dom-mirror.js"></script>
@@ -341,6 +341,5 @@
   <script src="agent-context.js"></script>
   <script src="top-bar.js"></script>
   <script src="preview-controls.js"></script>
-  <script type="module" src="/_workbench/ui/src/canvas/legacy-runtime.ts"></script>
 </body>
 </html>

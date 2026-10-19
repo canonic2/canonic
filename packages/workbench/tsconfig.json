@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["extension/src/**/*.ts", "server/node/src/**/*.ts", "capture/src/**/*.ts", "ui/src/**/*.ts", "contracts/src/**/*.ts"]
+  "include": ["extension/src/**/*.ts", "server/node/src/**/*.ts", "capture/src/**/*.ts", "contracts/src/**/*.ts"]
 }

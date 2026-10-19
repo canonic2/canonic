@@ -8,6 +8,16 @@ process model and its move into the Rust binary `workbench-server`. The
 native pages; the [extension contract](vscode-extension.md#process-boundaries)
 owns how the editor starts and stops it.
 
+The [UI/backend independence contract](modules.md#ui-and-backend-independence)
+is mandatory. This server owns project data, operations and previewed content;
+its domain services do not compose the Workbench interface or initialize its
+components. Generic UI asset delivery is host infrastructure and may share this
+HTTP process. UI tooling remains independent of project compiler configuration,
+caches and lifecycle. The [rendering-flow contract](rendering-flow.md) requires
+the UI to load content-only renderers into artboards; the application
+`/_workbench/index.html` is an outer host entry, never an artboard destination.
+Compiling and rendering project React, docs or Storybook is backend work.
+
 Status: agreed by the owner on 2026-10-17, with the
 [decisions](#decisions-for-the-owner) as recommended. Phase 1 is
 implemented; its measurement against the current server has not been made.
@@ -43,7 +53,7 @@ and the server.
 
 ### Processes and connections
 
-Every request goes through the Workbench server, and the server is the only
+Every project-data, operation and project-preview request goes through the Workbench server, and the server is the only
 thing that talks to its child processes (decided by the owner on 2026-10-16
 and 2026-10-18).
 
@@ -148,11 +158,13 @@ route from the front door, previews and docs from the resident index,
 Storybook detection and the Simulator catalog; until phase 3 the Node server
 keeps adding the proxy addresses.
 
-### Phase 3: files and assets
+### Phase 3: project files and preview assets
 
-The canvas's own files under `/_workbench/`, its TypeScript modules (stripped
-of types in Rust), project files with the compatibility script injected,
-`.md` pages, and the config files. The implementation proxies, the
+Project files with the compatibility script injected, `.md` pages and config
+files move here. Workbench UI assets are browser-native JavaScript/CSS served
+unchanged by host infrastructure, independently of backend domain services,
+as required by the [independence contract](modules.md#ui-and-backend-independence).
+The implementation proxies, the
 Storybook the server runs on a local socket, and the stories route move here
 too: they forward HTTP and start a child, and need neither the compiler nor
 the editor (decided by the owner on 2026-10-18). The routes that need the
@@ -179,8 +191,9 @@ child processes.
 | Routes | Today | Moves in |
 | --- | --- | --- |
 | `/_workbench/config` | Config resolution with previews, docs, Storybook detection, Simulator catalog | Phase 2 |
-| `/_workbench/` files, `manifest.js`, `yaml.js`, Lucide, `/_workbench/manifest/` | Static files from the extension and the space | Phase 3 |
-| `/_workbench/ui/src/`, `/_workbench/contracts/src/` | TypeScript stripped on demand | Phase 3 |
+| `/_workbench/` UI files, `manifest.js`, `yaml.js`, Lucide | UI assets served by the combined host | Host asset delivery; outside backend domain migration phases |
+| `/_workbench/ui/src/`, `/_workbench/contracts/src/` | Authored JavaScript/CSS served unchanged; TypeScript and tests are not browser assets | Host static delivery, independent of project compiler lifecycle |
+| `/_workbench/manifest/` | Project manifest resources | Phase 3 |
 | Project files, `.md` pages, docs source, revision and bundle | Files with injection; docs through the compile worker | Phase 3 (files), phase 4 (docs bundles) |
 | `/_workbench/preview-runtime.js`, `preview-requests.js`, `preview-compat.js` | Preview runtime files | Phase 3 |
 | `/_workbench/previews/`, `*.workbench.ts(x)` | Forwarded to the preview worker | Phase 4 |

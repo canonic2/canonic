@@ -122,7 +122,7 @@ Today these jobs keep esbuild, so the VSIX ships both compilers
 | Job | Where and why |
 | --- | --- |
 | Evaluating definitions and `workbench.config.ts` | Project code, so the Node evaluator runs it. Today it is a Node CommonJS bundle built by esbuild with packages external and only the `@canonic2/workbench` plugin; it runs no project plugins and needs no hot updates. Listing pages bundles every definition that needs evaluating in one build ([page listing](performance.md#page-listing)) |
-| The sidebar's component bundle and the docs page script | Workbench's own code, not project code, bundled in memory with esbuild ([webview components](../../extension/src/webview-components.ts)) |
+| Workbench browser UI and docs page script | Browser-native JavaScript/CSS loaded or copied unchanged. UI delivery has no compiler or bundler dependency; project-content compilation follows the contracts above |
 
 The portable build and the export's docs examples use an Rspack production
 compiler with the same format handling and project plugins

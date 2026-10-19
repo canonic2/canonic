@@ -33,7 +33,8 @@
 */
 
 (function () {
-  if (window.wbMultiArtboardHost) return;
+ function create(options) {
+  options = options || {};
   var NS = 'http://www.w3.org/2000/svg';
   var SHAPE_ICONS = { line: 'minus', rect: 'square', ellipse: 'circle' };
   var SHAPE_NAMES = { line: 'Line', rect: 'Rectangle', ellipse: 'Circle' };
@@ -55,8 +56,8 @@
     w: { x: 'left', y: null },
   };
 
-  var shell = document.querySelector('.wb');
-  var canvas = document.getElementById('canvas');
+  var shell = options.surface || document.querySelector('.wb');
+  var canvas = options.surface || document.getElementById('canvas');
   var artboard = document.getElementById('artboard');
   var artboardContent = document.getElementById('artboardContent');
   var frame = document.getElementById('frame');
@@ -70,12 +71,12 @@
   var handoffButton = document.getElementById('handoff');
   var annotationCount = document.getElementById('annotationCount');
   var toolButtons = slice(document.querySelectorAll('.wb-tool'));
-  var menuItems = slice(shapeMenu.querySelectorAll('.wb-menu-item'));
+  var menuItems = shapeMenu ? slice(shapeMenu.querySelectorAll('.wb-menu-item')) : [];
 
   /* The workbench double-buffers page navigation. Follow whichever iframe it
      promotes so inspection, screenshots, and handoff use the visible page. */
   var tool = 'pointer';
-  var shape = shapeButton.dataset.tool; /* the shape the shape button draws */
+  var shape = shapeButton ? shapeButton.dataset.tool : 'rect';
   var annotations = []; /* creation order — that's paint order and undo order */
   var selected = null;
 
@@ -117,6 +118,7 @@
 
   function setShape(name) {
     shape = name;
+    if (!shapeButton) { setTool(name); return; }
     shapeButton.dataset.tool = name;
     shapeButton.title = SHAPE_NAMES[name];
     shapeButton.setAttribute('aria-label', SHAPE_NAMES[name]);
@@ -134,7 +136,7 @@
   }
 
   function openMenu(open) {
-    show(shapeMenu, shapeCaret, open);
+    if (shapeMenu && shapeCaret) show(shapeMenu, shapeCaret, open);
   }
 
   function closeMenus() {
@@ -435,6 +437,7 @@
 
   /* Beside the handoff: how many annotations it will carry. */
   function countAnnotations() {
+    if (!annotationCount) return;
     annotationCount.hidden = !annotations.length;
     annotationCount.textContent = annotations.length === 1 ? '1 annotation' : annotations.length + ' annotations';
   }
@@ -812,6 +815,7 @@
   var toastCopy = '';
 
   function say(message, copy) {
+    if (!toast) { window.dispatchEvent(new CustomEvent('wb-content-say', { detail: { message: message } })); return; }
     toastCopy = copy || '';
     toast.textContent = message;
     toast.classList.toggle('is-copyable', !!toastCopy);
@@ -876,8 +880,8 @@
     else say('Couldn’t copy ' + value);
   }
 
-  toast.addEventListener('click', copyToastPath);
-  toast.addEventListener('keydown', function (e) {
+  if (toast) toast.addEventListener('click', copyToastPath);
+  if (toast) toast.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
     copyToastPath();
@@ -886,9 +890,9 @@
   /* The shell says what the canvas is showing — page, state, lens, story.
      Anything asked before it has settled is the design as addressed. */
   function viewNow() {
-    var view = window.wbView ? window.wbView() : null;
+    var view = options.view ? options.view() : window.wbView ? window.wbView() : null;
     if (view) return view;
-    var target = window.wbTarget();
+    var target = options.target ? options.target() : window.wbTarget();
     return { src: target.src, state: target.state, stateLabel: null, lens: null, story: null, url: null, code: [] };
   }
 
@@ -904,7 +908,7 @@
     var state = view.story ? view.story.state : view.state;
     if (state) base += '-' + state;
     if (view.lens) base += '-' + view.lens.key;
-    var size = docsShowing() ? null : window.wbSize && window.wbSize();
+    var size = docsShowing() ? null : (options.size ? options.size() : window.wbSize && window.wbSize());
     if (size) base += '-' + size.key;
     return (base || 'canonic') + '.jpg';
   }
@@ -1352,7 +1356,7 @@
   }
 
   function docsShowing() {
-    return !!document.querySelector('.wb[data-canvas-mode="docs"]');
+    return options.docs ? options.docs() : !!document.querySelector('.wb[data-canvas-mode="docs"]');
   }
 
   /* The size as the space names it — "Sidebar, 340 × fill" tells an agent
@@ -1360,7 +1364,7 @@
      canvas. */
   function sizeName() {
     if (docsShowing()) return 'Docs, filling the canvas';
-    var size = window.wbSize && window.wbSize();
+    var size = options.size ? options.size() : window.wbSize && window.wbSize();
     if (!size) return canvas.dataset.size || 'Unknown';
     return window.wbSizes ? window.wbSizes.describe(size) : size.label;
   }
@@ -1370,7 +1374,7 @@
      label — and, through a Storybook lens, the story's name in its place. */
   function stateName(view) {
     if (view.stateLabel) return view.stateLabel;
-    var item = window.wbItem(view.src);
+    var item = options.item ? options.item(view.src) : window.wbItem(view.src);
     var states = (item && item.states) || [];
     for (var i = 0; i < states.length; i++) {
       if (states[i].id === view.state) return states[i].label;
@@ -1385,7 +1389,7 @@
   function payload(file, targets) {
     var box = { width: artboardContent.offsetWidth, height: artboardContent.offsetHeight };
     var view = viewNow();
-    var item = window.wbItem(view.src);
+    var item = options.item ? options.item(view.src) : window.wbItem(view.src);
     /* The elements under the annotations: read here when the frame can be read
        into, else what the browser that took the shot answered. */
     var readable = preview() !== null;
@@ -1481,7 +1485,7 @@
       });
   }
 
-  fetch('/_workbench/handoff')
+  if (handoffControl) fetch('/_workbench/handoff')
     .then(function (res) {
       return res.json();
     })
@@ -1506,12 +1510,12 @@
     });
   });
 
-  shapeButton.addEventListener('click', function () {
+  if (shapeButton) shapeButton.addEventListener('click', function () {
     setTool(tool === shape ? 'pointer' : shape);
     closeMenus();
   });
 
-  shapeCaret.addEventListener('click', function () {
+  if (shapeCaret) shapeCaret.addEventListener('click', function () {
     openMenu(shapeMenu.hidden);
   });
 
@@ -1525,7 +1529,7 @@
   /* Anything outside the layer drops the selection — including a click into
      the preview, which lands on the iframe and takes focus with it. */
   document.addEventListener('pointerdown', function (e) {
-    if (!shapeMenu.hidden && !e.target.closest('.wb-shape')) openMenu(false);
+    if (shapeMenu && !shapeMenu.hidden && !e.target.closest('.wb-shape')) openMenu(false);
     if (selected && !e.target.closest('.wb-annotation-layer')) select(null);
   });
 
@@ -1533,10 +1537,10 @@
     select(null);
   });
 
-  document.getElementById('undo').addEventListener('click', undo);
-  document.getElementById('clearAnnotations').addEventListener('click', clearAll);
-  document.getElementById('shoot').addEventListener('click', shoot);
-  document.getElementById('handoff').addEventListener('click', handoff);
+  if (document.getElementById('undo')) document.getElementById('undo').addEventListener('click', undo);
+  if (document.getElementById('clearAnnotations')) document.getElementById('clearAnnotations').addEventListener('click', clearAll);
+  if (document.getElementById('shoot')) document.getElementById('shoot').addEventListener('click', shoot);
+  if (document.getElementById('handoff')) document.getElementById('handoff').addEventListener('click', handoff);
 
   /* Inside a note or the filter box, the keyboard is the browser's. */
   function typing() {
@@ -1590,17 +1594,19 @@
   }
 
   var loaded = pageOf(location.hash);
-  window.addEventListener('hashchange', function () {
+  function resetForPage() {
     var next = pageOf(location.hash);
     if (next === loaded) return;
     loaded = next;
     clearAll();
     setTool('pointer');
     closeMenus();
-  });
+  }
+  window.addEventListener('hashchange', resetForPage);
+  window.addEventListener('wb-content-destination', resetForPage);
 
   /* Artboard-local review boundary, shared by camera and full-canvas review. */
-  window.wbArtboardAnnotations = {
+  var api = {
     deselect: function () { select(null); },
     toolName: function () { return tool; },
     tool: setTool,
@@ -1627,4 +1633,8 @@
   setShape(shape);
   setTool('pointer');
   select(null);
+  return api;
+ }
+ window.wbCreateAnnotations = create;
+ if (!window.wbMultiArtboardHost && !window.wbContentOnly) window.wbArtboardAnnotations = create();
 })();

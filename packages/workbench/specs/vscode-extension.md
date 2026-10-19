@@ -70,7 +70,9 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
   it with recovery instructions that point to the log. Delayed startup must
   not reopen a tab the user closed, and the latest page pick wins during
   startup.
-- The workbench tab is a webview containing the served workbench in an
+- The workbench tab hosts one Workbench application document. A content renderer
+  inside its canvas never loads that application again; see [rendering flow](rendering-flow.md).
+  The tab is a webview containing the hosted workbench in an
   iframe, addressed through `asExternalUri`. The panel relays sidebar picks as
   `wb-go` and settled canvas selections as `wb-here`. It holds a pick until
   the iframe has reported `wb-here` and until any config refresh is
@@ -96,7 +98,7 @@ switcher below still changes the editor's host space. Sidebar picks edit the
 selected instance; canvas context and handoffs cover every instance.
 
 Implemented in [spaces.js](../server/node/spaces.js), [extension.js](../extension/extension.js),
-and the [space switcher element](../ui/src/components/space-switcher/element.ts).
+and the [space switcher element](../ui/src/components/space-switcher/element.js).
 Component and theme contracts: [Web Components](web-components.md) and
 [themes](themes.md). User guide:
 [Several spaces](../docs/spaces.md).

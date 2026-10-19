@@ -74,7 +74,6 @@ function resolveView(visible, overrides) {
     if (name === 'path') return path;
     if (name === 'fs') return fs;
     if (name === 'node:crypto') return require(name);
-    if (name === './src/webview-components.ts') return require(name);
     throw new Error('unexpected require: ' + name);
   };
   fakeRequire.resolve = require.resolve;
@@ -154,12 +153,14 @@ test('the page carries the current space root and the spaces to switch between',
   assert.ok(sidebar.view.webview.options.localResourceRoots.some(function (uri) { return uri.fsPath === '/acme'; }));
 });
 
-test('the page inlines the component bundle exactly as built', function () {
-  var bundle = require('./src/webview-components.ts').webviewComponents();
+test('the page loads authored component modules from permitted webview resources', function () {
   var html = resolveView(true).view.webview.html;
-  assert.ok(bundle.includes('$&'), 'the bundle has a replacement pattern to preserve');
-  assert.ok(html.includes('">' + bundle + '</script>'));
-  assert.ok(!html.includes('/_workbench/ui/src/components/bootstrap.ts'));
+  var module = /<script type="module" nonce="([^"]+)" src="([^"]+)"><\/script>/.exec(html);
+  assert.ok(module, 'the bootstrap is an external JavaScript module');
+  assert.equal(module[2], path.resolve(__dirname, '../ui/src/bootstrap/sidebar.js'));
+  assert.ok(html.includes("'nonce-" + module[1] + "'"), 'the CSP permits the module nonce literally');
+  assert.ok(resolveView(true).view.webview.options.localResourceRoots.some(uri => uri.fsPath === path.resolve(__dirname, '../ui/src')));
+  assert.ok(!html.includes('/_workbench/ui/src/bootstrap/sidebar.js'));
 });
 
 test('the sidebar loads its local Lucide library, draws icons and reports a missing library', function () {

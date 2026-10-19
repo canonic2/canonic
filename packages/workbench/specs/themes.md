@@ -67,8 +67,13 @@ The canvas is a separate, cross-origin iframe inside a webview:
 ```text
 VS Code webview (theme variables)
   → Workbench iframe (shell tokens)
-    → preview iframe (project styling)
+    → content-only renderer / preview frame (project styling)
 ```
+
+There is no additional Workbench application shell inside an artboard. Minimal
+renderer/annotation wrapper UI may receive only the host tokens it needs through
+its explicit adapter; shell theme forwarding never bootstraps a nested application.
+Project styling remains isolated, as [rendering flow](rendering-flow.md) requires.
 
 CSS values do not inherit across iframe documents. The embedding webview owns a
 theme adapter that reads the relevant resolved variables and sends a complete,

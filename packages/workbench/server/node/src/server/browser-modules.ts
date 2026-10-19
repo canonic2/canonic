@@ -1,8 +1,5 @@
-/* Serves Workbench UI source and shared contracts under /_workbench/:
-   TypeScript modules with their types stripped, and stylesheets as they are.
-   Nothing is compiled ahead of time; a module is transformed when it is first
-   asked for and again only after its file changes. Tests and server-only code
-   are not served. */
+/* Static browser assets. Responses contain the authored JavaScript/CSS bytes;
+   no compiler or source transformation participates in UI delivery. */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -15,37 +12,27 @@ export interface BrowserAsset {
   body: string;
 }
 
-/** Strips a module's types; esbuild's `transform` in the server. */
-export type Transform = (code: string, file: string) => Promise<string>;
-
 const TYPES: Record<string, string> = {
-  '.ts': 'text/javascript; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
 };
 
 /* Source ownership is also the browser asset boundary. */
 const BROWSER = /^(ui\/src|contracts\/src)\//;
 
-export function createBrowserModules(root: string, transform: Transform) {
-  const cache = new Map<string, { stamp: string; body: string }>();
-
+export function createBrowserModules(root: string) {
   return async function serve(pathname: string): Promise<BrowserAsset> {
     let relative: string;
     try { relative = decodeURIComponent(pathname.slice(PREFIX.length)); } catch { return missing(pathname); }
     if (relative.includes('\\') || relative.split('/').some(part => part === '.' || part === '..')) return missing(pathname);
     const extension = path.extname(relative);
-    if (!TYPES[extension] || /\.test\.ts$/.test(relative) || !BROWSER.test(relative)) return missing(pathname);
+    if (!TYPES[extension] || /\.test\.js$/.test(relative) || !BROWSER.test(relative)) return missing(pathname);
     const file = path.resolve(root, relative);
     if (!file.startsWith(root + path.sep)) return missing(pathname);
     let stat;
     try { stat = await fs.stat(file); } catch { return missing(pathname); }
     if (!stat.isFile()) return missing(pathname);
-    const stamp = stat.mtimeMs + ':' + stat.size;
-    const cached = cache.get(file);
-    if (cached && cached.stamp === stamp) return { status: 200, type: TYPES[extension]!, body: cached.body };
-    const source = await fs.readFile(file, 'utf8');
-    const body = extension === '.ts' ? await transform(source, file) : source;
-    cache.set(file, { stamp, body });
+    const body = await fs.readFile(file, 'utf8');
     return { status: 200, type: TYPES[extension]!, body };
   };
 }

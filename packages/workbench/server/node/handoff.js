@@ -80,7 +80,7 @@ function notes(annotations) {
 }
 
 function prompt(payload) {
-  if (payload.version === 2) return require('../../ui/src/canvas-review/prompt.ts').canvasPrompt(payload, prompt);
+  if (payload.version === 2) return require('./src/modules/review/prompt.ts').canvasPrompt(payload, prompt);
   var annotations = payload.annotations || [];
   var out = [];
 

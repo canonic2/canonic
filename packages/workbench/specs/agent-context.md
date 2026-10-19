@@ -5,7 +5,7 @@ open in the workbench canvas. It builds on
 [Copy a reference](../docs/canvas.md#copy-a-reference), the
 [VS Code extension contract](vscode-extension.md), and the canvas host
 messages in [workbench.js](../ui/legacy/workbench.js). Facts about each
-agent live in the shared [AI agents research](../../../docs/research/agents/README.md).
+agent live in the shared [AI agents research](../../../docs/agents/README.md).
 
 ## Purpose and scope
 
@@ -24,16 +24,18 @@ screenshots keep their own path, the
 
 The support API can publish a version-2 record with canvas ID, selected
 artboard ID, complete reference text, and every artboard's space/view/size/status.
-The publisher under `ui/src/canvas/` serializes updates to participating spaces
+The publisher under `ui/src/modules/canvas/` serializes updates to participating spaces
 and their shared-root siblings. User activity determines the current canvas;
 background readiness and heartbeats only update its report. Oversize reports
 fail explicitly without silently truncating artboards. The server validates
 version 2 and the single-view report shape. Agent
 integrations consume `view.text`.
 
-The current canvas UI continues to publish the single-view shape. Its
-reference formatter can contribute each instance's reference to a future host;
-the singleton publisher is disabled only for an explicit isolated runtime.
+The canvas composition publishes this complete report through its controller-owned
+publisher. The legacy singleton publisher remains for legacy hosts and is disabled
+for an isolated renderer. A content renderer reports instance-local metadata to
+the outer canvas; it does not publish another application-level current view.
+See the [rendering flow](rendering-flow.md).
 
 **Requirement (agreed):** the current view carries what
 [reference.js](../ui/legacy/reference.js) puts in **Copy reference**:
@@ -44,7 +46,7 @@ the singleton publisher is disabled only for an explicit isolated runtime.
 - the lens (label and key) with its upstream implementation address, or
   `Design`.
 
-**Implemented publication behavior:**
+**Legacy singleton publication behavior:**
 
 - [agent-context.js](../ui/legacy/agent-context.js) builds the view with
   `wbReference.text()`, the function behind **Copy reference**, so the two
@@ -118,7 +120,7 @@ definitions before they can run.
 - Implicit canvas context where an editor exposes a supported provider API.
 
 These integrations require a capability review against the
-[agent research](../../../docs/research/agents/README.md) before implementation.
+[agent research](../../../docs/agents/README.md) before implementation.
 No proposed editor API or specific host version is assumed available by this
 contract.
 
@@ -152,7 +154,7 @@ contract.
 - Agent configuration owns generated project integration. Editor-specific
   registration must not introduce a second context model or conflicting files.
 - Agent-specific capabilities and external API status belong in
-  [agent research](../../../docs/research/agents/README.md), not duplicated
+  [agent research](../../../docs/agents/README.md), not duplicated
   version claims in this product contract.
 
 ## Open questions

@@ -5,6 +5,11 @@ server delivers compiler output to preview frames: URLs, caching, the preview
 module that each preview address loads, and which routes skip the compile
 queue.
 
+This pipeline compiles/serves the project's previewed content. Generic UI asset
+hosting is separate from this project pipeline and from Workbench UI composition;
+artboards follow [content-only rendering](../rendering-flow.md). UI assets follow the required
+[UI/backend independence contract](../modules.md#ui-and-backend-independence).
+
 ## Requirements
 
 ### Chunks and URLs

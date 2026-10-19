@@ -1,4 +1,7 @@
-import { WbExportDialog } from '../ui/src/components/export-dialog/element.ts';
+import { WbExportDialog } from '../ui/src/components/export-dialog/element.js';
+import { registerCanvasComponents } from '../ui/src/bootstrap/register.js';
+
+registerCanvasComponents();
 export const currentPage = (canvas: HTMLElement) => {
   const dialog = new WbExportDialog();
   dialog.pages = [{ id: 'home.html', label: 'Home' }, { id: 'card.html', label: 'Card' }];

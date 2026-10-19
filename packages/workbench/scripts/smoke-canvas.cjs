@@ -29,10 +29,9 @@ async function main() {
     var errors = []; t.on('Runtime.exceptionThrown', function (event) { errors.push(event.exceptionDetails.exception && event.exceptionDetails.exception.description || event.exceptionDetails.text); });
     await t.navigate(new URL('/harness.html', running.url).href);
     await t.evaluate('(async()=>{' +
-      'const {createController}=await import("/_workbench/ui/src/canvas/controller.ts");' +
-      'const {createRuntime}=await import("/_workbench/ui/src/canvas/runtime.ts");' +
-      'const {capture}=await import("/_workbench/ui/src/canvas/review.ts");' +
-      'const {createPublisher}=await import("/_workbench/ui/src/canvas/publication.ts");' +
+      'const {createController,createPublisher}=await import("/_workbench/ui/src/modules/canvas/index.js");' +
+      'const {createRuntime}=await import("/_workbench/ui/src/modules/preview-sessions/index.js");' +
+      'const {capture}=await import("/_workbench/ui/src/modules/review/index.js");' +
       'window.registry=' + JSON.stringify(registry) + ';window.supportErrors=[];' +
       'window.controller=createController({' +
         'mount(board,callbacks){const r=createRuntime(board,callbacks);r.element.dataset.board=board.id;document.body.append(r.element);return r;},' +

@@ -13,14 +13,16 @@ Workbench has peer owners under one product root: `extension/` for VS Code,
 `sdk/` for the published definition API, and `contracts/` for shared pure rules
 and wire data. See [module ownership](specs/modules.md).
 
-`ui/legacy/` holds the HTML/script shell; `ui/src/` holds TypeScript browser
-controllers, components and themes. Use the local server to load the complete
-application with shared contract scripts and TypeScript transformation.
+`ui/legacy/` holds the HTML/script shell and content document; `ui/src/` holds
+native JavaScript controllers, Web Components and CSS. Hosts serve or copy these
+files unchanged. See [standalone UI use](ui/README.md); project compilation is
+separate from UI delivery.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm test
 pnpm run check
+pnpm run check:ui
 pnpm run check:server
 pnpm run serve <folder>
 node server/node/config.js <folder>
@@ -89,8 +91,9 @@ until their window reloads. Reloading the preview or using **Refresh Pages**
 does not restart the extension. This also applies to `scripts/install-workbench.mjs`
 at the repository root.
 
-Building and running need Node 24 or later: the TypeScript in each part's `src/` loads
-through Node's type stripping, so the extension requires VS Code 1.123 or later,
+Building and running the extension/backend need Node 24 or later: their TypeScript
+loads through Node's type stripping. The browser UI uses JavaScript directly.
+The extension requires VS Code 1.123 or later,
 the first release on Node 24. `pnpm run package` bundles pinned Electron 44.2.0 and produces a
 platform-specific VSIX for the build host. `--target darwin-arm64` (or
 `darwin-x64`, `win32-x64`, `win32-arm64`, `linux-x64`, `linux-arm64`) selects

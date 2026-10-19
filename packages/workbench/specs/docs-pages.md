@@ -396,11 +396,11 @@ problems update when they arrive.
 - **Source text.** The server returns an example's source text for **Show
   code**: the whole file for directory examples, the export's declaration for
   named exports.
-- **Which lens shows.** [lenses.ts](../contracts/src/docs/lenses.ts)
+- **Which lens shows.** [lenses.js](../contracts/src/docs/lenses.js)
   decides a page's lenses, the lens it shows, its default lens, the lens a
   docs link opens, the lens the address names, and the canvas mode. It is
   pure; the canvas loads it through
-  [bootstrap.ts](../ui/src/modules/docs/canvas/bootstrap.ts) and waits for it
+  [bootstrap.js](../ui/src/bootstrap/docs.js) and waits for it
   before applying the config, and Node tests check it. Off a server
   (`file://`) the module can't load and the canvas shows no docs lenses.
 - **Docs entries.** The server keeps one entry per Markdown file, naming the
@@ -466,8 +466,11 @@ Client-project rollout is separate from this product contract.
   The compiler lists export names. Re-exports and multiline templates require
   dedicated source-location handling; see
   [export-source.ts](../server/node/src/modules/docs/export-source.ts).
-- Browser and Node use erasable TypeScript with explicit ownership boundaries.
-  Node 24 loads host modules; the server strips browser modules in memory.
+- Docs render as content through the [dedicated renderer contract](rendering-flow.md).
+  A docs page or example does not initialize Workbench navigation, toolbar or canvas.
+  Project docs/example compilation remains a backend content service; UI asset
+  delivery serves/copies browser-native JavaScript/CSS unchanged, with no UI
+  compilation or bundling.
 - Previews and docs examples share compiler profiles, aliases, rules, plugins
   and environments. React Native Web examples use a column flex stage without
   imposing viewport height on panels.
@@ -492,7 +495,7 @@ renderer combination or source-extraction edge case. See
   pages, `lens`, and `!` in `src` for both config readers; `address.js` reads
   and writes `!example`; the canvas leaves the width out of a docs lens's
   address and a Markdown page's own docs lens out of its address.
-- **Lenses.** [lenses.ts](../contracts/src/docs/lenses.ts) and its tests;
+- **Lenses.** [lenses.js](../contracts/src/docs/lenses.js) and its tests;
   the canvas's lens switcher, routing, sizes, canvas mode, and docs links in
   [workbench.js](../ui/legacy/workbench.js) decide with it.
 - **Discovery.** `defineDocs` from `@canonic2/workbench` (typed in
@@ -504,7 +507,7 @@ renderer combination or source-extraction edge case. See
   HTML with asset URLs made absolute against the bundle.
 - **Portable viewer.** [portable.ts](../server/node/src/modules/docs/portable.ts) writes each page
   in each lens as a static page under `browser/docs/`: the production bundle,
-  the page script compiled once, Show code as JSON per example, and the images
+  the authored page and mount scripts copied unchanged, Show code as JSON per example, and the images
   the Markdown references; [viewer.js](../ui/viewer/viewer.js) lists docs
   pages, swaps the State menu for a Lens menu, and follows docs links.
 - **Compilation.** `Compiler.docsExamples` lists a lens's examples: a directory's
@@ -522,17 +525,25 @@ renderer combination or source-extraction edge case. See
   page's revision. `eagerPreviews` on `server.start` warms the worker and
   every docs bundle (`warmDocs` in [server.js](../server/node/server.js)), and
   `onCatalogChanged` tells the host when a listing changes the problems.
-  Workbench's own browser code is served from `/_workbench/src/` with types
-  stripped ([browser-modules.ts](../server/node/src/server/browser-modules.ts)).
+  Workbench browser assets currently use `/_workbench/ui/src/` and
+  `/_workbench/contracts/src/` as unchanged JavaScript/CSS
+  ([browser-modules.ts](../server/node/src/server/browser-modules.ts)). This asset
+  delivery is distinct from compiling project docs/examples and does not justify
+  mounting the application shell inside the docs content viewport.
 - **The page.** [docs-service.ts](../server/node/src/modules/docs/docs-service.ts) decides each
   panel; [render-markdown.ts](../server/node/src/modules/docs/render-markdown.ts) renders the
-  Markdown; [docs-page.ts](../ui/src/modules/docs/page/docs-page.ts) and
-  [mount-examples.ts](../ui/src/modules/docs/page/mount-examples.ts) mount the examples,
+  Markdown; [docs-page.js](../ui/src/modules/docs/page/docs-page.js) and
+  [mount-examples.js](../ui/src/modules/docs/page/mount-examples.js) mount the examples,
   run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and apply pushed Markdown/example updates with scroll position kept.
-- **The canvas.** The docs canvas mode in [zoom.js](../ui/legacy/zoom.js) with
-  the geometry from [docs-layout.ts](../ui/src/modules/docs/canvas/docs-layout.ts) (loaded by
-  [bootstrap.ts](../ui/src/modules/docs/canvas/bootstrap.ts)); `.wb[data-canvas-mode="docs"]` styles in
-  [workbench.css](../ui/legacy/workbench.css); lenses, states, addresses,
+- **The canvas.** The host selects the `wb-canvas` reading mode in
+  [canvas.js](../ui/src/bootstrap/canvas.js). The
+  [element](../ui/src/components/canvas/element.js) owns undecorated presentation
+  and camera geometry from [docs-layout.js](../ui/src/modules/docs/canvas/docs-layout.js).
+  It emits viewport dimensions and scroll intent; the host applies those through
+  the authenticated content renderer. Viewport resizing and zoom retain the docs
+  document. Standalone Docs capture has no canvas framing or artboard label.
+  The file-based shell uses [zoom.js](../ui/legacy/zoom.js) and docs-mode styles in
+  [workbench.css](../ui/legacy/workbench.css). Lenses, states, addresses,
   scrolling to an addressed example, and docs links in
   [workbench.js](../ui/legacy/workbench.js).
 - **Source menu, handoff, export.** A page's Markdown, when it isn't the
@@ -569,7 +580,7 @@ renderer combination or source-extraction edge case. See
 - [server/node/src/modules/docs/](../server/node/src/modules/docs) `*.test.ts`: Markdown reading,
   rendering, example IDs, placement, export source, the docs service with fake
   I/O, the canvas geometry
-  ([docs-layout.test.ts](../ui/src/modules/docs/canvas/docs-layout.test.ts)), and
+  ([docs-layout.test.js](../ui/src/modules/docs/canvas/docs-layout.test.js)), and
   which lens a page shows ([lenses.test.ts](../contracts/src/docs/lenses.test.ts)).
 - [preview.test.js](../ui/legacy/preview.test.js): the lens switcher and the
   size switcher in a docs lens, with the canvas's own code.
@@ -581,6 +592,11 @@ renderer combination or source-extraction edge case. See
   workspaces, `defineDocs` discovery, export planning, and a page with a
   design whose docs are served, listed in its sources, and named in a review).
 - [zoom.test.js](../ui/legacy/zoom.test.js): docs canvas mode zoom, fit, and scroll.
+- [element.test.js](../ui/src/components/canvas/element.test.js): standalone
+  reading-mode presentation, viewport changes and reconnect lifecycle.
+  [capture.test.js](../ui/src/modules/review/capture.test.js) verifies capture
+  framing. [smoke-preview-sessions.cjs](../scripts/smoke-preview-sessions.cjs)
+  verifies Docs/Storybook transitions, reading geometry and scroll anchoring.
 - [manifest.test.js](../contracts/manifest.test.js),
   [address.test.js](../ui/legacy/address.test.js),
   and [config.test.js](../server/node/config.test.js): the schema and the address.

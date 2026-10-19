@@ -8,9 +8,9 @@ its spaces; pages come from declared pages, discovered TypeScript preview
 definitions, and an iOS Simulator catalog when one is configured.
 
 This folder ships inside the Workbench extension and is served from there, so no
-project holds a copy and no page in one points at it. Its browser entry points are HTML and script files, with TypeScript modules
-stripped and served by the local server. No maintained compiled copy or
-runtime CDN is required. Lucide ships with the
+project holds a copy and no page in one points at it. Its browser entry points are
+HTML, native JavaScript modules and CSS, served unchanged. There is no UI build
+or runtime CDN. See [UI ownership and standalone use](../README.md). Lucide ships with the
 extension as a pinned dependency.
 
 The [user documentation](../../docs/README.md) is the guide for people setting
@@ -28,10 +28,12 @@ shared browser components and themes. The paths below describe
 the current implementation.
 
 The default `/_workbench/` route continues to serve `index.html` with its
-existing controls and layout. TypeScript modules under `../src/canvas/` supply
-serializable multi-artboard state, geometry, a controller with injected runtime
-ports, authenticated iframe transport, full-canvas review, and context publication.
-`../src/modules/canvas/host.ts` composes a preview page's explicit `artboards` into independent
+existing controls and layout. JavaScript modules under `../src/modules/canvas/`
+own artboard state, geometry and context publication. `navigation/` owns requested
+destinations and supersession; `preview-sessions/` owns renderer transport,
+retention and the story catalog; `review/` owns capture and delivery workflows.
+Application composition and registration live under `../src/bootstrap/`.
+`../src/bootstrap/canvas.js` composes a preview page's explicit `artboards` into independent
 `wb-canvas` artboards inside the existing canvas region. The existing shell
 continues to own its sidebar, top bar, toolbar, source/configuration/export
 dialogs and routing. Its controls target the selected instance; camera and
@@ -39,8 +41,17 @@ review operations cover the complete canvas. Shell and annotation ports expose
 the isolated renderers; native producers are pooled by source/codec.
 One ordinary renderer can stay attached, hidden and inert, while explicit
 artboards are visible, preserving its Storybook session for up to 15 minutes.
-Only visible artboards enter selection, capture and published context. The canvas
-owns a shared story catalog; renderer lookups use authenticated iframe messages.
+Only visible artboards enter selection, capture and published context. The preview-session
+controller owns a shared story catalog; renderer lookups use authenticated iframe messages.
+The shell derives tab and artboard names from current page/story metadata;
+`wb-view-change` publishes label changes without declaring a rendered frame.
+New artboards carry a human-readable `target.label` before their renderer starts.
+The dedicated `content.html` renderer loads content, annotations and capture ports
+without application controls or shell bootstrap; see the
+[rendering flow](../../specs/rendering-flow.md). `content-frames.js` owns its retained
+iframe lifecycle, and `../src/modules/preview-sessions/content.js` derives metadata
+from project data without menu DOM. The outer canvas alone owns placement, labels, grid and zoom;
+the content viewport fills its artboard at the supplied logical dimensions.
 
 `definePreview({ artboards: { id: { label, width, height, inputs } } })` declares
 1–32 children of one page. Width and height are integers from 1 to 8192; label
@@ -156,7 +167,7 @@ first docs lens. A page whose `src` is `.md` is a Markdown page: it
 has no design lens, no `sizes`, and no `lensLabel`, and opens on its `lens` or
 first docs lens. A `.workbench.ts` file can declare one with `defineDocs`. See
 [Docs](../../docs/docs-pages.md); the server code is in `server/node/src/modules/docs/`, browser code in
-`ui/src/modules/docs/`, and `contracts/src/docs/lenses.ts` decides which lens
+`ui/src/modules/docs/`, and `contracts/src/docs/lenses.js` decides which lens
 a page shows.
 
 `sizes` controls both the sizes the size switcher offers for a page and its
@@ -498,6 +509,9 @@ implementation's own address; Workbench never switches to a stream.
 | File | Job |
 | --- | --- |
 | `index.html` | the shell: top bar, sidebar, canvas, and the toolbar and view controls floating over it |
+| `content.html` + `content.css` | content-only viewport and annotation overlay, with no Workbench application controls or canvas |
+| `content-frames.js` | retained content frame factory, warm preview mounts and Storybook channel switching |
+| `../src/modules/preview-sessions/content.js` + `renderer-bridge.ts` | model-derived content navigation/metadata and authenticated canvas commands, capture locks and input forwarding |
 | `server/node/config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |
 | `config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |
 | `server/node/yaml.js` | the part of YAML a config is written in |

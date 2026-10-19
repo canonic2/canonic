@@ -57,7 +57,8 @@
     window.dispatchEvent(new CustomEvent('wb-say', { detail: { message: message } }));
   }
 
-  document.getElementById('copyReference').addEventListener('click', function () {
+  var button = document.getElementById('copyReference');
+  if (button) button.addEventListener('click', function () {
     var view = window.wbView();
     var value = text(view);
     if (!value) {

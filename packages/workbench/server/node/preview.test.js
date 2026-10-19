@@ -656,7 +656,7 @@ test('authoring declarations infer input types and reject invalid state inputs',
     'tsconfig.json': JSON.stringify({ compilerOptions: { strict: true, noEmit: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', types: [] }, include: ['*.ts'] }),
   });
   cp.execFileSync(process.execPath, [path.join(__dirname, "./preview/cli.cjs"), 'init', root]);
-  const tsc = path.join(path.dirname(require.resolve('typescript')), '..', 'bin', 'tsc');
+  const tsc = path.join(path.dirname(require.resolve('@typescript/native')), '..', 'bin', 'tsc');
   const check = () => cp.spawnSync(process.execPath, [tsc, '-p', root], { encoding: 'utf8' });
   const valid = check();
   assert.equal(valid.status, 0, valid.stdout + valid.stderr);
@@ -671,7 +671,7 @@ test('the published package types definitions in installed projects', t => {
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const [packed] = JSON.parse(cp.execFileSync(npm, ['pack', '--json', '--pack-destination', work], { cwd: path.join(__dirname, '../../sdk'), encoding: 'utf8', shell: process.platform === 'win32' }));
   assert.deepEqual(packed.files.map(file => file.path).sort(), ['LICENSE', 'README.md', 'api.d.ts', 'api.js', 'package.json']);
-  const tsc = path.join(path.dirname(require.resolve('typescript')), '..', 'bin', 'tsc');
+  const tsc = path.join(path.dirname(require.resolve('@typescript/native')), '..', 'bin', 'tsc');
   for (const [type, resolution] of [['module', 'Bundler'], ['module', 'NodeNext'], ['commonjs', 'NodeNext']]) {
     const root = path.join(work, type + '-' + resolution);
     const installed = path.join(root, 'node_modules', '@canonic2', 'workbench');

@@ -7,18 +7,22 @@ the existing controls operate on the selected artboard. Artboard management UI
 proposals elsewhere in this spec remain separate design work.
 The [module plan](multiple-artboards-code-plan.md) records the implementation.
 
+Required architecture: [one shell with content-only renderers](rendering-flow.md).
+The outer application entry point remains unchanged; it must never become an
+artboard's content entry point. Instances use the dedicated `content.html` viewport.
+
 ## Implemented support system
 
-TypeScript modules under `ui/src/canvas/` provide serializable artboard descriptors,
+JavaScript modules under `ui/src/modules/` provide serializable artboard descriptors,
 validated dimensions, insertion-order geometry, a controller with injected
 runtime and snapshot ports, authenticated iframe messaging, full-canvas review,
-and participating-space context publication. `ui/src/modules/canvas/host.ts`
+and participating-space context publication. `ui/src/bootstrap/canvas.js`
 composes them through `wb-canvas` inside the shipping canvas region. No replacement
 top bar, sidebar, toolbar, artboard picker or inspector is installed.
 
 Each instance has a stable ID, its space/view/size, a render generation, and
-isolated runtime ownership. Shell and annotation ports expose the existing
-renderer; closing/replacing an instance disposes its iframe and pending
+isolated runtime ownership. Explicit content/annotation ports expose metadata,
+navigation and capture without hidden application controls. Closing/replacing an instance disposes its iframe and pending
 requests. The controller suppresses old-generation view reports and
 coordinates capture locks.
 The model permits 32 instances with dimensions of 1–8192 CSS pixels, subject
@@ -62,7 +66,7 @@ IDs, labels, dimensions and input overrides independently of `states`; the
 renderer receives `context.artboard`. Artboard inputs precede state overrides.
 Feedback declares five artboards and no variant states. Docs show one viewport.
 Ordinary single-view pages reuse one renderer across page, state and lens
-navigation. That renderer owns the retained preview sessions and Storybook
+navigation. The required content-only renderer owns the retained preview sessions and Storybook
 channel; navigating it does not replace its iframe. Explicit artboard groups
 own independent renderers. While a group is visible, at most one ordinary
 renderer stays attached, hidden and inert, for up to 15 minutes. It is excluded
@@ -182,13 +186,17 @@ those proposals do not reopen established support-API limits.
   placement, and capture operations. Each artboard owns its view descriptor,
   render generation, loading/error state, annotations, and renderer lifecycle.
   Content adapters expose mount/update, readiness, capture, and disposal.
+  An embedded renderer fills its owning artboard at 100% width and height. Its
+  content viewport contains no application shell, canvas grid or inner frame shadow, including after a docs/lens
+  transition; background and layout authored by preview content remain its own.
   Capabilities such as controls and input differ by content type; the shell
   must not assume every artboard has an iframe, DOM, controls, or input.
 - Distinguish the requested view from the settled view. An outgoing preview
   may remain visible while replacement loads, but its image must not be
   labelled as the new page. Capture and context carry the actual rendered
-  identity plus any pending request. Failed replacement preserves the usable
-  outgoing view and names the failed target; a first-load failure has a named
+  identity plus any pending request. A failed replacement may preserve a usable
+  outgoing view only under its actual identity and must name the failed target;
+  otherwise it shows a named problem. A first-load failure has a named
   placeholder and Retry.
 - Duplicate creates a fresh renderer and copies only space/view/size
   descriptors, with default controls and no copied annotations. Independent

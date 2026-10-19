@@ -5,9 +5,9 @@
    dimensions are captured once, under the first of them. A page whose only
    size is Resizable is still captured once, at EXPORT_FILL. */
 
-import { exportDimensions } from './browser/geometry.ts';
-import { EXPORT_FILL } from './browser/size.ts';
-import type { ResolvedSize } from './browser/size.ts';
+import { exportDimensions } from './browser/geometry.js';
+import { EXPORT_FILL } from './browser/size.js';
+import type { ResolvedSize } from './browser/size.js';
 
 export interface ExportSize { key: string; label: string; width: number; height: number }
 

@@ -2,6 +2,13 @@
 
 ## Product parts
 
+**The Workbench UI is independent of the backend. This is a required architecture
+boundary, not a description of the current implementation.**
+
+The [rendering-flow contract](rendering-flow.md) defines one Workbench shell and
+content-only artboard renderers. Project-preview compilation and static UI
+asset delivery are distinct from composing the Workbench interface.
+
 `packages/workbench/` owns the Workbench product. Applications and libraries are
 peers; the VS Code extension is one delivery host. The product root coordinates
 checks, builds, version consistency and releases, and holds product-wide specs,
@@ -17,7 +24,7 @@ user docs, design fixtures and labs.
 | `contracts/` | Shared manifest/YAML interpretation, wire types and pure rules used across parts |
 | `scripts/` | Product build coordination, temporary distribution assembly and release tooling |
 
-The server owns project state, definition discovery, compilation, output serving
+The server owns project state, definition discovery, project-preview compilation and output serving
 and subordinate compiler processes. The extension owns editor integration and
 the sessions it starts. Capture owns rendering resources. Browser controllers
 request operations through host contracts; elements render and emit events.
@@ -32,10 +39,78 @@ owns those integration and performance requirements.
 ## Dependencies and capability layout
 
 The extension composes server and capture entry points. Server workflows use
-capture, shared contracts, SDK definitions and UI assets. UI runtime code depends
+capture, shared data contracts and SDK definitions. UI runtime code depends
 on browser-safe contracts, never Node, Electron, VS Code or server services.
 The SDK stays independent of application hosts. Shared contracts own no sessions,
 DOM initialization, filesystem I/O or process lifecycle.
+
+### UI and backend independence
+
+- The UI owns the page-list presentation, navigation, artboard rendering and
+  arrangement, selection, component state, interaction, themes and UI lifecycle.
+  Backend responses provide data and operation results; they do not construct
+  Workbench controls or decide how its interface renders.
+- The backend exposes project data and operations through explicit API contracts.
+  Its domain services must not import UI runtime code, depend on component/DOM
+  structure, initialize the shell or decide its presentation. UI asset tooling
+  and delivery are host infrastructure, separate from backend domain services.
+- The UI depends on an injected data/operation client. HTTP and editor messaging
+  adapters implement that client; browser components and capability logic do not
+  import backend implementations or require their filesystem layout. A transport
+  adapter may use documented same-origin endpoints; its base address is host configuration.
+- The browser or editor host loads the UI and supplies its client and host
+  capabilities. Static asset delivery is host infrastructure serving opaque
+  browser assets. Co-location in an installation, process or origin does not
+  authorize application-backend knowledge of UI modules or build conventions.
+- Workbench UI source is JavaScript, Web Components, HTML and CSS. Hosts load,
+  serve or copy those files unchanged. No TypeScript, transpilation, bundling or
+  generated runtime copy participates in UI delivery. Runtime imports, including
+  shared browser rules, resolve to JavaScript. Backend declaration files live
+  outside the UI and are not browser assets.
+- Compilation, serving and proxying of the project's previews remain backend
+  capabilities. The previewed project is content consumed by the Workbench UI;
+  its compiler pipeline must not become the Workbench interface's build pipeline.
+- Shared contracts contain transport-neutral data, validation and demonstrated
+  shared domain rules. They must not introduce backend-to-UI dependencies or
+  shared DOM/presentation implementation under another directory name.
+
+#### Acceptance
+
+1. The UI can load and render a supplied page tree and artboard descriptors with
+   a fixture client, without starting the Workbench backend or preview compiler.
+   Loading, empty, error and interaction states are testable on that boundary.
+2. The backend can start and exercise its APIs without the UI source or assets
+   installed. Backend domain services do not import UI runtime modules. A generic
+   host's opaque UI asset lookup is not a backend application dependency.
+   Explicitly selected project files remain preview content, regardless of which
+   repository supplies that project; they are not backend application dependencies.
+3. UI assets can load from an independent browser/editor host with a configured
+   backend client. Replacing the client does not require changing components or
+   artboard/page-list rendering code.
+4. A UI-only change needs no backend code change or backend rebuild. A backend
+   implementation change that preserves the API needs no UI code change.
+5. UI unit/component tests use UI-owned fixtures and asset tooling. Separate
+   integration tests verify the real API and project-preview pipeline; passing
+   those integration tests alone does not establish UI independence.
+6. Dependency checks and independent host/backend acceptance tests enforce both
+   directions of the boundary. Directory organization or a combined package launch
+   alone is insufficient evidence.
+
+#### Current violations and migration scope
+
+The combined host serves authored JavaScript/CSS bytes through
+[`browser-modules.ts`](../server/node/src/server/browser-modules.ts).
+The VS Code sidebar loads its JavaScript entry point through an allowed webview
+resource URL. Portable docs copy their modules unchanged. No UI transform or
+compiler-wrapper dependency is needed by these delivery paths.
+
+Artboards use a dedicated content-only document with explicit metadata,
+navigation and annotation/capture ports. Startup request and child-markup checks
+cover absence of application initialization; see
+[rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps).
+Component fixtures load unchanged modules without the backend or compiler.
+Complete application loading with a fixture API client and backend API acceptance
+without UI files remain unverified; combined-host checks do not prove them.
 
 JavaScript/TypeScript capability modules use the owning part's
 `src/modules/<capability>/`; current Node services use
@@ -55,6 +130,56 @@ preview-pipeline Node workflows retain their own capability APIs.
 
 ## Delivery and verification
 
+### Browser source ownership
+
+The JavaScript UI is organized by capability, with application startup outside
+component folders:
+
+```text
+ui/src/
+  bootstrap/                 Browser, sidebar and renderer composition/registration
+  components/<name>/         Element, styles, owned helpers and interaction tests
+  components/shared/         Shared modal presentation styles
+  host/                     Browser HTTP transport
+  modules/
+    canvas/                 Artboard state, geometry, controller and publication
+    navigation/             Requested destination, supersession and transition state
+    preview-sessions/       Renderer transport, retention, catalog and legacy adapter
+    review/                 Capture, reference projection, review workflow and browser delivery
+    docs/                   Reading layout and embedded examples
+  theme/                    Standalone tokens and host theme assets
+```
+
+Canvas, navigation, preview-session and review `index.js` files expose their application contracts. Canvas also has
+a pure `presentation.js` entry point for component data and camera geometry;
+components cannot import capability operations, bootstraps or host services.
+Component styles stay beside their element; shared modal styles have their own
+presentation owner. Importing an element class does not register it.
+
+`bootstrap/workbench.js` registers the browser controls and composes the canvas;
+`sidebar.js` is the direct webview module entry. `renderer.js` composes the
+content-only renderer. Size and docs bridges also initialize from bootstrap.
+`bootstrap/canvas.js` connects capability ports to the existing shell. Its
+legacy chrome adapter owns the current DOM controls and restores the previous
+zoom API when its connection ends.
+
+Navigation owns pending destination and request generations. The preview-session
+controller owns the ordinary renderer's parking/expiry policy and shared catalog;
+the canvas controller owns artboard instances, geometry and capture locks.
+Review owns capture/handoff sequencing and partial failure. Its browser adapter
+owns downloads and HTTP delivery. Server-side handoff prompt formatting and its
+tests live under `server/node/src/modules/review/`, not in browser source.
+
+The outer legacy shell still interprets its configuration, hash and controls.
+The content controller separately derives renderer metadata from the project model,
+without menu DOM. `bootstrap/renderer.js` composes content, retained frame sessions,
+native surfaces and annotation/capture ports inside `content.html`.
+The frame lifecycle, native adapter and annotation internals retain JavaScript
+factories under `ui/legacy/`; renderer polling and deeper annotation separation
+remain bounded legacy debt, along with the docs/sizing acceptance gaps.
+
+### Asset and packaging checks
+
 The source extension manifest lives in `extension/package.json`; the product
 root's private package manifest coordinates tools and Node dependencies.
 `stage-extension.cjs` assembles a temporary distribution from the peer owners,
@@ -62,10 +187,11 @@ rewrites extension resource paths for that root, includes production dependencie
 and selected server binaries, and checks product/extension/SDK versions match.
 Cargo sources, build caches, tests, labs and design fixtures do not ship.
 
-Browser modules under `ui/src/` and `contracts/src/` are served with types
-stripped on demand. The legacy shell remains at `/_workbench/`; its manifest and
-YAML script routes use the shared contract implementation. VS Code webviews
-supply local resource roots and CSP for UI assets and shared contracts.
+The combined host serves JavaScript/CSS modules under `ui/src/` and
+`contracts/src/` unchanged. Static serving is host infrastructure, independent of
+backend domain logic and project compiler lifecycle. The [rendering flow](rendering-flow.md) forbids using that delivery
+arrangement to load the full application inside an artboard.
+VS Code webviews supply resource roots and CSP for the UI they host.
 
 Path migrations update imports, compiler runtime lookup, asset serving, webview
 resources/CSP, package assembly, release automation, design pages and source

@@ -44,7 +44,7 @@ function sizeChoice(current, supported) {
     current: current,
     view: null,
     window: {},
-    lensRules: require('../../contracts/src/docs/lenses.ts'),
+    lensRules: require('../../contracts/src/docs/lenses.js'),
     index: current ? { [current]: { src: current } } : {},
     sizesOf: function () { return (supported || ['laptop', 'mobile']).map(function (key) { return { key: key }; }); },
     setSize: function (key) { calls.push(['size', key]); },
@@ -56,8 +56,8 @@ function sizeChoice(current, supported) {
   return { choose: state.chooseSize, calls: calls };
 }
 
-var sizeRules = require('../../contracts/src/sizes/browser/choice.ts');
-var SPACE = require('../../contracts/src/sizes/browser/size.ts').defaultSizes();
+var sizeRules = require('../../contracts/src/sizes/browser/choice.js');
+var SPACE = require('../../contracts/src/sizes/browser/size.js').defaultSizes();
 
 /* updateSizeAvailability with the real size rules, the page's sizes given
    as the server resolves them. */
@@ -76,7 +76,7 @@ function sizeAvailability(options) {
     appliedSize: '',
     signature: function (size) { return size.key; },
     sizesOf: function () { return sizeRules.supported(SPACE, options.page); },
-    lensRules: require('../../contracts/src/docs/lenses.ts'),
+    lensRules: require('../../contracts/src/docs/lenses.js'),
     sizeByKey: function (key) { return SPACE.concat((options.page && options.page.ownSizes) || []).find(function (size) { return size.key === key; }) || null; },
     setSize: function (key) { selected.push(key); state.canvas.dataset.size = key; },
     window: { wbSizes: sizeRules },
@@ -99,13 +99,18 @@ function storyNavigation() {
   var item = { implementationOnly: 'storybook', implementations: { storybook: { title: 'Components/Button' } } };
   var frame = { contentWindow: { postMessage: function (data, origin) { sent.push([JSON.parse(data), origin]); } } };
   var frameBuffer = { contentWindow: {} };
+  var blankClasses = new Set();
   var state = {
     current: 'button', currentState: null, showSeq: 1, frameReady: true,
     pendingFrame: null, frame: frame, frameBuffer: frameBuffer,
     view: { lens: lens }, pageList: null, openLink: {},
     sessionKey: function () { return 'storybook'; },
     sessions: require('./preview-sessions').create({ dispose: function () {}, setTimeout: function () {}, clearTimeout: function () {} }),
-    cancelPendingFrame: function () {}, frameLoaded: function () {}, blank: {},
+    cancelPendingFrame: function () {}, frameLoaded: function () {}, blank: { classList: {
+      add: function (name) { blankClasses.add(name); },
+      remove: function (name) { blankClasses.delete(name); },
+      contains: function (name) { return blankClasses.has(name); },
+    } },
     window: { wbLenses: {
       pick: function (list, picked) { return list.find(function (story) { return story.state === picked; }); },
       storyUrl: function (_lens, id) { return lens.url + '/iframe.html?id=' + id + '&viewMode=story'; },
@@ -395,7 +400,7 @@ function lensSwitcher(item) {
   var box = { hidden: false, innerHTML: '', children: [], appendChild: function (el) { this.children.push(el); } };
   var context = {
     window: { wbManifest: require('../../contracts/manifest') },
-    lensRules: require('../../contracts/src/docs/lenses.ts'),
+    lensRules: require('../../contracts/src/docs/lenses.js'),
     config: {
       implementations: {
         storybook: { key: 'storybook', label: 'Storybook' },
@@ -422,11 +427,11 @@ test('opening on no page still tells the host it is ready', function () {
   var end = source.indexOf('  /* ----------------------------------------------------------- actions */');
   var told = [];
   function noop() {}
-  var el = function () { return { hidden: false, textContent: '', removeAttribute: noop }; };
+  var el = function () { return { hidden: false, textContent: '', removeAttribute: noop, classList: { remove: noop } }; };
   var context = {
     index: {}, showSeq: 0, view: null, current: 'old.html', currentState: null, renderedStory: null,
     pageList: { setCurrent: noop },
-    lensRules: require('../../contracts/src/docs/lenses.ts'),
+    lensRules: require('../../contracts/src/docs/lenses.js'),
     cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
     cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop, holdLayout: noop, commitLayout: noop,
     updateSizeAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,

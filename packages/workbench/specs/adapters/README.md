@@ -32,6 +32,11 @@ describes a page and names the adapter that renders its source.
 
 ## What every adapter supplies
 
+Adapters render project content, not Workbench application chrome. Their browser
+mount runs in a [content-only renderer](../rendering-flow.md); none may use
+Workbench's application `index.html` as its artboard entry point. This leaves
+project compilation/evaluation/server rendering in the backend where required.
+
 | Part | Where it runs | What it is |
 | --- | --- | --- |
 | Build settings | The Workbench server's compiler | Rules, loaders, resolution and defines for its sources, and the profile it builds in ([compiler](../preview-pipeline/compiler.md#one-compiler-per-project-and-profile)) |

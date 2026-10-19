@@ -9,6 +9,11 @@ wait covers only real work.
 
 ## Requirements
 
+Readiness belongs to the requested [content renderer](../rendering-flow.md), not
+the Workbench application document. Loading a wrapper, hiding shell chrome or
+receiving metadata alone cannot declare an artboard ready. Instance, generation
+and destination must match; a late report cannot reveal another request's pixels.
+
 ### What readiness waits for
 
 After mount and the `play` and `ready` hooks, readiness waits for:
@@ -41,8 +46,10 @@ A slow wait is then visible in the Workbench log without a profiler
 
 ### Hidden frames
 
-Frames that are loading or retained render behind the visible frame rather
-than being hidden. The browser keeps painting them, so animation frames,
+Content frames that are loading or retained stay paintable behind the visible
+surface rather than being made non-renderable. This does not permit an outgoing
+view beneath new destination labels, nor a nested Workbench shell. The browser
+keeps painting them, so animation frames,
 font loading and image decoding progress as they would on screen. Only the
 active frame receives input; the others stay inert, as
 [core](../core.md#canvas-and-artboard) requires.

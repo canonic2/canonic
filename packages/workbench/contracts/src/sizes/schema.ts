@@ -6,8 +6,8 @@
    rest is used. See specs/sizes.md. Pure: the config reader hands it the
    parsed YAML and keeps the problems. */
 
-import { defaultSize, defaultSizes, isLength, isSizeKey, labelOf } from './browser/size.ts';
-import type { Length, PageSizes, ResolvedSize } from './browser/size.ts';
+import { defaultSize, defaultSizes, isLength, isSizeKey, labelOf } from './browser/size.js';
+import type { Length, PageSizes, ResolvedSize } from './browser/size.js';
 
 const FIELDS = ['width', 'height', 'label', 'icon', 'button'];
 const ICON = /^[a-z0-9-]+$/;

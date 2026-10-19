@@ -79,12 +79,32 @@ This work follows the iframe runtime ownership in the
   iframe document loading alone does not make a story ready. The selected
   renderer's completion is relayed to the editor only for the requested page,
   state and lens.
+- The shell conceals the outgoing canvas before changing its destination,
+  including while the story catalog is unresolved. An ordinary preview is
+  revealed only when its reported page, state and lens match the request and
+  it is ready or has a named failure. Hiding does not detach its renderer or
+  reload Storybook. Capture and handoff reject a pending destination; queued
+  focus reports cannot route back to the hidden outgoing page.
+- One outer canvas status, `Loading preview…`, covers catalog lookup and
+  rendering. The preview's own loading documents and host labels stay hidden
+  during this transition. Story lookup emits no progress toast. A matching
+  ready view clears the status; a lookup failure replaces it with a persistent
+  error and clears `aria-busy`. Superseded reports cannot overwrite that error.
+  Choosing another page or retrying the failed title starts a fresh status;
+  choosing no available page restores the empty message without a spinner.
+- Titles, state controls and renderer labels derive from the current page and
+  resolved story metadata. Navigation immediately names the destination page;
+  an unresolved story leaves no previous state name behind. A resolved story
+  updates those names before preview switching starts. `wb-view-change` relays
+  label metadata independently of `wb-frame-change` and readiness, so a label
+  update cannot acknowledge an unrendered story. Cold artboards receive their
+  human-readable `target.label` before mounting, including authored child names.
 - Opening explicit artboards parks the ordinary renderer for up to 15 minutes.
   Returning restores its Storybook iframe without loading another preview
   document. Parked renderers cannot select a visible artboard or send editor
   navigation messages, and do not participate in captures or published context.
 - The canvas owns one catalog cache keyed by implementation and exact title.
-  Its shell and isolated renderers share pending and completed lookups over
+  The outer UI and content renderers share pending and completed lookups over
   source-, origin- and channel-checked messages. Failed lookups can retry;
   refreshing configuration clears the shared cache. Closing a renderer cancels
   its pending catalog responses and deadlines.
@@ -109,6 +129,12 @@ This work follows the iframe runtime ownership in the
   story has focus (reported in the user guide; not controlled by Workbench).
 
 ## Screenshots and export
+
+Storybook renders as [content only](rendering-flow.md): a dedicated renderer
+loads its proxied `iframe.html`, never Workbench's application `index.html`.
+Changing or returning to a story preserves the retained Storybook content
+document/channel where allowed; retaining a nested Workbench shell is not the
+mechanism. Add checks for absence of application startup before claiming this boundary.
 
 - A screenshot of a story captures the live story, including opened modals,
   typed text, and scroll, with no Storybook changes: the
@@ -165,4 +191,7 @@ This work follows the iframe runtime ownership in the
   production canvas with a channel-compatible Storybook fixture. It checks one
   preview load across mapped pages, story/lens switches and explicit artboards,
   one index lookup per title, retained edits, delayed rendering,
-  editor acknowledgements, superseded picks, hidden cold startup and Reload.
+  painted page/story/artboard labels, continuous loading through delayed lookup
+  and rendering, failure/retry and
+  empty selection, editor acknowledgements, superseded picks, hidden cold
+  startup and Reload.

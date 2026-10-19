@@ -16,6 +16,11 @@ loads that the runtime does not have yet.
 
 ## Requirements
 
+Warm documents contain [project content only](../rendering-flow.md). Retaining a
+full Workbench application document is not an acceptable warm-runtime mechanism.
+Keep the existing Storybook channel and project content alive without retaining
+hidden application controls or another canvas.
+
 ### Pre-warming on project start
 
 - When a trusted space with native pages starts, the Workbench server's
@@ -37,7 +42,9 @@ The canvas keeps, per project and profile, a runtime that has loaded:
 - global stylesheets from the project environment;
 - the web fonts those stylesheets load.
 
-A selection mounts into one long-lived warm document per project and profile.
+A selection mounts into one long-lived warm document per owning content renderer,
+project and profile. Independent artboards own independent mutable documents;
+they may share compiled chunks and catalog data, not a document or input state.
 Between pages it restores its baseline and loads the selected preview's project
 modules while retaining shared dependencies, stylesheets and fonts. State,
 input and size changes re-render the current page without reloading its modules.
@@ -73,7 +80,9 @@ Import-time body nodes keep their retention rule in
 
 ### Resource bounds
 
-- At most one warm document per project and profile.
+- At most one warm document per owning content renderer, project and profile.
+  Independent artboards are distinct owners. This bound does not permit a global
+  mutable document shared by multiple simultaneously visible artboards.
 - Retained frames keep the limits in [core](../core.md#canvas-and-artboard): one
   active and up to three inactive sessions for 15 minutes. A warm document
   counts as one session.

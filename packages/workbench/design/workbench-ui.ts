@@ -1,13 +1,20 @@
 /* Design examples use the shipping elements and explicit icon input. */
 
 import { icon } from './icons.ts';
-import { registerSpaceComponents } from '../ui/src/components/register.ts';
-import type { WbSpaceMark } from '../ui/src/components/space-mark/element.ts';
-import type { WbSpaceSwitcher } from '../ui/src/components/space-switcher/element.ts';
-import type { Space } from '../ui/src/components/space-mark/space.ts';
+import { registerSpaceComponents } from '../ui/src/bootstrap/register.js';
+import type { WbSpaceMark } from '../ui/src/components/space-mark/element.js';
+import type { WbSpaceSwitcher } from '../ui/src/components/space-switcher/element.js';
 import './spaces.js';
 
-export type { Space };
+export interface Space {
+  id: string;
+  name: string;
+  initial?: string;
+  color?: string;
+  icon?: string | null;
+  image?: string | null;
+  removable?: boolean;
+}
 
 const host = window as unknown as { designSpaces: { current: string; spaces: Space[] } };
 

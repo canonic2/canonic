@@ -19,14 +19,22 @@ Related contracts: [themes](themes.md),
 
 ## Component structure
 
+The UI follows the required [backend-independence contract](modules.md#ui-and-backend-independence).
+The host loads browser-executable UI assets and injects a data/operation client.
+Components, page-list presentation and artboard rendering do not require the
+application backend or project compiler to initialize. Generic host asset delivery
+is permitted. Artboards must follow the [content-only rendering flow](rendering-flow.md),
+not initialize another copy of the application.
+
 The [module layout contract](modules.md) keeps shared components under
 `ui/src/components/` and capability controllers and operations under
 `ui/src/modules/<capability>/`. Components receive inputs and emit events across
 that boundary; they do not own capability I/O or application state.
 
 - Use autonomous custom elements extending `HTMLElement`, with `wb-` tag names
-  such as `wb-space-switcher`. Write erasable TypeScript ES modules with explicit
-  `.ts` imports, following the package's existing source and serving conventions.
+  such as `wb-space-switcher`. Expose deliberate properties and event contracts.
+  Author browser-native JavaScript and CSS. Hosts serve/copy these modules unchanged;
+  no TypeScript, transpilation, bundling or generated implementation is required.
 - Give each component a named folder under `ui/src/components/`, with its element
   implementation, owned styles, and meaningful behavioral tests. Put component
   helpers beside their owner; extract shared behavior only when it has consumers.
@@ -88,8 +96,9 @@ Account for event retargeting; use public events and `composedPath()` where need
 rather than making document listeners depend on private internal targets.
 
 All shell components consume the [theme contract](themes.md). Component styles
-must load under both the VS Code webview's CSP and the standalone server. Do not
-introduce a CDN, browser-side compilation, or a maintained compiled source copy.
+must load under both the VS Code webview's CSP and an independent browser host.
+Do not introduce a CDN or browser-side compilation. The UI owns any asset build;
+backend domain services do not decide or initialize UI presentation.
 
 ## Migration and delivery
 
@@ -160,31 +169,34 @@ element, not in the page.
 
 ## Evidence and implementation gaps
 
-- [Size switcher](../ui/src/components/size-switcher/element.ts),
-  [Custom size](../ui/src/components/size-dialog/element.ts),
-  [Edit sizes](../ui/src/components/sizes-editor/element.ts), and the
-  [Actions switch](../ui/src/components/actions-switch/element.ts) are registered for the
-  canvas only, by [canvas-bootstrap.ts](../ui/src/components/canvas-bootstrap.ts);
-  the sidebar's bundle registers the space controls. Their pure form and row
+- [Size switcher](../ui/src/components/size-switcher/element.js),
+  [Custom size](../ui/src/components/size-dialog/element.js),
+  [Edit sizes](../ui/src/components/sizes-editor/element.js), and the
+  [Actions switch](../ui/src/components/actions-switch/element.js) are registered for the
+  canvas only, by [workbench.js](../ui/src/bootstrap/workbench.js);
+  the sidebar's module registers the space controls. Their pure form and row
   logic is tested in Node beside each element.
 - Each element requires its [design page](#design-pages), a `defineDocs`
   definition in [design/](../design/size-switcher.workbench.ts);
-  [design-pages.test.ts](../ui/src/components/design-pages.test.ts) fails an
+  [design-pages.test.js](../ui/src/components/design-pages.test.js) fails an
   element folder without the three files, the `components/<name>` ID, or a
   Public API section. It checks the page exists, not that it is current: a
   changed API without an updated page is a review finding.
-- [Space switcher](../ui/src/components/space-switcher/element.ts) and
-  [space mark](../ui/src/components/space-mark/element.ts) use the same contract.
+- [Space switcher](../ui/src/components/space-switcher/element.js) and
+  [space mark](../ui/src/components/space-mark/element.js) use the same contract.
   Their [public API and examples](../design/space-switcher.md) document properties,
   events, parts and keyboard behavior. Application operations remain in the
   existing sidebar and canvas controllers.
 - [browser-modules.ts](../server/node/src/server/browser-modules.ts) serves component modules
-  and shared theme CSS with the existing type-stripping route, excluding tests
-  and server modules. [webview-components.ts](../extension/src/webview-components.ts)
-  bundles the same registration entry in memory with the packaged compiler for
-  the direct sidebar webview. A per-document CSP nonce authorizes that script.
-  No compiled source copy is maintained. Owned styles use adopted stylesheets.
-- [Browser component tests](../ui/src/components/space-switcher/element.test.ts)
+  and shared theme CSS unchanged, excluding tests, declarations, TypeScript
+  and server modules. The direct sidebar webview loads the same JavaScript
+  registration entry through a resource URL. Host-owned CSP and local resource
+  roots authorize the script and its module graph.
+  This is the current host asset/tooling path, not Workbench component rendering
+  by the backend. Keep that infrastructure separate from domain and project-compiler
+  lifecycle. Owned styles use adopted stylesheets. Artboard renderers must not load
+  the shell bootstrap from those assets.
+- [Browser component tests](../ui/src/components/space-switcher/element.test.js)
   exercise source loading and nonce bootstrap, upgrade timing, events, keyboard
   focus, reconnect cleanup, defaults and token overrides. They require Chrome;
   real VS Code theme/host acceptance remains a separate manual check.

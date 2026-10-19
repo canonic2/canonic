@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Content renderer</title>
+  <link rel="stylesheet" href="/_workbench/ui/src/theme/defaults.css">
+  <link rel="stylesheet" href="annotations.css">
+  <link rel="stylesheet" href="content.css">
+  <script>window.wbContentOnly = true;</script>
+</head>
+<body>
+  <div id="artboard" data-content-mode="preview">
+    <div id="artboardContent" class="is-pending">
+      <iframe class="is-active" id="frame" title="Preview" allow="clipboard-read; clipboard-write"></iframe>
+      <iframe id="frameBuffer" title="Preview loading" aria-hidden="true" allow="clipboard-read; clipboard-write"></iframe>
+      <canvas id="simulatorCanvas" aria-label="Native preview" hidden></canvas>
+      <div id="simulatorPrompt" hidden>
+        <button id="shareSimulator" type="button">Retry native stream</button>
+        <span id="simulatorStatus" role="status"></span>
+      </div>
+    </div>
+    <div class="wb-annotation-layer" id="annotationLayer">
+      <svg id="annotationSvg" aria-hidden="true"><defs>
+        <marker id="wb-arrowhead" markerWidth="16" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0,0 L16,5.5 L0,11 z" fill="currentColor" stroke="none"></path>
+        </marker>
+      </defs></svg>
+    </div>
+  </div>
+  <script src="manifest.js"></script>
+  <script src="address.js"></script>
+  <script src="keys.js"></script>
+  <script src="lenses.js"></script>
+  <script src="preview-sessions.js"></script>
+  <script src="content-frames.js"></script>
+  <script src="simulator.js"></script>
+  <script src="describe.js"></script>
+  <script src="capture-sync.js"></script>
+  <script src="dom-mirror.js"></script>
+  <script src="preview-bridge-client.js"></script>
+  <script src="annotations.js"></script>
+  <script src="reference.js"></script>
+  <script type="module" src="/_workbench/ui/src/bootstrap/renderer.js"></script>
+</body>
+</html>

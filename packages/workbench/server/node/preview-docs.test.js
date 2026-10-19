@@ -279,17 +279,18 @@ test('a page with a design has its docs as a lens: served at its Markdown, liste
   assert.equal(reviewed.payload.docs.lensLabel, 'Native');
 });
 
-test('the page script and stylesheet are served from src/ with types stripped', async t => {
+test('the page script and stylesheet are served unchanged from browser-ready source', async t => {
   const root = docsProject(t);
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
   const base = `http://127.0.0.1:${running.port}`;
-  const script = await request(base + '/_workbench/ui/src/modules/docs/page/docs-page.ts');
+  const script = await request(base + '/_workbench/ui/src/modules/docs/page/docs-page.js');
   assert.equal(script.status, 200);
   assert.match(script.headers.get('content-type'), /text\/javascript/);
   const body = await script.text();
-  assert.match(body, /import \{ mountExamples \} from "\.\/mount-examples\.ts"/);
-  assert.doesNotMatch(body, /interface ExampleSource|: string\)/);
+  assert.equal(body, fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
+  const mount = await request(base + '/_workbench/ui/src/modules/docs/page/mount-examples.js');
+  assert.equal(await mount.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
   assert.equal((await request(base + '/_workbench/server/node/src/modules/docs/docs-service.ts')).status, 404);
   assert.equal((await request(base + '/_workbench/ui/src/modules/docs/page/docs-page.css')).status, 200);
 });
@@ -398,7 +399,8 @@ test('the portable export builds each docs page in each lens as a static page wi
   assert.deepEqual([options.bundle, options.sourceUrl, options.revisionUrl], [{ module: './examples.js' }, './sources/', '']);
   assert.ok(files.has('browser/docs/docs-button/web/examples.js'));
   assert.ok(files.has('browser/docs/docs-button/web/files/docs/anatomy.svg'));
-  assert.ok(files.has('browser/docs/page.js') && !files.get('browser/docs/page.js').toString().includes('interface '));
+  assert.equal(files.get('browser/docs/page.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
+  assert.equal(files.get('browser/docs/mount-examples.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
   assert.equal(JSON.parse(files.get('browser/docs/docs-button/native/sources/primary')).text,
     'export const primary = (canvas: HTMLElement) => { canvas.textContent = "Native primary"; };');
   assert.match(files.get('browser/docs/docs-button/native/index.html').toString(), /data-wb-example="secondary" data-status="missing"/);

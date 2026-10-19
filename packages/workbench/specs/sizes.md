@@ -194,6 +194,14 @@ name. A menu button follows them and opens the **size menu**:
   icon and is pressed, and its accessible name and title name the size, such
   as *Sidebar, 340 × fill*. Otherwise it shows a chevron.
 - In a docs lens, every size is disabled and nothing is pressed or checked.
+- Source format does not disable sizes: a Markdown-backed page's Storybook or
+  URL lens supports the space's sizes. Returning from Docs restores those
+  controls; selecting a size resizes the retained preview without reloading it.
+- Reusing an ordinary renderer applies the requested preset when metadata for
+  the matching destination arrives. Docs viewport dimensions do not become the
+  next preview's dimensions. A size pick replaces that pending choice. Each
+  choice is applied once so later content-fit measurements can settle normally;
+  explicitly declared artboards retain their authored sizes during navigation.
 - The size switcher never folds into **More**. The top bar's compact
   measurement includes however many buttons the space has.
 - The menu is a menu of radio items: arrow keys move between enabled entries,
@@ -406,7 +414,7 @@ sizes, the local merge, and problems; `address.test.js` for size keys;
 `server/node/config.test.js` and `server/node/server.test.js` for both readers agreeing, writes
 (including comments kept outside replaced blocks), and export plans;
 `server/node/handoff.test.js` for size lines and screenshot names;
-`ui/src/canvas/canvas.test.ts` for multiple-artboard sizes. The size switcher,
+`ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes. The size switcher,
 menu, and dialogs need a browser check of keyboard use and focus with the
 [browser harness](../scripts/chrome.cjs).
 
@@ -418,7 +426,7 @@ menu, and dialogs need a browser check of keyboard use and focus with the
   [server.js](../server/node/server.js); the canvas's size choice, fill axes, keyed
   addresses, and pinned artboard sizes in
   [workbench.js](../ui/legacy/workbench.js) and [zoom.js](../ui/legacy/zoom.js),
-  through the [bridge](../ui/src/sizes/bootstrap.ts); handoff size lines
+  through the [bridge](../ui/src/bootstrap/sizes.js); handoff size lines
   and screenshot names; the export plan and README labels; preview keys and
   the portable viewer; the multiple-artboard model; the agent policy hook's pattern. This
   repository's Sidebar page opens at its `sidebar` size, checked in Chrome at
@@ -430,9 +438,9 @@ menu, and dialogs need a browser check of keyboard use and focus with the
   only.
 - **Configure pages** keeps a page's sizes as written, its own sizes
   included.
-- **Interface:** [`wb-size-switcher`](../ui/src/components/size-switcher/element.ts),
-  [`wb-size-dialog`](../ui/src/components/size-dialog/element.ts), and
-  [`wb-sizes-editor`](../ui/src/components/sizes-editor/element.ts) are Web
+- **Interface:** [`wb-size-switcher`](../ui/src/components/size-switcher/element.js),
+  [`wb-size-dialog`](../ui/src/components/size-dialog/element.js), and
+  [`wb-sizes-editor`](../ui/src/components/sizes-editor/element.js) are Web
   Components ([contract](web-components.md)), in the middle of the top bar
   beside the lens switcher. The canvas controller feeds them and posts to
   `/_workbench/sizes`. Their docs pages are in [design/](../design); a

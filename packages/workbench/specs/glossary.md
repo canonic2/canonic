@@ -108,7 +108,8 @@ The bar across the top of the canvas, with controls for the page showing.
 | **Canvas** | The large area that shows the page, gray and dotted, which zooms and pans. Artboards are drawn on it. `#canvas`, inside the `.wb-main` region, which also holds the toolbar and view controls. |
 | **Canvas mode** | How the canvas shows the page. **Default**: the page is in an artboard on the canvas. **Docs**: a page in a docs lens, shown on its own, has no artboard; its docs fill the canvas, on white, and scroll. The mode follows the lens. Docs beside other artboards are in an artboard like any page. |
 | **Artboard** | The box on the canvas that shows content at a size, labeled with its page's name and size by the **artboard label**. A canvas can hold more than one; see [multiple artboards](multiple-artboards.md). `#artboard`; its clipped `#artboardContent` holds the preview frames. |
-| **Preview frame** | The iframe inside an artboard that loads the page. "Frame" means only this. |
+| **Preview frame** | The content iframe inside an artboard, loading a page or preview rather than the Workbench application. "Frame" means only this. |
+| **Content renderer** | An owned content-only viewport/adapter with mounting, readiness, interaction, capture and disposal. It may own preview frames or a native surface. It never initializes the Workbench application shell; see [rendering flow](rendering-flow.md). |
 | **Toolbar** | The floating bar at the bottom of the canvas: the annotation tools (Select, Scribble, Arrow, shapes, Text, Comment), Undo, Clear, the screenshot, and **Copy handoff**. |
 | **View controls** | The floating controls at the bottom right: **Recenter view**, **Zoom out**, the zoom level and its menu, and **Zoom in**. |
 | **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, state, and artboard they were drawn on. |
