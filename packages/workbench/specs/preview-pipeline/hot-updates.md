@@ -53,7 +53,7 @@ overrides survive every row, including reloads.
 | A Vue component's template | Vue's hot reload re-renders; state kept |
 | A Vue component's script | Vue's hot reload re-creates the component; its state resets, as Vue defines |
 | An HTML preview's markup | The preview re-renders in place from the new module, without a document reload |
-| An Astro component | The worker renders the preview again on the server, and its HTML replaces the old in place without a document reload ([Astro adapter](../adapters/astro.md#edits)) |
+| An Astro component | The Node evaluator renders the preview again on the server, and its HTML replaces the old in place without a document reload ([Astro adapter](../adapters/astro.md#edits)) |
 | A docs page's Markdown | The page's Markdown is replaced in place; live examples and scroll position kept ([docs](#docs-pages)) |
 | A docs example's source | The example updates in place through its adapter, as the matching preview edit would |
 | A module shared by many pages | Hot update in every open frame that loaded it |

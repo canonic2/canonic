@@ -65,13 +65,26 @@ function create(options) {
   var opened = new Map();
   var closed = false;
 
-  function open(targetOrigin) {
+  /* `targetOrigin` is the implementation's address. With `socketOf`, the
+     implementation is a process Workbench owns that listens on a local
+     socket instead of a port: `socketOf(port)` answers that socket's path,
+     starting the process on first use, and the proxy's own port is the one
+     the process is told it serves, so the addresses it writes into its
+     pages lead back here. */
+  function open(targetOrigin, socketOf) {
     var target = new URL(targetOrigin);
     var secure = target.protocol === 'https:';
     var client = secure ? https : http;
     var targetPort = Number(target.port) || (secure ? 443 : 80);
     var sockets = new Set();
     var self = { target: targetOrigin, origin: null, server: null };
+    var listening = null;
+
+    /* Where to connect: the owned process's socket, or the address. */
+    function upstream() {
+      return socketOf ? Promise.resolve(socketOf(listening)).then(function (socketPath) { return { socketPath: socketPath }; })
+        : Promise.resolve({ hostname: target.hostname, port: targetPort });
+    }
 
     function upstreamHeaders(headers) {
       var out = Object.assign({}, headers);
@@ -101,21 +114,29 @@ function create(options) {
     function failed(res, error) {
       if (res.headersSent) { res.destroy(); return; }
       res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end(targetOrigin + ' isn’t answering — is it running? (' + String(error.message || error) + ')');
+      /* An owned process's own error says why it isn't there. */
+      res.end(socketOf ? String(error.message || error)
+        : targetOrigin + ' isn’t answering — is it running? (' + String(error.message || error) + ')');
     }
 
     var server = http.createServer(function (req, res) {
-      var outgoing = client.request({
+      req.pause();
+      upstream().then(function (where) {
+        if (res.destroyed) return;
+        forward(req, res, where);
+      }, function (error) { failed(res, error); });
+    });
+
+    function forward(req, res, where) {
+      var outgoing = client.request(Object.assign({
         protocol: target.protocol,
-        hostname: target.hostname,
-        port: targetPort,
         method: req.method,
         path: req.url,
         headers: upstreamHeaders(req.headers),
         /* No pooled sockets: closing the proxy leaves nothing behind. */
         agent: false,
         rejectUnauthorized: false,
-      }, function (incoming) {
+      }, where), function (incoming) {
         var headers = downstreamHeaders(incoming.headers);
         if (!isDocument(req, incoming.headers)) {
           res.writeHead(incoming.statusCode, incoming.statusMessage, headers);
@@ -147,13 +168,21 @@ function create(options) {
       outgoing.on('error', function (error) { failed(res, error); });
       res.on('close', function () { if (!res.writableFinished) outgoing.destroy(); });
       req.pipe(outgoing);
-    });
+      req.resume();
+    }
 
     /* Dev servers push reloads and their own channels over WebSockets. Pass
        the upgrade through as raw bytes once the request line is rewritten. */
     server.on('upgrade', function (req, socket, head) {
-      var upstream = secure
-        ? tls.connect({ host: target.hostname, port: targetPort, servername: target.hostname, rejectUnauthorized: false })
+      socket.on('error', function () { socket.destroy(); });
+      upstream().then(function (where) {
+        if (!socket.destroyed) tunnel(req, socket, head, where);
+      }, function () { socket.destroy(); });
+    });
+
+    function tunnel(req, socket, head, where) {
+      var upstream = where.socketPath ? net.connect({ path: where.socketPath })
+        : secure ? tls.connect({ host: target.hostname, port: targetPort, servername: target.hostname, rejectUnauthorized: false })
         : net.connect({ host: target.hostname, port: targetPort });
       function end() { socket.destroy(); upstream.destroy(); }
       upstream.on('error', end);
@@ -172,7 +201,7 @@ function create(options) {
         upstream.pipe(socket);
         socket.pipe(upstream);
       });
-    });
+    }
 
     server.on('connection', function (socket) {
       sockets.add(socket);
@@ -190,7 +219,13 @@ function create(options) {
       server.once('error', reject);
       server.listen(0, '127.0.0.1', function () {
         server.removeListener('error', reject);
-        self.origin = 'http://127.0.0.1:' + server.address().port;
+        listening = server.address().port;
+        self.origin = 'http://127.0.0.1:' + listening;
+        /* An owned process believes it serves this port on localhost. */
+        if (socketOf) {
+          targetOrigin = self.target = 'http://localhost:' + listening;
+          target = new URL(targetOrigin);
+        }
         resolve(self);
       });
     });
@@ -208,7 +243,25 @@ function create(options) {
     return proxies.get(origin);
   }
 
+  /* A process Workbench owns, such as a Storybook it runs, reached only
+     through its proxy over a local socket. Keyed by the implementation. */
+  function ownedProxy(key, socketOf) {
+    if (closed) return Promise.reject(new Error('Implementation proxies are closed'));
+    var id = 'owned:' + key;
+    if (!proxies.has(id)) {
+      var opening = open('http://localhost', socketOf);
+      proxies.set(id, opening);
+      opening.then(function (proxy) { opened.set(id, proxy); },
+        function () { if (proxies.get(id) === opening) proxies.delete(id); });
+    }
+    return proxies.get(id);
+  }
+
   return {
+    /* The origin of an owned process's proxy; see ownedProxy. */
+    owned: function (key, socketOf) {
+      return ownedProxy(key, socketOf).then(function (proxy) { return proxy.origin; });
+    },
     /* The same address, at its proxy. */
     address: function (address) {
       return proxyFor(address).then(function (proxy) {

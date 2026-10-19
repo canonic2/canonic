@@ -49,7 +49,8 @@ pub(super) fn fallback(value: Option<&Value>, default: Value) -> Value {
 }
 
 pub(super) fn supported(raw: &Value, file: &Path, root: &Path) -> bool {
-    if raw.get("kind").and_then(Value::as_str) == Some("docs") {
+    // Artboard declarations use the shared evaluator's validation and projection.
+    if raw.get("kind").and_then(Value::as_str) == Some("docs") || raw.get("artboards").is_some() {
         return false;
     }
     if !requests_valid(raw.get("requests")) {

@@ -519,6 +519,12 @@ the shipping server forwards to the preview worker.
 
 Diagnostic controls, not candidates:
 
+- **N: the control without its front door.** `server.js` listens on the
+  public port itself, as it does when the `workbench-server` binary is
+  missing. Run with `--variants 0,N`, it is the comparison the server's
+  [phase 1 acceptance](../../specs/server.md#phase-1-the-front-door) asks
+  for: the front door's first-page, page-list and switching p50 against
+  the server without it. Its renders are checked against variant 0's.
 - **D1: request overhead.** Not a variant: in every variant, the Workbench
   server records, per request, the time from receiving it to the first
   byte, and the time it spends forwarding preview requests; in R, the host

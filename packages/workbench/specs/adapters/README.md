@@ -71,7 +71,7 @@ evaluator only for the parts that have to run JavaScript:
 | React, React Native Web, HTML | Everything | Not started |
 | Vue | Everything, with a Rust compiler that passes conformance ([target](vue.md#target)) | Vue's own compiler, only where the Rust one does not pass |
 | Astro | Rendered HTML, client scripts and styles; saved renders on a warm start | Renders: first open, edits, input changes ([target](astro.md#target)) |
-| Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server ([target](storybook.md#target)) |
+| Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server on a local socket ([how](storybook.md#a-storybook-the-server-runs)) |
 | Custom adapters | The browser mount, and Rust-native rules | The project's JavaScript loaders and plugins |
 
 - **One Node evaluator per space,** not one per adapter. The server starts
@@ -82,8 +82,11 @@ evaluator only for the parts that have to run JavaScript:
 - **An adapter declares which parts are Rust and which are Node,** so adding
   an adapter does not change the server's core.
 - A child process of any kind, the Node evaluator or Storybook's dev server,
-  is the Workbench server's: started on need, bound to loopback, reached only
-  through the server, and stopped with it.
+  is the Workbench server's: started on need, reached only by the server over
+  stdin and stdout pipes or a local socket (a Unix socket, or a named pipe on
+  Windows) and never on a TCP port, and stopped with it. A process the user
+  runs on any port never conflicts with it
+  ([processes and connections](../server.md#processes-and-connections)).
 
 The [glossary](../glossary.md#behind-the-canvas) defines the Workbench
 server, the page index, adapters and the Node evaluator. Project code never
@@ -129,7 +132,10 @@ every adapter in the table. Its format handling is shared code rather than
 separate units: React Native Web's profile is in `options.ts`, Vue's and
 HTML's rules in the shared rule list, Astro's rendering in
 [astro.cjs](../../server/node/preview/astro.cjs), and the adapter-to-module
-map in `project.ts`.
+map in `project.ts`. That worker listens on a loopback TCP port, which the
+target's children do not ([processes and connections](../server.md#processes-and-connections)).
+A Storybook the server runs is implemented in the Node server as the target
+describes, on a local socket ([Storybook](storybook.md#status)).
 
 The Rust server is not implemented. The lab's prototype compiles React and
 plain-module pages only ([stage 2 report](../../labs/instant-first-page/README.md#stage-2-report)).

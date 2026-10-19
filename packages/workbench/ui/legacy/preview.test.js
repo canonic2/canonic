@@ -22,6 +22,7 @@ function preview() {
   var paints = []; var events = [];
   var state = { frame: node(), frameBuffer: node(), pendingFrame: null, artboardContent: node(), artboard: { hidden: true },
     reportRenderedStory: function () {}, revealExample: function () {}, view: null,
+    layoutCommits: [], commitLayout: function () { state.layoutCommits.push(state.frame); },
     document: { createElement: node },
     window: { requestAnimationFrame: function (fn) { paints.push(fn); }, dispatchEvent: function (event) {
       events.push({ frame: event.detail.frame, hidden: state.artboard.hidden });
@@ -42,6 +43,7 @@ function sizeChoice(current, supported) {
   var state = {
     current: current,
     view: null,
+    window: {},
     lensRules: require('../../contracts/src/docs/lenses.ts'),
     index: current ? { [current]: { src: current } } : {},
     sizesOf: function () { return (supported || ['laptop', 'mobile']).map(function (key) { return { key: key }; }); },
@@ -158,6 +160,64 @@ test('a spare iframe that wins the initial load reveals the preview before captu
   assert.equal(state.artboard.hidden, false);
   assert.equal(p.events[0].frame, winner);
   assert.equal(p.events[0].hidden, false);
+});
+
+test('the next page’s layout is applied in the paint that swaps it in, not while it loads', function () {
+  var p = preview(); var state = p.state;
+  state.loadPreview('/initial');
+  state.frameLoaded({ currentTarget: state.frame });
+  p.paint();
+  var showing = state.frame;
+  state.layoutCommits.length = 0;
+  state.loadPreview('/docs/card.md');
+  var next = state.pendingFrame;
+  assert.notEqual(next, showing, 'the next page loads behind the one showing');
+  state.frameLoaded({ currentTarget: next });
+  assert.deepEqual(state.layoutCommits, [], 'loaded, but not yet painted: the canvas keeps the old layout');
+  p.paint();
+  assert.deepEqual(state.layoutCommits, [showing], 'applied in the swap paint, before the frames exchange');
+  assert.equal(state.frame, next);
+});
+
+function layoutHold(options) {
+  var applied = [];
+  var state = {
+    frameReady: options.frameReady, artboard: { hidden: !!options.hidden },
+    shell: { dataset: { canvasMode: options.mode || 'default' } },
+    canvas: { dataset: { size: options.size || 'laptop' } },
+    appliedSize: options.size || 'laptop',
+    window: {},
+    sizeByKey: function (key) { return { key: key }; },
+    signature: function (size) { return size.key; },
+    applySize: function (size) { applied.push(['size', size.key]); state.canvas.dataset.size = size.key; state.appliedSize = size.key; },
+  };
+  var source = fs.readFileSync(path.join(__dirname, './workbench.js'), 'utf8');
+  vm.runInNewContext(source.slice(source.indexOf('  function setCanvasMode('), source.indexOf('  /* The docs page in the frame')), state);
+  var setMode = state.setCanvasMode;
+  state.setCanvasMode = function (mode) { setMode(mode); if (state.shell.dataset.canvasMode === mode) applied.push(['mode', mode]); };
+  return { state: state, applied: applied };
+}
+
+test('a page shown over another holds its canvas mode and size until it commits', function () {
+  var h = layoutHold({ frameReady: true, mode: 'docs', size: 'laptop' });
+  h.state.holdLayout();
+  h.state.setCanvasMode('default');
+  h.state.heldLayout.size = 'mobile';
+  assert.equal(h.state.shell.dataset.canvasMode, 'docs', 'the showing page keeps its mode');
+  assert.equal(h.state.canvas.dataset.size, 'laptop', 'and its size');
+  assert.equal(h.state.sizeKey(), 'mobile', 'the address already names the next size');
+  h.state.commitLayout();
+  assert.equal(h.state.shell.dataset.canvasMode, 'default');
+  assert.equal(h.state.canvas.dataset.size, 'mobile');
+  assert.equal(h.state.heldLayout, null);
+});
+
+test('with nothing showing, the layout applies at once', function () {
+  var h = layoutHold({ frameReady: false, mode: 'default' });
+  h.state.holdLayout();
+  h.state.setCanvasMode('docs');
+  assert.equal(h.state.shell.dataset.canvasMode, 'docs');
+  assert.equal(h.state.heldLayout, null);
 });
 
 test('a superseded pending frame cannot replace the active preview during paint', function () {
@@ -368,7 +428,7 @@ test('opening on no page still tells the host it is ready', function () {
     pageList: { setCurrent: noop },
     lensRules: require('../../contracts/src/docs/lenses.ts'),
     cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
-    cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop,
+    cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop, holdLayout: noop, commitLayout: noop,
     updateSizeAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
     drawSources: noop, setActionsAvailability: noop,
     tellHost: function (src, state, lens) { told.push([src, state, lens]); },

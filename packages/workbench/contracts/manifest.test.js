@@ -207,7 +207,7 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations: “Dev Server” must be kebab-case — it travels in a URL.',
     'implementations: “design” is reserved for a page’s own lens; choose another name.',
     'implementations › dev: needs a base starting with http:// or https://.',
-    'implementations › stories: needs a url starting with http:// or https://, or url: auto.',
+    'implementations › stories: Storybook takes url, not base; leave both out to have Workbench run Storybook.',
     'implementations › docs: kind must be url, storybook, workbench, docs, ios-simulator, or window.',
     'implementations › bare: needs a kind, and a url or base.',
     'implementations › staging: catalog is only available for iOS Simulator implementations.',
@@ -215,6 +215,24 @@ test('names every problem with an implementation and keeps the rest', function (
     'implementations › staging: root must be a folder path, not a URL.',
     'implementations › odd: catalog must be true, false, or a map with an icon.',
     'implementations › catalogued: catalog is only available for iOS Simulator implementations.',
+  ]);
+});
+
+test('a Storybook without a url is one Workbench runs, from its root', function () {
+  var problems = [];
+  var implementations = manifest.implementations({
+    storybook: { kind: 'storybook' },
+    nested: { kind: 'storybook', root: 'packages/ui' },
+    started: { kind: 'storybook', start: { command: 'pnpm storybook', check: { port: 6006 } } },
+  }, problems);
+  assert.deepEqual(implementations.storybook, {
+    key: 'storybook', label: 'Storybook', kind: 'storybook', root: '.', owned: true, url: null,
+  });
+  assert.equal(implementations.nested.root, 'packages/ui');
+  assert.equal(implementations.nested.owned, true);
+  assert.equal(implementations.started.start, undefined);
+  assert.deepEqual(problems, [
+    'implementations › started: start is for a Storybook you run at url; without url, Workbench runs Storybook itself.',
   ]);
 });
 

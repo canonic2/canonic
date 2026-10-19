@@ -18,16 +18,16 @@ async function main() {
     res.setHeader('Content-Type', 'text/html');
     if (req.url === '/index.json') {
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ entries: Object.fromEntries(['default', 'secondary'].map(state => [
-        'page--' + state, { id: 'page--' + state, type: 'story', title: 'Components/Page', name: state },
-      ])) }));
+      res.end(JSON.stringify({ entries: Object.fromEntries(['Page', 'Other'].flatMap(title => ['default', 'secondary'].map(state => [
+        title.toLowerCase() + '--' + state, { id: title.toLowerCase() + '--' + state, type: 'story', title: 'Components/' + title, name: state },
+      ]))) }));
       return;
     }
     res.end(`<!doctype html><html><body><h1>Acme lens</h1><input id="edit" value="Original">
       <details id="menu"><summary>Menu</summary>Open menu</details><div style="height:2500px"></div>
       <script>
       function announce(type,args){parent.postMessage(JSON.stringify({key:'storybook-channel',event:{type,args}}),'*')}
-      function render(id){window.story=id;announce('currentStoryWasSet',[{storyId:id}]);announce('storyRendered',[id])}
+      function render(id){announce('currentStoryWasSet',[{storyId:id}]);setTimeout(()=>{window.story=id;announce('storyRendered',[id])},250)}
       addEventListener('message',event=>{let data=event.data;try{if(typeof data==='string')data=JSON.parse(data)}catch{return}
         if(data?.type==='fixture-command'){
           if(data.value!==undefined)document.querySelector('#edit').value=data.value;
@@ -65,10 +65,21 @@ collections:
     items:
       - label: Page
         src: page.workbench.ts
+        docs: page.md
         implementations:
           storybook: Components/Page
           app: /page
+      - label: Other
+        src: other.html
+        implementations:
+          storybook: Components/Other
+      - label: Feedback
+        src: feedback.workbench.ts
 `);
+  fs.writeFileSync(path.join(root, 'other.html'), '<!doctype html><body>Other authored page');
+  fs.writeFileSync(path.join(root, 'feedback.workbench.ts'), `import {definePreview} from '@canonic2/workbench';export default definePreview({id:'feedback',adapter:'html',source:{entry:'./feedback.ts'},artboards:${JSON.stringify(Object.fromEntries(['info','success','warning','danger','autopilot'].map(id => [id,{label:id,width:320,height:120}])))} });`);
+  fs.writeFileSync(path.join(root, 'feedback.ts'), `export default function(canvas,context){canvas.textContent=context.artboard;}`);
+  fs.writeFileSync(path.join(root, 'page.md'), '# Acme documentation\n\nPage documentation.');
   try {
     running = await server.start({ root, capture: { warm() {}, prepare() {}, preparePage() {}, close() {} } });
     console.log('workbench on ' + running.url);
@@ -85,27 +96,32 @@ collections:
         if (await target.evaluate(expression)) return;
         await new Promise(resolve => setTimeout(resolve, 20));
       }
-      throw new Error('Retained preview did not settle: ' + expression);
+      throw new Error('Retained preview did not settle: ' + expression + '\n' + await target.evaluate(`JSON.stringify({hash:location.hash,state:document.getElementById('artboards')?.state,reports:window.reports,fixtureReports:document.querySelector('wb-canvas > iframe')?.contentWindow.fixtureReports})`));
     }
-    async function pick(lens, state = 'default') {
+    async function pick(lens, state = 'default', expectPending = false) {
       const started = performance.now();
-      const changed = await target.evaluate('changes');
       await target.evaluate('location.hash=' + JSON.stringify('page.workbench.ts:' + state + '@laptop~' + (lens || 'design')));
-      await until('changes > ' + changed);
+      if (expectPending) {
+        await until(`${canvas}.artboards[0]?.target.state==='secondary' && !${canvas}.artboards[0]?.view?.ready`);
+      }
+      await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].target.lens===${JSON.stringify(lens || null)}${lens === 'storybook' ? ` && ${canvas}.artboards[0].target.state===${JSON.stringify(state)}` : ''}`);
       console.log(JSON.stringify({ lens: lens || 'workbench', state, ms: Math.round(performance.now() - started) }));
     }
-    const active = 'document.querySelector("iframe.is-active")';
+    const canvas = 'document.getElementById("artboards").state';
+    const renderer = 'document.querySelector("wb-canvas > iframe").contentWindow';
+    const active = renderer + '.document.querySelector("iframe.is-active")';
     const page = active + '.contentWindow';
     let token = 0;
     async function external(command = {}, which = active) {
       command = { ...command, token: ++token, type: 'fixture-command' };
       await target.evaluate(which + '.contentWindow.postMessage(' + JSON.stringify(command) + ',"*")');
-      await until('fixtureReports.some(report=>report.token===' + token + ')');
-      return target.evaluate('fixtureReports.find(report=>report.token===' + token + ')');
+      await until(renderer + '.fixtureReports.some(report=>report.token===' + token + ')');
+      return target.evaluate(renderer + '.fixtureReports.find(report=>report.token===' + token + ')');
     }
     // Retained preview sessions belong to each isolated artboard renderer.
-    await target.navigate(running.url + 'index.html#page.workbench.ts:default@laptop');
-    await until('changes > 0');
+    await target.navigate(running.url + 'index.html#page.workbench.ts:default@laptop~design');
+    await until(`${canvas}.artboards[0]?.view?.ready`);
+    const rendererId = await target.evaluate(`${canvas}.artboards[0].id`);
     await target.evaluate(`window.reactFrame=${active};${page}.document.querySelector('#edit').value='Edited React';
       ${page}.document.querySelector('#menu').open=true;${page}.document.querySelector('#counter').click();${page}.scrollTo(0,300);`);
     await until(page + '.document.querySelector("#counter").textContent === "1"');
@@ -123,9 +139,25 @@ collections:
     assert.equal(await target.evaluate(active + '===storyFrame'), true);
     const story = await external();
     assert.equal(story.value, 'Edited Story'); assert.equal(story.menu, true); assert.equal(story.story, 'page--default');
-    await pick('storybook', 'secondary');
+    await pick('storybook', 'secondary', true);
     assert.equal(await target.evaluate(active + '===storyFrame'), true);
     assert.equal((await external()).story, 'page--secondary');
+    await pick('docs');
+    await pick('storybook', 'secondary');
+    assert.equal(await target.evaluate(active + '===storyFrame'), true, 'docs navigation retains the Storybook session');
+    await target.evaluate('location.hash="#other.html:default@laptop~storybook"');
+    await until(`${canvas}.artboards[0]?.target.src==='other.html' && ${canvas}.artboards[0]?.view?.ready`);
+    assert.equal(await target.evaluate(active + '===storyFrame'), true, 'a different mapped page uses the same Storybook document');
+    assert.equal((await external()).story, 'other--default');
+    await pick('storybook', 'secondary');
+    await external({value:'Parked Story'});
+    await target.evaluate(`window.ordinaryRenderer=document.querySelector('wb-canvas > iframe');location.hash='#feedback.workbench.ts~design'`);
+    await until(`${canvas}.artboards.length===5 && ${canvas}.artboards.every(b=>b.target.artboard && b.view?.ready)`);
+    assert.deepEqual(await target.evaluate("({rects:ordinaryRenderer.getClientRects().length,inert:ordinaryRenderer.inert,connected:ordinaryRenderer.isConnected})"), {rects:0,inert:true,connected:true}, 'the warm owner stays attached, hidden and inert');
+    await pick('storybook', 'secondary');
+    assert.equal(await target.evaluate("document.querySelector('wb-canvas > iframe')===ordinaryRenderer"), true);
+    assert.equal(await target.evaluate(active + '===storyFrame'), true, 'returning from explicit artboards restores the same Storybook document');
+    assert.equal((await external()).value, 'Parked Story');
     await pick('app');
     assert.equal(await target.evaluate(active + '===urlFrame'), true);
     assert.equal((await external()).value, 'Edited URL');
@@ -133,14 +165,36 @@ collections:
     // Inactive frames cannot navigate the active canvas through the bridge.
     await external({ navigate: true }, 'storyFrame');
     assert.equal(await target.evaluate(active + '===reactFrame'), true);
-    const changed = await target.evaluate('changes');
+    const changed = await target.evaluate(renderer + '.changes');
     await target.evaluate('document.getElementById("reload").click()');
-    await until('changes > ' + changed);
+    await until(renderer + '.changes > ' + changed);
     assert.equal(await target.evaluate(active + '!==reactFrame && ' + page + '.document.querySelector("#edit").value === "Original"'), true);
     assert.equal(requests.filter(url => url.startsWith('/iframe.html')).length, 1, 'Storybook boots once across lens switches and channel selection');
+    assert.equal(requests.filter(url => url === '/index.json').length, 2, 'each of the two titles is resolved once for both shells');
     assert.equal(requests.filter(url => url === '/page').length, 1, 'URL lens boots once');
+    assert.equal(await target.evaluate(`${canvas}.artboards[0].id`), rendererId, 'ordinary navigation retains its owning renderer');
+    // Exercise the real editor iframe boundary: pending selection is followed
+    // by a completion from the outer Workbench, after the story renders.
+    fs.writeFileSync(path.join(root, 'editor.html'), `<!doctype html><iframe id="workbench" src="${running.url}#page.workbench.ts~docs"></iframe><script>window.reports=[];addEventListener('message',e=>{if(e.source===document.getElementById('workbench').contentWindow&&e.data?.type==='wb-here')reports.push(e.data)})</script>`);
+    await target.navigate(new URL('/editor.html', running.url).href);
+    await until("reports.some(r=>!r.pending && r.lens==='docs')");
+    await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:default~storybook'");
+    await until("reports.some(r=>r.pending && r.lens==='storybook')");
+    assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.lens==='storybook')"), false);
+    await until("reports.some(r=>!r.pending && r.lens==='storybook' && r.state==='default')");
+    await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:secondary~storybook'");
+    const embedded = "document.getElementById('workbench').contentDocument.getElementById('artboards').state.artboards[0]";
+    await until(`${embedded}?.target.state==='secondary' && !${embedded}.view?.ready`);
+    await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:default~storybook'");
+    await until("reports.filter(r=>!r.pending && r.lens==='storybook' && r.state==='default').length===2");
+    assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.state==='secondary')"), false, 'a superseded story cannot acknowledge the current selection');
+    await target.navigate(running.url + 'index.html#page.workbench.ts:default@laptop~storybook');
+    await until("!!document.querySelector('wb-canvas > iframe')");
+    assert.equal(await target.evaluate("getComputedStyle(document.querySelector('wb-canvas > iframe')).visibility"), 'hidden', 'cold startup cannot expose the nested Workbench UI');
+    await until(`${canvas}.artboards[0]?.view?.ready`);
+    assert.equal(await target.evaluate("getComputedStyle(document.querySelector('wb-canvas > iframe')).visibility"), 'visible');
     assert.deepEqual(failures, []);
-    console.log('Passed: retained React state, form edits, menus, scroll, Storybook channel reuse, URL reuse, inactive navigation isolation and Reload.');
+    console.log('Passed: retained React/Storybook/URL sessions, delayed readiness, editor acknowledgements, superseded picks, hidden cold startup, inactive navigation isolation and Reload.');
   } finally {
     await browser.close();
     if (running) await running.close();

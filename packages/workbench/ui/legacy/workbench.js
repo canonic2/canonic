@@ -166,7 +166,9 @@
     dialog.pages = Object.keys(resolved.pages).map(function (id) { return { id: id, label: resolved.pages[id].label }; });
     dialog.collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
     dialog.current = current ? { page: current, state: currentState, lens: view && view.lens ? view.lens.key : null,
-      size: canvas.dataset.size, width: Math.round(frame.offsetWidth) || 1440, height: Math.round(frame.offsetHeight) || 900 } : undefined;
+      artboard: window.wbMultiCanvas ? window.wbMultiCanvas.selectedArtboard() : undefined,
+      size: canvas.dataset.size, width: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().width : Math.round(frame.offsetWidth) || 1440,
+      height: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().height : Math.round(frame.offsetHeight) || 900 } : undefined;
     dialog.show();
   });
   document.getElementById('exportDialog').addEventListener('wb-export-request', function (event) {
@@ -247,7 +249,7 @@
     /* A page's default lens is left out: its first docs lens, or its design when it has no docs. */
     var lens = view ? lensRules.addressLens(view.item, config.implementations, view.lens) : null;
     var docs = !!view && lensRules.isDocsLens(view.lens);
-    var size = docs ? null : canvas.dataset.size || null;
+    var size = docs ? null : sizeKey() || null;
     var example = docs ? currentExample : null;
     if (have.src === current && have.state === currentState && have.size === size && have.lens === lens &&
         have.example === example) return;
@@ -338,6 +340,8 @@
     if (lens.kind === 'workbench') {
       var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], state), config.root);
       target.searchParams.set('actions', actionsOn ? 'on' : 'off');
+      var artboard = new URLSearchParams(location.search).get('artboard');
+      if (artboard) target.searchParams.set('artboard', artboard);
       return target.href;
     }
     return window.wbLenses.url(lens, item.implementations[lens.key], state);
@@ -345,6 +349,22 @@
 
   /* The page into the iframe, the usual way. */
   function showFrame(url) {
+    if (window.wbMultiCanvas) {
+      blank.hidden = true;
+      window.wbMultiCanvas.show({ src: current, state: currentState, lens: view.lens ? view.lens.key : null,
+        example: currentExample, docs: lensRules.isDocsLens(view.lens), size: sizeByKey(canvas.dataset.size) || spaceSizes[0], actions: actionsOn,
+        artboards: (!view.lens || view.lens.kind === 'workbench') && resolved && resolved.pages[current] && resolved.pages[current].preview ? resolved.pages[current].preview.artboards : undefined,
+        select: function (state, size, actions, src, lens) {
+          if (actions !== undefined) setActions(actions);
+          var preset = sizesOf(view.item).find(function (entry) { return entry.kind === 'fixed' && entry.width === size.width && entry.height === size.height; });
+          if (preset) canvas.dataset.size = preset.key;
+          if ((src && src !== current) || currentState !== state) writeHash(src || current, state, canvas.dataset.size, lens || (view.lens ? view.lens.key : null), currentExample);
+        },
+      }).catch(function (error) { say(String(error.message || error)); });
+      if (url) openLink.href = view && view.lens ? window.wbLenses.upstream(view.lens, url) : url;
+      else openLink.removeAttribute('href');
+      return;
+    }
     window.wbSimulator.hide();
     blank.hidden = true;
     /* With no current document, keep the whole canvas out of sight until the
@@ -478,7 +498,7 @@
       button.setAttribute('aria-pressed', String(showing === key));
       button.addEventListener('click', function () {
         setLensPref(key);
-        writeHash(current, currentState, canvas.dataset.size, key, currentExample);
+        writeHash(current, currentState, sizeKey(), key, currentExample);
       });
       lensesBox.appendChild(button);
     });
@@ -507,6 +527,8 @@
   var storyCache = {};
 
   function stories(lens, title) {
+    if (window.wbMultiCanvas) return window.wbMultiCanvas.stories(lens.key, title);
+    if (window.wbRequestStories) return window.wbRequestStories(lens.key, title);
     var key = lens.key + '|' + title;
     if (storyCache[key]) return storyCache[key];
     var request = fetch(
@@ -559,6 +581,7 @@
       row.setAttribute('role', 'menuitem');
       row.setAttribute('aria-current', String(entry === picked));
       row.textContent = entry.label;
+      row.dataset.state = entry.target || '';
       row.addEventListener('click', function () {
         openStates(false);
         entry.pick();
@@ -571,8 +594,9 @@
     drawStateMenu(list && list.map(function (story) {
       return {
         label: story.name,
+        target: story.state,
         current: story.id === picked.id,
-        pick: function () { writeHash(current, story.state, canvas.dataset.size, lens.key); },
+        pick: function () { writeHash(current, story.state, sizeKey(), lens.key); },
       };
     }), 'story');
   }
@@ -590,9 +614,10 @@
     drawStateMenu(states.map(function (state, i) {
       return {
         label: state.label,
+        target: window.wbPageList.statePick(item, state, i),
         current: currentState ? currentState === state.id : i === 0,
         pick: function () {
-          writeHash(current, window.wbPageList.statePick(item, state, i), canvas.dataset.size, lens ? lens.key : null);
+          writeHash(current, window.wbPageList.statePick(item, state, i), sizeKey(), lens ? lens.key : null);
         },
       };
     }), 'state');
@@ -736,11 +761,42 @@
   /* The canvas mode follows the lens: 'docs' for a docs lens, whose page
      fills the canvas; 'default' for every other lens, on an artboard. */
   function setCanvasMode(mode) {
+    if (heldLayout) { heldLayout.mode = mode; return; }
+    applyCanvasMode(mode);
+  }
+
+  function applyCanvasMode(mode) {
     if (shell.dataset.canvasMode === mode) return;
     shell.dataset.canvasMode = mode;
     if (window.wbZoom && window.wbZoom.mode) window.wbZoom.mode(mode);
     /* Back from a docs page, the next page's size is applied afresh. */
     if (mode === 'default') appliedSize = '';
+  }
+
+  /* While the next page loads behind the one showing, the canvas keeps the
+     showing page's mode and size: the next page's are held here and applied
+     in the same frame that swaps it in, so the old page is never drawn at
+     the new page's dimensions. */
+  var heldLayout = null;
+
+  function holdLayout() {
+    if (!heldLayout && frameReady && !artboard.hidden) heldLayout = { mode: null, size: null };
+  }
+
+  function commitLayout() {
+    var held = heldLayout;
+    heldLayout = null;
+    if (!held) return;
+    if (held.mode) applyCanvasMode(held.mode);
+    /* Leaving a docs page re-applies the size the canvas was on. */
+    var key = held.size || (shell.dataset.canvasMode === 'default' && !appliedSize ? canvas.dataset.size : null);
+    var size = key && sizeByKey(key);
+    if (size && (key !== canvas.dataset.size || signature(size) !== appliedSize)) applySize(size);
+  }
+
+  /* The size the canvas is on, or the one it moves to with the next page. */
+  function sizeKey() {
+    return (heldLayout && heldLayout.size) || canvas.dataset.size;
   }
 
   /* The docs page in the frame, when it has loaded its script. */
@@ -781,6 +837,7 @@
     }
     currentExample = docsItem ? example || null : null;
     exampleToReveal = currentExample;
+    holdLayout();
     setCanvasMode(lensRules.canvasMode(nextLens));
     var seq = ++showSeq;
     var previousView = view;
@@ -817,6 +874,8 @@
     setActionsAvailability(lens);
 
     if (!item) {
+      if (window.wbMultiCanvas) window.wbMultiCanvas.clear();
+      commitLayout();
       window.wbSimulator.hide();
       artboard.hidden = true;
       frameReady = false;
@@ -841,11 +900,14 @@
     };
 
     if (story) {
+      commitLayout();
       loadStory(item, lens, state, seq, previousView);
       return;
     }
 
     if (window.wbManifest.streamed(lens)) {
+      commitLayout();
+      if (window.wbMultiCanvas) { setTitle(item, null, lens); syncHash(); showFrame(null); return; }
       var streamRef = item.implementations[lens.key];
       currentState = null;
       view.url = null;
@@ -874,6 +936,9 @@
     syncHash();
 
     showFrame(url);
+    /* With nothing showing yet, the page loads at its own size. Otherwise
+       frameLoaded applies the held layout with the page it brings in. */
+    if (!frameReady || artboardContent.classList.contains('is-loading')) commitLayout();
   }
 
   /* ----------------------------------------------------------- actions */
@@ -894,6 +959,8 @@
   function withFlags(src, state) {
     var url = root + src + (src.indexOf('?') > -1 ? '&' : '?') +
       'actions=' + (actionsOn ? 'on' : 'off');
+    var artboard = new URLSearchParams(location.search).get('artboard');
+    if (artboard) url += '&artboard=' + encodeURIComponent(artboard);
     return state ? url + '&state=' + encodeURIComponent(state) : url;
   }
 
@@ -1021,7 +1088,7 @@
     // The warm document: the visible warm host changes page in place, as an
     // application's router would, keeping loaded dependencies, stylesheets and
     // fonts. A new state of the same preview re-renders without reloading it.
-    if (frame.wbWarmHost && frame.wbRequestedUrl && frameReady && /\.workbench\.tsx?(?:[?#]|$)/.test(src) &&
+    if (!force && frame.wbWarmHost && frame.wbRequestedUrl && frameReady && /\.workbench\.tsx?(?:[?#]|$)/.test(src) &&
         new URL(src, location.href).origin === location.origin) {
       var showing = new URL(frame.wbRequestedUrl, location.href);
       var next = new URL(src, location.href);
@@ -1079,6 +1146,7 @@
     if (loaded === pendingFrame) {
       window.requestAnimationFrame(function () {
         if (loaded !== pendingFrame || sequence !== loaded.wbLoadSequence) return;
+        commitLayout();
         var previous = frame;
         previous.classList.remove('is-active');
         previous.setAttribute('aria-hidden', 'true');
@@ -1112,6 +1180,7 @@
     if (loaded === frame && !pendingFrame) {
       window.requestAnimationFrame(function () {
         if (loaded !== frame || pendingFrame || sequence !== loaded.wbLoadSequence) return;
+        commitLayout();
         sessions.activate(loaded);
         loaded.inert = false;
         loaded.classList.add('is-active');
@@ -1128,7 +1197,7 @@
 
   frame.addEventListener('load', frameLoaded);
   frameBuffer.addEventListener('load', frameLoaded);
-  if (location.protocol === 'http:' || location.protocol === 'https:') {
+  if (!window.wbMultiArtboardHost && (location.protocol === 'http:' || location.protocol === 'https:')) {
     warmFrame(frame);
     warmFrame(frameBuffer);
   }
@@ -1306,7 +1375,7 @@
       });
       if (!target) return;
       if (pageList) pageList.reveal(target);
-      writeHash(target, stateOf(index[target], data.state), canvas.dataset.size);
+      writeHash(target, stateOf(index[target], data.state), sizeKey());
       return;
     }
 
@@ -1337,7 +1406,7 @@
     if (!index[src]) return;
 
     if (pageList) pageList.reveal(src);
-    writeHash(src, stateOf(index[src], data.state), canvas.dataset.size);
+    writeHash(src, stateOf(index[src], data.state), sizeKey());
   });
 
   function setActions(on) {
@@ -1429,7 +1498,8 @@
   function setSize(key) {
     var size = sizeByKey(key);
     if (!size) return;
-    applySize(size);
+    if (heldLayout) heldLayout.size = size.key;
+    else applySize(size);
     rememberedSize = size.key;
     try {
       localStorage.setItem('canonic-workbench-size', size.key);
@@ -1480,6 +1550,7 @@
     if (view && lensRules.isDocsLens(view.lens)) return;
     pinnedSize = false;
     setSize(key);
+    if (window.wbMultiCanvas) window.wbMultiCanvas.resize(sizeByKey(key)).catch(function (error) { say(String(error.message || error)); });
     if (current) syncHash();
   }
 
@@ -1872,7 +1943,7 @@
           list: document.getElementById('pageList'),
           collections: collections,
           onPick: function (src, state) {
-            writeHash(src, state, canvas.dataset.size);
+            writeHash(src, state, sizeKey());
           },
         });
       }
@@ -1898,7 +1969,10 @@
     whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'sizes/browser/bootstrap.ts', function () {
       whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'docs/canvas/bootstrap.ts', function () {
         lensRules = window.wbDocsLenses || NO_DOCS;
-        then();
+        if (window.wbMultiArtboardHost) whenModule(function () { return !!window.wbMultiCanvas; }, 'wb-multi-ready', 'components/canvas-bootstrap.ts', then);
+        else if (new URLSearchParams(location.search).has('artboard-runtime')) {
+          whenModule(function () { return !!window.wbRequestStories; }, 'wb-artboard-ready', 'canvas/legacy-runtime.ts', then);
+        } else then();
       });
     });
   }
@@ -1914,6 +1988,7 @@
       sessions.clearInactive();
       sessions.forget(frame);
       applyConfig(loaded, false);
+      if (window.wbMultiCanvas) window.wbMultiCanvas.refresh().catch(function (error) { say(String(error.message || error)); });
     });
   }
 
@@ -1934,18 +2009,28 @@
     problem: function () { return !blank.hidden && !blank.classList.contains('is-loading') && blank.textContent !== BLANK_TEXT ? blank.textContent : null; },
     read: function () {
       if (!view) return null;
+      var artboardId = new URLSearchParams(location.search).get('artboard');
+      var preview = resolved && resolved.pages[current] && resolved.pages[current].preview;
+      var artboardInfo = preview && (preview.artboards || []).find(function (board) { return board.id === artboardId; });
+      var ready = frameReady && !pendingFrame && !pendingStorySwitch && frame.wbRequestedUrl === view.url;
+      if (view.lens && view.lens.kind === 'storybook') {
+        ready = ready && renderedStory && renderedStory.frame === frame && renderedStory.seq === showSeq &&
+          view.story && renderedStory.id === view.story.id;
+      }
       return { src: current, state: currentState, lens: view.lens ? view.lens.key : null,
         sizes: view.item && !lensRules.isDocsLens(view.lens) ? sizesOf(view.item) : undefined,
-        label: artboardName.textContent || (view.item && view.item.label) || current,
-        hash: location.hash, ready: !!view.lens && window.wbManifest.streamed(view.lens) ? !!(window.wbSimulator && window.wbSimulator.ready()) : (frameReady && !pendingFrame && !pendingStorySwitch),
-        states: Array.from(stateMenu.querySelectorAll('button')).map(function (b, i) { return { id: String(i), label: b.textContent, current: b.getAttribute('aria-current') === 'true' }; }),
+        actions: { checked: actionsToggle.checked, disabled: actionsToggle.disabled },
+        label: artboardInfo ? view.item.label + ' / ' + artboardInfo.label : artboardName.textContent || (view.item && view.item.label) || current,
+        hash: location.hash, ready: !!view.lens && window.wbManifest.streamed(view.lens) ? !!(window.wbSimulator && window.wbSimulator.ready()) : !!ready,
+        states: Array.from(stateMenu.querySelectorAll('button')).map(function (b, i) { return { id: String(i), target: b.dataset.state || null, label: b.textContent, current: b.getAttribute('aria-current') === 'true' }; }),
         lenses: Array.from(lensesBox.querySelectorAll('button')).map(function (b) { return { id: b.dataset.lens, label: b.textContent }; }) };
     },
     navigate: function (target) {
       if (!config) throw new Error('The space is still loading.');
-      setLensPref(target.lens || null);
+      var lens = target.lens || 'design';
+      setLensPref(lens);
       var before = location.hash;
-      writeHash(target.src, target.state || null, null, target.lens || null, target.example || null);
+      writeHash(target.src, target.state || null, null, lens, target.example || null);
       if (location.hash === before) route();
     },
     /* The artboard's CSS size, set directly, whatever sizes the space lists. */
@@ -1954,9 +2039,12 @@
       applySize(sizeByKey('resizable') || { key: 'resizable', label: 'Resizable', icon: 'scaling', button: false, kind: 'resizable', width: null, height: null });
     },
     pickState: function (id) { var b = stateMenu.querySelectorAll('button')[Number(id)]; if (b) b.click(); },
-    lens: function (key) { setLensPref(key || null); writeHash(current, currentState, canvas.dataset.size, key || null, currentExample); },
+    lens: function (key) { setLensPref(key || null); writeHash(current, currentState, sizeKey(), key || null, currentExample); },
     reload: function () { reload.click(); },
     refresh: function () { window.wbConfig.load(refreshConfig, refuse); },
+    action: function (name, value) {
+      if (name === 'actions') { setActions(!!value); show(current, currentState); }
+    },
   };
   window.wbConfig.load(start, refuse);
 })();

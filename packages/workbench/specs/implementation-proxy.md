@@ -66,11 +66,30 @@ interaction state is not reconstructed in a separate application session.
   and means nothing outside it.
 - **The server talks to implementations directly.** Storybook index reads,
   catalog imports, start checks, and export reference captures use the
-  configured address, not the proxy.
+  configured address, not the proxy. A process the server runs itself has
+  no other address, so it is reached through its proxy too.
 - **A stopped implementation answers 502** in the preview frame, naming the
   address that isn't answering.
 - **Capture accepts the proxy origins** alongside the configured ones
   (`origins()` in [server.js](../server/node/server.js)).
+
+## A process the server runs
+
+An implementation can be a process the Workbench server runs itself, such
+as a [Storybook without a url](adapters/storybook.md#a-storybook-the-server-runs).
+Its proxy is opened like any other, keyed by the implementation, and its
+upstream is the process's local socket rather than an address:
+
+- The first request through the proxy starts the process; requests and
+  WebSocket upgrades wait until its socket answers, and pass through to it
+  as above.
+- The process is told the proxy's own port and believes it serves
+  `localhost` on it, so `Host` is `localhost:<proxy port>` and the addresses
+  it writes into its pages lead back to the proxy.
+- When it can't start, the proxy answers 502 with the process's own error
+  as the body.
+- **People see the proxy address** for it in handoffs and **Open on its
+  own**, since it has no other.
 
 ## Capture boundary
 
@@ -80,6 +99,12 @@ state. Every framed implementation uses its own proxy origin. Workbench-served
 previews and native streams use their own acquisition paths.
 
 ## Current status
+
+Implemented in the Node server ([proxy.js](../server/node/proxy.js)). In
+the Rust Workbench server the proxies, and the Storybook it runs behind one,
+are part of `workbench-server`, with the same requirements
+([processes and connections](server.md#processes-and-connections),
+[route inventory](server.md#route-inventory)).
 
 ### Verified behavior
 
@@ -105,8 +130,12 @@ opened modal, appearing in the captured image without project changes.
 ## Verification points
 
 - [proxy.test.js](../server/node/proxy.test.js): bridge injection, header and cookie
-  rewriting, redirects, request bodies and `Origin`, WebSocket upgrades, and a
-  stopped implementation.
+  rewriting, redirects, request bodies and `Origin`, WebSocket upgrades, a
+  stopped implementation, and an owned process started by the first request
+  and reached over its socket.
+- [storybook/index.test.ts](../server/node/src/modules/storybook/index.test.ts):
+  a Storybook the server runs, on a socket and told the proxy's port; restart
+  after it exits; the fallback without `--preview-only`; a missing install.
 - [server.test.js](../server/node/server.test.js): the config route's proxy addresses and
   `upstream`, including auto-detected Storybooks.
 - [lenses.test.js](../ui/legacy/lenses.test.js): mapping proxy addresses back

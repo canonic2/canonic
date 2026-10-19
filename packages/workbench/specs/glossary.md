@@ -123,10 +123,10 @@ document, such as a heading's section in docs or a guide.
 
 | Term | Meaning |
 | --- | --- |
-| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, is the front door on the public port and holds the page index; the HTTP server and compile worker run in Node under `server/node/` behind it and are moving into the binary ([server](server.md)). |
+| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, is the front door on the public port and holds the page index; the HTTP server and compile worker run in Node under `server/node/` behind it and are moving into the binary ([server](server.md)). Every request goes through it; its child processes take no TCP port ([processes and connections](server.md#processes-and-connections)). |
 | **Page index** | The part of the Workbench server that finds preview and docs definitions and keeps the saved index; see [page index](preview-pipeline/page-index.md). |
-| **Adapter** | What renders one kind of page: `html`, `react`, `react-native-web`, `vue`, `astro`, or a custom adapter registered in `workbench.config.ts`. A definition or docs lens names its adapter. Storybook stories are the adapter that renders through Storybook's own server; see [adapters](adapters/README.md). |
-| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions. |
+| **Adapter** | What renders one kind of page: `html`, `react`, `react-native-web`, `vue`, `astro`, or a custom adapter registered in `workbench.config.ts`. A definition or docs lens names its adapter. Storybook stories are the adapter that renders through Storybook's own server: one the Workbench server runs on a local socket, or one the user runs at `url`; see [adapters](adapters/README.md). |
+| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions, `workbench.config.ts` and Astro renders. One per space, started on need in a trusted workspace, reached only by the server over stdin and stdout or a local socket, never a TCP port ([processes and connections](server.md#processes-and-connections)). |
 
 ## Naming across interfaces
 

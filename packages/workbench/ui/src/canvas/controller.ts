@@ -1,5 +1,5 @@
-import { add, change, createState, remove, select, size, supportsSize } from './model.ts';
-import { dimensions as sizeDimensions } from '../../../contracts/src/sizes/browser/geometry.ts';
+import { add, arrange, change, createState, remove, select, size, supportsSize } from './model.ts';
+import { dimensions as sizeDimensions, validDimensions } from '../../../contracts/src/sizes/browser/geometry.ts';
 import { EXPORT_FILL } from '../../../contracts/src/sizes/browser/size.ts';
 import type { Artboard, CanvasState, Size, Target, ViewInfo } from './model.ts';
 import type { Runtime } from './runtime.ts';
@@ -8,14 +8,18 @@ export function createController(ports: {
   render(state: CanvasState): void;
   host(board: Artboard, data: unknown): void;
   error(error: unknown): void;
+  activity?(): void;
+  /** Optional automatic wrapping in logical CSS pixels; absent keeps one row. */
+  rowWidth?: number;
   /** The room an artboard has on the canvas, for a size that fills it; EXPORT_FILL when unknown. */
   available?(): Size;
 }) {
   let state = createState(crypto.randomUUID());
   const runtimes = new Map<string, Runtime>();
+  const parked = new Map<string, Artboard>();
   let busy = false;
   let disposed = false;
-  const notify = () => ports.render(state);
+  const notify = () => { if (ports.rowWidth) state = arrange(state, ports.rowWidth); ports.render(state); };
   function live() { if (disposed) throw new Error('Canvas closed.'); }
   function choose(id: string) { live(); state = select(state, id); notify(); }
   function create(target: Target, dimensions: Size) {
@@ -34,10 +38,14 @@ export function createController(ports: {
         const parsed = { ...current.target, src: info.src, state: info.state, lens: info.lens };
         /* A page that can't be shown at the artboard's size takes its first size, a filled axis at the canvas's length now. */
         const first = info.sizes?.[0];
-        const dimensions = supportsSize(current.size, info.sizes) || !first ? current.size : sizeDimensions(first, ports.available?.() || EXPORT_FILL, current.size);
+        let dimensions = supportsSize(current.size, info.sizes) || !first ? current.size : sizeDimensions(first, ports.available?.() || EXPORT_FILL, current.size);
+        if (!busy && info.ready && validDimensions(info.contentSize) && supportsSize(info.contentSize, info.sizes)) dimensions = size(info.contentSize.width, info.contentSize.height);
         state = change(state, board.id, { view: info, target: parsed, size: dimensions }); notify();
         if (dimensions.width !== current.size.width || dimensions.height !== current.size.height) void runtime.request('size', dimensions).catch(ports.error);
-      }, focus() { if (state.selected !== board.id) choose(board.id); }, host(data) { ports.host(board, data); },
+      }, focus() {
+        if (!state.artboards.some(b => b.id === board.id && b.generation === board.generation)) return;
+        ports.activity?.(); if (state.selected !== board.id) choose(board.id);
+      }, host(data) { if (state.artboards.some(b => b.id === board.id && b.generation === board.generation)) ports.host(board, data); },
     });
     runtimes.set(board.id, runtime); notify();
     runtime.element.addEventListener('load', () => {
@@ -46,12 +54,13 @@ export function createController(ports: {
       void runtime.request('size', current.size).catch(ports.error);
     }, { once: true });
   }
-  function replace(id: string, target: Target) {
+  function replace(id: string, target: Target, dimensions?: Size) {
     live();
     if (busy) throw new Error('Wait for the canvas capture to finish.');
     const previous = state.artboards.find(b => b.id === id); if (!previous) throw new Error('Artboard closed.');
+    const nextSize = dimensions ? size(dimensions.width, dimensions.height) : previous.size;
     runtimes.get(id)?.dispose(); runtimes.delete(id);
-    state = change(state, id, { target, view: null, generation: previous.generation + 1 });
+    state = change(state, id, { target, view: null, generation: previous.generation + 1, size: nextSize });
     mount(state.artboards.find(b => b.id === id)!);
   }
   async function command(id: string, name: string, value?: unknown) {
@@ -68,9 +77,23 @@ export function createController(ports: {
   function close(id: string) {
     live();
     if (busy) throw new Error('Wait for the canvas capture to finish.');
-    runtimes.get(id)?.dispose(); runtimes.delete(id); state = remove(state, id); notify();
+    runtimes.get(id)?.dispose(); runtimes.delete(id); parked.delete(id); state = remove(state, id); notify();
   }
-  return { snapshot: () => state, create, replace, choose, command, close, runtime: (id: string) => runtimes.get(id),
+  function park(id: string) {
+    live();
+    if (busy) throw new Error('Wait for the canvas capture to finish.');
+    const board = state.artboards.find(b => b.id === id);
+    if (!board) throw new Error('Artboard closed.');
+    parked.set(id, board); state = remove(state, id); notify();
+  }
+  function resume(id: string) {
+    live();
+    if (busy) throw new Error('Wait for the canvas capture to finish.');
+    const board = parked.get(id); if (!board) throw new Error('Artboard is not parked.');
+    state = change(add(state, id, board.target, board.size), id, { view: board.view, generation: board.generation });
+    parked.delete(id); notify();
+  }
+  return { snapshot: () => state, create, replace, choose, command, close, park, resume, runtime: (id: string) => runtimes.get(id),
     async capture<T>(run: (snapshot: CanvasState, get: (id: string) => Runtime) => Promise<T>): Promise<T> {
       live();
       if (busy) throw new Error('A canvas capture is already running.');
@@ -84,8 +107,17 @@ export function createController(ports: {
         return await run(snapshot, id => { const r = runtimes.get(id); if (!r) throw new Error('Artboard closed.'); return r; });
       } finally {
         await Promise.allSettled(locked.map(r => r.request('unlock'))); busy = false;
+        // Unlock can report newly laid-out content before the response arrives.
+        // Apply those deferred bounds after releasing the immutable capture.
+        for (const board of state.artboards) {
+          const measured = board.view?.contentSize;
+          if (!disposed && board.view?.ready && validDimensions(measured) && supportsSize(measured, board.view.sizes) && (measured.width !== board.size.width || measured.height !== board.size.height)) {
+            state = change(state, board.id, { size: size(measured.width, measured.height) }); notify();
+            void runtimes.get(board.id)?.request('size', measured).catch(ports.error);
+          }
+        }
       }
     },
-    dispose() { if (disposed) return; disposed = true; for (const runtime of runtimes.values()) runtime.dispose(); runtimes.clear(); },
+    dispose() { if (disposed) return; disposed = true; for (const runtime of runtimes.values()) runtime.dispose(); runtimes.clear(); parked.clear(); },
   };
 }

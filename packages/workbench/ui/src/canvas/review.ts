@@ -14,6 +14,7 @@ export function report(state: CanvasState) {
   return { version: 2, canvas: state.id, selected: state.selected, text: reference(state), artboards: state.artboards.map(b => ({
     id: b.id, space: { id: b.target.space.id, name: b.target.space.name }, src: b.target.src,
     state: b.target.state, lens: b.target.lens, size: b.size, status: b.view?.problem || (b.view?.ready ? 'ready' : 'loading'),
+    ...(b.target.artboard ? { artboard: b.target.artboard } : {}),
   })) };
 }
 export async function capture(state: CanvasState, runtime: (id: string) => Runtime) {

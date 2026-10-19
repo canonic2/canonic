@@ -19,6 +19,20 @@ test('visual page defaults use the current state and actual dimensions exactly o
   assert.equal(selected.length, 1); assert.equal(selected[0].state, 'first'); assert.equal(selected[0].width, 777);
   assert.equal(readRequest({ scope: 'page', pages: ['a'] }).variants, 'all');
 });
+
+test('page artboards export at authored sizes and current export identifies the selected artboard', () => {
+  const captures = [
+    { page: 'feedback', state: 'default', artboard: 'info', size: 'info', width: 560, height: 79, variant: 'default-info', url: 'http://localhost/feedback?artboard=info' },
+    { page: 'feedback', state: 'default', artboard: 'success', size: 'success', width: 560, height: 119, variant: 'default-success', url: 'http://localhost/feedback?artboard=success' },
+  ];
+  assert.equal(selectCaptures(captures, readRequest({ format: 'images', sizes: ['laptop'] })).length, 2);
+  const request = readRequest({ format: 'images', scope: 'page', current: { page: 'feedback', artboard: 'success', width: 500, height: 140 } });
+  const selected = selectCaptures(captures, request);
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0]!.artboard, 'success');
+  assert.equal(selected[0]!.width, 500);
+  assert.match(selected[0]!.url, /artboard=success/);
+});
 test('PDF merging preserves custom visual and standard documentation page sizes', async () => {
   const references = [];
   for (const size of [[600, 4000], [595, 842], [612, 792]]) {

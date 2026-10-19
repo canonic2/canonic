@@ -55,10 +55,25 @@ test('built-in browser adapters resolve framework imports from the previewed pro
   assert.match(script, /ACME_PROJECT_REACT_DOM/);
 });
 
+test('a preview page declares artboards independently of its state list', async t => {
+  const root = fixture(t, {
+    'alert.ts': 'export default () => {};',
+    'alert.workbench.ts': `import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'feedback',adapter:'html',source:{entry:'./alert.ts'},artboards:{info:{label:'Info',width:560,height:79},success:{label:'Success',width:560,height:119,inputs:{tone:'success'}}}});`,
+  });
+  const index = await new Compiler(root).index();
+  assert.deepEqual(index.errors, []);
+  assert.deepEqual(index.previews[0].states, [{ id: 'default', label: 'Default' }]);
+  assert.deepEqual(index.previews[0].artboards, [{ id: 'info', label: 'Info', width: 560, height: 79 }, { id: 'success', label: 'Success', width: 560, height: 119 }]);
+  const { indexPages } = require('./src/modules/page-index/index.ts');
+  const native = await indexPages({ root, executable: async () => process.execPath, diagnostic() {}, fallback: async () => { throw Error('Unexpected whole-index fallback'); } });
+  assert.deepEqual(native.answer, JSON.parse(JSON.stringify(index)));
+});
+
 test('native listing matches the compiler on preview fixtures and validation edge cases', async t => {
   const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
   const { indexPages } = require('./src/modules/page-index/index.ts');
   const cases = ['', "sizes: []", "sizes: ['123']", "sizes: ['small--wide']", "states: null", "states: []", "states: { default: null }", "states: { '1': {}, '10': {}, '2': {} }", "title: 42", "controls: { tone: {type: 'select', options: []} }", "controls: { tone: null }", "links: null", "links: {'/next': {state: 'ready'}}", "links: {'/next': {preview: 3}}", "requests: {'bad request': {}}", "requests: {'GET /acme': {body: {ok: true}}}", "states: { empty: { requests: {'GET /acme': []} } }", "states: { empty: { label: 42 } }"];
+  cases.push("artboards: []", "artboards: {}", "artboards: {info:{width:0,height:79}}", "artboards: {info:{width:560,height:8193}}", "artboards: {'bad id':{width:560,height:79}}", "artboards: {info:{width:560,height:79,inputs:[]}}", "artboards: {info:{width:560,height:79,label:42}}", "artboards: {info:{width:560,height:79}}");
   for (const fields of cases) {
     fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields));
     const expected = JSON.parse(JSON.stringify(await new Compiler(root).index()));

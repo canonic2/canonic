@@ -94,6 +94,15 @@ function validate(raw, file, root) {
   }
   if (raw.states !== undefined && (!raw.states || typeof raw.states !== 'object' || Array.isArray(raw.states))) throw new Error(file + ': states must be a map.');
   const states = raw.states && Object.keys(raw.states).length ? raw.states : { default: {} };
+  if (raw.artboards !== undefined) {
+    if (!raw.artboards || typeof raw.artboards !== 'object' || Array.isArray(raw.artboards) || !Object.keys(raw.artboards).length || Object.keys(raw.artboards).length > 32) throw new Error(file + ': artboards must be a map of 1–32 artboards.');
+    for (const [id, board] of Object.entries(raw.artboards)) {
+      if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(id) || !board || typeof board !== 'object' || Array.isArray(board)) throw new Error(file + ': artboards need kebab-case IDs and object definitions.');
+      if (![board.width, board.height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new Error(file + ': artboard width and height must be integers from 1 to 8192.');
+      if (board.label !== undefined && (typeof board.label !== 'string' || !board.label.trim())) throw new Error(file + ': artboard labels must be nonempty text.');
+      if (board.inputs !== undefined && (!board.inputs || typeof board.inputs !== 'object' || Array.isArray(board.inputs))) throw new Error(file + ': artboard inputs must be a map.');
+    }
+  }
   for (const [id, state] of Object.entries(states)) {
     if (!/^[a-z0-9-]+$/.test(id) || !state || typeof state !== 'object' || Array.isArray(state)) throw new Error(file + ': states need kebab-case IDs and object definitions.');
     for (const key of ['inputs', 'fixtures', 'globals']) if (state[key] !== undefined) JSON.stringify(state[key]);
@@ -625,6 +634,7 @@ function projectDefinition(raw, file, root) {
     source: slash(path.relative(root, path.resolve(path.dirname(file), definition.source.entry))),
     states: Object.entries(definition.states).map(([id, state]) => ({ id, label: state.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
     controls: definition.controls || {}, sizes: definition.sizes, docs: definition.docs || null,
+    ...(definition.artboards ? { artboards: Object.entries(definition.artboards).map(([id, board]) => ({ id, label: board.label || id, width: board.width, height: board.height })) } : {}),
     ...(definition.icon ? { icon: definition.icon } : {}),
     links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
       typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.state ? { state: to.state } : {}) }])),

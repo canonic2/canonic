@@ -3,7 +3,9 @@
    bootstrap.ts alone. */
 import { registerActionsComponents, registerSizeComponents, registerSpaceComponents } from './register.ts';
 import './export-dialog/element.ts';
+import { initialize } from '../modules/canvas/host.ts';
 
 registerSpaceComponents();
 registerSizeComponents();
 registerActionsComponents();
+initialize();

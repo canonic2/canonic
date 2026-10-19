@@ -1,17 +1,32 @@
 //! CLI arguments and bounded stdin/stdout JSON transport.
-use crate::{index, model::Request, serve};
+use crate::{config, index, model::Request, serve};
 use anyhow::{Context, Result, bail};
 use std::io::{Read, Write};
 
-const USAGE: &str = "expected: workbench-server index < request.json, or workbench-server serve --upstream <port> [--ports <port,...>]";
+const USAGE: &str = "expected: workbench-server index < request.json, workbench-server config <folder> [--space <id>], or workbench-server serve --upstream <port> [--ports <port,...>]";
 
 pub(crate) fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("index") => index_once(),
+        Some("config") => config_once(args),
         Some("serve") => serve::run(serve::Options::parse(args)?),
         _ => bail!(USAGE),
     }
+}
+
+/// The resolved config of a folder's space, as JSON on stdout.
+fn config_once(mut args: impl Iterator<Item = String>) -> Result<()> {
+    let Some(dir) = args.next() else { bail!(USAGE) };
+    let key = match (args.next().as_deref(), args.next()) {
+        (None, None) => None,
+        (Some("--space"), Some(key)) => Some(key),
+        _ => bail!(USAGE),
+    };
+    let dir = std::path::absolute(&dir).with_context(|| format!("invalid folder {dir}"))?;
+    let answer = config::answer(&dir, key.as_deref())?;
+    std::io::stdout().write_all(&serde_json::to_vec(&answer)?)?;
+    Ok(())
 }
 
 /// One index transaction: a request on stdin, the answer on stdout.

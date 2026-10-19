@@ -12,11 +12,12 @@ export function selectCaptures<T extends Reference>(captures: T[], request: Expo
       if (lens && new URL(reference.url).searchParams.get('lens') !== lens) return [];
     } else {
       if (current && reference.state !== (current.state || firstState)) return [];
+      if (current?.artboard && reference.artboard !== current.artboard) return [];
       if (!current && request.states.length && !request.states.includes(reference.state)) return [];
-      if (!current && request.sizes.length && !request.sizes.includes(reference.size)) return [];
+      if (!current && !reference.artboard && request.sizes.length && !request.sizes.includes(reference.size)) return [];
     }
     let selected = reference;
-    if (current && !reference.docsPage) selected = { ...reference, width: current.width, height: current.height,
+    if (current && !reference.docsPage && (!reference.artboard || current.artboard)) selected = { ...reference, width: current.width, height: current.height,
       size: current.size || 'current', variant: reference.state + '-current' };
     const key = selected.page + ':' + selected.variant;
     if (seen.has(key)) return [];

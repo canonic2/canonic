@@ -1,7 +1,7 @@
 # Serving
 
-Part of the [preview pipeline](README.md). This spec covers how the compile
-worker delivers compiler output to preview frames: URLs, caching, the preview
+Part of the [preview pipeline](README.md). This spec covers how the Workbench
+server delivers compiler output to preview frames: URLs, caching, the preview
 module that each preview address loads, and which routes skip the compile
 queue.
 
@@ -53,18 +53,22 @@ receives pushed updates, so the runtime starts no revision poll
 
 ### Routes
 
-- Output files, the event stream and preview modules bypass the worker's
-  serial request queue. A long compile or export never delays a chunk that a
-  document is waiting for.
+- Output files, the event stream and preview modules never wait behind
+  other work, such as a long compile, an export or an Astro render. A chunk
+  that a document is waiting for is answered as soon as it exists.
 - A failure while serving a file is logged and answered with an error status;
   it does not affect the queue.
 - Preview and docs descriptors wait for the build that contains their entry
-  ([compiler](compiler.md#entries)), not for the serial queue.
+  ([compiler](compiler.md#entries)), and for nothing else.
 
 ## Status
 
-Implemented, with one gap: preview and docs descriptors are still answered in
-the worker's serial queue, so a long export or Astro input render delays them.
+Implemented in the Node preview worker, which the Workbench server forwards
+`/_workbench/previews/` to over a loopback TCP port until
+[phase 4](../server.md#phase-4-previews). The worker answers most requests in
+a serial queue; output files, the event stream and preview modules bypass it.
+One gap: preview and docs descriptors are still answered in that queue, so a
+long export or Astro input render delays them.
 
 ## Verification
 

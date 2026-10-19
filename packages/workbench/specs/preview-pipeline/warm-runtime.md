@@ -18,14 +18,14 @@ loads that the runtime does not have yet.
 
 ### Pre-warming on project start
 
-- When a trusted space with native pages starts, the compile worker starts
-  without waiting for a request. It indexes the project, declares every entry
+- When a trusted space with native pages starts, the Workbench server's
+  compiler starts without waiting for a request. It indexes the project, declares every entry
   ([compiler](compiler.md#entries)), restores the persistent cache and builds.
 - A request during pre-warming waits for that build, which contains its
   entry, and never for a later one.
 - The canvas prepares its warm runtime as soon as the build reports, before a
   native page is selected.
-- Pre-warming never runs project code outside the compile worker, and never
+- Pre-warming never runs project code outside the Node evaluator, and never
   runs in an untrusted space or with `previews: false`.
 
 ### The warm runtime
@@ -84,7 +84,8 @@ Import-time body nodes keep their retention rule in
 
 ## Status
 
-Implemented: pre-warming when the server starts the worker, and the warm
+Implemented in the Node preview worker: pre-warming when the server starts
+the worker, and the warm
 document. A new state, input or size of the preview a warm document shows
 re-renders through the preview runtime without reloading its modules. Gaps:
 

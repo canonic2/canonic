@@ -11,8 +11,10 @@
   var overrides = {};
   var log = [];
   var opened = false;
+  var port = null;
   function frame() { return document.querySelector('iframe.is-active'); }
   function send(command) {
+    if (port) { port.send({ command: command, state: selected && selected.state, inputs: overrides }); return; }
     var active = frame();
     if (active && selected) active.contentWindow.postMessage({ type: 'workbench-preview-command', command: command, state: selected.state, inputs: overrides }, new URL(active.src).origin);
   }
@@ -67,9 +69,12 @@
   window.addEventListener('message', function (event) {
     var active = frame();
     if (!active || event.source !== active.contentWindow || event.origin !== location.origin || event.data && event.data.type !== 'workbench-preview') return;
-    var data = event.data;
+    receive(event.data);
+  });
+  function receive(data) {
     if (!data) return;
-    var requested = new URL(active.src).searchParams.get('state');
+    var active = frame();
+    var requested = !port && active ? new URL(active.src).searchParams.get('state') : null;
     if (requested && data.state && requested !== data.state) return;
     if (data.event === 'ready') {
       if (!selected || selected.id !== data.id || selected.state !== data.state) { overrides = {}; log = []; }
@@ -82,6 +87,10 @@
       log.push({ name: data.name, values: data.values || [] });
       draw();
     }
-  });
-  window.wbPreviewControls = { reset: function () { selected = null; overrides = {}; log = []; button.hidden = true; panel.hidden = true; opened = false; button.setAttribute('aria-expanded', 'false'); } };
+  }
+  window.wbPreviewControls = {
+    connect: function (value) { port = value; },
+    receive: receive,
+    reset: function () { selected = null; overrides = {}; log = []; button.hidden = true; panel.hidden = true; opened = false; button.setAttribute('aria-expanded', 'false'); }
+  };
 })();

@@ -174,6 +174,16 @@
       } catch (_) {}
       prepared = null;
       return (payload.mirror ? mirrorLoaded(payload.mirror, JSON.stringify([payload.url, payload.revision])) : frameLoaded(payload.url, payload.revision)).then(function () {
+        // Content-fitted components have no page surface. Flatten their
+        // transparent corners against the complete canvas's review surface.
+        var fitted = false;
+        try {
+          var root = frame.contentDocument.querySelector('[data-wb-fit-content]');
+          var bounds = root && root.getBoundingClientRect();
+          fitted = !!bounds && Math.abs(bounds.x) < 1 && Math.abs(bounds.y) < 1 && bounds.width <= 8192 && bounds.height <= 8192;
+        } catch (_) {}
+        if (document.body) document.body.style.background = fitted ? '#242424' : '';
+        if (frame.style) frame.style.background = fitted ? '#242424' : '';
         annotations.innerHTML = payload.annotations || '';
         return settle(payload);
       }).then(function () {

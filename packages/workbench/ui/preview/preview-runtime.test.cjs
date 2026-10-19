@@ -58,6 +58,23 @@ test('a reusable renderer disposes its adapter, listeners and canvas exactly onc
   assert.equal(r.window.workbench, null);
 });
 
+test('artboard inputs are independent of states and survive control reset', async () => {
+  const r = runtime('default');
+  let context;
+  await r.boot({ id: 'feedback', inputs: { tone: 'info', title: 'Base' },
+    artboards: { success: { width: 560, height: 119, inputs: { tone: 'success' } } },
+  }, { default: 'component' }, { mount(_canvas, _source, value) { context = value; } }, {}, { artboard: 'success' });
+  assert.equal(context.state, 'default');
+  assert.equal(context.artboard, 'success');
+  assert.equal(context.inputs.tone, 'success');
+  await r.command({ inputs: { title: 'Edited' } });
+  assert.equal(context.inputs.title, 'Edited');
+  await r.command({ command: 'reset' });
+  assert.equal(context.inputs.title, 'Base');
+  assert.equal(context.inputs.tone, 'success');
+  await r.window.__workbenchStop();
+});
+
 test('disposing a renderer cancels a pending font wait instead of blocking its next mount', async () => {
   const r = runtime();
   r.document.fonts.ready = new Promise(() => {});

@@ -174,3 +174,74 @@ test('answers 502 when the implementation is not running', async function () {
     assert.match(answer.body, /isn’t answering/);
   } finally { await proxies.close(); }
 });
+
+/* An owned process: a server on a local socket that the proxy starts on its
+   first request, telling it the proxy's own port. */
+function ownedUpstream() {
+  var dir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'wb-proxy-'));
+  var socket = require('node:path').join(dir, 'owned.sock');
+  var seen = [];
+  var starts = [];
+  var server = http.createServer(function (req, res) {
+    seen.push({ url: req.url, headers: req.headers });
+    res.writeHead(200, { 'Content-Type': req.url === '/iframe.html' ? 'text/html' : 'text/javascript' });
+    res.end(req.url === '/iframe.html' ? '<html><head></head><body>Acme</body></html>' : 'export default 1;');
+  });
+  server.on('upgrade', function (req, sock) {
+    seen.push({ url: req.url, headers: req.headers, upgrade: true });
+    sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
+    sock.on('data', function (chunk) { sock.write(chunk); });
+  });
+  function socketOf(port) {
+    starts.push(port);
+    if (server.listening) return socket;
+    return new Promise(function (resolve) { server.listen(socket, function () { resolve(socket); }); });
+  }
+  return {
+    seen: seen, starts: starts, socketOf: socketOf,
+    close: function () { server.closeAllConnections(); server.close(); require('node:fs').rmSync(dir, { recursive: true, force: true }); },
+  };
+}
+
+test('an owned process is started by the first request and reached over its socket', async function () {
+  var owned = ownedUpstream();
+  var proxies = proxy.create({ bridge: function () { return BRIDGE; } });
+  try {
+    var origin = await proxies.owned('storybook', owned.socketOf);
+    var port = Number(new URL(origin).port);
+    assert.deepStrictEqual(owned.starts, [], 'nothing starts until a request needs it');
+    var page = await request(origin + '/iframe.html', { headers: { 'Sec-Fetch-Dest': 'iframe' } });
+    assert.strictEqual(page.status, 200);
+    assert.ok(page.body.indexOf('<head>' + TAG) !== -1, 'documents still get the bridge');
+    assert.strictEqual(owned.starts[0], port, 'the process is told the proxy’s port');
+    assert.strictEqual(owned.seen[0].headers.host, 'localhost:' + port);
+    assert.strictEqual((await request(origin + '/@vite/client')).body, 'export default 1;');
+    assert.strictEqual(await proxies.owned('storybook', owned.socketOf), origin, 'one proxy per owned process');
+    assert.ok(proxies.origins().indexOf(origin) !== -1);
+
+    var echoed = await new Promise(function (resolve, reject) {
+      var socket = net.connect(port, '127.0.0.1', function () {
+        socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1:' + port + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
+      });
+      var received = '';
+      socket.on('data', function (chunk) {
+        received += chunk;
+        if (/\r\n\r\n$/.test(received) && received.indexOf('ping') === -1) socket.write('ping');
+        if (received.indexOf('ping') !== -1) { socket.destroy(); resolve(received); }
+      });
+      socket.on('error', reject);
+    });
+    assert.match(echoed, /^HTTP\/1\.1 101/);
+    assert.ok(owned.seen.some(function (entry) { return entry.upgrade; }));
+  } finally { await proxies.close(); owned.close(); }
+});
+
+test('an owned process that cannot start answers 502 with its own reason', async function () {
+  var proxies = proxy.create({ bridge: function () { return BRIDGE; } });
+  try {
+    var origin = await proxies.owned('storybook', function () { return Promise.reject(new Error('Storybook isn’t installed in /acme.')); });
+    var answer = await request(origin + '/iframe.html');
+    assert.strictEqual(answer.status, 502);
+    assert.strictEqual(answer.body, 'Storybook isn’t installed in /acme.');
+  } finally { await proxies.close(); }
+});

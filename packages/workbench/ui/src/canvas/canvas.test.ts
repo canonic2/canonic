@@ -55,8 +55,9 @@ test('canvas context includes duplicate and foreign-space artboards, without tru
 });
 
 function setup() {
-  const callbacks: { view(info: ViewInfo): void; focus(): void }[] = [];
+  const callbacks: { view(info: ViewInfo): void; focus(): void; host(data: unknown): void }[] = [];
   const calls: string[][] = [], disposed: number[] = [];
+  const hosts: unknown[] = [];
   const controller = createController({
     mount(_board, handlers) {
       const at = callbacks.length; callbacks.push(handlers); calls.push([]);
@@ -64,16 +65,69 @@ function setup() {
         async request(command) { calls[at]!.push(command); return null; },
         async capture() { throw new Error('unused'); }, dispose() { disposed.push(at); },
       } satisfies Runtime;
-    }, render() {}, host() {}, error(error) { throw error; },
+    }, render() {}, host(_board, data) { hosts.push(data); }, error(error) { throw error; },
   });
-  return { controller, callbacks, calls, disposed };
+  return { controller, callbacks, calls, disposed, hosts };
 }
 
+test('parked renderers remain alive but cannot select, publish, or participate in visible capture', async () => {
+  const { controller, callbacks, disposed, hosts } = setup();
+  const ordinary = controller.create(target, dimensions);
+  callbacks[0]!.view(ready);
+  const runtime = controller.runtime(ordinary);
+  controller.park(ordinary);
+  const explicit = controller.create({ ...target, artboard: 'info' }, dimensions);
+  callbacks[1]!.view(ready);
+  callbacks[0]!.view({ ...ready, src: 'stale.html' });
+  callbacks[0]!.focus(); callbacks[0]!.host('inactive message');
+  assert.equal(controller.snapshot().selected, explicit);
+  assert.deepEqual(hosts, []);
+  assert.deepEqual(disposed, []);
+  await controller.capture(async snapshot => {
+    assert.deepEqual(snapshot.artboards.map(b => b.id), [explicit]);
+    assert.throws(() => controller.resume(ordinary), /capture/);
+  });
+  controller.close(explicit); controller.resume(ordinary);
+  assert.equal(controller.runtime(ordinary), runtime);
+  assert.equal(controller.snapshot().artboards[0]!.view!.src, target.src);
+  assert.deepEqual(disposed, [1]);
+  controller.park(ordinary); controller.dispose();
+  assert.deepEqual(disposed, [1, 0]);
+});
+
+test('ready content bounds resize only their own artboard and follow live edits', () => {
+  const { controller, callbacks } = setup();
+  controller.create(target, dimensions); controller.create(target, dimensions);
+  callbacks[0]!.view({ ...ready, contentSize: { width: 560, height: 79 } });
+  assert.deepEqual(controller.snapshot().artboards.map(b => b.size), [{ width: 560, height: 79 }, dimensions]);
+  callbacks[0]!.view({ ...ready, contentSize: { width: 560, height: 200 } });
+  assert.equal(controller.snapshot().artboards[0]!.size.height, 200);
+  callbacks[1]!.view({ ...ready, ready: false, contentSize: { width: 560, height: 79 } });
+  assert.deepEqual(controller.snapshot().artboards[1]!.size, dimensions);
+  callbacks[1]!.view({ ...ready, contentSize: { width: 560, height: 0 } });
+  assert.deepEqual(controller.snapshot().artboards[1]!.size, dimensions);
+  controller.dispose();
+});
+
+test('content fitting waits until the capture lock is released', async () => {
+  const { controller, callbacks } = setup();
+  controller.create(target, dimensions);
+  callbacks[0]!.view({ ...ready, contentSize: { width: 560, height: 79 } });
+  await controller.capture(async () => {
+    callbacks[0]!.view({ ...ready, contentSize: { width: 560, height: 200 } });
+    assert.equal(controller.snapshot().artboards[0]!.size.height, 79);
+  });
+  assert.equal(controller.snapshot().artboards[0]!.size.height, 200);
+  controller.dispose();
+});
+
 test('replacing content retains the instance ID and discards late messages from its disposed renderer', () => {
-  const { controller, callbacks, disposed } = setup();
+  const { controller, callbacks, disposed, hosts } = setup();
   const id = controller.create(target, dimensions); callbacks[0]!.view(ready);
   controller.replace(id, { ...target, src: 'dashboard.html' });
   callbacks[0]!.view(ready);
+  callbacks[0]!.host('stale generation');
+  assert.deepEqual(hosts, []);
   assert.equal(controller.snapshot().artboards[0]!.target.src, 'dashboard.html');
   assert.equal(controller.snapshot().artboards[0]!.id, id);
   assert.equal(controller.snapshot().artboards[0]!.view, null);

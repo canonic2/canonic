@@ -42,11 +42,14 @@ if (resultsDir && fs.existsSync(resultsDir)) { console.error('Refusing to overwr
 
 const VARIANTS = {
   0: { snapshot: 'control', env: {} },
+  // The control without the Rust front door: server.js on the public port, for
+  // the server's phase 1 acceptance (specs/server.md#phase-1-the-front-door).
+  N: { snapshot: 'control', env: { WORKBENCH_LAB_FRONT_DOOR: 'off' } },
   R: { snapshot: 'rust', env: { WORKBENCH_LAB_PREVIEW: 'rust' } },
   RN: { snapshot: 'rust', env: { WORKBENCH_LAB_PREVIEW: 'neighbours', WORKBENCH_LAB_NEIGHBOURS: '8' } },
   D2: { snapshot: 'rust', env: { WORKBENCH_LAB_PREVIEW: 'cap', WORKBENCH_LAB_CAP: '20' } },
 };
-const rust = variant => variant !== '0';
+const rust = variant => variant !== '0' && variant !== 'N';
 
 const runParent = path.join(os.tmpdir(), 'canonic-workbench-labs', 'instant-first-page', 'runs');
 fs.mkdirSync(runParent, { recursive: true });

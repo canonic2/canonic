@@ -17,6 +17,8 @@ server.start({
   root: fixture,
   config: { dir: fixture, key: null },
   eagerPreviews: true,
+  // Variant N measures the server without its Rust front door.
+  frontDoor: process.env.WORKBENCH_LAB_FRONT_DOOR === 'off' ? false : undefined,
   captureStorage: process.env.WORKBENCH_LAB_STORAGE || undefined,
   capture: { warm() {}, prepare() {}, preparePage() {}, close() {} },
   onLog: record => emit({ log: record, at: Date.now() }),

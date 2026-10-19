@@ -3,14 +3,18 @@
 Architecture and bounded integration plan.
 The [product contract](multiple-artboards.md#implemented-support-system)
 records support APIs, limits, verification, and remaining work. The current
-implementation is infrastructure only; it does not change the shipping UI.
+implementation composes explicitly declared page artboards inside the existing canvas region,
+preserving the shipping shell's markup, controls and layout.
 
 ## Actual module boundaries
 
 | Modules | Ownership |
 | --- | --- |
+| `ui/src/modules/canvas/host.ts` | Explicit page artboards, selected-instance commands, preview controls, review and publication in the existing shell; states remain alternatives. |
+| `ui/src/components/canvas/element.ts` | Keyed artboard shells, labels, resizing and shared camera; no chrome or server operations. |
 | `ui/src/canvas/model.ts`, `geometry.ts` | Serializable state and pure geometry/size policy. |
-| `ui/src/canvas/controller.ts` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, capture locks. |
+| `ui/src/canvas/controller.ts` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, park/resume outside visible state, capture locks. |
+| `ui/src/modules/canvas/story-catalog.ts` | Canvas-owned catalog cache and authenticated renderer requests; concurrent lookup sharing, retry and cleanup. |
 | `ui/src/canvas/runtime.ts` | Per-iframe authenticated messaging, request deadlines, capture responses and cleanup. |
 | `ui/src/canvas/legacy-runtime.ts` | Authenticated command/data adapter for the existing shell/annotation ports, without chrome or style changes. |
 | `ui/src/canvas/review.ts` | Complete reference/context derivation and immutable full-canvas capture composition. |
@@ -29,7 +33,9 @@ one controller owner; renderer handles never enter serializable state.
 
 Tests live with these capabilities. `scripts/smoke-canvas.cjs` exercises real
 Chrome and the packaged capture runtime through a temporary programmatic harness,
-including full handoff persistence. Production controls and layout are unchanged. See the implementation record for actual native-host and
+including full handoff persistence. `smoke-canvas-ui.cjs` exercises the production
+shell, declared page artboards, ordinary state switching, input/size/annotation isolation, preview
+controls and composite native handoff. See the implementation record for actual native-host and
 performance verification limits.
 
 ## Standards and runtime constraints
@@ -62,8 +68,8 @@ for presentation, and write-tests for behavioral verification.
 
 ## Future integration capability map
 
-Presentation, annotation UI extraction, and host composition below are
-future integration work, outside the current infrastructure-only scope.
+The explicit page-artboard presentation and existing-shell composition are implemented.
+The map below also covers deeper extraction and future artboard-management UI.
 
 Suggested paths are relative to `packages/workbench/` and follow the
 [module layout contract](modules.md). These are target paths; the actual module

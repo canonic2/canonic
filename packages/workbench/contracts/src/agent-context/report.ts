@@ -15,6 +15,7 @@ export function cleanView(value: unknown): Record<string, unknown> | null {
       if (typeof b.id !== 'string' || ids.has(b.id) || typeof b.src !== 'string' || !space || typeof space.id !== 'string' || typeof space.name !== 'string' || !size || typeof size.width !== 'number' || typeof size.height !== 'number' || ![size.width,size.height].every(Number.isFinite)) throw new Error('Invalid artboard context.');
       ids.add(b.id);
       return { id: b.id, space: { id: space.id, name: space.name }, src: b.src, state: typeof b.state === 'string' ? b.state : null,
+        ...(typeof b.artboard === 'string' ? { artboard: b.artboard } : {}),
         lens: typeof b.lens === 'string' ? b.lens : null, size: { width: size.width, height: size.height }, status: typeof b.status === 'string' ? b.status : 'loading' };
     });
     if (v.selected !== null && (typeof v.selected !== 'string' || !ids.has(v.selected))) throw new Error('Invalid selected artboard.');

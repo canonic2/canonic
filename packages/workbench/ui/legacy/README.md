@@ -31,8 +31,24 @@ The default `/_workbench/` route continues to serve `index.html` with its
 existing controls and layout. TypeScript modules under `../src/canvas/` supply
 serializable multi-artboard state, geometry, a controller with injected runtime
 ports, authenticated iframe transport, full-canvas review, and context publication.
-They do not install a replacement canvas UI. Shell and annotation ports expose the
-existing renderer to a future host; native producers are pooled by source/codec.
+`../src/modules/canvas/host.ts` composes a preview page's explicit `artboards` into independent
+`wb-canvas` artboards inside the existing canvas region. The existing shell
+continues to own its sidebar, top bar, toolbar, source/configuration/export
+dialogs and routing. Its controls target the selected instance; camera and
+review operations cover the complete canvas. Shell and annotation ports expose
+the isolated renderers; native producers are pooled by source/codec.
+One ordinary renderer can stay attached, hidden and inert, while explicit
+artboards are visible, preserving its Storybook session for up to 15 minutes.
+Only visible artboards enter selection, capture and published context. The canvas
+owns a shared story catalog; renderer lookups use authenticated iframe messages.
+
+`definePreview({ artboards: { id: { label, width, height, inputs } } })` declares
+1–32 children of one page. Width and height are integers from 1 to 8192; label
+and inputs are optional. Artboards are independent of `states`: state switching
+shows an alternative page state, and ordinary states or stories produce no
+extra artboards. The renderer receives `context.artboard`; artboard inputs are
+merged before state inputs. The native index delegates these definitions to
+the shared evaluator so validation and metadata match compilation.
 
 See [the support-system record](../../specs/multiple-artboards.md) and
 [the module plan](../../specs/multiple-artboards-code-plan.md) for APIs and limits.
@@ -167,9 +183,9 @@ declared once at the top and referred to by name:
 implementations:
   storybook:                  # any kebab-case name; it's the button's label unless `label` says otherwise
     kind: storybook           # workbench | url | storybook | ios-simulator | window
-    url: auto                 # or an explicit http://localhost:6006
-    root: ../product/packages/ui   # optional folder: where the code is, relative to this file or absolute
-    start:                    # optional: start it in VS Code when the check fails
+    url: auto                 # or an explicit http://localhost:6006; leave out to have Workbench run Storybook itself
+    root: ../product/packages/ui   # optional folder: where the code is, relative to this file or absolute; without url, where Storybook runs
+    start:                    # optional, with url: start it in VS Code when the check fails
       command: yarn storybook
       cwd: ../product         # relative to workbench.yaml; default is .
       check:

@@ -28,6 +28,10 @@ Phases 2 to 5 are not implemented.
   listens publicly itself and runs the index as a process per request.
 - Previews compile in the Node preview worker, a child process the server
   forwards `/_workbench/previews/` to.
+- URL and Storybook lenses are framed through implementation proxies that
+  `server.js` opens, and a Storybook implementation without `url` is a
+  Storybook `server.js` runs on a local socket
+  ([processes and connections](#processes-and-connections)).
 
 ## Target
 
@@ -36,6 +40,44 @@ runtime. `workbench-server` answers HTTP, holds the page index resident with
 one watcher, and runs the compiler. Node runs only as child processes for
 project code. The editor-side callbacks become messages between the extension
 and the server.
+
+### Processes and connections
+
+Every request goes through the Workbench server, and the server is the only
+thing that talks to its child processes (decided by the owner on 2026-10-16
+and 2026-10-18).
+
+| Process | Runs | Listens on | Started |
+| --- | --- | --- | --- |
+| `workbench-server`, one per space | HTTP for the canvas, the page index and its watcher, the compiler (Rspack's Rust crates), serving and pushed updates, the [implementation proxies](implementation-proxy.md) | The space's public loopback port, and one loopback port per proxied implementation origin, because each framed implementation needs an origin of its own | By the extension or Studio |
+| The Node evaluator, one per space | Project code: computed definitions, `workbench.config.ts`, Astro compiling and rendering, Vue's compiler where the Rust one does not pass, project JavaScript loaders ([adapters](adapters/README.md#how-pages-are-served)) | Nothing: stdin and stdout pipes, or a local socket | On first need, in a trusted workspace |
+| A Storybook the server runs | The project's `storybook dev --preview-only` ([Storybook adapter](adapters/storybook.md#a-storybook-the-server-runs)) | A local socket only | On the first story request, in a trusted workspace |
+
+- **No child takes a TCP port.** A child is reached over stdin and stdout
+  pipes or a local socket (a Unix socket, or a named pipe on Windows) in a
+  private temporary folder, so only the server can reach it, and a dev
+  server or Storybook the user runs on any port never conflicts with it.
+- **Children are the server's.** Started on need, restarted on the next
+  need after they exit, and stopped with the server. A space that needs no
+  project code on the server starts none.
+- **The browser reaches a child only through the server:** a page an owned
+  child serves is framed through its implementation proxy, whose port the
+  child is told it serves, so the addresses it writes into its pages lead
+  back to the proxy.
+- **Implementations the user runs** (`kind: url`, or Storybook at `url`) are
+  read at their own address and framed through their proxy, as today.
+
+Today, in the Node server ([current state](#current-state)), these differ
+from the target, and close as the phases below move routes into Rust:
+
+- The front door forwards to `server.js` on a private loopback TCP port.
+- The preview worker, a Node child of `server.js`, listens on a loopback TCP
+  port; it compiles with Rspack's JavaScript API and evaluates definitions
+  and `workbench.config.ts` with esbuild.
+- The page index's evaluator, a child of the front door, already uses stdin
+  and stdout.
+- A Storybook the server runs already listens only on a local socket
+  ([storybook/](../server/node/src/modules/storybook/index.ts)).
 
 ## Migration
 
@@ -95,19 +137,35 @@ server; the Rust reader must give the same answer, checked by a parity
 harness that runs both readers over the same fixtures, as the page index's
 parity tests do. Storybook `url: auto` detection moves with it.
 
+Implemented so far: the reader, `workbench-server config <folder> [--space
+<id>]` ([config.rs](../server/src/config.rs)): the YAML subset, local
+merging, spaces, the manifest rules, sizes, the page tree and resolution for
+this machine, answering what `config.resolve(dir, config.read({ dir, key }))`
+answers in Node. [config-parity.test.js](../server/node/config-parity.test.js)
+runs both readers over a corpus that reaches every rule and problem and over
+seeded random configs, and they agree on all of them. Not yet: answering the
+route from the front door, previews and docs from the resident index,
+Storybook detection and the Simulator catalog; until phase 3 the Node server
+keeps adding the proxy addresses.
+
 ### Phase 3: files and assets
 
 The canvas's own files under `/_workbench/`, its TypeScript modules (stripped
 of types in Rust), project files with the compatibility script injected,
-`.md` pages, and the config files. The routes that need the editor or the
-capture helper (open, capture, handoff, export, simulator input and streams)
-stay forwarded until the callbacks become messages.
+`.md` pages, and the config files. The implementation proxies, the
+Storybook the server runs on a local socket, and the stories route move here
+too: they forward HTTP and start a child, and need neither the compiler nor
+the editor (decided by the owner on 2026-10-18). The routes that need the
+editor or the capture helper (open, capture, handoff, export, simulator input
+and streams) stay forwarded until the callbacks become messages.
 
 ### Phase 4: previews
 
 `/_workbench/previews/` moves from the Node worker to the Rust compiler host,
 after the next lab settles the [adapters](adapters/README.md#open-questions)
 that need it. This is when the binary moves to Rspack's nightly toolchain.
+The Node preview worker is replaced by the Node evaluator, which takes no
+port ([processes and connections](#processes-and-connections)).
 
 ### Phase 5: the server owns the process
 
@@ -127,7 +185,9 @@ child processes.
 | `/_workbench/preview-runtime.js`, `preview-requests.js`, `preview-compat.js` | Preview runtime files | Phase 3 |
 | `/_workbench/previews/`, `*.workbench.ts(x)` | Forwarded to the preview worker | Phase 4 |
 | `/_workbench/sizes`, `config-file`, `spaces`, `spaces/open`, `canvas/space`, `canvas/review`, `log`, agent view | Config editing, spaces, logging, agent context | Phase 3, or 5 where they reach the editor |
-| `/_workbench/open`, `shot`, `capture/*`, `handoff`, `export`, `stories` | Editor, capture helper and export | Phase 5 |
+| Implementation proxies and a Storybook the server runs | Loopback proxy origins per implementation; the owned Storybook on a local socket | Phase 3 |
+| `/_workbench/stories` | A Storybook's index, read at its address or through its proxy | Phase 3 |
+| `/_workbench/open`, `shot`, `capture/*`, `handoff`, `export` | Editor, capture helper and export | Phase 5 |
 | `/_workbench/simulator/*`, `/_workbench/window/stream` (WebSocket) | Native streams and Sandbox input | Phase 5 |
 
 ## Decisions for the owner

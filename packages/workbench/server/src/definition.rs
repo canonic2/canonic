@@ -32,6 +32,19 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
+    fn page_artboards_use_the_shared_definition_evaluator() {
+        let raw = json!({"id":"page","adapter":"html","source":{"entry":"page.html"},"artboards":{"info":{"width":560,"height":79}}});
+        assert!(
+            project(
+                &raw,
+                Path::new("/acme/page.workbench.ts"),
+                Path::new("/acme"),
+                |_| true
+            )
+            .is_none()
+        );
+    }
+    #[test]
     fn validation_errors_keep_the_definition_path() {
         let root = Path::new("/acme");
         let file = root.join("page.workbench.ts");

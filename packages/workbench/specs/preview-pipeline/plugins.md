@@ -52,7 +52,7 @@ export default defineConfig({
 - `rules` is a list of Rspack module rules, applied after Workbench's own
   rules. Loader paths resolve from the project root.
 - Workbench evaluates `workbench.config.ts` with packages external
-  ([compiler](compiler.md#what-stays-on-esbuild)). A plugin therefore takes
+  ([compiler](compiler.md#what-runs-in-the-node-evaluator)). A plugin therefore takes
   Rspack's classes from the compiler it is applied to (`compiler.rspack`),
   rather than importing its own copy of `@rspack/core`, which the project need
   not install.
@@ -75,11 +75,38 @@ The portable build and the export's docs examples build with an Rspack
 production compiler that uses the same format handling and project plugins,
 so projects write one plugin form.
 
+## Target
+
+In the Rust Workbench server ([processes and connections](../server.md#processes-and-connections)),
+the compiler is Rspack's Rust crates, and only project JavaScript leaves the
+server, for the Node evaluator:
+
+- **Workbench's format handling is native.** SWC with React Refresh, native
+  CSS, assets, `tsconfig.json` paths, aliases, `dedupe`, `define`, the
+  `@canonic2/workbench` and preview runtime resolution, and the React Native
+  Web profile are options of Rspack's Rust crates. The HTML loader and part
+  loader become Rust loaders ([HTML adapter](../adapters/html.md#target)). Vue
+  and Astro follow their adapters' targets ([Vue](../adapters/vue.md#target),
+  [Astro](../adapters/astro.md#target)).
+- **`workbench.config.ts` is evaluated in the Node evaluator.** Its
+  declarative settings (`aliases`, `dedupe`, `resolveExtensions`, `define`,
+  and each rule's conditions) become compiler options in the server.
+- **Project `rules`:** a rule whose loader is one of Rspack's built-in loaders
+  runs natively; a JavaScript loader runs in the Node evaluator, one module
+  at a time, over the evaluator's private channel, and its result returns to
+  the compilation.
+- **Project `plugins`** are JavaScript objects with `apply(compiler)` that use
+  `compiler.rspack`. Rspack's Rust crates cannot call them. How they are
+  supported is open ([adapters](../adapters/README.md#open-questions)).
+- **Portable output** uses the same native compiler in production mode, with
+  the same rules and the same answer for plugins.
+
 ## Status
 
-Implemented: Workbench's format handling as Rspack loaders and rules, the
+Implemented in the Node preview worker, with Rspack's JavaScript API:
+Workbench's format handling as Rspack loaders and rules, the
 project `plugins` and `rules` keys, plugin-shape validation, and
-portable output from an Rspack production build. HTML previews bundle every
+portable output from an Rspack production build. Not implemented in Rust. HTML previews bundle every
 inline and local script and run it per render, with top-level declarations
 private. An `aliases` entry stands in for an Astro application module, such as
 `astro:content`. Gaps:

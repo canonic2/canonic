@@ -79,6 +79,11 @@
   }
 
   var document = root.document;
+  root.wbMultiArtboardHost = !!root.location && /^https?:$/.test(root.location.protocol) && !new URLSearchParams(root.location.search).has('artboard-runtime');
+  if (root.wbMultiArtboardHost) {
+    root.wbZoom = { scale: function () { return 1; }, update: function () {}, fit: function () {}, hold: function () {}, key: function () { return false; }, command: command, mode: function () {} };
+    return;
+  }
   if (root.location && root.location.search && root.location.search.indexOf('artboard-runtime=') !== -1) {
     root.wbZoom = { scale: function () { return 1; }, update: function () {}, fit: function () {}, hold: function () {},
       key: function () { return false; }, command: command, mode: function () {} };

@@ -17,12 +17,17 @@ The keys, their validation, and examples are in the
 - A project may declare several Storybooks. Workbench reads each one's live
   `/index.json`, which Storybook 7 and later serve. Story source links and
   export sources resolve against the implementation's `root`.
+- Without `url`, the Workbench server runs the project's Storybook itself
+  from `root` (the space root unless set), on a local socket and never a
+  TCP port, in trusted workspaces only
+  ([adapter](adapters/storybook.md#a-storybook-the-server-runs)). `start`
+  without `url`, and `base` on a Storybook, are problems.
 - `url: auto` finds a running Storybook from the project's package scripts and
   the default ports ([guide](../docs/storybook.md#detect-the-port-with-url-auto)).
   The detected address is remembered while the server runs. When nothing
   answers, `problems` says so and story lookups for that implementation are
   refused. Detection never launches a process.
-- `start` launches Storybook in VS Code as described in
+- `start`, for a Storybook at `url`, launches it in VS Code as described in
   [implementation startup](vscode-extension.md#implementation-startup). A
   timeout is logged; the canvas still opens, and a mapped page's Storybook
   lens shows the failure when it is opened.
@@ -67,6 +72,22 @@ This work follows the iframe runtime ownership in the
 - The first story loads in the preview iframe. Later picks on the same
   Storybook origin ask the loaded preview to switch through Storybook's
   `setCurrentStory` channel. This keeps the Storybook runtime warm.
+- The ordinary single-view canvas keeps its owning renderer across page, state
+  and lens navigation. Its first paint stays hidden until the requested preview
+  is ready, so the renderer's hosting interface cannot flash inside the artboard.
+  Ready status requires the matching story's render event and visible iframe;
+  iframe document loading alone does not make a story ready. The selected
+  renderer's completion is relayed to the editor only for the requested page,
+  state and lens.
+- Opening explicit artboards parks the ordinary renderer for up to 15 minutes.
+  Returning restores its Storybook iframe without loading another preview
+  document. Parked renderers cannot select a visible artboard or send editor
+  navigation messages, and do not participate in captures or published context.
+- The canvas owns one catalog cache keyed by implementation and exact title.
+  Its shell and isolated renderers share pending and completed lookups over
+  source-, origin- and channel-checked messages. Failed lookups can retry;
+  refreshing configuration clears the shared cache. Closing a renderer cancels
+  its pending catalog responses and deadlines.
 - Leaving a Storybook lens retains its iframe under the canvas's 15-minute,
   three-inactive-session policy. Returning to its current story preserves
   interactions without rendering again. Picking another story in that session
@@ -140,3 +161,8 @@ This work follows the iframe runtime ownership in the
   accepted only from the active Storybook iframe and its origin.
 - [startup.test.js](../extension/startup.test.js) checks start commands, trust, and
   readiness probes.
+- [smoke-preview-sessions.cjs](../scripts/smoke-preview-sessions.cjs) drives the
+  production canvas with a channel-compatible Storybook fixture. It checks one
+  preview load across mapped pages, story/lens switches and explicit artboards,
+  one index lookup per title, retained edits, delayed rendering,
+  editor acknowledgements, superseded picks, hidden cold startup and Reload.

@@ -247,7 +247,7 @@ storage. Browser-only VS Code cannot spawn any of these local processes.
 
 The worker runs project code, so it is a separate process from the extension
 host and server. Its lifecycle, timeouts, and logging are specified in
-[TypeScript previews](previews.md#compile-worker-lifecycle-and-trust).
+[TypeScript previews](previews.md#server-processes-lifecycle-and-trust).
 
 ## Logging
 

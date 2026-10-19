@@ -147,6 +147,7 @@ See [Customize lens labels](lenses.md#customize-lens-labels).
 | `inputs` | Data passed to the source: props for React and Vue, `Astro.props` for Astro. |
 | `controls` | Inputs you can edit in **Preview controls**. See [Controls](preview-data.md#controls). |
 | `states` | A map of kebab-case state IDs to [states](#states). |
+| `artboards` | An explicit map of artboards shown together within this page. Each has an optional `label`, integer `width` and `height` from 1 to 8192, and optional `inputs`. See [Multiple artboards](#multiple-artboards). |
 | `links` | The addresses the source links or submits to, each mapped to the preview it opens. See [Links and navigation](preview-data.md#links-and-navigation). |
 | `requests` | Answers to the page's `fetch` and `XMLHttpRequest` calls. See [Request mocks](preview-data.md#request-mocks). |
 | `sizes` | The artboard sizes the preview supports: any of `fit`, `laptop`, `mobile`, and `resizable`. See [Sizes](pages-and-states.md#sizes). |
@@ -187,6 +188,34 @@ preview. Closing the canvas releases its sessions.
 
 The `<html>` element carries `data-wb-state` with the current state ID, so CSS
 keyed off it works as it does in [design pages](pages-and-states.md#1-css-keyed-off-the-root).
+
+## Multiple artboards
+
+Use `artboards` when one page contains several independently sized examples.
+States remain alternatives selected with the state switcher; declaring states
+does not create artboards. A page may have both: the selected state applies to
+each of its declared artboards.
+
+```ts
+artboards: {
+  info: { label: 'Info', width: 560, height: 79 },
+  success: {
+    label: 'Success', width: 560, height: 119,
+    inputs: { tone: 'success', title: 'Import complete' },
+  },
+}
+```
+
+Declare 1–32 artboards with kebab-case IDs. These are children of one page,
+not state entries or additional pages in the sidebar. Each renderer receives
+`context.artboard` and its own inputs. Inputs merge from the preview, then the
+artboard, then the selected state, then temporary control edits. Reset restores
+that artboard's authored inputs. The page's supported sizes must permit its
+dimensions; include Resizable for arbitrary dimensions.
+
+For a component that should fit its content, put `data-wb-fit-content` on its
+origin-aligned root and remove surrounding padding, backgrounds and viewport
+minimum heights. Natural bounds follow content edits independently per artboard.
 
 ## Adapters
 

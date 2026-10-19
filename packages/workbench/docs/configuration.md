@@ -138,6 +138,10 @@ it.*
 
 ## Previews
 
+Preview definitions can declare [multiple artboards](workbench-previews.md#multiple-artboards)
+inside one page. This uses the definition's `artboards` map; `states` remain
+alternatives and do not create additional artboards.
+
 Workbench discovers [TypeScript previews](workbench-previews.md) in
 `**/*.workbench.ts` and `**/*.workbench.tsx` files without any configuration.
 Each preview becomes a page, in the collection named by the first segment of
@@ -362,7 +366,7 @@ implementations:
 | `kind` | all | yes | `workbench`, `url`, `storybook`, `docs`, `ios-simulator`, or `window`. |
 | `label` | all | no | The lens's display label, independent of kind: for example **Live**, **Prod**, or **Design**. Defaults to the name in sentence case. Changing it preserves the implementation key and addresses. |
 | `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`. Page paths are appended to it. A trailing slash is removed. |
-| `url` | `storybook` | yes | Storybook's origin, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). |
+| `url` | `storybook` | no | The origin of a Storybook you run, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). Without it, Workbench [runs your project's Storybook itself](storybook.md#let-workbench-run-storybook) from `root`, the space's folder unless set, on a private local socket, in trusted workspaces. |
 | `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
 | `adapter` | `docs` | yes | What renders the examples in a page's docs: `html`, `react`, `vue`, `astro`, `react-native-web`, or an adapter registered in `workbench.config.ts`. |
 | `styles` | `docs` | no | Stylesheets loaded with the examples, relative to the project root. |
@@ -370,7 +374,7 @@ implementations:
 | `app` | `window` | yes | The macOS application whose window is streamed: its bundle ID, or part of it, such as `com.example.app`. Letters, digits, dots, and hyphens only. |
 | `root` | all but `workbench` and `docs` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
 | `catalog` | `ios-simulator` | no | Import each booted device as a page. See [Catalogs](#catalogs). |
-| `start` | `url`, `storybook` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
+| `start` | `url`, `storybook` with `url` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
 A `workbench` implementation shows this space's
 [TypeScript previews](#previews). It takes no address, `start`, or `root`: its
@@ -484,7 +488,8 @@ implementation without `root` can't be resolved, and the
 
 ## Start commands
 
-A `url` or `storybook` implementation can name a command that brings it up.
+A `url` implementation, or a `storybook` one with a `url`, can name a command
+that brings it up. A Storybook without `url` needs none: Workbench runs it.
 In a trusted VS Code workspace, Workbench checks whether the implementation is
 answering, and runs the command in a visible terminal only when it isn't.
 

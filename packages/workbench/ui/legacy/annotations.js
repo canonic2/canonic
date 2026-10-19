@@ -33,6 +33,7 @@
 */
 
 (function () {
+  if (window.wbMultiArtboardHost) return;
   var NS = 'http://www.w3.org/2000/svg';
   var SHAPE_ICONS = { line: 'minus', rect: 'square', ellipse: 'circle' };
   var SHAPE_NAMES = { line: 'Line', rect: 'Rectangle', ellipse: 'Circle' };
@@ -1600,6 +1601,7 @@
 
   /* Artboard-local review boundary, shared by camera and full-canvas review. */
   window.wbArtboardAnnotations = {
+    deselect: function () { select(null); },
     toolName: function () { return tool; },
     tool: setTool,
     undo: undo,

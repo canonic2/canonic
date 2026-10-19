@@ -69,7 +69,10 @@ the owner on 2026-10-16:
   the project's code, so every Astro page needs the Node evaluator whatever
   compiles it; compiling there adds no process, and the compiler always
   matches the project's Astro runtime. From Astro 7 that compiler is
-  `@astrojs/compiler-rs`, Rust loaded as a Node addon.
+  `@astrojs/compiler-rs`, Rust loaded as a Node addon. The server asks the
+  evaluator for each render over its private channel; a frame's input edit
+  goes to the server's render route, never to the evaluator itself
+  ([processes and connections](../server.md#processes-and-connections)).
 - **The client side builds in the Rust server:** the rendered HTML and its
   resources go through the [HTML adapter's](html.md#target) Rust loaders,
   with shared chunks and hot updates.

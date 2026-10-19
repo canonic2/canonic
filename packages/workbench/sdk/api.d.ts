@@ -2,6 +2,8 @@
 export type SizeKey = 'fit' | 'laptop' | 'mobile' | 'resizable' | (string & {});
 export interface PreviewContext<T extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
+  /** The independently rendered artboard within this page, when declared. */
+  artboard?: string;
   state: string;
   inputs: T;
   fixtures: Record<string, unknown>;
@@ -78,6 +80,8 @@ export interface Preview<T extends Record<string, unknown> = Record<string, unkn
   sizes?: SizeKey[];
   controls?: Record<string, Control>;
   states?: Record<string, PreviewState<NoInfer<T>>>;
+  /** Artboards rendered together on this page, independently of its states. */
+  artboards?: Record<string, { label?: string; width: number; height: number; inputs?: Partial<NoInfer<T>> }>;
   /** Addresses the source links or submits to, mapped to the preview each opens. */
   links?: Record<string, PreviewLink>;
   docs?: string;

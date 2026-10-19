@@ -4,6 +4,7 @@
 //! filesystem discovery, saved state and JavaScript evaluation. CLI transport and
 //! response projection stay at the boundary; shared observations live in model/files.
 mod cli;
+mod config;
 mod definition;
 mod discovery;
 mod evaluate;

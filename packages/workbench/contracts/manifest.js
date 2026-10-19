@@ -341,7 +341,19 @@
       } else {
         var field = kind === 'url' ? 'base' : 'url';
         var implementationAddress = text(spec[field]);
-        if (kind === 'storybook' && implementationAddress === 'auto') {
+        if (kind === 'storybook' && spec.base !== undefined) {
+          problems.push(where + ': Storybook takes url, not base; leave both out to have Workbench run Storybook.');
+          return;
+        } else if (kind === 'storybook' && !implementationAddress) {
+          /* No url: Workbench runs the project's Storybook itself, from its
+             root, reached only through the server. */
+          impl.owned = true;
+          impl.url = null;
+          impl.root = '.';
+          if (spec.start !== undefined) {
+            problems.push(where + ': start is for a Storybook you run at url; without url, Workbench runs Storybook itself.');
+          }
+        } else if (kind === 'storybook' && implementationAddress === 'auto') {
           impl.url = 'auto';
           impl.auto = true;
         } else if (!HTTP.test(implementationAddress)) {
@@ -368,7 +380,7 @@
         problems.push(where + ': render is no longer used; remove it. URL and Storybook implementations use iframes.');
       }
 
-      if (spec.start !== undefined) {
+      if (spec.start !== undefined && !impl.owned) {
         if (kind === 'ios-simulator' || kind === 'window' || kind === 'workbench' || kind === 'docs') {
           problems.push(where + ': start is available for URL and Storybook implementations.');
         } else {

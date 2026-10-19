@@ -1,18 +1,19 @@
 # Compiler
 
-Part of the [preview pipeline](README.md). This spec covers the development
-compiler that builds previews and docs lenses for the canvas. It also says
-which jobs stay on esbuild. Format handling and the project plugin contract
-are in [plugins](plugins.md); delivering the output is in [serving](serving.md).
-The [page index](page-index.md) owns server-side listing. The worker retains
-its own index for compilation and pre-warming; the Rust page-index integration
-does not replace this compiler with the lab's Rust compiler host.
+Part of the [preview pipeline](README.md). This spec covers the Workbench
+server's development compiler that builds previews and docs lenses for the
+canvas. It also says which jobs run in the Node evaluator. Format handling
+and the project plugin contract are in [plugins](plugins.md); delivering the
+output is in [serving](serving.md). The [page index](page-index.md) owns
+server-side listing. Today the preview worker retains its own index for
+compilation and pre-warming; the Rust page-index integration does not
+replace this compiler with the lab's Rust compiler host.
 
 ## Requirements
 
 ### One compiler per project and profile
 
-- The compile worker runs one Rspack compiler in watch mode per space root and
+- The Workbench server runs one Rspack compiler in watch mode per space root and
   **profile**. A profile is a set of resolution rules shared by adapters:
   - `web`: React, Vue, HTML, Astro client output and custom adapters;
   - `react-native-web`: `react-native` aliased to `react-native-web`, and
@@ -73,7 +74,7 @@ does not replace this compiler with the lab's Rust compiler host.
 
 - A change to `workbench.config.ts` replaces the compilers, because aliases,
   defines, rules and plugins are compiler options. Edits to environment files
-  are ordinary module edits ([hot updates](hot-updates.md#the-reload-rule)). The worker closes the old ones, starts a new
+  are ordinary module edits ([hot updates](hot-updates.md#the-reload-rule)). The server closes the old ones, starts a new
   **generation**, declares the entries again and builds.
 - Each generation's output has its own URL prefix. Documents that loaded an
   older generation reload into a fresh warm host
@@ -91,29 +92,37 @@ does not replace this compiler with the lab's Rust compiler host.
 
 ### Runtime and packaging
 
-- The compiler runs in the compile worker, on the
+- The compiler is Rspack's Rust crates inside `workbench-server`, built with
+  Rspack's nightly toolchain from [phase 4](../server.md#phase-4-previews).
+  Project code never runs in the server, the extension host or the capture
+  renderer; it runs in the Node evaluator
+  ([processes and connections](../server.md#processes-and-connections)).
+- The installed extension downloads no compiler, and projects install none.
+
+Today the compiler runs in the Node preview worker, through Rspack's
+JavaScript API:
+
+- The worker runs on the
   [bundled Electron runtime](../capture.md#bundled-electron-runtime) in Node
-  mode where that runtime is used, otherwise on the host's Node. Project code
-  never runs in the extension host.
+  mode where that runtime is used, otherwise on the host's Node.
 - Rspack 2 is published as ES modules only. The CommonJS worker loads it
   through Node 24's `require` of ES modules.
-- Scope `NAPI_RS_NATIVE_LIBRARY_PATH` to loading the bundled Rspack binding
-  ([rspack.cjs](../../server/node/preview/rspack.cjs)). Other napi-rs modules share that
-  environment key and must resolve their own bindings.
+- `NAPI_RS_NATIVE_LIBRARY_PATH` is scoped to loading the bundled Rspack
+  binding ([rspack.cjs](../../server/node/preview/rspack.cjs)). Other napi-rs
+  modules share that environment key and must resolve their own bindings.
 - Each platform VSIX bundles the matching pinned Rspack native binding, as it
-  does esbuild. The installed extension downloads no compiler, and projects
-  install none. Packaging includes both the Rspack binding and esbuild,
-  whose separate evaluation responsibilities are listed below.
+  does esbuild, and both, whose separate jobs are listed below.
 
-### What stays on esbuild
+### What runs in the Node evaluator
 
-These keep esbuild, so the VSIX ships both compilers
+Evaluating project code is the Node evaluator's job, not the compiler's.
+Today these jobs keep esbuild, so the VSIX ships both compilers
 ([finding 11](../../labs/rspack-pipeline/README.md#findings)):
 
-| Job | Why |
+| Job | Where and why |
 | --- | --- |
-| Evaluating definitions and `workbench.config.ts` | A Node CommonJS bundle with packages external, built with only the `@canonic2/workbench` plugin. It runs no project plugins and needs no hot updates. Listing pages bundles every definition that needs evaluating in one build ([page listing](performance.md#page-listing)) |
-| The sidebar's component bundle and the docs page script | Workbench's own code, bundled in memory ([webview components](../../extension/src/webview-components.ts)) |
+| Evaluating definitions and `workbench.config.ts` | Project code, so the Node evaluator runs it. Today it is a Node CommonJS bundle built by esbuild with packages external and only the `@canonic2/workbench` plugin; it runs no project plugins and needs no hot updates. Listing pages bundles every definition that needs evaluating in one build ([page listing](performance.md#page-listing)) |
+| The sidebar's component bundle and the docs page script | Workbench's own code, not project code, bundled in memory with esbuild ([webview components](../../extension/src/webview-components.ts)) |
 
 The portable build and the export's docs examples use an Rspack production
 compiler with the same format handling and project plugins

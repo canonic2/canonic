@@ -7,10 +7,37 @@ title: the page gets a Storybook lens, so you can compare the design with the
 built component, and in that lens the state switcher lists the title's stories.
 
 Workbench reads Storybook's live `/index.json`, which Storybook 7 and later
-serve. Storybook has to be running, either started by you or by
-[Workbench](#start-storybook-automatically).
+serve. Either Workbench runs your Storybook for you, or you run it and give
+Workbench its address.
 
-## Declare the Storybook
+## Let Workbench run Storybook
+
+```yaml
+implementations:
+  storybook:
+    kind: storybook
+    root: packages/ui
+```
+
+With no `url`, Workbench runs your project's own Storybook: the `storybook`
+package and a framework installed in `root`, with your `.storybook/`
+configuration, addons and builder. You don't start anything.
+
+- It starts the first time you open a story, which takes a few seconds, and
+  stops when Workbench closes. If it exits, the next story you open starts it
+  again.
+- It uses no port. Workbench reaches it over a private local socket, so it
+  never conflicts with a Storybook you run yourself on 6006 or any other
+  port, and nothing else can connect to it.
+- Edits to your stories update the open story in place, as in Storybook.
+- It runs your project's code, so it runs only in a trusted workspace.
+- It starts with `storybook dev --preview-only`, without Storybook's own
+  interface. Storybook versions without `--preview-only` start without it.
+
+If it can't start, the lens shows why, with Storybook's own output. When
+Storybook isn't installed in `root`, it says so.
+
+## Use a Storybook you run
 
 ```yaml
 implementations:
@@ -20,13 +47,16 @@ implementations:
     root: packages/ui
 ```
 
+With `url`, Workbench reads the Storybook at that address. Start it yourself,
+or have VS Code [start it](#start-storybook-automatically).
+
 | Key | Description |
 | --- | --- |
 | `kind` | `storybook`. |
-| `url` | Storybook's origin, or `auto` to [detect it](#detect-the-port-with-url-auto). |
-| `root` | The folder Storybook runs from: the one containing `.storybook/`, relative to `workbench.yaml` or absolute. Optional, but needed for source links and exports. |
+| `url` | Optional. The origin of a Storybook you run, or `auto` to [detect it](#detect-the-port-with-url-auto). Leave it out to [let Workbench run Storybook](#let-workbench-run-storybook). |
+| `root` | The folder Storybook runs from: the one containing `.storybook/`, relative to `workbench.yaml` or absolute. Without `url`, the folder Workbench runs it in, and the space's folder when left out. With `url`, optional, but needed for source links and exports. |
 | `label` | The lens button's label. Defaults to the name in sentence case, *Storybook*. |
-| `start` | A command that [starts Storybook](#start-storybook-automatically). |
+| `start` | With `url`: a command that [starts Storybook](#start-storybook-automatically). Without `url` it is reported, since Workbench runs Storybook itself. |
 
 The implementation name, `storybook` here, is any kebab-case key. Declare
 several if you have several Storybooks, such as `web-ui` and `mobile-ui`.
@@ -118,13 +148,20 @@ Start commands run only in trusted workspaces, and only in VS Code. See
 ## Switching stories
 
 The first story loads in an iframe at
-`<url>/iframe.html?id=<story-id>&viewMode=story`, through the loopback proxy
+`iframe.html?id=<story-id>&viewMode=story`, through the loopback proxy
 Workbench runs for each implementation (see
 [Embedding and sign-in](lenses.md#embedding-and-sign-in)). After that, Workbench
 switches stories through Storybook's own channel, so the preview stays loaded
 and switching is fast. If Storybook doesn't confirm a switch within about
 1.5 seconds, or doesn't finish rendering within 15 seconds, Workbench loads the
 story's URL instead.
+
+On single-view pages, switching to Docs, Preview, or another implementation lens
+keeps the Storybook session available. Returning preserves edits and opened menus
+while that session is retained. **Reload** starts the selected preview afresh.
+Opening a page with multiple artboards also keeps the ordinary renderer available
+for up to 15 minutes. Returning restores its retained Storybook session without
+loading Storybook's preview again.
 
 Keyboard shortcuts reach the workbench through Storybook's key channel, so
 canvas zoom and editor shortcuts keep working while a story has focus.
@@ -153,6 +190,6 @@ the page's `sizes`. Set `root` so sources can be found.
 | --- | --- |
 | No Storybook lens on a page | The title is exact. Ask the [stories route](troubleshooting.md#check-a-storybook-title), which lists near matches. |
 | `url: auto` finds nothing | Storybook isn't on a scripted port or 6006 to 6010. Set `url` explicitly, or in `workbench.local.yaml`. |
-| Lens is blank or shows an error | Check that Storybook is running at `url`: open `<url>/index.json` in a browser. Then open `<url>/iframe.html` directly, and check the frame's console. |
+| Lens is blank or shows an error | Without `url`: read the error on the canvas, which includes Storybook's output, and check that `storybook` is installed in `root` and the workspace is trusted. With `url`: check that Storybook is running there: open `<url>/index.json` in a browser. Then open `<url>/iframe.html` directly, and check the frame's console. |
 | No source links | `root` is missing or points at the wrong folder. It should be the folder Storybook runs from. |
 | Screenshots don't match what you see | The story hadn't finished loading, so the bridge hadn't connected. Take the screenshot again. |

@@ -71,5 +71,5 @@
     });
   });
 
-  window.wbReference = { text: text };
+  window.wbReference = { text: text, copy: copy };
 })();

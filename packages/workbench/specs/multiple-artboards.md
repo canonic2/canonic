@@ -1,10 +1,10 @@
 # Multiple artboards per canvas
 
-Status: support APIs implemented; user-facing multi-artboard controls and
-canvas integration are future work.
-The current scope is infrastructure only. The existing Workbench UI, controls,
-styles, navigation, and default `index.html` entry point remain in place.
-UI proposals elsewhere in this spec are future design work, not shipping behavior.
+Status: support APIs and explicit page-artboard composition implemented.
+The existing sidebar, top bar, toolbar, view controls and default `index.html`
+entry point remain in place. A preview page's declared artboards appear together inside the canvas;
+the existing controls operate on the selected artboard. Artboard management UI
+proposals elsewhere in this spec remain separate design work.
 The [module plan](multiple-artboards-code-plan.md) records the implementation.
 
 ## Implemented support system
@@ -12,8 +12,9 @@ The [module plan](multiple-artboards-code-plan.md) records the implementation.
 TypeScript modules under `ui/src/canvas/` provide serializable artboard descriptors,
 validated dimensions, insertion-order geometry, a controller with injected
 runtime and snapshot ports, authenticated iframe messaging, full-canvas review,
-and participating-space context publication. No replacement canvas page,
-top bar, catalog, camera UI, artboard picker, or styles are installed.
+and participating-space context publication. `ui/src/modules/canvas/host.ts`
+composes them through `wb-canvas` inside the shipping canvas region. No replacement
+top bar, sidebar, toolbar, artboard picker or inspector is installed.
 
 Each instance has a stable ID, its space/view/size, a render generation, and
 isolated runtime ownership. Shell and annotation ports expose the existing
@@ -21,8 +22,11 @@ renderer; closing/replacing an instance disposes its iframe and pending
 requests. The controller suppresses old-generation view reports and
 coordinates capture locks.
 The model permits 32 instances with dimensions of 1–8192 CSS pixels, subject
-to the page's authored `sizes`. Geometry includes a 48px row gap; a future host
-can use pure bounds/fit/zoom functions without changing the current camera.
+to the page's authored `sizes`. Automatic placement wraps at 1600 logical pixels
+with 48px gaps. Selection preserves live inputs and annotations. An origin-aligned
+`data-wb-fit-content` root opts into natural content bounds; an owned ResizeObserver
+tracks edits. Content fitting pauses during capture locks. Transparent corners
+use the dark review surface when flattened into a JPEG.
 
 Review APIs compose every supplied artboard into one JPEG at CSS-pixel dimensions,
 with labels, spacing, and a 32px margin. Limits are 32 megapixels and 32767px per
@@ -36,22 +40,36 @@ supported.
 The version-2 context validator and publisher include all supplied instances.
 Publication is serialized across participating spaces and their shared-root
 siblings, preserving user-activity timestamps and withdrawing closed participation.
-The existing UI continues to publish its single-view context. The registered-space
+The shipping canvas publishes its complete version-2 context. The registered-space
 coordinator permits only config/context operations. Native producers are pooled
 by source and codec, preserving subscribed peers; authored Simulator mappings
 resolve booted names or UDIDs without requiring a catalog.
 
-These APIs have no layout persistence or shared configuration schema. The temporary
-browser acceptance harness drives the support through injected ports, not through
-production controls. Verification covers instance/state/size isolation, two-space
+These APIs have no layout persistence or shared configuration schema. The production
+browser check drives existing controls and declared page artboards, and proves
+ordinary HTML and Button states remain single alternative views. The support
+harness also exercises injected ports. Verification covers instance/state/size isolation, two-space
 context, combined image geometry, handoff persistence, and disposal, plus the Node
 suite and strict TypeScript check. Actual native capture and Simulator input require
 the appropriate host/devices; no performance benchmark has been performed.
 
 ## UI and integration scope
 
-User-facing artboard controls and composition of these support APIs remain
-future integration work. The future workflows and acceptance criteria below remain design
+Artboard management controls remain separate design work. The shipping integration
+opens one page's explicitly declared artboards together. States and Storybook
+stories remain alternatives. The `definePreview.artboards` map declares stable
+IDs, labels, dimensions and input overrides independently of `states`; the
+renderer receives `context.artboard`. Artboard inputs precede state overrides.
+Feedback declares five artboards and no variant states. Docs show one viewport.
+Ordinary single-view pages reuse one renderer across page, state and lens
+navigation. That renderer owns the retained preview sessions and Storybook
+channel; navigating it does not replace its iframe. Explicit artboard groups
+own independent renderers. While a group is visible, at most one ordinary
+renderer stays attached, hidden and inert, for up to 15 minutes. It is excluded
+from canvas state, selection, review captures and context publication. Returning
+restores that renderer and its retained sessions; clearing the canvas or closing
+the host disposes it. Expiry waits for any capture to finish before disposing it.
+The future workflows and acceptance criteria below remain design
 proposals; free positioning and row/grid arrangement remain phase 2. Persistence
 and sharing policy remain open.
 

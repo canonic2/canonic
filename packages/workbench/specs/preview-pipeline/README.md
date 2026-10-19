@@ -14,16 +14,19 @@ This folder owns how they are built, delivered and kept current.
    literal definitions, and evaluates computed definitions and docs in a
    separate Node process. A saved index avoids re-reading unchanged inputs
    ([page index](page-index.md)).
-2. **Evaluate.** The compile worker evaluates definitions and
-   `workbench.config.ts` in Node, bundled with esbuild. Every definition
-   that needs evaluating is bundled in one build ([compiler](compiler.md#what-stays-on-esbuild)).
-3. **Compile.** One Rspack development compiler per project and profile
-   builds every preview and docs lens in one compilation, with shared chunks,
-   hot updates and a persistent cache ([compiler](compiler.md)).
-4. **Serve.** The worker serves the output from memory. Shared chunks get
-   content-hashed URLs and are cached as immutable. Each preview gets a small
-   preview module that loads only the chunks its document is missing
-   ([serving](serving.md)).
+2. **Evaluate.** The Node evaluator runs definitions and
+   `workbench.config.ts`, which are project code. Every definition that needs
+   evaluating is bundled in one build ([compiler](compiler.md#what-runs-in-the-node-evaluator)).
+3. **Compile.** The Workbench server's compiler, one Rspack development
+   compiler per project and profile, builds every preview and docs lens in
+   one compilation, with shared chunks, hot updates and a persistent cache
+   ([compiler](compiler.md)). Adapters that need project code on the server,
+   such as Astro renders, run that part in the Node evaluator
+   ([adapters](../adapters/README.md#how-pages-are-served)).
+4. **Serve.** The Workbench server serves the output from memory. Shared
+   chunks get content-hashed URLs and are cached as immutable. Each preview
+   gets a small preview module that loads only the chunks its document is
+   missing ([serving](serving.md)).
 5. **Load and mount.** A warm document that has already
    loaded the runtime and shared code mounts the preview ([warm runtime](warm-runtime.md)).
 6. **Ready.** Readiness waits only for fonts and images that are still loading
@@ -77,11 +80,11 @@ the targets the whole pipeline is measured against.
 | --- | --- |
 | Native page listing | Implemented in `server/` and `server/node/src/modules/page-index/`; [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](performance.md#page-listing) do not establish canvas-paint acceptance |
 | Rust engineering gates | Implemented; [code quality](../code-quality.md) owns tools, policy, test conventions and CI enforcement |
-| Rspack compilation and pre-warming | Implemented in the Node worker; retain their own listing and eager-entry start |
+| Rspack compilation and pre-warming | Implemented in the Node preview worker, with Rspack's JavaScript API, esbuild for evaluation and a loopback TCP port; retain their own listing and eager-entry start. The worker moves into the Workbench server at [phase 4](../server.md#phase-4-previews) |
 | Rust compiler host | Prototype in the [instant first page lab](../../labs/instant-first-page/README.md#stage-2-report), reported without meeting the agreed targets; not a shipping compiler or adopted first-page solution |
 
 The implemented page index follows this [design direction](#decisions).
-It lists pages independently of the compile worker; it does not change the
+It lists pages independently of the preview worker; it does not change the
 compiler's entry preparation or pre-warming.
 
 The Rspack preview pipeline is implemented in [server/node/src/modules/preview-pipeline/](../../server/node/src/modules/preview-pipeline)

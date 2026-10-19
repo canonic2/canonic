@@ -19,7 +19,7 @@ nothing else: it has no design lens.
 compilation, adapters, and environments are in
 [TypeScript previews](previews.md); lenses are in [lenses](lenses.md) and
 [implementations](implementations.md). The code is the
-[docs module](../src/modules/docs).
+[docs module](../server/node/src/modules/docs).
 
 ## Purpose and scope
 
@@ -381,9 +381,9 @@ problems update when they arrive.
 - **The page before its examples.** The page answers with its Markdown without
   waiting for a build: its panels are `pending` until the page script learns
   the lens's bundle, which then mounts them or names why not. The examples are
-  usually built already: the extension and the command-line server start the
-  compile worker with the session, which builds every docs page in each lens
-  with the previews as it starts ([warm runtime](preview-pipeline/warm-runtime.md)).
+  usually built already: the Workbench server starts its compiler with the
+  session, which builds every docs page in each lens with the previews as it
+  starts ([warm runtime](preview-pipeline/warm-runtime.md)).
 - **Compilation.** Each docs page lens is an entry of the
   [preview pipeline](preview-pipeline/compiler.md#entries), built from that
   lens's example source with the lens's adapter, styles, environment, and the
@@ -566,7 +566,7 @@ renderer combination or source-extraction edge case. See
 
 ### Verification points
 
-- [src/modules/docs/](../src/modules/docs) `*.test.ts`: Markdown reading,
+- [server/node/src/modules/docs/](../server/node/src/modules/docs) `*.test.ts`: Markdown reading,
   rendering, example IDs, placement, export source, the docs service with fake
   I/O, the canvas geometry
   ([docs-layout.test.ts](../ui/src/modules/docs/canvas/docs-layout.test.ts)), and

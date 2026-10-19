@@ -32,7 +32,9 @@ project-registered adapters. They do not run a project's application server,
 - Previews are discovered by default and open in their own authored lens,
   labelled **Workbench** by default and customizable under the
   [lens contract](lenses.md).
-- Source compiles in a managed worker. Live and portable output share one
+- Source compiles in the Workbench server's compiler, with project code in
+  the Node evaluator ([server processes](#server-processes-lifecycle-and-trust)).
+  Live and portable output share one
   adapter and state lifecycle, and that lifecycle is shared by every built-in
   and custom adapter.
 - Managed previews use retained iframe sessions and become ready only
@@ -149,7 +151,8 @@ applies independently within each isolated artboard.
   preview without a manual refresh: edits apply as hot updates pushed from the
   server, and edits that cannot apply in place reload the preview
   ([hot updates](preview-pipeline/hot-updates.md)).
-- Astro input edits re-render through the worker; frontmatter runs in Node.
+- Astro input edits re-render through the server; frontmatter runs in the
+  Node evaluator (today, the preview worker).
 
 ### Links and navigation
 
@@ -307,32 +310,44 @@ reached through `node_modules` are listed by name and version.
 - Custom adapters, compiler plugins, live output, and portable output share the
   same entry and [browser runtime](../ui/preview/browser.js).
 
-### Compile worker lifecycle and trust
+### Server processes, lifecycle and trust
 
-- Project code runs in child processes, never in the extension host or
-  capture renderer. The [page index](preview-pipeline/page-index.md) owns its
-  separate evaluator; rendering and compilation use the compile worker.
-  The worker serves a loopback port; queued operations are serialized, while
-  output files and pushed updates bypass that queue.
-- The compile service is created for discovered definitions or docs examples.
-  A compilation request starts its process; eager server startup also starts
-  pre-warming in trusted spaces with previews enabled. It must report its port within
-  30 seconds or startup fails with a problem. A change to the resolved
-  `previews` value replaces it on the next resolution; `previews: false`
-  closes it. Catalog reads time out after 120 seconds, exports after 300,
-  and proxied requests after 120.
-- If it exits unexpectedly, the next preview request or config resolution
-  starts a new one; there is no proactive restart.
-- It stops with the server, which asks it to close and kills it after
-  3 seconds. It also exits when its parent's IPC channel disconnects.
-- Its error output is logged as `preview.worker` (each chunk truncated), and
-  per-request timing as `preview.request.completed`.
-- Previews and docs lenses build in the worker's
+The target follows the Workbench server's
+[processes and connections](server.md#processes-and-connections):
+
+- Project code runs only in the Node evaluator, a child of the Workbench
+  server, never in the server itself, the extension host or the capture
+  renderer. The evaluator starts on first need in a trusted workspace,
+  is reached over stdin and stdout or a local socket, never a TCP port, and
+  stops with the server.
+- Previews and docs lenses build in the server's
   [preview pipeline](preview-pipeline/README.md): Rspack compilers in watch
   mode, with output in memory and a persistent cache in the host's temporary
   folder. Only discovered definitions inside the project compile. A request
   for one definition checks discovery rules directly without scanning every
   project file.
+
+Today, compilation, evaluation and rendering run in the Node preview worker
+([worker.cjs](../server/node/preview/worker.cjs)), a child of `server.js`;
+the [page index](preview-pipeline/page-index.md) owns its separate
+evaluator. The worker:
+
+- listens on a loopback TCP port, which the target does not take; its
+  queued operations are serialized, while output files and pushed updates
+  bypass that queue;
+- is created for discovered definitions or docs examples. A compilation
+  request starts its process; eager server startup also starts pre-warming
+  in trusted spaces with previews enabled. It must report its port within
+  30 seconds or startup fails with a problem. A change to the resolved
+  `previews` value replaces it on the next resolution; `previews: false`
+  closes it. Catalog reads time out after 120 seconds, exports after 300,
+  and proxied requests after 120;
+- when it exits unexpectedly, is started again by the next preview request
+  or config resolution; there is no proactive restart;
+- stops with the server, which asks it to close and kills it after
+  3 seconds. It also exits when its parent's IPC channel disconnects;
+- logs its error output as `preview.worker` (each chunk truncated), and
+  per-request timing as `preview.request.completed`.
 - In an untrusted server (`isTrusted: false`), no definition runs, discovered
   files produce `Workbench previews require a trusted workspace.`, and preview
   routes answer 404. When trust applies is part of the
@@ -340,12 +355,12 @@ reached through `node_modules` are listed by name and version.
 
 ### Runtime selection
 
-The worker runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
+Today the worker runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
 in Node mode when that runtime is used on the host, and otherwise on the
 current process's executable (Node for the standalone server). `NODE_OPTIONS`
 is removed from its environment. Previews compile with Rspack, and esbuild
 evaluates definitions and builds Workbench's own bundles
-([compiler](preview-pipeline/compiler.md#what-stays-on-esbuild)). Each
+([compiler](preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)). Each
 platform VSIX bundles the matching pinned esbuild binary and Rspack binding at
 build time; source checkouts use the package's installed compilers. Projects install no compiler,
 and the installed extension downloads none.
@@ -413,7 +428,8 @@ and the installed extension downloads none.
 
 ## Design constraints
 
-- Project code remains in the evaluator or compile worker. Astro frontmatter
+- Project code runs only in the Node evaluator (today, in the page index's
+  evaluator or the preview worker). Astro frontmatter
   runs on the server side; only rendered HTML and client assets reach browsers.
 - Runtime readiness cannot depend on animation frames being delivered to a
   hidden frame. The [readiness contract](preview-pipeline/readiness.md) owns

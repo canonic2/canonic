@@ -35,6 +35,9 @@ export async function boot(preview, sources, adapter, environment, options) {
   let pending = Promise.resolve();
   const initial = new URL(location.href).searchParams.get('state') || Object.keys(preview.states || {})[0] || 'default';
   const states = preview.states && Object.keys(preview.states).length ? preview.states : { default: {} };
+  const artboardId = options?.artboard || new URL(location.href).searchParams.get('artboard');
+  const artboard = artboardId ? preview.artboards?.[artboardId] : null;
+  if (artboardId && !artboard) throw new Error('Unknown preview artboard: ' + artboardId);
   let selected = initial;
   let context;
   let actions = [];
@@ -166,8 +169,8 @@ export async function boot(preview, sources, adapter, environment, options) {
     const spec = states[state];
     controller = new AbortController();
     const rendered = context = {
-      id: preview.id, state,
-      inputs: structuredClone({ ...preview.inputs, ...spec.inputs, ...overrides }),
+      id: preview.id, state, ...(artboardId ? { artboard: artboardId } : {}),
+      inputs: structuredClone({ ...preview.inputs, ...artboard?.inputs, ...spec.inputs, ...overrides }),
       fixtures: structuredClone({ ...preview.fixtures, ...spec.fixtures }),
       globals: structuredClone({ ...preview.globals, ...spec.globals }),
       signal: controller.signal,

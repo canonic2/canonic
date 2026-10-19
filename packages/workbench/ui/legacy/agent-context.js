@@ -4,6 +4,7 @@
    A heartbeat keeps this canvas counted while it stays open; closing it
    says so. See agent-view.js for the server's side. */
 (function () {
+  if (window.wbMultiArtboardHost) return;
   if (new URLSearchParams(location.search).has('artboard-runtime')) return;
   var PATH = '/_workbench/view';
   var HEARTBEAT_MS = 30 * 1000;

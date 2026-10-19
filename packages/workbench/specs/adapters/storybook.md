@@ -20,27 +20,43 @@ through the Workbench server's
 [implementation proxy](../implementation-proxy.md), never from Storybook's
 own address.
 
-## Target
+## A Storybook the server runs
 
-Proposed:
+A Storybook implementation without `url` is the Workbench server's
+([storybook/index.ts](../../server/node/src/modules/storybook/index.ts)):
 
-- **The Workbench server runs the project's Storybook.** With only `root`
-  set, it starts the project's installed `storybook dev` with
-  `--preview-only` (no manager build), `-h 127.0.0.1`, a port it picks with
-  `--exact-port`, and `--ci --no-open --quiet --no-version-updates
-  --disable-telemetry`. It starts it when a page first needs a story,
-  treats it as ready when `/index.json` answers, restarts it on a crash, and
-  stops it with the server.
-- **A loopback port stays.** Storybook listens only on TCP, and its hot
-  updates (Vite's WebSocket, webpack's event stream) use the same server.
-  Driving Storybook's internal Node API without a port would break between
-  versions.
-- `url` remains for a Storybook the user runs, and `start` for a project's
-  own command.
-
-To verify in a lab: that `--preview-only` serves `/index.json` and hot updates
-as Workbench uses them, the Storybook versions that have it, and its start
-time against a full `storybook dev`.
+- **It runs the project's own Storybook.** `root`, the space root unless
+  set, is the folder with `.storybook/`; the `storybook` package and a
+  framework are installed there. The server starts the installed
+  `storybook dev --preview-only --exact-port -p <port> --ci --no-open --quiet
+  --no-version-updates --disable-telemetry` from that folder. A version that
+  rejects `--preview-only` is started again without it.
+- **On first need.** The first request through the implementation's proxy,
+  or the stories route, starts it. It is ready when `/index.json` answers;
+  a start that takes more than 120 seconds fails with Storybook's output.
+  After it exits, the next request starts it again. It stops with the
+  server.
+- **No TCP port.** A preload
+  ([socket-listen.cjs](../../server/node/src/modules/storybook/socket-listen.cjs)),
+  loaded with `--require`, moves every TCP listen in that process to a
+  local socket in a private temporary folder: a Unix socket, or a named pipe
+  on Windows. Only the Workbench server reaches it, through the
+  implementation's [proxy](../implementation-proxy.md), so a Storybook the
+  user runs on 6006 or any other port never conflicts with it.
+- **Told the proxy's port.** `<port>` is the proxy's own port. Storybook's
+  pages carry addresses built from it, such as Vite's live-update client
+  (`hmrPort`), so they lead back to the proxy; hot updates and WebSockets
+  pass through it to the socket.
+- **Trusted workspaces only.** Storybook runs project code. In an untrusted
+  workspace the config reports `implementations › <key>: Workbench runs
+  Storybook in a trusted workspace only, since Storybook runs project code.`
+- **Failures name the cause.** The lens shows Storybook's own error, and
+  the stories route answers `Workbench couldn’t run Storybook in <root>:
+  <output>` or `Storybook isn’t installed in <root>. Install storybook and a
+  framework there, or set url to a Storybook you run.`
+- **A Storybook the user runs** keeps `url` (or `url: auto`) and, in VS
+  Code, `start`; the server reads it at that address. `start` without `url`
+  is reported, and so is `base` on a Storybook implementation.
 
 ## Decisions
 
@@ -58,8 +74,21 @@ Decided by the owner on 2026-10-17:
   portable stories API would need no Storybook server, but it applies only
   preview annotations, not builder configuration or framework presets.
 
+Decided by the owner on 2026-10-18:
+
+- **The server runs Storybook on a local socket, never a TCP port,** and
+  reaches it only through itself. The same holds for any child process an
+  adapter needs, such as the Node evaluator for Astro renders.
+
+Verified on 2026-10-18 with Storybook 10.6.2, `@storybook/html-vite` and
+Vite 8: ready in about 1.7 to 2 seconds with `--preview-only`; the index,
+`iframe.html`, Vite's modules and its live-update WebSocket all answered
+through the socket; editing a stories file updated the framed story in
+place; nothing listened on 6006. Vite writes the port it is given into its
+live-update client, which is why Storybook is told the proxy's port.
+
 ## Status
 
-Workbench reads a running Storybook, started by the user or by `start` in
-VS Code, for the pages mapped to it. The owned preview-only launch is not
-implemented.
+Implemented in the Node server, for both a Storybook it runs and one the
+user runs. It moves into the Rust Workbench server with the rest of the
+server ([server](../server.md)).

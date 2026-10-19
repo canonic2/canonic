@@ -7,6 +7,8 @@ every annotation and the element under it.
 ## The toolbar
 
 The toolbar floats at the bottom of the canvas.
+Drawing tools, Undo, and Clear annotations apply to the selected artboard.
+The camera and handoff include every artboard and its annotations.
 
 | Tool | Does |
 | --- | --- |
@@ -48,9 +50,9 @@ screenshots are cropped to the artboard either way.
   outline and handles take clicks. Clicking inside an empty rectangle reaches
   the page underneath, so you can keep using the page while annotations are on
   it.
-- **Annotations belong to a page and state.** They are cleared when you
-  switch to another page or state. Changing size or lens keeps them, so you can
-  draw on the design and then check the same spots on the implementation.
+- **Annotations belong to an artboard.** Selecting another artboard preserves
+  each artboard's annotations. Changing size keeps them. Picking a different
+  page, state, or lens opens fresh artboards.
 - Annotations stay in place when you zoom and pan, because they scale with the
   artboard. In a docs lens, they stay on the docs as they scroll and zoom.
 
@@ -58,25 +60,10 @@ Every key is listed in [Keyboard shortcuts](canvas.md#keyboard-shortcuts).
 
 ## Screenshots
 
-**Save screenshot** (the camera) downloads a JPEG of the artboard at its real
-size, whatever the zoom, with your annotations on it. In a
-[docs lens](#in-a-docs-lens), it captures the part of the docs in view. It is
-named after the page's file, state, and lens:
-
-| View | Filename |
-| --- | --- |
-| `pages/sign-in.html`, first state, Design | `sign-in.jpg` |
-| Same, state `error` | `sign-in-error.jpg` |
-| Same, through the `staging` lens | `sign-in-error-staging.jpg` |
-| TypeScript preview `src/button.workbench.ts`, state `disabled` | `button.workbench-disabled.jpg` |
-
-Lens labels are display names. Renaming one leaves screenshot filenames
-unchanged: implementation filenames use the implementation key, and the
-authored lens adds no lens suffix. References and handoffs use the configured
-display label. See [Customize lens labels](lenses.md#customize-lens-labels).
-
-On a Storybook lens, the story stands where the state does. The file goes to
-your browser's downloads, and a message names it.
+**Save screenshot** (the camera) downloads `workbench-canvas.jpg`, a JPEG of
+every artboard at its real size, whatever the zoom, with labels and annotations.
+In a [docs lens](#in-a-docs-lens), the artboard contains the part of the docs in
+view. The file goes to your browser's downloads.
 
 Screenshots use 90% JPEG quality. Their pixel size matches the artboard's CSS
 size, so Retina displays don't double it. The camera doesn't write into your
@@ -119,39 +106,32 @@ itself, and a page behind sign-in may be captured as its sign-in page.
 
 ## Hand off to an agent
 
-**Copy handoff** turns the current view into something any coding agent can
+**Copy handoff** turns the complete canvas into something any coding agent can
 act on:
 
 1. The screenshot, with annotations, is saved to `.canonic/.handoffs/` in the
    project, named like the camera's file. A second handoff of the same view
    gets `-2`, `-3`, and so on.
-2. The annotations are cleared from the canvas.
+2. Captured annotations are cleared from every artboard after the handoff succeeds.
 3. A prompt is copied to your clipboard, and VS Code confirms it with a
    notification. Paste it into Claude Code, Codex, Cursor's chat, or any other
    conversation.
 
-The prompt says which page, state, and size the screenshot shows, where it
-is saved, and what each annotation is, with its position and the element under
-it:
+The prompt identifies every labelled image region, its space, page, state,
+lens, dimensions and capture time. Each artboard's section describes its
+annotations in local CSS-pixel coordinates and names the element under each one:
 
 ```text
-Here is a page from Workbench.
+Here is a Workbench canvas review.
 
-- Page: Sign in — `pages/sign-in.html`
-- State: Wrong password
-- Lens: Design
-- Width: Mobile · iPhone 15 Pro, 393 × 852 (artboard is 393 × 852 CSS px)
-- Screenshot: `.canonic/.handoffs/sign-in-error.jpg`
+- Screenshot: `.canonic/.handoffs/workbench-canvas.jpg`
+- Selected artboard: example-error
+Each labelled image region is an artboard. Annotation coordinates below are local to that artboard, in CSS pixels.
 
-The screenshot has 3 annotations drawn over it. **Everything red in the image
-is an annotation, not the design** — …
-
-1. Arrow pointing at (168, 254) — on button.primary “Sign in”
-2. Rectangle at (24, 300), 342 × 96 — on input#email
-3. Note at (30, 410): “make this full width”
-
-In words, the notes say:
-- “make this full width”
+Artboard example-error — Space: Acme (acme)
+- Image region: (473, 64), 393 × 852
+- Status: ready
+…
 ```
 
 Through a lens, the prompt also names the implementation and its URL, and says
@@ -179,7 +159,7 @@ The handoff isn't tied to any agent: it is text on your clipboard and a JPEG
 in your project. Nothing is sent anywhere until you paste it.
 
 - **Run the agent in the project folder.** The screenshot path, such as
-  `.canonic/.handoffs/sign-in-error.jpg`, is relative to the folder that holds
+  `.canonic/.handoffs/workbench-canvas.jpg`, is relative to the folder that holds
   `workbench.yaml`. An agent working in that folder, such as Claude Code or
   Codex in a terminal there, or the chat of the editor window that has the
   project open, can open the file from that path.

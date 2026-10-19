@@ -9,6 +9,9 @@ and leaves out headings.
 
 ## 0.14.0
 
+- Workbench runs a project's Storybook itself when its Storybook implementation has no `url`: started on the first story, on a private local socket instead of a port, so it never conflicts with a Storybook you run. See Storybook.
+- Switching to a page with another size or to a docs page keeps the page showing at its own size until the next one is ready, then changes both at once.
+- Astro docs lenses build their examples in the canvas.
 - Astro previews whose states use names other than `default` compile and render with their request mocks in live and portable builds.
 - Concurrent Astro renders keep request mocks isolated by state and restore normal requests after rendering failures.
 - HTML and Astro previews preserve asset-like text in documentation code samples instead of trying to bundle it as files.

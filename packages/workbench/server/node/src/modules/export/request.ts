@@ -40,10 +40,11 @@ export function readRequest(value: unknown = {}): ExportRequest {
     const view = record(input.current);
     if (typeof view.page !== 'string' || !view.page || view.page.length > 2000 ||
         ![view.width, view.height].every(n => Number.isInteger(n) && Number(n) >= 1 && Number(n) <= 8192)) throw new Error('Invalid current export view.');
-    for (const key of ['state', 'lens', 'size']) if (view[key] != null && (typeof view[key] !== 'string' || String(view[key]).length > 2000)) throw new Error('Invalid current export ' + key + '.');
+    for (const key of ['state', 'lens', 'size', 'artboard']) if (view[key] != null && (typeof view[key] !== 'string' || String(view[key]).length > 2000)) throw new Error('Invalid current export ' + key + '.');
     current = { page: view.page, width: Number(view.width), height: Number(view.height),
       state: typeof view.state === 'string' ? view.state : null, lens: typeof view.lens === 'string' ? view.lens : null,
-      size: typeof view.size === 'string' ? view.size : undefined };
+      size: typeof view.size === 'string' ? view.size : undefined,
+      ...(typeof view.artboard === 'string' ? { artboard: view.artboard } : {}) };
   }
   const pages = strings(input.pages, 'pages');
   if (scope === 'page' && !pages.length && current) pages.push(current.page);

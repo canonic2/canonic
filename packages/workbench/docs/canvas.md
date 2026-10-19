@@ -1,9 +1,24 @@
 # Using the canvas
 
-The canvas shows one page at a time, on an artboard at a real device size, on
-a surface you can zoom and pan like a design tool. In a
+The canvas shows the selected page on a surface you can zoom and pan like a
+design tool. A page can explicitly declare multiple artboards, each with its
+own dimensions and inputs. Click an artboard's label to select it. Size, preview controls,
+Actions, and drawing tools apply to that artboard. In a
 [docs lens](docs-pages.md), a page's docs fill the canvas instead; see
 [Docs on the canvas](#docs-on-the-canvas). This page covers each part of it.
+
+States are alternatives: the state switcher changes which state of the page
+is showing. Storybook stories also remain alternatives. They do not create
+artboards. A page without an `artboards` declaration shows one preview; docs
+show one viewport. Inputs and annotations stay independent while selecting
+between declared artboards. Screenshots, references, and handoffs include
+every artboard. The existing sidebar, top bar, toolbar, and view controls keep
+their layout.
+
+For a component with no surrounding page, mark its origin-aligned root with
+`data-wb-fit-content` and remove page padding, viewport minimum heights, and
+backgrounds. With Fit or Resizable supported, its artboard follows the content's
+natural bounds, including after live input edits.
 
 ## Layout
 
@@ -232,14 +247,13 @@ after a restart; the hash part stays valid. Share a
 
 ## Copy a reference
 
-**Copy reference** copies a few lines of text that identify the current view:
-the page's label and design file, its state or story, and the lens with its
-implementation URL. Paste it into a conversation to point an agent or a
-colleague at a page. It doesn't take a screenshot or include annotations. For
+**Copy reference** identifies every artboard and the selection, with each page's
+label, design file, state or story, size, and lens. Paste it into a conversation
+to point an agent or a colleague at the canvas. It doesn't take a screenshot or include annotations. For
 those, use a [handoff](annotations-and-handoff.md#hand-off-to-an-agent).
 
 Agents can also read the same reference without a paste. Every open canvas
-tells the Workbench server which page it shows, and
+tells the Workbench server which artboards it shows, and
 `GET /_workbench/view` on the server returns the reference from the canvas
 you changed most recently. Projects with agent hooks set up can give
 it to Claude Code and Codex with every prompt, and to MCP clients through a

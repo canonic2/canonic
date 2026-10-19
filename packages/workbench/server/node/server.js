@@ -40,6 +40,7 @@ var windowStream = require('../../capture/window-stream');
 var agentView = require('./agent-view');
 var manifest = require('../../contracts/manifest');
 var docsModule = require('./src/modules/docs/index.ts');
+var storybookModule = require('./src/modules/storybook/index.ts');
 var browserModules = require('./src/server/browser-modules.ts');
 var canvasSpaces = require('./src/spaces/coordinator.ts');
 var nativePool = require('../../capture/src/native-streams/pool.ts');
@@ -97,6 +98,7 @@ var MAX_LOG = 16 * 1024; /* diagnostics are metadata, never screenshots or promp
 var MAX_VIEW = 256 * 1024; /* complete canvas context; no silent truncation */
 var MAX_LOG_SESSION = 2 * 1024 * 1024; /* one noisy workbench cannot grow forever */
 var REMOTE_TIMEOUT = 5000; /* a dev server that isn't running says so quickly */
+var OWNED_STORYBOOK_TIMEOUT = 130000; /* a Storybook Workbench starts builds first */
 var EXPORT_CAPTURE_WORKERS = 4;
 
 /* What the annotations are dressed in when they're laid over a page the workbench
@@ -305,6 +307,18 @@ function exportCapturePlan(view, baseUrl) {
     var preview = view.pages[item.src] && view.pages[item.src].preview;
     if (preview) {
       variants = preview.states;
+      if (preview.artboards && preview.artboards.length) {
+        variants.forEach(function (state) {
+          preview.artboards.forEach(function (board) {
+            var target = new URL(preview.file, baseUrl);
+            target.searchParams.set('state', state.id);
+            target.searchParams.set('artboard', board.id);
+            captures.push({ page: item.src, state: state.id, artboard: board.id, variant: state.id + '-' + board.id, label: board.label,
+              size: board.id, sizeLabel: board.label, url: target.href, external: false, width: board.width, height: board.height });
+          });
+        });
+        return;
+      }
       variants.forEach(function (state) {
         sizes.forEach(function (size) {
           var target = new URL(preview.file, baseUrl);
@@ -481,6 +495,21 @@ function storyEntries(index, impl) {
 }
 
 function storybookIndex(impl) {
+  /* A Storybook Workbench runs starts on this first request, so it may take
+     a while, and its failures are Workbench's to explain. */
+  if (impl.owned) {
+    return remote.fetchText(impl.url + '/index.json', { timeout: OWNED_STORYBOOK_TIMEOUT }).then(function (answer) {
+      if (answer.status < 200 || answer.status >= 300) {
+        throw refused(502, 'Workbench couldn’t run Storybook in ' + impl.root + ': ' + answer.body.trim());
+      }
+      var body;
+      try { body = JSON.parse(answer.body); } catch (error) { body = null; }
+      storyEntries(body, impl);
+      return body;
+    }, function (error) {
+      throw refused(503, 'Workbench’s Storybook in ' + impl.root + ' isn’t answering: ' + String(error.message || error));
+    });
+  }
   return remote.fetchJson(impl.url + '/index.json', { timeout: REMOTE_TIMEOUT }).then(
     function (answer) {
       if (answer.status < 200 || answer.status >= 300) {
@@ -727,6 +756,21 @@ function start(options) {
       return 'http://127.0.0.1:' + publicPort() + WORKBENCH_PREFIX + 'preview-bridge.js';
     },
   });
+  /* Storybooks Workbench runs itself, one per implementation and folder,
+     started by the first request through their proxy and stopped with the
+     server (src/modules/storybook). */
+  var ownedStorybooks = new Map();
+  function ownedStorybookOrigin(key, impl) {
+    var id = key + '|' + impl.root;
+    if (!ownedStorybooks.has(id)) {
+      ownedStorybooks.set(id, storybookModule.ownedStorybook({
+        root: impl.root,
+        log: function (event, details) { diagnostic('info', event, details); },
+      }));
+    }
+    var storybook = ownedStorybooks.get(id);
+    return proxies.owned(id, function (port) { return storybook.socket(port); });
+  }
   var windowVideo = options.windowStream || nativePool.createPool(function () { return windowStream.create({
     storage: path.join(options.captureStorage || path.join(os.tmpdir(), 'canonic-workbench-capture'), 'window-capture'),
     path: WINDOW_STREAM_PATH,
@@ -823,6 +867,24 @@ function start(options) {
         });
       });
     }, Promise.resolve()).then(function () {
+      /* A Storybook Workbench runs is addressed at its proxy; it starts on
+         the first request there. It runs project code, so only in a
+         trusted workspace. */
+      return Promise.all(Object.keys(implementations).filter(function (key) {
+        return implementations[key].kind === 'storybook' && implementations[key].owned;
+      }).map(function (key) {
+        var impl = implementations[key];
+        if (options.isTrusted === false) {
+          problems.push('implementations › ' + key + ': Workbench runs Storybook in a trusted workspace only, since Storybook runs project code.');
+          return null;
+        }
+        return ownedStorybookOrigin(key, impl).then(function (origin) {
+          implementations[key] = Object.assign({}, impl, { url: origin });
+        }, function (error) {
+          problems.push('implementations › ' + key + ': ' + String(error.message || error));
+        });
+      }));
+    }).then(function () {
       var simulatorKeys = Object.keys(implementations).filter(function (key) {
         var impl = implementations[key];
         return impl.kind === 'ios-simulator' && impl.catalog;
@@ -1212,6 +1274,8 @@ function start(options) {
     var implementations = Object.assign({}, view.implementations);
     return Promise.all(Object.keys(implementations).map(function (key) {
       var impl = implementations[key];
+      /* A Storybook Workbench runs is already addressed at its proxy. */
+      if (impl.owned) return null;
       var field = impl.kind === 'url' ? 'base' : impl.kind === 'storybook' ? 'url' : null;
       if (!field || !/^https?:\/\//i.test(impl[field] || '')) return null;
       return proxies.address(impl[field]).then(function (address) {
@@ -1949,7 +2013,7 @@ function start(options) {
         .then(function () {
           return resolvedWithCatalogs().then(function (view) {
             var impl = view && view.implementations[storyKey];
-            if (!impl || impl.kind !== 'storybook' || impl.url === 'auto') {
+            if (!impl || impl.kind !== 'storybook' || !impl.url || impl.url === 'auto') {
               throw refused(400, 'there is no available Storybook implementation called “' + storyKey + '”');
             }
             if (!title) throw refused(400, 'which title?');
@@ -2248,6 +2312,9 @@ function start(options) {
             options.captureShared ? Promise.resolve() : Promise.resolve(capture.close()).catch(function () {}),
             Promise.resolve(windowVideo.close()).catch(function () {}),
             proxies.close(),
+            Promise.all(Array.from(ownedStorybooks.values()).map(function (storybook) {
+              return storybook.close().catch(function () {});
+            })),
             previews ? previews.close() : Promise.resolve(),
           ]);
         }).then(function () {
