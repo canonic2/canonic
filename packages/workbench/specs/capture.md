@@ -55,7 +55,7 @@ web-page capture, not an operating-system screenshot of VS Code.
   the archive is present, the host is not macOS earlier than 13 (Darwin 22),
   and a Linux host has `DISPLAY` or `WAYLAND_DISPLAY`. Otherwise there are no
   screenshots: every capture and export reference fails with the reason (for
-  example, "it needs macOS 13 or later"), and the preview worker runs with the
+  example, "it needs macOS 13 or later"), and the Node evaluator runs with the
   host's own executable.
 - On macOS the helper is an accessory app (`LSUIElement`) with no visible
   window or Dock icon, including at startup.
@@ -157,7 +157,7 @@ The element under an annotation comes from the visible document for local
 pages, from the mirrored copy on the capture surface for bridged lenses
 ([capture-page.js](../ui/legacy/capture-page.js)), and from the helper's page
 for the URL fallback. The prompt says when elements could not be read.
-See [handoff.js](../server/node/handoff.js).
+See [handoff.rs](../server/src/handoff.rs).
 
 ## Failure behavior
 
@@ -236,7 +236,7 @@ cases, and embedded documents or tainted pixels.
   captures, and proxied implementation addresses in the config.
   [proxy.test.js](../server/node/proxy.test.js) covers bridge injection, header and cookie
   rewriting, redirects, request bodies, WebSocket upgrades, and a stopped
-  implementation. [handoff.test.js](../server/node/handoff.test.js) covers the prompt.
+  implementation. The [handoff tests](../server/src/handoff/tests.rs) cover the prompt.
 - Manual, on a desktop after `pnpm run bundle-runtime`:
   [smoke-capture.cjs](../scripts/smoke-capture.cjs) (warm reuse, reloads,
   resizing, implementation handoffs, Dock visibility, crash recovery),

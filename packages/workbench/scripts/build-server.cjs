@@ -17,11 +17,14 @@ function build(target = process.platform + '-' + process.arch, debug = false) {
   if (!source) {
     const local = path.join(os.homedir(), '.cargo/bin/cargo' + (process.platform === 'win32' ? '.exe' : ''));
     const cargo = fs.existsSync(local) ? local : 'cargo';
-    const args = ['+1.99.0', 'build', '--locked', '--target', triples[target]];
+    // server/rust-toolchain.toml pins Rspack's nightly toolchain. The host's
+    // own target builds in Cargo's default folder, shared with the checks.
+    const host = target === process.platform + '-' + process.arch;
+    const args = ['build', '--locked'].concat(host ? [] : ['--target', triples[target]]);
     if (!debug) args.push('--release');
     const result = cp.spawnSync(cargo, args, { cwd: root, stdio: 'inherit' });
-    if (result.error || result.status !== 0) throw new Error('Cannot build workbench-server for ' + target + '. Install Rust 1.99.0, target ' + triples[target] + ' and its linker, or supply WORKBENCH_SERVER_BINARY for this target.', { cause: result.error });
-    source = path.join(root, 'target', triples[target], debug ? 'debug' : 'release', name);
+    if (result.error || result.status !== 0) throw new Error('Cannot build workbench-server for ' + target + '. Install the toolchain server/rust-toolchain.toml names, target ' + triples[target] + ' and its linker, or supply WORKBENCH_SERVER_BINARY for this target.', { cause: result.error });
+    source = path.join(root, 'target', ...(host ? [] : [triples[target]]), debug ? 'debug' : 'release', name);
   }
   const bins = path.join(root, 'bin');
   fs.mkdirSync(bins, { recursive: true });

@@ -20,39 +20,31 @@
     "check:ui": "pnpm run lint && pnpm run format:check && pnpm run test:ui"
   },
   "dependencies": {
-    "@rspack/core": "2.2.7",
     "@rspack/plugin-react-refresh": "2.0.2",
     "@vue/compiler-sfc": "3.5.43",
-    "css-loader": "7.1.5",
     "esbuild": "0.28.2",
-    "highlight.js": "11.12.0",
     "ignore": "7.0.12",
     "lucide": "1.33.0",
-    "marked": "18.0.14",
-    "memfs": "4.79.0",
-    "pdf-lib": "1.17.1",
     "picomatch": "4.0.7",
     "react-refresh": "0.19.0",
-    "style-loader": "4.0.0",
-    "tar": "7.5.22",
-    "vue-loader": "17.4.2",
-    "webpack": "5.111.1"
+    "tar": "7.5.22"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
     "@eslint/js": "10.0.1",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
+    "@typescript/native": "npm:typescript@7.0.2",
     "@vscode/vsce": "3.9.2",
     "astro": "7.3.5",
     "eslint": "10.13.0",
     "eslint-plugin-wc": "3.1.0",
+    "pdf-lib": "1.17.1",
     "prettier": "3.9.10",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native-web": "0.21.3",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vue": "3.5.43",
-    "@typescript/native": "npm:typescript@7.0.2"
+    "vue": "3.5.43"
   }
 }

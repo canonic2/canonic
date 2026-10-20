@@ -189,6 +189,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    #[expect(clippy::float_cmp, reason = "parsed numbers are exact")]
     fn numbers_read_and_print_as_javascript_does() {
         assert_eq!(to_number(Some(&json!(" 12 "))), 12.0);
         assert_eq!(to_number(Some(&json!("0x10"))), 16.0);

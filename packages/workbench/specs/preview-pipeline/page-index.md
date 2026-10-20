@@ -80,44 +80,43 @@ first page meets its render target.
 - Binary, evaluator, compiler, authoring API and index options form the cache
   identity. A changed identity or saved format rebuilds the index. A failed
   evaluation retries because its dependency graph may be incomplete.
-- A complete ordered answer is saved beside the native records. Its identity
-  and generation must agree with the native index before it can be reused.
-  A missing or corrupt answer is rebuilt from the records.
+- The server keeps the last ordered answer with its generation; the index
+  answers `reuse_answer` only for that generation, and anything else lists
+  the records again.
 - Cache reads and writes are optional optimizations. Unreadable or corrupt
   data cannot prevent listing. Publish each save through a temporary file and
   atomic rename; report save failures without discarding a successful answer.
 
 ### Process and resource ownership
 
-The stable Rust package in `server/` has a library and a thin binary entry
+The Rust package in `server/` has a library and a thin binary entry
 point. `workbench-server index` consumes one JSON request on stdin and writes
 one JSON response, then exits. The protocol is documented in
 [the server README](../../server/README.md#index-protocol).
 The [native ownership contract](../modules.md#rust-ownership) separates
 pure definition rules, application stages, shared observations and adapters.
 
-The TypeScript adapter in `server/node/src/modules/page-index/` owns binary selection,
-temporary storage, process lifetime, ordering, duplicate IDs and recovery.
-It starts a native process per request. The bundled Electron runtime is
+The server's [catalog](../../server/src/catalog.rs) owns the request: the
+saved index's location, its identity, ordering and duplicate IDs. The resident
+index answers it in the server process. The host's bundled Electron runtime is
 prepared only when evaluation is requested; literal-only listing requires
-neither runtime extraction nor a Node subprocess. Evaluation can use a second
-native invocation, reusing the first invocation's parsed records.
+neither runtime extraction nor a Node subprocess. Evaluation uses a second
+request, reusing the first one's parsed records. `workbench-server index` runs
+one transaction per process, and `workbench-server list` prints the read
+answer.
 
 | Resource | Bound and release rule |
 | --- | --- |
 | Saved records | At most 32 MiB of versioned postcard data per project; a larger index is not saved, and the timings report it as a save error |
-| Complete ordered answer | At most 32 MiB per project; oversized answers are not saved |
 | Project saves | At most 32 root-digest directories under `canonic-workbench-index/` in the system temporary folder; evict inactive directories after seven days and oldest directories beyond the count bound during index requests |
-| Native invocation | Default deadline of 120 seconds per invocation; terminate the process tree before falling back |
-| Evaluator run | The request's deadline, 120 seconds by default, in the one-process index and the [front door's resident index](../server.md#phase-1-the-front-door) alike; the evaluator is killed at the deadline. A resident request has the same deadline on the Node side and falls back to a one-process index |
-| Native stdout | At most 128 MiB per invocation; exceeding it terminates the process tree |
-| Captured stderr | At most 4,000 characters for failure diagnostics |
+| Evaluator run | The request's deadline, 120 seconds by default, in the one-process index and the [server's resident index](../server.md#the-resident-index-and-watcher) alike; the evaluator is killed at the deadline |
+| Index answer | At most 128 MiB, the one-process index's output bound and the resident index's answer bound |
 
 Saved indexes belong outside the project. They are not authoring files or
-portable build outputs. A missing, failing, malformed or timed-out native
-index emits `previews.index.fallback` and uses the worker's index. Successful
-native listing does not start the compile worker; later rendering and
-pre-warming retain their own worker lifecycle.
+portable build outputs. A failing or timed-out index adds a
+`Workbench previews: …` problem to the page tree. Listing starts neither the
+compilers nor the Node evaluator; the page tree then configures the compilers,
+which build and pre-warm what it lists ([server](../server.md#previews)).
 
 ### Distribution
 
@@ -137,11 +136,11 @@ acceptance.
 
 | ID | Acceptance criterion | Existing evidence |
 | --- | --- | --- |
-| PI-01 | Native and compiler answers agree for literal/computed previews, docs, invalid definitions, duplicate IDs, custom globs and discovery order | [Adapter parity tests](../../server/node/src/modules/page-index/index.test.ts) and [answer tests](../../server/node/src/modules/page-index/answer.test.ts) |
-| PI-02 | Literal listing requires no JavaScript executable; executable definitions use evaluation | Adapter tests; [literal unit and property tests](../../server/src/literal.rs) |
-| PI-03 | Refresh observes additions, removals, renames, retitles and changed imported list fields | [Native CLI integration](../../server/tests/integration/main.rs) and adapter dependency-invalidation test |
-| PI-04 | Invalid saves rebuild, only matching generations reuse the complete answer, failed saves preserve successful listing, and a corrupt ordered answer does not lose pages | [Saved-index unit test](../../server/src/saved.rs), native CLI generation/handoff/save-failure tests and adapter tests |
-| PI-05 | Native failure or timeout logs a diagnostic and returns the fallback answer | Adapter missing/failing-binary and timeout test |
+| PI-01 | Native and compiler answers agree for literal/computed previews, docs, invalid definitions, duplicate IDs, custom globs and discovery order | Parity tests in [preview.test.js](../../server/node/preview.test.js) against `workbench-server list`, and [answer tests](../../server/src/catalog/answer.rs) |
+| PI-02 | Literal listing requires no JavaScript executable; executable definitions use evaluation | [Server integration tests](../../server/node/server.test.js); [literal unit and property tests](../../server/src/literal.rs) |
+| PI-03 | Refresh observes additions, removals, renames, retitles and changed imported list fields | [Native CLI integration](../../server/tests/integration/main.rs) and [server.test.js](../../server/node/server.test.js)'s added-definition test |
+| PI-04 | Invalid saves rebuild, only matching generations reuse the complete answer, and failed saves preserve successful listing | [Saved-index unit test](../../server/src/saved.rs), native CLI generation/handoff/save-failure tests |
+| PI-05 | A failing or timed-out index is a page-tree problem, and the rest of the configuration still answers | [Native CLI deadline test](../../server/tests/integration/main.rs); the page-tree problem has no dedicated test |
 | PI-06 | Trust and disabled-preview controls prevent project evaluation | [Preview server integration tests](../../server/node/preview.test.js) |
 | PI-07 | Cache eviction, byte bounds and process cleanup follow the resource table | Implemented bounds; dedicated boundary/eviction and descendant-cleanup assertions remain verification gaps |
 | PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [performance](performance.md#page-listing); acceptance on all six targets is not established by that probe |
@@ -153,11 +152,9 @@ compiler evaluator. [Performance](performance.md#page-listing) owns measured
 results and target gaps; [lab evidence](../../labs/instant-first-page/README.md#stage-1-report)
 supports the architecture without defining the shipping interface.
 
-- The [front door](../server.md#phase-1-the-front-door) keeps the index
+- The [server](../server.md#the-resident-index-and-watcher) keeps the index
   resident with a watcher and reports changed listings; what still lacks a
   notice is owned by [sidebar placement](../previews.md#sidebar-placement).
-- The worker's index and pre-warming remain independent. Sharing the native
-  file list with them belongs to the compiler-host work.
 - Studio has no native-library integration contract. The presence of a Rust
   library does not establish an embeddable indexing API.
 - Metadata stamps do not establish content identity when both modification

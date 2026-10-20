@@ -54,7 +54,6 @@ test('the extension ships its runtime dependencies and none of its tooling', () 
     const at = parts.lastIndexOf('node_modules');
     return parts[at + 1].startsWith('@') ? parts[at + 1] + '/' + parts[at + 2] : parts[at + 1];
   });
-  // Vue Loader's Rspack plugin loads webpack's rule classes, so webpack ships.
-  for (const name of ['esbuild', '@rspack/core', 'webpack', 'vue-loader', 'lucide', 'marked', 'highlight.js', 'picomatch', 'tar', '@vue/compiler-sfc']) assert.ok(names.includes(name), name);
-  for (const name of ['@vscode/vsce', '@electron/packager', 'astro', 'typescript', 'xmlbuilder']) assert.ok(!names.includes(name), name);
+  for (const name of ['esbuild', '@rspack/plugin-react-refresh', 'react-refresh', 'lucide', 'picomatch', 'tar', '@vue/compiler-sfc']) assert.ok(names.includes(name), name);
+  for (const name of ['@vscode/vsce', '@electron/packager', 'astro', 'typescript', 'xmlbuilder', 'pdf-lib']) assert.ok(!names.includes(name), name);
 });

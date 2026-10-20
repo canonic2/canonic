@@ -138,7 +138,7 @@ hidden until the file is back.
 ## Servers and start commands
 
 Each space runs on its own [server](extension.md#the-server), with its own
-port, [start commands](configuration.md#start-commands), and preview worker.
+port, [start commands](configuration.md#start-commands), and [preview compiler](extension.md#the-preview-compiler).
 All spaces in a window share one [screenshot helper](extension.md#the-screenshot-helper).
 
 - A window's own space starts with the window.

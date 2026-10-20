@@ -1,22 +1,31 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { Compiler, docsRequest } = require('../server/node/preview/compiler.cjs');
+const compilerFixture = require('../server/node/compiler-fixture.cjs');
 const server = require('../server/node/server.js');
 const chrome = require('../scripts/chrome.cjs');
 
 const root = path.resolve(__dirname, '..');
 
-test('the shipping component design pages validate and their examples compile', async () => {
-  const compiler = new Compiler(root, { include: ['design/**/*.workbench.ts'] });
-  const index = await compiler.index();
-  assert.deepEqual(index.errors, []);
-  assert.ok(index.docs.length > 0);
-  for (const page of index.docs) {
+test('the shipping component design pages validate and their examples compile', async t => {
+  // The repository's Workbench space: these pages, with its preview settings.
+  const compiler = await compilerFixture.open(root, null, { dir: path.resolve(root, '../..'), key: 'workbench' });
+  t.after(() => compiler.close());
+  const config = await compiler.config();
+  assert.deepEqual(config.problems, []);
+  const docs = Object.values(config.pages).map(page => page.docs).filter(Boolean);
+  assert.ok(docs.length > 0);
+  const base = 'http://127.0.0.1:' + compiler.port + '/_workbench/previews';
+  for (const page of docs) {
     for (const lens of page.lenses) {
-      const listed = await compiler.docsExamples(docsRequest(lens, root));
-      assert.deepEqual(listed.problems, [], page.file);
-      assert.ok(listed.examples.length > 0, page.file);
+      const request = encodeURIComponent(JSON.stringify({ adapter: lens.adapter, examples: lens.examples, styles: lens.styles, ...(lens.environment ? { environment: lens.environment } : {}) }));
+      const bundle = await fetch(base + '/docs/bundle?request=' + request);
+      assert.equal(bundle.status, 200, page.file);
+      const built = await bundle.json();
+      assert.deepEqual(built.problems, [], page.file);
+      assert.ok(built.examples.length > 0, page.file);
+      const module = await (await fetch('http://127.0.0.1:' + compiler.port + built.module)).text();
+      assert.equal(/const errors = (.*);/.exec(module)[1], '[]', page.file);
     }
   }
 });

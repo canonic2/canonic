@@ -39,7 +39,7 @@ copying acceptance criteria or treating lab results as shipped verification.
 | --- | --- |
 | Shell/content boundary | One Workbench shell and dedicated content-only renderers; startup request/markup assertions and retained Storybook checks cover the boundary. See [rendering flow](rendering-flow.md) |
 | UI/backend independence | UI owns presentation; backend owns data/operations and project previews. Generic asset hosting is separate. Independent UI/backend acceptance remains unverified |
-| Preview pipeline | Native listing and the Rspack worker are implemented. Complete-list and first-page targets still require work; compiler-host alternatives remain lab work |
+| Preview pipeline | Native listing and the native Rspack compiler in `workbench-server` are implemented, with project JavaScript in the Node evaluator. Complete-list and first-page targets still require work and are unmeasured against the native compiler |
 | Multiple artboards | Instance isolation, mixed-space support, review composition and context APIs are implemented. User-facing multi-artboard integration is future work; arrangement is phase 2 and persistence/sharing remain open |
 | Sizes and shell | Configurable sizes and migrated Web Components are implemented. Configure pages size cards, guide alignment and the canvas theme bridge remain gaps |
 
@@ -59,7 +59,7 @@ user-facing workflow is delivered.
 | [Lenses](lenses.md) | Rendering kinds, customizable display labels for every lens including the authored preview, stable identity, defaults, and configuration precedence |
 | [Multiple artboards](multiple-artboards.md) | Implemented instance/review support, desired comparison workflows, remaining UI integration, arrangement phases and persistence decisions |
 | [Artboard code plan](multiple-artboards-code-plan.md) | JavaScript UI owners, target capability boundaries, state/runtime/space contracts, remaining integration and validation |
-| [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler worker, controls, the `workbench` lens, and the portable build |
+| [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler and Node evaluator, controls, the `workbench` lens, and the portable build |
 | [Adapters](adapters/README.md) | What each technology needs to render, one spec per adapter: [HTML](adapters/html.md), [React](adapters/react.md), [React Native Web](adapters/react-native-web.md), [Vue](adapters/vue.md), [Astro](adapters/astro.md), [Storybook](adapters/storybook.md) and [custom adapters](adapters/custom.md); how the Workbench server serves pages |
 | [Artboard sizes](sizes.md) | Sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
 | [Docs](docs-pages.md) | Docs as a lens of any page: Markdown with live examples on the whole canvas, `docs` lenses one per renderer, Markdown pages, `defineDocs`, the docs canvas mode, and docs references in the export |
@@ -87,8 +87,8 @@ Rust index and Node services are in `server/`. Projects provide
 
 A page enters the page list from `workbench.yaml`, from the iOS Simulator
 catalog, or from preview discovery. TypeScript previews (`*.workbench.ts` and
-`*.workbench.tsx`) are discovered unless `previews: false`, compile in a managed
-worker, and render in the Workbench preview host; see
+`*.workbench.tsx`) are discovered unless `previews: false`, compile in the
+Workbench server, and render in the Workbench preview host; see
 [TypeScript previews](previews.md) and the [preview API guide](../docs/workbench-previews.md).
 
 | Source | How it enters the page list | What appears on the canvas |

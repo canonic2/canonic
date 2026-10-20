@@ -3,221 +3,216 @@
 The Workbench server is what the extension or Studio starts for a space: it
 answers the canvas, serves the [page tree](glossary.md#what-a-space-holds) and
 serves pages through their [adapters](adapters/README.md). This spec owns its
-process model and its move into the Rust binary `workbench-server`. The
-[preview pipeline](preview-pipeline/README.md) owns compiling and delivering
-native pages; the [extension contract](vscode-extension.md#process-boundaries)
-owns how the editor starts and stops it.
+process model, its routes and its protocol with the process that starts it.
+The [preview pipeline](preview-pipeline/README.md) owns compiling and
+delivering native pages; the
+[extension contract](vscode-extension.md#process-boundaries) owns how the
+editor starts and stops it.
 
 The [UI/backend independence contract](modules.md#ui-and-backend-independence)
 is mandatory. This server owns project data, operations and previewed content;
 its domain services do not compose the Workbench interface or initialize its
-components. Generic UI asset delivery is host infrastructure and may share this
+components. Generic UI asset delivery is host infrastructure and shares this
 HTTP process. UI tooling remains independent of project compiler configuration,
 caches and lifecycle. The [rendering-flow contract](rendering-flow.md) requires
 the UI to load content-only renderers into artboards; the application
 `/_workbench/index.html` is an outer host entry, never an artboard destination.
 Compiling and rendering project React, docs or Storybook is backend work.
 
-Status: agreed by the owner on 2026-10-17, with the
-[decisions](#decisions-for-the-owner) as recommended. Phase 1 is
-implemented; its measurement against the current server has not been made.
-Phases 2 to 5 are not implemented.
+Decided by the owner ([adapters](adapters/README.md#decisions), 2026-10-16
+and 2026-10-17): one Rust runtime. `workbench-server` answers HTTP, holds the
+page index resident with one watcher, and runs the compiler. Node runs only as
+child processes for project code, and the editor's side becomes messages
+between the host and the server.
 
-## Current state
+## The server and its host
 
-- `server/node/server.js` is the HTTP server. The extension `require`s it and
-  runs it inside the VS Code extension host, one server per space. The
-  standalone `node server/node/server.js` does the same in its own process.
-- It talks to the editor through in-process callbacks: opening a file, the
-  screenshot capture service, logging, announcing its address and telling the
-  sidebar the page tree changed.
-- `workbench-server serve`, the front door, owns the space's public loopback
-  port (the first free of 3579–3583, then any free port) and forwards every
-  request to `server.js` on a private one; it keeps the page index resident
-  and watches the space (phase 1 below). Without the binary, `server.js`
-  listens publicly itself and runs the index as a process per request.
-- Previews compile in the Node preview worker, a child process the server
-  forwards `/_workbench/previews/` to.
-- URL and Storybook lenses are framed through implementation proxies that
-  `server.js` opens, and a Storybook implementation without `url` is a
-  Storybook `server.js` runs on a local socket
-  ([processes and connections](#processes-and-connections)).
+`workbench-server serve` is one space's whole HTTP server
+([serve.rs](../server/src/serve.rs)):
 
-## Target
+```text
+workbench-server serve --root <project> --product <workbench folder>
+  [--ports 3579,3580,3581,3582,3583,0] [--space-dir <dir>] [--space-key <key>]
+  [--space-id <id>] [--untrusted] [--handoff] [--eager-previews]
+  [--log-limit <bytes>] [--export-retention-ms <ms>]
+  [--export-max-archive-bytes <bytes>] [--view-stale-ms <ms>]
+```
 
-Decided by the owner ([adapters](adapters/README.md#decisions)): one Rust
-runtime. `workbench-server` answers HTTP, holds the page index resident with
-one watcher, and runs the compiler. Node runs only as child processes for
-project code. The editor-side callbacks become messages between the extension
-and the server.
+It owns the space's public loopback port (the first free of the list, where
+0 takes any) and answers everything on it: Workbench's browser files, the
+project's files, previews from the native compiler, and the space's routes.
+It exits when its standard input closes, so it never outlives its host.
+
+The host is the process that starts it: the extension, or the standalone
+command `node server/node/server.js <folder>…`. Both start spaces through
+[host/](../server/node/src/modules/host/index.ts), which keeps the
+`start(options)` interface: it spawns the server in its own process group,
+killed when the server exits, answers its questions with the editor's
+callbacks and the capture service, and closes it with the space. A server that
+stops unexpectedly is started again on the same port, at most three times a
+minute. Without the binary, a space does not start, and says why.
+
+### Messages
+
+One JSON object per line each way
+([messages.rs](../server/src/serve/messages.rs),
+[host.rs](../server/src/host.rs)).
+
+| From | Message | Meaning |
+| --- | --- | --- |
+| Server | `listening` | The public port, once. |
+| Server | `host`, with `question` | A question the host answers with `reply`: `node` (the Node runtime for project code), `capture` (a capture operation; the image or PDF comes back in a temporary file the server reads and removes), `capture-pool` and `capture-pool-close` (an export's renderers), `open`, `handoff`, `spaces`, `space-open`, `stream` (start or stop a native window stream) and `stream-socket`. |
+| Server | `log`, `diagnostic` | A record for the editor's log. |
+| Server | `shot`, `changed`, `catalog` | A screenshot was saved; the page tree changed on disk; the docs catalog changed. |
+| Host | `reply` | The answer to a question, or why it failed. |
+| Host | `catalog` | The page tree with everything this machine adds, for `running.config()`. |
+| Host | `announce` | Write this server's address for agents again. |
+| Host | `index`, `config` | One page-index request; the resolved manifests of a folder. |
+
+Diagnostics are bounded by the server
+([diagnostics.rs](../server/src/diagnostics.rs)): a record keeps a known
+level, a short event and at most twenty small details, and a session stops
+logging at its byte budget after saying so once.
 
 ### Processes and connections
 
-Every project-data, operation and project-preview request goes through the Workbench server, and the server is the only
-thing that talks to its child processes (decided by the owner on 2026-10-16
-and 2026-10-18).
+Every project-data, operation and project-preview request goes through the
+Workbench server, and the server is the only thing that talks to its child
+processes (decided by the owner on 2026-10-16 and 2026-10-18).
 
 | Process | Runs | Listens on | Started |
 | --- | --- | --- | --- |
-| `workbench-server`, one per space | HTTP for the canvas, the page index and its watcher, the compiler (Rspack's Rust crates), serving and pushed updates, the [implementation proxies](implementation-proxy.md) | The space's public loopback port, and one loopback port per proxied implementation origin, because each framed implementation needs an origin of its own | By the extension or Studio |
-| The Node evaluator, one per space | Project code: computed definitions, `workbench.config.ts`, Astro compiling and rendering, Vue's compiler where the Rust one does not pass, project JavaScript loaders ([adapters](adapters/README.md#how-pages-are-served)) | Nothing: stdin and stdout pipes, or a local socket | On first need, in a trusted workspace |
+| `workbench-server`, one per space | HTTP for the canvas, the page index and its watcher, the compiler (Rspack's Rust crates), serving and pushed updates, the [implementation proxies](implementation-proxy.md) | The space's public loopback port, and one loopback port per proxied implementation origin, because each framed implementation needs an origin of its own | By the host |
+| The Node evaluator, one per space | Project code: computed definitions, `workbench.config.ts`, Astro compiling and rendering, Vue's compiler, project JavaScript loaders ([adapters](adapters/README.md#how-pages-are-served)) | Nothing: stdin and stdout pipes | On first need, in a trusted workspace, on the Node runtime the host gives |
 | A Storybook the server runs | The project's `storybook dev --preview-only` ([Storybook adapter](adapters/storybook.md#a-storybook-the-server-runs)) | A local socket only | On the first story request, in a trusted workspace |
 
 - **No child takes a TCP port.** A child is reached over stdin and stdout
-  pipes or a local socket (a Unix socket, or a named pipe on Windows) in a
-  private temporary folder, so only the server can reach it, and a dev
-  server or Storybook the user runs on any port never conflicts with it.
-- **Children are the server's.** Started on need, restarted on the next
-  need after they exit, and stopped with the server. A space that needs no
-  project code on the server starts none.
+  pipes or a local socket in a private temporary folder, so only the server
+  can reach it, and a dev server or Storybook the user runs on any port never
+  conflicts with it.
+- **Children are the server's.** Started on need, restarted on the next need
+  after they exit, and stopped with the server. A space that needs no project
+  code on the server starts none: the evaluator asks the host for its runtime
+  only when a definition, the project configuration or a lens first needs it.
 - **The browser reaches a child only through the server:** a page an owned
   child serves is framed through its implementation proxy, whose port the
   child is told it serves, so the addresses it writes into its pages lead
   back to the proxy.
 - **Implementations the user runs** (`kind: url`, or Storybook at `url`) are
-  read at their own address and framed through their proxy, as today.
+  read at their own address and framed through their proxy.
+- **Native capture stays with the host.** The capture helper is an Electron
+  process the host shares between spaces. Window and Simulator video streams
+  are the capture part's: the host serves them on a local socket, and the
+  server forwards `/_workbench/window/stream` there, upgrades included.
 
-Today, in the Node server ([current state](#current-state)), these differ
-from the target, and close as the phases below move routes into Rust:
+### The page tree
 
-- The front door forwards to `server.js` on a private loopback TCP port.
-- The preview worker, a Node child of `server.js`, listens on a loopback TCP
-  port; it compiles with Rspack's JavaScript API and evaluates definitions
-  and `workbench.config.ts` with esbuild.
-- The page index's evaluator, a child of the front door, already uses stdin
-  and stdout.
-- A Storybook the server runs already listens only on a local socket
-  ([storybook/](../server/node/src/modules/storybook/index.ts)).
+`/_workbench/config` is assembled in Rust
+([catalog.rs](../server/src/catalog.rs)): `workbench.yaml` and
+`workbench.local.yaml` read with the manifest rules
+([config.rs](../server/src/config.rs)), previews and docs pages from the
+resident index placed where their titles say, links and Workbench lens
+mappings checked, the address of a Storybook found running for `url: auto`,
+the proxy origin of one the server runs, booted iOS Simulators from
+`xcrun simctl` ([simulators.rs](../server/src/simulators.rs)), and the docs
+pages' sources and problems. URL and Storybook implementations are answered
+at their proxies, with the address they proxy as `upstream`. A Storybook or
+Simulator that is not running leaves the other pages usable and adds one
+problem. The answer is assembled fresh on every request.
 
-## Migration
+The manifest rules live in [manifest.js](../contracts/manifest.js), shared by
+the browser; [config-parity.test.js](../server/node/config-parity.test.js)
+runs the Rust reader and the Node reader over a corpus that reaches every rule
+and problem and over seeded random configs, and they agree on all of them.
 
-The Rust binary becomes the front door first, then takes routes over one at a
-time, so Workbench keeps working at every step.
+### The resident index and watcher
 
-### Phase 1: the front door
+The server keeps the page index resident: it holds the saved index in memory,
+watches the space, and answers each page-tree request without a process per
+resolution. A definition added, removed, renamed or retitled is reported as
+`changed` once its background index settles; the extension rebuilds the
+sidebar and refreshes the canvas for the space being shown, which closes the
+[definition watching gap](previews.md#sidebar-placement). An edit that only
+changes a component reports nothing.
 
-- `workbench-server serve` listens on the space's public loopback port, with
-  the current port search, and forwards every request to `server.js` on a
-  private loopback port: methods, headers, bodies, streamed and server-sent
-  responses, `HEAD`, aborted requests, and WebSocket upgrades (the window
-  stream). An unreachable upstream answers 502 with a message, never a hang.
-- `server.js` stays where it runs today, with its callbacks. It listens on an
-  ephemeral port, starts `workbench-server serve` with that port, and
-  announces the address the front door reports. The front door exits when its
-  parent's stdin closes.
-- `server.js` takes the public origin as an option. Its same-origin check
-  (which today compares `Origin` with its own port) and every URL it builds
-  for the browser or the capture helper use the public origin.
-- The front door keeps the page index resident: one `workbench-server` process
-  holds the saved index in memory, watches definition files, and answers
-  `server.js` over its private connection instead of a process per
-  resolution. A definition added, removed, renamed or retitled tells the
-  canvas and sidebar to refresh, which closes the
-  [definition watching gap](previews.md#sidebar-placement).
+### Previews
 
-Acceptance: the Workbench suite passes with every HTTP test going through the
-front door; Rust integration tests cover each forwarding case above; and the
-lab's first-page, page-list and switching sequences stay within 10% of the
-current server's p50.
-
-Implemented as above. If the front door stops unexpectedly, `server.js`
-starts it again on the same public port, at most three times a minute; after
-that, or when a restart fails, `server.js` listens on the public port itself.
-The front door runs in its own process group, killed when it exits, so its
-evaluator cannot outlive it. The extension rebuilds the sidebar
-and refreshes the canvas on a page-tree change for the space being shown.
-Verified: the Workbench suite passes through the front door, including a
-definition added on disk being reported and listed, and the fallback without
-the binary; the Rust tests cover forwarding, streaming, `HEAD`, 502,
-upgrades, exit on closed input, the resident index and change reports.
-On this repository's own spaces through the standalone server and headless
-Chrome (2026-10-17): every page tried in the Acme demo and Website spaces
-renders without errors, a definition added or removed shows in the page tree
-within about 70 ms and is announced within about 220 ms, and a killed front
-door answers again on the same port within about 70 ms. Not yet verified:
-the lab measurement and the extension's rebuild in a running VS Code.
-
-### Phase 2: the page tree
-
-`/_workbench/config` is answered in Rust: `workbench.yaml` and
-`workbench.local.yaml`, the manifest rules, previews and docs from the
-resident index, the iOS Simulator catalog, and problems. The manifest rules
-live in [manifest.js](../contracts/manifest.js), shared by the browser and the
-server; the Rust reader must give the same answer, checked by a parity
-harness that runs both readers over the same fixtures, as the page index's
-parity tests do. Storybook `url: auto` detection moves with it.
-
-Implemented so far: the reader, `workbench-server config <folder> [--space
-<id>]` ([config.rs](../server/src/config.rs)): the YAML subset, local
-merging, spaces, the manifest rules, sizes, the page tree and resolution for
-this machine, answering what `config.resolve(dir, config.read({ dir, key }))`
-answers in Node. [config-parity.test.js](../server/node/config-parity.test.js)
-runs both readers over a corpus that reaches every rule and problem and over
-seeded random configs, and they agree on all of them. Not yet: answering the
-route from the front door, previews and docs from the resident index,
-Storybook detection and the Simulator catalog; until phase 3 the Node server
-keeps adding the proxy addresses.
-
-### Phase 3: project files and preview assets
-
-Project files with the compatibility script injected, `.md` pages and config
-files move here. Workbench UI assets are browser-native JavaScript/CSS served
-unchanged by host infrastructure, independently of backend domain services,
-as required by the [independence contract](modules.md#ui-and-backend-independence).
-The implementation proxies, the
-Storybook the server runs on a local socket, and the stories route move here
-too: they forward HTTP and start a child, and need neither the compiler nor
-the editor (decided by the owner on 2026-10-18). The routes that need the
-editor or the capture helper (open, capture, handoff, export, simulator input
-and streams) stay forwarded until the callbacks become messages.
-
-### Phase 4: previews
-
-`/_workbench/previews/` moves from the Node worker to the Rust compiler host,
-after the next lab settles the [adapters](adapters/README.md#open-questions)
-that need it. This is when the binary moves to Rspack's nightly toolchain.
-The Node preview worker is replaced by the Node evaluator, which takes no
-port ([processes and connections](#processes-and-connections)).
-
-### Phase 5: the server owns the process
-
-The extension starts `workbench-server` as the space's process. Opening files,
-capture, logging and page-tree notifications become messages over its stdio;
-`server.js` is gone, and Node runs only as the adapters' and the page index's
-child processes.
+Previews, docs lenses and portable builds compile in the server on Rspack's
+Rust crates ([compiler.rs](../server/src/compiler.rs)), with project
+JavaScript in the Node evaluator. The catalog configures them for a trusted
+workspace whose `previews` is not `false`, with the index's listing; the
+server answers the preview routes, pre-warms every listed preview and docs
+lens, and reports request timings as diagnostics. Live builds use the
+persistent cache in the system temporary folder, keyed by the binary and the
+configuration. Project plugin capabilities are Rust descriptors, with no Node
+compiler fallback
+([plugin decision](preview-pipeline/plugins.md#plugin-migration-decision)).
 
 ## Route inventory
 
-| Routes | Today | Moves in |
-| --- | --- | --- |
-| `/_workbench/config` | Config resolution with previews, docs, Storybook detection, Simulator catalog | Phase 2 |
-| `/_workbench/` UI files, `manifest.js`, `yaml.js`, Lucide | UI assets served by the combined host | Host asset delivery; outside backend domain migration phases |
-| `/_workbench/ui/src/`, `/_workbench/contracts/src/` | Authored JavaScript/CSS served unchanged; TypeScript and tests are not browser assets | Host static delivery, independent of project compiler lifecycle |
-| `/_workbench/manifest/` | Project manifest resources | Phase 3 |
-| Project files, `.md` pages, docs source, revision and bundle | Files with injection; docs through the compile worker | Phase 3 (files), phase 4 (docs bundles) |
-| `/_workbench/preview-runtime.js`, `preview-requests.js`, `preview-compat.js` | Preview runtime files | Phase 3 |
-| `/_workbench/previews/`, `*.workbench.ts(x)` | Forwarded to the preview worker | Phase 4 |
-| `/_workbench/sizes`, `config-file`, `spaces`, `spaces/open`, `canvas/space`, `canvas/review`, `log`, agent view | Config editing, spaces, logging, agent context | Phase 3, or 5 where they reach the editor |
-| Implementation proxies and a Storybook the server runs | Loopback proxy origins per implementation; the owned Storybook on a local socket | Phase 3 |
-| `/_workbench/stories` | A Storybook's index, read at its address or through its proxy | Phase 3 |
-| `/_workbench/open`, `shot`, `capture/*`, `handoff`, `export` | Editor, capture helper and export | Phase 5 |
-| `/_workbench/simulator/*`, `/_workbench/window/stream` (WebSocket) | Native streams and Sandbox input | Phase 5 |
+| Routes | Answered by |
+| --- | --- |
+| `/_workbench/` UI files, `manifest.js`, `yaml.js`, Lucide, `/_workbench/ui/src/`, `/_workbench/contracts/src/` | Host asset delivery: authored JavaScript/CSS served unchanged; TypeScript and tests are not browser assets ([files.rs](../server/src/serve/files.rs)) |
+| `/_workbench/manifest/`, project files, `/_workbench/preview-runtime.js`, `preview-requests.js`, `preview-compat.js` | Files served as they are, with the compatibility script first in each project HTML page; a missing file is a 404 |
+| `/_workbench/previews/`, `*.workbench.ts(x)` | The native compiler ([previews.rs](../server/src/serve/previews.rs)) |
+| `/_workbench/config`, `config-file`, `sizes` | The catalog, and config editing that keeps the rest of the file and its comments ([config/edit.rs](../server/src/config/edit.rs)) |
+| `.md` pages, `/_workbench/docs/source`, `revision`, `bundle` | Docs pages ([docs.rs](../server/src/docs.rs), [space/docs.rs](../server/src/space/docs.rs)) |
+| `/_workbench/stories` | A Storybook's index, read at its address or through its proxy ([storybook.rs](../server/src/storybook.rs)) |
+| `/_workbench/log`, `view`, `spaces`, `spaces/open`, `canvas/space`, `canvas/review`, `open`, `handoff` | Diagnostics, the [agent view](agent-context.md) ([agent_view.rs](../server/src/agent_view.rs)), spaces from the host, opening a configured source through the host, handoff prompts ([handoff.rs](../server/src/handoff.rs)) sent to the host |
+| `/_workbench/capture/*`, `shot` | Requests checked here ([capture.rs](../server/src/capture.rs)), pictures taken by the host's capture helper, screenshots saved under `.canonic/.handoffs/` |
+| `/_workbench/export` | The design export's jobs ([export.rs](../server/src/export.rs)), with portable builds from [portable.rs](../server/src/portable.rs) |
+| `/_workbench/simulator/*`, `/_workbench/window/stream` | Sandbox input and screen size for a declared Simulator; native streams started by the host and forwarded to its socket |
+
+The routes live in [serve/routes/](../server/src/serve/routes.rs) and answer
+with the statuses and messages the canvas expects.
+
+## Verification
+
+- The Workbench suite starts every space through the host and the built
+  binary: config, editing, spaces, capture, handoff, the agent view, exports,
+  Storybook and Simulator routes (with a stand-in `xcrun`), proxies through a
+  URL lens, the restart policy, previews and docs lenses.
+- The Rust suite covers the modules above with their own tests, the server's
+  routes and a host question through the built binary, the resident index
+  and change reports, and exit on closed input.
+- On this repository's Acme demo through the standalone command
+  (2026-10-19, debug build): the canvas, config, spaces, handoff and agent
+  view answer, the config lists no problems, and a docs page renders.
+
+## Known gaps
+
+- The extension's own space list (`spaces.js`) still reads `workbench.yaml`
+  in Node for names and marks; the server's config reader is not used there.
+- How Studio starts and talks to the server is open: the same stdio messages
+  as the extension, or a library interface.
+- The [lab](preview-pipeline/performance.md) measurements of first page,
+  page list and switching have not been made against this server.
+- Builds for Windows and Linux have not been run on those systems.
+- The installed VS Code extension on the development machine has not been
+  updated to this server.
+- Highlighted code in docs pages follows syntect's grammars, so some token
+  classes differ from highlight.js's; Markdown does not turn bare URLs into
+  links.
+- Export job IDs come from the standard library's hashing seeds, not a
+  cryptographic random source.
+- `scripts/smoke-lenses.cjs` listens for its fixture's messages on the canvas
+  page, but the fixture now runs inside the isolated artboard renderer
+  (`content.html`), whose page is its parent, so the smoke times out
+  (2026-10-19). The other browser smokes pass.
 
 ## Decisions for the owner
 
-1. **HTTP stack: `axum` on `tokio`, with `hyper` for forwarding.** Rspack's
-   crates already use tokio, so the compiler joins the same runtime.
-2. **Toolchain: stable Rust 1.99 until phase 4,** when the compiler brings
-   Rspack's nightly.
-3. **One front door per space,** as servers are today. One process for every
-   space is a Studio question for later.
-4. **Phase 1 includes the resident index and watcher,** not only forwarding,
-   so the first step already makes the warm page list faster and closes the
-   watching gap.
+1. **HTTP stack: `axum` on `tokio`, with `hyper` for proxies and loopback
+   requests.** Rspack's crates already use tokio, so the compiler shares the
+   runtime.
+2. **Toolchain:** the package builds with `nightly-2026-04-16`, Rspack's own
+   toolchain at the pinned crates.
+3. **One server per space.** One process for every space is a Studio question
+   for later.
+4. **The resident index and watcher live in the server,** so the warm page
+   list needs no process per request.
 
 ## Open questions
 
-- How Studio starts and talks to the server: the same stdio messages as the
-  extension, or a library interface.
-- Whether the parity harness of phase 2 keeps `manifest.js` as the reference
-  for the browser, or the browser moves to the server's answer only.
+- Whether the browser keeps `manifest.js` as its reader, or moves to the
+  server's answer only.

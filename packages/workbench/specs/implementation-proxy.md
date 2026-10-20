@@ -2,8 +2,8 @@
 
 URL and Storybook lenses load through a loopback proxy that the workbench
 server runs for each implementation origin. This spec explains why it exists,
-what it does, and how it preserves live-page capture without project setup. See [proxy.js](../server/node/proxy.js), the `proxied` config
-step in [server.js](../server/node/server.js), and `upstream` in
+what it does, and how it preserves live-page capture without project setup. See [proxies.rs](../server/src/proxies.rs), the `proxied` config
+step in [space.rs](../server/src/space.rs), and `upstream` in
 [lenses.js](../ui/legacy/lenses.js). The user-facing description is
 [Embedding and sign-in](../docs/lenses.md#embedding-and-sign-in).
 
@@ -71,7 +71,7 @@ interaction state is not reconstructed in a separate application session.
 - **A stopped implementation answers 502** in the preview frame, naming the
   address that isn't answering.
 - **Capture accepts the proxy origins** alongside the configured ones
-  (`origins()` in [server.js](../server/node/server.js)).
+  (`origins()` in [space.rs](../server/src/space.rs)).
 
 ## A process the server runs
 
@@ -100,11 +100,14 @@ previews and native streams use their own acquisition paths.
 
 ## Current status
 
-Implemented in the Node server ([proxy.js](../server/node/proxy.js)). In
-the Rust Workbench server the proxies, and the Storybook it runs behind one,
-are part of `workbench-server`, with the same requirements
-([processes and connections](server.md#processes-and-connections),
-[route inventory](server.md#route-inventory)).
+Implemented in `workbench-server`
+([proxies.rs](../server/src/proxies.rs)): the page tree answers URL and
+Storybook implementations at their proxy addresses, and an owned
+implementation's proxy asks for its socket on its first request, starting the
+Storybook the server runs
+([processes and connections](server.md#processes-and-connections)). `https` implementations are
+reached with rustls, accepting any certificate, as local dev servers use
+self-signed ones. Without the binary, implementation lenses are unavailable.
 
 ### Verified behavior
 
@@ -129,11 +132,14 @@ opened modal, appearing in the captured image without project changes.
 
 ## Verification points
 
-- [proxy.test.js](../server/node/proxy.test.js): bridge injection, header and cookie
-  rewriting, redirects, request bodies and `Origin`, WebSocket upgrades, a
-  stopped implementation, and an owned process started by the first request
-  and reached over its socket.
-- [storybook/index.test.ts](../server/node/src/modules/storybook/index.test.ts):
+- [proxy.test.js](../server/node/proxy.test.js), through a URL lens of a
+  running server: bridge injection, header and cookie rewriting, redirects,
+  request bodies and `Origin`, WebSocket upgrades and a stopped
+  implementation.
+- [proxies.rs](../server/src/proxies.rs) tests: an owned process started by
+  the first request, told the proxy's port and reached over its socket, and
+  one that cannot start answering 502 with its own reason.
+- [storybook/owned.rs](../server/src/storybook/owned.rs) tests:
   a Storybook the server runs, on a socket and told the proxy's port; restart
   after it exits; the fallback without `--preview-only`; a missing install.
 - [server.test.js](../server/node/server.test.js): the config route's proxy addresses and

@@ -27,6 +27,35 @@ pub(crate) fn project(
     Some(Projection { entry, sources })
 }
 
+/// A literal definition's validated value, with the default state filled in
+/// as the compiler's validation does. `None` when JavaScript must decide.
+pub(crate) fn validated(
+    raw: &Value,
+    file: &Path,
+    root: &Path,
+    source_exists: impl FnMut(&Path) -> bool,
+) -> Option<Result<Value, String>> {
+    if !compatibility::supported(raw, file, root) {
+        return None;
+    }
+    let mut sources = vec![];
+    Some(
+        validation::check(raw, file, root, source_exists, &mut sources)
+            .map(|object| {
+                let mut object = object.clone();
+                let empty = object
+                    .get("states")
+                    .and_then(Value::as_object)
+                    .is_none_or(serde_json::Map::is_empty);
+                if empty {
+                    object.insert("states".into(), serde_json::json!({ "default": {} }));
+                }
+                Value::Object(object)
+            })
+            .map_err(|message| format!("{}: {message}", file.display())),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

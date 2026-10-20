@@ -128,7 +128,8 @@ rule, errors per entry and docs pages updated in place. Gaps:
 
 ## Verification
 
-[Pipeline tests](../../server/node/src/modules/preview-pipeline/pipeline.test.ts),
+The compiler's Rust unit tests (in [compiler.rs](../../server/src/compiler.rs)'s
+modules, such as the hot client in [client.rs](../../server/src/compiler/client.rs)),
 [preview integration tests](../../server/node/preview.test.js) and
 [docs integration tests](../../server/node/preview-docs.test.js) exercise the implemented
 build, serving and docs paths. The [pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report)

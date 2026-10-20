@@ -5,9 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { Compiler, discover } = require('./preview/compiler.cjs');
 const server = require('./server');
-const exporter = require('./src/modules/export/index.ts');
 const manifest = require('../../contracts/manifest');
-const portable = require('./preview/portable.cjs');
+const compilerFixture = require('./compiler-fixture.cjs');
+const { Browser, findChrome } = require('../../scripts/chrome.cjs');
 
 function fixture(t, files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-preview-test-'));
@@ -21,15 +21,17 @@ function fixture(t, files) {
 }
 // Portable builds: the Rspack production compiler the export and the CLI use.
 async function build(t, root, file, options) {
-  const builder = portable.portableBuilder(new Compiler(root, options));
-  t.after(() => builder.close());
-  return builder.compile(file);
+  const compiler = await compilerFixture.open(root, options);
+  t.after(() => compiler.close());
+  return compiler.compile(file);
 }
 async function buildDocs(t, root, request) {
-  const builder = portable.portableBuilder(new Compiler(root));
-  t.after(() => builder.close());
-  return builder.compileDocs(request);
+  const compiler = await compilerFixture.open(root);
+  t.after(() => compiler.close());
+  return compiler.compileDocs(request);
 }
+// The compatibility script every project page loads first.
+const COMPAT = ['keys.js', 'actions.js', 'states.js'].map(name => fs.readFileSync(path.join(__dirname, '../../ui/legacy', name), 'utf8')).join('\n;\n');
 const definition = (adapter, entry, extra = '') => `import { definePreview } from '@canonic2/workbench';
 export default definePreview({ id: 'components/button', title: 'Components/Button', adapter: '${adapter}', source: { entry: '${entry}' },
 inputs: { label: 'Continue' }, states: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
@@ -49,7 +51,7 @@ test('built-in browser adapters resolve framework imports from the previewed pro
     fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
     fs.writeFileSync(path.join(root, name), body);
   }
-  const result = await new Compiler(root).compile(path.join(root, 'button.workbench.ts'), false);
+  const result = await build(t, root, 'button.workbench.ts');
   const script = result.outputs.get('preview.js').toString();
   assert.match(script, /ACME_PROJECT_REACT/);
   assert.match(script, /ACME_PROJECT_REACT_DOM/);
@@ -64,21 +66,17 @@ test('a preview page declares artboards independently of its state list', async 
   assert.deepEqual(index.errors, []);
   assert.deepEqual(index.previews[0].states, [{ id: 'default', label: 'Default' }]);
   assert.deepEqual(index.previews[0].artboards, [{ id: 'info', label: 'Info', width: 560, height: 79 }, { id: 'success', label: 'Success', width: 560, height: 119 }]);
-  const { indexPages } = require('./src/modules/page-index/index.ts');
-  const native = await indexPages({ root, executable: async () => process.execPath, diagnostic() {}, fallback: async () => { throw Error('Unexpected whole-index fallback'); } });
-  assert.deepEqual(native.answer, JSON.parse(JSON.stringify(index)));
+  assert.deepEqual(compilerFixture.list(root), JSON.parse(JSON.stringify(index)));
 });
 
 test('native listing matches the compiler on preview fixtures and validation edge cases', async t => {
   const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
-  const { indexPages } = require('./src/modules/page-index/index.ts');
   const cases = ['', "sizes: []", "sizes: ['123']", "sizes: ['small--wide']", "states: null", "states: []", "states: { default: null }", "states: { '1': {}, '10': {}, '2': {} }", "title: 42", "controls: { tone: {type: 'select', options: []} }", "controls: { tone: null }", "links: null", "links: {'/next': {state: 'ready'}}", "links: {'/next': {preview: 3}}", "requests: {'bad request': {}}", "requests: {'GET /acme': {body: {ok: true}}}", "states: { empty: { requests: {'GET /acme': []} } }", "states: { empty: { label: 42 } }"];
   cases.push("artboards: []", "artboards: {}", "artboards: {info:{width:0,height:79}}", "artboards: {info:{width:560,height:8193}}", "artboards: {'bad id':{width:560,height:79}}", "artboards: {info:{width:560,height:79,inputs:[]}}", "artboards: {info:{width:560,height:79,label:42}}", "artboards: {info:{width:560,height:79}}");
   for (const fields of cases) {
     fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields));
     const expected = JSON.parse(JSON.stringify(await new Compiler(root).index()));
-    const actual = await indexPages({ root, executable: async () => process.execPath, diagnostic() {}, fallback: async () => { throw new Error('Native parity fallback: ' + fields); } });
-    assert.deepEqual(actual.answer, expected, fields);
+    assert.deepEqual(compilerFixture.list(root), expected, fields);
   }
 });
 
@@ -292,8 +290,12 @@ test('bundles React and Vue SFCs with scoped styles using project framework vers
     const built = await build(t, root, 'button.workbench.ts');
     assert.ok(built.outputs.get('preview.js').length > 1000);
     assert.ok(built.localFiles.includes(path.join(root, entry)));
-    // Vue style blocks are injected by the bundle, scoped to the component.
-    if (adapter === 'vue') assert.match(built.outputs.get('preview.js').toString(), /button\[data-v-[0-9a-f]+\]/);
+    // Vue style blocks are stylesheets of the build, scoped to the component.
+    if (adapter === 'vue') {
+      const css = Array.from(built.outputs).filter(([name]) => name.endsWith('.css')).map(([, body]) => body.toString()).join('\n');
+      assert.match(css, /button\[data-v-[0-9a-f]+\]/);
+      assert.match(built.outputs.get('index.html').toString(), /<link rel="stylesheet" href="\.\/preview\.css">/);
+    }
   }
 });
 
@@ -417,26 +419,84 @@ test('preview mounts fill flex-body artboards and React Native Web fills frames 
   assert.equal(code, 0, output);
 });
 
-test('builds run the project’s Rspack plugins and rules, and esbuild plugins are reported', async t => {
+test('builds run the project’s plugin capabilities and loader rules, and JavaScript plugins are problems', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('acme', './button.acme'),
     'button.acme': 'Custom adapter',
-    'adapter.ts': 'export function mount(canvas, source, ctx) { canvas.textContent = source + ctx.inputs.label + BUILD_LABEL; }',
-    'workbench.config.ts': `import { defineConfig } from '@canonic2/workbench';
+    'adapter.ts': `import { buildInfo } from 'virtual:acme-build-info';
+import { platform } from '@acme/platform';
+import { nativePlatform } from './native/screen';
+import names from 'virtual:svg-icons-names';
+import 'virtual:svg-icons-register';
+// import.meta.glob('./missing/*.json') in a comment stays as written
+const locales = import.meta.glob('./locales/*.json', { eager: true, import: 'default' });
+export function mount(canvas, source, ctx) {
+  canvas.textContent = [source, ctx.inputs.label, buildInfo, platform, nativePlatform, names.join(','), Object.keys(locales).join(','), locales['./locales/fr.json'].hello, GREETING].join('|');
+}`,
+    'native/screen.ts': 'import { platform } from "@acme/platform"; export const nativePlatform = "from " + platform;',
+    'platform/web.ts': 'export const platform = "ACME_WEB";',
+    'platform/native.ts': 'export const platform = "ACME_NATIVE";',
+    'locales/en.json': '{"hello":"Hello"}',
+    'locales/fr.json': '{"hello":"ACME_BONJOUR"}',
+    'icons/check.svg': '<svg width="16" height="12"><title>check</title><path id="a" stroke="#000"/><use href="#a"/></svg>',
+    'greeting-loader.cjs': 'module.exports = function (source) { return source.split("GREETING").join(JSON.stringify(this.getOptions().greeting)); };',
+    'workbench.config.ts': `import { defineConfig, virtualModule, resolveImport, importGlob, svgSprite } from '@canonic2/workbench';
 export default defineConfig({
   adapters: { acme: { runtime: './adapter.ts', rules: [{ test: /\\.acme$/, type: 'asset/source' }] } },
-  plugins: [{ apply(compiler) { new compiler.rspack.DefinePlugin({ BUILD_LABEL: JSON.stringify('ACME_PLUGIN') }).apply(compiler); } }],
+  rules: [{ test: /adapter\\.ts$/, enforce: 'pre', loader: './greeting-loader.cjs', options: { greeting: 'ACME_GREETING' } }],
+  plugins: [
+    virtualModule({ id: 'virtual:acme-build-info', source: "export const buildInfo = 'ACME_BUILD_42';" }),
+    resolveImport({ request: '@acme/platform', importer: 'native/**', to: './platform/native.ts' }),
+    resolveImport({ request: '@acme/platform', to: './platform/web.ts' }),
+    importGlob(),
+    svgSprite({ dirs: 'icons', symbolId: 'icon-[name]' }),
+  ],
 });`,
   });
   const built = await build(t, root, 'button.workbench.ts');
-  const js = built.outputs.get('preview.js').toString();
-  assert.match(js, /Custom adapter/);
-  assert.match(js, /ACME_PLUGIN/);
+  const js = Array.from(built.outputs).filter(([name]) => name.endsWith('.js')).map(([, body]) => body.toString()).join('\n');
+  for (const expected of ['Custom adapter', 'ACME_BUILD_42', 'ACME_WEB', 'ACME_NATIVE', 'ACME_BONJOUR', 'ACME_GREETING', './locales/en.json', './locales/fr.json', 'icon-check']) {
+    assert.ok(js.includes(expected), expected);
+  }
+  // The icon is a symbol with its own view box and IDs, and no title.
+  assert.match(js, /<symbol id=\\?"icon-check\\?"[^>]*viewBox=\\?"0 0 16 12/);
+  assert.match(js, /icon-check_a/);
+  assert.doesNotMatch(js, /<title>check/);
   assert.ok(built.localFiles.includes(path.join(root, 'workbench.config.ts')));
-  const { projectExtensions } = require('./src/modules/preview-pipeline/index.ts');
-  const checked = projectExtensions({ plugins: [{ name: 'acme-old', setup() {} }, { apply() {} }], adapters: { 'react-native-web': { plugins: [{ apply() {} }] } } }, 'web');
-  assert.equal(checked.plugins.length, 1, 'an adapter’s plugins apply only to its own compiler');
-  assert.match(checked.problems[0], /“acme-old” is an esbuild plugin/);
+  assert.ok(built.localFiles.includes(path.join(root, 'locales/fr.json')));
+  // JavaScript plugins do not run in the native compiler; they are problems.
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  fs.writeFileSync(path.join(root, 'workbench.config.ts'), `export default { plugins: [{ name: 'acme-old', setup() {} }, { apply() {} }], adapters: { acme: { runtime: './adapter.ts' } } };`);
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  let problems = [];
+  for (let attempt = 0; attempt < 100 && problems.length < 2; attempt++) {
+    problems = (await (await fetch('http://127.0.0.1:' + running.port + '/_workbench/config')).json()).problems;
+    if (problems.length < 2) await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.match(problems.join('\n'), /“acme-old” is an esbuild plugin/);
+  assert.match(problems.join('\n'), /a plugin is a JavaScript Rspack plugin/);
+});
+
+test('a project loader’s emitted error fails the build and its warning does not', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('html', './button.ts'),
+    'button.ts': 'export default function (canvas) { canvas.textContent = "ACME_BUTTON"; }',
+    'checking-loader.cjs': `module.exports = function (source) {
+  const { emit } = this.getOptions();
+  if (emit === 'error') this.emitError(new Error('ACME_LOADER_FAILED'));
+  this.emitWarning(new Error('ACME_LOADER_WARNED'));
+  return source;
+};`,
+  });
+  const configure = emit => fs.writeFileSync(path.join(root, 'workbench.config.ts'), `export default {
+  rules: [{ test: /button\\.ts$/, loader: './checking-loader.cjs', options: { emit: '${emit}' } }],
+};`);
+  configure('warning');
+  const warned = await build(t, root, 'button.workbench.ts');
+  assert.ok(Array.from(warned.outputs.values()).some(body => body.toString().includes('ACME_BUTTON')));
+  configure('error');
+  await assert.rejects(build(t, root, 'button.workbench.ts'), /checking-loader\.cjs on .*button\.ts: ACME_LOADER_FAILED/);
 });
 
 test('builds follow the evaluated configuration and only discovered definitions build', async t => {
@@ -510,7 +570,7 @@ test('the server serves previews from the live pipeline, pushes builds, exports 
   assert.match(html, /"push":true/);
   const compatibility = await fetch(base + '/_workbench/preview-compat.js');
   assert.equal(compatibility.status, 200);
-  assert.equal(await compatibility.text(), require('./preview-scripts').source);
+  assert.equal(await compatibility.text(), COMPAT);
   // The preview module names the build's scripts; they are content-hashed and immutable.
   const modulePath = /import \{ mount \} from "([^"]+)"/.exec(html)[1];
   const scriptsOf = async () => {
@@ -546,6 +606,164 @@ test('the server serves previews from the live pipeline, pushes builds, exports 
   assert.equal((await fetch(base + modulePath)).status, 404);
 });
 
+test('plugin capabilities rebuild live when an icon or a matched file is added, edited or deleted', async t => {
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\n',
+    'button.workbench.ts': definition('html', './button.ts'),
+    'button.ts': `import names from 'virtual:svg-icons-names';
+import 'virtual:svg-icons-register';
+const locales = import.meta.glob('./locales/*.json', { eager: true, import: 'default' });
+export default function (canvas) { canvas.textContent = names.join(',') + '|' + Object.keys(locales).join(','); }`,
+    'icons/check.svg': '<svg viewBox="0 0 16 16"><path d="M1 1"/></svg>',
+    'locales/en.json': '{"hello":"Hello"}',
+    'workbench.config.ts': `import { defineConfig, importGlob, svgSprite } from '@canonic2/workbench';
+export default defineConfig({ plugins: [importGlob(), svgSprite({ dirs: 'icons', symbolId: 'icon-[name]' })] });`,
+  });
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const base = `http://127.0.0.1:${running.port}`;
+  await (await fetch(base + '/_workbench/config')).json();
+  const html = await (await fetch(base + '/button.workbench.ts')).text();
+  const modulePath = /import \{ mount \} from "([^"]+)"/.exec(html)[1];
+  const built = async () => {
+    const source = await (await fetch(base + modulePath)).text();
+    const scripts = JSON.parse(/const scripts = (\[[^\]]*\]);/.exec(source)[1]);
+    return (await Promise.all(scripts.map(async script => (await fetch(base + script)).text()))).join('\n');
+  };
+  const first = await built();
+  assert.match(first, /icon-check/);
+  assert.match(first, /\.\/locales\/en\.json/);
+  const edit = async (change, test) => {
+    const pushed = nextEvent(base + '/_workbench/previews/rspack/events', event => event.type === 'built');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    change();
+    await pushed;
+    let output = await built();
+    for (let attempt = 0; attempt < 50 && !test(output); attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      output = await built();
+    }
+    assert.ok(test(output), 'the rebuilt preview reflects the change');
+  };
+  await edit(() => fs.writeFileSync(path.join(root, 'icons/star.svg'), '<svg viewBox="0 0 8 8"><circle r="1"/></svg>'), output => /icon-star/.test(output));
+  await edit(() => fs.writeFileSync(path.join(root, 'icons/check.svg'), '<svg viewBox="0 0 24 24"><path d="M2 2"/></svg>'), output => /0 0 24 24/.test(output));
+  await edit(() => fs.unlinkSync(path.join(root, 'icons/check.svg')), output => !/icon-check/.test(output) && /icon-star/.test(output));
+  await edit(() => fs.writeFileSync(path.join(root, 'locales/fr.json'), '{"hello":"Bonjour"}'), output => /\.\/locales\/fr\.json/.test(output));
+});
+
+test('a Vue <style src> file is scoped, bundled and rebuilt when it changes', async t => {
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\n',
+    'card.workbench.ts': definition('vue', './Card.vue'),
+    'Card.vue': '<template><p class="card">Card</p></template><style scoped src="./styles/card.css"></style><style src="./missing-free.css"></style>',
+    'styles/card.css': '.card { color: rgb(1, 2, 3); }',
+    'missing-free.css': '.acme-global { margin: 0; }',
+  });
+  // Portable: the file is compiled like an inline block and is a file of the build.
+  const portable = await build(t, root, 'card.workbench.ts');
+  const css = Array.from(portable.outputs).filter(([name]) => name.endsWith('.css')).map(([, body]) => body.toString()).join('\n');
+  assert.match(css, /\.card\[data-v-[0-9a-f]+\]\s*\{\s*color: rgb\(1, 2, 3\)/);
+  assert.match(css, /\.acme-global/);
+  assert.ok(portable.localFiles.includes(path.join(root, 'styles/card.css')));
+  // Live: an edit to the file alone rebuilds the component's stylesheet.
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const origin = `http://127.0.0.1:${running.port}`;
+  const html = await (await fetch(origin + '/card.workbench.ts')).text();
+  const modulePath = /import \{ mount \} from "([^"]+)"/.exec(html)[1];
+  const stylesheets = async () => {
+    const source = await (await fetch(origin + modulePath)).text();
+    const styles = JSON.parse(/for \(const style of (\[[^\n]*\])\) \{/.exec(source)[1]);
+    return (await Promise.all(styles.map(async style => (await fetch(new URL(style.href, origin))).text()))).join('\n');
+  };
+  assert.match(await stylesheets(), /rgb\(1, 2, 3\)/);
+  const pushed = nextEvent(origin + '/_workbench/previews/rspack/events', event => event.type === 'built');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  fs.writeFileSync(path.join(root, 'styles/card.css'), '.card { color: rgb(4, 5, 6); }');
+  await pushed;
+  let live = await stylesheets();
+  for (let attempt = 0; attempt < 50 && !/rgb\(4, 5, 6\)/.test(live); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    live = await stylesheets();
+  }
+  assert.match(live, /\.card\[data-v-[0-9a-f]+\]\s*\{\s*color: rgb\(4, 5, 6\)/);
+  // A src that names no file, or a preprocessor's file, explains itself.
+  fs.writeFileSync(path.join(root, 'Card.vue'), '<template><p>Card</p></template><style src="./styles/absent.css"></style>');
+  await assert.rejects(build(t, root, 'card.workbench.ts'), /Vue style src not found: \.\/styles\/absent\.css/);
+  fs.writeFileSync(path.join(root, 'Card.vue'), '<template><p>Card</p></template><style src="./styles/card.scss"></style>');
+  await assert.rejects(build(t, root, 'card.workbench.ts'), /Vue style src must name a \.css file/);
+});
+
+test('a Vue template edit re-renders in place and keeps state; a script edit re-creates the component', {
+  skip: !findChrome() && 'Chrome is required to apply hot updates',
+}, async t => {
+  const root = fixture(t, {
+    'workbench.yaml': 'name: Acme\n',
+    'counter.workbench.ts': definition('vue', './Counter.vue'),
+    'Counter.vue': '<script setup lang="ts">import { ref } from "vue"; const count = ref(0);</script><template><button @click="count++">Count {{ count }}</button></template>',
+  });
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const browser = new Browser();
+  t.after(() => browser.close());
+  await browser.launch();
+  const page = await browser.createTarget();
+  await page.navigate(`http://127.0.0.1:${running.port}/counter.workbench.ts`);
+  const text = () => page.evaluate('document.querySelector("button")?.textContent || ""');
+  const settle = async expected => {
+    let seen = '';
+    for (let attempt = 0; attempt < 300 && seen !== expected; attempt++) {
+      seen = await text();
+      if (seen !== expected) await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(seen, expected);
+  };
+  await settle('Count 0');
+  await page.evaluate('for (let click = 0; click < 7; click++) document.querySelector("button").click()');
+  await settle('Count 7');
+  fs.writeFileSync(path.join(root, 'Counter.vue'), '<script setup lang="ts">import { ref } from "vue"; const count = ref(0);</script><template><button @click="count++">Total {{ count }}</button></template>');
+  await settle('Total 7');
+  fs.writeFileSync(path.join(root, 'Counter.vue'), '<script setup lang="ts">import { ref } from "vue"; const count = ref(0); const label = "Again";</script><template><button @click="count++">{{ label }} {{ count }}</button></template>');
+  await settle('Again 0');
+});
+
+test('a file read from outside the project root rebuilds the preview when it changes', async t => {
+  // A monorepo app whose preview imports a sibling package.
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-monorepo-'));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const root = path.join(base, 'apps/web');
+  const label = path.join(base, 'packages/ui/label.js');
+  fs.mkdirSync(root, { recursive: true });
+  fs.mkdirSync(path.dirname(label), { recursive: true });
+  fs.symlinkSync(path.join(__dirname, '../../node_modules'), path.join(root, 'node_modules'), 'junction');
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts'));
+  fs.writeFileSync(path.join(root, 'button.ts'), `import { label } from '../../packages/ui/label.js';
+export default function (canvas) { canvas.textContent = label; }`);
+  fs.writeFileSync(label, 'export const label = "ACME_UI_FIRST";');
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const origin = `http://127.0.0.1:${running.port}`;
+  const html = await (await fetch(origin + '/button.workbench.ts')).text();
+  const modulePath = /import \{ mount \} from "([^"]+)"/.exec(html)[1];
+  const built = async () => {
+    const source = await (await fetch(origin + modulePath)).text();
+    const scripts = JSON.parse(/const scripts = (\[[^\]]*\]);/.exec(source)[1]);
+    return (await Promise.all(scripts.map(async script => (await fetch(origin + script)).text()))).join('\n');
+  };
+  assert.ok((await built()).includes('ACME_UI_FIRST'));
+  const pushed = nextEvent(origin + '/_workbench/previews/rspack/events', event => event.type === 'built');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  fs.writeFileSync(label, 'export const label = "ACME_UI_SECOND";');
+  await pushed;
+  let output = await built();
+  for (let attempt = 0; attempt < 50 && !output.includes('ACME_UI_SECOND'); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    output = await built();
+  }
+  assert.ok(output.includes('ACME_UI_SECOND'), 'the rebuilt preview reads the edited package');
+});
+
 test('untrusted and disabled workspaces never execute preview definitions', async t => {
   for (const disabled of [true, false]) {
     const root = fixture(t, {
@@ -579,14 +797,27 @@ test('a Workbench implementation maps a design to managed preview states', async
     'button.workbench.ts': definition('html', './button.ts'),
     'button.ts': 'export default function(canvas, ctx) { canvas.textContent = ctx.inputs.label; }',
   });
-  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  const loaded = [];
+  const running = await server.start({ root, capture: {
+    capture: (base, payload) => { loaded.push(payload.url); return Buffer.from('reference jpeg'); },
+    close: () => Promise.resolve(),
+  } });
   try {
     const config = await running.config();
     assert.deepEqual(config.problems, []);
     assert.equal(config.collections[0].items[0].implementations.built.states.disabled, '/button.workbench.ts?state=disabled');
     assert.equal(config.pages['design.html'].code[0].relative, 'button.ts');
-    const plan = server.exportCapturePlan(config, `http://127.0.0.1:${running.port}/`);
-    assert.ok(plan.captures.some(capture => capture.state === 'default' && capture.url.includes('state=default')));
+    // An export in the Workbench lens captures the managed preview's states.
+    const base = `http://127.0.0.1:${running.port}`;
+    const started = await (await fetch(base + '/_workbench/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'zip', scope: 'pages', pages: ['design.html'], lens: 'built' }) })).json();
+    let status = started;
+    while (status.status === 'running') {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      status = await (await fetch(base + '/_workbench/export?job=' + started.id)).json();
+    }
+    assert.equal(status.status, 'complete', JSON.stringify(status));
+    assert.ok(loaded.some(url => url.includes('/button.workbench.ts?state=default')), loaded.join(' '));
   } finally { await running.close(); }
 });
 
@@ -627,26 +858,6 @@ export default definePreview({ id: '${id}', adapter: 'html', source: { entry: '.
   } finally { await running.close(); }
 });
 
-test('portable compiler source closure is hashed and browser files are included in the archive', async t => {
-  const root = fixture(t, {
-    'workbench.yaml': 'name: Acme\n',
-    'button.workbench.ts': definition('html', './button.ts'),
-    'button.ts': 'import { label } from "./fixture.ts"; export default function(canvas) { canvas.textContent = label; }',
-    'fixture.ts': 'export const label = "Hello";',
-  });
-  const built = await build(t, root, 'button.workbench.ts');
-  const view = { name: 'Acme', pages: { 'button.workbench.ts': { label: 'Button', design: path.join(root, 'button.workbench.ts'), code: [] } }, implementations: {} };
-  const portable = { previews: [{ id: built.id, file: built.file, files: built.localFiles, packages: built.packages, directory: 'browser/' + built.slug, states: [{ id: 'default' }] }],
-    files: Array.from(built.outputs, ([name, body]) => ({ path: 'browser/' + built.slug + '/' + name, data: Buffer.from(body).toString('base64') })), warnings: [] };
-  const output = exporter.create(root, view, { portable });
-  assert.ok(output.report.pages[0].files.includes('fixture.ts'));
-  assert.ok(!output.report.dependencies.some(pkg => pkg.name === '@canonic2/workbench'));
-  assert.equal(output.report.browser.previews[0].source, 'button.workbench.ts');
-  assert.ok(output.body.includes(Buffer.from('browser/' + built.slug + '/index.html')));
-  const first = output.report.pages[0].hash;
-  fs.writeFileSync(path.join(root, 'fixture.ts'), 'export const label = "Changed";');
-  assert.notEqual(exporter.create(root, view, { portable }).report.pages[0].hash, first);
-});
 
 test('authoring declarations infer input types and reject invalid state inputs', t => {
   const cp = require('node:child_process');
@@ -655,7 +866,7 @@ test('authoring declarations infer input types and reject invalid state inputs',
     'button.ts': 'export default function(canvas: HTMLElement) { canvas.textContent = "Hello"; }',
     'tsconfig.json': JSON.stringify({ compilerOptions: { strict: true, noEmit: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', types: [] }, include: ['*.ts'] }),
   });
-  cp.execFileSync(process.execPath, [path.join(__dirname, "./preview/cli.cjs"), 'init', root]);
+  cp.execFileSync(server.binaryPath(), ['init', root, '--product', path.resolve(__dirname, '../..')]);
   const tsc = path.join(path.dirname(require.resolve('@typescript/native')), '..', 'bin', 'tsc');
   const check = () => cp.spawnSync(process.execPath, [tsc, '-p', root], { encoding: 'utf8' });
   const valid = check();
@@ -690,27 +901,28 @@ test('the published package types definitions in installed projects', t => {
   }
 });
 
-test('portable build includes the interactive viewer and shared controls while retaining successful previews', async t => {
+test('the portable build includes the interactive viewer and shared controls while retaining successful previews', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts'),
     'button.ts': 'export default function(canvas, context) { canvas.textContent = context.inputs.label; }',
     'broken.workbench.ts': "export default { id: 'broken', adapter: 'unknown', source: { entry: './button.ts' } }",
   });
-  const result = await portable.create(new Compiler(root), { name: 'Acme' });
-  assert.equal(result.previews.length, 1);
-  assert.equal(result.warnings.length, 1);
-  const contents = name => Buffer.from(result.files.find(file => file.path === 'browser/' + name).data, 'base64');
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  const output = path.join(root, 'output');
+  const result = compilerFixture.build(root, output);
+  assert.notEqual(result.status, 0, 'a broken preview is reported');
+  assert.match(result.stderr, /broken\.workbench\.ts/);
+  const contents = name => fs.readFileSync(path.join(output, name));
   const catalog = JSON.parse(contents('workbench.json'));
   assert.equal(catalog.name, 'Acme');
+  assert.equal(catalog.previews.length, 1);
+  assert.equal(catalog.warnings.length, 1);
   assert.deepEqual(catalog.previews[0].states.map(state => state.id), ['default', 'disabled']);
   assert.equal(catalog.previews[0].files, undefined);
-  assert.ok(result.files.some(file => file.path === result.previews[0].directory + '/index.html'));
+  assert.ok(fs.existsSync(path.join(output, catalog.previews[0].directory.replace(/^browser\//, ''), 'index.html')));
   assert.deepEqual(contents('preview-controls.js'), fs.readFileSync(path.join(__dirname, "../../ui/legacy/preview-controls.js")));
   assert.deepEqual(contents('preview-controls.css'), fs.readFileSync(path.join(__dirname, "../../ui/legacy/preview-controls.css")));
   assert.deepEqual(contents('CANONIC-LICENSE.txt'), fs.readFileSync(path.join(__dirname, "../../LICENSE")));
-  const exported = exporter.create(root, { name: 'Acme', pages: {}, implementations: {} }, { portable: result });
-  assert.ok(exported.body.includes(Buffer.from('browser/CANONIC-LICENSE.txt')));
-  assert.ok(exported.body.includes(contents('CANONIC-LICENSE.txt')));
 });
 
 test('portable export compiles only selected previews and filters declared variants', async t => {
@@ -720,12 +932,28 @@ test('portable export compiles only selected previews and filters declared varia
     'button.ts': 'export default function(canvas) { canvas.textContent = "Selected"; }',
     'other.ts': 'export default function(canvas) { canvas.textContent = "Unselected"; }',
   });
-  const result = await portable.create(new Compiler(root), { selection: { pages: ['button.workbench.ts'], states: ['disabled'], sizes: ['mobile'] } });
-  assert.deepEqual(result.previews.map(p => p.file), ['button.workbench.ts']);
-  assert.deepEqual(result.previews[0].states.map(s => s.id), ['disabled']);
-  assert.deepEqual(result.previews[0].sizes.map(s => s.key), ['mobile']);
-  const catalog = JSON.parse(Buffer.from(result.files.find(f => f.path === 'browser/workbench.json').data, 'base64'));
-  assert.equal(catalog.previews.length, 1);
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
+  const running = await server.start({ root, isTrusted: true, capture: { close() {} } });
+  t.after(() => running.close());
+  const base = 'http://127.0.0.1:' + running.port;
+  await (await fetch(base + '/_workbench/config')).json();
+  const started = await fetch(base + '/_workbench/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ format: 'browser', scope: 'pages', pages: ['button.workbench.ts'], variants: 'custom', states: ['disabled'], sizes: ['mobile'] }) });
+  const job = await started.json();
+  assert.equal(started.status, 202, JSON.stringify(job));
+  let status = job;
+  while (status.status === 'running') {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    status = await (await fetch(base + '/_workbench/export?job=' + job.id)).json();
+  }
+  assert.equal(status.status, 'complete', JSON.stringify(status));
+  const archive = Buffer.from(await (await fetch(base + '/_workbench/export?job=' + job.id + '&download=1')).arrayBuffer());
+  const at = archive.indexOf('{\n  "version": 1');
+  assert.ok(at > 0, 'the archive holds the viewer\'s catalog');
+  const catalog = JSON.parse(archive.subarray(at, archive.indexOf('\n}', at) + 2).toString('utf8'));
+  assert.deepEqual(catalog.previews.map(p => p.file), ['button.workbench.ts']);
+  assert.deepEqual(catalog.previews[0].states.map(s => s.id), ['disabled']);
+  assert.deepEqual(catalog.previews[0].sizes.map(s => s.key), ['mobile']);
 });
 
 test('CLI builds a static viewer without starting a server and refuses to overwrite existing content', t => {
@@ -733,13 +961,12 @@ test('CLI builds a static viewer without starting a server and refuses to overwr
   const root = fixture(t, { 'workbench.yaml': 'name: Acme\n', 'button.workbench.ts': definition('html', './button.ts'),
     'button.ts': 'export default function(canvas) { canvas.textContent = "Hello"; }' });
   const output = path.join(root, 'output');
-  const args = [path.join(__dirname, "./preview/cli.cjs"), 'build', root, output];
-  const result = cp.spawnSync(process.execPath, args, { encoding: 'utf8' });
+  const result = compilerFixture.build(root, output);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(JSON.parse(fs.readFileSync(path.join(output, 'workbench.json'))).name, 'Acme');
   assert.ok(fs.existsSync(path.join(output, 'index.html')));
   fs.writeFileSync(path.join(output, 'preserve.txt'), 'User content');
-  const repeat = cp.spawnSync(process.execPath, args, { encoding: 'utf8' });
+  const repeat = compilerFixture.build(root, output);
   assert.notEqual(repeat.status, 0);
   assert.match(repeat.stderr, /must be empty/);
   assert.equal(fs.readFileSync(path.join(output, 'preserve.txt'), 'utf8'), 'User content');

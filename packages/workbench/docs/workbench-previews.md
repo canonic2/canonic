@@ -307,7 +307,7 @@ a compiler.
 
 Adapter names aren't a fixed list. `workbench.config.ts` at the project root,
 or the file named by [`previews.config`](configuration.md#previews), registers
-adapters and sets Rspack `rules` and `plugins`, `aliases`, `dedupe`,
+adapters and sets Rspack `rules`, `plugins` made with Workbench's helpers, `aliases`, `dedupe`,
 `resolveExtensions`, and `define` for every preview. An adapter whose name isn't built in or
 registered fails with `Unknown adapter`. See [Custom adapters](custom-adapters.md).
 
@@ -336,16 +336,19 @@ a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
 
 ## Command-line tools
 
-The extension includes a command-line tool at `server/node/preview/cli.cjs` in its install
-folder. Run it with Node 24 or later:
+The extension includes the `workbench-server` command in its install folder,
+at `server/bin/<platform>-<arch>/workbench-server`. Project code in
+definitions and configuration runs on Node 24 or later: the `node` on your
+`PATH`, or the program `--node` names.
 
 ```sh
-node ~/.vscode/extensions/canonic.canonic-workbench-<version>/server/node/preview/cli.cjs check .
+~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench-server check .
 ```
 
 | Command | What it does |
 | --- | --- |
 | `init <project>` | Writes `workbench-env.d.ts`, the types for `@canonic2/workbench`, and a `workbench.yaml` named after the folder. Existing files are left alone. |
+| `list <project>` | Prints, as JSON, the previews, docs pages and definition errors Workbench finds. |
 | `check <project>` | Finds and compiles every preview without opening a browser. Prints `Built <id>` for each, lists every failure, and exits with an error if there were any. |
 | `build <project> [output]` | Writes the [standalone viewer](#portable-exports) to `output`, or `workbench-static` in the project. The folder must be empty or missing. Successful previews are written even when others fail; failures are listed and the exit code is nonzero. |
 

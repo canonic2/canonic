@@ -3,7 +3,7 @@
 Workbench previews ship with adapters for HTML, React, Vue, Astro, and React
 Native Web. To preview anything else, such as web components, Svelte, Solid, or
 an in-house rendering library, register an adapter in `workbench.config.ts`. The
-same file holds the compiler settings every preview shares: Rspack plugins and
+same file holds the compiler settings every preview shares: compiler plugins and
 loader rules, import aliases, deduplicated packages, file extensions, and
 build-time constants.
 
@@ -199,7 +199,7 @@ the button logs `acme-press` in **Actions**. The
 [checker](workbench-previews.md#command-line-tools) reports:
 
 ```text
-$ node <extension>/preview/cli.cjs check acme-ui
+$ <extension>/server/bin/<platform>-<arch>/workbench-server check acme-ui
 Built components/acme-button
 ```
 
@@ -298,7 +298,7 @@ export default defineConfig({
 | `adapters` | map of name to `{ runtime, rules?, plugins? }` | Adapters that definitions name in `adapter`. |
 | `environment` | path, or map of adapter name to path | An [environment](preview-data.md#environments) around every preview, or around each adapter's previews, relative to the project root. |
 | `rules` | list of Rspack module rules | Loader rules for every preview. |
-| `plugins` | list of Rspack plugins | Plugins for every preview. |
+| `plugins` | list of compiler plugins | [Plugins](#rules-and-plugins) for every preview. |
 | `aliases` | map of import specifier to path or package | Redirects exact imports. |
 | `dedupe` | list of package names | Packages resolved from the definition's folder. |
 | `resolveExtensions` | list of extensions | The extensions tried for imports without one. Replaces the default list. |
@@ -311,33 +311,61 @@ kebab-case names, such as `web-components`. Each value has:
 
 - `runtime`: the [runtime module](#the-runtime-module), relative to the project
   root.
-- `rules` and `plugins`: Rspack rules and plugins for previews that use this
+- `rules` and `plugins`: rules and plugins for previews that use this
   adapter only. `defineAdapter` from `@canonic2/workbench` types one adapter on its own.
 
 ### rules and plugins
 
-Workbench compiles previews with [Rspack](https://rspack.rs/). `rules` are
-[module rules](https://rspack.rs/config/module#modulerules): they pick a loader
-or a module type for matching files. `plugins` are
-[Rspack plugins](https://rspack.rs/concepts/plugins): objects with
-`apply(compiler)`. Global ones apply to every preview, and an adapter's to the
-previews that use it. Workbench's own rules and plugins come first.
+Workbench compiles previews with [Rspack](https://rspack.rs/)'s compiler.
+`rules` are [module rules](https://rspack.rs/config/module#modulerules): they
+pick a loader or a module type for matching files. `plugins` are the compiler
+capabilities below, made with helpers from `@canonic2/workbench`. Global ones
+apply to every preview, and an adapter's to the previews that use it.
+Workbench's own rules and plugins come first.
 
-Write a plugin as a plain object and take Rspack's classes from the compiler it
-is given, since your project doesn't install Rspack. This one serves a virtual
-module, `virtual:build-info`:
+| Helper | What it does |
+| --- | --- |
+| `virtualModule({ id, source })` | Serves a module made from `source` when code imports `id`, such as `virtual:build-info` |
+| `resolveImport({ request, to, importer? })` | Sends an exact import to another file: from every file, or only from files `importer` matches |
+| `importGlob({ include? })` | Expands `import.meta.glob(...)` at build time, as Vite does |
+| `svgSprite({ dirs, symbolId?, register?, names? })` | Builds an SVG sprite from a folder of icons, as `vite-plugin-svg-icons` does |
 
 ```ts
-const buildInfo = {
-  apply(compiler) {
-    const { NormalModuleReplacementPlugin } = compiler.rspack;
-    const source = 'export const buildInfo = ' + JSON.stringify('Acme build 42') + ';';
-    new NormalModuleReplacementPlugin(/^virtual:build-info$/, resource => {
-      resource.request = 'data:text/javascript,' + encodeURIComponent(source);
-    }).apply(compiler);
-  },
-};
+import { defineConfig, virtualModule, resolveImport, importGlob, svgSprite } from '@canonic2/workbench';
+
+export default defineConfig({
+  plugins: [
+    virtualModule({ id: 'virtual:build-info', source: "export const buildInfo = 'Acme build 42';" }),
+    // The first match wins: native screens get the native entry, other files the web one.
+    resolveImport({ request: '@acme/ui', importer: 'apps/mobile/**', to: './packages/ui/src/native.ts' }),
+    resolveImport({ request: '@acme/ui', to: './packages/ui/src/index.ts' }),
+    importGlob(),
+    svgSprite({ dirs: ['packages/ui/src/icons'], symbolId: 'icon-[name]' }),
+  ],
+});
 ```
+
+- **`resolveImport`**: `request` matches one whole import. `to` is a file
+  relative to the project root, or a package. `importer` is a glob, or a list
+  of globs, over the importing file's path from the project root, or a regular
+  expression over its absolute path.
+- **`importGlob`**: each call's patterns must be string literals starting with
+  `./`, `../` or `/` (the project root). Keys are written as the pattern is,
+  in name order. `eager`, `import`, `query` and `exhaustive` work as in Vite;
+  a `!` pattern leaves files out. `include` limits the transform to some files,
+  as a rule's `include` does: a path from the project root, a regular
+  expression, or a list of them. Calls in comments and strings are left as
+  written.
+- **`svgSprite`**: every `.svg` in `dirs`, relative to the project root,
+  becomes a `<symbol>`. `symbolId` names each one: `[dir]` is the icon's
+  folder inside `dirs` (with `-` for `/`) and `[name]` its file name, and
+  the default is `icon-[dir]-[name]`. Importing `virtual:svg-icons-register`
+  inserts the sprite into the page; `virtual:svg-icons-names` exports the IDs.
+  `register` and `names` rename those imports. Each symbol keeps the icon's
+  view box, or takes one from its width and height; IDs inside an icon are
+  prefixed with its symbol ID, and so are the references to them.
+- Adding, editing or deleting a file a plugin reads, such as an icon or a file
+  a glob matches, rebuilds the previews that use it.
 
 A loader is a file that exports a function from source text to module text.
 Name it in a rule by path, relative to the project root:
@@ -346,14 +374,23 @@ Name it in a rule by path, relative to the project root:
 rules: [{ test: /\.tsx?$/, exclude: /node_modules/, enforce: 'pre', loader: './workbench/greeting-loader.cjs' }],
 ```
 
-Rules and plugins run when Workbench builds previews and docs examples, live
-and for the [design-system export](design-system-export.md). They don't run when
-Workbench reads a definition or this file, or in
+Loaders run in Node, one module at a time, with the usual loader context:
+`this.getOptions()`, `this.resourcePath`, `this.async()`, `this.addDependency()`
+and the like. `this.emitError()` fails the module's build with its message,
+as a thrown error does; `this.emitWarning()` reports a warning and the build
+continues. `this.loadModule` and `this.importModule` are not available.
+Rspack's built-in loaders, such as `builtin:lightningcss-loader`, run in the
+compiler itself.
+
+Rules and plugins apply when Workbench builds previews and docs examples, live
+and for the [design-system export](design-system-export.md). They don't apply
+when Workbench reads a definition or this file, or in
 [Astro frontmatter](astro.md#imports-aliases-and-plugins), so a `.workbench.ts`
 file can't import a file that only a loader can read.
 
-A plugin written for esbuild, an object with `setup(build)`, is reported as a
-configuration problem and left out.
+An object with `apply(compiler)` (an Rspack plugin) or `setup(build)` (an
+esbuild plugin) doesn't run: it is reported as a configuration problem and
+left out. Use a helper above, or a loader rule.
 
 - **Build absolute paths from `__dirname`,** the folder of the configuration
   file. Don't rely on the current working directory.
@@ -446,9 +483,9 @@ build fails with `Module parse failed`. Replacing
 | `adapter.mount is not a function` | The frame | Export a function named `mount` from the runtime. |
 | `The selected source export does not exist for <id> — <state>` | The frame only; `check` passes | Fix `source.export`, or export that name from the entry. |
 | `Module parse failed` on a file type Workbench doesn't compile | The frame and `check` | Add a rule with a loader for the file type. |
-| `workbench.config.ts: “<name>” is an esbuild plugin.` | Configuration problems | Rewrite it as an Rspack plugin or a loader rule. |
+| `workbench.config.ts: “<name>” is an esbuild plugin.` or `is a JavaScript Rspack plugin.` | Configuration problems | Use a plugin from `@canonic2/workbench`, or a loader rule. |
 | `Workbench previews: <message>` | Configuration problems | `workbench.config.ts` threw while loading. No previews load until it's fixed; `check` prints the same message. |
 | `previews.config: must be a project-relative config file.` | Configuration problems | Point `previews.config` at a file inside the project. Previews stay off until it's fixed. |
 
-For configuration problems and the worker's log, see
+For configuration problems and the log, see
 [A TypeScript preview is missing or broken](troubleshooting.md#a-typescript-preview-is-missing-or-broken).

@@ -65,7 +65,7 @@ the owner on 2026-10-16:
 
 - **The server side runs in the Node evaluator:** compiling with the
   project's own Astro compiler, bundling the frontmatter, and rendering
-  through the container, as the compile worker does today. Rendering runs
+  through the container. Rendering runs
   the project's code, so every Astro page needs the Node evaluator whatever
   compiles it; compiling there adds no process, and the compiler always
   matches the project's Astro runtime. From Astro 7 that compiler is
@@ -90,11 +90,15 @@ the owner on 2026-10-16:
 
 ## Status
 
-Implemented in the Node compile worker
-([astro.cjs](../../server/node/preview/astro.cjs), `project.ts`), with the
-server side bundled by esbuild, covered by
-[preview-astro.test.js](../../server/node/preview-astro.test.js). Not
-implemented in Rust.
+Implemented as the target describes, except saved renders: the server side
+runs in the Node evaluator
+([astro.ts](../../server/node/src/modules/evaluator/astro.ts),
+[astro.cjs](../../server/node/preview/astro.cjs)), with frontmatter bundled
+by esbuild, and the client side builds natively in `workbench-server`
+through the HTML loader ([astro.rs](../../server/src/compiler/astro.rs)).
+Covered by [preview-astro.test.js](../../server/node/preview-astro.test.js).
+Saved renders are not implemented: every warm start renders each state in
+the evaluator again.
 
 ## Open questions
 

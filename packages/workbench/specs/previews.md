@@ -4,8 +4,9 @@ A Workbench preview renders a component or page from a project's own source,
 in named states, from a `.workbench.ts` or `.workbench.tsx` definition. The
 user guide is [Workbench previews](../docs/workbench-previews.md); this spec
 records the contract, how it is built, and what is still open. See
-[compiler.cjs](../server/node/preview/compiler.cjs), [worker.cjs](../server/node/preview/worker.cjs),
-[browser.js](../ui/preview/browser.js), [server.js](../server/node/server.js), and
+[compiler.cjs](../server/node/preview/compiler.cjs), [compiler.rs](../server/src/compiler.rs),
+[evaluator.cjs](../server/node/preview/evaluator.cjs),
+[browser.js](../ui/preview/browser.js), [catalog.rs](../server/src/catalog.rs), and
 [manifest.js](../contracts/manifest.js).
 
 The sections below are the agreed contract. Where the code does not yet meet
@@ -65,8 +66,8 @@ an artboard, even while loading or displaying errors.
 - The [page index](preview-pipeline/page-index.md) owns discovery patterns,
   ordering, skipped paths, saved-state reuse, evaluation and fallback. Discovery
   is enabled by default; `previews.include` replaces its patterns and
-  `previews: false` disables project preview code and closes the worker.
-  Native listing is independent of compile-worker startup. Untrusted
+  `previews: false` disables project preview code and closes the compilers.
+  Native listing is independent of the compilers and the Node evaluator. Untrusted
   workspaces list no definitions.
 
 - A definition that fails to load or validate becomes one problem prefixed
@@ -111,11 +112,10 @@ an artboard, even while loading or displaying errors.
   definition file matching discovery is added, removed, renamed, or changes
   its title, states, or sizes, without **Workbench: Refresh Pages**; see
   [the extension's refresh contract](vscode-extension.md#refresh).
-  In VS Code, the [front door](server.md#phase-1-the-front-door) watches
+  In VS Code, the [server](server.md#the-resident-index-and-watcher) watches
   the space and the extension runs the same rebuild as a `workbench.yaml`
   edit when the listed definitions change. **Gap:** the standalone canvas in
-  a browser gets no such notice and needs a reload, and a server running
-  without the front door binary watches nothing.
+  a browser gets no such notice and needs a reload.
 
 ### Open, states, controls, and actions
 
@@ -157,7 +157,7 @@ applies independently within each isolated artboard.
   server, and edits that cannot apply in place reload the preview
   ([hot updates](preview-pipeline/hot-updates.md)).
 - Astro input edits re-render through the server; frontmatter runs in the
-  Node evaluator (today, the preview worker).
+  Node evaluator.
 
 ### Links and navigation
 
@@ -247,9 +247,9 @@ after 8 seconds.
 
 The [design-system export](export.md) plans one reference per preview state at
 the page's sizes, loading the definition URL with `?state=`. After
-references, it asks the worker for the portable build and adds the `browser/`
+references, it asks the compiler for the portable build and adds the `browser/`
 package and catalog. A preview that fails to build is a warning. **Requirement:** a portable build that fails entirely, including a
-worker failure, is also a warning, and the export still delivers its sources
+compiler or evaluator failure, is also a warning, and the export still delivers its sources
 and references without `browser/`; see [export](export.md#job-lifecycle).
 The source closure is
 the compiler's resolved local module graph (outside `node_modules`); packages
@@ -267,13 +267,15 @@ reached through `node_modules` are listed by name and version.
 - Astro previews carry every authored state pre-rendered. Their controls are
   removed and a note is appended to their docs, since input edits need a live
   render.
-- `server/node/preview/cli.cjs` ships in the extension. `init` writes `workbench-env.d.ts`
-  and a minimal `workbench.yaml` without overwriting. `check` evaluates and
-  compiles every preview and exits nonzero on any failure. `build` refuses a
-  nonempty output folder, writes successful previews, and exits nonzero when
-  any failed. `check` and `build` honor `previews: false`. The CLI runs
-  definitions in its own Node process with no trust check; running it is the
-  user's explicit choice.
+- `workbench-server` ships in the extension with `init`, `list`, `check` and
+  `build` commands ([build.rs](../server/src/build.rs)). `init` writes
+  `workbench-env.d.ts` and a minimal `workbench.yaml` without overwriting.
+  `list` prints the page index's answer. `check` evaluates and compiles every
+  preview and exits nonzero on any failure. `build` refuses a nonempty output
+  folder, writes successful previews, and exits nonzero when any failed.
+  `check` and `build` honor `previews: false`. The commands run definitions
+  on `--node` or the `node` on the `PATH` with no trust check; running them
+  is the user's explicit choice.
 
 ## System behavior
 
@@ -332,27 +334,27 @@ The target follows the Workbench server's
   for one definition checks discovery rules directly without scanning every
   project file.
 
-Today, compilation, evaluation and rendering run in the Node preview worker
-([worker.cjs](../server/node/preview/worker.cjs)), a child of `server.js`;
-the [page index](preview-pipeline/page-index.md) owns its separate
-evaluator. The worker:
+Compilation runs in `workbench-server`
+([compiler](preview-pipeline/compiler.md)); evaluation and Astro rendering
+run in its Node evaluator ([node.rs](../server/src/node.rs),
+[evaluator.cjs](../server/node/preview/evaluator.cjs)); the
+[page index](preview-pipeline/page-index.md) owns its separate evaluator.
 
-- listens on a loopback TCP port, which the target does not take; its
-  queued operations are serialized, while output files and pushed updates
-  bypass that queue;
-- is created for discovered definitions or docs examples. A compilation
-  request starts its process; eager server startup also starts pre-warming
-  in trusted spaces with previews enabled. It must report its port within
-  30 seconds or startup fails with a problem. A change to the resolved
-  `previews` value replaces it on the next resolution; `previews: false`
-  closes it. Catalog reads time out after 120 seconds, exports after 300,
-  and proxied requests after 120;
-- when it exits unexpectedly, is started again by the next preview request
-  or config resolution; there is no proactive restart;
-- stops with the server, which asks it to close and kills it after
-  3 seconds. It also exits when its parent's IPC channel disconnects;
-- logs its error output as `preview.worker` (each chunk truncated), and
-  per-request timing as `preview.request.completed`.
+- Each page-tree request configures the compilers with the space's
+  `previews` settings and the page index's listing, and they pre-warm every
+  listed preview and docs lens after applying it. For `previews: false`, the
+  compilers close; an untrusted workspace never configures them. A change to
+  the resolved `previews` value replaces the compilers with new ones. A
+  preview or docs request that arrives first assembles the page tree.
+- The evaluator starts on the first request that needs project JavaScript,
+  waits up to a minute for the runtime, and fails a request that has no
+  answer within two minutes, stopping the process. When it exits, every
+  waiting request fails and the next request starts a new one; there is no
+  proactive restart. It is killed with the server. It asks the host for its
+  Node runtime the first time it starts, so a space whose definitions are
+  literals and that has no `workbench.config.ts` starts none.
+- The evaluator's error output goes to the server's standard error.
+  Per-request timing is logged as `preview.request.completed`.
 - In an untrusted server (`isTrusted: false`), no definition runs, discovered
   files produce `Workbench previews require a trusted workspace.`, and preview
   routes answer 404. When trust applies is part of the
@@ -360,15 +362,16 @@ evaluator. The worker:
 
 ### Runtime selection
 
-Today the worker runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
+The evaluator runs on the [bundled Electron runtime](capture.md#bundled-electron-runtime)
 in Node mode when that runtime is used on the host, and otherwise on the
-current process's executable (Node for the standalone server). `NODE_OPTIONS`
-is removed from its environment. Previews compile with Rspack, and esbuild
-evaluates definitions and builds Workbench's own bundles
-([compiler](preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)). Each
-platform VSIX bundles the matching pinned esbuild binary and Rspack binding at
-build time; source checkouts use the package's installed compilers. Projects install no compiler,
-and the installed extension downloads none.
+host's Node (the standalone command's executable). `NODE_OPTIONS` is removed
+from its environment. Previews compile with Rspack's Rust crates in
+`workbench-server`, and esbuild in the evaluator bundles definitions and
+`workbench.config.ts` for evaluation
+([compiler](preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)).
+Each platform VSIX bundles the matching pinned esbuild binary at build time;
+source checkouts use the package's installed esbuild. Projects install no
+compiler, and the installed extension downloads none.
 
 ### Readiness and errors
 
@@ -380,7 +383,7 @@ and the installed extension downloads none.
 - Thrown errors, unhandled rejections, adapter errors, and `context.error`
   clear readiness, release resources, and show the error in the frame.
   **Reset state** recovers.
-- Problems from discovery, validation, worker failure, and lens mapping join
+- Problems from discovery, validation, compiler configuration, and lens mapping join
   the config's `problems`; see [core](core.md#problem-reporting).
 
 ## Acceptance criteria and verification points
@@ -389,8 +392,8 @@ and the installed extension downloads none.
   isolation of invalid definitions; HTML scripts, inline modules, CSS,
   `srcset`, and assets; React and Vue SFCs with project framework versions;
   custom adapters and plugins on the shared path; project escape and excluded
-  definitions; server catalog, compiled pages, runnable export, and worker
-  close; untrusted and disabled workspaces never executing definitions; manual
+  definitions; server catalog, compiled pages, runnable export, and closing
+  previews; untrusted and disabled workspaces never executing definitions; manual
   placement (via `mergeCollections`); `workbench` lens state mapping; source
   closure hashing; authoring type checks; portable viewer and partial
   success; CLI `build` refusing nonempty output.
@@ -405,10 +408,8 @@ and the installed extension downloads none.
   module isolation, recovery after failed mounts, listener and timer release,
   refusal of external pages. [workbench/preview.test.js](../ui/legacy/preview.test.js)
   checks mounting into the warm spare frame.
-- [preview-scripts.test.js](../server/node/preview-scripts.test.js) checks the shared
-  compatibility injection, and that in-page fragments scroll in both switch
-  positions while a mounted preview's `follow` sees links and forms only with
-  actions on.
+- [files.rs](../server/src/serve/files.rs) tests check the shared
+  compatibility injection.
 - [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs) "links open mapped
   previews…" and "without the actions switch…" cover matching, state-only
   targets, logged links and forms, `navigate` with actions off, release of
@@ -426,15 +427,15 @@ and the installed extension downloads none.
   preview, project environments with third-party clients/routers, and canvas
   and portable-viewer navigation. Browser recipes are in
   [preview data](../docs/preview-data.md).
-- Definition watching through the extension's rebuild, worker timeout/restart paths, CLI `check`/`init` beyond
+- Definition watching through the extension's rebuild, evaluator timeout/restart paths, CLI `check`/`init` beyond
   type generation, and installed cross-platform CLI use need dedicated
   acceptance coverage. See the [page-index evidence](preview-pipeline/page-index.md#acceptance-and-evidence)
   for native listing and packaging evidence.
 
 ## Design constraints
 
-- Project code runs only in the Node evaluator (today, in the page index's
-  evaluator or the preview worker). Astro frontmatter
+- Project code runs only in the Node evaluator (or the page index's
+  evaluator). Astro frontmatter
   runs on the server side; only rendered HTML and client assets reach browsers.
 - Runtime readiness cannot depend on animation frames being delivered to a
   hidden frame. The [readiness contract](preview-pipeline/readiness.md) owns
@@ -459,18 +460,6 @@ and the installed extension downloads none.
 - **Modifier clicks are claimed too.** A Cmd- or Ctrl-click on a link in a
   preview is mapped or logged like a plain click, never opened in a new tab.
 
-- **Possible duplicate workers (hypothesis, from code reading).**
-  `importPreviews` in [server.js](../server/node/server.js) closes the old worker on a
-  `previews` change, then sets `previews = null` after an `await`. Two
-  overlapping resolutions after a YAML edit (the sidebar's catalog request and
-  the canvas refresh both resolve the config) could each pass that check; the
-  later one would then discard the worker the earlier one created without
-  closing it, leaving it running until the extension host exits. Not
-  reproduced.
-- **Idle worker after previews disappear.** When discovery finds no
-  definitions, resolution returns before touching the running worker, so it
-  keeps running until the server stops or `previews` changes.
-
 ## Open questions
 
 - **Unavailable Workbench lens.** An unknown preview ID, disabled previews or
@@ -480,7 +469,7 @@ and the installed extension downloads none.
 - **State data.** Validation uses JSON serialization while runtime isolation
   uses `structuredClone`. Decide whether JSON data or the broader cloneable
   set is the authoring contract.
-- **Worker exit.** Decide whether an unexpected worker exit should publish a
+- **Evaluator exit.** Decide whether an unexpected evaluator exit should publish a
   persistent problem before a subsequent request starts its replacement.
 - **Trust changes.** Live workspace-trust transitions and added spaces are
   governed by the [extension contract](vscode-extension.md#open-questions).

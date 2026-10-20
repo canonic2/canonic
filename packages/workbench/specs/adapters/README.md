@@ -21,10 +21,10 @@ differs for its technology, and links to those topics for the rest.
 | `html` | [HTML](html.md) | Workbench's HTML loader, SWC for its scripts | None | [html.js](../../ui/preview/html.js) |
 | `react` | [React](react.md) | Rspack's built-in SWC loader, React Refresh | None | [react.js](../../ui/preview/react.js) |
 | `react-native-web` | [React Native Web](react-native-web.md) | As React, in the `react-native-web` profile | None | [react.js](../../ui/preview/react.js) (`mountNative`) |
-| `vue` | [Vue](vue.md) | Vue Loader with `@vue/compiler-sfc` | Vue's compiler (JavaScript) | [vue.js](../../ui/preview/vue.js) |
+| `vue` | [Vue](vue.md) | Workbench's Vue loaders, with its bundled `@vue/compiler-sfc` | Vue's compiler (JavaScript) | [vue.js](../../ui/preview/vue.js) |
 | `astro` | [Astro](astro.md) | The project's Astro compiler | Compiling, frontmatter and rendering, through Astro's container | [astro.js](../../ui/preview/astro.js), then `html.js` |
 | Storybook | [Storybook](storybook.md) | The project's Storybook, with its own builder | Storybook's dev server | Storybook's own `iframe.html` |
-| A registered name | [Custom adapters](custom.md) | The project's Rspack rules and plugins | The project's loaders and plugins | The project's `runtime` module |
+| A registered name | [Custom adapters](custom.md) | The project's Rspack rules and native plugin capabilities | The project's JavaScript loaders | The project's `runtime` module |
 
 Docs is not an adapter: it is a lens of a page whose examples render through
 one ([docs](../docs-pages.md)). A preview definition is not one either: it
@@ -74,10 +74,10 @@ evaluator only for the parts that have to run JavaScript:
 | Adapter | Served by the Rust server | Node evaluator |
 | --- | --- | --- |
 | React, React Native Web, HTML | Everything | Not started |
-| Vue | Everything, with a Rust compiler that passes conformance ([target](vue.md#target)) | Vue's own compiler, only where the Rust one does not pass |
+| Vue | Everything but compiling single-file components; a Rust compiler takes that over only if one passes conformance ([target](vue.md#target)) | Workbench's bundled `@vue/compiler-sfc`, for each `.vue` file |
 | Astro | Rendered HTML, client scripts and styles; saved renders on a warm start | Renders: first open, edits, input changes ([target](astro.md#target)) |
 | Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server on a local socket ([how](storybook.md#a-storybook-the-server-runs)) |
-| Custom adapters | The browser mount, and Rust-native rules | The project's JavaScript loaders and plugins |
+| Custom adapters | The browser mount, native plugin capabilities and Rust-native rules | The project's JavaScript loaders |
 
 - **One Node evaluator per space,** not one per adapter. The server starts
   it on first need, with the space's trust and configuration; it loads only
@@ -109,8 +109,10 @@ Decided by the owner on 2026-10-16, after the
 - **The Workbench server is one Rust runtime:** HTTP, the page index and
   the compiler (Rspack's Rust crates) in one binary. Node runs only as the
   Node evaluator, for code that has to be JavaScript: computed definitions,
-  `workbench.config.ts`, Vue's compiler, Astro rendering and project loaders
-  and plugins. A project that needs none of them starts no Node process.
+  `workbench.config.ts`, Vue's compiler, Astro rendering and project JavaScript
+  loaders. Project plugin capabilities migrate to Rust
+  ([decision](../preview-pipeline/plugins.md#plugin-migration-decision)).
+  A project that needs none of the JavaScript steps starts no Node process.
 - **Each adapter is a separate unit** that owns its build settings,
   project-code step, browser mount and documentation, instead of having its
   format handling spread through the pipeline.
@@ -131,29 +133,26 @@ Decided by the owner on 2026-10-16, after the
 
 ## Status
 
-Implemented in the Node compile worker
-([server/node/src/modules/preview-pipeline/](../../server/node/src/modules/preview-pipeline)):
-every adapter in the table. Its format handling is shared code rather than
-separate units: React Native Web's profile is in `options.ts`, Vue's and
-HTML's rules in the shared rule list, Astro's rendering in
-[astro.cjs](../../server/node/preview/astro.cjs), and the adapter-to-module
-map in `project.ts`. That worker listens on a loopback TCP port, which the
-target's children do not ([processes and connections](../server.md#processes-and-connections)).
-A Storybook the server runs is implemented in the Node server as the target
+Implemented in `workbench-server`'s preview compiler
+([compiler.rs](../../server/src/compiler.rs)) and the Node evaluator, as the
+[serving model](#how-pages-are-served) describes: React, React Native Web,
+HTML and custom adapters compile natively; Vue compiles with Workbench's
+`@vue/compiler-sfc` in the Node evaluator and native loaders; Astro renders
+in the Node evaluator and its client side builds natively through the HTML
+loader. The evaluator takes no port
+([processes and connections](../server.md#processes-and-connections)).
+Format handling is shared code rather than separate units: the profiles and
+Workbench's rules are in [options.rs](../../server/src/compiler/options.rs),
+the adapter-to-module map in [project.rs](../../server/src/compiler/project.rs),
+Vue in [vue.rs](../../server/src/compiler/vue.rs), Astro in
+[astro.rs](../../server/src/compiler/astro.rs) and the evaluator's
+[astro.ts](../../server/node/src/modules/evaluator/astro.ts), and project
+plugin capabilities in [plugins.rs](../../server/src/compiler/plugins.rs).
+A Storybook the server runs is implemented in the server as the target
 describes, on a local socket ([Storybook](storybook.md#status)).
-
-The Rust server is not implemented. The lab's prototype compiles React and
-plain-module pages only ([stage 2 report](../../labs/instant-first-page/README.md#stage-2-report)).
 
 ## Open questions
 
-- **Project plugins in a Rust compiler.** A project plugin is a JavaScript
-  object with `apply(compiler)` that uses `compiler.rspack`
-  ([plugins](../preview-pipeline/plugins.md#project-plugins)). Rspack's Rust
-  crates cannot call it. Loaders can run in the Node evaluator, one module at
-  a time; plugins that hook the compilation cannot. Decide whether project
-  plugins keep their current form, become loaders only, or keep a Node
-  compiler for projects that use them.
 - **The cost of the Node evaluator's loader step,** per transformed module,
   for Vue and project loaders. It is measured before Vue's target is fixed.
 - **Where each adapter lives in the code:** a module per adapter, spanning

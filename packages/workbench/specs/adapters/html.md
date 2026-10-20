@@ -15,8 +15,9 @@ A preview's `source.entry` is either:
 ## Build
 
 HTML is not served as a static file. Workbench's
-[HTML loader](../../server/node/src/modules/preview-pipeline/html-loader.ts)
-turns the page into a module whose default export is its HTML, so it enters
+HTML loader ([html.rs](../../server/src/compiler/html.rs), registered in
+[loaders.rs](../../server/src/compiler/loaders.rs) as
+`builtin:workbench-html-loader`) turns the page into a module whose default export is its HTML, so it enters
 the build like any other source:
 
 - linked local stylesheets and inline `<style>` blocks become CSS imports,
@@ -27,9 +28,8 @@ the build like any other source:
 - local images and media become asset URLs;
 - `<title>`, `<meta>` and `<base>` are dropped.
 
-JSON data blocks and external scripts stay in the HTML. The
-[part loader](../../server/node/src/modules/preview-pipeline/html-part-loader.ts)
-serves each extracted style and script through a resource query on the same
+JSON data blocks and external scripts stay in the HTML. The part loader
+(`builtin:workbench-html-part-loader`) serves each extracted style and script through a resource query on the same
 file. The [Astro adapter](astro.md) uses the same loaders for its rendered
 HTML.
 
@@ -63,6 +63,8 @@ replace them.
 
 ## Status
 
-Implemented in the Node compile worker, covered by
-[preview.test.js](../../server/node/preview.test.js) (scripts, inline modules,
-CSS, `srcset`, assets). Not implemented in Rust.
+Implemented as Rust loaders in `workbench-server`'s compiler, as the target
+describes, covered by [preview.test.js](../../server/node/preview.test.js)
+(scripts, inline modules, CSS, `srcset`, assets) and the unit tests in
+[html.rs](../../server/src/compiler/html.rs). No fixture-by-fixture comparison
+with the Node loaders' output is recorded.

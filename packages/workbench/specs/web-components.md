@@ -187,7 +187,7 @@ element, not in the page.
   Their [public API and examples](../design/space-switcher.md) document properties,
   events, parts and keyboard behavior. Application operations remain in the
   existing sidebar and canvas controllers.
-- [browser-modules.ts](../server/node/src/server/browser-modules.ts) serves component modules
+- [files.rs](../server/src/serve/files.rs) serves component modules
   and shared theme CSS unchanged, excluding tests, declarations, TypeScript
   and server modules. The direct sidebar webview loads the same JavaScript
   registration entry through a resource URL. Host-owned CSP and local resource

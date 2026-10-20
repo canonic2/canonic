@@ -120,7 +120,7 @@ without the canvas, run the
 [checker](workbench-previews.md#command-line-tools) on the project:
 
 ```text
-$ node <extension>/preview/cli.cjs check acme-site
+$ <extension>/server/bin/<platform>-<arch>/workbench-server check acme-site
 Built components/plan-card
 ```
 
@@ -209,10 +209,11 @@ Other links, including downloads and other sites, are recorded under
 
 ## What runs where
 
-- **In Workbench's preview worker (Node):** the frontmatter of every component,
-  and whatever it imports, including Node modules such as `node:fs`. Workbench
-  renders each state there when it builds the preview. Frontmatter is never
-  sent to the browser.
+- **In Workbench's [Node evaluator](extension.md#the-preview-compiler):** the
+  frontmatter of every component, and whatever it imports, including Node
+  modules such as `node:fs`. Workbench renders each state there with your
+  project's own Astro when it builds the preview. Frontmatter is never sent to
+  the browser.
 - **In the canvas:** the rendered HTML, its styles, its `<script>` tags, and
   your preview's `setup`, `play`, and `ready` hooks.
 
@@ -254,8 +255,8 @@ calls an external service needs that service to be reachable.
 
 ### Edit inputs
 
-Editing a field in **Preview controls** sends the new inputs to the preview
-worker, which renders that state again and replaces the frame's content. Each
+Editing a field in **Preview controls** sends the new inputs to the Node
+evaluator, which renders that state again and replaces the frame's content. Each
 edit is a full server render, so frontmatter runs again. **Reset state** returns
 to the authored render. Edits never change your files.
 

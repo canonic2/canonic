@@ -205,9 +205,10 @@ Repeated artboards on one device/window share that external surface.
   (including a first state named by its own ID), implementation validation,
   window implementations, code pointers, and code for an implementation
   without a root.
-- [preview-scripts.test.js](../server/node/preview-scripts.test.js) checks that the bundle
-  applies actions, states, and `noValidate` together, and that served HTML
-  and the compat route use the one injection. [server.test.js](../server/node/server.test.js)
+- [files.rs](../server/src/serve/files.rs) tests check that served project
+  HTML carries the one compatibility script first in its head, and
+  [preview.test.js](../server/node/preview.test.js) that the compat route
+  serves the bundle of actions, states and `noValidate`. [server.test.js](../server/node/server.test.js)
   checks placement first in `<head>`, the Simulator catalog, stream
   negotiation only for a configured device or declared window, and export
   warnings for implementation-only pages.

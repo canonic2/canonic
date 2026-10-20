@@ -213,7 +213,7 @@ pub(super) fn space_sizes(
 
 /// A page's sizes: `{ sizes, ownSizes? }`, or `None` when it supports every
 /// size of the space.
-pub(super) fn page_sizes(
+pub(crate) fn page_sizes(
     raw: Option<&Value>,
     space: &[Value],
     where_: &str,

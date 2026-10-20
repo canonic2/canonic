@@ -1,19 +1,15 @@
-/* Evaluates preview definitions and workbench.config.ts with esbuild, lists
-   docs examples, and renders Astro input edits. Previews, docs lenses and
-   portable output build with Rspack in src/modules/preview-pipeline/. Each
-   platform VSIX carries its own native compilers; projects install none. */
+/* Discovers and evaluates preview definitions and workbench.config.ts with
+   esbuild, for the page index's evaluator and the Node evaluator. Previews,
+   docs lenses and portable output build in workbench-server's native
+   compiler. Each platform VSIX carries its esbuild; projects install none. */
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const Module = require('node:module');
 const esbuild = require('./engine.cjs');
 const picomatch = require('picomatch');
 const ignore = require('ignore');
 const API = path.join(__dirname, "../../../sdk/api.js");
-const BROWSER_RUNTIME = path.resolve(__dirname, '../../../ui/preview');
 const OMIT = new Set(['node_modules', '.git', '.canonic', '.claude', '.codex', 'dist', 'build', 'coverage', '.next', '.astro']);
-const EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.json', '.vue', '.html'];
-const digest = body => crypto.createHash('sha256').update(body).digest('hex').slice(0, 16);
 const inside = (root, file) => {
   if (!fs.existsSync(file)) {
     const relative = path.relative(root, file);
@@ -157,175 +153,10 @@ async function renderWithFetches(definition, state, inputs, render) {
   try { return await render(); } finally { globalThis.fetch = original; }
 }
 
-// The esbuild setup for an Astro input edit's render and for listing a docs
-// lens's examples: aliases, the Vue and HTML loaders, and copying the assets
-// they reference. Project plugins are Rspack plugins and don't run here.
-// `file` is the entry the build
-// resolves aliases and deduplicated packages from; `dependencies` collects
-// every file the outputs depend on; `rendered` and `astro` carry the built-in
-// Astro adapter's server renders, empty for anything else.
-function createBuild(compiler, { file, adapter, addon, development, dependencies, extraPlugins = [], rendered = {}, astro = { resources: new Map(), publicDirs: new Set() } }) {
-  const config = compiler.config;
-  const outputs = new Map();
-  const outdir = path.join(compiler.root, '__workbench_output__');
-  const aliases = Object.assign({}, adapter === 'react-native-web' ? { 'react-native': 'react-native-web' } : {}, config.aliases);
-  // Project plugins are Rspack plugins; esbuild builds take none of them.
-  const plugins = [compiler.apiPlugin(), ...extraPlugins];
-  const htmlAssets = new Map();
-  const htmlStyles = new Map();
-  const copyAsset = async (from, reference) => {
-    if (!astro.resources.has(reference) && /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference)) return reference;
-    const [clean, suffix = ''] = reference.split(/(?=[?#])/);
-    const resource = astro.resources.get(reference);
-    let target = resource ? reference : clean.startsWith('/') ? path.join(compiler.root, clean.slice(1)) : path.resolve(path.dirname(from), clean);
-    if (!resource && adapter === 'astro' && clean.startsWith('/') && !fs.existsSync(target)) {
-      for (const directory of astro.publicDirs) {
-        const candidate = path.join(directory, clean.slice(1));
-        if (fs.existsSync(candidate)) { target = candidate; break; }
-      }
-    }
-    if (!resource && (!inside(compiler.root, target) || !fs.existsSync(target))) throw new Error('Missing HTML asset: ' + reference + ' in ' + from);
-    if (!resource) dependencies.add(target);
-    if (htmlAssets.has(target)) return htmlAssets.get(target) + suffix;
-    const extension = path.extname(target);
-    const name = 'assets/' + digest(target + (resource ? resource.contents : fs.readFileSync(target))) + extension;
-    htmlAssets.set(target, './' + name);
-    if (/\.(?:[cm]?[jt]sx?|css)$/.test(target)) {
-      const entry = resource ? { stdin: resource } : { entryPoints: [target] };
-      const result = await esbuild.build(Object.assign({}, buildOptions(), entry, { outdir, entryNames: name.replace(/\.[^.]+$/, ''), format: extension === '.css' ? 'esm' : 'iife' }));
-      for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
-      for (const dependency of compiler.tracked(result.metafile)) dependencies.add(dependency);
-      const output = result.outputFiles.find(output => output.path.endsWith(extension === '.css' ? '.css' : '.js'));
-      const url = './' + slash(path.relative(outdir, output.path));
-      const styles = result.outputFiles.filter(output => output.path.endsWith('.css'))
-        .map(output => './' + slash(path.relative(outdir, output.path)));
-      if (extension !== '.css' && styles.length) htmlStyles.set(target, styles);
-      htmlAssets.set(target, url);
-      return url + suffix;
-    }
-    outputs.set(name, fs.readFileSync(target));
-    return './' + name + suffix;
-  };
-  plugins.push({ name: 'workbench-project', setup(build) {
-    build.onResolve({ filter: /^[^./]/ }, args => {
-      if (args.pluginData?.workbenchResolved) return;
-      if (args.path.startsWith('workbench:')) return;
-      const exact = Object.prototype.hasOwnProperty.call(aliases, args.path) && aliases[args.path];
-      if (exact) {
-        const target = exact.startsWith('.') || path.isAbsolute(exact) ? path.resolve(compiler.root, exact) : exact;
-        return build.resolve(target, { resolveDir: path.dirname(file), kind: args.kind, pluginData: { workbenchResolved: true } });
-      }
-      const packageName = args.path.startsWith('@') ? args.path.split('/').slice(0, 2).join('/') : args.path.split('/')[0];
-      if ((config.dedupe || []).includes(packageName) || args.importer.startsWith(BROWSER_RUNTIME + path.sep)) {
-        return build.resolve(args.path, { resolveDir: path.dirname(file), kind: args.kind, pluginData: { workbenchResolved: true } });
-      }
-    });
-    build.onLoad({ filter: /\.vue$/ }, async args => {
-      const compilerSfc = require('@vue/compiler-sfc');
-      const { descriptor, errors } = compilerSfc.parse(fs.readFileSync(args.path, 'utf8'), { filename: args.path });
-      if (errors.length) throw new Error(errors.join('\n'));
-      const id = digest(args.path);
-      let content = '';
-      if (descriptor.script || descriptor.scriptSetup) {
-        const script = compilerSfc.compileScript(descriptor, { id, genDefaultAs: '__component', inlineTemplate: true, templateOptions: { scoped: descriptor.styles.some(style => style.scoped) } });
-        content = script.content;
-        if (!descriptor.scriptSetup && descriptor.template) {
-          const template = compilerSfc.compileTemplate({ source: descriptor.template.content, filename: args.path, id, scoped: descriptor.styles.some(style => style.scoped), compilerOptions: { bindingMetadata: script.bindings } });
-          if (template.errors.length) throw new Error(template.errors.join('\n'));
-          content += '\n' + template.code + '\n__component.render = render;';
-        }
-      } else {
-        const template = compilerSfc.compileTemplate({ source: descriptor.template?.content || '', filename: args.path, id, scoped: descriptor.styles.some(style => style.scoped) });
-        if (template.errors.length) throw new Error(template.errors.join('\n'));
-        content = template.code + '\nconst __component = { render };';
-      }
-      for (let index = 0; index < descriptor.styles.length; index++) {
-        const style = descriptor.styles[index];
-        if (style.src || style.lang && style.lang !== 'css') throw new Error('Vue style preprocessors are not supported here; use plain CSS: ' + args.path);
-        const compiled = compilerSfc.compileStyle({ source: style.content, filename: args.path, id: 'data-v-' + id, scoped: style.scoped });
-        if (compiled.errors.length) throw new Error(compiled.errors.join('\n'));
-        content += '\nimport ' + JSON.stringify('workbench:style:' + args.path + ':' + index) + ';';
-        htmlAssets.set('workbench:style:' + args.path + ':' + index, { contents: compiled.code, resolveDir: path.dirname(args.path) });
-      }
-      if (descriptor.styles.some(style => style.scoped)) content += '\n__component.__scopeId = ' + JSON.stringify('data-v-' + id) + ';';
-      return { contents: content + '\nexport default __component;', loader: 'ts', resolveDir: path.dirname(args.path) };
-    });
-    build.onResolve({ filter: /^workbench:style:/ }, args => ({ path: args.path, namespace: 'workbench-style' }));
-    build.onLoad({ filter: /.*/, namespace: 'workbench-style' }, args => ({ ...htmlAssets.get(args.path), loader: 'css' }));
-    build.onResolve({ filter: /^workbench:astro-page:/ }, args => ({ path: args.path, namespace: 'astro-page' }));
-    const loadHtml = async (args, initialHtml) => {
-      let html = initialHtml;
-      // Copy referenced browser assets; scripts/styles are compiled so their
-      // own imports and URLs travel too. Inline modules/styles enter the graph.
-      // Replacements are functions so `$&` and the like in the page's own
-      // markup are inserted as written rather than read as patterns.
-      const linkedStyles = new Set();
-      const tags = Array.from(html.matchAll(/<([a-z][a-z0-9-]*)\b[^>]*>/gi));
-      for (const tag of tags) {
-        let rewritten = tag[0];
-        for (const match of tag[0].matchAll(/\b(src|href|poster)\s*=\s*(["'])([^"']+)\2/gi)) {
-          // Anchor links and base URLs describe navigation, not build assets.
-          if (match[1].toLowerCase() === 'href' && tag[1].toLowerCase() !== 'link') continue;
-          const url = await copyAsset(args.path, match[3]);
-          rewritten = rewritten.replace(match[0], () => match[1] + '=' + match[2] + url + match[2]);
-          const target = astro.resources.has(match[3]) ? match[3] : match[3].startsWith('/') ? path.join(compiler.root, match[3].slice(1).split(/[?#]/)[0]) : path.resolve(path.dirname(args.path), match[3].split(/[?#]/)[0]);
-          for (const style of htmlStyles.get(target) || []) linkedStyles.add(style);
-        }
-        html = html.replace(tag[0], () => rewritten);
-      }
-      const srcsets = Array.from(html.matchAll(/\bsrcset\s*=\s*(["'])([^"']+)\1/gi));
-      for (const match of srcsets) {
-        const values = [];
-        for (const item of match[2].split(',')) { const [url, ...size] = item.trim().split(/\s+/); values.push(await copyAsset(args.path, url) + (size.length ? ' ' + size.join(' ') : '')); }
-        html = html.replace(match[0], () => 'srcset=' + match[1] + values.join(', ') + match[1]);
-      }
-      for (const match of Array.from(html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/gi))) {
-        const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: match[1], loader: 'css', resolveDir: path.dirname(args.path) }, outdir, entryNames: 'assets/' + digest(args.path + match[1]) }));
-        for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
-        for (const dependency of compiler.tracked(result.metafile)) dependencies.add(dependency);
-        const css = result.outputFiles.find(output => output.path.endsWith('.css'));
-        html = html.replace(match[0], () => '<link rel="stylesheet" href="./' + slash(path.relative(outdir, css.path)) + '">');
-      }
-      for (const match of Array.from(html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi))) {
-        if (/\bsrc\s*=/.test(match[1]) || /\btype\s*=\s*["'](?:application\/ld\+json|application\/json)/i.test(match[1])) continue;
-        const isModule = /\btype\s*=\s*["']module["']/i.test(match[1]);
-        const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: match[2], loader: 'js', resolveDir: path.dirname(args.path) }, format: isModule ? 'esm' : 'iife', outdir, entryNames: 'assets/' + digest(args.path + match[2]) }));
-        for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
-        for (const dependency of compiler.tracked(result.metafile)) dependencies.add(dependency);
-        const js = result.outputFiles.find(output => output.path.endsWith('.js'));
-        for (const output of result.outputFiles.filter(output => output.path.endsWith('.css'))) linkedStyles.add('./' + slash(path.relative(outdir, output.path)));
-        html = html.replace(match[0], () => '<script' + match[1] + ' src="./' + slash(path.relative(outdir, js.path)) + '"></script>');
-      }
-      html = Array.from(linkedStyles, style => '<link rel="stylesheet" href="' + style + '">').join('') + html;
-      // Keep document attributes for the HTML adapter (body classes and
-      // styles are part of the source's rendering contract).
-      html = html.replace(/<title>[\s\S]*?<\/title>|<meta\b[^>]*>|<base\b[^>]*>/gi, '');
-      if (args.state) rendered[args.state].html = html;
-      return { contents: 'export default ' + JSON.stringify(html), loader: 'js' };
-    };
-    build.onLoad({ filter: /\.html?$/ }, args => loadHtml(args, fs.readFileSync(args.path, 'utf8')));
-    build.onLoad({ filter: /.*/, namespace: 'astro-page' }, async args => {
-      const state = args.path.slice('workbench:astro-page:'.length);
-      const item = rendered[state];
-      const html = await loadHtml({ path: item.target, state }, item.html);
-      return { contents: html.contents + '\nexport const inputs = ' + JSON.stringify(item.inputs) + ';', loader: 'js' };
-    });
-  } });
-  function buildOptions() {
-    return { absWorkingDir: compiler.root, bundle: true, write: false, metafile: true, logLevel: 'silent', platform: 'browser', format: 'esm', target: 'es2020', jsx: 'automatic',
-      define: { 'process.env.NODE_ENV': JSON.stringify(development ? 'development' : 'production'), __VUE_OPTIONS_API__: 'true', __VUE_PROD_DEVTOOLS__: 'false', __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false', ...config.define },
-      resolveExtensions: config.resolveExtensions || (adapter === 'react-native-web' ? ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', ...EXTENSIONS] : EXTENSIONS),
-      loader: { '.svg': 'file', '.png': 'file', '.jpg': 'file', '.jpeg': 'file', '.gif': 'file', '.webp': 'file', '.avif': 'file', '.woff': 'file', '.woff2': 'file', '.ttf': 'file', '.mp4': 'file', '.mp3': 'file' },
-      assetNames: 'assets/[name]-[hash]', plugins };
-  }
-  return { outputs, outdir, plugins, buildOptions };
-}
-
 class Compiler {
   constructor(root, options = {}) {
     this.root = path.resolve(root);
     this.options = options;
-    this.cache = new Map();
     this.config = {};
     this.configFiles = new Map();
     this.definitions = new Map();
@@ -411,7 +242,6 @@ class Compiler {
       this.config = evaluated.value;
       const files = evaluated.files;
       this.configFiles = new Map([file, ...files].map(file => [file, stamp(file)]));
-      this.cache.clear();
     }
     return this.config;
   }
@@ -442,186 +272,7 @@ class Compiler {
     if (!discoveredFile(this.root, file, this.options.include)) throw new Error('Not a declared Workbench preview definition.');
     return file;
   }
-  async compile(file, development = true, renderRequest) {
-    await this.settings();
-    file = this.declared(file);
-    const evaluated = await this.definition(file);
-    const definition = validate(evaluated.value, file, this.root);
-    const config = this.config;
-    const builtins = { html: 'html.js', react: 'react.js', vue: 'vue.js', 'react-native-web': 'react.js', astro: 'astro.js' };
-    const addon = config.adapters?.[definition.adapter];
-    const runtime = addon?.runtime ? path.resolve(this.root, addon.runtime) : builtins[definition.adapter] && path.join(BROWSER_RUNTIME, builtins[definition.adapter]);
-    if (!runtime) throw new Error('Unknown adapter “' + definition.adapter + '”. Register it in workbench.config.ts.');
-    const dependencies = new Set([...evaluated.files, ...this.configFiles.keys()]);
-    const extraSources = new Set();
-    const extraPlugins = [];
-    const astroSources = new Map();
-    const astroResources = new Map();
-    const astroPackages = [];
-    const astroPublicDirs = new Set();
-    const rendered = {};
-    if (definition.adapter === 'astro' && !addon) {
-      if (renderRequest && !Object.prototype.hasOwnProperty.call(definition.states, renderRequest.state)) throw new Error('Unknown preview state: ' + renderRequest.state);
-      for (const [state, spec] of Object.entries(definition.states)) {
-        if (renderRequest && state !== renderRequest.state) continue;
-        const source = spec.source || definition.source;
-        const target = path.resolve(path.dirname(file), source.entry);
-        let renderer = astroSources.get(target);
-        if (!renderer) {
-          renderer = await require('./astro.cjs').create(this.root, target, { ...config,
-            define: { 'import.meta.env.DEV': JSON.stringify(development), 'import.meta.env.PROD': JSON.stringify(!development), ...config.define } });
-          astroSources.set(target, renderer);
-          for (const dependency of renderer.dependencies) dependencies.add(dependency);
-          for (const [id, resource] of renderer.resources) astroResources.set(id, resource);
-          astroPackages.push(renderer.package);
-          astroPublicDirs.add(renderer.publicDir);
-        }
-        const inputs = { ...definition.inputs, ...spec.inputs,
-          ...(renderRequest?.state === state ? renderRequest.inputs : {}) };
-        const html = await mockFetches(definition, state, inputs, () => renderer.render(inputs, source.export));
-        rendered[state] = { html, inputs, target };
-      }
-      extraPlugins.push({ name: 'workbench-astro-assets', setup(build) {
-        build.onResolve({ filter: /^workbench:astro-resource:/ }, args => ({ path: args.path, namespace: 'astro-resource' }));
-        build.onLoad({ filter: /.*/, namespace: 'astro-resource' }, args => astroResources.get(args.path));
-      } });
-    }
-    const { outputs, outdir, buildOptions } = createBuild(this, { file, adapter: definition.adapter, addon, development, dependencies,
-      extraPlugins, rendered, astro: { resources: astroResources, publicDirs: astroPublicDirs } });
-    // Request mocks first: they replace fetch before any project module runs.
-    const lines = ['import ' + JSON.stringify(development ? '/_workbench/preview-requests.js' : path.join(__dirname, "../../../ui/preview/requests.js")) + ';',
-      'import definition from ' + JSON.stringify(file) + ';',
-      (definition.adapter === 'react-native-web' && !addon?.runtime ? 'import ' + JSON.stringify(path.join(__dirname, "../../../ui/preview/react-native-web.css")) + '; import { mountNative } from ' + JSON.stringify(runtime) + '; const adapter = { mount: mountNative };' : 'import * as adapter from ' + JSON.stringify(runtime) + ';'),
-      'import { boot, combine } from ' + JSON.stringify(development ? '/_workbench/preview-runtime.js' : path.join(__dirname, "../../../ui/preview/browser.js")) + ';'];
-    const sourceMap = [];
-    const defaultSource = definition.source;
-    const sources = { default: defaultSource };
-    Object.entries(definition.states).forEach(([state, spec]) => { sources[state] = spec.source || defaultSource; });
-    for (const [state, source] of Object.entries(sources)) {
-      const name = 'source' + sourceMap.length;
-      const target = path.resolve(path.dirname(file), source.entry);
-      if (rendered[state]) {
-        lines.push('import * as ' + name + ' from ' + JSON.stringify('workbench:astro-page:' + state) + ';');
-        sourceMap.push(JSON.stringify(state) + ': { html: ' + name + '.default, inputs: ' + name + '.inputs, renderUrl: ' +
-          JSON.stringify(development ? '/_workbench/previews/render?file=' + encodeURIComponent(slash(path.relative(this.root, file))) : null) + ' }');
-      } else if (definition.adapter !== 'astro' || addon) {
-        lines.push('import * as ' + name + ' from ' + JSON.stringify(target) + ';');
-        sourceMap.push(JSON.stringify(state) + ': ' + name + '[' + JSON.stringify(source.export || 'default') + ']');
-      }
-    }
-    const environments = [];
-    // One environment for every preview, or one per adapter name, so a
-    // project with React and Vue pages can wrap each in its own providers.
-    const projectEnvironment = typeof config.environment === 'string' ? config.environment
-      : config.environment && typeof config.environment === 'object' ? config.environment[definition.adapter] : undefined;
-    if (projectEnvironment) {
-      const target = path.resolve(this.root, projectEnvironment);
-      if (!inside(this.root, target) || !fs.existsSync(target)) throw new Error('The preview config environment must be a file inside the project: ' + projectEnvironment);
-      lines.push('import * as projectEnvironment from ' + JSON.stringify(target) + ';');
-      environments.push('projectEnvironment');
-    }
-    if (definition.environment) {
-      lines.push('import * as environment from ' + JSON.stringify(path.resolve(path.dirname(file), definition.environment)) + ';');
-      environments.push('environment');
-    }
-    for (const style of definition.styles || []) lines.push('import ' + JSON.stringify(path.resolve(path.dirname(file), style)) + ';');
-    const slug = definition.id.replace(/\//g, '--') + '-' + digest(definition.id + (renderRequest ? JSON.stringify(renderRequest) : ''));
-    const portableNote = Object.keys(rendered).length ? 'Astro input edits require the live Workbench server. This export contains the authored states.' : '';
-    const browserDefinition = portableNote && !development ? '{ ...definition, controls: {}, docs: (definition.docs || "") + "\\n" + ' + JSON.stringify(portableNote) + ' }' : 'definition';
-    const entry = lines.join('\n') + '\nexport function mount(options) { return boot(' + browserDefinition + ', {' + sourceMap.join(',') + '}, adapter, ' + (environments.length === 2 ? 'combine(projectEnvironment, environment)' : environments[0] || '{}') + ', options); }\nif (!window.__workbenchHost) mount(window.__workbenchOptions);';
-    const result = await esbuild.build(Object.assign({}, buildOptions(), { stdin: { contents: entry, loader: 'js', resolveDir: path.dirname(file) }, outdir, entryNames: 'preview', external: development ? ['/_workbench/preview-runtime.js', '/_workbench/preview-requests.js'] : [], sourcemap: development ? 'linked' : false }));
-    for (const output of result.outputFiles) outputs.set(slash(path.relative(outdir, output.path)), Buffer.from(output.contents));
-    for (const dependency of this.tracked(result.metafile)) dependencies.add(dependency);
-    for (const asset of definition.assets || []) {
-      const target = path.resolve(path.dirname(file), asset);
-      if (!inside(this.root, target)) throw new Error('Declared assets must be inside the project.');
-      const add = file => { dependencies.add(file); extraSources.add(file); outputs.set('assets/source/' + slash(path.relative(this.root, file)), fs.readFileSync(file)); };
-      if (fs.statSync(target).isDirectory()) {
-        const walk = dir => { for (const item of fs.readdirSync(dir, { withFileTypes: true })) { if (item.isSymbolicLink() || item.name.startsWith('.') || OMIT.has(item.name)) continue; const child = path.join(dir, item.name); if (item.isDirectory()) walk(child); else add(child); } };
-        walk(target);
-        dependencies.add(target);
-      } else add(target);
-    }
-    const revision = digest(Array.from(outputs, ([name, body]) => name + Buffer.from(body).toString('base64')).join('\n'));
-    const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      (development ? '<base href="/_workbench/previews/preview/' + slug + '/">' : '') +
-      '<title>' + (definition.title || definition.id).replace(/[&<>"']/g, char => '&#' + char.charCodeAt(0) + ';') + '</title>' +
-      (outputs.has('preview.css') ? '<link rel="stylesheet" href="./preview.css">' : '') +
-      '<style>html,body{margin:0;min-height:100%}#workbench-preview{width:100%;min-width:0;box-sizing:border-box;min-height:100vh}</style></head><body>' +
-      '<script>window.__workbenchOptions=' + JSON.stringify({ development, revision, revisionUrl: '/_workbench/previews/revision?file=' + encodeURIComponent(slash(path.relative(this.root, file))) }).replace(/</g, '\\u003c') + '</script>' +
-      '<script type="module" src="./preview.js"></script></body></html>';
-    outputs.set('index.html', Buffer.from(html));
-    const localFiles = Array.from(new Set(Array.from(dependencies)
-      .filter(file => inside(this.root, file) && !slash(path.relative(this.root, file)).split('/').includes('node_modules') && fs.existsSync(file) && fs.statSync(file).isFile())
-      .map(file => path.join(this.root, path.relative(fs.realpathSync(this.root), fs.realpathSync(file))))));
-    const packages = new Map();
-    for (const pkg of astroPackages) packages.set(pkg.name, pkg.version);
-    for (const dependency of dependencies) {
-      if (!slash(dependency).includes('/node_modules/')) continue;
-      let directory = path.dirname(dependency);
-      while (directory !== path.dirname(directory)) {
-        const manifest = path.join(directory, 'package.json');
-        if (fs.existsSync(manifest)) {
-          try { const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8')); if (pkg.name && pkg.version) packages.set(pkg.name, pkg.version); } catch (_) {}
-          break;
-        }
-        directory = path.dirname(directory);
-      }
-    }
-    const compiled = { slug, id: definition.id, title: definition.title || definition.id, file: slash(path.relative(this.root, file)), revision, outputs, localFiles, rendered, portableNote,
-      packages: Array.from(packages, ([name, version]) => ({ name, version })),
-      watched: new Map(Array.from(dependencies).map(file => [file, stamp(file)])) };
-    return compiled;
-  }
-  // The examples one lens offers: each file of a folder (its default export),
-  // or each named export of a file, as the compiler sees them.
-  // Kept until a file it read changes, so listing again is a few stats.
-  async docsExamples(request) {
-    const key = 'list:' + JSON.stringify(request);
-    const cached = this.cache.get(key);
-    if (cached && this.fresh(cached.watched)) return cached.listed;
-    const watched = new Set(this.configFiles.keys());
-    const listed = await this.listDocsExamples(request, watched);
-    this.cache.set(key, { listed, watched: new Map(Array.from(watched, file => [file, stamp(file)])) });
-    return listed;
-  }
-  async listDocsExamples(request, watched) {
-    const { examplesInFolder, exportNameToId } = require('../src/modules/docs/index.ts');
-    const problems = [];
-    if (request.adapter === 'astro' && !request.folder && !this.config.adapters?.astro) throw new Error(ASTRO_FOLDER);
-    if (request.folder) {
-      // A folder's listing changes its own stamp when a file is added or removed.
-      watched.add(request.examples);
-      const entries = fs.readdirSync(request.examples, { withFileTypes: true })
-        .filter(entry => !entry.isSymbolicLink()).map(entry => ({ name: entry.name, isFile: entry.isFile() }));
-      const found = examplesInFolder(entries, request.adapter);
-      for (const rejected of found.rejected) {
-        problems.push(rejected.file + (rejected.reason === 'duplicate-id' ? ': another file in the folder gives the same example ID.' : ': example file names must be kebab-case.'));
-      }
-      return { examples: found.examples.map(example => ({ id: example.id, file: path.join(request.examples, example.file), export: 'default' })), problems };
-    }
-    // Bundled with the project's own setup (aliases, plugins, loaders) so
-    // `export * from` re-exports resolve; packages stay external, since
-    // examples are the project's own modules.
-    const addon = this.config.adapters?.[request.adapter];
-    const { buildOptions, outdir } = createBuild(this, { file: request.examples, adapter: request.adapter, addon, development: true, dependencies: new Set() });
-    const result = await esbuild.build(Object.assign({}, buildOptions(), { entryPoints: [request.examples], outdir, packages: 'external', sourcemap: false }));
-    for (const file of this.tracked(result.metafile)) watched.add(file);
-    const output = Object.values(result.metafile.outputs).find(candidate => candidate.entryPoint);
-    const examples = [];
-    const ids = new Map();
-    for (const name of (output && output.exports) || []) {
-      if (name === 'default') continue;
-      const id = exportNameToId(name);
-      if (ids.has(id)) { problems.push(name + ': gives the same example ID as ' + ids.get(id) + ' (“' + id + '”).'); continue; }
-      ids.set(id, name);
-      examples.push({ id, file: request.examples, export: name });
-    }
-    return { examples, problems };
-  }
 }
-
-const ASTRO_FOLDER = 'Astro examples are one component per file: point the lens at a folder of .astro files.';
 
 // The list contract shared by the worker and the native index's evaluator.
 // Duplicate IDs belong to the caller, after discovery ordering.
@@ -676,32 +327,4 @@ function validateDocs(raw, file, root) {
     src: docs, lens: raw.lens || (lenses[0] ? lenses[0].key : null), lenses, states };
 }
 
-// A docs page's examples for one lens. The request comes from workbench.yaml
-// or a defineDocs definition, already relative to the project root: the lens's
-// adapter, styles, and environment, and its example source, a folder with one
-// example per file or a file with one example per named export.
-function docsRequest(raw, root) {
-  if (!raw || typeof raw !== 'object') throw new Error('Docs examples need a request.');
-  const local = (value, what) => {
-    if (typeof value !== 'string' || !value.trim()) throw new Error(what + ' must be a path inside the project.');
-    const target = path.resolve(root, value);
-    if (!inside(root, target)) throw new Error(what + ' must be inside the project: ' + value);
-    return target;
-  };
-  if (typeof raw.adapter !== 'string' || !/^[a-z0-9-]+$/.test(raw.adapter)) throw new Error('Examples need a registered kebab-case adapter.');
-  const examples = local(raw.examples, 'The example source');
-  if (!fs.existsSync(examples)) throw new Error('The example source doesn’t exist: ' + raw.examples);
-  return {
-    adapter: raw.adapter,
-    examples,
-    folder: fs.statSync(examples).isDirectory(),
-    styles: (raw.styles || []).map(style => {
-      const target = local(style, 'A style');
-      if (!fs.existsSync(target)) throw new Error('A style doesn’t exist: ' + style);
-      return target;
-    }),
-    environment: raw.environment ? local(raw.environment, 'The environment') : null,
-  };
-}
-
-module.exports = { Compiler, discover, validate, inside, docsRequest, mockFetches, projectDefinition };
+module.exports = { Compiler, discover, validate, inside, mockFetches, projectDefinition };

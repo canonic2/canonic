@@ -9,23 +9,29 @@ A preview's `source` is a Vue 3 single-file component or a component module;
 
 ## Build
 
-- `.vue` files go through Vue Loader with Workbench's bundled
-  `@vue/compiler-sfc`, so the project need not install the compiler.
-  Development builds enable its hot reload. `VueLoaderPlugin` is applied in
-  every compiler.
-- Style blocks go through `style-loader` and `css-loader`, because Vue
-  Loader's style proxy does not work with Rspack's native CSS
-  ([finding 7](../../labs/rspack-pipeline/README.md#findings)). A
-  `<style module>` block's class names are its default export, read as
-  `$style`.
+- `.vue` files go through Workbench's native Vue loader
+  ([vue.rs](../../server/src/compiler/vue.rs)), which hands each file to the
+  Node evaluator. There Workbench's bundled `@vue/compiler-sfc` returns the
+  script with its template and each style block as CSS, so the project need
+  not install the compiler. Portable builds inline the template into
+  `<script setup>`; live builds keep it a separate render function, as Vue
+  Loader does in development, so a template edit can re-render alone.
+- Style blocks are Rspack's native CSS, emitted as stylesheets of the build
+  rather than injected by JavaScript: scoped by the component's ID, or a CSS
+  module for `<style module>`, whose class names are read as `$style`.
+- Development builds register each component with Vue's hot-reload runtime
+  (`__VUE_HMR_RUNTIME__`). An update whose script, style flags and CSS
+  variables are unchanged calls its `rerender`; any other update calls
+  `reload`.
 - Vue's feature flags are set through `define`.
 - Script blocks compile with the shared SWC loader. It builds in the `web`
   profile.
 
 ## Project code on the server
 
-Vue's single-file-component compiler and Vue Loader are JavaScript. They run
-in the compiler process today.
+Vue's single-file-component compiler is JavaScript. It runs in the Node
+evaluator, one round trip per `.vue` file and per edit
+([what runs in the Node evaluator](../preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)).
 
 ## Browser
 
@@ -66,17 +72,20 @@ and Vue's hot-reload runtime is browser code and is unaffected.
 
 ## Status
 
-Implemented in the Node compile worker (`pipeline.ts`, `portable.ts`),
-covered by [preview.test.js](../../server/node/preview.test.js) with project
-Vue versions. Not implemented in Rust.
+Implemented through the Node evaluator path of the target: native loaders in
+[vue.rs](../../server/src/compiler/vue.rs) and
+[loaders.rs](../../server/src/compiler/loaders.rs), with
+`@vue/compiler-sfc` in the evaluator
+([vue.ts](../../server/node/src/modules/evaluator/vue.ts)). Live and
+portable builds share it. Covered by
+[preview.test.js](../../server/node/preview.test.js) with project Vue
+versions and scoped styles, and by the module's Rust unit tests. Vize is not
+adopted; no lab has compared it with `@vue/compiler-sfc`.
 
 ## Open questions
 
 - **Vize's conformance,** licence and what its dependencies add to the
   server binary, measured in a lab against `@vue/compiler-sfc`:
   `<script setup>`, scoped and module styles, slots, and hot updates.
-- **The Node step's cost,** one round trip per `.vue` file and per edit, if
-  Vize does not pass.
-- **Style blocks under native CSS.** With its own loader, the Rust server
-  could hand style blocks to Rspack's native CSS instead of `style-loader`
-  and `css-loader`.
+- **The Node step's cost,** one round trip per `.vue` file and per edit,
+  is unmeasured.

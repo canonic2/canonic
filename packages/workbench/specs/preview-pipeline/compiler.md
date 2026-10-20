@@ -5,9 +5,7 @@ server's development compiler that builds previews and docs lenses for the
 canvas. It also says which jobs run in the Node evaluator. Format handling
 and the project plugin contract are in [plugins](plugins.md); delivering the
 output is in [serving](serving.md). The [page index](page-index.md) owns
-server-side listing. Today the preview worker retains its own index for
-compilation and pre-warming; the Rust page-index integration does not
-replace this compiler with the lab's Rust compiler host.
+server-side listing; the compiler builds what its listing found.
 
 ## Requirements
 
@@ -20,6 +18,12 @@ replace this compiler with the lab's Rust compiler host.
     `.web.*` extensions preferred.
 
   Opening another page, state, size or lens never starts another compiler.
+- The server watches the space root recursively, and every folder outside it
+  that holds a file a build, an Astro render or `workbench.config.ts` read,
+  one level deep: a monorepo package linked through `node_modules` or imported
+  by a relative path rebuilds when it changes. Folders inside `node_modules`
+  and folders above the root are not watched; watching above the root would
+  watch the root's whole tree.
 - Each compiler builds one compilation that contains every entry of its
   profile. Code that entries share is split into shared chunks, with one
   runtime chunk per profile ([serving](serving.md#chunks-and-urls)).
@@ -61,6 +65,11 @@ replace this compiler with the lab's Rust compiler host.
   ([finding 2](../../labs/rspack-pipeline/README.md#findings)). A server
   restart with unchanged inputs restores the cache. An unreadable or stale
   cache rebuilds from source, and a cache failure never prevents compilation.
+- Rspack's cache trusts a file whose modification time matches its snapshot.
+  Generated modules, which live only in memory, therefore get a new
+  modification time whenever their content changes and on every server start.
+  After a restart the cache compares their content, so a render changed
+  while the server was stopped rebuilds and an unchanged one is reused.
 - Rspack frees a compilation when the next build starts, and reading it
   afterwards throws. When each build finishes, the compiler copies what
   serving needs:
@@ -93,52 +102,56 @@ replace this compiler with the lab's Rust compiler host.
 ### Runtime and packaging
 
 - The compiler is Rspack's Rust crates inside `workbench-server`, built with
-  Rspack's nightly toolchain from [phase 4](../server.md#phase-4-previews).
+  Rspack's nightly toolchain ([phase 4](../server.md#previews)).
   Project code never runs in the server, the extension host or the capture
   renderer; it runs in the Node evaluator
   ([processes and connections](../server.md#processes-and-connections)).
 - The installed extension downloads no compiler, and projects install none.
 
-Today the compiler runs in the Node preview worker, through Rspack's
-JavaScript API:
-
-- The worker runs on the
-  [bundled Electron runtime](../capture.md#bundled-electron-runtime) in Node
-  mode where that runtime is used, otherwise on the host's Node.
-- Rspack 2 is published as ES modules only. The CommonJS worker loads it
-  through Node 24's `require` of ES modules.
-- `NAPI_RS_NATIVE_LIBRARY_PATH` is scoped to loading the bundled Rspack
-  binding ([rspack.cjs](../../server/node/preview/rspack.cjs)). Other napi-rs
-  modules share that environment key and must resolve their own bindings.
-- Each platform VSIX bundles the matching pinned Rspack native binding, as it
-  does esbuild, and both, whose separate jobs are listed below.
+The compiler is [compiler.rs](../../server/src/compiler.rs) in
+`workbench-server`. Each profile's Rspack compiler belongs to
+its own builder task, which applies entries, generated modules and file
+changes in batches and keeps a snapshot of what serving needs from each
+build. Rspack's Rust builder needs three things the JavaScript one supplies:
+webpack's default `./src` entry is replaced by an empty module, the `web`
+target's HTTP externals (remote URLs a stylesheet imports) are added, and
+`splitChunks: { chunks: "all" }` is the split-chunks plugin with Rspack's
+development defaults.
 
 ### What runs in the Node evaluator
 
 Evaluating project code is the Node evaluator's job, not the compiler's.
-Today these jobs keep esbuild, so the VSIX ships both compilers
-([finding 11](../../labs/rspack-pipeline/README.md#findings)):
+The evaluator is one long-lived Node process per space
+([node.rs](../../server/src/node.rs),
+[evaluator/](../../server/node/src/modules/evaluator/index.ts)), started on
+first need and reached over stdin and stdout with one JSON request per line:
 
-| Job | Where and why |
+| Job | How |
 | --- | --- |
-| Evaluating definitions and `workbench.config.ts` | Project code, so the Node evaluator runs it. Today it is a Node CommonJS bundle built by esbuild with packages external and only the `@canonic2/workbench` plugin; it runs no project plugins and needs no hot updates. Listing pages bundles every definition that needs evaluating in one build ([page listing](performance.md#page-listing)) |
-| Workbench browser UI and docs page script | Browser-native JavaScript/CSS loaded or copied unchanged. UI delivery has no compiler or bundler dependency; project-content compilation follows the contracts above |
+| Evaluating definitions and `workbench.config.ts` | esbuild bundles each with packages external and only the `@canonic2/workbench` plugin, and Node runs it. A definition whose list fields are literals is read in Rust and needs no evaluation. The config returns as data |
+| A project's JavaScript loaders | One module at a time, with the common parts of the webpack loader context |
+| Vue single-file components | Workbench's bundled `@vue/compiler-sfc` returns the script and each style block ([Vue adapter](../adapters/vue.md#build)) |
+| Astro rendering | The project's Astro through its container, with the state's request mocks ([Astro adapter](../adapters/astro.md#build)) |
+| Workbench browser UI and docs page script | Not the evaluator: browser-native JavaScript/CSS loaded or copied unchanged |
 
-The portable build and the export's docs examples use an Rspack production
+The portable build and the export's docs examples use a production
 compiler with the same format handling and project plugins
 ([plugins](plugins.md#portable-output)).
 
 ## Status
 
-Implemented in [pipeline.ts](../../server/node/src/modules/preview-pipeline/pipeline.ts)
-and [portable.ts](../../server/node/src/modules/preview-pipeline/portable.ts). Gaps:
+Implemented in [compiler.rs](../../server/src/compiler.rs) and its modules,
+with portable builds in [portable.rs](../../server/src/compiler/portable.rs).
+Gaps:
 
 - Live builds have no source maps. The lab measured builds without them, and
   turning them on is not yet measured.
-- The first page after a restart waits for every entry to rebuild
+- The first page after a restart waits for every entry to build
   ([open questions](#open-questions)).
 - An entry added while pages are open changes the entry set
   ([open questions](#open-questions)).
+- The compiler's memory, and the persistent cache's growth over long
+  sessions, are unmeasured ([open questions](#open-questions)).
 
 ## First-page design constraints
 

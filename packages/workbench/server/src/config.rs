@@ -3,14 +3,22 @@
 //! reader (`server/node/config.js` with `contracts/manifest.js`). Parsing and
 //! rules are pure; `read` alone touches the filesystem. Phase 2 of the
 //! server's move into Rust (specs/server.md).
+pub(crate) mod edit;
 mod js;
 mod manifest;
 mod read;
 mod sizes;
 mod yaml;
 
+pub(crate) use sizes::page_sizes;
+
 use anyhow::{Result, bail};
 use std::path::Path;
+
+/// An object’s keys in JavaScript’s order, as the browser reads the answer.
+pub(crate) fn ordered(map: serde_json::Map<String, serde_json::Value>) -> serde_json::Value {
+    serde_json::Value::Object(js::ordered(map))
+}
 
 /// The resolved config of a space, as JSON, or `null` without a workbench.yaml.
 ///

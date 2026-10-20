@@ -15,9 +15,9 @@ pub(crate) struct Response {
 }
 #[derive(Serialize)]
 pub(crate) struct Listed {
-    file: String,
-    docs: bool,
-    entry: Result<String, String>,
+    pub(crate) file: String,
+    pub(crate) docs: bool,
+    pub(crate) entry: Result<String, String>,
 }
 impl Response {
     pub(crate) fn waiting(timings: Value) -> Self {
@@ -43,6 +43,20 @@ impl Response {
         (!self.needs_evaluator && !self.reuse_answer)
             .then(|| serde_json::to_string(&self.records).ok())
             .flatten()
+    }
+
+    /// The listed records of a complete answer.
+    pub(crate) fn records(&self) -> &[Listed] {
+        &self.records
+    }
+
+    pub(crate) fn timings(&self) -> &Value {
+        &self.timings
+    }
+
+    /// Whether the answer is the one the request’s cached generation names.
+    pub(crate) fn reuses(&self) -> bool {
+        self.reuse_answer
     }
 
     /// Whether the evaluator must be supplied before this request can be answered.

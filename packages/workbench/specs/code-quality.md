@@ -96,7 +96,7 @@ and capture behavior. The detailed contracts remain in [modules](modules.md),
 
 | Area | Contract |
 | --- | --- |
-| Toolchain | Pin stable Rust 1.99.0 with rustfmt, Clippy and LLVM tools; commit `Cargo.lock` |
+| Toolchain | Pin Rspack's own toolchain for the pinned crates, `nightly-2026-04-16`, with rustfmt, Clippy, LLVM tools and the standard library's source; commit `Cargo.lock`, whose Rspack entries follow Rspack's own lockfile at the pinned release |
 | Formatting | Use rustfmt defaults |
 | Lint | Check every target and feature with Clippy and `-D warnings` |
 | Rust policy | Forbid unsafe code; warn on unreachable public items, Clippy pedantic, production unwraps and `mod_module_files`; deny broken and private rustdoc links |
@@ -150,8 +150,23 @@ own license, warn on duplicate versions, deny wildcard versions and unknown
 Git/registry sources, and check advisories. Package-specific license
 exceptions permit `Apache-2.0 WITH LLVM-exception` for `ar_archive_writer`, used
 by SWC's stacker/psm build dependencies; `CC0-1.0` for `notify` and `ISC` for
-`inotify` and `inotify-sys`, the file watcher and its Linux backend; and
-`BSD-3-Clause` for `matchit`, the HTTP router's path matcher.
+`inotify` and `inotify-sys`, the file watcher and its Linux backend;
+`BSD-3-Clause` for `matchit`, the HTTP router's path matcher; and, one crate
+each, the licenses of Rspack's compiler dependencies, the same crates Rspack's
+published native binding is built from: `MPL-2.0` for Lightning
+CSS and its parsers (`lightningcss`, `lightningcss-derive`, `cssparser`,
+`cssparser-color`, `cssparser-macros`, `dtoa-short`, `parcel_selectors`,
+`static-self`, `static-self-derive`, `smartstring`), `Zlib` (`foldhash`,
+`foldhash-portable`, `libz-rs-sys`, `zlib-rs`, `slotmap`), `ISC` (`hmac-sha256`,
+`is_ci`, `libloading`), `BSD-2-Clause` (`Inflector`, `pnp`), `BSD-3-Clause`
+(`swc_sourcemap`), `BSD-2-Clause-Patent` (`ustr-fxhash`), `BSL-1.0`
+(`xxhash-rust`) and `Apache-2.0 WITH LLVM-exception` (`dragonbox_ecma`); and
+`ISC` for `ring`, `rustls-webpki` and `untrusted` and `BSD-3-Clause` for
+`subtle`, the TLS the implementation proxies use; and `BSD-3-Clause` for
+`encoding_rs`, which the design export's PDF library reads text encodings with. The
+advisory RUSTSEC-2026-0235 is ignored for `rkyv` 0.7, which only Lightning
+CSS's source-map crate uses, on archives it wrote itself; 0.7 has no fixed
+release.
 
 Runtime dependencies retain exact manifest pins to align parser inputs with
 the planned compiler-host evaluation. Test dependencies use the same tools

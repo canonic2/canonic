@@ -1,15 +1,46 @@
-/* The implementation proxy: everything passes through, documents gain the
-   bridge, and nothing the implementation sends keeps it out of the frame. */
+/* The implementation proxies, in the Workbench server: a URL lens is framed
+   through one, everything passes through, documents gain the bridge, and
+   nothing the implementation sends keeps it out of the frame. */
 
 var test = require('node:test');
 var assert = require('node:assert');
+var fs = require('node:fs');
 var http = require('node:http');
 var net = require('node:net');
+var os = require('node:os');
+var path = require('node:path');
 
-var proxy = require('./proxy');
+var server = require('./server');
 
-var BRIDGE = 'http://127.0.0.1:3579/_workbench/preview-bridge.js';
-var TAG = '<script src="' + BRIDGE + '"></script>';
+function getJson(port, route) {
+  return new Promise(function (resolve, reject) {
+    http.get({ host: '127.0.0.1', port: port, path: route, agent: false }, function (res) {
+      var body = '';
+      res.on('data', function (chunk) { body += chunk; });
+      res.on('end', function () { resolve(JSON.parse(body)); });
+    }).on('error', reject);
+  });
+}
+
+/* A space whose URL lens is `implementation`, as the canvas reads it: the
+   config answers with the implementation at its proxy. */
+async function proxyClient(implementation) {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-proxy-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\nimplementations:\n  dev:\n    label: Dev\n    kind: url\n    base: ' + implementation + '\n');
+  var running = await server.start({ root: root, capture: { close: function () {} } });
+  async function proxied() {
+    var config = await getJson(running.port, '/_workbench/config');
+    return config.implementations.dev;
+  }
+  var first = await proxied();
+  return {
+    tag: '<script src="http://127.0.0.1:' + running.port + '/_workbench/preview-bridge.js"></script>',
+    origin: new URL(first.base).origin,
+    upstream: first.upstream,
+    proxied: proxied,
+    close: function () { return running.close().then(function () { fs.rmSync(root, { recursive: true, force: true }); }); },
+  };
+}
 
 function upstream() {
   var seen = [];
@@ -74,22 +105,22 @@ function request(address, options) {
 
 async function setup() {
   var up = await upstream();
-  var proxies = proxy.create({ bridge: function () { return BRIDGE; } });
-  var address = await proxies.address(up.origin + '/iframe.html?id=button--primary');
-  var origin = new URL(address).origin;
+  var proxies = await proxyClient(up.origin);
+  var origin = proxies.origin;
+  var address = origin + '/iframe.html?id=button--primary';
   return {
-    up: up, proxies: proxies, address: address, origin: origin,
+    up: up, proxies: proxies, address: address, origin: origin, tag: proxies.tag,
     close: function () { return proxies.close().then(function () { up.server.closeAllConnections(); up.server.close(); }); },
   };
 }
 
-test('moves an address to its proxy and reuses one proxy per origin', async function () {
+test('a URL lens is framed through its proxy, one per origin, keeping its own address', async function () {
   var made = await setup();
   try {
-    assert.match(made.address, /^http:\/\/127\.0\.0\.1:\d+\/iframe\.html\?id=button--primary$/);
+    assert.match(made.origin, /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.notStrictEqual(made.origin, made.up.origin);
-    assert.strictEqual(await made.proxies.address(made.up.origin), made.origin);
-    assert.deepStrictEqual(made.proxies.origins(), [made.origin]);
+    assert.strictEqual(made.proxies.upstream, made.up.origin);
+    assert.strictEqual(new URL((await made.proxies.proxied()).base).origin, made.origin);
   } finally { await made.close(); }
 });
 
@@ -98,7 +129,7 @@ test('puts the bridge first in a framed document and lifts frame blockers', asyn
   try {
     var answer = await request(made.address, { headers: { 'Sec-Fetch-Dest': 'iframe', 'Accept-Encoding': 'gzip' } });
     assert.strictEqual(answer.status, 200);
-    assert.ok(answer.body.indexOf('<head>' + TAG + '<title>') !== -1, answer.body);
+    assert.ok(answer.body.indexOf('<head>' + made.tag + '<title>') !== -1, answer.body);
     assert.strictEqual(Number(answer.headers['content-length']), Buffer.byteLength(answer.body));
     assert.strictEqual(answer.headers['content-security-policy'], undefined);
     assert.strictEqual(answer.headers['x-frame-options'], undefined);
@@ -163,85 +194,14 @@ test('passes WebSocket upgrades through both ways', async function () {
 });
 
 test('answers 502 when the implementation is not running', async function () {
-  var proxies = proxy.create({ bridge: function () { return BRIDGE; } });
   var closed = net.createServer();
   await new Promise(function (resolve) { closed.listen(0, '127.0.0.1', resolve); });
   var dead = 'http://127.0.0.1:' + closed.address().port;
   await new Promise(function (resolve) { closed.close(resolve); });
+  var proxies = await proxyClient(dead);
   try {
-    var answer = await request(await proxies.address(dead + '/'));
+    var answer = await request(proxies.origin + '/');
     assert.strictEqual(answer.status, 502);
     assert.match(answer.body, /isn’t answering/);
-  } finally { await proxies.close(); }
-});
-
-/* An owned process: a server on a local socket that the proxy starts on its
-   first request, telling it the proxy's own port. */
-function ownedUpstream() {
-  var dir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'wb-proxy-'));
-  var socket = require('node:path').join(dir, 'owned.sock');
-  var seen = [];
-  var starts = [];
-  var server = http.createServer(function (req, res) {
-    seen.push({ url: req.url, headers: req.headers });
-    res.writeHead(200, { 'Content-Type': req.url === '/iframe.html' ? 'text/html' : 'text/javascript' });
-    res.end(req.url === '/iframe.html' ? '<html><head></head><body>Acme</body></html>' : 'export default 1;');
-  });
-  server.on('upgrade', function (req, sock) {
-    seen.push({ url: req.url, headers: req.headers, upgrade: true });
-    sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
-    sock.on('data', function (chunk) { sock.write(chunk); });
-  });
-  function socketOf(port) {
-    starts.push(port);
-    if (server.listening) return socket;
-    return new Promise(function (resolve) { server.listen(socket, function () { resolve(socket); }); });
-  }
-  return {
-    seen: seen, starts: starts, socketOf: socketOf,
-    close: function () { server.closeAllConnections(); server.close(); require('node:fs').rmSync(dir, { recursive: true, force: true }); },
-  };
-}
-
-test('an owned process is started by the first request and reached over its socket', async function () {
-  var owned = ownedUpstream();
-  var proxies = proxy.create({ bridge: function () { return BRIDGE; } });
-  try {
-    var origin = await proxies.owned('storybook', owned.socketOf);
-    var port = Number(new URL(origin).port);
-    assert.deepStrictEqual(owned.starts, [], 'nothing starts until a request needs it');
-    var page = await request(origin + '/iframe.html', { headers: { 'Sec-Fetch-Dest': 'iframe' } });
-    assert.strictEqual(page.status, 200);
-    assert.ok(page.body.indexOf('<head>' + TAG) !== -1, 'documents still get the bridge');
-    assert.strictEqual(owned.starts[0], port, 'the process is told the proxy’s port');
-    assert.strictEqual(owned.seen[0].headers.host, 'localhost:' + port);
-    assert.strictEqual((await request(origin + '/@vite/client')).body, 'export default 1;');
-    assert.strictEqual(await proxies.owned('storybook', owned.socketOf), origin, 'one proxy per owned process');
-    assert.ok(proxies.origins().indexOf(origin) !== -1);
-
-    var echoed = await new Promise(function (resolve, reject) {
-      var socket = net.connect(port, '127.0.0.1', function () {
-        socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1:' + port + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
-      });
-      var received = '';
-      socket.on('data', function (chunk) {
-        received += chunk;
-        if (/\r\n\r\n$/.test(received) && received.indexOf('ping') === -1) socket.write('ping');
-        if (received.indexOf('ping') !== -1) { socket.destroy(); resolve(received); }
-      });
-      socket.on('error', reject);
-    });
-    assert.match(echoed, /^HTTP\/1\.1 101/);
-    assert.ok(owned.seen.some(function (entry) { return entry.upgrade; }));
-  } finally { await proxies.close(); owned.close(); }
-});
-
-test('an owned process that cannot start answers 502 with its own reason', async function () {
-  var proxies = proxy.create({ bridge: function () { return BRIDGE; } });
-  try {
-    var origin = await proxies.owned('storybook', function () { return Promise.reject(new Error('Storybook isn’t installed in /acme.')); });
-    var answer = await request(origin + '/iframe.html');
-    assert.strictEqual(answer.status, 502);
-    assert.strictEqual(answer.body, 'Storybook isn’t installed in /acme.');
   } finally { await proxies.close(); }
 });

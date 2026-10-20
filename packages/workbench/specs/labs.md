@@ -16,7 +16,7 @@ decision already made, or in place of behavioral tests for product code.
 
 This spec owns experiment design, execution, evidence and confirmation. Feature
 specs own product behavior and any agreed budgets: [TypeScript previews](previews.md)
-for previews and the worker, the [preview pipeline](preview-pipeline/README.md)
+for previews and the Node evaluator, the [preview pipeline](preview-pipeline/README.md)
 for compilation, delivery, hot updates, readiness and performance targets,
 [core](core.md) for the canvas, frames and selection, [Storybook](storybook.md)
 for story reuse and [capture](capture.md) for screenshots. Lab findings inform those contracts;
@@ -43,7 +43,8 @@ its own README describing what it generates and the pinned dependencies.
   below. `extension/.vscodeignore` excludes `labs/` from the VSIX. Product code, tests,
   packaging and scripts never import, run or name anything in `labs/`.
 - Runners may load the shipping modules read-only, such as
-  `server/node/preview/compiler.cjs`, `server/node/preview/worker.cjs` and `server/node/server.js`. Variant logic
+  `server/node/preview/compiler.cjs` and `server/node/server.js`, and the
+  `workbench-server` binary. Variant logic
   lives in the lab. A lab changes no product code; the winning variant is
   re-implemented in the product with its own tests.
 - Generated projects, installed fixture dependencies, build output, compiler
@@ -58,7 +59,7 @@ its own README describing what it generates and the pinned dependencies.
   record, with the source revision that produced them. The feature spec
   describes the chosen behavior without depending on the lab.
 
-Every runner closes the servers, compile workers, browsers and child processes
+Every runner closes the servers, compilers, browsers and child processes
 it starts, on success, failure and cancellation, and reports cleanup failures.
 
 ## Fixtures and selected projects
@@ -128,7 +129,7 @@ Name every timed boundary from this list, or define a new one in the plan:
 
 | Boundary | Starts | Stops |
 | --- | --- | --- |
-| Compile | The worker receives a descriptor or page request | The response is written |
+| Compile | The server receives a descriptor or page request | The response is written |
 | Module load | The preview frame requests its module | The preview runtime reports `started` |
 | Mount | Runtime `started` | `mount.completed` |
 | Readiness | `mount.completed` | `__workbenchReady` |
@@ -143,9 +144,9 @@ it does not change the result.
 
 State each cell's cache state:
 
-- **Cold:** a new compile worker, an empty preview disk cache and a new browser
-  profile.
-- **Disk-warm:** a new worker and a new browser profile, with the preview disk
+- **Cold:** a new compiler process, an empty preview disk cache and a new
+  browser profile.
+- **Disk-warm:** a new compiler process and a new browser profile, with the preview disk
   cache populated by an earlier run of the same variant.
 - **Browser-warm:** the same browser profile, with HTTP and code caches
   populated, and a new frame.
@@ -183,14 +184,14 @@ checks, on every run:
   between hosts. A result that the decision relies on is confirmed in the
   VS Code webview before adoption.
 - Record bytes transferred and decoded per frame, scripts evaluated, long
-  tasks during readiness, compile-worker CPU and peak RSS, JS heap per
+  tasks during readiness, compiler-process CPU and peak RSS, JS heap per
   retained frame and preview disk-cache size where the plan names them.
 - Take at least ten samples per cell for latencies, after a declared warmup,
   with variants and sequences alternated in a seeded order. Report sample
   counts, p50, p95 and maximum by nearest rank, and keep the raw samples. Ten
   samples do not establish stable tails; label p95 as exploratory unless the
   plan collects more.
-- Keep first-use costs, such as the first compile after a worker starts or
+- Keep first-use costs, such as the first compile after a compiler starts or
   the first frame of a project, as separate cells instead of folding them
   into warm averages.
 - Avoid builds, test suites or other heavy work on the host while measuring.
@@ -249,7 +250,7 @@ product code. Runner defects must not appear as product timings or verdicts.
   before beginning the next sequence.
 - A declared setup retry is bounded and recorded. Do not retry failing
   correctness or timing samples until a favorable result appears.
-- Close every server, worker, browser and child process on completion, failure
+- Close every server, compiler, browser and child process on completion, failure
   and cancellation; report cleanup failures.
 
 ### Before and during a run set

@@ -19,7 +19,8 @@ nothing else: it has no design lens.
 compilation, adapters, and environments are in
 [TypeScript previews](previews.md); lenses are in [lenses](lenses.md) and
 [implementations](implementations.md). The code is the
-[docs module](../server/node/src/modules/docs).
+[docs module](../server/src/docs.rs), with its use in a space in
+[space/docs.rs](../server/src/space/docs.rs).
 
 ## Purpose and scope
 
@@ -404,7 +405,7 @@ problems update when they arrive.
   before applying the config, and Node tests check it. Off a server
   (`file://`) the module can't load and the canvas shows no docs lenses.
 - **Docs entries.** The server keeps one entry per Markdown file, naming the
-  page it belongs to ([pages.ts](../server/node/src/modules/docs/pages.ts)); the first page
+  page it belongs to ([docs.rs](../server/src/docs.rs)); the first page
   to claim a file has it. Docs are served at the Markdown's path in the lens
   `?lens=` names, and the routes take the Markdown as `page`. Handoffs, the
   source menu, and export references use the owning page.
@@ -465,7 +466,7 @@ Client-project rollout is separate from this product contract.
   including attached comments/decorators, without introducing a second parser.
   The compiler lists export names. Re-exports and multiline templates require
   dedicated source-location handling; see
-  [export-source.ts](../server/node/src/modules/docs/export-source.ts).
+  [export_source.rs](../server/src/docs/export_source.rs).
 - Docs render as content through the [dedicated renderer contract](rendering-flow.md).
   A docs page or example does not initialize Workbench navigation, toolbar or canvas.
   Project docs/example compilation remains a backend content service; UI asset
@@ -503,36 +504,41 @@ renderer combination or source-extraction edge case. See
   and the server places them by title, in a **Docs** collection when the title has
   no `/`.
 - **Astro.** An `astro` lens takes a directory; each `.astro` file renders in the
-  worker as an Astro preview's state does, and the bundle hands the page its
+  Node evaluator as an Astro preview's state does, and the bundle hands the page its
   HTML with asset URLs made absolute against the bundle.
-- **Portable viewer.** [portable.ts](../server/node/src/modules/docs/portable.ts) writes each page
+- **Portable viewer.** [portable.rs](../server/src/docs/portable.rs) writes each page
   in each lens as a static page under `browser/docs/`: the production bundle,
   the authored page and mount scripts copied unchanged, Show code as JSON per example, and the images
   the Markdown references; [viewer.js](../ui/viewer/viewer.js) lists docs
   pages, swaps the State menu for a Lens menu, and follows docs links.
-- **Compilation.** `Compiler.docsExamples` lists a lens's examples: a directory's
-  files, or a file's named exports from a bundled build with packages external,
-  so `export * from` re-exports are listed. The pipeline builds each lens as an
-  entry, and the portable export as a production bundle. A listing is kept until
-  a file it read changes. Worker routes: `/docs/index`, and `/docs/bundle`,
-  which answers with the lens's preview module.
+- **Compilation.** The server's compiler lists a lens's examples
+  ([docs.rs](../server/src/compiler/docs.rs)): a directory's files, or a
+  file's named exports read statically with SWC, following `export * from`
+  through local files with packages closed
+  ([exports.rs](../server/src/compiler/exports.rs)). The compiler builds each
+  lens as an entry, and the portable export as a production bundle. A listing
+  is kept until a file it read changes. Compiler routes under
+  `/_workbench/previews/`: `docs/index`, and `docs/bundle`, which answers
+  with the lens's preview module.
 - **Serving.** A page's Markdown is served as its docs at the Markdown's path
   (`?lens=`, `?state=`), with its panels pending; any other `.md` is served as
   a file.
   `/_workbench/docs/bundle` answers what the page mounts (the module, its
   stylesheet, the lens's example IDs, and the page's revision),
   `/_workbench/docs/source` Show code, and `/_workbench/docs/revision` the
-  page's revision. `eagerPreviews` on `server.start` warms the worker and
-  every docs bundle (`warmDocs` in [server.js](../server/node/server.js)), and
-  `onCatalogChanged` tells the host when a listing changes the problems.
+  page's revision. `eagerPreviews` on the host's `start` (the server's
+  `--eager-previews`) warms every docs bundle, and the server's `catalog`
+  notice, `onCatalogChanged` on the host, says when a listing changes the
+  problems.
   Workbench browser assets currently use `/_workbench/ui/src/` and
   `/_workbench/contracts/src/` as unchanged JavaScript/CSS
-  ([browser-modules.ts](../server/node/src/server/browser-modules.ts)). This asset
+  ([files.rs](../server/src/serve/files.rs)). This asset
   delivery is distinct from compiling project docs/examples and does not justify
   mounting the application shell inside the docs content viewport.
-- **The page.** [docs-service.ts](../server/node/src/modules/docs/docs-service.ts) decides each
-  panel; [render-markdown.ts](../server/node/src/modules/docs/render-markdown.ts) renders the
-  Markdown; [docs-page.js](../ui/src/modules/docs/page/docs-page.js) and
+- **The page.** [service.rs](../server/src/docs/service.rs) decides each
+  panel; [render.rs](../server/src/docs/render.rs) renders the Markdown with
+  pulldown-cmark, and [highlight.rs](../server/src/docs/highlight.rs) highlights
+  code with syntect under highlight.js class names; [docs-page.js](../ui/src/modules/docs/page/docs-page.js) and
   [mount-examples.js](../ui/src/modules/docs/page/mount-examples.js) mount the examples,
   run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and apply pushed Markdown/example updates with scroll position kept.
 - **The canvas.** The host selects the `wb-canvas` reading mode in
@@ -550,7 +556,7 @@ renderer combination or source-extraction edge case. See
   page's own file, and each docs lens's example source join the page's code
   entries; the handoff names the page, the docs lens, the Markdown, and the
   examples in view with their files; the export plans docs references
-  separately (`docsExportPlan` in [server.js](../server/node/server.js)) through the helper's
+  separately ([plan.rs](../server/src/export/plan.rs)) through the helper's
   `fullPage` and `selector` options
   ([capture-helper/main.cjs](../capture/app/main.cjs)).
 - **Problems.** Missing Markdown, placement problems with their line,
@@ -577,15 +583,14 @@ renderer combination or source-extraction edge case. See
 
 ### Verification points
 
-- [server/node/src/modules/docs/](../server/node/src/modules/docs) `*.test.ts`: Markdown reading,
-  rendering, example IDs, placement, export source, the docs service with fake
-  I/O, the canvas geometry
+- The server's `docs` module tests: Markdown reading, rendering,
+  highlighting, placement, export source, portable pages and the docs service
+  with fake I/O; the canvas geometry
   ([docs-layout.test.js](../ui/src/modules/docs/canvas/docs-layout.test.js)), and
   which lens a page shows ([lenses.test.ts](../contracts/src/docs/lenses.test.ts)).
 - [preview.test.js](../ui/legacy/preview.test.js): the lens switcher and the
   size switcher in a docs lens, with the canvas's own code.
-- [browser-modules.test.ts](../server/node/src/server/browser-modules.test.ts): serving
-  and caching browser modules.
+- [files.rs](../server/src/serve/files.rs) tests: serving browser modules.
 - [preview-docs.test.js](../server/node/preview-docs.test.js): docs bundles (directory and
   file lenses, `export *`, environments, rebuilds, request validation) and the
   server (pages in each lens, Show code, revision, problems, untrusted
@@ -600,4 +605,4 @@ renderer combination or source-extraction edge case. See
 - [manifest.test.js](../contracts/manifest.test.js),
   [address.test.js](../ui/legacy/address.test.js),
   and [config.test.js](../server/node/config.test.js): the schema and the address.
-- [handoff.test.js](../server/node/handoff.test.js): the handoff prompt through a docs lens.
+- [handoff tests](../server/src/handoff/tests.rs): the handoff prompt through a docs lens.

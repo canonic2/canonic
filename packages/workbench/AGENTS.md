@@ -11,7 +11,7 @@ with annotations, screenshots and agent handoffs. Projects supply
 | Location | Owner |
 | --- | --- |
 | `extension/` | VS Code activation, commands, sidebar/webview integration and extension manifest |
-| `server/` | Rust Cargo package and page index; `server/node/` owns the shipping Node HTTP server, compiler worker and host services |
+| `server/` | Rust Cargo package: the Workbench server (HTTP, project services, page index and preview compiler); `server/node/` owns its host, the standalone command and the Node evaluator |
 | `capture/` | Electron screenshot helper (`app/`), runtime acquisition (`runtime/` bundle), window capture and native stream lifecycle |
 | `ui/` | Browser-native JavaScript controllers, Web Components (`src/components/`), themes (`src/theme/`), canvas/content documents (`legacy/`), preview adapters (`preview/`) and portable viewer (`viewer/`) |
 | `sdk/` | Published `@canonic2/workbench` definition helpers and authoring types |
@@ -24,10 +24,12 @@ with annotations, screenshots and agent handoffs. Projects supply
 
 Read `ui/legacy/README.md` before changing the browser shell, and
 `specs/modules.md` for the ownership and dependency contracts. `server/README.md`
-owns Rust layout and tooling. The shipping server and compiler run in Node,
-behind the Rust front door (`workbench-server serve`), which also keeps the
-page index resident. `specs/server.md` plans the rest of the server's move
-into Rust in phases.
+owns Rust layout and tooling. `workbench-server serve` is a space's whole
+HTTP server: it owns the public port, keeps the page index resident, compiles
+previews with Rspack's Rust crates and answers every route; project JavaScript
+runs in its Node evaluator. Its host (`server/node/src/modules/host/`) answers
+what belongs to the editor and the capture helper over stdio; `specs/server.md`
+owns the process model and protocol.
 
 ## Engineering contracts
 
@@ -102,9 +104,10 @@ Node dependencies and no dependency install scripts.
 | VSIX packaging | `pnpm run package` or `pnpm run package:all <target>` |
 | Locked dependencies | `pnpm install --frozen-lockfile` |
 
-Tests build the debug Rust index. Packaging builds `workbench-server` with
-Rust 1.99.0 and locked dependencies for the VSIX target, bundles the compilers
-and Electron runtime, and assembles a temporary product tree with the extension
+Tests build the debug Rust executable. Packaging builds `workbench-server` with
+the toolchain `server/rust-toolchain.toml` pins (Rspack's nightly) and locked
+dependencies for the VSIX target, bundles esbuild for the Node evaluator and
+the Electron runtime, and assembles a temporary product tree with the extension
 manifest. Only `server/bin/<target>/` ships from Rust output; Cargo sources and
 `target/` do not. Cross builds need the Rust target and linker or an explicit
 `WORKBENCH_SERVER_BINARY`. Electron downloads are roughly 120–155 MB per target.

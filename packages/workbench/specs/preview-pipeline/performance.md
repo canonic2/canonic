@@ -33,9 +33,9 @@ Feature specs own the behavior that must not change while making it faster.
 
 ### Work is shared per project
 
-- A space root has one compile worker, shared by every native page in it.
-  Opening another page, state, size or lens in the same space never starts
-  another compiler.
+- A space root has one compiler per profile in the server, and at most
+  one Node evaluator, shared by every native page in it. Opening another
+  page, state, size or lens in the same space never starts another compiler.
 - Code shared by a project's native pages is compiled once per project and
   adapter, and loaded once per browser session. Its URLs stay stable while
   its content is unchanged, so the browser's HTTP and code caches keep it
@@ -65,13 +65,16 @@ Feature specs own the behavior that must not change while making it faster.
 
 ### First open and edits
 
+- Preview and docs entry chunks preload together while their stylesheets load.
+  They execute in dependency order after styles are available, so examples that
+  read computed styles during initialization retain that behavior.
 - The page list appears from discovery without waiting for any page to
   compile. Discovery reads only what it needs to list pages.
 - The complete page list of Workbench definitions (every page's title,
   group, states and icon) shows on the canvas's first paint, not filled in
   progressively, and its time does not grow with the number of pages.
   The story lists of pages mapped to Storybook are outside this requirement.
-- The first page compiles on request. Compilation after a worker restart
+- The first page compiles on request. Compilation after a server restart
   uses the persisted build cache when its inputs are unchanged.
 - The time to the first page after the server starts does not grow with the
   number of pages in the project. The first page waits for its own
@@ -115,7 +118,7 @@ A faster path must keep every existing contract, in particular:
 
 ### Resource bounds
 
-Retained frames, the compile worker's memory, the in-memory and on-disk build
+Retained frames, the compilers' and the Node evaluator's memory, the in-memory and on-disk build
 caches, and any prepared spare runtimes each have a stated bound and an
 eviction rule in the owning feature spec. Speed achieved by unbounded
 retention does not meet these requirements.
@@ -172,8 +175,8 @@ claim it. Development builds of a framework run inside project time.
 
 ### Diagnostics
 
-Every selection of a native page records, per phase: worker queue and work
-time, module load, mount, each readiness wait and frame promotion. They are
+Every selection of a native page records, per phase: server work time,
+module load, mount, each readiness wait and frame promotion. They are
 logged through the existing `preview.request.*` and `preview.browser.phase`
 events, correlated by page and state, so that a slow selection in someone's
 editor can be broken down from the Workbench log without a profiler.
@@ -203,7 +206,7 @@ compiler contract.
 ### Page listing
 
 The server's [native page index](page-index.md) lists pages independently of
-the compile worker. Its saved-state, evaluation and failure contracts are
+the compilers and the Node evaluator. Its saved-state, evaluation and failure contracts are
 owned there. The measurements below distinguish the lab prototype from the
 shipping-server boundary.
 
@@ -257,9 +260,9 @@ The 200 ms complete-list target is not met on the 10,002-definition fixture.
 Process startup, saved-answer transport, collection assembly and the full
 config response add to native work. Canvas first paint and the VS Code
 webview boundary require a separate measurement; these server probes do not
-establish that target. The front door's resident index removes the process
+establish that target. The server's resident index removes the process
 per request and, while nothing changed, the disk check; it has not been
-measured yet ([server](../server.md#phase-1-the-front-door)).
+measured yet ([server](../server.md#the-resident-index-and-watcher)).
 
 ### First page
 
@@ -281,6 +284,20 @@ a faster list alone does not establish success.
   through the shipping server and the VS Code webview, and the measured
   values, conditions and Workbench revision are recorded in this spec's
   status.
+
+### Acme docs navigation, 2026-10-19
+
+On macOS x64, an isolated server selected `acme` from the root `workbench.yaml`.
+The repository's headless Chrome harness used a 1900 × 1100 viewport and opened
+Colors, Typography and Button through the `html` docs lens, then returned to each.
+At public base `3e2a86e`, first visits to Typography/Button took 261/286 ms;
+with entry-script preloads they took 215/170 ms. Resource traces confirmed
+parallel chunk fetches during the stylesheet wait, with one fetch per chunk.
+These single samples demonstrate the waterfall correction, not a stable speed
+ratio. Fresh-server Colors startup varied from 1.4 to 2.9 seconds, including
+compiler startup. Retained returns took 17–35 ms and reused their documents.
+The shell still shows its loading status immediately, including on fast returns.
+This browser probe does not establish VS Code webview latency or other hosts.
 
 ## Open questions
 

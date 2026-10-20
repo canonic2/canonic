@@ -2,8 +2,8 @@
 
 Part of the [preview pipeline](README.md). This spec covers how the Workbench
 server delivers compiler output to preview frames: URLs, caching, the preview
-module that each preview address loads, and which routes skip the compile
-queue.
+module that each preview address loads, and which requests wait for a
+build.
 
 This pipeline compiles/serves the project's previewed content. Generic UI asset
 hosting is separate from this project pipeline and from Workbench UI composition;
@@ -62,23 +62,28 @@ receives pushed updates, so the runtime starts no revision poll
   other work, such as a long compile, an export or an Astro render. A chunk
   that a document is waiting for is answered as soon as it exists.
 - A failure while serving a file is logged and answered with an error status;
-  it does not affect the queue.
+  it does not affect other requests.
 - Preview and docs descriptors wait for the build that contains their entry
   ([compiler](compiler.md#entries)), and for nothing else.
 
 ## Status
 
-Implemented in the Node preview worker, which the Workbench server forwards
-`/_workbench/previews/` to over a loopback TCP port until
-[phase 4](../server.md#phase-4-previews). The worker answers most requests in
-a serial queue; output files, the event stream and preview modules bypass it.
-One gap: preview and docs descriptors are still answered in that queue, so a
-long export or Astro input render delays them.
+Implemented in `workbench-server`, which answers
+`/_workbench/previews/` and `*.workbench.ts(x)` page addresses
+([previews.rs](../../server/src/serve/previews.rs)) once its page tree has
+configured previews ([server](../server.md#previews)); a preview asked for
+first assembles the page tree. Requests are
+answered concurrently, with no serial queue; an Astro render waits only for
+the Node evaluator's answer to it. One gap: preview and docs descriptors
+wait for pre-warming to finish, so after a restart the first descriptor
+waits for every listed entry to build
+([compiler](compiler.md#status)).
 
 ## Verification
 
-[Pipeline tests](../../server/node/src/modules/preview-pipeline/pipeline.test.ts) cover
-compiler output and serving. Shared-runtime isolation and stylesheet updates
-also have [pipeline lab evidence](../../labs/rspack-pipeline/README.md#stage-2-report).
-The remaining descriptor-queue gap must be closed without weakening build
-error reporting or generation checks.
+[preview.test.js](../../server/node/preview.test.js) and
+[preview-docs.test.js](../../server/node/preview-docs.test.js) cover
+compiler output and serving through the server, and the compiler's Rust unit
+tests cover entries, the generated client and HTML modules. Shared-runtime
+isolation and stylesheet updates also have
+[pipeline lab evidence](../../labs/rspack-pipeline/README.md#stage-2-report).

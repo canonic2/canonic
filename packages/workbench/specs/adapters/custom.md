@@ -11,7 +11,8 @@ Part of the [adapters](README.md). User guide:
   `mount(canvas, source, context, environment)` that returns an optional
   cleanup. It is bundled with the project's packages; Workbench installs
   nothing.
-- optional `rules` and `plugins`: Rspack module rules and plugins that apply
+- optional `rules` and `plugins`: Rspack module rules and native plugin
+  capabilities made with the `@canonic2/workbench` helpers, which apply
   only to the compiler building that adapter's previews, after Workbench's
   own and the config's global ones
   ([plugins](../preview-pipeline/plugins.md#project-plugins)).
@@ -24,7 +25,9 @@ share the entry, lifecycle and portable output of the built-ins
 
 ## Project code on the server
 
-The adapter's loaders and plugins, which are JavaScript. The browser mount
+The adapter's JavaScript loaders run in the Node evaluator, one module at a
+time; `builtin:` loaders and plugin capabilities run natively. JavaScript
+plugin objects are configuration problems and do not run. The browser mount
 runs only in the frame.
 
 ## Target
@@ -33,12 +36,19 @@ runs only in the frame.
   it works unchanged with the Rust server.
 - `rules` whose loaders are JavaScript run through the Node evaluator, one
   module at a time, as the [Vue adapter](vue.md#target) proposes.
-- `plugins` cannot run in Rspack's Rust crates. How they are supported is
-  the [open question](README.md#open-questions) on project plugins.
+- Plugin implementations migrate to Rust, preserving their virtual modules,
+  transforms and resolver behavior. Their adapter-specific scope is preserved;
+  they do not require a Node compiler fallback. See the
+  [plugin migration decision](../preview-pipeline/plugins.md#plugin-migration-decision)
+  for required capabilities and verification.
 
 ## Status
 
-Implemented in the Node compile worker (`project.ts`, `options.ts`), covered
-by [preview.test.js](../../server/node/preview.test.js) (custom adapters and
-plugins on the shared path). Not implemented in Rust; the lab's prototype
-builds a plain-module custom adapter without rules or plugins.
+Implemented natively in `workbench-server`'s compiler
+([project.rs](../../server/src/compiler/project.rs),
+[options.rs](../../server/src/compiler/options.rs),
+[plugins.rs](../../server/src/compiler/plugins.rs)), with JavaScript loaders
+in the Node evaluator ([node_loader.rs](../../server/src/compiler/node_loader.rs)).
+Covered by [preview.test.js](../../server/node/preview.test.js): custom
+adapters on the shared path, plugin capabilities and loader rules, and
+JavaScript plugins reported as problems.

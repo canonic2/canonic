@@ -103,25 +103,30 @@ design-system export lists the missing reference screenshots as warnings.
 The [iOS Simulator](ios-simulator.md) and [app window](windows.md) streams use
 a separate native helper and need Screen Recording permission.
 
-## The preview worker
+## The preview compiler
 
-When the space has [TypeScript previews](workbench-previews.md) or
-[docs](docs-pages.md) with examples, the server starts a separate worker
-process that compiles them and runs their project code: definitions, examples,
-`workbench.config.ts`, Rspack plugins and loaders, and Astro rendering. Packaged builds run it on the bundled runtime, so it doesn't need a
-separate Node installation.
+The server compiles [TypeScript previews](workbench-previews.md) and
+[docs](docs-pages.md) examples itself. Project JavaScript that has to run
+while they build runs in a separate Node process, the evaluator: definitions
+that compute their values, `workbench.config.ts`, JavaScript loaders from its
+`rules`, Vue single-file components, and Astro rendering. Packaged builds run
+the evaluator on the bundled runtime, so it doesn't need a separate Node
+installation.
 
-- It starts the first time previews are listed, builds every preview and docs
-  example right away, and stops with the server.
-- If it stops, the next preview request starts a new one.
-- Changing the `previews` key in `workbench.yaml` restarts it with the new
-  settings. With `previews: false`, nothing is compiled and no worker runs:
-  docs show their Markdown, and each example panel says why its example
-  is missing.
+- The compiler builds every preview and docs example as soon as the server
+  has listed your pages, and stops with the server.
+- The evaluator starts the first time a build needs it, and stops with the
+  server. A space whose definitions are plain values and that has no
+  `workbench.config.ts` never starts one.
+- If the evaluator stops, the next build that needs it starts a new one.
+- Changing the `previews` key in `workbench.yaml` replaces the compilers with
+  new ones that use the new settings. With `previews: false`, nothing is
+  compiled and no evaluator runs: docs show their Markdown, and each example
+  panel says why its example is missing.
 
 ## Logs
 
-Errors from the canvas, the screenshot helper, the preview worker, the server,
+Errors from the canvas, the screenshot helper, the preview compiler, the server,
 and handoffs are written to the **Workbench** output log. Run **Workbench: Show Log** to open it.
 
 - VS Code manages the log and its retention. Nothing is written to your project.
@@ -181,7 +186,7 @@ and install **Canonic Workbench** from the Extensions view.
 
 Then run **Developer: Reload Window** in each open project window. Installing
 replaces the files on disk, but running windows, servers, screenshot helpers,
-and preview workers keep the old code until their window reloads. Reloading
+and preview evaluators keep the old code until their window reloads. Reloading
 the canvas or running **Refresh Pages** isn't enough.
 
 ## Uninstalling
@@ -199,11 +204,11 @@ files from a project too, see
 
 ## Running without VS Code
 
-The extension's server runs on its own with Node 24 or later. Find the
+The extension's server runs on its own, started with Node 24 or later. Find the
 installed extension's folder and point the server at a project:
 
 ```sh
-node ~/.vscode/extensions/canonic.canonic-workbench-*/server.js path/to/project
+node ~/.vscode/extensions/canonic.canonic-workbench-*/server/node/server.js path/to/project
 ```
 
 It prints `workbench on http://127.0.0.1:3579/_workbench/` (or the port it

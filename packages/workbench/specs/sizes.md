@@ -420,10 +420,11 @@ menu, and dialogs need a browser check of keyboard use and focus with the
 
 ## Current status
 
-- **Built:** the size model, schema, export sizes, and edits in
-  [src/sizes/](../contracts/src/sizes), with tests beside each; the server reader and
-  writer in [config.js](../server/node/config.js); `/_workbench/sizes` in
-  [server.js](../server/node/server.js); the canvas's size choice, fill axes, keyed
+- **Built:** the browser size model and schema in
+  [src/sizes/](../contracts/src/sizes), with tests beside each; the server's
+  reader in [sizes.rs](../server/src/config/sizes.rs), its edits in
+  [config/edit/](../server/src/config/edit.rs) behind `/_workbench/sizes`, and
+  export sizes in [export/sizes.rs](../server/src/export/sizes.rs); the canvas's size choice, fill axes, keyed
   addresses, and pinned artboard sizes in
   [workbench.js](../ui/legacy/workbench.js) and [zoom.js](../ui/legacy/zoom.js),
   through the [bridge](../ui/src/bootstrap/sizes.js); handoff size lines

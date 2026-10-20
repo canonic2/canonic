@@ -46,7 +46,7 @@ the targets the whole pipeline is measured against.
 | [Page index](page-index.md) | Complete ordered listing, definition parity, saved-state invalidation, process and storage bounds, failure recovery and acceptance evidence |
 | [Performance](performance.md) | Requirements for render, navigation and edits; proposed targets; Workbench versus project time; diagnostics; measured status |
 | [Compiler](compiler.md) | Rspack compilers per project and profile, the fixed entry set, in-memory output, persistent caching, config changes, build errors, packaging and first-page constraints |
-| [Serving](serving.md) | Output URLs and caching, the preview module, stylesheet names, worker routes outside the compile queue |
+| [Serving](serving.md) | Output URLs and caching, the preview module, stylesheet names, which requests wait for a build |
 | [Hot updates](hot-updates.md) | The push channel, edit behavior per format, the reload rule, state kept across edits, build errors and recovery, hidden frames |
 | [Warm runtime](warm-runtime.md) | Pre-warming on project start, warm-document reuse, isolation between previews and resource bounds |
 | [Readiness](readiness.md) | What readiness waits for, phase diagnostics, rendering hidden frames |
@@ -78,20 +78,21 @@ the targets the whole pipeline is measured against.
 
 | Capability | Implementation and evidence boundary |
 | --- | --- |
-| Native page listing | Implemented in `server/` and `server/node/src/modules/page-index/`; [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](performance.md#page-listing) do not establish canvas-paint acceptance |
+| Native page listing | Implemented in `server/` ([catalog.rs](../../server/src/catalog.rs) reads its answer); [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](performance.md#page-listing) do not establish canvas-paint acceptance |
 | Rust engineering gates | Implemented; [code quality](../code-quality.md) owns tools, policy, test conventions and CI enforcement |
-| Rspack compilation and pre-warming | Implemented in the Node preview worker, with Rspack's JavaScript API, esbuild for evaluation and a loopback TCP port; retain their own listing and eager-entry start. The worker moves into the Workbench server at [phase 4](../server.md#phase-4-previews) |
-| Rust compiler host | Prototype in the [instant first page lab](../../labs/instant-first-page/README.md#stage-2-report), reported without meeting the agreed targets; not a shipping compiler or adopted first-page solution |
+| Rspack compilation and pre-warming | Implemented in `workbench-server` with Rspack's Rust crates, one compiler per space and profile, pre-warming every listed preview and docs lens once the page tree configures them; project JavaScript runs in the Node evaluator over stdin and stdout ([server](../server.md#previews), [compiler](compiler.md)). The [instant first page lab](../../labs/instant-first-page/README.md#stage-2-report)'s targets are not yet measured against it |
 
 The implemented page index follows this [design direction](#decisions).
-It lists pages independently of the preview worker; it does not change the
-compiler's entry preparation or pre-warming.
+It lists pages independently of the compilers and the Node evaluator; it
+does not change the compiler's entry preparation or pre-warming.
 
-The Rspack preview pipeline is implemented in [server/node/src/modules/preview-pipeline/](../../server/node/src/modules/preview-pipeline)
-and the preview runtime, canvas and docs page. Each topic's status names what
-remains. The implementation passes the package's tests and the
-[Rspack pipeline lab](../../labs/rspack-pipeline/README.md)'s stage 1 checks
-on the formats fixture, run against the product code. The confirmation run the
+The Rspack preview pipeline is implemented in
+[server/src/compiler.rs](../../server/src/compiler.rs) and its modules, the
+Node evaluator, and the preview runtime, canvas and docs page. Each topic's
+status names what remains. The implementation passes the package's tests.
+The [Rspack pipeline lab](../../labs/rspack-pipeline/README.md)'s stage 1
+checks on the formats fixture have not been run against this
+implementation. The confirmation run the
 [labs methodology](../labs.md#reports-and-decisions) asks for, the lab's
 sequences through the shipping server and the VS Code webview, has not been
 made yet.

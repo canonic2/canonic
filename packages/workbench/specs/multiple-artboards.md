@@ -219,7 +219,7 @@ those proposals do not reopen established support-API limits.
 
 ### Spaces and host transport
 
-- Keep one server/preview worker per space. A canvas coordinator uses the
+- Keep one server, with its preview compilers and Node evaluator, per space. A canvas coordinator uses the
   existing space registry and space-aware host adapters to resolve requests;
   artboard identity includes space ID and manifest location/key. Ephemeral
   server URLs are resolved at runtime, not treated as durable source identity.

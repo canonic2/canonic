@@ -3,7 +3,7 @@ use crate::{config, index, model::Request, serve};
 use anyhow::{Context, Result, bail};
 use std::io::{Read, Write};
 
-const USAGE: &str = "expected: workbench-server index < request.json, workbench-server config <folder> [--space <id>], or workbench-server serve --upstream <port> [--ports <port,...>]";
+const USAGE: &str = "expected: workbench-server serve --root <project> --product <folder> [--ports <port,...>], workbench-server <init|list|check|build> <project> [build-output] [--node <program>] [--product <folder>], workbench-server index < request.json, or workbench-server config <folder> [--space <id>]";
 
 pub(crate) fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -11,6 +11,12 @@ pub(crate) fn run() -> Result<()> {
         Some("index") => index_once(),
         Some("config") => config_once(args),
         Some("serve") => serve::run(serve::Options::parse(args)?),
+        Some(command @ ("init" | "list" | "check" | "build")) => {
+            if !crate::build::run(command, args)? {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         _ => bail!(USAGE),
     }
 }

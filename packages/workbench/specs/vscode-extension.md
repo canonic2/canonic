@@ -3,7 +3,8 @@
 This spec covers the editor host around the [core workbench](core.md). Its
 implementation is in [extension.js](../extension/extension.js), [spaces.js](../server/node/spaces.js), [panel.js](../extension/panel.js),
 [sidebar-view.js](../extension/sidebar-view.js), [startup.js](../extension/startup.js),
-[server.js](../server/node/server.js), and [preview-service.js](../server/node/preview-service.js).
+[server.js](../server/node/server.js), and the [host](../server/node/src/modules/host/index.ts) of each space's
+[Workbench server](server.md).
 The user-facing reference is [The VS Code extension](../docs/extension.md).
 
 ## Activation and ownership
@@ -229,31 +230,35 @@ Component and theme contracts: [Web Components](web-components.md) and
 
 ```text
 VS Code extension host
-  ├─ loopback workbench server ── project, workbench, and preview pages, on a private port
-  │    ├─ Rust front door ── the public port, forwarded here; resident page index and watcher;
-  │    │                     separate Node evaluator when needed
-  │    ├─ preview worker ── compiles and serves TypeScript previews (bundled runtime or Node)
-  │    ├─ screenshot capture service ── bundled Electron helper
-  │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS
+  ├─ host, one per space ── answers its server on stdin/stdout: editor, capture and spaces
+  │    ├─ workbench-server ── the public loopback port: project, workbench, preview and docs pages,
+  │    │    │                 the page tree and routes; resident page index and watcher
+  │    │    ├─ Node evaluator ── project JavaScript, on stdin/stdout, when needed (bundled runtime or Node)
+  │    │    └─ Storybook ── one the server runs, on a local socket, when a story is asked for
+  │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS,
+  │                                on a local socket the server forwards to
+  ├─ screenshot capture service ── bundled Electron helper, shared by every space
   └─ VS Code webviews ── sidebar and workbench tab
 ```
 
 The screenshot helper renders pages for [interactive capture](capture.md) and
 [export](export.md). The window helper streams native windows for the
 [Simulator and window lenses](implementations.md#native-window-stream); it is a separate process and
-Screen Recording permission path. The preview worker and screenshot helper
+Screen Recording permission path. The Node evaluator and screenshot helper
 share the bundled Electron runtime, unpacked once into the extension's global
 storage. Browser-only VS Code cannot spawn any of these local processes.
 
-### Preview worker
+### Preview compiler and Node evaluator
 
-The worker runs project code, so it is a separate process from the extension
-host and server. Its lifecycle, timeouts, and logging are specified in
+The server compiles previews itself; project JavaScript runs only in the
+Node evaluator, a separate process from the extension host and the server,
+killed with the server. Their lifecycle, timeouts,
+and logging are specified in
 [TypeScript previews](previews.md#server-processes-lifecycle-and-trust).
 
 ## Logging
 
-Server, canvas, capture, preview worker, and handoff diagnostics go to the
+Server, canvas, capture, preview compiler, and handoff diagnostics go to the
 **Workbench** output channel as bounded event records. Each server stops
 logging after 2 MB per session. Records never contain screenshots, page HTML,
 or handoff prompts.
@@ -321,10 +326,10 @@ or handoff prompts.
 - [server.test.js](../server/node/server.test.js) checks that only config-resolved paths
   open and that handoff is advertised only when the editor provides it.
 - [preview.test.js](../server/node/preview.test.js) checks that the server starts, serves
-  through, and closes the worker, stops serving after `previews: false`, and
+  through, and closes previews, stops serving after `previews: false`, and
   never runs definitions when untrusted or disabled.
-- Manual, not automated: worker restart after it is killed, worker restart on
-  a `previews` change, the YAML watcher, **Refresh Pages** after adding a
+- Manual, not automated: Node evaluator restart after it is killed, compiler
+  replacement on a `previews` change, the YAML watcher, **Refresh Pages** after adding a
   definition (until definition watching is implemented and tested), activity-bar visibility without `workbench.yaml`, handoff
   from **Open Canvas in Browser**, and in VS Code: adding, switching, and
   removing spaces, the window-focus reread, and extension.js wiring. The

@@ -54,5 +54,5 @@ collections you edit with **Configure pages**. See
 | --- | --- |
 | [workbench.yaml reference](configuration.md) | Every key, its type, its default, and the rules the reader enforces |
 | [Design-system export](design-system-export.md) | What the ZIP export contains, including portable previews, and how to use it |
-| [The VS Code extension](extension.md) | Commands, projects in subfolders, the server and its ports, the preview worker, screenshots, files and network access, updating, uninstalling, and running without the editor |
+| [The VS Code extension](extension.md) | Commands, projects in subfolders, the server and its ports, the preview compiler, screenshots, files and network access, updating, uninstalling, and running without the editor |
 | [Troubleshooting](troubleshooting.md) | How to find out why a page, lens, story, or screenshot is missing or wrong |

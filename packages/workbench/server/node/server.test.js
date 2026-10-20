@@ -10,9 +10,6 @@ var path = require('node:path');
 
 var server = require('./server');
 var config = require('./config');
-var withPreviewScripts = server.withPreviewScripts;
-
-var SCRIPTS = '<script src="/_workbench/preview-compat.js"></script>';
 
 test('config lists literal previews without starting the worker and keeps untrusted workspaces unevaluated', async function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-index-'));
@@ -38,101 +35,15 @@ test('config lists literal previews without starting the worker and keeps untrus
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('puts one compatibility script first inside head', function () {
-  var out = withPreviewScripts('<!doctype html><html><head><title>x</title></head><body></body></html>');
 
-  assert.ok(out.indexOf('<head>' + SCRIPTS) !== -1);
-  /* Before the page's own head, which is what "before its own scripts" means. */
-  assert.ok(out.indexOf(SCRIPTS) < out.indexOf('<title>'));
-});
 
-test('reads a head with attributes', function () {
-  var out = withPreviewScripts('<html><head lang="en"><title>x</title></head></html>');
 
-  assert.ok(out.indexOf('<head lang="en">' + SCRIPTS) !== -1);
-});
 
-test('is not fooled by header', function () {
-  var out = withPreviewScripts('<html><body><header class="a">hi</header></body></html>');
 
-  /* No <head> to speak of, so the scripts belong to <html> — and <header> is
-     left exactly where it was. */
-  assert.ok(out.indexOf('<html>' + SCRIPTS) !== -1);
-  assert.ok(out.indexOf('<header class="a">hi</header>') !== -1);
-});
 
-test('falls back to the top of a fragment', function () {
-  var out = withPreviewScripts('<div>just a fragment</div>');
 
-  assert.strictEqual(out, SCRIPTS + '<div>just a fragment</div>');
-});
 
-test('leaves the rest of the document alone', function () {
-  var page = '<html><head></head><body><p>unchanged</p></body></html>';
 
-  assert.strictEqual(withPreviewScripts(page).replace(SCRIPTS, ''), page);
-});
-
-test('accepts a local native capture payload and normalizes its geometry', function () {
-  var payload = server.capturePayload(Buffer.from(JSON.stringify({
-    url: '/pages/sign-in.html?state=error',
-    width: 1511.7,
-    height: '982',
-    scroll: { x: 12, y: 40 },
-    annotations: '<svg></svg>',
-    name: 'sign-in.png',
-  })), 'http://127.0.0.1:3579/');
-
-  assert.strictEqual(payload.url, 'http://127.0.0.1:3579/pages/sign-in.html?state=error');
-  assert.strictEqual(payload.width, 1512);
-  assert.strictEqual(payload.height, 982);
-  assert.deepStrictEqual(payload.scroll, { x: 12, y: 40 });
-  assert.strictEqual(payload.annotations, '<svg></svg>');
-});
-
-test('refuses capture URLs outside the workbench origin', function () {
-  assert.throws(function () {
-    server.capturePayload(Buffer.from(JSON.stringify({
-      url: 'https://example.com/', width: 393, height: 852,
-    })), 'http://127.0.0.1:3579/');
-  }, /must belong to this workbench/);
-});
-
-test('local capture carries live mirror state and rejects malformed snapshots', function () {
-  var mirror = { revision: 'session-2', html: '<html><body>Edited</body></html>', states: [{ id: '1', value: 'typed' }], defined: ['x-card'], animations: [] };
-  function payload(value) {
-    return server.capturePayload(Buffer.from(JSON.stringify({ url: '/page.html', width: 1440, height: 1000, mirror: value })), 'http://127.0.0.1:3579/');
-  }
-  assert.deepStrictEqual(payload(mirror).mirror, mirror);
-  assert.equal(payload(undefined).mirror, undefined);
-  assert.throws(function () { payload(Object.assign({}, mirror, { states: null })); }, /Invalid live DOM snapshot/);
-  assert.throws(function () { payload(Object.assign({}, mirror, { revision: '' })); }, /Invalid live DOM snapshot/);
-});
-
-test('refuses invalid native capture dimensions', function () {
-  assert.throws(function () {
-    server.capturePayload(Buffer.from(JSON.stringify({
-      url: '/page.html', width: 0, height: 852,
-    })), 'http://127.0.0.1:3579/');
-  }, /capture width/);
-});
-
-test('local capture accepts incremental records and rejects malformed or executable nodes', function () {
-  var mirror = { version: 1, revision: 'session-2', base: 'session-1', root: '1', nodes: [
-    { id: '2', type: 1, tag: 'p', ns: 'http://www.w3.org/1999/xhtml', attrs: [['class', 'edited', null]], children: ['3'] },
-    { id: '3', type: 3, text: 'Changed text' },
-  ], removed: ['4'], cleared: ['4'], states: [{ id: '5', value: 'typed' }], defined: [], animations: [] };
-  function payload(value) {
-    return server.capturePayload(Buffer.from(JSON.stringify({ url: '/page.html', width: 100, height: 100, mirror: value })), 'http://127.0.0.1:3579/');
-  }
-  assert.deepEqual(payload(mirror).mirror, mirror);
-  assert.deepEqual(payload(Object.assign({}, mirror, { pointer: { x: 32, y: 16 } })).mirror.pointer, { x: 32, y: 16 });
-  assert.throws(function () { payload(Object.assign({}, mirror, { pointer: { x: Infinity, y: 16 } })); }, /Invalid live DOM pointer/);
-  assert.throws(function () { payload(Object.assign({}, mirror, { pointer: { x: -1, y: 16 } })); }, /Invalid live DOM pointer/);
-  assert.throws(function () { payload(Object.assign({}, mirror, { base: 12 })); }, /Invalid live DOM patch/);
-  assert.throws(function () { payload(Object.assign({}, mirror, { nodes: [{ id: '2', type: 1, tag: 'script', ns: '', attrs: [], children: [] }] })); }, /Invalid live DOM patch/);
-  assert.throws(function () { payload(Object.assign({}, mirror, { removed: [null] })); }, /Invalid live DOM patch/);
-});
 
 function post(port, pathname, payload) {
   var body = JSON.stringify(payload || {});
@@ -226,45 +137,44 @@ test('a definition added on disk is reported as a page change and listed', async
   }
 });
 
-test('a front door that keeps stopping is replaced by the server on the same port', { skip: process.platform === 'win32' && 'needs a POSIX shell' }, async function () {
+
+
+test('a server that stops is started again on the same port, at most three times a minute', { skip: process.platform === 'win32' && 'needs a POSIX shell' }, async function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-restarts-'));
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
   var free = http.createServer();
   await new Promise(function (resolve) { free.listen(0, '127.0.0.1', resolve); });
   var port = free.address().port;
   await new Promise(function (resolve) { free.close(resolve); });
-  // Starts like a front door on that port without listening, then stops.
+  // Starts like a server on that port, then stops; the restarts ask for the same port.
   var binary = path.join(root, 'stopping');
-  fs.writeFileSync(binary, '#!/bin/sh\nprintf \'{"type":"listening","port":' + port + '}\\n\'\nsleep 0.2\n', { mode: 0o755 });
+  var asked = path.join(root, 'asked');
+  fs.writeFileSync(binary, '#!/bin/sh\nprintf "%s\\n" "$*" >> ' + JSON.stringify(asked) + '\nprintf \'{"type":"listening","port":' + port + '}\\n\'\nsleep 0.2\n', { mode: 0o755 });
   var events = [];
-  var running = await server.start({ root: root, capture: { close: function () {} }, frontDoorBinary: binary,
+  var running = await server.start({ root: root, capture: { close: function () {} }, binary: binary,
     onLog: function (entry) { events.push(entry.event); } });
   try {
     assert.equal(running.port, port);
     var deadline = Date.now() + 10000;
-    while (!events.includes('front-door.replaced') && Date.now() < deadline) await new Promise(function (resolve) { setTimeout(resolve, 50); });
-    assert.equal(events.filter(function (event) { return event === 'front-door.exited'; }).length, 4, events.join(' '));
-    assert.ok(events.includes('front-door.replaced'), events.join(' '));
-    assert.equal((await get(port, server.CONFIG_PATH)).status, 200);
+    while (!events.includes('server.stopped') && Date.now() < deadline) await new Promise(function (resolve) { setTimeout(resolve, 50); });
+    assert.equal(events.filter(function (event) { return event === 'server.exited'; }).length, 4, events.join(' '));
+    assert.ok(events.includes('server.stopped'), events.join(' '));
+    var starts = fs.readFileSync(asked, 'utf8').trim().split('\n');
+    assert.equal(starts.length, 4);
+    starts.slice(1).forEach(function (line) { assert.ok(line.includes('--ports ' + port + ' '), line); });
   } finally {
     await running.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('without the front door binary the server listens publicly itself', async function () {
-  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-direct-'));
+test('without the server binary a space does not start, and says why', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-missing-'));
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');
-  var events = [];
-  var running = await server.start({ root: root, capture: { close: function () {} }, frontDoorBinary: path.join(root, 'missing'),
-    onLog: function (entry) { events.push(entry.event); } });
   try {
-    assert.equal((await get(running.port, server.CONFIG_PATH)).status, 200);
-    assert.ok(!events.includes('front-door.started'));
-  } finally {
-    await running.close();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+    await assert.rejects(server.start({ root: root, capture: { close: function () {} }, binary: path.join(root, 'missing') }),
+      /needs its server binary/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('funnels bounded browser diagnostics into the server session logger', async function () {
@@ -283,7 +193,7 @@ test('funnels bounded browser diagnostics into the server session logger', async
     });
     assert.strictEqual(answer.status, 200);
     assert.deepStrictEqual(entries.map(function (entry) { return entry.event; }), [
-      'front-door.started', 'session.started', 'handoff.browser.failed',
+      'server.started', 'session.started', 'handoff.browser.failed',
     ]);
     assert.strictEqual(entries[2].level, 'error');
     assert.strictEqual(entries[2].details.phase, 'send');
@@ -321,33 +231,9 @@ test('stops accepting diagnostics after the per-session byte budget', async func
   assert.strictEqual(entries.some(function (entry) { return entry.event === 'another.failure'; }), false);
 });
 
-test('discovers Storybook ports from project package scripts', function () {
-  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-storybook-port-'));
-  try {
-    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
-      scripts: { storybook: 'storybook dev --port 7123' },
-    }));
-    assert.strictEqual(server.storybookPorts(root)[0], 7123);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
-test('turns matching booted simulators into implementation-only pages', function () {
-  var imported = server.simulatorCatalog([
-    { name: 'iPhone 17', udid: 'SIM-1', runtime: 'iOS 26.2' },
-    { name: 'iPad Pro', udid: 'SIM-2', runtime: 'iOS 26.2' },
-  ], 'ios', { label: 'Simulator', device: 'iPhone 17', catalogIcon: 'smartphone' });
-  assert.deepStrictEqual(imported.collections, [{
-    name: 'Simulator', icon: 'smartphone', items: [{
-      label: 'iPhone 17', src: '__ios-simulator/ios/SIM-1.html', icon: 'smartphone',
-      implementations: { ios: { device: 'SIM-1' } }, implementationOnly: 'ios',
-    }],
-  }]);
-  assert.strictEqual(imported.pages['__ios-simulator/ios/SIM-1.html'].simulator.udid, 'SIM-1');
-});
 
-test('negotiates a native Simulator stream only for a configured device', async function () {
+test('negotiates a native Simulator stream only for a configured device', { skip: process.platform === 'win32' && 'needs a POSIX shell' }, async function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-simulator-stream-'));
   fs.writeFileSync(path.join(root, 'workbench.yaml'), [
     'name: Simulator stream',
@@ -367,12 +253,17 @@ test('negotiates a native Simulator stream only for a configured device', async 
     accept: function () { return false; },
     close: function () {},
   };
-  var running = await server.start({
-    root: root,
-    capture: { close: function () {} },
-    windowStream: nativeStream,
-    simulators: function () { return [{ name: 'iPhone 17', udid: 'SIM-1', runtime: 'iOS 26.2' }]; },
-  });
+  // The server lists booted Simulators with xcrun; this one lists one.
+  var bin = path.join(root, 'bin');
+  fs.mkdirSync(bin);
+  var devices = { devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-2': [{ name: 'iPhone 17', udid: 'SIM-1', state: 'Booted', isAvailable: true }] } };
+  fs.writeFileSync(path.join(bin, 'xcrun'), '#!/bin/sh\nprintf \'%s\\n\' \'' + JSON.stringify(devices) + '\'\n', { mode: 0o755 });
+  var saved = process.env.PATH;
+  process.env.PATH = bin + path.delimiter + saved;
+  var running;
+  try {
+    running = await server.start({ root: root, capture: { close: function () {} }, windowStream: nativeStream });
+  } finally { process.env.PATH = saved; }
   try {
     var started = await post(running.port, server.SIMULATOR_STREAM_PATH, {
       implementation: 'ios', udid: 'SIM-1',
@@ -574,122 +465,10 @@ test('downloads the resolved workbench as a ZIP', async function () {
   }
 });
 
-test('plans every local state for export capture, and warns for a catalogued Simulator page', function () {
-  var view = {
-    implementations: { ios: { kind: 'ios-simulator', device: 'booted', catalog: true } },
-    collections: [{ items: [{
-      label: 'Sign in', src: 'pages/sign-in.html',
-      sizes: ['laptop', 'mobile', 'resizable', 'fit'],
-      states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Error' }],
-    }] }],
-    catalogCollections: [{ items: [{
-      label: 'iPhone 17', src: '__ios-simulator/ios/SIM-1.html', implementationOnly: 'ios',
-    }] }],
-    pages: {},
-  };
-  var plan = server.exportCapturePlan(view, 'http://127.0.0.1:3579/');
-  assert.deepStrictEqual(plan.captures.map(function (capture) {
-    return [capture.page, capture.state, capture.size, capture.width, capture.height, capture.external];
-  }), [
-    ['pages/sign-in.html', 'default', 'laptop', 1512, 982, false],
-    ['pages/sign-in.html', 'default', 'mobile', 393, 852, false],
-    ['pages/sign-in.html', 'default', 'fit', 1440, 900, false],
-    ['pages/sign-in.html', 'error', 'laptop', 1512, 982, false],
-    ['pages/sign-in.html', 'error', 'mobile', 393, 852, false],
-    ['pages/sign-in.html', 'error', 'fit', 1440, 900, false],
-  ]);
-  assert.match(plan.captures[3].url, /state=error/);
-  assert.deepStrictEqual(plan.warnings, ['iPhone 17: reference screenshots are not supported for ios-simulator.']);
-});
 
-test('captures export references through four reusable workers', async function () {
-  var active = 0;
-  var peak = 0;
-  var closed = false;
-  var payloads = [];
-  var workers = Array.from({ length: 4 }, function () {
-    return { captureExportPage: async function (payload) {
-      payloads.push(payload);
-      active += 1;
-      peak = Math.max(peak, active);
-      await new Promise(function (resolve) { setTimeout(resolve, 10); });
-      active -= 1;
-      return { image: Buffer.from('jpeg') };
-    } };
-  });
-  var capture = { createPool: function (size) {
-    assert.equal(size, 4);
-    return { workers: workers, close: async function () { closed = true; } };
-  } };
-  var captures = Array.from({ length: 7 }, function (_, index) {
-    return { page: 'story-' + index, state: 'default', variant: 'default-mobile', label: 'Story ' + index,
-      size: 'mobile', sizeLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=story--' + index,
-      external: true, width: 393, height: 852 };
-  });
-  var result = await server.captureExportReferences(capture, { captures: captures, warnings: [] }, 'http://localhost:3579/', function () {});
-  assert.equal(peak, 4);
-  assert.equal(result.screenshots.length, 7);
-  assert.ok(payloads.every(function (payload) { return payload.reuse === 'storybook'; }));
-  assert.equal(closed, true);
-});
 
-test('keeps successful export captures when pool cleanup fails', async function () {
-  var worker = { captureExportPage: async function () { return { image: Buffer.from('jpeg') }; } };
-  var capture = { createPool: function () {
-    return { workers: [worker, worker], close: async function () { throw new Error('close failed'); } };
-  } };
-  var captures = ['button', 'card'].map(function (story) {
-    return { page: story, state: 'default', variant: 'default-mobile', label: story,
-      size: 'mobile', sizeLabel: 'Mobile', url: 'http://localhost:6006/iframe.html?id=' + story,
-      external: true, width: 393, height: 852 };
-  });
-  var result = await server.captureExportReferences(capture, { captures: captures, warnings: [] }, 'http://localhost:3579/', function () {});
-  assert.equal(result.screenshots.length, 2);
-  assert.deepEqual(result.warnings, ['Capture worker cleanup: close failed']);
-});
 
-test('keeps every size for a story on one warm capture worker', async function () {
-  var assignments = new Map();
-  var workers = Array.from({ length: 2 }, function (_, worker) {
-    return { captureExportPage: async function (payload) {
-      if (!assignments.has(payload.url)) assignments.set(payload.url, new Set());
-      assignments.get(payload.url).add(worker);
-      return { image: Buffer.from('jpeg') };
-    } };
-  });
-  var capture = { createPool: function (size) {
-    assert.equal(size, 2);
-    return { workers: workers, close: async function () {} };
-  } };
-  var captures = ['button', 'card'].flatMap(function (story) {
-    return ['mobile', 'laptop', 'fit'].map(function (size) {
-      return { page: story, state: 'default', variant: 'default-' + size, label: story,
-        size: size, sizeLabel: size, url: 'http://localhost:6006/iframe.html?id=' + story,
-        external: true, width: size === 'mobile' ? 393 : 1512, height: 852 };
-    });
-  });
-  var result = await server.captureExportReferences(capture, { captures: captures, warnings: [] }, 'http://localhost:3579/', function () {});
-  assert.equal(result.screenshots.length, 6);
-  assert.deepEqual(Array.from(assignments.values(), function (workerIds) { return workerIds.size; }), [1, 1]);
-});
 
-test('local export sizes share a document revision, while another export gets a fresh one', async function () {
-  var requests = [];
-  var capture = { capture: async function (_, payload) {
-    requests.push(payload);
-    return Buffer.from('jpeg');
-  } };
-  var plan = { warnings: [], captures: [393, 1512].map(function (width) {
-    return { page: 'button', label: 'Default', sizeLabel: String(width),
-      url: 'http://localhost:3579/button.html', width: width, height: 852 };
-  }) };
-  await server.captureExportReferences(capture, plan, 'http://localhost:3579/', function () {});
-  assert.ok(requests[0].revision);
-  assert.equal(requests[0].revision, requests[1].revision);
-  await server.captureExportReferences(capture, plan, 'http://localhost:3579/', function () {});
-  assert.notEqual(requests[0].revision, requests[2].revision);
-  assert.equal(requests[2].revision, requests[3].revision);
-});
 
 test('reports export capture progress before serving the completed job', async function () {
   var made = project('http://localhost:6006');
@@ -702,7 +481,8 @@ test('reports export capture progress before serving the completed job', async f
     assert.strictEqual(started.status, 202);
     assert.strictEqual(started.body.total, 6);
     var status = started.body;
-    for (var i = 0; i < 20 && status.status !== 'complete'; i += 1) {
+    for (var i = 0; i < 400 && status.status !== 'complete'; i += 1) {
+      if (i) await new Promise(function (resolve) { setTimeout(resolve, 25); });
       status = (await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id)).body;
     }
     assert.strictEqual(status.status, 'complete');
@@ -725,42 +505,6 @@ test('reports export capture progress before serving the completed job', async f
   }
 });
 
-test('an export job downloads sources and references when the portable worker fails', async function () {
-  var service = require('./preview-service');
-  var original = service.create;
-  var made = project('http://localhost:6006');
-  fs.writeFileSync(path.join(made.root, 'button.workbench.ts'), 'export default {};\n');
-  var running;
-  service.create = function () { return {
-    index: async function () { return { previews: [], docs: [], errors: [] }; },
-    export: async function () { throw new Error('Preview worker stopped'); },
-    close: async function () {},
-  }; };
-  try {
-    running = await server.start({ root: made.root, capture: {
-      capture: async function () { return Buffer.from('reference jpeg'); },
-      close: async function () {},
-    } });
-    var started = await post(running.port, server.EXPORT_PATH, {});
-    var status;
-    do {
-      status = await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id);
-      if (status.body.status === 'running') await new Promise(function (resolve) { setTimeout(resolve, 5); });
-    } while (status.body.status === 'running');
-    assert.equal(status.body.status, 'complete');
-    assert.equal(status.body.warnings, 1);
-    var answer = await getRaw(running.port, server.EXPORT_PATH + '?job=' + started.body.id + '&download=1');
-    assert.equal(answer.status, 200);
-    assert.ok(answer.body.includes(Buffer.from('pages/sign-in.html')));
-    assert.ok(answer.body.includes(Buffer.from('reference jpeg')));
-    assert.ok(answer.body.includes(Buffer.from('Portable browser previews: Preview worker stopped')));
-    assert.ok(!answer.body.includes(Buffer.from('browser/index.html')));
-  } finally {
-    service.create = original;
-    if (running) await running.close();
-    fs.rmSync(made.root, { recursive: true, force: true });
-  }
-});
 
 test('waits for eager capture warm-up before starting export screenshots', async function () {
   var made = project('http://localhost:6006');
@@ -780,7 +524,8 @@ test('waits for eager capture warm-up before starting export screenshots', async
     releaseWarm();
     await warmed;
     var status;
-    for (var i = 0; i < 20; i += 1) {
+    for (var i = 0; i < 400; i += 1) {
+      if (i) await new Promise(function (resolve) { setTimeout(resolve, 25); });
       status = (await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id)).body;
       if (status.status === 'complete') break;
     }
@@ -812,7 +557,8 @@ test('coalesces overlapping exports into one capture job', async function () {
     assert.equal(different.status, 409);
     releaseCapture();
     var status;
-    for (var i = 0; i < 20; i += 1) {
+    for (var i = 0; i < 400; i += 1) {
+      if (i) await new Promise(function (resolve) { setTimeout(resolve, 25); });
       status = (await get(running.port, server.EXPORT_PATH + '?job=' + first.body.id)).body;
       if (status.status === 'complete') break;
     }
@@ -873,7 +619,8 @@ test('retains a slow export job until after it settles', async function () {
     assert.equal((await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id)).status, 200);
     releaseCapture();
     var status;
-    for (var i = 0; i < 20; i += 1) {
+    for (var i = 0; i < 400; i += 1) {
+      if (i) await new Promise(function (resolve) { setTimeout(resolve, 25); });
       status = await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id);
       if (status.body.status === 'complete') break;
     }
@@ -894,7 +641,8 @@ test('bounds retained completed export bundles', async function () {
   async function completeExport() {
     var started = await post(running.port, server.EXPORT_PATH, {});
     var status;
-    for (var i = 0; i < 20; i += 1) {
+    for (var i = 0; i < 400; i += 1) {
+      if (i) await new Promise(function (resolve) { setTimeout(resolve, 25); });
       status = await get(running.port, server.EXPORT_PATH + '?job=' + started.body.id);
       if (status.body.status === 'complete') break;
     }

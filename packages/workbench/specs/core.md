@@ -46,7 +46,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
 - `previews` is a map (`include`, `config`, `icon`, `icons`, `lensLabel`) or `false`. Discovery is on by
   default; `false` turns it off and no preview code runs. An invalid value is
   a problem and leaves previews off until fixed. Discovery, definitions, and
-  the worker are specified in [TypeScript previews](previews.md).
+  the compiler are specified in [TypeScript previews](previews.md).
 - Icon-only authored collections style matching imported collections and stay
   in the configuration editor. Empty collections are hidden after imports. Icon
   precedence and order-independent merging are specified in

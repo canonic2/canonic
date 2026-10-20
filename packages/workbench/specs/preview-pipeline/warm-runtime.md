@@ -93,8 +93,9 @@ Import-time body nodes keep their retention rule in
 
 ## Status
 
-Implemented in the Node preview worker: pre-warming when the server starts
-the worker, and the warm
+Implemented in `workbench-server`'s preview compiler: pre-warming every
+listed preview and docs lens once the page tree configures them
+([compiler](compiler.md)), and the warm
 document. A new state, input or size of the preview a warm document shows
 re-renders through the preview runtime without reloading its modules. Gaps:
 

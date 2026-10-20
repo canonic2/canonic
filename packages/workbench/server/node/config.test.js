@@ -34,19 +34,15 @@ test('browser reader preserves icon-only declarations and hides them after faile
   await assert.rejects(new Promise((resolve, reject) => window.wbConfig.load(resolve, reject)), /nothing to show/);
 });
 
-test('icon-only collections survive reading and editor saves', function () {
+test('icon-only collections survive reading', function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-collection-icon-'));
   try {
     fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\ncollections:\n  - name: Web App\n    icon: app-window\n');
     assert.deepEqual(config.read(root).collections, [{ name: 'Web App', icon: 'app-window', items: [] }]);
-    var authored = config.source(root).collections;
-    config.updateCollections(root, authored);
-    assert.deepEqual(config.source(root).collections, authored);
-    assert.equal(config.read(root).collections[0].icon, 'app-window');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('server and browser readers retain authored lens labels and editor saves preserve them', async function () {
+test('server and browser readers retain authored lens labels', async function () {
   var body = 'name: Acme\npreviews:\n  lensLabel: Design\ncollections:\n  - name: Pages\n    items:\n      - label: Button\n        src: button.workbench.ts\n        lensLabel: Reference\n      - label: Invalid\n        src: invalid.html\n        lensLabel: false\n';
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-lens-label-'));
   try {
@@ -56,8 +52,6 @@ test('server and browser readers retain authored lens labels and editor saves pr
     assert.equal(read.collections[0].items[0].lensLabel, 'Reference');
     assert.equal(read.collections[0].items[1].lensLabel, undefined);
     assert.deepEqual(read.problems, ['Pages › Invalid: lensLabel: must be a nonempty string.']);
-    config.updateCollections(root, config.source(root).collections);
-    assert.equal(config.read(root).collections[0].items[0].lensLabel, 'Reference');
     var warnings = [];
     var window = { wbManifest: require('../../contracts/manifest'), wbYaml: yaml.parse };
     function Request() {}
@@ -236,34 +230,6 @@ test('reads implementations, lenses and code pointers', function () {
   }
 });
 
-test('updates the collections block without rewriting the rest of the YAML file', function () {
-  var original = [
-    'name: Acme # keep this comment',
-    'implementations:',
-    '  dev:',
-    '    kind: url',
-    '    base: http://localhost:3000',
-    'collections:',
-    '  - name: Old',
-    '    items:',
-    '      - label: Old page',
-    '        src: old.html',
-    '',
-  ].join('\n');
-  var root = project({ 'workbench.yaml': original });
-  try {
-    config.updateCollections(root, [{ name: 'Pages', icon: 'file-text', items: [{
-      label: 'Sign in', src: 'pages/sign-in.html', sizes: ['laptop', 'mobile'],
-    }] }]);
-    var body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
-    assert.match(body, /name: Acme # keep this comment/);
-    assert.match(body, /base: http:\/\/localhost:3000/);
-    assert.match(body, /sizes:\n\s+- laptop\n\s+- mobile/);
-    assert.deepEqual(config.read(root).collections[0].items[0].sizes, ['laptop', 'mobile']);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test('answers null for a project without a workbench.yaml', function () {
   var root = project({});
@@ -514,27 +480,6 @@ test('reads one space of a file, with the shared keys and its own root', functio
   }
 });
 
-test('saving pages for one space rewrites only that space, adding its collections when it has none', function () {
-  var dir = multiSpace(MULTI);
-  try {
-    var collections = [{ name: 'Components', items: [{ label: 'Button', src: 'button.html' }] }];
-    var saved = config.updateCollections({ dir: dir, key: 'ui' }, collections);
-    assert.deepEqual(saved.collections, collections);
-    var body = fs.readFileSync(path.join(dir, 'workbench.yaml'), 'utf8');
-    assert.match(body, /^# Two spaces in one file/);
-    assert.match(body, /    # its own collections come later\n    collections:\n      - name: Components\n/);
-    assert.match(body, /\n\npreviews: false\n$/);
-    assert.equal(config.read({ dir: dir, key: 'web' }).collections[0].items[0].src, 'index.html');
-    assert.equal(config.read({ dir: dir, key: 'ui' }).collections[0].items[0].src, 'button.html');
-
-    config.updateCollections({ dir: dir, key: 'web' }, [{ name: 'Pages', items: [{ label: 'About', src: 'about.html' }] }]);
-    assert.equal(config.read({ dir: dir, key: 'web' }).collections[0].items[0].label, 'About');
-    assert.equal(config.read({ dir: dir, key: 'ui' }).collections[0].items[0].label, 'Button');
-    assert.equal(config.read({ dir: dir, key: 'web' }).implementations.dev.base, 'http://localhost:3000');
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
 
 test('reads Markdown pages, pages with docs, their docs lenses, and the lens a Markdown page opens with', function () {
   var root = project({ 'workbench.yaml': [
@@ -653,54 +598,6 @@ test('sizes belong to each space of a file that lists several', function () {
     assert.match(web.problems.join('\n'), /Sizes: sizes go in each space, under spaces.<key>, when the file lists spaces\./);
     var ui = config.read({ dir: dir, key: 'ui' });
     assert.deepEqual(ui.sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable']);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('saving sizes replaces the sizes block, and the collections only when a page changes', function () {
-  var edit = require('../../contracts/src/sizes/edit.ts');
-  var root = project({ 'workbench.yaml': SIZED });
-  try {
-    config.updateSizes(root, function (sizes, collections) {
-      return edit.addSize(sizes, collections, { name: 'Wide', width: 'fill', height: 200 });
-    });
-    var body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
-    assert.match(body, /name: Acme # keep this comment/);
-    assert.match(body, /# the sidebar is 340 wide/, 'collections were not rewritten');
-    assert.deepEqual(config.read(root).sizes.map(function (size) { return size.key; }), ['fit', 'sidebar', 'tablet', 'wide']);
-
-    config.updateSizes(root, function (sizes, collections) {
-      return edit.addSize(sizes, collections, { name: 'Narrow', width: 200, height: 'fill', page: 'sidebar.html' });
-    });
-    body = fs.readFileSync(path.join(root, 'workbench.yaml'), 'utf8');
-    assert.match(body, /name: Acme # keep this comment/);
-    assert.deepEqual(config.read(root).collections[0].items[0].sizes, ['sidebar', 'narrow']);
-
-    config.updateSizes(root, function (sizes, collections) {
-      return edit.updateSizes(sizes, collections, [{ key: 'fit', value: true }, { key: 'narrow', value: sizes.narrow }]);
-    });
-    var read = config.read(root);
-    assert.deepEqual(read.sizes.map(function (size) { return size.key; }), ['fit', 'narrow']);
-    assert.deepEqual(read.collections[0].items[0].sizes, ['narrow']);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('saving sizes for one space of several writes only that space', function () {
-  var edit = require('../../contracts/src/sizes/edit.ts');
-  var dir = multiSpace(MULTI);
-  try {
-    config.updateSizes({ dir: dir, key: 'ui' }, function (sizes, collections) {
-      return edit.addSize(sizes, collections, { name: 'Tablet', width: 1024, height: 1366 });
-    });
-    var body = fs.readFileSync(path.join(dir, 'workbench.yaml'), 'utf8');
-    assert.match(body, /^# Two spaces in one file/);
-    assert.match(body, /\n\npreviews: false\n$/);
-    assert.deepEqual(config.read({ dir: dir, key: 'ui' }).sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable', 'tablet']);
-    assert.deepEqual(config.read({ dir: dir, key: 'web' }).sizes.map(function (size) { return size.key; }), ['fit', 'laptop', 'mobile', 'resizable']);
-    assert.equal(config.read({ dir: dir, key: 'web' }).collections[0].items[0].src, 'index.html');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

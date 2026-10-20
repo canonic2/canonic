@@ -148,8 +148,9 @@ run project code, so they need a trusted workspace. A handwritten page may
 name a definition as its `src`; it keeps its place in `collections` and takes its
 states from the definition. See [TypeScript previews](../../docs/workbench-previews.md)
 for definitions, the HTML, React, Vue, Astro and React Native Web adapters,
-controls, plugins, and portable exports. `server/node/preview/compiler.cjs` discovers and
-compiles them in a worker started by `server/node/preview-service.js`.
+controls, plugins, and portable exports. The page index discovers them, and
+`workbench-server` compiles them, running project JavaScript in its Node
+evaluator.
 
 State ids are kebab-case — they travel in a URL and in a screenshot's filename.
 Declaring one here is half of it: the page has to answer to the id, which
@@ -166,7 +167,7 @@ the page's design and other implementations, and a page with docs opens on its
 first docs lens. A page whose `src` is `.md` is a Markdown page: it
 has no design lens, no `sizes`, and no `lensLabel`, and opens on its `lens` or
 first docs lens. A `.workbench.ts` file can declare one with `defineDocs`. See
-[Docs](../../docs/docs-pages.md); the server code is in `server/node/src/modules/docs/`, browser code in
+[Docs](../../docs/docs-pages.md); the server code is in `server/src/docs/`, browser code in
 `ui/src/modules/docs/`, and `contracts/src/docs/lenses.js` decides which lens
 a page shows.
 
@@ -326,10 +327,11 @@ is taken. Same origin lets the workbench read the live preview and synchronize
 it into the warm native capture frame. A foreign origin prevents that. The config
 is fetched too, which a `file://` page isn't allowed to do at all.
 
-TypeScript previews are compiled by a worker process that `server/node/preview-service.js`
-starts on the bundled Electron runtime's Node (plain Node from a source
-checkout); the server proxies `/_workbench/previews/` and the definition files'
-own paths to it. Managed previews use retained `preview-host.html`
+TypeScript previews are compiled by `workbench-server`, which answers
+`/_workbench/previews/` and the definition files' own paths once its page
+tree has configured them for a trusted workspace.
+Project JavaScript runs in its Node evaluator, on the bundled Electron
+runtime's Node (plain Node from a source checkout). Managed previews use retained `preview-host.html`
 documents. Each loads the compatibility bundle and `/_workbench/preview-runtime.js`
 (`ui/preview/browser.js`) once. `preview-host.js` fetches a compiled descriptor and
 calls the module's adapter-neutral `mount` entry point; `browser.js` owns
@@ -412,7 +414,7 @@ shadow roots and browser-private UI are inaccessible; origin-tainted canvas or
 video pixels cannot be transferred. Linked stylesheets load from their URLs;
 runtime CSSOM edits to those sheets are not transferred. The mirror is not an
 OS screen recording.
-URL and Storybook lenses load through `../proxy.js`: one loopback proxy per
+URL and Storybook lenses load through the server's implementation proxies: one loopback proxy per
 implementation origin, on its own port so absolute paths such as
 `/@vite/client` keep working. The config route hands the browser the proxy
 address (the original stays in `upstream`); the server keeps talking to the
@@ -550,7 +552,8 @@ the Workbench sidebar in VS Code, where it stands in for a file tree. `page-list
 draws it in either place; it names no colours of its own, so `workbench.css`
 dresses it in the tool's grays and `sidebar.css` in the editor's theme.
 
-The `preview-compat.js` bundle, built by `../preview-scripts.js`, runs inside
+The `preview-compat.js` bundle, `keys.js`, `actions.js` and `states.js` joined
+by the server, runs inside
 previews served by Workbench. Its `actions.js` and `states.js` modules are
 the reason those pages can apply shell state without project code: off
 `file://` the frame is a foreign origin the shell can't reach into, so both
@@ -602,7 +605,7 @@ not discard the archive: `captureWarnings` in `canonic-export.json` names it,
 and the remaining references continue.
 
 When the project has TypeScript previews, the archive also holds a standalone
-browser viewer of them under `browser/`, built by `server/node/preview/portable.cjs`:
+browser viewer of them under `browser/`, built by the server's portable build:
 serve the extracted directory with any static HTTP server and open
 `browser/index.html`. `canonic-export.json` lists its entries and build
 warnings under `browser`. If the portable builder fails entirely, the sources

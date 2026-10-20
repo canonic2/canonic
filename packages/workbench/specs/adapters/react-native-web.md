@@ -49,8 +49,12 @@ loader. No JavaScript loader is involved.
 
 ## Status
 
-Implemented in the Node compile worker (`options.ts`, `project.ts`). Not
-implemented in Rust.
+Implemented natively in `workbench-server`'s compiler, as the target
+describes: the profile's resolution in
+[options.rs](../../server/src/compiler/options.rs) and its entry styles in
+[project.rs](../../server/src/compiler/project.rs). Covered by
+[preview.test.js](../../server/node/preview.test.js) (frames and docs stages
+filled by a root view) and the compiler's unit tests.
 
 ## Open questions
 

@@ -8,7 +8,9 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 ## Product layout
 
 Workbench has peer owners under one product root: `extension/` for VS Code,
-`server/` for Rust and `server/node/` for the shipping Node server/compiler,
+`server/` for Rust (the Workbench server: HTTP, page index and preview
+compiler) and `server/node/` for its host, the standalone command and the Node
+evaluator,
 `capture/` for Electron and platform capture, `ui/` for the browser application,
 `sdk/` for the published definition API, and `contracts/` for shared pure rules
 and wire data. See [module ownership](specs/modules.md).
@@ -25,11 +27,11 @@ pnpm run check
 pnpm run check:ui
 pnpm run check:server
 pnpm run serve <folder>
-node server/node/config.js <folder>
-node server/node/preview/cli.cjs check <folder>
+server/bin/<platform>-<arch>/workbench-server check <folder>
 ```
 
-`server/node/preview/cli.cjs` also provides `init` and `build`; see the
+`pnpm test` builds the debug binary into `server/bin/`. `workbench-server`
+also provides `init`, `list` and `build`; see the
 [command-line tools](docs/workbench-previews.md#command-line-tools).
 
 The extension manifest is `extension/package.json`. Packaging assembles a
@@ -107,13 +109,14 @@ Use native builders for release validation and signing.
 The download happens at build time only. `CANONIC_ELECTRON_ZIP_DIR` can point
 to a directory of official Electron ZIPs for an offline build.
 
-Packaging also writes the target's pinned native esbuild binary and Rspack binding to `server/node/preview/bin/`.
+Packaging also writes the target's pinned native esbuild binary to `server/node/preview/bin/`.
 It copies the matching installed binary, or, when building another target,
 downloads the registry archive and checks it against the integrity recorded in
-`pnpm-lock.yaml`. The installed worker uses this bundled
-binary; source checkouts use the package dependency. Preview build artifacts
-live under `canonic-workbench-previews` in the host's temporary directory and
-survive worker restarts. Live source maps are served separately from scripts.
+`pnpm-lock.yaml`. The installed Node evaluator uses this bundled
+binary; source checkouts use the package dependency. Previews compile with
+Rspack's Rust crates inside `workbench-server`, so no Rspack binding ships.
+The compiler's persistent cache lives under `canonic-workbench-rspack` in the
+host's temporary directory and survives server restarts.
 
 The macOS runtime adds about 135 MB to the VSIX and hundreds of MB to the
 installed runtime cache. Its tar archive preserves framework links that VSIX

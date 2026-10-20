@@ -11,9 +11,9 @@ var path = require('node:path');
 
 var config = require('./config');
 var yaml = require('./yaml');
-var frontDoor = require('./src/modules/front-door/index.ts');
+var host = require('./src/modules/host/index.ts');
 
-var BINARY = frontDoor.binaryPath();
+var BINARY = host.binaryPath();
 
 function node(dir, key) {
   try { return JSON.parse(JSON.stringify(config.resolve(dir, config.read({ dir: dir, key: key })))); }

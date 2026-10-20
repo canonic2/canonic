@@ -89,20 +89,39 @@ export interface Preview<T extends Record<string, unknown> = Record<string, unkn
 export interface BrowserAdapter {
   mount(canvas: HTMLElement, source: unknown, context: PreviewContext, environment?: unknown): Cleanup | Promise<Cleanup>;
 }
+/** A module made from source text, imported by its ID, such as `virtual:build-info`. */
+export interface VirtualModulePlugin { plugin: 'virtual-module'; id: string; source: string }
 /**
- * An Rspack plugin. Workbench applies it to the compilers that build
- * previews; take Rspack's classes from `compiler.rspack`, since the project
- * need not install Rspack.
+ * An exact import sent to another file: from every importer, or only from
+ * importers matching `importer` (globs over the path from the project root,
+ * or a regular expression over the absolute path). The first match wins.
  */
-export interface CompilerPlugin {
-  apply(compiler: any): void;
+export interface ResolveImportPlugin { plugin: 'resolve'; request: string; to: string; importer?: string | string[] | RegExp }
+/** `import.meta.glob(...)` expanded at build time in the project's sources, or those `include` matches as a rule condition: a path from the project root, a regular expression, or a list of them. */
+export interface ImportGlobPlugin { plugin: 'import-glob'; include?: string | string[] | RegExp }
+/**
+ * An SVG sprite: every icon in `dirs` becomes a `<symbol>`. Importing
+ * `register` (`virtual:svg-icons-register`) inserts the sprite into the
+ * document; `names` (`virtual:svg-icons-names`) exports the symbol IDs.
+ */
+export interface SvgSpritePlugin {
+  plugin: 'svg-sprite';
+  dirs: string | string[];
+  /** `[dir]` and `[name]` stand for the icon's folder and file name; `icon-[dir]-[name]` by default. */
+  symbolId?: string;
+  register?: string;
+  names?: string;
+  inject?: 'body-last' | 'body-first';
+  domId?: string;
 }
-/** An Rspack module rule, such as `{ test: /\.svg$/, loader: './svg-loader.cjs' }`. Loader paths resolve from the project root. */
+/** A capability of Workbench's compiler, made by the helpers below. */
+export type CompilerPlugin = VirtualModulePlugin | ResolveImportPlugin | ImportGlobPlugin | SvgSpritePlugin;
+/** An Rspack module rule, such as `{ test: /\.svg$/, loader: './svg-loader.cjs' }`. Loader paths resolve from the project root; JavaScript loaders run in a Node process. */
 export type CompilerRule = Record<string, unknown>;
 export interface Adapter {
   /** Browser module exporting mount(canvas, source, context, environment). */
   runtime: string;
-  /** Rspack plugins for this adapter's previews only, executed only in trusted projects. */
+  /** Compiler plugins for this adapter's previews only. */
   plugins?: CompilerPlugin[];
   /** Rspack module rules for this adapter's previews only. */
   rules?: CompilerRule[];
@@ -111,7 +130,7 @@ export interface WorkbenchConfig {
   adapters?: Record<string, Adapter>;
   /** An environment module around every preview, or one per adapter name, relative to the project root. */
   environment?: string | Record<string, string>;
-  /** Rspack plugins, applied after Workbench's own, executed only in trusted projects. */
+  /** Compiler plugins, applied after Workbench's own. */
   plugins?: CompilerPlugin[];
   /** Rspack module rules, applied after Workbench's own. */
   rules?: CompilerRule[];
@@ -148,3 +167,7 @@ export function definePreview<T extends Record<string, unknown>>(preview: Previe
 export function defineDocs(docs: Docs): Docs & { kind: 'docs' };
 export function defineConfig(config: WorkbenchConfig): WorkbenchConfig;
 export function defineAdapter(adapter: Adapter): Adapter;
+export function virtualModule(options: Omit<VirtualModulePlugin, 'plugin'>): VirtualModulePlugin;
+export function resolveImport(options: Omit<ResolveImportPlugin, 'plugin'>): ResolveImportPlugin;
+export function importGlob(options?: Omit<ImportGlobPlugin, 'plugin'>): ImportGlobPlugin;
+export function svgSprite(options: Omit<SvgSpritePlugin, 'plugin'>): SvgSpritePlugin;

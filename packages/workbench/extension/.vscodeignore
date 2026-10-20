@@ -17,8 +17,6 @@ node_modules/**/*.map
 node_modules/**/*.d.ts
 node_modules/**/dist/esm/**
 node_modules/@esbuild/**
-# The target's binding ships in server/node/preview/bin/rspack.node.
-node_modules/@rspack/binding-*/**
 node_modules/lucide/**
 !node_modules/lucide/package.json
 !node_modules/lucide/LICENSE

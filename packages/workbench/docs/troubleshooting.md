@@ -54,10 +54,10 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 ### Other places
 
 - **The Workbench log.** Run **Workbench: Show Log** for screenshot, server,
-  handoff, preview worker, Simulator, and window stream errors. For slow
-  TypeScript previews, `preview.request.completed` events separate the time a
-  request waited in the worker's queue (`queueMs`) from compiling and serving
-  it (`workMs`), and `preview.browser.phase` events time setup, mounting,
+  handoff, preview compiler, Simulator, and window stream errors. For slow
+  TypeScript previews, `preview.request.completed` events give the time the
+  server spent compiling and serving each request (`workMs`), and
+  `preview.browser.phase` events time setup, mounting,
   fonts, images, and readiness.
 - **The canvas's developer tools.** In VS Code, run
   **Developer: Open Webview Developer Tools** to see the canvas's console.
@@ -132,8 +132,9 @@ and the previews and docs pages that `*.workbench.ts` files define.
   definition is added, removed, renamed or retitled; **Workbench: Refresh
   Pages** does the same by hand. A canvas opened in a browser from the
   standalone server needs a reload.
-- **`Workbench previews: …`** The worker or `workbench.config.ts` failed. The
-  log's `preview.worker` entries hold the worker's error output.
+- **`Workbench previews: …`** Listing the previews or reading
+  `workbench.config.ts` failed. In the log, `server.exited` holds the error
+  output of a Workbench server that stopped.
 - **`unknown Workbench preview “…”`** A page's `kind: workbench` lens names an
   id that no definition declares.
 - **The canvas shows an error instead of the component:** the message is the
@@ -194,7 +195,7 @@ To check every preview without the canvas, run the extension's checker on the
 project. It builds each preview and lists the failures:
 
 ```sh
-node ~/.vscode/extensions/canonic.canonic-workbench-*/preview/cli.cjs check path/to/project
+~/.vscode/extensions/canonic.canonic-workbench-*/server/bin/*/workbench-server check path/to/project
 ```
 
 See [TypeScript Workbench previews](workbench-previews.md).

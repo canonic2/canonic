@@ -28,9 +28,9 @@ inside an artboard. The dedicated content entry point implements that boundary.
 | `ui/src/modules/review/capture.js`, `reference.js` | Immutable full-canvas capture composition and pure reference/context derivation. |
 | `ui/src/modules/review/controller.js`, `browser.js` | Capture/handoff sequencing, locks and partial failure; HTTP and download resources behind browser ports. |
 | `ui/src/modules/canvas/publication.js` | Serialized participating-space publication, shared-root discovery policy, heartbeats and withdrawal. |
-| `server/node/src/spaces/coordinator.ts` | Registered-space, fixed-operation server access. |
+| `server/src/serve/routes/canvas.rs` | Registered-space, fixed-operation server access. |
 | `contracts/src/agent-context/report.js` | Versioned context validation without silent text truncation. |
-| `server/node/src/modules/review/prompt.ts` | Per-region handoff sections using the existing local annotation formatter. |
+| `server/src/handoff/canvas.rs` | Per-region handoff sections using the existing local annotation formatter. |
 | `capture/src/native-streams/pool.ts` | Independent source/codec producers, subscriber ownership and idle cleanup. |
 
 Keep project preview compilation and pixel acquisition behind their existing
@@ -315,7 +315,7 @@ HTML, images, or full handoff prompts.
 | Phase 2 arrangement | Extend geometry and interactions for free positioning and row/grid placement | Stable renderer state, capture mapping and accessible movement |
 
 The browser host serves authored JavaScript/CSS bytes through
-[browser-modules.ts](../server/node/src/server/browser-modules.ts). The sidebar
+[files.rs](../server/src/serve/files.rs). The sidebar
 loads its module through a VS Code resource URL; portable docs copy their modules.
 No UI compiler or bundler participates. Preserve native module resolution, CSP,
 resource roots and packaging while maintaining the content-only rendering boundary.

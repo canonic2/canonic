@@ -200,7 +200,7 @@ doesn't change it.
   follow, such as aliases it doesn't understand.
 - Check `captureWarnings` for missing screenshots, and `browser.warnings` for
   TypeScript previews that didn't build.
-- A preview that fails to build is a warning. If the preview worker cannot
+- A preview that fails to build is a warning. If the preview compiler cannot
   build the viewer at all, the export still includes sources and reference
   screenshots, leaves out `browser/`, and records the cause under `warnings`.
   Read **Workbench: Show Log**,

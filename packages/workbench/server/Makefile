@@ -1,4 +1,5 @@
-CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$(HOME)/.cargo/bin/cargo")
+# rustup's proxy first: only it honours rust-toolchain.toml's pinned nightly.
+CARGO ?= $(shell test -x "$(HOME)/.cargo/bin/cargo" && printf '%s' "$(HOME)/.cargo/bin/cargo" || command -v cargo)
 CARGO_FLAGS ?=
 
 .DEFAULT_GOAL := help

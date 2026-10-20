@@ -18,7 +18,7 @@ compiler, before any project plugin:
 | `@canonic2/workbench` | Resolved to Workbench's bundled API module, whatever the project installs |
 | Preview runtime | `/_workbench/preview-runtime.js` is an external read from a window global set by the preview module, so every preview in a document shares one runtime |
 | TypeScript, JSX, TSX | Rspack's SWC loader, with React Refresh for project sources outside `node_modules` and generated entries |
-| Vue single-file components | Vue Loader and its style loaders ([Vue adapter](../adapters/vue.md#build)) |
+| Vue single-file components | Workbench's Vue loaders, with the Node evaluator compiling each component ([Vue adapter](../adapters/vue.md#build)) |
 | CSS | Rspack's native CSS, with hot updates. Files named `*.module.css` are CSS modules importable as a default object (`namedExports: false`) |
 | HTML previews | Workbench's HTML loader ([HTML adapter](../adapters/html.md#build)) |
 | Assets | Images, fonts and media imported by sources are emitted with content-hashed names |
@@ -31,13 +31,18 @@ compiler, before any project plugin:
 
 ### Project plugins
 
-Project configuration supplies Rspack plugins and module rules:
+Project configuration supplies compiler plugins and module rules:
 
 ```ts
-import { defineConfig } from '@canonic2/workbench';
+import { defineConfig, virtualModule, resolveImport, importGlob, svgSprite } from '@canonic2/workbench';
 
 export default defineConfig({
-  plugins: [new AcmeBuildInfo()],                  // Rspack plugins
+  plugins: [
+    virtualModule({ id: 'virtual:acme-build-info', source: "export const buildInfo = 'Acme build 42';" }),
+    resolveImport({ request: '@acme/platform', importer: 'src/native/**', to: './src/platform/native.ts' }),
+    importGlob(),
+    svgSprite({ dirs: ['src/icons'], symbolId: 'icon-[name]' }),
+  ],
   rules: [{ test: /\.tsx?$/, enforce: 'pre', loader: './workbench/greeting-loader.cjs' }],
   adapters: {
     'acme-canvas': { runtime: './workbench/canvas-runtime.ts', plugins: [], rules: [] },
@@ -45,35 +50,53 @@ export default defineConfig({
 });
 ```
 
-- `plugins` is a list of Rspack plugins: objects with `apply(compiler)`. They
-  are applied after Workbench's own plugins, in every compiler of the space.
-  An adapter's `plugins` apply only to the compiler that builds that adapter's
-  previews.
+- `plugins` is a list of compiler capabilities, plain objects that name their
+  `plugin`, made by the `@canonic2/workbench` helpers. They apply after
+  Workbench's own handling, in every compiler of the space. An adapter's
+  `plugins` apply only to the compiler that builds that adapter's previews.
+- Each capability is implemented in the native compiler; the project's paths,
+  identifiers and mappings are its options. The implementations know no
+  consuming project.
+
+  | Helper | Capability |
+  | --- | --- |
+  | `virtualModule({ id, source })` | A module made from source text, imported by its exact ID |
+  | `resolveImport({ request, to, importer? })` | An exact import resolved to another file, from every importer or from importers matching globs over the project-relative path or a regular expression over the absolute path; the first match wins |
+  | `importGlob({ include? })` | Vite's `import.meta.glob`, expanded at build time: literal patterns from `./`, `../` or `/`, negative patterns, `eager`, `import`, `query` and `exhaustive`; keys as written, in name order |
+  | `svgSprite({ dirs, symbolId?, register?, names?, inject?, domId? })` | `vite-plugin-svg-icons`' registration and names modules: each icon a `<symbol>` with its view box, IDs prefixed by the symbol ID with their references, the first stroke `currentColor` |
+
 - `rules` is a list of Rspack module rules, applied after Workbench's own
-  rules. Loader paths resolve from the project root.
-- Workbench evaluates `workbench.config.ts` with packages external
-  ([compiler](compiler.md#what-runs-in-the-node-evaluator)). A plugin therefore takes
-  Rspack's classes from the compiler it is applied to (`compiler.rspack`),
-  rather than importing its own copy of `@rspack/core`, which the project need
-  not install.
-- A plugin must expose `apply(compiler)`. An unsupported plugin shape produces
-  a problem naming the plugin while other previews remain available.
-- A plugin that throws, or a rule that fails, shows as a build error in the
-  previews whose graph it affects ([compiler](compiler.md#build-errors)).
+  rules: `test`, `include`, `exclude`, `resource`, `resourceQuery`,
+  `issuer`, `enforce`, `type`, `sideEffects`, `loader` with `options`,
+  `use`, `oneOf` and `rules`. A string condition is a path from the project
+  root. Loader paths resolve from the project root, as Node resolves them.
+- Workbench evaluates `workbench.config.ts` in the Node evaluator with
+  packages external ([compiler](compiler.md#what-runs-in-the-node-evaluator))
+  and passes it to the compiler as data: regular expressions are carried
+  over, and a function the compiler would need is a problem.
+- An object with `apply(compiler)` (a JavaScript Rspack plugin) or
+  `setup(build)` (an esbuild plugin), or any other plugin shape, produces a
+  problem naming the plugin while other previews remain available. It does
+  not run.
+- A plugin or rule that fails shows as a build error in the previews whose
+  graph it affects ([compiler](compiler.md#build-errors)). An invalid plugin
+  or rule option is a configuration problem for that plugin or rule.
 
 Common extension points:
 
-| Task | Rspack form |
+| Task | Form |
 | --- | --- |
-| Supply a virtual module | `NormalModuleReplacementPlugin` redirects to generated module source |
+| Supply a virtual module | `virtualModule` |
 | Transform source | A loader in `rules`, with `enforce: 'pre'` when it needs original source |
-| Redirect an import by its issuer | `NormalModuleReplacementPlugin` inspects request and issuer |
+| Redirect an import by its issuer | `resolveImport` with `importer` |
+| Expand a file glob at build time | `importGlob` |
+| Build an icon sprite from a folder | `svgSprite` |
 
 ### Portable output
 
-The portable build and the export's docs examples build with an Rspack
-production compiler that uses the same format handling and project plugins,
-so projects write one plugin form.
+The portable build and the export's docs examples build with a production
+compiler that uses the same format handling and project plugins, so
+projects write one plugin form.
 
 ## Target
 
@@ -85,39 +108,89 @@ server, for the Node evaluator:
   CSS, assets, `tsconfig.json` paths, aliases, `dedupe`, `define`, the
   `@canonic2/workbench` and preview runtime resolution, and the React Native
   Web profile are options of Rspack's Rust crates. The HTML loader and part
-  loader become Rust loaders ([HTML adapter](../adapters/html.md#target)). Vue
+  loader are Rust loaders ([HTML adapter](../adapters/html.md#target)). Vue
   and Astro follow their adapters' targets ([Vue](../adapters/vue.md#target),
   [Astro](../adapters/astro.md#target)).
 - **`workbench.config.ts` is evaluated in the Node evaluator.** Its
   declarative settings (`aliases`, `dedupe`, `resolveExtensions`, `define`,
-  and each rule's conditions) become compiler options in the server.
+  plugins, and each rule's conditions) become compiler options in the server.
 - **Project `rules`:** a rule whose loader is one of Rspack's built-in loaders
   runs natively; a JavaScript loader runs in the Node evaluator, one module
   at a time, over the evaluator's private channel, and its result returns to
   the compilation.
-- **Project `plugins`** are JavaScript objects with `apply(compiler)` that use
-  `compiler.rspack`. Rspack's Rust crates cannot call them. How they are
-  supported is open ([adapters](../adapters/README.md#open-questions)).
+- **Project plugin capabilities run in Rust.** The transformations, virtual
+  modules and resolver hooks are native compiler plugins. Project-specific
+  paths and options remain configuration; the implementation stays
+  independent of a consuming project. JavaScript `apply(compiler)` objects
+  are not the extension interface, and there is no Node compiler fallback for
+  them.
 - **Portable output** uses the same native compiler in production mode, with
   the same rules and the same answer for plugins.
 
+### Plugin migration decision
+
+Decided by the owner on 2026-10-19: migrate plugin implementations to Rust as
+part of the server migration. Preserve the capabilities used by consuming
+projects rather than maintaining a JavaScript compiler to execute their hooks.
+The registration interface is the `plugins` list of capability descriptions
+above.
+
+The concrete production use cases inspected for this decision are SVG sprite
+virtual modules, eager `import.meta.glob` expansion, and import resolution based
+on the importing source. They require project-agnostic implementations with
+configured directories, identifiers and mappings. The formats lab additionally
+exercises a virtual build-info module, source transformation and platform-specific
+resolution. Its JavaScript plugins are fixtures, not an additional production
+compatibility requirement.
+
+Migration acceptance must cover:
+
+- SVG symbol IDs, view boxes and references, registration and names modules,
+  and rebuilding after an icon is added, edited or deleted.
+- Glob match ordering and import keys, default exports, multiple expressions
+  without generated-name collisions, and rebuilding after matching files change.
+  Parse source expressions so comments and string literals are not rewritten.
+- Exact import matching and importer conditions: native sources resolve to the
+  configured native entry while other sources keep their normal resolution.
+- Equivalent live preview, docs-example and portable-build output, with invalid
+  configuration reported for the affected capability and no Node compiler
+  fallback. Native capabilities track their file and directory dependencies so
+  hot updates and the persisted build cache invalidate correctly.
+
 ## Status
 
-Implemented in the Node preview worker, with Rspack's JavaScript API:
-Workbench's format handling as Rspack loaders and rules, the
-project `plugins` and `rules` keys, plugin-shape validation, and
-portable output from an Rspack production build. Not implemented in Rust. HTML previews bundle every
-inline and local script and run it per render, with top-level declarations
-private. An `aliases` entry stands in for an Astro application module, such as
-`astro:content`. Gaps:
+Implemented in the native compiler in `workbench-server`
+([compiler/](../../server/src/compiler.rs)): Workbench's format handling, the
+`plugins` capabilities above
+([plugins/](../../server/src/compiler/plugins.rs)), project `rules` with
+JavaScript loaders run in the Node evaluator
+([node_loader.rs](../../server/src/compiler/node_loader.rs)), problems for
+JavaScript plugin objects and invalid options, and portable output from a
+production build. HTML previews bundle every inline and local script and run
+it per render, with top-level declarations private. An `aliases` entry
+stands in for an Astro application module, such as `astro:content`.
 
-- Astro frontmatter and Astro input edits still bundle with esbuild, without
-  project plugins or rules.
+Verified against the acceptance list, with the
+[preview tests](../../server/node/preview.test.js) and the compiler's unit tests
+(2026-10-19, debug build): SVG symbol IDs, view boxes, ID and reference
+prefixing, registration and names modules; glob ordering and keys, default and
+named imports, several calls without name collisions, comments and strings
+left as written; importer-dependent resolution beside the default; a loader
+rule run in Node with options; JavaScript plugins reported as problems. Gaps:
+
+- Rebuilding after an icon or a glob-matched file is added, edited or deleted
+  relies on the modules' recorded folder and file dependencies; no test
+  edits an icon or a matched file in a running server yet.
+- Live and docs-example output use the same rules and plugins as the
+  portable build, but parity between them is not compared in a test.
+- Astro frontmatter and Astro input edits still bundle with esbuild in the
+  Node evaluator, without project plugins or rules.
 
 ## Verification
 
-[Preview integration tests](../../server/node/preview.test.js) cover project plugins,
-module rules, format handling and portable builds. Plugin behavior in
+[Preview integration tests](../../server/node/preview.test.js) cover plugin
+capabilities, module rules, format handling and portable builds; the
+compiler's Rust unit tests cover each capability's transformation. Plugin behavior in
 server-side definition and Astro evaluation must be assessed separately from
 browser compilation; successful browser output does not establish that path.
 

@@ -3,15 +3,38 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Compiler, mockFetches } = require('./preview/compiler.cjs');
+const { mockFetches } = require('./preview/compiler.cjs');
 const server = require('./server');
-const portable = require('./preview/portable.cjs');
+const compilerFixture = require('./compiler-fixture.cjs');
 
 // Portable builds: the Rspack production compiler the export and the CLI use.
+// A compiler for the fixture, started on the first build it is asked for.
+function builder(t, root) {
+  let opened = null;
+  const compiler = () => opened || (opened = compilerFixture.open(root).then(started => { t.after(() => started.close()); return started; }));
+  return {
+    compile: async file => (await compiler()).compile(file),
+    compileDocs: async request => (await compiler()).compileDocs(request),
+  };
+}
 async function build(t, root, file) {
-  const builder = portable.portableBuilder(new Compiler(root));
-  t.after(() => builder.close());
-  return builder.compile(file);
+  return builder(t, root).compile(file);
+}
+
+/* The portable build of `root`, by its browser/ names. */
+function portableFiles(root) {
+  const output = path.join(root, '.workbench-test-output');
+  const result = compilerFixture.build(root, output);
+  const out = new Map();
+  const walk = folder => {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else out.set('browser/' + path.relative(output, file).split(path.sep).join('/'), fs.readFileSync(file));
+    }
+  };
+  walk(output);
+  return { result, files: out };
 }
 
 function fixture(t, files = {}) {
@@ -170,11 +193,13 @@ test('Astro previews without a default state render their base and named request
 
 test('portable Astro exports retain all reference states without requiring a rendering server', async t => {
   const root = fixture(t);
-  const result = await portable.create(new Compiler(root), { name: 'Acme' });
-  assert.deepEqual(result.warnings, []);
-  assert.equal(result.previews.length, 1);
-  assert.deepEqual(result.previews[0].controls, {});
-  const js = result.files.filter(file => file.path.endsWith('.js')).map(file => Buffer.from(file.data, 'base64').toString()).join('\n');
+  const { result, files } = portableFiles(root);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const catalog = JSON.parse(files.get('browser/workbench.json'));
+  assert.deepEqual(catalog.warnings, []);
+  assert.equal(catalog.previews.length, 1);
+  assert.deepEqual(catalog.previews[0].controls, {});
+  const js = [...files].filter(([name]) => name.endsWith('.js')).map(([, body]) => body.toString()).join('\n');
   assert.doesNotMatch(js, /SERVER_ONLY_SENTINEL|node:fs/);
   assert.match(js, /renderUrl:\s*null/);
 });
@@ -235,8 +260,7 @@ test('docs examples render Astro components from a folder, with their assets mad
     'examples/plain.astro': '<p>Plain</p>',
     'one.astro': '<p>One</p>',
   });
-  const compiler = portable.portableBuilder(new Compiler(root));
-  t.after(() => compiler.close());
+  const compiler = builder(t, root);
   const compiled = await compiler.compileDocs({ adapter: 'astro', examples: 'examples/' });
   assert.deepEqual(compiled.examples.map(example => example.id), ['plain', 'primary']);
   const bundle = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-astro-docs-')), 'examples.mjs');
@@ -261,6 +285,31 @@ test('docs examples render Astro components from a folder, with their assets mad
   assert.equal(info.error, null);
   assert.deepEqual(info.examples, ['plain', 'primary']);
   assert.equal((await fetch(base + info.module)).status, 200, 'live Astro docs handle the renderer dependency set');
+});
+
+test('a restarted server rebuilds an Astro render edited while it was stopped', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': `export default { id: 'components/note', adapter: 'astro', source: { entry: './Note.astro' } };`,
+    'Note.astro': '<p>ACME_FIRST_RENDER</p>',
+  });
+  // Every script the live preview page loads, as one text.
+  const served = async () => {
+    const running = await server.start({ root, capture: { close: async () => {} } });
+    try {
+      const base = 'http://127.0.0.1:' + running.port;
+      const html = await (await fetch(base + '/button.workbench.ts?state=default')).text();
+      const modulePath = /import \{ mount \} from "([^"]+)"/.exec(html)[1];
+      const scripts = JSON.parse(/const scripts = (\[[^\]]*\]);/.exec(await (await fetch(base + modulePath)).text())[1]);
+      return (await Promise.all(scripts.map(async script => (await fetch(base + script)).text()))).join('\n');
+    } finally {
+      await running.close();
+    }
+  };
+  assert.ok((await served()).includes('ACME_FIRST_RENDER'));
+  fs.writeFileSync(path.join(root, 'Note.astro'), '<p>ACME_SECOND_RENDER</p>');
+  const restarted = await served();
+  assert.ok(restarted.includes('ACME_SECOND_RENDER'), 'the restarted server serves the new render');
+  assert.ok(!restarted.includes('ACME_FIRST_RENDER'), 'nothing of the old render is restored from the cache');
 });
 
 test('a live Astro docs lens builds its examples and watches what they read', async t => {

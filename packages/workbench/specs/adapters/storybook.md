@@ -23,7 +23,7 @@ own address.
 ## A Storybook the server runs
 
 A Storybook implementation without `url` is the Workbench server's
-([storybook/index.ts](../../server/node/src/modules/storybook/index.ts)):
+([storybook.rs](../../server/src/storybook.rs)):
 
 - **It runs the project's own Storybook.** `root`, the space root unless
   set, is the folder with `.storybook/`; the `storybook` package and a
@@ -89,6 +89,6 @@ live-update client, which is why Storybook is told the proxy's port.
 
 ## Status
 
-Implemented in the Node server, for both a Storybook it runs and one the
-user runs. It moves into the Rust Workbench server with the rest of the
-server ([server](../server.md)).
+Implemented in the Rust Workbench server, for both a Storybook it runs and
+one the user runs ([server](../server.md)). The Storybook it runs is started on
+the host's Node runtime.

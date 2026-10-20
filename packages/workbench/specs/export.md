@@ -5,25 +5,29 @@ source closure of each selected page, reference screenshots, a guide per page,
 and, when the project has [TypeScript previews](previews.md), a portable
 `browser/` viewer. It is a server-backed operation available from the editor
 or a hosted browser; a `file://` workbench cannot export. See
-[server.js](../server/node/server.js), [export module](../server/node/src/modules/export/index.ts), and the
+the [export route](../server/src/serve/routes/export.rs), the [export module](../server/src/export.rs), and the
 [capture contract](capture.md) for the renderer it uses. The user-facing
 description is [Design-system export](../docs/design-system-export.md).
 
 ## Module ownership
 
-The source and archive core lives under `server/node/src/modules/export/`, following the
-[module layout contract](modules.md). Its public Node API is `index.ts`, with
-typed inputs and reports in `types.ts`, filesystem-backed source closure and
-page guides in `source.ts`, reference parsing in `references.ts`, and ZIP
-assembly and partitioning in `archive.ts`. `build.ts` coordinates the optional
-portable build and source archive, preserving a portable failure as a warning.
-`request.ts` validates options and filters page scope; `selection.ts` filters
-reference variants; `output.ts` assembles PDFs and image/browser archives.
-Tests live beside the module.
+The export is the server's `export` module (`server/src/export/`), following
+the [module layout contract](modules.md): typed inputs and reports in
+`types.rs`, filesystem-backed source closure and page guides in `source.rs`,
+reference parsing in `references.rs`, and ZIP assembly and partitioning in
+`archive.rs`. `build.rs` coordinates the optional portable build and source
+archive, preserving a portable failure as a warning. `request.rs` validates
+options and filters page scope; `selection.rs` filters reference variants;
+`plan.rs` plans the references, `capture.rs` captures them through up to
+four renderers, `output.rs` assembles PDFs and image/browser archives,
+`jobs.rs` owns job lifecycle and retention, and `pipeline.rs` runs one
+export. Tests live in each file.
 
-The server owns job lifecycle, capture planning and coordination with the capture
-and preview services. Those services and shared host transport retain their
-existing owners.
+The space supplies the capture helper (the host's, over its messages), the
+docs pages, a Storybook's stories and the
+[portable build](../server/src/portable.rs)
+([space/export.rs](../server/src/space/export.rs)). The capture helper and the
+compiler keep their own owners.
 
 ## Space scope
 
@@ -108,17 +112,17 @@ variants. The request is recorded in ZIP metadata.
 
 Capture owns PDF rendering. Visual pages use screen media, full document height,
 custom paper size and zero margins. Docs use print media, A4/Letter, half-inch
-margins and automatic pagination. The export module merges them with `pdf-lib`,
+margins and automatic pagination. The export module merges them with `lopdf`,
 preserving each page's size and selectable text. Individual capture failures are
 warnings; no successful pages fails the job. PDF returns `application/pdf`.
 Visual pages above 19,200 CSS pixels fail their capture rather than clip. Images
 above 8,192 pixels likewise warn rather than silently truncate.
 
-The portable worker receives the selected page IDs and optional state/size
+The portable build receives the selected page IDs and optional state/size
 filters. Browser-only output fails if no compiled previews or docs are available.
 
 - A failed portable build never fails a source ZIP. If the
-  preview worker cannot produce it at all, the export records a warning, leaves
+  preview compiler cannot produce it at all, the export records a warning, leaves
   out `browser/`, and still delivers the sources and references. The warning
   retains the cause under `warnings` in `canonic-export.json`; individual preview
   build warnings remain under `browser.warnings` when a viewer is produced.
@@ -238,9 +242,9 @@ regressions. Source, capture and portable warnings all contribute to the final
 export warning count.
 
 Space ownership is explicit in the implementation:
-[server.js](../server/node/server.js) reads `config.read(where)` for its selected space,
-and its export endpoint passes that resolved view into `beginExport`.
-[source.ts](../server/node/src/modules/export/source.ts) starts page records from `view.pages` and copies
+the server reads its own space's configuration, and its export route passes
+that resolved view into the export's pipeline.
+[source.rs](../server/src/export/source.rs) starts page records from `view.pages` and copies
 the manifest through the source-root ownership check. Existing
 [server tests](../server/node/server.test.js) verify that a server selects only its
 configured space's pages. The full multi-space export acceptance criteria
@@ -248,21 +252,21 @@ above do not yet have a dedicated end-to-end test.
 
 ## Verification points
 
-- [server.test.js](../server/node/server.test.js) checks the capture plan for states and
-  a Storybook lens's stories, the four-worker pool, per-story worker reuse, progress,
-  waiting for warm-up, coalesced jobs, retention and expiry (`404`), bounded
-  retained bundles, cleanup warnings, job and part downloads, and the direct
-  ZIP download.
-- [export tests](../server/node/src/modules/export/export.test.js) check the source closure, linked
-  packages, Storybook configuration, page hashes, shared-directory guide and
-  screenshot placement, and the split parts bundle. They also verify portable
-  fallback, successful partial builds and archive failures after a portable
-  failure. Server tests exercise a failed preview worker through job completion
-  and ZIP download, and verify revision reuse within a job and refresh across jobs.
-- [preview.test.js](../server/node/preview.test.js) checks that preview states enter the
-  capture plan, that a preview's compiler-resolved sources are hashed and its
-  `browser/` files archived, and that the portable build keeps successful
-  previews beside a failed one.
+- [server.test.js](../server/node/server.test.js) checks, through the server
+  and a stand-in capture service, progress, waiting for warm-up, coalesced
+  jobs, the current-page PDF, retention and expiry (`404`), bounded retained
+  bundles, job and part downloads, and the direct ZIP download.
+- The export module's tests check the capture plan for states, artboards,
+  docs pages and a Storybook lens's stories, the four-worker pool, per-story
+  worker reuse, cleanup warnings, revision reuse within a job and refresh
+  across jobs, the source closure, linked packages, Storybook configuration,
+  shared-directory guide and screenshot placement, split parts, PDF merging,
+  portable fallback, successful partial builds and archive failures after a
+  portable failure.
+- [preview.test.js](../server/node/preview.test.js) checks that a Workbench
+  lens's export captures the managed preview's states, that a browser export
+  builds only the selected previews, states and sizes, and that the portable
+  build keeps successful previews beside a failed one.
   [preview-astro.test.js](../server/node/preview-astro.test.js) checks Astro reference
   states in portable output.
 - [capture-page.test.js](../ui/legacy/capture-page.test.js) checks that

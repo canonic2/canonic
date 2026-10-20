@@ -60,7 +60,7 @@ See the [rendering flow](rendering-flow.md).
   **Copy reference** says to wait.
 - A canvas posts `closed` on `pagehide`. One that stops reporting stops
   counting after 3 minutes.
-- [agent-view.js](../server/node/agent-view.js) keeps the views. `GET /_workbench/view`
+- [agent_view.rs](../server/src/agent_view.rs) keeps the views. `GET /_workbench/view`
   answers `{ root, open, view, changedAt }` for the canvas changed most
   recently. A heartbeat doesn't count as a change.
 - With no canvas open, `open` is false and agents are told nothing.
@@ -134,7 +134,7 @@ contract.
   `current_view` says no canvas is open.
 - The generated hook and MCP commands find the script from the project root
   and from nested folders, including a nested Git repository.
-- Automated: [agent-view.test.js](../server/node/agent-view.test.js) (latest canvas,
+- Automated: [agent_view tests](../server/src/agent_view/tests.rs) (latest canvas,
   heartbeats, closing, staleness, field filtering, the announcement file),
   [server.test.js](../server/node/server.test.js) (the route and the file's lifecycle),
   and the context reader's, output's and loader's own tests in the package

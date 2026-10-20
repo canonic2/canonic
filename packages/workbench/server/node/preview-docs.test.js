@@ -4,8 +4,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { Compiler, docsRequest } = require('./preview/compiler.cjs');
-const { portableBuilder } = require('./preview/portable.cjs');
+const compilerFixture = require('./compiler-fixture.cjs');
+
+// A docs lens's examples as the native compiler lists them.
+async function listing(t, root) {
+  const compiler = await compilerFixture.open(root);
+  t.after(() => compiler.close());
+  return async request => {
+    const answer = await fetch('http://127.0.0.1:' + compiler.port + '/_workbench/previews/docs/index?request=' + encodeURIComponent(JSON.stringify(request)));
+    assert.equal(answer.status, 200);
+    return answer.json();
+  };
+}
 
 function fixture(t, files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-docs-test-'));
@@ -30,10 +40,30 @@ async function load(t, compiled) {
 const canvas = () => ({ textContent: '' });
 
 // A docs lens's portable bundle, from the Rspack production compiler.
+// A compiler for the fixture, started on the first build it is asked for.
 function builder(t, root) {
-  const built = portableBuilder(new Compiler(root));
-  t.after(() => built.close());
-  return built;
+  let opened = null;
+  const compiler = () => opened || (opened = compilerFixture.open(root).then(started => { t.after(() => started.close()); return started; }));
+  return {
+    compile: async file => (await compiler()).compile(file),
+    compileDocs: async request => (await compiler()).compileDocs(request),
+  };
+}
+
+/* The portable build of `root`, by its browser/ names. */
+function portableFiles(root) {
+  const output = path.join(root, '.workbench-test-output');
+  const result = compilerFixture.build(root, output);
+  const out = new Map();
+  const walk = folder => {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else out.set('browser/' + path.relative(output, file).split(path.sep).join('/'), fs.readFileSync(file));
+    }
+  };
+  walk(output);
+  return { result, files: out };
 }
 
 test('a folder lens bundles one example per file, by file name, with its styles', async t => {
@@ -108,16 +138,15 @@ test('adding an example to a folder rebuilds the bundle', async t => {
   assert.notEqual(second.revision, first.revision);
 });
 
-test('a lens’s listing is kept until a file it read changes', async t => {
+test('a lens’s listing follows the files it reads', async t => {
   const root = fixture(t, { 'card.examples.ts': 'export * from "./more.ts";\nexport const basic = () => {};\n', 'more.ts': 'export const large = () => {};\n' });
-  const compiler = new Compiler(root);
-  const request = docsRequest({ adapter: 'html', examples: 'card.examples.ts' }, root);
-  const first = await compiler.docsExamples(request);
-  assert.deepEqual(first.examples.map(example => example.id).sort(), ['basic', 'large']);
-  assert.equal(await compiler.docsExamples(request), first, 'unchanged sources reuse the listing');
-  await new Promise(resolve => setTimeout(resolve, 20));
+  const list = await listing(t, root);
+  const request = { adapter: 'html', examples: 'card.examples.ts' };
+  const first = await list(request);
+  assert.deepEqual(first.examples.map(example => example.id), ['basic', 'large']);
+  assert.deepEqual(first.examples[1], { id: 'large', file: 'card.examples.ts', export: 'large' });
   fs.writeFileSync(path.join(root, 'more.ts'), 'export const large = () => {};\nexport const small = () => {};\n');
-  assert.deepEqual((await compiler.docsExamples(request)).examples.map(example => example.id).sort(), ['basic', 'large', 'small'], 'a re-exported file is watched too');
+  assert.deepEqual((await list(request)).examples.map(example => example.id), ['basic', 'large', 'small'], 'a re-exported file is read too');
 });
 
 test('docs requests stay inside the project and name what is wrong', async t => {
@@ -348,10 +377,7 @@ test('a file lens lists examples it re-exports, with export * included', async t
     'examples/index.ts': "export * from './basic.ts';\nexport { large as huge } from './sizes.ts';\nimport './theme.css';",
     'examples/theme.css': '.acme { color: red; }',
   });
-  const compiler = new Compiler(root);
-  await compiler.settings();
-  const { docsRequest } = require('./preview/compiler.cjs');
-  const listed = await compiler.docsExamples(docsRequest({ adapter: 'html', examples: 'examples/index.ts' }, root));
+  const listed = await (await listing(t, root))({ adapter: 'html', examples: 'examples/index.ts' });
   assert.deepEqual(listed.examples.map(example => [example.id, example.export]).sort(), [['basic', 'basic'], ['huge', 'huge'], ['with-icon', 'withIcon']]);
 });
 
@@ -384,9 +410,7 @@ test('the portable export builds each docs page in each lens as a static page wi
   const root = docsProject(t);
   fs.writeFileSync(path.join(root, 'docs/button.md'), fs.readFileSync(path.join(root, 'docs/button.md'), 'utf8') + '\n![Anatomy](anatomy.svg)\n');
   fs.writeFileSync(path.join(root, 'docs/anatomy.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
-  const portable = require('./preview/portable.cjs');
-  const built = await portable.create(new Compiler(root), { name: 'Acme' });
-  const files = new Map(built.files.map(file => [file.path, Buffer.from(file.data, 'base64')]));
+  const { files } = portableFiles(root);
   const catalog = JSON.parse(files.get('browser/workbench.json'));
   assert.deepEqual(catalog.docs, [{ id: 'docs/button.md', title: 'Button', src: 'docs/button.md', lens: 'web',
     lenses: [{ key: 'web', label: 'Web', directory: 'browser/docs/docs-button/web' }, { key: 'native', label: 'Native', directory: 'browser/docs/docs-button/native' }],

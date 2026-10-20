@@ -342,7 +342,8 @@ error in the preview's frame, then calls your handler.
 
 - **Component styles.** `<style>` and `<style scoped>` blocks are compiled and
   loaded with the preview, `v-bind()` in CSS works, and `<style src="...">`
-  loads a CSS file.
+  loads a CSS file, relative to the component or from a package, and
+  rebuilds when that file changes.
 - **Global CSS.** List stylesheets in the definition's `styles`, relative to the
   definition, or import them from a script with `import './tokens.css'`. Both
   are bundled into the preview's stylesheet, with their `@import` rules.
@@ -373,9 +374,11 @@ body { font-family: 'Acme Sans', system-ui, sans-serif; }
 Not supported:
 
 - **CSS preprocessors.** `<style lang="scss">` and other `lang` values fail the
-  build with `Module parse failed`. Use plain CSS, or add a
-  [rule](custom-adapters.md#rules-and-plugins) whose loaders compile the
-  language.
+  build with `Vue style preprocessors are not supported; use plain CSS`, and a
+  `<style src>` naming anything but a `.css` file fails with `Vue style src
+  must name a .css file`. Use plain CSS, or import the stylesheet from a
+  script and add a [rule](custom-adapters.md#rules-and-plugins) whose loaders
+  compile the language.
 - **Tailwind and PostCSS.** Workbench doesn't run PostCSS. `@tailwind` and
   `@apply` are left unprocessed, without an error, so utility classes have no
   styles. Build your CSS with your own toolchain and list the output file in

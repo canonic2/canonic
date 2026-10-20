@@ -17,7 +17,7 @@ user docs, design fixtures and labs.
 | Part | Responsibility and boundary |
 | --- | --- |
 | `extension/` | VS Code activation, commands, webviews, trust input and lifecycle of editor-launched sessions; extension manifest and icons |
-| `server/` | Rust page index in `src/`; shipping Node HTTP server, project services and compiler worker in `node/` |
+| `server/` | The Rust Workbench server in `src/`: HTTP, project services, page index and preview compiler; in `node/`, its host, the standalone command and the Node evaluator |
 | `capture/` | Electron screenshot renderer, runtime preparation, platform window capture and native stream pooling |
 | `ui/` | Browser canvas, components, themes, preview runtimes/adapters and portable viewer |
 | `sdk/` | Published definition helpers and authoring types, independently consumable by projects |
@@ -99,7 +99,7 @@ DOM initialization, filesystem I/O or process lifecycle.
 #### Current violations and migration scope
 
 The combined host serves authored JavaScript/CSS bytes through
-[`browser-modules.ts`](../server/node/src/server/browser-modules.ts).
+[`files.rs`](../server/src/serve/files.rs).
 The VS Code sidebar loads its JavaScript entry point through an allowed webview
 resource URL. Portable docs copy their modules unchanged. No UI transform or
 compiler-wrapper dependency is needed by these delivery paths.
@@ -113,7 +113,7 @@ Complete application loading with a fixture API client and backend API acceptanc
 without UI files remain unverified; combined-host checks do not prove them.
 
 JavaScript/TypeScript capability modules use the owning part's
-`src/modules/<capability>/`; current Node services use
+`src/modules/<capability>/`; the Node host and evaluator use
 `server/node/src/modules/`. Shared UI presentation is `ui/src/components/`,
 themes are `ui/src/theme/`, and browser controllers are in `ui/src/`.
 Application entry points compose owners. Existing direct capability directories
@@ -122,11 +122,10 @@ introducing speculative shared packages. Rust follows Cargo's standard layout.
 The [shared architecture rule](../../../.canonic/rules/module-architecture.md)
 and [product guide](../../../.canonic/guides/workbench/AGENTS.md) define the contracts.
 
-Docs illustrate the cross-part boundary: shared parsing, lens and placement rules are
-in `contracts/src/docs/`, browser canvas/page modules in `ui/src/modules/docs/`,
-and rendering, source reading and portable export services in
-`server/node/src/modules/docs/`. The service exposes `index.ts`. Export and
-preview-pipeline Node workflows retain their own capability APIs.
+Docs illustrate the cross-part boundary: the browser's lens rules are in
+`contracts/src/docs/lenses.js`, browser canvas/page modules in
+`ui/src/modules/docs/`, and Markdown reading, rendering, source reading and
+portable pages in the server's `docs` module ([docs.rs](../server/src/docs.rs)).
 
 ## Delivery and verification
 
@@ -168,7 +167,7 @@ controller owns the ordinary renderer's parking/expiry policy and shared catalog
 the canvas controller owns artboard instances, geometry and capture locks.
 Review owns capture/handoff sequencing and partial failure. Its browser adapter
 owns downloads and HTTP delivery. Server-side handoff prompt formatting and its
-tests live under `server/node/src/modules/review/`, not in browser source.
+tests live in the server ([handoff.rs](../server/src/handoff.rs)), not in browser source.
 
 The outer legacy shell still interprets its configuration, hash and controls.
 The content controller separately derives renderer metadata from the project model,
