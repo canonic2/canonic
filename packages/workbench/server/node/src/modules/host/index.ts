@@ -30,7 +30,7 @@ const electronCapture = require('../../../../../capture/electron-capture');
 const indexRuntime = require('../../../../../capture/electron-runtime');
 const windowStream = require('../../../../../capture/window-stream');
 const nativePool = require('../../../../../capture/src/native-streams/pool.ts');
-const spaces = require('../../../spaces');
+const binary = require('../../../binary');
 
 /** Ports to try in order. A stable one keeps links working between sessions; if all are taken the OS picks. */
 export const PORTS = [3579, 3580, 3581, 3582, 3583, 0];
@@ -109,7 +109,7 @@ export type Running = {
 
 /** The binary this product ships for this platform. */
 export function binaryPath(): string {
-  return path.join(product, 'server/bin', process.platform + '-' + process.arch, 'workbench-server' + (process.platform === 'win32' ? '.exe' : ''));
+  return binary.binaryPath();
 }
 
 /** What runs in every page the capture helper opens: the element-describing helper and its DevTools entry point. */
@@ -230,7 +230,7 @@ export function start(options: HostOptions): Promise<Running> {
       case 'handoff':
         if (!options.onHandoff) throw new Error('nothing is set up to receive a handoff');
         return Promise.resolve(options.onHandoff(String(message.prompt), message.canvas)).then(() => null);
-      case 'spaces': return options.spaces ? options.spaces.list() : [spaces.describe({ dir: where.dir, key: where.key, root })];
+      case 'spaces': return options.spaces ? options.spaces.list() : null;
       case 'space-open':
         if (!options.spaces) throw new Error('That space isn’t in the Workbench list.');
         return options.spaces.open(String(message.space));
@@ -252,7 +252,6 @@ export function start(options: HostOptions): Promise<Running> {
   function args(ports: number[]): string[] {
     const out = ['serve', '--ports', ports.join(','), '--root', root, '--product', product, '--space-dir', where.dir];
     if (where.key) out.push('--space-key', where.key);
-    out.push('--space-id', spaces.spaceId(where.dir, where.key));
     if (options.isTrusted === false) out.push('--untrusted');
     if (options.onHandoff) out.push('--handoff');
     if (options.eagerPreviews) out.push('--eager-previews');

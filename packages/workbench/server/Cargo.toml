@@ -5,11 +5,13 @@ edition = "2024"
 rust-version = "1.97"
 publish = false
 license-file = "../LICENSE"
-description = "Workbench server: the front door to the Node server and the resident page index"
+description = "Workbench server: one space's HTTP server, resident page index and preview compiler"
 
 [dependencies]
 anyhow = "=1.0.104"
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "tokio"] }
+# Export job IDs and capture revisions come from the system's random source.
+getrandom = "=0.3.2"
 globset = "=0.4.16"
 http-body-util = "=0.1.5"
 hyper = { version = "=1.12.0", features = ["client", "http1"] }
@@ -30,6 +32,8 @@ regex = "=1.13.1"
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.150", features = ["preserve_order"] }
+# Space ids, the same hash in every window and run.
+sha1 = "=0.10.6"
 sha2 = "=0.10.9"
 swc_common = "=26.0.0"
 swc_ecma_ast = "=29.0.1"

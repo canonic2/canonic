@@ -98,7 +98,9 @@ Its space picker browses without closing instances. The extension's space
 switcher below still changes the editor's host space. Sidebar picks edit the
 selected instance; canvas context and handoffs cover every instance.
 
-Implemented in [spaces.js](../server/node/spaces.js), [extension.js](../extension/extension.js),
+Implemented in [spaces.rs](../server/src/spaces.rs), which lists and describes
+spaces for `workbench-server spaces <folder>…`, [spaces.js](../server/node/spaces.js),
+which keeps the list and the running servers, [extension.js](../extension/extension.js),
 and the [space switcher element](../ui/src/components/space-switcher/element.js).
 Component and theme contracts: [Web Components](web-components.md) and
 [themes](themes.md). User guide:
@@ -110,7 +112,7 @@ Component and theme contracts: [Web Components](web-components.md) and
   default that folder, so several may share one). Shared top-level keys are
   inherited, `implementations` merged by name; `name`, `color`, `icon`, and
   `root` are not (`selectSpace` in [manifest.js](../contracts/manifest.js),
-  used by both readers). Folders are the window's that have a file, in folder
+  which the server's reader matches). Folders are the window's that have a file, in folder
   order, then the folders the user added (stored in `globalState`, shared by
   every window). A folder in both is listed once, as the window's, and is not
   removable. An added folder whose `workbench.yaml` is missing is hidden but
@@ -118,10 +120,9 @@ Component and theme contracts: [Web Components](web-components.md) and
   removed, or re-rooted in the file show up without a reload; a running
   server whose space left the file, or whose root changed, stops.
 - A space's id is the first 10 hex digits of the SHA-1 of its file's
-  resolved folder, with `#<key>` appended for a space under `spaces` (so
-  single-space ids are unchanged). Its name is the manifest `name`, else
-  the folder name (single space) or a label from its key, and the folder
-  name when the manifest does not parse.
+  resolved folder, with `#<key>` appended for a space under `spaces`. Its
+  name is the manifest `name`, else the folder name (single space) or a
+  label from its key, and the folder name when the manifest does not parse.
 - A server for a space that isn't its file's whole config, or whose root
   isn't the file's folder, is started with `config: { dir, key }`. It reads
   that space's config, serves the file and its local override at

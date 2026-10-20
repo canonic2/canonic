@@ -11,7 +11,6 @@
 
 var path = require('path');
 var host = require('./src/modules/host/index.ts');
-var config = require('./config');
 var spaces = require('./spaces');
 
 module.exports = host;
@@ -26,10 +25,7 @@ if (require.main === module) {
     console.error(String(err.message || err));
     process.exit(1);
   };
-  var found = [];
-  dirs.forEach(function (dir) {
-    config.list(dir).forEach(function (space) { found.push(Object.assign({ dir: path.resolve(dir) }, space)); });
-  });
+  var found = spaces.listed(dirs.map(function (dir) { return path.resolve(dir); }));
 
   if (found.length <= 1) {
     var only = found[0] || { dir: path.resolve(dirs[0]), key: null, root: path.resolve(dirs[0]) };
@@ -38,7 +34,7 @@ if (require.main === module) {
     }, failed);
   } else {
     var missing = dirs.filter(function (dir) { return !spaces.hasWorkbench(dir); });
-    if (missing.length) failed(new Error('There’s no ' + config.FILE + ' in ' + missing.join(', ') + '.'));
+    if (missing.length) failed(new Error('There’s no ' + spaces.FILE + ' in ' + missing.join(', ') + '.'));
     var shared = host.createCapture();
     var hub = spaces.create({
       start: function (space) {

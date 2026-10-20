@@ -1,4 +1,4 @@
-//! The Workbench server: the front door to the Node server and the page index.
+//! The Workbench server: one space's HTTP server, page index and preview compiler.
 //!
 //! Literal parsing and definition rules are pure. The index workflow coordinates
 //! filesystem discovery, saved state and JavaScript evaluation. CLI transport and
@@ -34,6 +34,7 @@ mod saved;
 mod serve;
 mod simulators;
 mod space;
+mod spaces;
 mod storybook;
 
 /// Run the native CLI using process arguments and standard streams.

@@ -36,6 +36,10 @@ pub(crate) type ListDevices =
 pub(crate) struct Settings {
     /// This space's id in the host's list.
     pub(crate) id: String,
+    /// The folder of its workbench.yaml and its key there, which describe
+    /// it when the host lists no other spaces.
+    pub(crate) dir: std::path::PathBuf,
+    pub(crate) key: Option<String>,
     /// Whether the host receives handoffs.
     pub(crate) handoff: bool,
     pub(crate) export_retention_ms: Option<u64>,

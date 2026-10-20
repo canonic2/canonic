@@ -193,6 +193,40 @@ fn local_size_keys(local_raw: Option<&Value>, key: Option<&str>) -> Vec<String> 
         .unwrap_or_default()
 }
 
+/// The spaces the workbench.yaml in `dir` holds, each `(key, root)`: one
+/// with no key for a file without `spaces`, and for a file that can't be
+/// read or parsed, so it is still listed and can show its error. Empty
+/// without the file.
+pub(crate) fn spaces_in(dir: &Path) -> Vec<(Option<String>, std::path::PathBuf)> {
+    let found = match read_raw(dir) {
+        Ok(Some(found)) => found,
+        Ok(None) => return Vec::new(),
+        Err(_) => return vec![(None, dir.to_path_buf())],
+    };
+    let keys = manifest::space_keys(&found.raw, &mut Vec::new());
+    if keys.is_empty() {
+        return vec![(None, dir.to_path_buf())];
+    }
+    keys.into_iter()
+        .map(|key| {
+            let (_, _, root) = manifest::select_space(&found.raw, Some(&key), &mut Vec::new());
+            let root = root.map_or_else(|| dir.to_path_buf(), |root| paths::resolve(dir, &root));
+            (Some(key), root)
+        })
+        .collect()
+}
+
+/// A space's `name` and mark (`color`, `icon`, `image`), local over
+/// committed, or `None` when its files can't be read.
+pub(crate) fn identity(dir: &Path, key: Option<&str>) -> Option<(String, Value)> {
+    let found = read_raw(dir).ok()??;
+    let (raw, _, _) = manifest::select_space(&found.raw, key, &mut Vec::new());
+    Some((
+        text(raw.get("name")),
+        manifest::space_mark(&raw, &mut Vec::new()),
+    ))
+}
+
 /// The config of the space `key` of the workbench.yaml in `dir`, resolved
 /// for this machine, or `None` without a workbench.yaml. The answer of
 /// `config.resolve(dir, config.read({ dir, key }))` in the Node reader.

@@ -69,12 +69,18 @@ async function main() {
       width: 2000, height: 1000, deviceScaleFactor: 1, mobile: false,
     });
     // Lenses frame the fixture through the workbench's implementation proxy,
-    // so its messages arrive from the proxy's loopback origin.
+    // so its messages arrive from the proxy's loopback origin. The fixture's
+    // parent is the isolated content renderer, which shares the canvas's
+    // origin and collects them on the canvas page.
     await target.send('Page.addScriptToEvaluateOnNewDocument', { source:
-      'window.fixtureMessages=[];addEventListener("message",function(e){' +
+      'if(window===top)window.fixtureMessages=[];addEventListener("message",function(e){' +
       'if(e.origin!==location.origin&&e.origin!==' + JSON.stringify(origin) + '&&/^http:\\/\\/127\\.0\\.0\\.1:/.test(e.origin)&&' +
-      'e.data&&e.data.type==="fixture-ready")window.fixtureMessages.push(e.data);});',
+      'e.data&&e.data.type==="fixture-ready")top.fixtureMessages.push(e.data);});',
     });
+    // The content renderer's document, and the implementation frame in it.
+    var content = 'document.querySelector("wb-canvas > iframe").contentDocument';
+    var active = content + '.querySelector("iframe.is-active")';
+    var shown = '!!document.querySelector("wb-canvas > iframe")?.contentDocument?.getElementById("artboard") && !' + content + '.getElementById("artboard").hidden';
     async function until(expression) {
       var deadline = Date.now() + 10000;
       while (Date.now() < deadline) {
@@ -85,23 +91,26 @@ async function main() {
     }
     async function pick(hash, pathname) {
       await target.evaluate('window.fixtureMessages=[];location.hash=' + JSON.stringify(hash));
-      await until('!document.getElementById("artboard").hidden && document.querySelector("iframe.is-active").src.includes(' + JSON.stringify(pathname) + ')');
+      await until(shown + ' && ' + active + '.src.includes(' + JSON.stringify(pathname) + ')');
       // A retained frame need not load again when its lens becomes active.
-      await target.evaluate('document.querySelector("iframe.is-active").contentWindow.postMessage("fixture-report","*")');
+      await target.evaluate(active + '.contentWindow.postMessage("fixture-report","*")');
       await until('window.fixtureMessages.some(function(m){return m.path===' + JSON.stringify(pathname) + ';})');
     }
     // Exercise the isolated artboard renderer; smoke-canvas covers its parent.
     await target.navigate(running.url + 'index.html#fixture.html@mobile~dev');
-    await until('window.fixtureMessages.length && !document.getElementById("artboard").hidden');
+    await until('window.fixtureMessages.length && ' + shown);
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).width'), 393);
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).signedIn'), false);
     await target.evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{key:"0",code:"Digit0",ctrlKey:true,bubbles:true}))');
     await until('window.wbZoom.scale() === 1');
     // Click the actual iframe form: no input forwarding or fake login API.
     async function click(field) {
-      var point = await target.evaluate('(function(){var f=document.querySelector("iframe.is-active").getBoundingClientRect();' +
+      // The fixture's point, through the implementation frame inside the
+      // content renderer, which the canvas places and scales.
+      var point = await target.evaluate('(function(){var r=document.querySelector("wb-canvas > iframe");' +
+        'var o=r.getBoundingClientRect();var outer=o.width/r.offsetWidth;var f=' + active + '.getBoundingClientRect();' +
         'var m=window.fixtureMessages.at(-1);var b=m[' + JSON.stringify(field) + '];' +
-        'var scale=f.width/m.width;return {x:f.x+b.x*scale,y:f.y+b.y*scale};})()');
+        'var scale=f.width/m.width;return {x:o.x+(f.x+b.x*scale)*outer,y:o.y+(f.y+b.y*scale)*outer};})()');
       await target.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
       await target.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
     }
@@ -118,7 +127,7 @@ async function main() {
     await pick('#fixture.html@laptop~dev', '/app');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).width'), 1512);
     await target.evaluate('document.querySelector("#lenses button").click()');
-    await until('document.querySelector("iframe.is-active").src.includes("/fixture.html")');
+    await until(active + '.src.includes("/fixture.html")');
     await pick('#fixture.html@mobile~dev', '/app');
     assert.equal(await target.evaluate('window.fixtureMessages.at(-1).signedIn'), true);
     assert.ok(!traffic.some(function (url) { return /\/_workbench\/(live\/|lens\/probe)/.test(url); }));

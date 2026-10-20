@@ -14,95 +14,43 @@
    listing a space costs one read of its workbench.yaml, while starting one
    can open terminals and compile previews.
 
-   A space's id is a hash of its file's folder, and of its key when the file
-   lists several, so it is the same in every window, in every run, and in the
-   canvas's address, without saying where the folder is. Its default mark —
-   the letter and colour drawn beside its name — comes from that id too, so a
-   space keeps its colour wherever it is shown. */
+   The server binary lists and describes spaces (see spaces.rs): a space's
+   id is a hash of its file's folder and key, the same in every window and
+   run, and its default colour comes from that id. */
 
-var crypto = require('crypto');
+var childProcess = require('child_process');
 var fs = require('fs');
 var path = require('path');
-var config = require('./config');
+var binaryPath = require('./binary').binaryPath;
 
-var COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'teal'];
-
-function spaceId(dir, key) {
-  var at = path.resolve(dir);
-  return crypto.createHash('sha1').update(key ? at + '#' + key : at).digest('hex').slice(0, 10);
-}
+var FILE = 'workbench.yaml';
 
 function hasWorkbench(dir) {
-  return fs.existsSync(path.join(dir, config.FILE));
+  return fs.existsSync(path.join(dir, FILE));
 }
 
-var MAX_IMAGE = 256 * 1024;
-var IMAGE_TYPES = {
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp', '.gif': 'image/gif',
-};
-
-/* What workbench.yaml says about the space: its `name`, `color` and
-   `icon`, with workbench.local.yaml over them. A file that doesn't parse
-   still lists the space, under its folder name with the default mark, so it
-   can be opened and its error read. */
-function read(space) {
-  try {
-    return config.read({ dir: space.dir, key: space.key }) || {};
-  } catch (error) {
-    return {};
-  }
+/* Every space the folders' workbench.yaml files hold, as the switchers
+   draw them: { id, key, name, dir, root, initial, color, icon, image }.
+   The server binary reads the files with the same rules as every other
+   reader of the configuration; a space listed by two folders is the first
+   one's. */
+function listed(dirs) {
+  if (!dirs.length) return [];
+  var out = childProcess.execFileSync(binaryPath(), ['spaces'].concat(dirs), {
+    encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return JSON.parse(out);
 }
 
-function initialOf(name) {
-  var match = /[\p{L}\p{N}]/u.exec(String(name || ''));
-  return match ? match[0].toLocaleUpperCase() : '?';
-}
-
-/* An image icon travels as a data URI. Each space is its own server and
-   its own folder, and the switcher draws every space's mark wherever it
-   is — the editor's sidebar, another space's canvas — so the image can't
-   be fetched from where it lives. One that is missing, too big or outside
-   the space's root leaves the letter in its place. */
-function imageOf(root, file) {
-  if (!file) return null;
-  var full = path.resolve(root, file);
-  if (full.indexOf(path.resolve(root) + path.sep) !== 0) return null;
-  var type = IMAGE_TYPES[path.extname(full).toLowerCase()];
-  try {
-    var stat = fs.statSync(full);
-    if (!type || !stat.isFile() || stat.size > MAX_IMAGE) return null;
-    return 'data:' + type + ';base64,' + fs.readFileSync(full).toString('base64');
-  } catch (error) {
-    return null;
-  }
-}
-
-/* A space as the switchers draw it. `space` is { dir, key, root,
+/* One space as the switchers draw it. `space` is { dir, key, root,
    removable }; `dir` holds its workbench.yaml and `root` is what it serves. */
 function describe(space) {
   var dir = path.resolve(space.dir || space.root);
   var key = space.key || null;
-  var id = spaceId(dir, key);
-  var found = read({ dir: dir, key: key });
-  var root = path.resolve(space.root || found.root || dir);
-  var mark = found.mark || {};
-  var name = found.name || path.basename(root);
-  var image = imageOf(root, mark.image);
-  /* An image is drawn as it is, on no colour unless the space names one. */
-  var color = mark.color || (image ? null : COLORS[parseInt(id.slice(0, 8), 16) % COLORS.length]);
-  return {
-    id: id,
-    key: key,
-    name: name,
-    dir: dir,
-    root: root,
-    initial: initialOf(name),
-    color: color,
-    icon: mark.icon || null,
-    image: image,
-    removable: !!space.removable,
-  };
+  var found = listed([dir]).filter(function (candidate) { return candidate.key === key; })[0];
+  var root = path.resolve(space.root || (found && found.root) || dir);
+  var described = found || { id: null, key: key, name: path.basename(root), dir: dir, root: root, initial: '?', color: null, icon: null, image: null };
+  return Object.assign({}, described, { root: root, removable: !!space.removable });
 }
 
 /* `start(space)` is given { dir, key, root } and answers with a running
@@ -119,17 +67,11 @@ function create(options) {
      added, removed or moved one. A space listed by two folders' files is
      the first one's. */
   function expand() {
-    var seen = {};
-    var out = [];
-    folders.forEach(function (folder) {
-      config.list(folder.dir).forEach(function (found) {
-        var id = spaceId(folder.dir, found.key);
-        if (seen[id]) return;
-        seen[id] = true;
-        out.push({ id: id, dir: folder.dir, key: found.key, root: found.root, removable: folder.removable });
-      });
+    var removable = {};
+    folders.forEach(function (folder) { removable[folder.dir] = folder.removable; });
+    return listed(folders.map(function (folder) { return folder.dir; })).map(function (space) {
+      return Object.assign(space, { removable: !!removable[space.dir] });
     });
-    return out;
   }
 
   /* Servers whose space left the list, or now serves another root, stop. */
@@ -164,7 +106,7 @@ function create(options) {
   function list() {
     var spaces = expand();
     settle(spaces);
-    return spaces.map(describe);
+    return spaces;
   }
 
   /* The running server for a listed space, started if it isn't. A start
@@ -202,8 +144,8 @@ function create(options) {
 
 module.exports = {
   create: create,
-  spaceId: spaceId,
   hasWorkbench: hasWorkbench,
   describe: describe,
-  COLORS: COLORS,
+  listed: listed,
+  FILE: FILE,
 };

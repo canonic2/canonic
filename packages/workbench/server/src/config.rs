@@ -1,8 +1,7 @@
 //! A space's configuration: its workbench.yaml and workbench.local.yaml read,
 //! checked and resolved for this machine, giving the same answer as the Node
 //! reader (`server/node/config.js` with `contracts/manifest.js`). Parsing and
-//! rules are pure; `read` alone touches the filesystem. Phase 2 of the
-//! server's move into Rust (specs/server.md).
+//! rules are pure; `read` alone touches the filesystem.
 pub(crate) mod edit;
 mod js;
 mod manifest;
@@ -10,6 +9,7 @@ mod read;
 mod sizes;
 mod yaml;
 
+pub(crate) use read::{identity, spaces_in};
 pub(crate) use sizes::page_sizes;
 
 use anyhow::{Result, bail};

@@ -1175,6 +1175,7 @@ test('a server on its own lists its one space as current', async function () {
 
 test('servers sharing a space list switch between each other, starting the other on demand', async function () {
   var spaces = require('./spaces');
+  function spaceId(dir) { return spaces.listed([dir])[0].id; }
   var acme = workbenchSpace('Acme');
   var example = workbenchSpace('Example');
   var closed = 0;
@@ -1189,28 +1190,28 @@ test('servers sharing a space list switch between each other, starting the other
   });
   hub.set([{ dir: acme }, { dir: example }]);
   try {
-    var first = await hub.open(spaces.spaceId(acme));
+    var first = await hub.open(spaceId(acme));
     var listed = await get(first.port, server.SPACES_PATH);
     assert.deepStrictEqual(listed.body.spaces.map(function (p) { return p.name; }), ['Acme', 'Example']);
-    assert.strictEqual(listed.body.current, spaces.spaceId(acme));
-    assert.strictEqual(hub.started(spaces.spaceId(example)), null);
+    assert.strictEqual(listed.body.current, spaceId(acme));
+    assert.strictEqual(hub.started(spaceId(example)), null);
 
-    var opened = await post(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) });
+    var opened = await post(first.port, server.SPACES_OPEN_PATH, { id: spaceId(example) });
     assert.strictEqual(opened.status, 200);
-    var second = await hub.started(spaces.spaceId(example));
+    var second = await hub.started(spaceId(example));
     assert.strictEqual(opened.body.url, second.url);
     assert.notStrictEqual(second.url, first.url);
     var fromSecond = await get(second.port, server.SPACES_PATH);
-    assert.strictEqual(fromSecond.body.current, spaces.spaceId(example));
+    assert.strictEqual(fromSecond.body.current, spaceId(example));
 
     /* Another page — another site, or another of these servers — can't start spaces. */
-    var foreign = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) },
+    var foreign = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaceId(example) },
       { Origin: 'http://127.0.0.1:' + second.port });
     assert.strictEqual(foreign.status, 403);
-    var crossSite = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) },
+    var crossSite = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaceId(example) },
       { 'Sec-Fetch-Site': 'cross-site' });
     assert.strictEqual(crossSite.status, 403);
-    var own = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaces.spaceId(example) },
+    var own = await postFrom(first.port, server.SPACES_OPEN_PATH, { id: spaceId(example) },
       { Origin: 'http://127.0.0.1:' + first.port, 'Sec-Fetch-Site': 'same-origin' });
     assert.strictEqual(own.status, 200);
   } finally {
@@ -1271,7 +1272,7 @@ test('a space of a file that lists several serves its own root and reads its own
 
     var listed = await get(running.port, server.SPACES_PATH);
     assert.strictEqual(listed.body.spaces[0].name, 'Acme UI');
-    assert.strictEqual(listed.body.current, require('./spaces').spaceId(dir, 'ui'));
+    assert.strictEqual(listed.body.current, require('./spaces').listed([dir]).filter(function (space) { return space.key === 'ui'; })[0].id);
   } finally {
     await running.close();
     fs.rmSync(dir, { recursive: true, force: true });

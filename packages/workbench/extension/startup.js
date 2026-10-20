@@ -2,9 +2,11 @@
    The check runs before the terminal is opened and again until the service
    answers. This keeps extension reloads from starting duplicate processes. */
 
+var childProcess = require('child_process');
 var net = require('net');
 var path = require('path');
-var config = require('../server/node/config');
+var binaryPath = require('../server/node/binary').binaryPath;
+var spaces = require('../server/node/spaces');
 
 function portOpen(host, port) {
   return new Promise(function (resolve) {
@@ -65,13 +67,32 @@ async function startOne(root, impl, options) {
   report(impl.key + ': did not become ready within ' + start.timeout + ' seconds');
 }
 
+/* The space's resolved config, as the server binary reads it. */
+function readConfig(space) {
+  var args = ['config', space.dir].concat(space.key ? ['--space', space.key] : []);
+  return new Promise(function (resolve, reject) {
+    childProcess.execFile(binaryPath(), args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, function (error, out, stderr) {
+      if (error) reject(new Error(String(stderr || error.message).trim()));
+      else resolve(JSON.parse(out));
+    });
+  });
+}
+
 /* `where` is the space's folder, or { dir, key } for one space of a
-   workbench.yaml that lists several; see config.read. */
+   workbench.yaml that lists several, its first space without a key. */
 function run(where, options) {
   options = options || {};
-  var read = config.read(where);
-  var root = read ? read.root : null;
-  if (!read) return Promise.resolve();
+  var at = typeof where === 'string' ? { dir: where, key: null } : where;
+  var space = spaces.listed([path.resolve(at.dir)]).filter(function (candidate) {
+    return !at.key || candidate.key === at.key;
+  })[0];
+  if (!space) return Promise.resolve();
+  return readConfig(space).then(function (read) {
+    if (read) return startAll(space.root, read, options);
+  });
+}
+
+function startAll(root, read, options) {
   var starts = Object.keys(read.implementations).map(function (key) {
     return read.implementations[key];
   }).filter(function (impl) { return !!impl.start; });

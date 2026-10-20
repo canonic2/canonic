@@ -50,12 +50,20 @@ async fn view(space: &Space, method: &Method, request: Request) -> Response {
     }
 }
 
-/// The spaces the canvas can switch between, this one marked current.
+/// The spaces the canvas can switch between, this one marked current: the
+/// host's list, or this space alone when the host shows no other.
 async fn spaces(space: &Space) -> Response {
     match space.host.spaces().await {
-        Ok(listed) => ok(
-            json!({ "current": space.settings.id, "spaces": listed.unwrap_or_else(|| json!([])) }),
-        ),
+        Ok(listed) => {
+            let listed = listed.unwrap_or_else(|| {
+                json!([crate::spaces::describe(
+                    &space.settings.dir,
+                    space.settings.key.as_deref(),
+                    space.catalog.root(),
+                )])
+            });
+            ok(json!({ "current": space.settings.id, "spaces": listed }))
+        }
         Err(error) => trouble(&error, 500),
     }
 }

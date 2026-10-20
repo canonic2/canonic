@@ -33,7 +33,7 @@ between the host and the server.
 ```text
 workbench-server serve --root <project> --product <workbench folder>
   [--ports 3579,3580,3581,3582,3583,0] [--space-dir <dir>] [--space-key <key>]
-  [--space-id <id>] [--untrusted] [--handoff] [--eager-previews]
+  [--untrusted] [--handoff] [--eager-previews]
   [--log-limit <bytes>] [--export-retention-ms <ms>]
   [--export-max-archive-bytes <bytes>] [--view-stale-ms <ms>]
 ```
@@ -120,9 +120,16 @@ at their proxies, with the address they proxy as `upstream`. A Storybook or
 Simulator that is not running leaves the other pages usable and adds one
 problem. The answer is assembled fresh on every request.
 
+The host reads configuration only through the binary: the space list and
+each space's mark from `workbench-server spaces <folder>…`
+([spaces.rs](../server/src/spaces.rs)), and implementation start commands
+from `workbench-server config <folder> [--space <key>]`. A server whose host
+lists no other spaces describes its own.
+
 The manifest rules live in [manifest.js](../contracts/manifest.js), shared by
 the browser; [config-parity.test.js](../server/node/config-parity.test.js)
-runs the Rust reader and the Node reader over a corpus that reaches every rule
+runs the Rust reader and the Node reader built on them
+([config.js](../server/node/config.js), which only tests run) over a corpus that reaches every rule
 and problem and over seeded random configs, and they agree on all of them.
 
 ### The resident index and watcher
@@ -178,11 +185,13 @@ with the statuses and messages the canvas expects.
 - On this repository's Acme demo through the standalone command
   (2026-10-19, debug build): the canvas, config, spaces, handoff and agent
   view answer, the config lists no problems, and a docs page renders.
+- The browser smokes in `scripts/` pass against the debug build: retained
+  preview sessions, the canvas and its UI, the live mirror, capture, and
+  lenses, including a sign-in through an implementation proxy that
+  survives switching lenses and sizes.
 
 ## Known gaps
 
-- The extension's own space list (`spaces.js`) still reads `workbench.yaml`
-  in Node for names and marks; the server's config reader is not used there.
 - How Studio starts and talks to the server is open: the same stdio messages
   as the extension, or a library interface.
 - The [lab](preview-pipeline/performance.md) measurements of first page,
@@ -193,12 +202,6 @@ with the statuses and messages the canvas expects.
 - Highlighted code in docs pages follows syntect's grammars, so some token
   classes differ from highlight.js's; Markdown does not turn bare URLs into
   links.
-- Export job IDs come from the standard library's hashing seeds, not a
-  cryptographic random source.
-- `scripts/smoke-lenses.cjs` listens for its fixture's messages on the canvas
-  page, but the fixture now runs inside the isolated artboard renderer
-  (`content.html`), whose page is its parent, so the smoke times out
-  (2026-10-19). The other browser smokes pass.
 
 ## Decisions for the owner
 

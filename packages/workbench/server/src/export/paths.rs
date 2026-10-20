@@ -1,7 +1,5 @@
 //! Lexical paths, URLs, names and clock values the export builds with. Pure,
 //! except for the clock and the random job and revision identifiers.
-use std::collections::hash_map::RandomState;
-use std::hash::{BuildHasher, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -181,19 +179,11 @@ fn percent(out: &mut String, byte: u8) {
     out.push(char::from(DIGITS[usize::from(byte & 15)]));
 }
 
-/// Twenty-four random hex digits, for job IDs and capture revisions.
+/// Twenty-four random hex digits from the system's random source, for
+/// job IDs and capture revisions.
 pub(super) fn random_hex() -> String {
-    let bytes: Vec<u8> = (0..2_u64)
-        .flat_map(|round| {
-            let mut hasher = RandomState::new().build_hasher();
-            hasher.write_u64(round);
-            if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                hasher.write_u128(now.as_nanos());
-            }
-            hasher.finish().to_be_bytes()
-        })
-        .take(12)
-        .collect();
+    let mut bytes = [0_u8; 12];
+    getrandom::fill(&mut bytes).expect("the system's random source is available");
     hex(&bytes)
 }
 

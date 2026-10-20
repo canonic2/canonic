@@ -38,8 +38,6 @@ pub(crate) struct Options {
     /// it, when they are not the root and its first space.
     space_dir: Option<PathBuf>,
     space_key: Option<String>,
-    /// This space's id in the host's list of spaces.
-    space_id: String,
     /// Project code runs only in a trusted workspace.
     trusted: bool,
     /// Whether the host receives handoffs.
@@ -55,8 +53,7 @@ pub(crate) struct Options {
 impl Options {
     pub(crate) fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
         let mut ports = vec![0];
-        let (mut root, mut product, mut space_dir, mut space_key, mut space_id) =
-            (None, None, None, None, String::new());
+        let (mut root, mut product, mut space_dir, mut space_key) = (None, None, None, None);
         let (mut trusted, mut handoff, mut eager_previews) = (true, false, false);
         let mut log_limit = SESSION_BYTES;
         let (mut export_retention_ms, mut export_max_archive_bytes, mut view_stale_ms) =
@@ -97,7 +94,6 @@ impl Options {
                 "--product" => product = Some(value.into()),
                 "--space-dir" => space_dir = Some(value.into()),
                 "--space-key" => space_key = Some(value),
-                "--space-id" => space_id = value,
                 "--log-limit" => log_limit = usize::try_from(number()?)?,
                 "--export-retention-ms" => export_retention_ms = Some(number()?),
                 "--export-max-archive-bytes" => export_max_archive_bytes = Some(number()?),
@@ -120,7 +116,6 @@ impl Options {
             product: product.context("serve needs --product <folder>")?,
             space_dir,
             space_key,
-            space_id,
             trusted,
             handoff,
             eager_previews,
@@ -184,8 +179,11 @@ async fn serve(options: Options) -> Result<()> {
         host.clone(),
         output.clone(),
     );
+    let dir = crate::paths::resolve(options.space_dir.as_ref().unwrap_or(&options.root), "");
     let settings = space::Settings {
-        id: options.space_id.clone(),
+        id: crate::spaces::id(&dir, options.space_key.as_deref()),
+        dir,
+        key: options.space_key.clone(),
         handoff: options.handoff,
         export_retention_ms: options.export_retention_ms,
         export_max_archive_bytes: options.export_max_archive_bytes,

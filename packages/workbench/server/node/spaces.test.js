@@ -5,6 +5,11 @@ var path = require('node:path');
 var test = require('node:test');
 var spaces = require('./spaces');
 
+/* A space's id, as the server binary gives it. */
+function spaceId(dir, key) {
+  return spaces.listed([dir]).filter(function (space) { return !key || space.key === key; })[0].id;
+}
+
 function space(name, yaml) {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-spaces-' + name + '-'));
   if (yaml !== null) fs.writeFileSync(path.join(root, 'workbench.yaml'), yaml === undefined ? 'name: ' + name + '\ncollections: []\n' : yaml);
@@ -42,10 +47,10 @@ test('a space is listed by its workbench name with a stable id, initial and colo
   assert.equal(entry.initial, 'A');
   assert.equal(entry.root, root);
   assert.equal(entry.removable, true);
-  assert.equal(entry.id, spaces.spaceId(root));
+  assert.equal(entry.id, spaceId(root));
   assert.match(entry.id, /^[0-9a-f]{10}$/);
-  assert.ok(spaces.COLORS.indexOf(entry.color) > -1);
-  assert.equal(spaces.describe({ root: root }).color, entry.color);
+  assert.match(entry.color, /^(blue|green|orange|purple|pink|teal)$/);
+  assert.equal(spaces.listed([root])[0].color, entry.color);
 });
 
 test('a space whose workbench.yaml has no name or does not parse is listed by its folder', function () {
@@ -73,13 +78,13 @@ test('servers start when a space is first opened, once, and not when it is liste
   made.hub.set([{ root: acme }, { root: example }]);
   assert.equal(made.started.length, 0);
 
-  var id = spaces.spaceId(example);
+  var id = spaceId(example);
   var first = await made.hub.open(id);
   var again = await made.hub.open(id);
 
   assert.equal(first, again);
   assert.deepEqual(made.started, [example]);
-  assert.equal(made.hub.started(spaces.spaceId(acme)), null);
+  assert.equal(made.hub.started(spaceId(acme)), null);
 });
 
 test('a failed start is retried the next time the space opens', async function () {
@@ -88,8 +93,8 @@ test('a failed start is retried the next time the space opens', async function (
   made.hub.set([{ root: acme }]);
   made.failNext[path.resolve(acme)] = true;
 
-  await assert.rejects(made.hub.open(spaces.spaceId(acme)), /port in use/);
-  var running = await made.hub.open(spaces.spaceId(acme));
+  await assert.rejects(made.hub.open(spaceId(acme)), /port in use/);
+  var running = await made.hub.open(spaceId(acme));
   assert.match(running.url, /^http:\/\/127\.0\.0\.1:/);
 });
 
@@ -104,15 +109,15 @@ test('taking a space off the list stops its server; closing stops the rest', asy
   var example = space('Example');
   var made = hub();
   made.hub.set([{ root: acme }, { root: example }]);
-  await made.hub.open(spaces.spaceId(acme));
-  await made.hub.open(spaces.spaceId(example));
+  await made.hub.open(spaceId(acme));
+  await made.hub.open(spaceId(example));
 
   await made.hub.set([{ root: acme }]);
   assert.deepEqual(made.closed, [path.resolve(example)]);
 
   await made.hub.close();
   assert.deepEqual(made.closed, [path.resolve(example), path.resolve(acme)]);
-  await assert.rejects(made.hub.open(spaces.spaceId(acme)), /stopped/);
+  await assert.rejects(made.hub.open(spaceId(acme)), /stopped/);
 });
 
 test('hasWorkbench names folders with a workbench.yaml', function () {
@@ -192,7 +197,7 @@ test('one workbench.yaml can list several spaces, sharing a folder or not', func
   assert.equal(found[1].root, path.join(path.resolve(dir), 'packages', 'ui'));
   assert.ok(found.every(function (p) { return p.dir === path.resolve(dir) && p.removable; }));
   assert.equal(new Set(found.map(function (p) { return p.id; })).size, 3);
-  assert.equal(found[0].id, spaces.spaceId(dir, 'web'));
+  assert.equal(found[0].id, spaceId(dir, 'web'));
   /* A space's icon resolves against its own root. */
   assert.match(found[1].image, /^data:image\/svg\+xml;base64,/);
 });
@@ -201,7 +206,7 @@ test('a single-space file’s id hashes its folder alone, without a key', functi
   var root = space('Acme');
   var listed = spaces.create({ start: function () {} });
   listed.set([{ dir: root }]);
-  assert.equal(listed.list()[0].id, spaces.spaceId(root));
+  assert.equal(listed.list()[0].id, spaceId(root));
   assert.equal(listed.list()[0].key, null);
 });
 
@@ -209,8 +214,8 @@ test('a space dropped from the file, or moved to another root, stops its server'
   var dir = space('multi', 'spaces:\n  web:\n    name: Web\n  ui:\n    name: UI\n');
   var made = hub();
   made.hub.set([{ dir: dir }]);
-  await made.hub.open(spaces.spaceId(dir, 'web'));
-  await made.hub.open(spaces.spaceId(dir, 'ui'));
+  await made.hub.open(spaceId(dir, 'web'));
+  await made.hub.open(spaceId(dir, 'ui'));
   assert.equal(made.started.length, 2);
 
   fs.writeFileSync(path.join(dir, 'workbench.yaml'), 'spaces:\n  web:\n    name: Web\n    root: site\n');
@@ -220,7 +225,7 @@ test('a space dropped from the file, or moved to another root, stops its server'
   assert.deepEqual(made.closed.sort(), [path.resolve(dir), path.resolve(dir)]);
 
   /* Opening it again starts it at its new root. */
-  var running = await made.hub.open(spaces.spaceId(dir, 'web'));
+  var running = await made.hub.open(spaceId(dir, 'web'));
   assert.ok(running);
   assert.equal(made.started[made.started.length - 1], path.join(path.resolve(dir), 'site'));
 });
