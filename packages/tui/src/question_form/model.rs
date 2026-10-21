@@ -41,6 +41,10 @@ pub struct Question {
     pub maximum: Option<usize>,
     /// Unicode scalar limit, including LF. Retained text is never truncated.
     pub characters: Option<usize>,
+    /// Label replacing Something else on the typed row; at most 64 bytes.
+    pub other_label: Option<String>,
+    /// Muted example for an empty typed field; at most 128 bytes, never an answer.
+    pub placeholder: Option<String>,
 }
 impl Question {
     /// Construct an optional question with no choices or limits.
@@ -59,6 +63,8 @@ impl Question {
             minimum: 0,
             maximum: None,
             characters: None,
+            other_label: None,
+            placeholder: None,
         }
     }
 }
@@ -75,6 +81,10 @@ pub struct Request {
     pub questions: Vec<Question>,
     /// Explicitly offer Send answers so far when cancelling.
     pub partial: bool,
+    /// The form is one step of the host's flow, after its first: Escape on the
+    /// first question closes the form at once and the footer reads `esc back`.
+    /// The host maps the resulting cancellation to its previous step.
+    pub back: bool,
 }
 /// Immutable staged response data; choice IDs retain host source order.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -183,9 +193,19 @@ pub(super) fn validate(r: &Request) -> std::result::Result<(), Invalid> {
             || (q.kind != Kind::Text && q.choices.is_empty() && !q.other)
             || q.maximum.is_some_and(|m| q.minimum > m)
             || (q.kind != Kind::Multiple && (q.minimum != 0 || q.maximum.is_some()))
+            || (q.other_label.is_some() && (q.kind == Kind::Text || !q.other))
+            || (q.placeholder.is_some() && q.kind != Kind::Text && !q.other)
         {
             return Err(Invalid::Question);
         }
+        let label = q.other_label.as_deref();
+        let placeholder = q.placeholder.as_deref();
+        if label.is_some_and(|l| l.trim().is_empty() || l.len() > 64)
+            || placeholder.is_some_and(|p| p.trim().is_empty() || p.len() > 128)
+        {
+            return Err(Invalid::Limit);
+        }
+        bytes += label.map_or(0, str::len) + placeholder.map_or(0, str::len);
         let mut choices = HashSet::new();
         for c in &q.choices {
             if c.id.is_empty() || !choices.insert(&c.id) {

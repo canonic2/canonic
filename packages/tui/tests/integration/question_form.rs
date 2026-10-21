@@ -49,6 +49,7 @@ fn request() -> Request {
         title: "Request".into(),
         questions: vec![single, multi, note],
         partial: false,
+        back: false,
     }
 }
 fn response(f: &mut QuestionForm) -> Response {
@@ -213,8 +214,13 @@ fn cancellation_defaults_keep_and_partial_requires_an_explicit_offer_and_action(
         r.partial = partial;
         let mut f = QuestionForm::new(r).unwrap();
         press(&mut f, KeyCode::Char('1'));
+        assert_eq!(f.step(), 1);
         press(&mut f, KeyCode::Esc);
-        assert!(f.cancelling());
+        assert_eq!(f.step(), 0, "a later question goes back one step");
+        assert!(!f.cancelling());
+        assert_eq!(f.answers().len(), 1, "going back keeps answers");
+        press(&mut f, KeyCode::Esc);
+        assert!(f.cancelling(), "the first question asks to cancel");
         press(&mut f, KeyCode::Enter);
         assert!(!f.cancelling());
         assert_eq!(f.take_intents().len(), 0);
@@ -359,6 +365,8 @@ fn chat_restores_exact_document_cursor_selection_mode_and_undo_while_streams_sta
     chat.update(&key(KeyCode::Char('1')));
     chat.append("Unread incoming line\n");
     assert!(chat.unread_count() > 0);
+    // Back to the first question, then its cancellation dialog.
+    chat.update(&key(KeyCode::Esc));
     chat.update(&key(KeyCode::Esc));
     chat.update(&key(KeyCode::Char('2')));
     assert_eq!(chat.composer().editor().document(), document);
@@ -425,4 +433,118 @@ fn public_rendering_handles_small_rectangles_profiles_fields_and_dialogs() {
             assert!(text.contains("é東 京"), "{text}");
         }
     }
+}
+fn labeled() -> Request {
+    let mut q = Question::new("profile", "profile", "Restrict the profile?", Kind::Single);
+    q.required = true;
+    q.other = true;
+    q.choices = vec![Choice::new("unset", "Any profile")];
+    q.other_label = Some("Only this profile".into());
+    q.placeholder = Some("acme-read-only".into());
+    Request {
+        id: "labeled".into(),
+        revision: 1,
+        title: "Setup".into(),
+        questions: vec![q],
+        partial: false,
+        back: false,
+    }
+}
+fn draw(f: &mut QuestionForm, width: u16, symbols: Symbols, colors: ColorMode) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
+    terminal
+        .draw(|frame| {
+            f.render_with(
+                frame,
+                frame.area(),
+                Presentation {
+                    colors,
+                    symbols,
+                    ..Presentation::default()
+                },
+                0,
+            );
+        })
+        .unwrap();
+    super::components::dump(terminal.backend().buffer())
+}
+#[test]
+fn labeled_typed_row_shows_its_label_and_never_submits_the_placeholder() {
+    let mut f = QuestionForm::new(labeled()).unwrap();
+    let text = draw(&mut f, 80, Symbols::Unicode, ColorMode::TrueColor);
+    assert!(text.contains("Only this profile"), "{text}");
+    assert!(text.contains("acme-read-only"), "{text}");
+    assert!(!text.contains("Something else"), "{text}");
+    for width in [40, 80] {
+        let text = draw(&mut f, width, Symbols::Ascii, ColorMode::NoColor);
+        assert!(text.contains("Only this profile"), "{text}");
+    }
+    press(&mut f, KeyCode::Down);
+    press(&mut f, KeyCode::Enter);
+    let text = draw(&mut f, 80, Symbols::Unicode, ColorMode::TrueColor);
+    assert!(
+        text.contains("acme-read-only"),
+        "empty field shows placeholder: {text}"
+    );
+    press(&mut f, KeyCode::Enter);
+    assert!(
+        f.take_intents()
+            .iter()
+            .all(|i| !matches!(i, Intent::Submit(_))),
+        "an empty typed row submits nothing"
+    );
+    for c in "ops".chars() {
+        press(&mut f, KeyCode::Char(c));
+    }
+    press(&mut f, KeyCode::Enter);
+    let sent = response(&mut f);
+    assert_eq!(
+        sent.answers[0].value,
+        AnswerValue::Choices {
+            ids: vec![],
+            other: Some("ops".into())
+        }
+    );
+}
+#[test]
+fn typed_row_label_and_placeholder_are_validated() {
+    let mut bad = labeled();
+    bad.questions[0].other = false;
+    bad.questions[0].choices.push(Choice::new("b", "B"));
+    assert!(QuestionForm::new(bad).is_err(), "label without a typed row");
+    let mut long = labeled();
+    long.questions[0].other_label = Some("x".repeat(65));
+    assert!(QuestionForm::new(long).is_err());
+    let mut text = labeled();
+    text.questions[0] = Question::new("note", "note", "Note?", Kind::Text);
+    text.questions[0].placeholder = Some("an example".into());
+    assert!(
+        QuestionForm::new(text).is_ok(),
+        "text questions take a placeholder"
+    );
+}
+#[test]
+fn a_step_of_a_host_flow_goes_back_without_the_cancel_dialog() {
+    let mut r = labeled();
+    r.back = true;
+    let mut f = QuestionForm::new(r).unwrap();
+    assert!(f.hint().contains("esc back"), "{}", f.hint());
+    press(&mut f, KeyCode::Down);
+    press(&mut f, KeyCode::Enter);
+    for c in "ops".chars() {
+        press(&mut f, KeyCode::Char(c));
+    }
+    press(&mut f, KeyCode::Esc);
+    press(&mut f, KeyCode::Esc);
+    assert!(
+        !f.cancelling(),
+        "typed text does not open the cancel dialog"
+    );
+    assert_eq!(f.state(), State::Cancelled);
+    assert!(matches!(
+        f.take_intents().as_slice(),
+        [Intent::Cancelled { .. }]
+    ));
+    let first = QuestionForm::new(labeled()).unwrap();
+    assert!(first.hint().contains("esc cancel"), "{}", first.hint());
 }

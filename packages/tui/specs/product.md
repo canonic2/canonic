@@ -39,7 +39,9 @@ products, accounts, networks or actual permissions.
    JSON, hooks, pipes and unattended paths use host-owned output.
 2. Picker/review displays caller-supplied choices, explanation and safe default
    or no selection. Search and movement change highlight without execution.
-3. Enter confirms an enabled choice. Esc cancels; closing never implies assent.
+3. Enter confirms an enabled choice. Esc goes back one step, and cancels on the
+   first step ([Escape rule](features/interaction.md#escape-goes-back-one-step));
+   Ctrl-C cancels the whole interaction. Closing never implies assent.
 4. Host validates current operation identity/authority, performs the operation,
    and writes ordinary output after releasing terminal modes. Cleanup failure
    is reported through its error path.

@@ -564,6 +564,7 @@ fn chat_review_and_run_attention_keep_priority_over_notices() {
         title: "Review".into(),
         questions: vec![question],
         partial: false,
+        back: false,
     })
     .expect("valid question");
     chat.push_review(Review::Questions(Box::new(form)))

@@ -182,6 +182,7 @@ impl PickerDemo {
             },
             max_height: if self.host == 2 { available.height } else { 9 },
             presentation: p,
+            ..PickerView::default()
         };
         let y = if self.host == 1 {
             available

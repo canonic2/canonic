@@ -371,6 +371,7 @@ fn questions() -> Review {
                 question_form::Kind::Text,
             )],
             partial: false,
+            back: false,
         })
         .expect("valid test fixture"),
     ))
@@ -508,6 +509,7 @@ fn long_host_titles_cannot_hide_the_actual_review_receipt_outcome() {
             question_form::Kind::Text,
         )],
         partial: false,
+        back: false,
     };
     let mut form = QuestionForm::new(descriptor.clone()).unwrap();
     form.update(&key(KeyCode::Enter));

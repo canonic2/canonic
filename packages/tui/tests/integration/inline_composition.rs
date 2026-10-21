@@ -132,6 +132,7 @@ fn measured_chat_dock_retains_draft_and_fits_an_active_review() {
             Kind::Text,
         )],
         partial: false,
+        back: false,
     })
     .unwrap();
     chat.push_review(Review::Questions(Box::new(form))).unwrap();

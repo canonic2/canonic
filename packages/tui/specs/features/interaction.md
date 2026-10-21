@@ -61,6 +61,27 @@ Enter's action; it may not redefine modified Enter as submission.
 | Modified Enter repeat/release | Release never edits; repeat never submits | Never confirm or activate |
 | Paste | Insert the supplied text, normalizing CRLF/CR to LF | Never confirm or activate |
 
+### Escape goes back one step
+
+This is a hard rule for the library and every consumer. Escape closes the
+innermost layer only: a selection, query, completion, field edit, dialog, or one
+step of a flow. A component reports that as its own cancellation or dismissal;
+the host decides what the closed layer was, never treating it as assent.
+
+| Where Escape is pressed | Result |
+| --- | --- |
+| Inside a component with local state | Clear that state first, as each component contract defines |
+| A step of a multi-step flow after the first | Return to the previous step with every answer kept |
+| The first step, or a single-step interaction | Cancel the interaction; nothing is applied |
+| A final confirmation | Cancel, the same as choosing its safe default |
+
+Ctrl-C cancels the whole interaction from any step, as an emergency exit; it
+does not go back. A flow shows "Esc back" in its footer on every step after the
+first, and "Esc cancel" on the first. Going back never applies, saves or sends
+anything; only the flow's final confirmation does. A host whose steps cannot be
+revisited (for example, one that already performed an external action) states
+that step's Escape meaning in its own contract.
+
 Multiline inputs use the same editor event adapter. A modifier-aware Enter event
 must reach that editor without a host intercepting it as submission. Submission
 requires an unmodified Enter press and must happen only once. Empty/disabled or

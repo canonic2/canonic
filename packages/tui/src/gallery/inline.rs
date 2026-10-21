@@ -761,5 +761,6 @@ fn picker_view(p: Presentation, max_height: u16) -> PickerView<'static> {
         context: "Deploy the fixture image to 3 services?",
         presentation: p,
         max_height,
+        ..PickerView::default()
     }
 }

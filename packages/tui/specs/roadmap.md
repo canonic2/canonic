@@ -97,7 +97,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | R-03 | [Activity](features/activity.md#acceptance-criteria): exact review identity/no implicit affirmative/expiry | 4 |
 | R-04 | [Activity](features/activity.md#acceptance-criteria): single/multi/typed question staged/reviewed response | 4 |
 | R-05 | [Activity](features/activity.md#acceptance-criteria): queued/stale review isolation and no authority effects | 4 |
-| QF-01–QF-07 | [Question Form](components/question-form.md#acceptance-criteria): staged/typed/review/cancellation, identified host delivery, queue and verification | 4 |
+| QF-01–QF-08 | [Question Form](components/question-form.md#acceptance-criteria): staged/typed/review/cancellation, identified host delivery, queue and verification | 4 |
 | PR-01–PR-06 | [Permission Review](components/permission-review.md#acceptance-criteria): deliberate/exact-scope confirmation, lifecycle races, mixed queue and inspection | 4 |
 | D-01 | [Dialog](components/dialog.md): topmost input/focus/generation/resize | 2 |
 | DG-02–DG-05 | [Dialog](components/dialog.md#acceptance-criteria): timed arrival/guard, app closure, notices/attention and caution qualification | 2 |

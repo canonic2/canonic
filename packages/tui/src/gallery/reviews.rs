@@ -79,6 +79,7 @@ pub(super) fn question_request() -> Request {
         title: "digest rollout".into(),
         questions: vec![users, channels, note],
         partial: false,
+        back: false,
     }
 }
 fn key(code: KeyCode) -> Event {
@@ -461,6 +462,10 @@ fn prepare_answered(form: &mut QuestionForm, name: &str) {
             | "partial-accepted"
             | "cancelled"
     ) {
+        // Escape goes back one step at a time; cancelling starts on the first question.
+        while form.step() > 0 {
+            press(form, KeyCode::Esc);
+        }
         press(form, KeyCode::Esc);
         if matches!(
             name,

@@ -76,14 +76,21 @@ impl QuestionForm {
             State::Expired => "y copy answers · esc close",
             State::Accepted | State::Cancelled => "closed",
             _ if self.step == self.stages.len() && self.review_row.is_some() => {
-                "enter edit row · tab returns to review · esc cancel"
+                "enter edit row · tab returns to review · esc back"
             }
-            _ if self.step == self.stages.len() => "enter send · 1–9 edit · ↑↓ row · esc cancel",
+            _ if self.step == self.stages.len() => "enter send · 1–9 edit · ↑↓ row · esc back",
             _ if self.editing => "enter next · ctrl+j new line · esc leave field",
             _ if self.request.questions[self.step].kind == Kind::Multiple => {
-                "space mark · enter next · tab next · esc cancel"
+                if self.step == 0 && !self.request.back {
+                    "space mark · enter next · tab next · esc cancel"
+                } else {
+                    "space mark · enter next · tab next · esc back"
+                }
             }
-            _ => "1–9 choose · enter choose · tab next · esc cancel",
+            _ if self.step == 0 && !self.request.back => {
+                "1–9 choose · enter choose · tab next · esc cancel"
+            }
+            _ => "1–9 choose · enter choose · tab next · esc back",
         }
     }
     fn status(&self) -> String {
@@ -317,11 +324,11 @@ impl QuestionForm {
                     choices.height.min(6),
                 ),
                 EditorView {
-                    placeholder: if q.required {
+                    placeholder: q.placeholder.as_deref().unwrap_or(if q.required {
                         "type an answer"
                     } else {
                         "type here, or tab to skip"
-                    },
+                    }),
                     presentation: p,
                     chrome: false,
                     ..EditorView::default()
@@ -519,6 +526,9 @@ fn choice_line(
         } else {
             "✓"
         }
+    } else if q.kind == Kind::Single {
+        // Numbers and the highlight carry a single choice; only a chosen row is marked.
+        " "
     } else {
         "○"
     };
@@ -531,17 +541,24 @@ fn choice_line(
         if s.other {
             format!("\"{}\"", clean(s.field.text(), 4096, false))
         } else {
-            "Something else".into()
+            clean(
+                q.other_label.as_deref().unwrap_or("Something else"),
+                64,
+                false,
+            )
         }
     } else {
         clean(&q.choices[i].label, 4096, false)
     };
+    let typed_detail = if s.other {
+        "your answer"
+    } else {
+        q.placeholder.as_deref().unwrap_or("your answer")
+    };
     let detail = if width < 50 {
         ""
     } else {
-        choice.map_or("your answer", |c| {
-            c.disabled.as_deref().unwrap_or(&c.detail)
-        })
+        choice.map_or(typed_detail, |c| c.disabled.as_deref().unwrap_or(&c.detail))
     };
     let capped = q.kind == Kind::Multiple
         && !marked

@@ -16,10 +16,10 @@ acme
 digest rollout ────────────────────────────────────────────────────────── 1 of 3
 › users  ○ channels  ○ note  ○ review
 Who should get timezone-aware digests?
-  1 ○ Everyone
-  2 ○ Users with a timezone set  default
-  3 ○ New sign-ups only  needs a migration first
-  4 ○ Something else  your answer
+  1   Everyone
+  2   Users with a timezone set  default
+  3   New sign-ups only  needs a migration first
+  4   Something else  your answer
 ────────────────────────────────────────────────────────────────────────────────
 
 message ────────────────────────────────────────────────────────────────────────

@@ -83,6 +83,15 @@ impl QuestionForm {
             self.stages.len()
         }
     }
+    /// Escape goes back one step with answers kept; on the first step it cancels.
+    fn back(&mut self) {
+        if self.step == 0 {
+            self.ask_cancel();
+        } else {
+            self.go(self.step - 1);
+            self.from_review = false;
+        }
+    }
     pub(super) fn go(&mut self, step: usize) {
         if let Some(s) = self.stages.get_mut(self.step) {
             s.visited = true;
@@ -111,7 +120,7 @@ impl QuestionForm {
                         self.submit(false);
                     }
                 }
-                KeyCode::Esc => self.ask_cancel(),
+                KeyCode::Esc => self.back(),
                 KeyCode::Char(c @ '1'..='9') => {
                     let step = c as usize - '1' as usize;
                     if step < self.stages.len() {
@@ -210,7 +219,7 @@ impl QuestionForm {
             | KeyCode::End
             | KeyCode::PageUp
             | KeyCode::PageDown => self.move_choice(k.code),
-            KeyCode::Esc if k.kind == KeyEventKind::Press => self.ask_cancel(),
+            KeyCode::Esc if k.kind == KeyEventKind::Press => self.back(),
             KeyCode::Enter if k.kind == KeyEventKind::Press => {
                 if self.other_row() || self.request.questions[self.step].kind == Kind::Text {
                     self.editing = true;
@@ -365,7 +374,8 @@ impl QuestionForm {
         });
     }
     fn ask_cancel(&mut self) {
-        if self.answers().is_empty() {
+        // Going back to the host's previous step drops nothing it has accepted.
+        if self.answers().is_empty() || self.request.back {
             self.close();
             return;
         }

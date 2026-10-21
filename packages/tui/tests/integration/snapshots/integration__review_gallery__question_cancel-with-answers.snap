@@ -13,13 +13,13 @@ acme
 
 
 
-    ┌ cancel questions? ────────────────────────────────────────────────── ┐
-    │Your 3 answers will be dropped.                                       │
-dige│  1  Keep answering                                                   │view
-✓ us│  2  Cancel and send nothing                                          │
-1 us└ ────────────────────────────────── enter choose · esc keep answering ┘
-2 channels   digest emails, weekly report
-3 note   Digest times now follow each user's · timezone. Users without one keep⋯
+dige┌ cancel questions? ────────────────────────────────────────────────── ┐of 3
+› us│Your 3 answers will be dropped.                                       │
+Who │  1  Keep answering                                                   │
+  1 │  2  Cancel and send nothing                                          │
+  2 └ ────────────────────────────────── enter choose · esc keep answering ┘
+  3   New sign-ups only  needs a migration first
+  4   Something else  your answer
 ────────────────────────────────────────────────────────────────────────────────
 
 message ────────────────────────────────────────────────────────────────────────

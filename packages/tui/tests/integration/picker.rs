@@ -263,6 +263,29 @@ fn non_ready_empty_and_repeat_events_never_confirm_or_leak_into_query() {
 }
 
 #[test]
+fn hosts_label_escape_as_back_and_a_query_still_clears_first() {
+    let mut p = picker(Filter::On, SelectionMode::Single);
+    let view = PickerView {
+        title: "rules",
+        escape: "back",
+        ..PickerView::default()
+    };
+    let draw = |p: &mut ChoicePicker| {
+        let mut terminal = Terminal::new(TestBackend::new(64, 12)).unwrap();
+        terminal
+            .draw(|f| {
+                p.render(f, f.area(), view, true);
+            })
+            .unwrap();
+        super::components::dump(terminal.backend().buffer())
+    };
+    let text = draw(&mut p);
+    assert!(text.contains("esc back"), "{text}");
+    assert!(!text.contains("esc cancel"), "{text}");
+    p.update(&key(KeyCode::Char('g')));
+    assert!(draw(&mut p).contains("esc clears"));
+}
+#[test]
 fn compact_rendering_keeps_height_and_label_columns_without_side_borders() {
     let mut p = picker(Filter::Off, SelectionMode::Single);
     let presentation = Presentation {

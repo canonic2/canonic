@@ -35,6 +35,9 @@ pub struct PickerView<'a> {
     pub max_height: u16,
     /// Semantic palette and decoration alphabet.
     pub presentation: Presentation,
+    /// What Escape does here, shown as `esc <escape>`: `cancel` by default, or
+    /// `back` when the host's flow returns to its previous step.
+    pub escape: &'a str,
 }
 impl Default for PickerView<'_> {
     fn default() -> Self {
@@ -44,6 +47,7 @@ impl Default for PickerView<'_> {
             context: "",
             max_height: PICKER_HEIGHT,
             presentation: Presentation::default(),
+            escape: "cancel",
         }
     }
 }
@@ -432,6 +436,12 @@ impl ChoicePicker {
             return;
         }
         let mut hints = Vec::new();
+        // Escape clears a query before it closes this layer.
+        let escape = if self.query().is_empty() {
+            format!("esc {}", clean(view.escape, 32, false))
+        } else {
+            "esc clears".to_owned()
+        };
         let below = rows.saturating_sub(self.offset + self.viewport);
         if below > 0 && self.status == Status::Ready {
             hints.push(format!("{} {below} more", p.symbols.more(false)));
@@ -452,30 +462,16 @@ impl ChoicePicker {
                 if self.mode == SelectionMode::Multiple || self.selected.is_some() {
                     hints.push("enter".to_owned());
                 }
-                hints.push(
-                    if self.query().is_empty() {
-                        "esc cancel"
-                    } else {
-                        "esc clears"
-                    }
-                    .to_owned(),
-                );
+                hints.push(escape.clone());
                 if self.inspect && self.selected.is_some() && area.width >= 50 {
                     hints.push("F3 inspect".to_owned());
                 }
             } else {
-                hints.push("esc cancel".to_owned());
+                hints.push(format!("esc {}", clean(view.escape, 32, false)));
             }
         }
         if area.width < 50 && focused {
-            hints = vec![
-                if self.query().is_empty() {
-                    "esc cancel"
-                } else {
-                    "esc clears"
-                }
-                .into(),
-            ];
+            hints = vec![escape];
         }
         frame.render_widget(
             Rule {

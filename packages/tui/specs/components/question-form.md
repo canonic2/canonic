@@ -9,7 +9,9 @@ acceptance and review ordering belong to the host.
 
 The reusable component, shared queue, Chat composition and deterministic gallery
 are implemented. Engineering evidence is tracked in [Verification](../verification.md).
-Human visual and platform acceptance remain independent.
+Human visual and platform acceptance remain independent. Host labels and
+placeholders for the typed row (QF-08) are implemented and covered by the
+component's integration tests; the gallery has no labeled-row scenario yet.
 Related contracts: [Chat](chat.md), [Editor](editor.md), [Dialog](dialog.md) and
 [Activity](../features/activity.md).
 
@@ -20,7 +22,12 @@ title, ordered questions and an explicit partial-answer capability. Each questio
 has a stable ID, short step label, prompt, optional description, kind, required
 flag, choice IDs/labels/details/disabled reasons and applicable limits. The host
 may supply a highlighted single-choice default; highlighting never stages it.
-A typed answer can be its own question or an explicit last Something else row.
+A typed answer can be its own question or an explicit last typed row. The host
+may give that row a label of at most 64 bytes and a placeholder of at most 128
+bytes; without them the row reads Something else with the detail "your answer".
+A placeholder shows muted in the empty field and as the row's detail. It is
+never staged, submitted or copied, and it disappears once the field has text.
+A text question accepts the same placeholder.
 
 Reject invalid snapshots atomically: empty/duplicate IDs, invalid defaults,
 inverted mark bounds, an empty choice-only question or excessive descriptors.
@@ -90,7 +97,7 @@ stage an answer. Choosing an enabled alternate replaces a staged typed answer.
 | Tab/Shift-Tab | Next/previous step, even if required content is missing. At either end stay there. |
 | Left/Right | Previous/next step outside a field; within a field move the caret. |
 | Ctrl-J | Insert a field newline. |
-| Esc | Field to staged choices; form to cancellation; confirmation to Keep; expired to Close. |
+| Esc | Field to staged choices; a later question or Review to the previous step with answers kept; the first question to cancellation; confirmation to Keep; expired to Close. This follows the shared [Escape rule](../features/interaction.md#escape-goes-back-one-step). |
 | Delete | On a staged typed row, clear it as one undoable operation. Ctrl-Z restores it. In a focused field use normal Editor deletion. |
 | Y | Copy retained expired/replaced answers through an identified host intent. |
 | Ctrl-G | Open a waiting request; in a field retain Editor's select-all behavior. |
@@ -148,3 +155,7 @@ reduced motion preserves elapsed seconds and removes cycling decoration.
   NO_COLOR and light rendering, real PTY input/resize/return and cleanup.
 - QF-07: package checks, release/library-only/consumer compilation, local links,
   ownership and whitespace pass; human visual acceptance is recorded separately.
+- QF-08: a host-labeled typed row shows its label and placeholder in place of
+  Something else; an empty field submits no text, the placeholder never appears
+  in a response or copy, and narrow, ASCII and NO_COLOR rendering keep the label
+  distinguishable from a staged answer.
