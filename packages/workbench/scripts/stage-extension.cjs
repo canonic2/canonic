@@ -11,7 +11,7 @@ function stageExtension(root) {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'extension/package.json'), 'utf8'));
     const sdk = JSON.parse(fs.readFileSync(path.join(root, 'sdk/package.json'), 'utf8'));
     if (product.version !== manifest.version || sdk.version !== manifest.version) throw new Error('Workbench product, extension and SDK versions must match');
-    const filter = file => !/\.test\.[cm]?[jt]s$/.test(file) && !['node_modules', 'simulator-demo'].includes(path.basename(file));
+    const filter = file => !/\.test\.[cm]?[jt]s$/.test(file) && path.basename(file) !== 'node_modules';
     for (const directory of ['extension', 'capture', 'ui', 'sdk', 'contracts', 'server/node', 'server/bin']) {
       fs.cpSync(path.join(root, directory), path.join(destination, directory), { recursive: true, filter });
     }

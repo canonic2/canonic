@@ -10,7 +10,6 @@
 extension/.vscodeignore
 extension/icon-source.svg
 capture/app/**
-capture/window-capture/simulator-demo/**
 server/target/**
 node_modules/**/README.md
 node_modules/**/*.map

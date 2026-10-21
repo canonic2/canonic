@@ -84,7 +84,8 @@ implementations. `start` isn't available for the Simulator.
   20 frames per second, which doesn't depend on the editor's media codecs. A
   standalone browser uses an H.264 stream at about 30 frames per second,
   decoded with WebCodecs.
-- Taps and drags on the canvas are sent to the device through WebDriverAgent.
+- Taps and drags on the canvas are sent to the device through Sandbox's
+  `sandbox` command.
 - There is no fallback to browser screen sharing. If the helper can't capture,
   the canvas says why.
 
@@ -104,8 +105,8 @@ terminal app that started it.
 
 ## Configure input
 
-Install the compiled Sandbox product at `.canonic/sandbox/bin/sandbox`. Sandbox
-needs no configuration file; Workbench selects the Simulator shown on the canvas
+Install Sandbox's `sandbox` command on your PATH or in `~/.local/bin`; Workbench
+looks in both. Sandbox needs no configuration file; Workbench selects the Simulator shown on the canvas
 by its device ID. Sandbox owns validation, controller
 acquisition, native touch dispatch and cleanup for each input command. The
 simulator input path requires no guest helper. Workbench's display path uses the
@@ -125,4 +126,4 @@ instead of getting a reference image.
 | No Simulator pages | Boot a Simulator. With a `device` name or UDID, check that it matches exactly. The config route's `problems` reports when no booted device matches. |
 | Black canvas or a permission error | Grant Screen Recording to the editor, then restart it. |
 | A design page's Simulator lens says the Simulator isn't declared | Name the device by its UDID, keep `catalog: true` on the implementation, and boot the device. See [Add a Simulator lens to a design page](#add-a-simulator-lens-to-a-design-page). |
-| Stream shows but taps do nothing | Install Sandbox at `.canonic/sandbox/bin/sandbox`. Check the **Workbench** log (**Workbench: Show Log**) for automation errors. |
+| Stream shows but taps do nothing | Install the `sandbox` command on your PATH or in `~/.local/bin`. Check the **Workbench** log (**Workbench: Show Log**) for automation errors. |

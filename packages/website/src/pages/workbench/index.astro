@@ -91,7 +91,7 @@ const docsMarkdown = [
         <ol class="areas">
           <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s states are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
           <li><span class="n">02</span><h3>Top bar</h3><p>The page and its state on the left. The lens switcher, the size switcher, and the Actions switch in the middle; the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
-          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. States remain alternatives selected with the state switcher. Zoom and pan keep each page’s layout width.</p></li>
+          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. States remain alternatives selected with the state switcher. Zoom and pan keep each page’s layout width. Fast page returns reuse their content without flashing a loader; longer waits show a loading message.</p></li>
           <li><span class="n">04</span><h3>Toolbar</h3><p>Annotation tools and the handoff, under the artboard. Select returns to using the page.</p></li>
         </ol>
       </div>
@@ -210,7 +210,7 @@ const docsMarkdown = [
       </Feature>
       <Feature id="docs" kicker="Docs" title="Component documentation with live examples">
           <p>A page written in Markdown documents a component or a part of a design system: sections, notes, hand-written props tables, and live examples rendered from your own source files. <b>Show code</b> under an example shows its source. Docs are a lens: any page can have them, listed first before its design and implementations, and the page opens on them. In a docs lens they fill the canvas, on white, without an artboard label or selection border, and scroll like a web page.</p>
-          <p>Docs lenses render the same examples in different ways, such as React and React Native Web. Annotations, handoffs, and export work in docs lenses too. Export a page, selected pages, a collection, or the whole space as a source ZIP, PDF, image ZIP, or portable browser viewer. PDFs preserve visual page dimensions and paginate documentation on A4 or Letter paper. See <a href={`${pages.docs}docs-pages/`}>Docs</a>.</p>
+          <p>Docs lenses render the same examples in different ways, such as React and React Native Web. Code text appears first and gains colour in the background, using Workbench’s bundled highlighter. Annotations, handoffs, and export work in docs lenses too. Export a page, selected pages, a collection, or the whole space as a source ZIP, PDF, image ZIP, or portable browser viewer. PDFs preserve visual page dimensions and paginate documentation on A4 or Letter paper. See <a href={`${pages.docs}docs-pages/`}>Docs</a>.</p>
           <img src={`${base}images/docs.jpg`} alt="The Acme Button through its Docs lens: the Markdown fills the canvas with live examples of every button variant, and the size switcher is off" loading="lazy" />
         <div class="feature-media" slot="media">
           <CodeBlock file="docs/card.md" code={docsMarkdown} copies="the docs page example" />

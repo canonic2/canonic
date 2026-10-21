@@ -1,11 +1,12 @@
-//! A Simulator's screen size and input, delegated to the project's Sandbox
-//! command line (`.canonic/sandbox/bin/sandbox`). Input runs one action at a
-//! time, in the order it arrived.
+//! A Simulator's screen size and input, delegated to the installed Sandbox
+//! command line (`sandbox` on PATH, or in `~/.local/bin`). Input runs one
+//! action at a time, in the order it arrived.
 
 use crate::refused::refused;
 use anyhow::{Result, anyhow};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
@@ -20,18 +21,59 @@ pub(crate) struct Screen {
     pub(crate) height: f64,
 }
 
-/// The project's Sandbox, and the queue its input waits in.
+/// Where to look for the `sandbox` command: each PATH folder, then
+/// `~/.local/bin`, where editors opened from the Dock often lack PATH entries.
+struct Search {
+    path: Option<OsString>,
+    home: Option<PathBuf>,
+}
+
+impl Search {
+    fn locate(&self) -> Option<PathBuf> {
+        let folders = self.path.iter().flat_map(std::env::split_paths);
+        let local = self.home.iter().map(|home| home.join(".local/bin"));
+        folders
+            .chain(local)
+            .map(|folder| folder.join("sandbox"))
+            .find(|candidate| executable(candidate))
+    }
+}
+
+fn executable(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        metadata.is_file()
+    }
+}
+
+/// The project's Simulator input through Sandbox, and the queue it waits in.
 pub(crate) struct Sandbox {
     root: PathBuf,
-    executable: PathBuf,
+    search: Search,
     queue: tokio::sync::Mutex<()>,
 }
 
 impl Sandbox {
     pub(crate) fn new(root: &Path) -> Self {
+        Self::searching(
+            root,
+            std::env::var_os("PATH"),
+            std::env::var_os("HOME").map(PathBuf::from),
+        )
+    }
+
+    fn searching(root: &Path, path: Option<OsString>, home: Option<PathBuf>) -> Self {
         Self {
             root: root.to_owned(),
-            executable: root.join(".canonic/sandbox/bin/sandbox"),
+            search: Search { path, home },
             queue: tokio::sync::Mutex::new(()),
         }
     }
@@ -72,12 +114,13 @@ impl Sandbox {
     }
 
     async fn invoke(&self, udid: &str, args: &[String]) -> Result<Value> {
-        if !self.executable.exists() {
+        // Looked up on each call, so installing Sandbox needs no Workbench restart.
+        let Some(executable) = self.search.locate() else {
             return Err(anyhow!(
-                "Sandbox is not installed at .canonic/sandbox/bin/sandbox"
+                "Sandbox is not installed: no sandbox command on PATH or in ~/.local/bin"
             ));
-        }
-        let mut command = tokio::process::Command::new(&self.executable);
+        };
+        let mut command = tokio::process::Command::new(&executable);
         command
             .args(["ios", "--id", &format!("simulator:{udid}")])
             .args(args)
@@ -95,7 +138,7 @@ impl Sandbox {
             return Err(anyhow!(if stderr.is_empty() {
                 format!(
                     "Command failed: {} ios --id simulator:{udid} {}",
-                    self.executable.display(),
+                    executable.display(),
                     args.join(" ")
                 )
             } else {
@@ -176,12 +219,15 @@ mod tests {
     use super::*;
     use crate::refused::status_of;
 
-    /// A project whose Sandbox is a Node script that records its arguments.
-    fn project() -> PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("sandbox-bridge-acme's-{}", std::process::id()));
+    /// A project folder that is also a home whose `~/.local/bin/sandbox` is a
+    /// Node script recording its arguments.
+    fn project(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "sandbox-bridge-acme's-{name}-{}",
+            std::process::id()
+        ));
         let _gone = std::fs::remove_dir_all(&root);
-        let binary = root.join(".canonic/sandbox/bin/sandbox");
+        let binary = root.join(".local/bin/sandbox");
         std::fs::create_dir_all(binary.parent().expect("folder")).expect("folders");
         let node = std::process::Command::new("node")
             .args(["-p", "process.execPath"])
@@ -206,8 +252,8 @@ mod tests {
 
     #[tokio::test]
     async fn delegates_literal_target_arguments_and_reports_invalid_input_and_failures() {
-        let root = project();
-        let sandbox = Sandbox::new(&root);
+        let root = project("delegates");
+        let sandbox = Sandbox::searching(&root, None, Some(root.clone()));
         let identity = "Acme $(touch injected)";
         assert_eq!(
             sandbox.screen(identity).await.expect("screen"),
@@ -265,12 +311,40 @@ mod tests {
 
     #[tokio::test]
     async fn says_when_sandbox_is_not_installed() {
-        let sandbox = Sandbox::new(Path::new("/acme/nowhere"));
+        let nowhere = Path::new("/acme/nowhere");
+        let sandbox = Sandbox::searching(
+            nowhere,
+            Some(OsString::from("/acme/nowhere/bin")),
+            Some(nowhere.to_owned()),
+        );
         let error = sandbox.screen("SIM-1").await.expect_err("missing");
         assert_eq!(
             error.to_string(),
-            "Sandbox is not installed at .canonic/sandbox/bin/sandbox"
+            "Sandbox is not installed: no sandbox command on PATH or in ~/.local/bin"
         );
+    }
+
+    #[test]
+    fn finds_sandbox_on_path_before_the_local_bin_folder() {
+        let home = project("search");
+        let local = home.join(".local/bin/sandbox");
+        let on_path = home.join("path bin");
+        std::fs::create_dir_all(&on_path).expect("folder");
+        std::fs::copy(&local, on_path.join("sandbox")).expect("copy");
+        let search = |path: &Path| Search {
+            path: Some(std::env::join_paths([path]).expect("PATH")),
+            home: Some(home.clone()),
+        };
+        assert_eq!(search(&on_path).locate(), Some(on_path.join("sandbox")));
+        assert_eq!(search(&home.join("empty")).locate(), Some(local.clone()));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&local, std::fs::Permissions::from_mode(0o644))
+                .expect("not executable");
+            assert_eq!(search(&home.join("empty")).locate(), None);
+        }
+        let _gone = std::fs::remove_dir_all(home);
     }
 
     #[test]

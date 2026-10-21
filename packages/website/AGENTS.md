@@ -90,12 +90,32 @@ Never push a tag without the user's go-ahead.
 - Restore mutated globals, environment, timers and test state. Keep production
   startup independent of fixtures. Store generated evidence in the package's
   ignored artifact locations or temporary directories.
+- Be conservative about running checks. Run scoped checks when they help, such
+  as the tests covering changed code or a lint of the module being edited;
+  Markdown-only changes need only a whitespace diff check. Do not run the full
+  battery (whole suites, format, strict lint, dependency audits, coverage,
+  builds, acceptance) after each change: when a task is complete, and before a
+  commit, ask which relevant categories to run and name their individual commands.
+  Command lists in package guides say how to run a check, not that every change
+  must run it. Do not rerun a passing check unless code it covers changed since.
+- Prefer the package's focused-test and development commands for iteration;
+  preserve Cargo's `target/` cache and avoid release packaging or installation
+  unless that is the behavior being verified.
 - Select checks from the affected contract. Preserve the assertions and coverage
   scope while fixing failures; do not weaken thresholds, skip suites or broadly
   suppress rules to obtain a pass.
 - Report executed commands and observed outcomes. Missing prerequisites, optional
   captures and platform limits are distinct from behavior failures and passing
   acceptance. Do not infer untested platform coverage from another host's result.
+
+- Run Rust verification categories individually and select only those needed for
+  the task. A request for tests does not also request formatting, lint, type
+  checking, doctests, API docs, dependency auditing or coverage. Name the selected
+  commands before running them; there is no aggregate Rust check target.
+  `docs` generates browsable HTML API reference in `target/doc/`; `doctest`
+  executes Rust documentation examples. Run either as its own explicit category.
+  Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
+  their generated reference pages. Keep Cargo caches between runs.
 
 ---
 
@@ -207,7 +227,8 @@ locations, audience, publishing, and validation.
 - Keep internal requirements and investigation notes in specs. Include technical
   detail in docs when it helps the intended audience use, configure, integrate,
   or troubleshoot the product. Prefer existing topics and cross-links over copies.
-- Check links and run the package's relevant validation. Do not add tests that
+- Check links and run `git diff --check`; run focused tests only when code also
+  changes. Do not add tests that
   merely assert documentation text. Writing a spec does not authorize implementing
   proposals; writing docs does not itself authorize publishing or distribution.
 
@@ -261,7 +282,8 @@ the actual component format, styles, host integration and verification commands.
 - Match supported product capabilities;
   download and release data come from GitHub rather than invented versions.
 - For site content or behavior changes, run `pnpm --dir packages/website test`
-  and `pnpm --dir packages/website run build`, then inspect affected output.
+  and `pnpm --dir packages/website run build` when the user asks for checks,
+  then inspect affected output.
   Check the rendered pages visually when layout or screenshots change. Internal Markdown-only specs need link review and `git diff --check`.
 - Writing content does not itself authorize deployment; publish only when
   requested.
