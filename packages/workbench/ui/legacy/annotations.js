@@ -1117,6 +1117,16 @@
   }
 
   function nativeShot() {
+    return waitForCode().then(nativeShotReady);
+  }
+
+  function waitForCode() {
+    var page = preview();
+    var docs = page && page.defaultView && page.defaultView.wbDocsPage;
+    return docs && docs.whenHighlighted ? docs.whenHighlighted() : Promise.resolve();
+  }
+
+  function nativeShotReady() {
     if (offOrigin()) {
       return Promise.reject(new Error(
         'the preview is served from elsewhere'
@@ -1136,7 +1146,7 @@
   /* A bridged lens uses the same inert live-DOM capture as a local page. An
      unbridged lens retains the URL capture fallback and its separate session. */
   function pageShot(inspectAnnotations) {
-    var flushed = liveMirror && liveMirror.flush ? liveMirror.flush() : Promise.resolve();
+    var flushed = waitForCode().then(function () { return liveMirror && liveMirror.flush ? liveMirror.flush() : undefined; });
     return flushed.then(function () {
       var request = captureRequest(true);
       if (!request) throw new Error('there is no preview to capture');
@@ -1229,7 +1239,7 @@
       return Promise.resolve(liveMirror && liveMirror.flush ? liveMirror.flush() : null).then(capture);
     }
     captureSync.pause();
-    return Promise.resolve().then(capture).finally(function () { captureSync.resume(); });
+    return waitForCode().then(capture).finally(function () { captureSync.resume(); });
   }
 
   /* Native capture uses the continuously mirrored Chromium surface. Both it

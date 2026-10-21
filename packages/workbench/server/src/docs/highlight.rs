@@ -3,7 +3,8 @@
 //!
 //! A fixed set of languages, with highlight.js's names and aliases; anything
 //! else is shown as escaped text. Tokens come from syntect's grammars (the
-//! extended set two-face ships, which has TypeScript, TSX and SCSS) and are
+//! extended set two-face ships, which has TypeScript, TSX and SCSS), parsed
+//! by Oniguruma to keep first-use grammar compilation small, and are
 //! marked with the `hljs-*` classes the docs page stylesheet colors.
 
 use std::sync::LazyLock;
@@ -11,6 +12,21 @@ use syntect::parsing::{ParseState, Scope, ScopeStack, ScopeStackOp, SyntaxRefere
 use syntect::util::LinesWithEndings;
 
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
+
+/// CPU work must not occupy the async server executor. Preserve its request's trace.
+///
+/// # Errors
+/// Fails if the blocking worker cannot complete.
+pub(crate) async fn background<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> anyhow::Result<T> {
+    let trace = crate::trace::REQUEST.try_with(Clone::clone).ok();
+    Ok(tokio::task::spawn_blocking(move || match trace {
+        Some(trace) => crate::trace::REQUEST.sync_scope(trace, work),
+        None => work(),
+    })
+    .await?)
+}
 
 /// Text safe in HTML text and attribute values.
 pub(crate) fn escape_html(text: &str) -> String {
@@ -84,6 +100,7 @@ fn syntax(name: &str) -> Option<&'static SyntaxReference> {
 
 /// Highlighted HTML for `code`, or the escaped text when the language is unknown.
 pub(crate) fn highlight(code: &str, language_name: Option<&str>) -> String {
+    let _phase = crate::trace::phase("highlight");
     let name = language_name.unwrap_or_default().trim().to_lowercase();
     match (!name.is_empty()).then(|| syntax(&name)).flatten() {
         Some(grammar) => highlighted(code, grammar).unwrap_or_else(|| escape_html(code)),
@@ -353,6 +370,38 @@ mod tests {
             "a &#60; b &#38; &#34;c&#34;"
         );
         assert_eq!(highlight("x", None), "x");
+    }
+
+    #[test]
+    fn jsx_tags_and_typescript_template_literals_keep_their_text_and_token_classes() {
+        let jsx = highlight(
+            "export const basic = () => <Card title=\"Acme\">Hello {name}</Card>;\n",
+            Some("jsx"),
+        );
+        assert!(jsx.contains("hljs-name\">Card</span>"), "{jsx}");
+        assert!(jsx.contains("hljs-attr\">title</span>"), "{jsx}");
+        assert!(
+            !jsx.contains("hljs-regexp"),
+            "a closing JSX tag is not a regexp: {jsx}"
+        );
+        let code = "export const basic = (canvas: HTMLElement) => render(canvas, `\n  <button class=\"btn\">Hello ${name}</button>\n`);";
+        let first = highlight(code, Some("ts"));
+        assert_eq!(highlight(code, Some("ts")), first);
+        assert!(first.contains("hljs-keyword\">export</span>"), "{first}");
+        assert!(first.contains("hljs-string"), "{first}");
+        let stripped = regex::Regex::new("<[^>]+>")
+            .unwrap()
+            .replace_all(&first, "")
+            .into_owned();
+        assert_eq!(
+            stripped
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#x27;", "'")
+                .replace("&amp;", "&"),
+            code
+        );
     }
 
     #[test]

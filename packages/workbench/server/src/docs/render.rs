@@ -58,6 +58,8 @@ impl PanelView {
 
 /// What to render.
 pub(crate) struct RenderInput<'input> {
+    /// Live documents send readable text first; portable documents colour it at build time.
+    pub(crate) defer_highlight: bool,
     /// The Markdown text.
     pub(crate) source: &'input str,
     /// The Markdown file, relative to the project root, with `/` separators.
@@ -72,6 +74,15 @@ pub(crate) struct RenderedDocs {
     pub(crate) html: String,
     /// The first level-1 heading's text, for the document title.
     pub(crate) title: Option<String>,
+    pub(crate) highlights: Vec<HighlightedCode>,
+}
+
+/// Coloured code tied to its exact source, so an edited document cannot apply stale markup.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct HighlightedCode {
+    pub(crate) text: String,
+    pub(crate) language: String,
+    pub(crate) html: String,
 }
 
 /* Lucide's code and copy icons. */
@@ -100,6 +111,7 @@ pub(crate) fn render_docs(
     let mut title: Option<String> = None;
     let mut out: Vec<Event<'_>> = Vec::with_capacity(events.len());
     let mut at = 0;
+    let mut highlights = Vec::new();
     while at < events.len() {
         let (event, _) = &events[at];
         match event {
@@ -118,7 +130,14 @@ pub(crate) fn render_docs(
             }
             Event::Start(Tag::CodeBlock(kind)) => {
                 let end = closing(&events, at);
-                let html = code_html(kind, &events[at + 1..end], &mut waiting, &mut panel);
+                let html = code_html(
+                    kind,
+                    &events[at + 1..end],
+                    &mut waiting,
+                    &mut panel,
+                    input.defer_highlight,
+                    &mut highlights,
+                );
                 out.push(Event::Html(html.into()));
                 at = end + 1;
             }
@@ -170,7 +189,11 @@ pub(crate) fn render_docs(
     }
     let mut html = String::with_capacity(model.body.len() * 2);
     pulldown_cmark::html::push_html(&mut html, out.into_iter());
-    RenderedDocs { html, title }
+    RenderedDocs {
+        html,
+        title,
+        highlights,
+    }
 }
 
 type Spanned<'source> = (Event<'source>, std::ops::Range<usize>);
@@ -211,6 +234,8 @@ fn code_html(
     inner: &[Spanned<'_>],
     waiting: &mut HashMap<&str, VecDeque<&ExamplePlacement>>,
     panel: &mut impl FnMut(&ExamplePlacement) -> PanelView,
+    defer: bool,
+    highlights: &mut Vec<HighlightedCode>,
 ) -> String {
     let mut text: String = inner
         .iter()
@@ -247,10 +272,21 @@ fn code_html(
         format!(" class=\"language-{}\"", escape_html(first))
     };
     let language = (!first.is_empty()).then_some(first);
-    format!(
-        "<pre class=\"wb-docs-code\"><code{class}>{}</code></pre>\n",
-        highlight(&text, language)
-    )
+    let (marker, html) = if defer {
+        (
+            format!(" data-wb-code=\"{}\"", escape_html(first)),
+            escape_html(&text),
+        )
+    } else {
+        let html = highlight(&text, language);
+        highlights.push(HighlightedCode {
+            text,
+            language: first.to_owned(),
+            html: html.clone(),
+        });
+        (String::new(), html)
+    };
+    format!("<pre class=\"wb-docs-code\"><code{class}{marker}>{html}</code></pre>\n")
 }
 
 /// The index of the event that closes the one at `start`.
@@ -424,10 +460,37 @@ mod tests {
 
     const SOURCE: &str = "---\ntitle: ignored\n---\n# Card `div`\n\nA plain surface. See [Button](../button/button.md#sizes), [the guide](guide.html), and [home](https://example.com).\n\n![Anatomy](images/anatomy.png \"Parts\")\n\n## Basic\n\n```example basic\ncaption: children\n```\n\n## Basic\n\n```example nested\n```\n\n```example basic\n```\n\n| Prop | Type |\n| --- | --- |\n| `children` | `ReactNode` |\n\n```ts\nconst card: string = \"<Card>\";\n```";
 
+    #[test]
+    fn deferred_code_is_escaped_readable_and_does_no_highlighting() {
+        let source = "# Acme\n\n```html\n<button>& safe</button>\n```\n```example basic\n```";
+        let pages = HashSet::new();
+        let mut input = RenderInput {
+            source,
+            file: "docs.md",
+            docs_pages: &pages,
+            defer_highlight: true,
+        };
+        let plain = render_docs(&input, |_| PanelView::shown(PanelStatus::Pending));
+        assert!(plain.html.contains("data-wb-code=\"html\""));
+        assert!(
+            plain
+                .html
+                .contains("&#60;button&#62;&#38; safe&#60;/button&#62;")
+        );
+        assert!(!plain.html.contains("hljs-"));
+        assert!(plain.highlights.is_empty());
+        input.defer_highlight = false;
+        let coloured = render_docs(&input, |_| PanelView::shown(PanelStatus::Pending));
+        assert_eq!(coloured.highlights.len(), 1);
+        assert_eq!(coloured.highlights[0].text, "<button>& safe</button>");
+        assert!(coloured.highlights[0].html.contains("hljs-name"));
+    }
+
     fn render(panel: impl FnMut(&ExamplePlacement) -> PanelView) -> RenderedDocs {
         let pages: HashSet<String> = ["docs/button/button.md".to_owned()].into();
         render_docs(
             &RenderInput {
+                defer_highlight: false,
                 source: SOURCE,
                 file: "docs/card/card.md",
                 docs_pages: &pages,
@@ -528,6 +591,7 @@ mod tests {
         let source = "```example\n```\n\n```example pending\n```";
         let rendered = render_docs(
             &RenderInput {
+                defer_highlight: false,
                 source,
                 file: "card.md",
                 docs_pages: &pages,

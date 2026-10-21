@@ -62,7 +62,7 @@ server's workspace trust check.
 
 ## Serve
 
-`workbench-server serve --root <project> --product <workbench> [--ports
+`workbench-server serve --root <project> --product <workbench> [--trace] [--ports
 <port,...>] …` listens on 127.0.0.1 at the first free port of the list (0
 takes any). Its options, standard-stream messages and routes are in the
 [server spec](../specs/server.md#the-server-and-its-host).
@@ -142,6 +142,11 @@ library's source; Rspack's crates do not build on stable. The first build
 compiles Rspack's crates and takes several minutes. Dev builds, which the
 tests run, optimize dependencies, since Rspack and SWC compile previews far
 more slowly unoptimized.
+Docs highlighting uses Syntect's Oniguruma backend. Its bundled C engine is
+compiled into the binary using the target C toolchain; shipped bindings avoid
+a build-time bindgen/libclang requirement. Running the server needs no system
+Oniguruma installation.
+
 Install the same test, dependency and coverage tools used by the other Rust
 packages:
 
@@ -152,14 +157,14 @@ cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.
 From this directory:
 
 ```sh
-make check
+make test
 make coverage
 ```
 
-`make check` runs all gates below with locked dependencies and all features.
+Each verification target runs one category with the package's pinned toolchain.
 `make coverage` writes the HTML report to `target/llvm-cov/`.
-From the repository root, use `pnpm --dir packages/workbench run check:server`
-or `pnpm --dir packages/workbench run coverage:server`.
+From the repository root, use the corresponding Workbench script, such as
+`pnpm --dir packages/workbench run test:server` or `docs:server`.
 
 ```sh
 cargo fmt --check
@@ -201,3 +206,25 @@ failure stops packaging with those prerequisites in the error.
 macOS can spend about 0.8 seconds checking a newly placed executable on its
 first launch, as observed in the instant first page lab. Subsequent launches
 avoid that check, like the bundled runtime's existing first-launch delay.
+
+## Individual Rust verification
+
+Run Rust verification categories individually and select only those needed for
+the task. A request for tests does not also request formatting, lint, type
+checking, doctests, API docs, dependency auditing or coverage. Name the selected
+commands before running them; there is no aggregate Rust check target.
+`docs` generates browsable HTML API reference in `target/doc/`; `doctest`
+executes Rust documentation examples. Run either as its own explicit category.
+Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
+their generated reference pages. Keep Cargo caches between runs.
+
+| Category | Command from this package |
+| --- | --- |
+| Apply formatting | `make format` |
+| Verify formatting | `make format-check` |
+| Strict Clippy | `make lint` |
+| Type checking | `make types` |
+| Tests | `make test` |
+| Documentation examples | `make doctest` |
+| API reference HTML | `make docs` |
+| Dependency audit | `make deps` |

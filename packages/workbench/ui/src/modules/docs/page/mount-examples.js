@@ -90,9 +90,13 @@ export async function mountExamples(root, bundle, options) {
     }
   }
 
+  options.phase?.('examples-mounted');
   await bundle.environment?.ready?.(page);
+  options.phase?.('readiness-environment');
   if (document.fonts) await document.fonts.ready;
+  options.phase?.('readiness-fonts');
   await visibleImages(3000);
+  options.phase?.('readiness-images');
 
   return {
     results,

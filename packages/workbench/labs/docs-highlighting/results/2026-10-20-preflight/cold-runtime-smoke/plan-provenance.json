@@ -1,0 +1,5 @@
+{
+  "originalSha256": "0a47b3df50a74c18c071d9be19b48272a56bc1f6918a8387fe8945d8aaa185f6",
+  "reviewedSha256": "60a660565437a5811dd8b7f3aa142bc00ca418f10890d9d82f048f9befb2ba37",
+  "transformation": "Only relative Markdown link targets are rebased from the lab README location to this review copy. The original frozen plan remains in the owned raw run; method text and measurements are unchanged."
+}

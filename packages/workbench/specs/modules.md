@@ -67,6 +67,10 @@ DOM initialization, filesystem I/O or process lifecycle.
   generated runtime copy participates in UI delivery. Runtime imports, including
   shared browser rules, resolve to JavaScript. Backend declaration files live
   outside the UI and are not browser assets.
+- Pinned third-party browser assets live under `ui/src/vendor/` with upstream
+  licenses and a hash manifest. Hosts serve those files unchanged; authored UI
+  source has no build step. Integrity and the native module graph are checked
+  separately from source lint and formatting.
 - Compilation, serving and proxying of the project's previews remain backend
   capabilities. The previewed project is content consumed by the Workbench UI;
   its compiler pipeline must not become the Workbench interface's build pipeline.

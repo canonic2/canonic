@@ -39,8 +39,10 @@ swc_common = "=26.0.0"
 swc_ecma_ast = "=29.0.1"
 swc_ecma_parser = "=45.1.3"
 swc_ecma_visit = "=29.0.0"
-syntect = { version = "=5.3.0", default-features = false, features = ["parsing", "regex-fancy"] }
-two-face = { version = "=0.4.5", default-features = false, features = ["syntect-fancy"] }
+# Oniguruma avoids the high first-use regex compilation cost of fancy-regex.
+# Syntect disables bindgen and uses onig's shipped bindings and bundled C engine.
+syntect = { version = "=5.3.0", default-features = false, features = ["parsing", "regex-onig"] }
+two-face = { version = "=0.4.5", default-features = false, features = ["syntect-onig"] }
 # Origins parsed by the WHATWG URL rules the browser and capture helper follow.
 url = "=2.5.8"
 futures = { version = "=0.3.32", default-features = false, features = ["std"] }
@@ -102,3 +104,9 @@ strip = true
 # to rebuild.
 [profile.dev.package."*"]
 opt-level = 2
+
+# Without debug info, macOS builds keep no per-unit object files in deps/.
+# Kept objects pile up with every edit, and a crowded deps/ slows every test
+# process launch.
+[profile.dev]
+debug = false

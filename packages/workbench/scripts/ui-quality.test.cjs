@@ -14,7 +14,8 @@ test('the UI ships native JavaScript with a complete browser-ready module graph'
   );
   const queue = files
     .filter((file) => file.startsWith('src/') && file.endsWith('.js') && !file.endsWith('.test.js'))
-    .map((file) => path.join(ui, file));
+    .map((file) => path.join(ui, file))
+    .filter((file) => fs.statSync(file).isFile());
   const { Linter } = await import('eslint');
   const linter = new Linter();
   const visited = new Set();

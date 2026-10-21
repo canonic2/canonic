@@ -44,6 +44,7 @@ pub(crate) struct Options {
     handoff: bool,
     /// Lists and builds every docs page at startup.
     eager_previews: bool,
+    trace: crate::trace::Mode,
     log_limit: usize,
     export_retention_ms: Option<u64>,
     export_max_archive_bytes: Option<u64>,
@@ -56,10 +57,15 @@ impl Options {
         let (mut root, mut product, mut space_dir, mut space_key) = (None, None, None, None);
         let (mut trusted, mut handoff, mut eager_previews) = (true, false, false);
         let mut log_limit = SESSION_BYTES;
+        let mut trace = crate::trace::Mode::Disabled;
         let (mut export_retention_ms, mut export_max_archive_bytes, mut view_stale_ms) =
             (None, None, None);
         while let Some(flag) = args.next() {
             match flag.as_str() {
+                "--trace" => {
+                    trace = crate::trace::Mode::Enabled;
+                    continue;
+                }
                 "--untrusted" => {
                     trusted = false;
                     continue;
@@ -119,6 +125,7 @@ impl Options {
             trusted,
             handoff,
             eager_previews,
+            trace,
             log_limit,
             export_retention_ms,
             export_max_archive_bytes,
@@ -156,12 +163,15 @@ async fn serve(options: Options) -> Result<()> {
     proxies.set_bridge(port);
     let resident = Arc::new(Resident::new(output.clone()));
     let previews = crate::compiler::Previews::new(&root, &product)?;
-    let files = Arc::new(files::Files::new(
-        &root,
-        &product,
-        options.space_dir.as_deref(),
-        options.space_key.as_deref(),
-    ));
+    let files = Arc::new(
+        files::Files::new(
+            &root,
+            &product,
+            options.space_dir.as_deref(),
+            options.space_key.as_deref(),
+        )
+        .with_trace(options.trace.enabled()),
+    );
     let place = Where {
         dir: options.space_dir.clone().map_or_else(
             || root.clone(),
@@ -181,6 +191,7 @@ async fn serve(options: Options) -> Result<()> {
     );
     let dir = crate::paths::resolve(options.space_dir.as_ref().unwrap_or(&options.root), "");
     let settings = space::Settings {
+        trace: options.trace.enabled(),
         id: crate::spaces::id(&dir, options.space_key.as_deref()),
         dir,
         key: options.space_key.clone(),
@@ -272,6 +283,13 @@ mod tests {
         let defaults = parse(&["--root", "/acme", "--product", "/wb"]).unwrap();
         assert_eq!(defaults.ports, vec![0]);
         assert!(defaults.trusted);
+        assert!(!defaults.trace.enabled());
+        assert!(
+            parse(&["--root", "/acme", "--product", "/wb", "--trace"])
+                .unwrap()
+                .trace
+                .enabled()
+        );
         assert!(parse(&["--product", "/wb"]).is_err());
         assert!(parse(&["--root", "/acme"]).is_err());
         assert!(parse(&["--root", "/acme", "--product", "/wb", "--ports", ""]).is_err());

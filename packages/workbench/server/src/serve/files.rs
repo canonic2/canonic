@@ -123,6 +123,13 @@ pub(crate) fn with_compat(html: &str) -> String {
 }
 
 impl Files {
+    pub(crate) fn with_trace(mut self, enabled: bool) -> Self {
+        if enabled {
+            self.canvas_head
+                .push_str("<meta name=\"workbench-trace\" content=\"true\">\n");
+        }
+        self
+    }
     pub(crate) fn new(
         root: &Path,
         product: &Path,

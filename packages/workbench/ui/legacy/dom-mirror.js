@@ -185,6 +185,22 @@
         return key;
       }
       var rootId = visit(doc.documentElement);
+      // CSS Highlight ranges paint without changing the DOM. Carry their node
+      // identities as root state so colour-only changes also advance revisions.
+      var highlights = [];
+      if (win.CSS && win.CSS.highlights) win.CSS.highlights.forEach(function (highlight, name) {
+        var ranges = [];
+        highlight.forEach(function (range) {
+          var start = ids.get(range.startContainer), end = ids.get(range.endContainer);
+          if (nodes.has(start) && nodes.has(end)) ranges.push([start, range.startOffset, end, range.endOffset]);
+        });
+        if (ranges.length) highlights.push({ name: name, priority: highlight.priority, type: highlight.type, ranges: ranges });
+      });
+      if (highlights.length) {
+        var rootState = Object.assign({}, states.get(rootId) || { id: rootId }, { highlights: highlights });
+        var previousRoot = latest && latest.states.get(rootId);
+        states.set(rootId, previousRoot && equal(rootState, previousRoot) ? previousRoot : rootState);
+      }
       var animations = [];
       var seenAnimations = new Set();
       roots.forEach(function (tree) {
@@ -300,6 +316,7 @@
   }
 
   var receivers = new WeakMap();
+  var mirroredHighlights = new WeakMap();
 
   function patchDocument(doc, snapshot) {
     var receiver = receivers.get(doc);
@@ -402,6 +419,26 @@
       nodes.set(parsed.documentElement.getAttribute(ID), doc.documentElement);
       reconcile(parsed.documentElement, doc.documentElement, doc, nodes);
     }
+    var registry = win.CSS && win.CSS.highlights;
+    var rangeNodes = snapshot.version === 1 ? receivers.get(doc).nodes : nodes;
+    (mirroredHighlights.get(doc) || []).forEach(function (name) { if (registry) registry.delete(name); });
+    var highlightNames = [];
+    mirroredHighlights.set(doc, highlightNames);
+    (snapshot.states || []).forEach(function (state) {
+      (state.highlights || []).forEach(function (record) {
+        if (!registry || !win.Highlight) throw new Error('Capture renderer does not support CSS Highlights');
+        var highlight = new win.Highlight();
+        highlight.priority = record.priority;
+        highlight.type = record.type;
+        record.ranges.forEach(function (entry) {
+          var range = doc.createRange();
+          range.setStart(rangeNodes.get(entry[0]), entry[1]);
+          range.setEnd(rangeNodes.get(entry[2]), entry[3]);
+          highlight.add(range);
+        });
+        registry.set(record.name, highlight); highlightNames.push(record.name);
+      });
+    });
     var pending = [];
     nodes.forEach(function (node) {
       if (node.localName === 'link' && node.rel === 'stylesheet' && !node.disabled &&

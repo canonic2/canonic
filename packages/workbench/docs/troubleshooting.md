@@ -5,6 +5,33 @@ a message somewhere. This page lists where to look, then common symptoms.
 
 ## Where to look
 
+### Trace a slow page
+
+In VS Code settings, enable **Workbench: Trace** (`workbench.trace`), then run
+**Developer: Reload Window**. Open **Output → Workbench** and select a few pages,
+including a return to a page you already opened. Tracing is off by default;
+disable it and reload when finished.
+
+`preview.request.completed` lines show the route, page, lens, status and total
+server milliseconds. Docs requests also show catalog readiness, Markdown,
+highlighting, startup warm-up wait and bundle work when those phases run.
+The docs document and its examples bundle are separate requests.
+`preview.browser.phase` lines show selection, renderer/document loading,
+bundle loading, example mounting, readiness and frame promotion. Match their
+`selection` IDs, page, state and lens; the final `visible` phase's `totalMs`
+shows the selection-to-visible time. A retained page can skip loading/mounting.
+
+**Developer: Open Webview Developer Tools** also shows server durations in
+the Network panel's `Server-Timing` response header. Diagnostic output is
+bounded; `log.limit.reached` means the session budget is exhausted. Reload to
+start a new session.
+
+For the standalone command, add `--trace` and read the terminal:
+
+```sh
+node packages/workbench/server/node/server.js /path/to/acme --trace
+```
+
 ### Read the resolved config
 
 The server answers with the config as your machine resolves it, including

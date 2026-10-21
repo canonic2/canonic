@@ -99,11 +99,13 @@ collections:
     target.on('Runtime.exceptionThrown', event => failures.push(event.exceptionDetails.text));
     await target.send('Emulation.setDeviceMetricsOverride', { width: 1900, height: 1100, deviceScaleFactor: 1, mobile: false });
     await target.send('Page.addScriptToEvaluateOnNewDocument', { source:
-      `window.changes=0;window.fixtureReports=[];window.labelTimeline=[];
+      `window.changes=0;window.fixtureReports=[];window.labelTimeline=[];window.loadingFrames=[];
       addEventListener('wb-frame-change',()=>changes++);
       addEventListener('message',event=>{if(event.data?.type==='fixture-state')fixtureReports.push(event.data)});
       let previousLabels='';
       function sampleLabels(){
+        const loading=document.getElementById('blank');
+        if(loading && !loading.hidden && loading.classList.contains('is-loading')) loadingFrames.push(location.hash);
         const canvas=document.getElementById('artboards');
         if(canvas && getComputedStyle(canvas).display!=='none' && getComputedStyle(canvas).visibility==='visible'){
           const sample={page:document.getElementById('crumbPage').textContent,title:document.title,
@@ -129,7 +131,8 @@ collections:
       if (expectPending) {
         await until(`${canvas}.artboards[0]?.target.state==='secondary' && !${canvas}.artboards[0]?.view?.ready`);
         assert.equal(await target.evaluate('getComputedStyle(document.getElementById("artboards")).visibility'), 'hidden', 'outgoing pixels stay private while the requested story renders');
-        assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'the same status covers the story render');
+        await until(`!document.getElementById('blank').hidden && document.getElementById('blank').classList.contains('is-loading')`);
+        assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'slow story rendering shows the loading status');
         assert.equal(await target.evaluate('document.title'), 'Page · Error field · Storybook · Acme');
         await until(`${canvas}.artboards[0].view.label==='Page / Error field' && !${canvas}.artboards[0].view.ready`);
       }
@@ -217,7 +220,10 @@ collections:
     await pick('storybook', 'secondary', true);
     assert.equal(await target.evaluate(active + '===storyFrame'), true);
     assert.equal((await external()).story, 'page--secondary');
+    await target.evaluate('loadingFrames=[]');
     await pick('docs');
+    assert.deepEqual(await target.evaluate('loadingFrames'), [], 'a retained docs return never paints the loading message');
+    assert.equal(await target.evaluate(`${active}.contentDocument===docsDocument`), true, 'the fast docs return reuses its document');
     await pick('storybook', 'secondary');
     assert.equal(await target.evaluate(active + '===storyFrame'), true, 'docs navigation retains the Storybook session');
     await pick('docs');
@@ -227,7 +233,8 @@ collections:
     assert.equal(await target.evaluate('document.title'), 'Other · Storybook · Acme', 'a pending lookup names its destination rather than the previous docs page');
     assert.equal(await target.evaluate('document.getElementById("stateName").textContent'), '', 'an unresolved story cannot retain the previous state label');
     assert.deepEqual(await target.evaluate('({visibility:getComputedStyle(document.getElementById("artboards")).visibility,inert:document.getElementById("artboards").inert})'), {visibility:'hidden',inert:true}, 'the docs view is concealed as soon as the destination changes, including during catalog lookup');
-    assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'one canvas status covers catalog lookup');
+    await until(`!document.getElementById('blank').hidden && document.getElementById('blank').classList.contains('is-loading')`);
+    assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'one canvas status covers slow catalog lookup');
     await new Promise(resolve => setTimeout(resolve, 450));
     assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'});
     assert.equal(await target.evaluate('document.getElementById("toast").textContent.includes("Asking Storybook")'), false, 'slow lookups do not start a competing toast');

@@ -1,6 +1,7 @@
 /* An adapter-neutral renderer. Its document, compatibility bridge and shared
    runtime stay alive while preview modules mount and dispose their content. */
 import '/_workbench/preview-runtime.js';
+import { begin as beginTrace, phase, address as tracedAddress } from '/_workbench/ui/src/modules/trace/browser.js';
 
 let generation = 0;
 let pending = Promise.resolve();
@@ -98,6 +99,7 @@ function reset() {
 
 function load(address) {
   const url = new URL(address, location.href);
+  const trace = beginTrace({ page: url.searchParams.get('wbPage') || decodeURIComponent(url.pathname.slice(1)), state: url.searchParams.get('wbState') || url.searchParams.get('state'), lens: url.searchParams.get('wbLens') || 'design' }, { selection: url.searchParams.get('wbTrace') }, 'preview-host');
   if (url.origin !== location.origin || !/\.workbench\.tsx?$/.test(url.pathname)) {
     return Promise.reject(new Error('The warm renderer accepts local Workbench preview definitions.'));
   }
@@ -105,7 +107,7 @@ function load(address) {
   fetching?.abort();
   if (!window.__workbenchReady && window.__workbenchStop) void window.__workbenchStop().catch(() => {});
   const controller = fetching = new AbortController();
-  const descriptor = fetch('/_workbench/previews/descriptor?file=' + encodeURIComponent(decodeURIComponent(url.pathname.slice(1))),
+  const descriptor = fetch(tracedAddress('/_workbench/previews/descriptor?file=' + encodeURIComponent(decodeURIComponent(url.pathname.slice(1))), trace),
     { signal: controller.signal }).then(async response => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Preview compilation failed');
@@ -117,6 +119,7 @@ function load(address) {
     try {
       const content = await descriptor;
       if (ticket !== generation) return;
+      phase(trace, 'descriptor-fetched');
       await clear();
       if (ticket !== generation) return;
       history.replaceState(null, '', url.href);
@@ -160,6 +163,7 @@ function load(address) {
       let module;
       try {
         module = await import(content.module);
+        phase(trace, 'bundle-fetched');
       } finally {
         // A superseded or failed import may already have created its nodes.
         // Remember them before the next queued load clears the document.
@@ -171,6 +175,7 @@ function load(address) {
       rememberStyles(stylesBeforeImport);
       enableStyles();
       await module.mount(content.options);
+      phase(trace, 'examples-mounted');
       rememberStyles();
     } catch (error) {
       if (ticket !== generation) return;

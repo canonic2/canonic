@@ -9,14 +9,55 @@ var ROOT = path.resolve(__dirname, "..");
 var VERSION = '44.2.0';
 var TARGETS = ['darwin-x64', 'darwin-arm64', 'win32-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'];
 
-async function bundle(target) {
+async function digest(file) {
+  var hash = crypto.createHash('sha256');
+  for await (var chunk of fs.createReadStream(file)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+function inputs(root, target) {
+  var hash = crypto.createHash('sha256');
+  hash.update(JSON.stringify({ target: target, electron: VERSION }));
+  function record(file, relative, ancestors = new Set()) {
+    var real = fs.realpathSync(file);
+    if (ancestors.has(real)) throw new Error('Circular runtime input: ' + file);
+    var stat = fs.statSync(file);
+    hash.update(JSON.stringify([relative, stat.mode, stat.isDirectory() ? 'directory' :
+      crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')]));
+    if (stat.isDirectory()) {
+      var next = new Set(ancestors).add(real);
+      for (var name of fs.readdirSync(file).sort()) record(path.join(file, name), relative + '/' + name, next);
+    }
+  }
+  record(__filename, 'bundler');
+  record(path.join(root, 'pnpm-lock.yaml'), 'lockfile');
+  record(path.join(root, 'capture/app'), 'app');
+  return hash.digest('hex');
+}
+
+async function bundle(target, options = {}) {
   if (!TARGETS.includes(target)) throw new Error('Unsupported Electron runtime target: ' + target);
+  var root = options.root || ROOT;
+  var destination = path.join(root, 'capture/runtime');
+  var sourceHash = inputs(root, target);
+  if (options.reuse) {
+    try {
+      var cached = JSON.parse(fs.readFileSync(path.join(destination, 'runtime.json'), 'utf8'));
+      if (cached && cached.target === target && cached.electron === VERSION && cached.sourceSha256 === sourceHash &&
+          cached.sha256 === await digest(path.join(destination, 'runtime.tar.gz'))) {
+        console.log('Reused Electron runtime for ' + target);
+        return;
+      }
+    } catch (error) {
+      if (!(error instanceof SyntaxError) && error.code !== 'ENOENT') throw error;
+    }
+  }
   var parts = target.split('-');
   var work = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-electron-build-'));
   try {
-    var packager = (await import('@electron/packager')).packager;
+    var packager = options.packager || (await import('@electron/packager')).packager;
     var results = await packager({
-      dir: path.join(ROOT, 'capture/app'), out: work,
+      dir: path.join(root, 'capture/app'), out: work,
       name: 'Canonic Capture', executableName: 'canonic-capture',
       appBundleId: 'com.canonic.capture', electronVersion: VERSION,
       platform: parts[0], arch: parts[1], overwrite: true, prune: false,
@@ -29,7 +70,6 @@ async function bundle(target) {
       electronZipDir: process.env.CANONIC_ELECTRON_ZIP_DIR || undefined,
       download: { cacheRoot: path.join(os.tmpdir(), 'canonic-electron-cache') },
     });
-    var destination = path.join(ROOT, 'capture/runtime');
     fs.rmSync(destination, { recursive: true, force: true });
     fs.mkdirSync(destination, { recursive: true });
     var archive = path.join(destination, 'runtime.tar.gz');
@@ -40,16 +80,14 @@ async function bundle(target) {
       file: archive, gzip: true, cwd: results[0],
       portable: true, mtime: new Date(0),
     }, ['.']);
-    var hash = crypto.createHash('sha256');
-    for await (var chunk of fs.createReadStream(archive)) hash.update(chunk);
-    fs.writeFileSync(path.join(destination, 'runtime.json'), JSON.stringify({ target: target, electron: VERSION, sha256: hash.digest('hex') }) + '\n');
+    fs.writeFileSync(path.join(destination, 'runtime.json'), JSON.stringify({ target: target, electron: VERSION, sha256: await digest(archive), sourceSha256: sourceHash }) + '\n');
     console.log('Bundled Electron runtime for capture and previews on ' + target);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
-if (require.main === module) bundle(process.argv[2] || process.platform + '-' + process.arch).catch(function (error) {
+if (require.main === module) bundle(process.argv.slice(2).find(arg => !arg.startsWith('--')) || process.platform + '-' + process.arch, { reuse: process.argv.includes('--reuse') }).catch(function (error) {
   console.error(error); process.exitCode = 1;
 });
 module.exports = { bundle: bundle, targets: TARGETS };

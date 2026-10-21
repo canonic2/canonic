@@ -1,0 +1,51 @@
+{
+  "originalReportSha256": "8d0b0668eaf623c950995a088e2007f650932016f8949860261490768bfdba55",
+  "originalReportBytes": 7348770,
+  "analysisTools": {
+    "reporting.cjs": "ab078bb527b8b4d97bdb46c37e6039802af7451faf3330b3ecb41dc32f7bcc0b",
+    "summarize.cjs": "389f20ecd8e4cfc59f04d69e682e904672f7245cf9abe3b1f5a5646903a9c9df"
+  },
+  "projection": "Exact latency/resource/worker values, correctness checks and file identities; source text replaced by digests. Eligibility recomputed from execution, token roles and final group parity, correcting pre-group flags. Duplicate CPU observations deduplicated without changing values. Full logs, process traces and screenshots remain in the owned temporary run.",
+  "traces": [
+    {
+      "file": "0-0-Code-heavy-startup/sample.json",
+      "bytes": 2151857,
+      "sha256": "66a4ff3749af546c6d152c01b37a6e46259d9db283fd07138e0add1723c601c7"
+    },
+    {
+      "file": "0-1-Code-heavy-startup/sample.json",
+      "bytes": 2201547,
+      "sha256": "d9a56082aa81827656256dab109aaf94f13dba52c690cee83fc81add6075427d"
+    },
+    {
+      "file": "0-2-Code-heavy-startup/sample.json",
+      "bytes": 2898217,
+      "sha256": "ef682495b5a6c344b4bbe26477cfcb1d00d36eb80e85e96d9c6a689609c30920"
+    },
+    {
+      "file": "0-D-Code-heavy-startup/sample.json",
+      "bytes": 1619484,
+      "sha256": "074927b0868d17e39f5b67b5818f5e29487b04aa47d789a6c299831ff459b064"
+    },
+    {
+      "file": "0-0-Code-heavy-settled/sample.json",
+      "bytes": 2133861,
+      "sha256": "8e80f5383bc3576bbb23b2ff33abd0b4471f4c4086b6f739751341a5fac3298e"
+    },
+    {
+      "file": "0-1-Code-heavy-settled/sample.json",
+      "bytes": 2194599,
+      "sha256": "45cde3a091b760778fc9db953f1b02ce61c387c5103b9bd1de87e15a6b569d2f"
+    },
+    {
+      "file": "0-2-Code-heavy-settled/sample.json",
+      "bytes": 2894051,
+      "sha256": "6b54dcba2adfcf85a50ceb667d0f363e5ed095a00f829e2f5a4cb39cbf0a1315"
+    },
+    {
+      "file": "0-D-Code-heavy-settled/sample.json",
+      "bytes": 1612090,
+      "sha256": "a3270990b1a3eb0fea046c12c9939d2423f7d8e79d64512f6e48bfc2cbd51138"
+    }
+  ]
+}

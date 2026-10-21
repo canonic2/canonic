@@ -47,6 +47,7 @@ export async function boot(preview, sources, adapter, environment, options) {
   let lastOverrides = {};
   const listeners = [];
   let stopping;
+  const tracing = options?.development && new URL(location.href).searchParams.has('wbTrace');
   function listen(name, handler) {
     window.addEventListener(name, handler);
     listeners.push([name, handler]);
@@ -68,12 +69,14 @@ export async function boot(preview, sources, adapter, environment, options) {
   }
   window.__workbenchStop = shutdown;
   function diagnostic(phase, details = {}) {
-    if (!options?.development) return;
+    if (!tracing) return;
+    const trace = new URL(location.href).searchParams.get('wbTrace');
+    if (!options?.development || !trace) return;
     const now = Date.now();
     try {
       fetch('/_workbench/log', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level: 'info', event: 'preview.browser.phase',
-          details: { id: preview.id, state: selected, phase, elapsedMs: now - loadStarted,
+          details: { id: preview.id, owner: 'preview-runtime', page: new URL(location.href).searchParams.get('wbPage') || decodeURIComponent(location.pathname.slice(1)), selection: trace, lens: new URL(location.href).searchParams.get('wbLens') || 'design', state: selected, phase, elapsedMs: now - loadStarted,
             phaseMs: now - phaseStarted, ...details } }), keepalive: true }).catch(() => {});
     } catch (_) { /* Loading must not depend on diagnostics. */ }
     phaseStarted = now;

@@ -31,7 +31,23 @@ jobs:
           components: clippy, rustfmt, llvm-tools, rust-src
       - name: Install Rust check tools
         run: cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2
-      - run: pnpm run check:server
+      - name: Rust dependency audit
+        run: pnpm run deps:server
+        working-directory: packages/workbench
+      - name: Rust formatting
+        run: pnpm run format:check:server
+        working-directory: packages/workbench
+      - name: Rust lint
+        run: pnpm run lint:server
+        working-directory: packages/workbench
+      - name: Rust tests
+        run: pnpm run test:server
+        working-directory: packages/workbench
+      - name: Rust documentation examples
+        run: pnpm run doctest:server
+        working-directory: packages/workbench
+      - name: Rust API reference
+        run: pnpm run docs:server
         working-directory: packages/workbench
       - run: pnpm install --frozen-lockfile
         working-directory: packages/workbench

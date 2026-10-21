@@ -97,8 +97,14 @@ under it. It can map other implementations too, such as a `url` or
 ## Write the Markdown
 
 The Markdown is GitHub Flavored Markdown: headings, lists, tables, code blocks
-with syntax highlighting, inline code, links, and images. Front matter at the
-top of the file is not shown. Write props tables by hand as Markdown tables.
+with syntax highlighting, inline code, links, and images. Code text appears first;
+its colours arrive in the background without moving the text or delaying the page.
+Styles, fonts, images and examples still finish loading before the docs appear.
+Highlighting uses the engine bundled with Workbench and makes no CDN or
+external-service requests.
+If colouring fails, the code stays readable as plain text.
+Front matter at the top of the file is not shown. Write props tables by hand as
+Markdown tables.
 
 - **Place an example** with a fenced block whose info string is `example` and
   the example's ID. The block's lines set its presentation:

@@ -18,8 +18,9 @@ their layout.
 When you switch pages, states, or lenses, the outgoing preview stays hidden
 until the requested content is ready. Its session remains attached for reuse.
 Screenshots and handoffs wait for the requested page to finish loading.
-The canvas shows **Loading preview…** through story lookup and rendering,
-then clears it when the requested content is ready. A lookup failure replaces
+The canvas shows **Loading preview…** if story lookup or rendering takes longer
+than 100 ms. Fast returns show the retained page without flashing a loader;
+the message's delay does not delay the page. A lookup failure replaces
 the loading message with the error.
 Labels use the page's name and the selected story or state. Declared artboards
 include their own names while loading. During a Storybook lookup, the tab names

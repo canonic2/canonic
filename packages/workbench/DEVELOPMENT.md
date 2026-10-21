@@ -25,7 +25,7 @@ pnpm install --frozen-lockfile
 pnpm test
 pnpm run check
 pnpm run check:ui
-pnpm run check:server
+pnpm run test:server
 pnpm run serve <folder>
 server/bin/<platform>-<arch>/workbench-server check <folder>
 ```
@@ -40,6 +40,45 @@ assets, compiler binaries, the Rust executable and Electron bundle. The source
 root remains a private development coordinator. Keep its version and the
 extension and SDK versions aligned. F5's launch configuration selects
 `extension/` as the extension development path.
+
+## Fast development loop
+
+Run these commands from `packages/workbench/`, after the initial frozen
+dependency install:
+
+```sh
+# Run just the files affected by an edit (optional test-name filter).
+pnpm run test:focus ui/src/modules/docs/page/highlighting.test.js
+pnpm run test:focus server/node/server.test.js --name 'trace'
+
+# Open this repository in a separate VS Code Extension Development Host.
+pnpm run dev ../..
+```
+
+`test:focus` requires explicit test files and limits test concurrency to four.
+UI-only selections skip Cargo. Other selections first build the debug server,
+using Cargo's existing dependency and incremental caches, so tests cannot silently
+use an older binary. Test failures stop the command. Select the relevant checks above individually
+before completing changes across parts.
+
+`dev` builds the debug server and prepares the local Electron helper, then loads
+the extension directly from source. It avoids release compilation, VSIX assembly
+and installation. Pass another project folder to try that project's workbench.
+Paths are relative to this package. Open this package in VS Code and press F5
+for the same preparation under the debugger.
+
+After JS, TypeScript, HTML or CSS edits, run **Developer: Reload Window** in
+the development window. After Rust or `capture/app/` edits, first run
+`pnpm run dev:prepare`, then reload. That preparation always asks Cargo to check
+freshness. The Electron archive is reused only when its checksum, target, pinned
+version, helper sources, lockfile and bundler inputs match; changed or damaged
+inputs rebuild it. Dependencies and the initial Electron download/build still
+need preparation once. Keep `server/target/` between iterations to retain Cargo's
+cache; dependency, toolchain and profile changes can require a longer rebuild.
+
+The source extension uses a debug server, so use a release build for performance
+measurements. `pnpm test`, the individual Rust verification scripts, release packaging and the repository's
+`scripts/install-workbench.mjs` retain their full validation/build paths.
 
 ## The two halves
 
@@ -230,3 +269,25 @@ the browser. The extension itself never uses Chrome.
 temporary programmatic harness: independent instances, state and size changes,
 cross-space context, and complete screenshot/handoff payloads. It uses the
 same Chrome driver and bundled capture runtime, without adding production UI.
+
+## Individual Rust verification
+
+Run Rust verification categories individually and select only those needed for
+the task. A request for tests does not also request formatting, lint, type
+checking, doctests, API docs, dependency auditing or coverage. Name the selected
+commands before running them; there is no aggregate Rust check target.
+`docs` generates browsable HTML API reference in `target/doc/`; `doctest`
+executes Rust documentation examples. Run either as its own explicit category.
+Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
+their generated reference pages. Keep Cargo caches between runs.
+
+| Category | Command from this package |
+| --- | --- |
+| format | `pnpm run format:server` |
+| format-check | `pnpm run format:check:server` |
+| lint | `pnpm run lint:server` |
+| types | `pnpm run types:server` |
+| test | `pnpm run test:server` |
+| doctest | `pnpm run doctest:server` |
+| docs | `pnpm run docs:server` |
+| deps | `pnpm run deps:server` |

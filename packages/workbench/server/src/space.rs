@@ -34,6 +34,8 @@ pub(crate) type ListDevices =
 /// Settings the host starts the server with.
 #[derive(Clone, Debug)]
 pub(crate) struct Settings {
+    /// Opt-in server and browser performance diagnostics.
+    pub(crate) trace: bool,
     /// This space's id in the host's list.
     pub(crate) id: String,
     /// The folder of its workbench.yaml and its key there, which describe

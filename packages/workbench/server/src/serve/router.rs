@@ -36,6 +36,60 @@ fn routes_are_send(space: &Arc<Space>, request: Request) {
 }
 
 async fn dispatch(State(served): State<Served>, request: Request) -> Response {
+    if !served.space.settings.trace {
+        return answer(served, request).await;
+    }
+    let started = std::time::Instant::now();
+    let path = request.uri().path().to_owned();
+    let mut params: std::collections::HashMap<_, _> =
+        url::form_urlencoded::parse(request.uri().query().unwrap_or_default().as_bytes())
+            .into_owned()
+            .collect();
+    // Stable assets can inherit navigation identity from their referring
+    // document without changing their cache URLs. Never log the full referrer.
+    if let Some(referer) = request
+        .headers()
+        .get("referer")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| url::Url::parse(value).ok())
+    {
+        for (name, value) in referer.query_pairs() {
+            if matches!(name.as_ref(), "wbTrace" | "wbPage" | "wbState" | "wbLens") {
+                params
+                    .entry(name.into_owned())
+                    .or_insert_with(|| value.into_owned());
+            }
+        }
+    }
+    let timings = crate::trace::Timings::default();
+    let mut response = crate::trace::REQUEST
+        .scope(timings.clone(), answer(served.clone(), request))
+        .await;
+    let total = started.elapsed().as_secs_f64() * 1000.0;
+    let phases = timings.values();
+    let mut header = format!("total;dur={total:.3}");
+    let mut details = json!({
+        "route": path, "page": params.get("wbPage").or_else(|| params.get("page")).or_else(|| params.get("file")).map_or(path.trim_start_matches('/'), String::as_str),
+        "lens": params.get("wbLens").or_else(|| params.get("lens")), "state": params.get("wbState").or_else(|| params.get("state")),
+        "selection": params.get("wbTrace"), "status": response.status().as_u16(), "elapsedMs": total,
+    });
+    for (name, ms) in phases {
+        use std::fmt::Write as _;
+        let _ = write!(header, ", {name};dur={ms:.3}");
+        details[format!("{name}Ms")] = json!(ms);
+    }
+    if let Ok(value) = header.parse() {
+        response.headers_mut().insert("server-timing", value);
+    }
+    served
+        .space
+        .diagnostics
+        .info("preview.request.completed", details)
+        .await;
+    response
+}
+
+async fn answer(served: Served, request: Request) -> Response {
     let path = request.uri().path().to_owned();
     let previews = &served.space.previews;
     if super::previews::handles(&path) {
@@ -44,7 +98,13 @@ async fn dispatch(State(served): State<Served>, request: Request) -> Response {
         if !previews.enabled().await {
             let _assembled = served.space.view().await;
         }
-        return super::previews::handle(previews.clone(), request, &served.output).await;
+        return super::previews::handle(
+            previews.clone(),
+            request,
+            &served.output,
+            served.space.settings.trace,
+        )
+        .await;
     }
     if let Some(response) = served.files.answer(request.method(), &path) {
         if matches!(path.as_str(), "/_workbench/" | "/_workbench/index.html") {

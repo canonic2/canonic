@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function runtime(state = 'default', painted = true, actions = null) {
+function runtime(state = 'default', painted = true, actions = null, trace = false) {
   const handlers = new Map();
   const documentHandlers = new Map();
   const messages = [];
@@ -28,7 +28,7 @@ function runtime(state = 'default', painted = true, actions = null) {
   };
   const source = fs.readFileSync(path.join(__dirname, "./browser.js"), 'utf8');
   const boot = vm.runInNewContext(source.replace(/^export /gm, '') + '\nboot;', {
-    window, parent, document, location: { href: 'http://127.0.0.1/preview?state=' + state, origin: 'http://127.0.0.1' },
+    window, parent, document, location: { href: 'http://127.0.0.1/preview?state=' + state + (trace ? '&wbTrace=acme-selection' : ''), pathname: '/preview', origin: 'http://127.0.0.1' },
     URL, AbortController, structuredClone, FormData: class { constructor(form) { return Object.entries(form.fields); } },
     CustomEvent: class { constructor(name, options) { this.type = name; this.detail = options.detail; } },
     requestAnimationFrame: painted ? queueMicrotask : () => {},
@@ -96,7 +96,7 @@ test('a hidden iframe becomes ready even when the browser suspends animation fra
 });
 
 test('offscreen lazy images do not hold preview readiness behind the image timeout', async () => {
-  const r = runtime();
+  const r = runtime('default', true, null, true);
   r.window.innerWidth = 1512;
   r.window.innerHeight = 982;
   let observed = false;
@@ -115,6 +115,14 @@ test('offscreen lazy images do not hold preview readiness behind the image timeo
   assert.equal(images.details.pendingImages, 0);
   assert.ok(r.diagnostics.at(-1).details.elapsedMs >= 0);
   assert.doesNotMatch(JSON.stringify(r.diagnostics), /PRIVATE_INPUT/);
+  assert.ok(r.diagnostics.every(entry => entry.details.selection === 'acme-selection'));
+});
+
+test('development previews do not log browser phases with trace disabled', async () => {
+  const r = runtime();
+  await r.boot({ id: 'page' }, { default: 'page' }, { mount() {} }, {}, { development: true });
+  assert.equal(r.window.__workbenchReady, true);
+  assert.deepEqual(r.diagnostics, []);
 });
 
 test('visible lazy images still load before preview readiness', async () => {

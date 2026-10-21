@@ -6,12 +6,23 @@ import {
   pageLenses,
 } from '../../../../contracts/src/docs/lenses.js';
 import { scrollAfterZoom } from '../docs/canvas/docs-layout.js';
+import { begin as beginTrace, phase, address } from '../trace/browser.js';
 
 export function createContentController(options) {
   const { frames, services } = options;
   let config = null;
   const pages = new Map();
   let target = services.address.parse(location.hash);
+  const params = new URLSearchParams(location.search);
+  let trace = beginTrace(
+    target,
+    {
+      selection: params.get('wbTrace'),
+      started: Number(params.get('wbTraceStart')) || undefined,
+    },
+    'renderer',
+  );
+  phase(trace, 'renderer-ready');
   let view = null;
   let mounted = null;
   let problem = null;
@@ -35,10 +46,14 @@ export function createContentController(options) {
     if (state) url.searchParams.set('state', state);
     const id = new URLSearchParams(location.search).get('artboard');
     if (id) url.searchParams.set('artboard', id);
-    return url.href;
+    return address(url.href, trace);
   }
   function write(next) {
     target = next;
+    if (next.trace) {
+      trace = beginTrace(next, next.trace, 'renderer');
+      phase(trace, 'renderer-ready', { retained: true });
+    }
     const hash = '#' + services.address.write(next);
     // Commands route immediately; hashchange is for external navigation only.
     history.replaceState(null, '', location.pathname + location.search + hash);
@@ -147,6 +162,13 @@ export function createContentController(options) {
     }
     changed();
     mounted = view;
+    if (trace) {
+      trace.page = item.src;
+      trace.state = state || 'default';
+      trace.lens = view.lens?.key || 'design';
+      view.trace = trace;
+      view.phase = phase;
+    }
     frames.show(view, force);
   }
   function navigate(next) {

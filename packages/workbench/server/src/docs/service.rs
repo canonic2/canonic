@@ -6,13 +6,13 @@
 //! module decides what a page shows without owning any I/O.
 
 use super::export_source::export_source;
-use super::highlight::{highlight, language_of};
+use super::highlight::{escape_html, highlight, language_of};
 use super::markdown::{ExamplePlacement, match_lens, read_docs_markdown};
 use super::page::{BundleRef, DocsPageOptions, PageDocument, page_document};
 use super::render::{PanelStatus, PanelView, RenderInput, encode_uri_component, render_docs};
 use super::{
-    BUNDLE_PATH, BundleInfo, DocsBundle, DocsLens, DocsPageEntry, Listing, REVISION_PATH,
-    SOURCE_PATH, choose_lens,
+    BUNDLE_PATH, BundleInfo, DocsBundle, DocsLens, DocsPageEntry, HIGHLIGHT_PATH, Listing,
+    REVISION_PATH, SOURCE_PATH, choose_lens,
 };
 use crate::refused::refused;
 use anyhow::Result;
@@ -185,8 +185,10 @@ impl<S: DocsSource + Sync> DocsService<S> {
             available: &available,
             lens_label: lens.map_or("", |lens| lens.label.as_str()),
         };
+        let rendering = crate::trace::phase("markdown");
         let rendered = render_docs(
             &RenderInput {
+                defer_highlight: defer,
                 source: &source,
                 file: &entry.src,
                 docs_pages,
@@ -194,6 +196,7 @@ impl<S: DocsSource + Sync> DocsService<S> {
             |placement| shows.panel(placement),
         );
         let query = query(entry, lens);
+        drop(rendering);
         let bundle_ref = if deferred {
             Some(BundleRef::Info {
                 info: format!("{BUNDLE_PATH}{query}"),
@@ -207,6 +210,7 @@ impl<S: DocsSource + Sync> DocsService<S> {
                 })
         };
         let options = DocsPageOptions {
+            highlight_url: defer.then(|| format!("{HIGHLIGHT_PATH}{query}")),
             page: entry.src.clone(),
             lens: lens.map(|lens| lens.key.clone()),
             lens_label: lens.map(|lens| lens.label.clone()),
@@ -314,6 +318,7 @@ impl<S: DocsSource + Sync> DocsService<S> {
         entry: &DocsPageEntry,
         lens_key: Option<&str>,
         id: &str,
+        plain: bool,
     ) -> Result<ExampleCode> {
         let Some(lens) = choose_lens(entry, lens_key) else {
             return Err(refused(
@@ -348,12 +353,34 @@ impl<S: DocsSource + Sync> DocsService<S> {
                 ),
             ));
         };
-        let html = highlight(&text, Some(&language_of(&example.file)));
+        let html = if plain {
+            escape_html(&text)
+        } else {
+            highlight(&text, Some(&language_of(&example.file)))
+        };
         Ok(ExampleCode {
             file: example.file.clone(),
             text,
             html,
         })
+    }
+
+    /// Highlight the current Markdown off the request executor; examples are never built here.
+    pub(crate) fn highlight_page(
+        &self,
+        entry: &DocsPageEntry,
+    ) -> Result<Vec<super::render::HighlightedCode>> {
+        let source = self.markdown(entry)?;
+        Ok(render_docs(
+            &RenderInput {
+                source: &source,
+                file: &entry.src,
+                docs_pages: &HashSet::new(),
+                defer_highlight: false,
+            },
+            |_| PanelView::shown(PanelStatus::Pending),
+        )
+        .highlights)
     }
 
     /// The examples a page places, for the export's references; `None` when
@@ -697,26 +724,28 @@ mod tests {
     #[test]
     fn show_code_gets_a_named_exports_statement_or_a_folder_examples_whole_file() {
         let docs = service(true, None);
-        let nested = block_on(docs.example_source(&card(), Some("web"), "nested")).expect("nested");
+        let nested =
+            block_on(docs.example_source(&card(), Some("web"), "nested", false)).expect("nested");
         assert_eq!(
             nested.text,
             "export const nested = () => (\n  <Card>Nested</Card>\n);"
         );
         assert!(nested.html.contains("hljs-keyword"));
-        let whole = block_on(docs.example_source(&card(), Some("native"), "basic")).expect("basic");
+        let whole =
+            block_on(docs.example_source(&card(), Some("native"), "basic", false)).expect("basic");
         assert_eq!(whole.text, "export default () => null;\n");
         let large =
-            block_on(docs.example_source(&card(), Some("web"), "large")).expect_err("large");
+            block_on(docs.example_source(&card(), Some("web"), "large", false)).expect_err("large");
         assert_eq!(status_of(&large, 500), 404);
         assert!(large.to_string().contains("Couldn’t find the export large"));
-        let unknown =
-            block_on(docs.example_source(&card(), Some("native"), "nested")).expect_err("nested");
+        let unknown = block_on(docs.example_source(&card(), Some("native"), "nested", false))
+            .expect_err("nested");
         assert_eq!(
             (status_of(&unknown, 500), unknown.to_string()),
             (404, "Native has no example “nested”.".into())
         );
         let untrusted =
-            block_on(service(false, None).example_source(&card(), Some("web"), "basic"))
+            block_on(service(false, None).example_source(&card(), Some("web"), "basic", false))
                 .expect_err("blocked");
         assert_eq!(status_of(&untrusted, 500), 403);
     }

@@ -1,5 +1,23 @@
 /** The requested destination and supersession belong here, not in DOM handlers. */
+import { begin as beginTrace, phase } from '../trace/browser.js';
 export function createNavigation(ports) {
+  let trace, clicked;
+  let loadingTimer,
+    loading = false;
+  function cancelLoading() {
+    clearTimeout(loadingTimer);
+    loadingTimer = undefined;
+    loading = false;
+  }
+  function deferLoading() {
+    cancelLoading();
+    loadingTimer = setTimeout(() => {
+      loadingTimer = undefined;
+      if (disposed || !navigating) return;
+      loading = true;
+      ports.present();
+    }, 100);
+  }
   let sequence = 0,
     group = '',
     disposed = false;
@@ -8,6 +26,9 @@ export function createNavigation(ports) {
     navigating = false,
     expanding = false;
   function clear() {
+    cancelLoading();
+    trace = null;
+    clicked = null;
     sequence++;
     group = '';
     selection = undefined;
@@ -62,27 +83,53 @@ export function createNavigation(ports) {
           : boards.length === 1 &&
             matches(boards[0].view) &&
             !!(boards[0].view?.ready || boards[0].view?.problem));
-      return { visible, pending: !visible && (navigating || !!selection) };
+      const pending = !visible && (navigating || !!selection);
+      return { visible, pending, loading: pending && loading };
     },
     begin() {
       if (disposed || ports.busy()) return;
+      clicked = beginTrace();
+      trace = null;
       sequence++;
       expanding = false;
       awaitingSelection = true;
       navigating = true;
+      deferLoading();
       selection = undefined;
       ports.present();
     },
-    complete() {
+    complete(outcome = 'visible') {
+      cancelLoading();
       navigating = false;
+      if (trace) {
+        const completed = trace;
+        trace = null;
+        requestAnimationFrame(() => {
+          if (!disposed && selection?.trace?.selection === completed.selection)
+            phase(completed, outcome, {
+              totalMs: performance.timeOrigin + performance.now() - completed.started,
+            });
+        });
+      }
     },
     fail: clear,
     clear,
     async show(next) {
+      trace = beginTrace(next, clicked);
+      if (trace && clicked) trace.previous = clicked.started;
+      clicked = null;
+      if (trace) {
+        next = { ...next, trace };
+        phase(trace, 'selection');
+      }
       const request = ++sequence;
       await ports.ready;
       if (disposed || request !== sequence) return;
       if (ports.busy()) throw new Error('Wait for the canvas capture to finish.');
+      if (!awaitingSelection) {
+        navigating = true;
+        deferLoading();
+      }
       selection = next;
       awaitingSelection = false;
       ports.present();

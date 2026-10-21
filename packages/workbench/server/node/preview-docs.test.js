@@ -253,6 +253,10 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   const code = await (await request(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=primary')).json();
   assert.equal(code.text, 'export const primary = (canvas: HTMLElement) => { canvas.textContent = "Native primary"; };');
   assert.equal(code.file, 'docs/button.examples.ts');
+  const plain = await (await request(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=primary&plain=1')).json();
+  assert.equal(plain.text, code.text);
+  assert.doesNotMatch(plain.html, /hljs-/);
+  assert.match(code.html, /hljs-keyword/);
   const missing = await request(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=secondary');
   assert.equal(missing.status, 404);
 
@@ -416,15 +420,16 @@ test('the portable export builds each docs page in each lens as a static page wi
     lenses: [{ key: 'web', label: 'Web', directory: 'browser/docs/docs-button/web' }, { key: 'native', label: 'Native', directory: 'browser/docs/docs-button/native' }],
     examples: [{ id: 'primary', label: 'Primary' }, { id: 'secondary', label: 'Secondary' }] }]);
   const page = files.get('browser/docs/docs-button/web/index.html').toString();
-  assert.match(page, /<script type="module" src="..\/..\/page.js"><\/script>/);
+  assert.match(page, /<script type="module" src="..\/..\/page\/page.js"><\/script>/);
   assert.match(page, /<link rel="stylesheet" href="..\/..\/docs-page.css">/);
   assert.match(page, /<img src=".\/files\/docs\/anatomy.svg" alt="Anatomy">/);
   const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(page)[1]);
   assert.deepEqual([options.bundle, options.sourceUrl, options.revisionUrl], [{ module: './examples.js' }, './sources/', '']);
   assert.ok(files.has('browser/docs/docs-button/web/examples.js'));
   assert.ok(files.has('browser/docs/docs-button/web/files/docs/anatomy.svg'));
-  assert.equal(files.get('browser/docs/page.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
-  assert.equal(files.get('browser/docs/mount-examples.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
+  assert.equal(files.get('browser/docs/page/page.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
+  assert.equal(files.get('browser/docs/page/mount-examples.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
+  assert.equal(files.get('browser/trace/browser.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/trace/browser.js'), 'utf8'));
   assert.equal(JSON.parse(files.get('browser/docs/docs-button/native/sources/primary')).text,
     'export const primary = (canvas: HTMLElement) => { canvas.textContent = "Native primary"; };');
   assert.match(files.get('browser/docs/docs-button/native/index.html').toString(), /data-wb-example="secondary" data-status="missing"/);

@@ -304,8 +304,8 @@ An `ios-simulator` implementation with `catalog: true` adds its matching booted
 Simulator devices as implementation-only pages. In the extension, a small
 ad-hoc-signed ScreenCaptureKit helper finds the matching Simulator window and
 hardware-encodes a 30 FPS H.264 stream for the canvas. This avoids VS Code's
-webview `display-capture` restriction. WDA forwards taps and drags from the canvas. Install WDA once in the project with
-`node .canonic/src/automation/ios-cli.mjs install-wda`. The default `device:
+webview `display-capture` restriction. The installed `sandbox` command forwards
+taps and drags from the canvas. The default `device:
 booted` imports every booted device; an exact device name or UDID narrows it.
 
 A `window` implementation uses the same helper for any macOS app: `app` is
@@ -534,7 +534,7 @@ implementation's own address; Workbench never switches to a stream.
 | `annotations.js` + `annotations.css` | the draw layer, screenshots, and clipboard handoff |
 | `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
 | `capture-sync.js` | coalesces preparation, checks readiness and retries failures |
-| `dom-mirror.js` | caches node records, sends revisioned patches and applies them to the inert capture document |
+| `dom-mirror.js` | caches node records, sends revisioned patches and CSS Highlight ranges, and applies them to the inert capture document |
 | `preview-bridge.js` | external-preview sender for live DOM and scroll state, added to lens pages by the implementation proxy |
 | `preview-bridge-client.js` | validates bridge messages from the active configured iframe |
 | `workbench.css` | the chrome. Every value it uses is declared in it |

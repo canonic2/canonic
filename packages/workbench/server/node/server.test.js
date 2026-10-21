@@ -11,6 +11,80 @@ var path = require('node:path');
 var server = require('./server');
 var config = require('./config');
 
+test('trace is opt-in and times static, space, docs and failed requests through the same logger', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-trace-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\npreviews: false\ncollections:\n  - name: Docs\n    items:\n      - label: Card\n        src: card.md\n');
+  fs.writeFileSync(path.join(root, 'card.md'), '# Card\n\n```ts\nconst card = 1;\n```\n');
+  try {
+    for (var trace of [false, true]) {
+      var events = [];
+      var running = await server.start({ root: root, trace: trace, capture: { close: function () {} },
+        onLog: function (record) { events.push(record); } });
+      try {
+        for (var pathname of ['/_workbench/', '/_workbench/config', '/card.md?lens=docs&state=default&wbTrace=acme-pick', '/_workbench/docs/highlight?page=card.md&lens=docs&wbTrace=acme-pick', '/missing']) {
+          var answer = await getRaw(running.port, pathname);
+          assert.equal(!!answer.headers['server-timing'], trace, pathname);
+          if (trace) {
+            assert.match(answer.headers['server-timing'], /total;dur=\d/);
+            var request = events.filter(function (entry) { return entry.event === 'preview.request.completed'; }).at(-1);
+            assert.equal(request.details.status, answer.status);
+            assert.equal(request.details.route, pathname.split('?')[0]);
+            if (pathname.startsWith('/card.md')) {
+              assert.match(answer.headers['server-timing'], /docs-ready;dur=/);
+              assert.match(answer.headers['server-timing'], /markdown;dur=/);
+              assert.doesNotMatch(answer.headers['server-timing'], /highlight;dur=/);
+              assert.equal(request.details.selection, 'acme-pick');
+              assert.equal(request.details.lens, 'docs');
+              assert.equal(request.details.state, 'default');
+              assert.ok(answer.body.toString().includes('data-wb-code="ts"'));
+              assert.ok(!answer.body.toString().includes('hljs-keyword'));
+            }
+            if (pathname.startsWith('/_workbench/docs/highlight')) {
+              assert.match(answer.headers['server-timing'], /highlight;dur=/);
+              assert.equal(request.details.selection, 'acme-pick');
+              assert.equal(request.details.page, 'card.md');
+              assert.ok(request.details.highlightMs >= 0);
+              var blocks = JSON.parse(answer.body).blocks;
+              assert.equal(blocks[0].text, 'const card = 1;');
+              assert.ok(blocks[0].html.includes('hljs-keyword'));
+            }
+          }
+          if (pathname === '/_workbench/') assert.equal(answer.body.toString().includes('name="workbench-trace"'), trace);
+        }
+        if (!trace) assert.ok(!events.some(function (entry) { return entry.event === 'preview.request.completed'; }));
+      } finally { await running.close(); }
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('traced docs bundles expose the startup barrier separately from requested build work', async function () {
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-trace-bundle-'));
+  fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\nimplementations:\n  html:\n    kind: docs\n    adapter: html\ncollections:\n  - name: Docs\n    items:\n      - label: Card\n        src: card.md\n        implementations:\n          html: examples.ts\n');
+  fs.writeFileSync(path.join(root, 'card.md'), '# Card\n\n```example basic\n```');
+  fs.writeFileSync(path.join(root, 'examples.ts'), 'export const basic = (canvas) => { canvas.textContent = "Acme"; };');
+  var events = [];
+  var running;
+  try {
+    running = await server.start({ root: root, trace: true, eagerPreviews: true, capture: { close: function () {} },
+      onLog: function (record) { events.push(record); } });
+    var answer = await getRaw(running.port, '/_workbench/docs/bundle?page=card.md&lens=html&wbTrace=acme-first&wbPage=card.md&wbState=default&wbLens=html');
+    assert.equal(answer.status, 200);
+    assert.ok(JSON.parse(answer.body).module);
+    var request = events.filter(function (entry) { return entry.event === 'preview.request.completed'; }).at(-1);
+    assert.equal(request.details.selection, 'acme-first');
+    assert.equal(request.details.page, 'card.md');
+    assert.equal(request.details.state, 'default');
+    for (var name of ['docs-ready', 'warm-wait', 'bundle']) {
+      var measured = Number(new RegExp(name + ';dur=([0-9.]+)').exec(answer.headers['server-timing'])[1]);
+      assert.ok(Math.abs(measured - request.details[name + 'Ms']) < 0.001, name + ' matches the log');
+    }
+    assert.ok(events.some(function (entry) { return entry.event === 'docs.warm.started'; }));
+  } finally {
+    if (running) await running.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('config lists literal previews without starting the worker and keeps untrusted workspaces unevaluated', async function () {
   var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-server-index-'));
   fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: Acme\n');

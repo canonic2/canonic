@@ -24,6 +24,8 @@ pub(crate) enum BundleRef {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DocsPageOptions {
+    /// Local endpoint for live highlighting; absent in already-coloured portable documents.
+    pub(crate) highlight_url: Option<String>,
     /// The docs page's src, relative to the project root.
     pub(crate) page: String,
     /// The lens rendering the examples, and its label, or null when the page has none.
@@ -90,6 +92,7 @@ mod tests {
     #[test]
     fn the_options_cannot_close_their_script_and_defaults_are_the_servers_files() {
         let options = DocsPageOptions {
+            highlight_url: None,
             page: "docs/card.md".into(),
             lens: None,
             lens_label: None,

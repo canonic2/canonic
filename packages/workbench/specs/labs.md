@@ -228,6 +228,13 @@ product code. Runner defects must not appear as product timings or verdicts.
   announcing it never comes.
 - Independently observe fonts, images and visible content when stopping a
   timer. The product's readiness flag alone is not the correctness oracle.
+- Start a selection only after its catalog row is selectable; a document's load
+  event does not establish that asynchronous configuration is ready.
+- Validate a fault target's required content before injection, such as the
+  presence of a code fence. A page without that feature cannot test its failure.
+- For installed-webview measurements, independently establish foreground document
+  visibility and animation-frame progress. Attaching DevTools or requesting
+  `Page.bringToFront` does not establish native application focus.
 
 ### Comparisons and verdicts
 
@@ -239,6 +246,8 @@ product code. Runner defects must not appear as product timings or verdicts.
   variant output must never overwrite a failed runner assertion.
 - Read structured reports for verdicts. Live logs help diagnose a stuck run;
   filtering a log cannot establish that every check passed.
+- Compare semantic token roles over source-character ranges when span boundaries
+  may differ; adjacent spans with the same role are not a correctness failure.
 
 ### Caches, files and processes
 
@@ -252,6 +261,12 @@ product code. Runner defects must not appear as product timings or verdicts.
   correctness or timing samples until a favorable result appears.
 - Close every server, compiler, browser and child process on completion, failure
   and cancellation; report cleanup failures.
+- Observe worker targets through their attach/detach lifecycle and initialize
+  their debugging sessions before reading heaps. A target-list snapshot can
+  contain workers whose URL or runtime is not available.
+- Validate temporary overlays against the actual asset routes and complete
+  product inputs, including export licenses. A JS/CSS route is not a generic
+  binary-asset route merely because the file exists on disk.
 
 ### Before and during a run set
 
@@ -301,6 +316,7 @@ product contracts; a report or an unadopted variant is not a shipping interface.
 
 | Record | Current relevance and remaining work |
 | --- | --- |
+| [Docs highlighting](../labs/docs-highlighting/README.md) | Performance reported on 2026-10-21: 1,200 trials. Owner selected asynchronous highlight.js after reviewing the dense-colouring gain and prototype visibility/small-page regressions. Integration uses deferred worker creation and CSS Highlight ranges; prototype measurements remain unchanged. Host and correctness qualifications remain; installed/portable compatibility has separate evidence |
 | [Preview loading](../labs/preview-loading/README.md) | Shared-build and runtime design evidence; current navigation requirements belong to [performance](preview-pipeline/performance.md) |
 | [Rspack pipeline](../labs/rspack-pipeline/README.md) | Evidence for the implemented compiler, warm document and hot updates; shipping-server/webview confirmation remains open |
 | [First page](../labs/first-page/README.md) | Startup-scaling comparisons; no replacement start is adopted by the active compiler contract |

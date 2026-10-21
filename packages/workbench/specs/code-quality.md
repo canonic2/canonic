@@ -18,6 +18,19 @@ The baseline follows the repository's Rust packages, including TUI and
 Registry. Workbench keeps its own configuration and lockfile; it does not
 introduce a root Cargo workspace or couple product releases.
 
+## Development iteration
+
+`test:focus` accepts explicit test files and an optional `--name` filter, with
+four concurrent Node test workers. UI-only selections run without Cargo; other
+selections require a successful incremental debug build before tests execute.
+`dev` and F5 prepare the debug server and local Electron archive, then launch
+the authored extension in a VS Code Extension Development Host. Runtime reuse
+requires matching source/lockfile/bundler inputs, target and Electron version,
+plus verification of the archive checksum. Release packaging still creates a
+fresh runtime and release server. These iteration commands do not replace the
+full gates below or establish release performance. Commands and reload behavior
+are documented in the [development guide](../DEVELOPMENT.md#fast-development-loop).
+
 ## Required gates
 
 ### Browser UI
@@ -107,10 +120,14 @@ and capture behavior. The detailed contracts remain in [modules](modules.md),
 | Shipping | Build the target's native release executable with locked dependencies before packaging |
 | Host integration | Run the Workbench Node suite and TypeScript check alongside the native gates |
 
-`make -C server check` runs the Rust gates. The package-level
-`check:server` command delegates to it, and the extension release workflow
-runs it before packaging. Coverage is a separate developer command. CI installs
-the same pinned nextest and cargo-deny tools documented for local development.
+Rust verification runs through independent server Make targets: `format-check`,
+`lint`, `types`, `test`, `doctest`, `docs` and `deps`. Workbench exposes matching
+`:server` scripts (format verification is `format:check:server`). The extension
+release workflow names each enabled category in its own step before packaging, with the
+dependency audit first. Local runs select categories explicitly; API reference
+generation is separate from tests and documentation examples. Coverage is also
+separate. CI installs the same pinned nextest and cargo-deny tools documented for
+local development.
 
 Clippy lint levels belong in `Cargo.toml`; test-only unwrap permission belongs
 in `clippy.toml`. Do not suppress broad lint groups or disable

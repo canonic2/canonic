@@ -17,6 +17,11 @@ module.exports = host;
 
 if (require.main === module) {
   var dirs = process.argv.slice(2);
+  var trace = dirs.includes('--trace');
+  dirs = dirs.filter(function (dir) { return dir !== '--trace'; });
+  var onLog = function (record) {
+    console.log(record.event + ' ' + JSON.stringify(record.details || {}));
+  };
   if (!dirs.length) dirs = [process.cwd()];
   var onShot = function (file) {
     console.log('saved ' + file);
@@ -29,7 +34,7 @@ if (require.main === module) {
 
   if (found.length <= 1) {
     var only = found[0] || { dir: path.resolve(dirs[0]), key: null, root: path.resolve(dirs[0]) };
-    host.start({ root: only.root, config: { dir: only.dir, key: only.key }, eagerCapture: true, eagerPreviews: true, onShot: onShot }).then(function (running) {
+    host.start({ root: only.root, config: { dir: only.dir, key: only.key }, eagerCapture: true, eagerPreviews: true, trace: trace, onLog: trace ? onLog : undefined, onShot: onShot }).then(function (running) {
       console.log('workbench on ' + running.url);
     }, failed);
   } else {
@@ -41,6 +46,7 @@ if (require.main === module) {
         return host.start({
           root: space.root, config: { dir: space.dir, key: space.key },
           capture: shared, captureShared: true, eagerCapture: true, eagerPreviews: true,
+          trace: trace, onLog: trace ? onLog : undefined,
           spaces: hub, onShot: onShot,
         });
       },

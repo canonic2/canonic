@@ -36,6 +36,7 @@ mod simulators;
 mod space;
 mod spaces;
 mod storybook;
+mod trace;
 
 /// Run the native CLI using process arguments and standard streams.
 ///

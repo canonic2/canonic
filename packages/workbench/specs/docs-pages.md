@@ -378,7 +378,17 @@ problems update when they arrive.
 - **Serving.** The server serves a docs page at its Markdown path and renders
   the Markdown to HTML with example placeholders. Markdown parsing and syntax
   highlighting use pinned dependencies shipped in the extension, like Lucide;
-  no runtime network.
+  no runtime dependency downloads or external highlighting service. Live HTML
+  contains escaped, readable code. One lazy, document-owned module worker uses
+  pinned local highlight.js 11.11.1 with explicitly registered languages for
+  fences and Show code. It starts after document load and two animation frames,
+  outside page readiness. Tokenization runs off the browser's main thread;
+  CSS Custom Highlight ranges colour the original text nodes without syntax spans.
+  CSS, fonts, images and examples retain their readiness waits. Token colours
+  cannot change code font metrics. Requests time out to readable plain code;
+  edits/disposal cancel pending work and stale results cannot overwrite new text.
+  Captures wait for colouring to settle (including a plain-text failure fallback).
+  Portable docs are highlighted at export time and never need a live endpoint.
 - **The page before its examples.** The page answers with its Markdown without
   waiting for a build: its panels are `pending` until the page script learns
   the lens's bundle, which then mounts them or names why not. The examples are
@@ -538,7 +548,13 @@ renderer combination or source-extraction edge case. See
 - **The page.** [service.rs](../server/src/docs/service.rs) decides each
   panel; [render.rs](../server/src/docs/render.rs) renders the Markdown with
   pulldown-cmark, and [highlight.rs](../server/src/docs/highlight.rs) highlights
-  code with syntect under highlight.js class names; [docs-page.js](../ui/src/modules/docs/page/docs-page.js) and
+  portable code and explicit server highlighting responses with syntect's
+  Oniguruma backend under highlight.js class names. Live docs use the local
+  [worker](../ui/src/modules/docs/page/highlight-worker.js) and
+  [range painter](../ui/src/modules/docs/page/code-colours.js). Unsupported
+  languages or browsers without CSS Custom Highlights retain readable plain code.
+  Opening docs does not pre-highlight every page or example.
+  [docs-page.js](../ui/src/modules/docs/page/docs-page.js) and
   [mount-examples.js](../ui/src/modules/docs/page/mount-examples.js) mount the examples,
   run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and apply pushed Markdown/example updates with scroll position kept.
 - **The canvas.** The host selects the `wb-canvas` reading mode in

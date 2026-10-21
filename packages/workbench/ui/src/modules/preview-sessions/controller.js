@@ -35,6 +35,7 @@ export function createPreviewSessions(ports) {
         state: next.target.state,
         lens: next.target.lens,
         example: next.target.example,
+        ...(next.target.trace ? { trace: next.target.trace } : {}),
       };
       if (retained) {
         await ports.command(boards[0].id, 'navigate', destination);

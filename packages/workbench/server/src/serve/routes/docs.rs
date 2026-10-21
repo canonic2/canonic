@@ -3,8 +3,9 @@
 //! revision an open page polls, and an example's code for Show code. Any
 //! other Markdown file is served as it is.
 use super::{json_response, query, respond, text, trouble};
+use crate::docs::highlight::{background, highlight, language_of};
 use crate::docs::service::{DocsRequest, PageLocations};
-use crate::docs::{BUNDLE_PATH, REVISION_PATH, SOURCE_PATH};
+use crate::docs::{BUNDLE_PATH, HIGHLIGHT_PATH, REVISION_PATH, SOURCE_PATH};
 use crate::refused::refused;
 use crate::space::Space;
 use anyhow::Result;
@@ -24,6 +25,7 @@ struct Asked {
     lens: Option<String>,
     example: String,
     state: Option<String>,
+    plain: bool,
 }
 
 impl Asked {
@@ -33,11 +35,12 @@ impl Asked {
             lens: query(request, "lens"),
             example: query(request, "example").unwrap_or_default(),
             state: query(request, "state"),
+            plain: query(request, "plain").as_deref() == Some("1"),
         }
     }
 }
 
-async fn docs_route(space: &Space, path: &str, asked: Asked) -> Result<Value> {
+async fn docs_route(space: &Arc<Space>, path: &str, asked: Asked) -> Result<Value> {
     let view = space.docs_ready().await?.unwrap_or(Value::Null);
     let wanted = asked.page;
     let pages = space.docs_pages(&view);
@@ -46,6 +49,12 @@ async fn docs_route(space: &Space, path: &str, asked: Asked) -> Result<Value> {
         .find(|candidate| candidate.src == wanted)
         .ok_or_else(|| refused(404, format!("Not a docs page: {wanted}")))?;
     let lens = asked.lens;
+    if path == HIGHLIGHT_PATH {
+        let page = page.clone();
+        let space = space.clone();
+        let blocks = background(move || space.docs.highlight_page(&page)).await??;
+        return Ok(json!({ "blocks": blocks }));
+    }
     if path == REVISION_PATH {
         return Ok(json!({ "revision": space.docs.revision(page, lens.as_deref()).await? }));
     }
@@ -54,10 +63,15 @@ async fn docs_route(space: &Space, path: &str, asked: Asked) -> Result<Value> {
             space.docs.bundle_info(page, lens.as_deref()).await?,
         )?);
     }
-    let code = space
+    let mut code = space
         .docs
-        .example_source(page, lens.as_deref(), &asked.example)
+        .example_source(page, lens.as_deref(), &asked.example, true)
         .await?;
+    if !asked.plain {
+        let text = code.text.clone();
+        let language = language_of(&code.file);
+        code.html = background(move || highlight(&text, Some(&language))).await?;
+    }
     Ok(json!({ "file": code.file, "text": code.text, "html": code.html }))
 }
 
@@ -96,7 +110,7 @@ pub(super) async fn answer(
     method: &Method,
     request: Request,
 ) -> Result<Response, Request> {
-    if [SOURCE_PATH, REVISION_PATH, BUNDLE_PATH].contains(&path) {
+    if [SOURCE_PATH, REVISION_PATH, BUNDLE_PATH, HIGHLIGHT_PATH].contains(&path) {
         if method != Method::GET {
             return Ok(text(
                 405,

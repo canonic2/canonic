@@ -13,6 +13,7 @@ function captureUI() {
     simulatorView: function () { return false; },
     captureSync: { paused: 0, pause: function () { this.paused++; }, resume: function () { this.paused--; } },
     offOrigin: function () { return false; },
+    preview: function () { return null; },
     captureRequest: function () { return { url: '/page', format: 'jpeg', mirror: { revision: 'live-1' } }; },
     shotName: function () { return 'page.jpg'; }, say: function () {},
     traceCapture: function () {},
@@ -101,6 +102,20 @@ test('a persisted native capture finishes without reading back its saved image',
   assert.equal(result.blob, undefined);
   assert.equal(ui.calls.length, 1);
   assert.equal(ui.calls[0].url, '/_workbench/capture');
+});
+
+test('docs captures and camera exports wait for background colouring before reading pixels', async function () {
+  for (var method of ['nativeShot', 'downloadShot', 'pageShot']) {
+    var ui = captureUI(); var finish;
+    var pending = new Promise(function (resolve) { finish = resolve; });
+    ui.state.preview = function () { return { defaultView: { wbDocsPage: { whenHighlighted: function () { return pending; } } } }; };
+    var shot = ui.state[method]();
+    await Promise.resolve();
+    assert.equal(ui.calls.length, 0, method + ' must not read unfinished pixels');
+    finish();
+    await shot;
+    assert.equal(ui.calls.length, 1, method + ' captures after colouring settles');
+  }
 });
 
 test('a missing patch base retries the exact requested snapshot and acknowledges only success', async function () {

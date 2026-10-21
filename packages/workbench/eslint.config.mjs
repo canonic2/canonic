@@ -7,14 +7,16 @@ const browser = readonly(
 );
 const node = readonly('process Buffer global setImmediate clearImmediate');
 export default [
-  { ignores: ['**/node_modules/**'] },
+  { ignores: ['**/node_modules/**', 'ui/src/vendor/**'] },
   {
     ...js.configs.recommended,
     files: ['ui/src/**/*.js'],
     languageOptions: {
       globals: {
         ...browser,
-        ...readonly('Option CSS EventTarget addEventListener sessionStorage createImageBitmap'),
+        ...readonly(
+          'Option CSS EventTarget addEventListener sessionStorage createImageBitmap Worker self DOMException',
+        ),
       },
     },
   },

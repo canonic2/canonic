@@ -10,6 +10,12 @@ controllers; `src/modules/` owns capabilities; `src/theme/` supplies standalone
 defaults. Browser-used rules under `../contracts/src/` are also JavaScript modules.
 Their declaration files support backend consumers and are never loaded by browsers.
 
+`src/vendor/highlight.js/` contains pinned upstream browser ES modules and their
+license, served unchanged. Its manifest records asset hashes checked by the
+focused highlighting test. The docs document owns a lazy module worker; its
+explicit language imports require no UI build or runtime downloads. Vendored
+files are excluded from source formatting and linting.
+
 For example, from a static host exposing the product folder:
 
 ```html

@@ -187,6 +187,7 @@ impl Space {
     /// # Errors
     /// Returns the reader's message when the configuration can't be read.
     pub(crate) async fn docs_ready(&self) -> Result<Option<Value>> {
+        let _phase = crate::trace::phase("docs-ready");
         if !self.previews.enabled().await {
             let _assembled = self.view().await?;
         }
@@ -257,6 +258,9 @@ impl Space {
     /// first visit to a page is already built.
     pub(crate) async fn warm_docs(&self) {
         let began = Instant::now();
+        if self.settings.trace {
+            self.diagnostics.info("docs.warm.started", json!({})).await;
+        }
         let mut built = 0;
         let result: Result<()> = async {
             let Some(view) = self.docs_ready().await? else {

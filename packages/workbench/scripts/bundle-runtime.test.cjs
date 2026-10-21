@@ -1,0 +1,63 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { bundle } = require('./bundle-runtime.cjs');
+
+test('development reuses verified runtime inputs; source, lock and archive changes invalidate it', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-runtime-cache-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'capture/app'), { recursive: true });
+  const source = path.join(root, 'capture/app/main.cjs');
+  const lock = path.join(root, 'pnpm-lock.yaml');
+  const archive = path.join(root, 'capture/runtime/runtime.tar.gz');
+  fs.writeFileSync(source, 'first');
+  fs.writeFileSync(lock, 'lock');
+  let builds = 0;
+  const packager = async options => {
+    builds++;
+    const output = path.join(options.out, 'app');
+    fs.mkdirSync(output);
+    fs.copyFileSync(source, path.join(output, 'main.cjs'));
+    return [output];
+  };
+  const run = () => bundle('darwin-arm64', { root, packager, reuse: true });
+  await run();
+  const before = fs.statSync(archive).mtimeMs;
+  await run();
+  assert.equal(builds, 1);
+  assert.equal(fs.statSync(archive).mtimeMs, before);
+  const sourceTime = fs.statSync(source);
+  fs.writeFileSync(source, 'other');
+  fs.utimesSync(source, sourceTime.atime, sourceTime.mtime);
+  await run();
+  assert.equal(builds, 2, 'contents invalidate even with unchanged timestamps');
+  fs.writeFileSync(lock, 'new lock');
+  await run();
+  assert.equal(builds, 3);
+  fs.writeFileSync(archive, 'corrupt');
+  await run();
+  assert.equal(builds, 4);
+  fs.unlinkSync(archive);
+  await run();
+  assert.equal(builds, 5);
+  const manifest = path.join(root, 'capture/runtime/runtime.json');
+  for (const damaged of ['{', 'null']) {
+    fs.writeFileSync(manifest, damaged);
+    await run();
+  }
+  assert.equal(builds, 7, 'damaged metadata triggers a rebuild');
+  fs.symlinkSync('../external.cjs', path.join(root, 'capture/app/link.cjs'));
+  fs.writeFileSync(path.join(root, 'capture/external.cjs'), 'linked');
+  await run();
+  fs.writeFileSync(path.join(root, 'capture/external.cjs'), 'changed');
+  await run();
+  assert.equal(builds, 9, 'linked source contents invalidate the cache');
+  await bundle('darwin-arm64', { root, packager });
+  assert.equal(builds, 10, 'release bundling stays fresh by default');
+  await bundle('linux-x64', { root, packager, reuse: true });
+  assert.equal(builds, 11, 'other targets cannot reuse the cached runtime');
+  fs.writeFileSync(source, 'needs rebuilding');
+  await assert.rejects(bundle('linux-x64', { root, reuse: true, packager: async () => { throw new Error('packaging failed'); } }), /packaging failed/);
+});

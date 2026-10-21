@@ -29,6 +29,75 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+void test('fast retained returns stay busy without showing loading feedback or delaying visibility', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let paints = 0;
+  const navigation = createNavigation({
+    ready: Promise.resolve(),
+    busy: () => false,
+    present() {
+      paints++;
+    },
+    fit() {},
+    async activate() {},
+    async settle() {},
+  });
+  t.after(() => navigation.dispose());
+  navigation.begin();
+  await navigation.show(selection('returned'));
+  const board = { view: { ...selection('returned'), ready: false } };
+  assert.deepEqual(navigation.presentation([board]), {
+    visible: false,
+    pending: true,
+    loading: false,
+  });
+  t.mock.timers.tick(22);
+  board.view.ready = true;
+  assert.deepEqual(navigation.presentation([board]), {
+    visible: true,
+    pending: false,
+    loading: false,
+  });
+  navigation.complete();
+  const before = paints;
+  t.mock.timers.tick(200);
+  assert.equal(paints, before, 'the completed selection cannot reveal a late loader');
+});
+
+void test('slow selections show loading feedback and replacement, failure and disposal cancel its timer', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let paints = 0;
+  const navigation = createNavigation({
+    ready: Promise.resolve(),
+    busy: () => false,
+    present() {
+      paints++;
+    },
+    fit() {},
+    async activate() {},
+    async settle() {},
+  });
+  t.after(() => navigation.dispose());
+  navigation.begin();
+  t.mock.timers.tick(99);
+  assert.equal(navigation.presentation([]).loading, false);
+  navigation.begin();
+  t.mock.timers.tick(1);
+  assert.equal(navigation.presentation([]).loading, false, 'the previous deadline is cancelled');
+  t.mock.timers.tick(99);
+  assert.deepEqual(navigation.presentation([]), { visible: false, pending: true, loading: true });
+  navigation.begin();
+  assert.equal(navigation.presentation([]).loading, false);
+  navigation.fail();
+  let before = paints;
+  t.mock.timers.tick(200);
+  assert.equal(paints, before);
+  navigation.begin();
+  navigation.dispose();
+  before = paints;
+  t.mock.timers.tick(200);
+  assert.equal(paints, before);
+});
 void test('retained destinations consume the requested size once, after matching metadata arrives', async () => {
   const navigation = createNavigation({
     ready: Promise.resolve(),
@@ -194,7 +263,11 @@ void test('presentation accepts only the requested preview or the complete decla
     view: { src: 'one', state: null, lens: 'design', ready: true, problem: null },
   };
   navigation.begin();
-  assert.deepEqual(navigation.presentation([board]), { visible: false, pending: true });
+  assert.deepEqual(navigation.presentation([board]), {
+    visible: false,
+    pending: true,
+    loading: false,
+  });
   await navigation.show(next);
   assert.equal(navigation.presentation([board]).visible, true);
   assert.equal(

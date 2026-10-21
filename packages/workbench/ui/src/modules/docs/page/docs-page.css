@@ -10,6 +10,13 @@
   --wb-docs-tint: #f6f8fa;
   --wb-docs-accent: #0969da;
   --wb-docs-code: #eff2f5;
+  --wb-docs-syntax-comment: #59636e;
+  --wb-docs-syntax-keyword: #cf222e;
+  --wb-docs-syntax-string: #0a3069;
+  --wb-docs-syntax-value: #0550ae;
+  --wb-docs-syntax-title: #6639ba;
+  --wb-docs-syntax-name: #116329;
+  --wb-docs-syntax-deletion: #82071e;
   --wb-docs-font:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
   --wb-docs-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
@@ -146,6 +153,13 @@ body.wb-docs-body {
 
 .wb-docs-code code,
 .wb-docs-example-code code {
+  display: block;
+  font: inherit;
+}
+
+/* Colouring must not introduce italic/bold font metrics after first paint. */
+.wb-docs-code code span,
+.wb-docs-example-code code span {
   font: inherit;
 }
 
@@ -239,42 +253,42 @@ body.wb-docs-body {
 /* highlight.js tokens, in GitHub's light colors. */
 .hljs-comment,
 .hljs-quote {
-  color: #59636e;
+  color: var(--wb-docs-syntax-comment);
   font-style: italic;
 }
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-literal,
 .hljs-type {
-  color: #cf222e;
+  color: var(--wb-docs-syntax-keyword);
 }
 .hljs-string,
 .hljs-regexp,
 .hljs-addition {
-  color: #0a3069;
+  color: var(--wb-docs-syntax-string);
 }
 .hljs-number,
 .hljs-attr,
 .hljs-attribute,
 .hljs-variable,
 .hljs-template-variable {
-  color: #0550ae;
+  color: var(--wb-docs-syntax-value);
 }
 .hljs-title,
 .hljs-title.function_,
 .hljs-section {
-  color: #6639ba;
+  color: var(--wb-docs-syntax-title);
 }
 .hljs-name,
 .hljs-tag,
 .hljs-built_in,
 .hljs-selector-class,
 .hljs-selector-id {
-  color: #116329;
+  color: var(--wb-docs-syntax-name);
 }
 .hljs-deletion {
-  color: #82071e;
+  color: var(--wb-docs-syntax-deletion);
 }
 .hljs-meta {
-  color: #0550ae;
+  color: var(--wb-docs-syntax-value);
 }

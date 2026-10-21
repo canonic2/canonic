@@ -104,8 +104,10 @@
 
   function sessionKey(url) {
     var lens = view && view.lens;
+    var identity = new URL(url, location.href);
+    ['wbTrace', 'wbPage', 'wbState', 'wbLens'].forEach(function (key) { identity.searchParams.delete(key); });
     return lens && lens.kind === 'storybook' ? 'storybook|' + lens.key + '|' + lens.url :
-      (lens ? lens.key : 'design') + '|' + new URL(url, location.href).href;
+      (lens ? lens.key : 'design') + '|' + identity.href;
   }
 
   function disposeFrame(target) {
@@ -260,6 +262,10 @@
     var loaded = e.currentTarget;
     if (previewFrames.indexOf(loaded) === -1 || (e.sequence !== undefined && e.sequence !== loaded.wbLoadSequence)) return;
     var sequence = loaded.wbLoadSequence;
+    var measuredView = loaded.wbContentView;
+    if (measuredView && measuredView.trace && !e.previewAttempt) {
+      measuredView.phase(measuredView.trace, 'document-loaded', { retained: !!loaded.wbRestoring, warm: !!e.warm });
+    }
     if (loaded.wbWarmHost && !e.warm) {
       startWarmLoad(loaded);
       return;
@@ -278,6 +284,7 @@
       if (preview && preview.__workbenchError) { options.failed(new Error(String(preview.__workbenchError)), loaded.wbContentView); return; }
     } catch (_) { /* Foreign-origin previews keep their existing load behavior. */ }
     if (loaded === pendingFrame) {
+      if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'readiness');
       window.requestAnimationFrame(function () {
         if (loaded !== pendingFrame || sequence !== loaded.wbLoadSequence) return;
         var previous = frame;
@@ -295,6 +302,7 @@
         frameBuffer = previous;
         pendingFrame = null;
         frameReady = true;
+        if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'frame-promotion');
         // A resize can start the spare frame before the initial frame has
         // loaded. Whichever wins must reveal the preview and enable prepare.
         artboardContent.classList.remove('is-loading');
@@ -311,6 +319,7 @@
       return;
     }
     if (loaded === frame && !pendingFrame) {
+      if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'readiness');
       window.requestAnimationFrame(function () {
         if (loaded !== frame || pendingFrame || sequence !== loaded.wbLoadSequence) return;
         sessions.activate(loaded);
@@ -318,6 +327,7 @@
         loaded.classList.add('is-active');
         loaded.removeAttribute('aria-hidden');
         frameReady = true;
+        if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'frame-promotion');
         artboardContent.classList.remove('is-loading');
         artboard.hidden = false;
         reportRenderedStory();

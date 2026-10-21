@@ -20,6 +20,8 @@ use serde_json::{Value, json};
 
 /// Where a docs page's script asks for an example's code.
 pub(crate) const SOURCE_PATH: &str = "/_workbench/docs/source";
+/// Colours live code fences after the readable document is shown.
+pub(crate) const HIGHLIGHT_PATH: &str = "/_workbench/docs/highlight";
 /// Where an open docs page polls for its revision.
 pub(crate) const REVISION_PATH: &str = "/_workbench/docs/revision";
 /// Where a deferred docs page asks what to mount.

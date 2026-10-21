@@ -33,7 +33,7 @@ between the host and the server.
 ```text
 workbench-server serve --root <project> --product <workbench folder>
   [--ports 3579,3580,3581,3582,3583,0] [--space-dir <dir>] [--space-key <key>]
-  [--untrusted] [--handoff] [--eager-previews]
+  [--untrusted] [--handoff] [--eager-previews] [--trace]
   [--log-limit <bytes>] [--export-retention-ms <ms>]
   [--export-max-archive-bytes <bytes>] [--view-stale-ms <ms>]
 ```
@@ -73,6 +73,37 @@ Diagnostics are bounded by the server
 ([diagnostics.rs](../server/src/diagnostics.rs)): a record keeps a known
 level, a short event and at most twenty small details, and a session stops
 logging at its byte budget after saying so once.
+
+### Request tracing
+
+`--trace` enables request timings. The extension's `workbench.trace` setting
+passes that flag to each space on startup; the standalone Node command accepts
+`--trace` too and prints diagnostics to its terminal. Tracing is off by default.
+Every response, including space routes, static assets and failures, records
+`preview.request.completed` with route, page, state, lens, selection ID when
+provided, status and `elapsedMs`, and carries `Server-Timing: total;dur=…`.
+For streaming responses this measures producing the response headers, not the
+lifetime of the stream or network transfer.
+
+Docs work adds `docs-ready`, `markdown`, `highlight`, `warm-wait` and `bundle`
+durations when those phases run. Log fields append `Ms` to the header's phase
+names. Markdown excludes its nested highlighting time, including first-use
+syntax loading. `docs-ready` covers `Space::docs_ready`, including catalog
+assembly when needed. `warm-wait` covers the compiler's whole-project `warmed()`
+barrier; `bundle` covers the requested lens's subsequent preparation/build.
+Live docs return plain code; their document-owned highlight.js worker colours it
+locally. Show code requests plain source with `plain=1` and uses that worker too.
+These browser tokenization jobs have no server `highlight` phase. Explicit
+`/_workbench/docs/highlight?page=…` requests and portable exports still use
+server Syntect; traced requests include first-use syntax loading on a blocking
+worker in `highlight`. Document and bundle requests have separate records with
+the same selection identity. Startup
+`docs.warm.started` and `docs.warmed`/`docs.warm.failed` bracket `Space::warm_docs`;
+overlapping work alone does not establish time spent queued behind it.
+
+Timers belong to the request task and are absent outside traced requests.
+Diagnostics retain the existing size and session budget limits. Browser phase
+records use the same bounded logger; see [performance diagnostics](preview-pipeline/performance.md#diagnostics).
 
 ### Processes and connections
 
@@ -163,7 +194,7 @@ compiler fallback
 | `/_workbench/manifest/`, project files, `/_workbench/preview-runtime.js`, `preview-requests.js`, `preview-compat.js` | Files served as they are, with the compatibility script first in each project HTML page; a missing file is a 404 |
 | `/_workbench/previews/`, `*.workbench.ts(x)` | The native compiler ([previews.rs](../server/src/serve/previews.rs)) |
 | `/_workbench/config`, `config-file`, `sizes` | The catalog, and config editing that keeps the rest of the file and its comments ([config/edit.rs](../server/src/config/edit.rs)) |
-| `.md` pages, `/_workbench/docs/source`, `revision`, `bundle` | Docs pages ([docs.rs](../server/src/docs.rs), [space/docs.rs](../server/src/space/docs.rs)) |
+| `.md` pages, `/_workbench/docs/source`, `revision`, `bundle`, `highlight` | Docs pages ([docs.rs](../server/src/docs.rs), [space/docs.rs](../server/src/space/docs.rs)) |
 | `/_workbench/stories` | A Storybook's index, read at its address or through its proxy ([storybook.rs](../server/src/storybook.rs)) |
 | `/_workbench/log`, `view`, `spaces`, `spaces/open`, `canvas/space`, `canvas/review`, `open`, `handoff` | Diagnostics, the [agent view](agent-context.md) ([agent_view.rs](../server/src/agent_view.rs)), spaces from the host, opening a configured source through the host, handoff prompts ([handoff.rs](../server/src/handoff.rs)) sent to the host |
 | `/_workbench/capture/*`, `shot` | Requests checked here ([capture.rs](../server/src/capture.rs)), pictures taken by the host's capture helper, screenshots saved under `.canonic/.handoffs/` |
@@ -189,6 +220,9 @@ with the statuses and messages the canvas expects.
   preview sessions, the canvas and its UI, the live mirror, capture, and
   lenses, including a sign-in through an implementation proxy that
   survives switching lenses and sizes.
+- The host release with trace mode was packaged and installed on the macOS
+  x86_64 development machine on 2026-10-20. Existing VS Code windows need a
+  reload to use it; installed-webview latency has not been measured.
 
 ## Known gaps
 
@@ -197,11 +231,8 @@ with the statuses and messages the canvas expects.
 - The [lab](preview-pipeline/performance.md) measurements of first page,
   page list and switching have not been made against this server.
 - Builds for Windows and Linux have not been run on those systems.
-- The installed VS Code extension on the development machine has not been
-  updated to this server.
-- Highlighted code in docs pages follows syntect's grammars, so some token
-  classes differ from highlight.js's; Markdown does not turn bare URLs into
-  links.
+- Portable code uses Syntect grammars, so token boundaries can differ from
+  live highlight.js output. Markdown does not turn bare URLs into links.
 
 ## Decisions for the owner
 

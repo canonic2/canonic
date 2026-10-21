@@ -28,6 +28,10 @@ After mount and the `play` and `ready` hooks, readiness waits for:
   excluded, and the wait is capped at 3 seconds.
 
 It adds no fixed delay. A capture still shows the final fonts and images.
+The selected page becomes visible after readiness. Fonts, CSS, images and docs
+examples remain readiness blockers; asynchronous syntax colours alone may finish
+after the page is visible. Capture retains its highlighting-completion or bounded
+plain-text-fallback wait.
 
 ### Phase diagnostics
 
@@ -74,8 +78,3 @@ layout cannot establish that the page has started its own font loads.
   frame and then on `document.fonts.ready`, or loading the families the
   page's computed styles use with `document.fonts.load`. Either needs the
   lab's readiness check to pass on the web-font fixture.
-
-- **Showing a page before readiness.** Should a page become visible when it
-  mounts, with full readiness kept for captures? Measure the visible-load
-  benefit and capture fidelity separately
-  ([performance](performance.md#open-questions)).

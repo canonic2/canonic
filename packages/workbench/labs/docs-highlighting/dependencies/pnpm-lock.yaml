@@ -1,0 +1,42 @@
+lockfileVersion: '9.0'
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+importers:
+  .:
+    dependencies:
+      '@highlightjs/cdn-assets':
+        specifier: 11.11.1
+        version: 11.11.1
+      vscode-oniguruma:
+        specifier: 2.0.1
+        version: 2.0.1
+      pixelmatch:
+        specifier: 7.1.0
+        version: 7.1.0
+      vscode-textmate:
+        specifier: 9.3.0
+        version: 9.3.0
+packages:
+  pixelmatch@7.1.0:
+    resolution: {integrity: sha512-1wrVzJ2STrpmONHKBy228LM1b84msXDUoAzVEl0R8Mz4Ce6EPr+IVtxm8+yvrqLYMHswREkjYFaMxnyGnaY3Ng==}
+    engines: {node: '>=16'}
+    hasBin: true
+  pngjs@7.0.0:
+    resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
+    engines: {node: '>=14.19.0'}
+  '@highlightjs/cdn-assets@11.11.1':
+    resolution: {integrity: sha512-VEPdHzwelZ12hEX18BHduqxMZGolcUsrbeokHYxOUIm8X2+M7nx5QPtPeQgRxR9XjhdLv4/7DD5BWOlSrJ3k7Q==}
+    engines: {node: '>=12.0.0'}
+  vscode-oniguruma@2.0.1:
+    resolution: {integrity: sha512-poJU8iHIWnC3vgphJnrLZyI3YdqRlR27xzqDmpPXYzA93R4Gk8z7T6oqDzDoHjoikA2aS82crdXFkjELCdJsjQ==}
+  vscode-textmate@9.3.0:
+    resolution: {integrity: sha512-zHiZZOdb9xqj5/X1C4a29sbgT2HngdWxPLSl3PyHRQF+5visI4uNM020OHiLJjsMxUssyk/pGVAg/9LCIobrVg==}
+snapshots:
+  pixelmatch@7.1.0:
+    dependencies:
+      pngjs: 7.0.0
+  pngjs@7.0.0: {}
+  '@highlightjs/cdn-assets@11.11.1': {}
+  vscode-oniguruma@2.0.1: {}
+  vscode-textmate@9.3.0: {}

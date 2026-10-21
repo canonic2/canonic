@@ -200,6 +200,7 @@ pub(crate) async fn handle(
     previews: Arc<Previews>,
     request: Request,
     output: &super::messages::Output,
+    trace: bool,
 ) -> Response {
     let started = std::time::Instant::now();
     let path = request.uri().path().to_owned();
@@ -218,7 +219,7 @@ pub(crate) async fn handle(
         "/portable/docs",
     ]
     .contains(&route.as_str());
-    if traced || elapsed >= 500 {
+    if !trace && (traced || elapsed >= 500) {
         let details = json!({
             "route": route, "file": file, "status": response.status().as_u16(),
             "queueMs": 0, "workMs": elapsed, "elapsedMs": elapsed,

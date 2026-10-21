@@ -58,6 +58,7 @@ function serve(context, space, diagnostics, shared) {
       isTrusted: vscode.workspace.isTrusted,
       eagerCapture: true,
       eagerPreviews: true,
+      trace: vscode.workspace.getConfiguration('workbench').get('trace', false),
       capture: shared.capture(),
       captureShared: true,
       captureStorage: path.join(context.globalStorageUri.fsPath, 'capture'),

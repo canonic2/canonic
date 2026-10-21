@@ -37,6 +37,16 @@
   ],
   "main": "./extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Workbench",
+      "properties": {
+        "workbench.trace": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log request and page selection phase timings to Output → Workbench. Reload the window after changing this setting."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {

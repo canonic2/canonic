@@ -176,6 +176,13 @@ See [handoff.rs](../server/src/handoff.rs).
 - A capture requested before the live mirror has its first snapshot fails
   with "the live preview is still loading".
 
+CSS Custom Highlight ranges travel as root element state, referencing the
+snapshot's existing node identities and offsets. The inert receiver recreates
+the ranges and their priority/type with the copied stylesheets; it never inserts
+syntax spans. Colour-only changes advance the mirror revision, and cleared
+highlights are removed on the receiver. Docs capture waits for the worker's
+completion or bounded plain fallback before reading that snapshot.
+
 ## Decisions
 
 - **Mirror the live document instead of re-running the page.** The helper

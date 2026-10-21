@@ -6,13 +6,19 @@
    its bundle here, and its panels wait as `pending` until then. */
 
 import { mountExamples } from './mount-examples.js';
+import { documentTrace, phase, address } from '../../trace/browser.js';
+import { createHighlighting } from './highlighting.js';
 
 /** What the canvas calls on a docs page in its frame (same origin). */
 
 const options = window.__workbenchDocs;
+const trace = documentTrace(options);
 const SCROLL_KEY = 'wb-docs-scroll:' + location.pathname;
 const actions = [];
 const sources = new Map();
+let sourceRevision = 0;
+const highlighting = createHighlighting({ report: (name) => phase(trace, name) });
+addEventListener('pagehide', () => highlighting.dispose(), { once: true });
 
 function report(type, detail) {
   window.dispatchEvent(new CustomEvent('workbench:' + type, { detail }));
@@ -34,14 +40,16 @@ function onAction(type, detail) {
 function source(id) {
   let pending = sources.get(id);
   if (!pending) {
-    pending = fetch(options.sourceUrl + encodeURIComponent(id), { cache: 'no-store' }).then(
-      async (answer) => {
-        const body = await answer.json();
-        if (!answer.ok) throw new Error(body.error || 'Couldn’t load the example’s code.');
-        return body;
-      },
-    );
-    pending.catch(() => sources.delete(id));
+    const url =
+      options.sourceUrl + encodeURIComponent(id) + (options.highlightUrl ? '&plain=1' : '');
+    pending = fetch(address(url, trace), { cache: 'no-store' }).then(async (answer) => {
+      const body = await answer.json();
+      if (!answer.ok) throw new Error(body.error || 'Couldn’t load the example’s code.');
+      return body;
+    });
+    pending.catch(() => {
+      if (sources.get(id) === pending) sources.delete(id);
+    });
     sources.set(id, pending);
   }
   return pending;
@@ -71,17 +79,22 @@ async function toggleCode(figure, id, button) {
   }
   panel.hidden = false;
   if (panel.dataset.loaded) return;
+  const revision = sourceRevision;
   try {
     const code = await source(id);
+    if (revision !== sourceRevision || !panel.isConnected) return;
     const pre = document.createElement('pre');
     const element = document.createElement('code');
     element.className = 'hljs';
-    element.innerHTML = code.html;
+    if (options.highlightUrl) element.textContent = code.text;
+    else element.innerHTML = code.html;
     pre.title = code.file;
     pre.append(element);
     panel.replaceChildren(pre);
     panel.dataset.loaded = 'true';
+    if (options.highlightUrl) highlighting.source(element, code.file?.split('.').pop());
   } catch (error) {
+    if (revision !== sourceRevision || !panel.isConnected) return;
     panel.replaceChildren(
       Object.assign(document.createElement('p'), {
         className: 'wb-docs-example-note',
@@ -131,8 +144,9 @@ async function resolveBundle(info) {
   const pending = figures().filter((figure) => figure.dataset.status === 'pending');
   let answer;
   try {
-    const response = await fetch(info, { cache: 'no-store' });
+    const response = await fetch(address(info, trace), { cache: 'no-store' });
     answer = await response.json();
+    phase(trace, 'bundle-info-fetched');
     if (!response.ok) throw new Error(answer.error || 'Couldn’t load the examples.');
   } catch (error) {
     for (const figure of pending) settle(figure, 'unavailable', String(error.message ?? error));
@@ -277,17 +291,42 @@ async function swapMarkdown() {
     );
     if (live) figure.replaceWith(live);
   }
+  sourceRevision += 1;
+  highlighting.reset();
   current.replaceChildren(...Array.from(next.childNodes));
+  sources.clear();
+  for (const figure of figures()) {
+    const panel = figure.querySelector('[data-wb-example-code]');
+    const button = figure.querySelector('[data-wb-show-code]');
+    if (!panel || !button) continue;
+    const open = !panel.hidden;
+    delete panel.dataset.loaded;
+    panel.replaceChildren();
+    if (open) {
+      panel.hidden = true;
+      void toggleCode(figure, figure.dataset.wbExample ?? '', button);
+    }
+  }
+  highlightFences();
+}
+
+function highlightFences() {
+  if (options?.highlightUrl) highlighting.fences(document);
 }
 
 async function start() {
   window.__workbenchReady = false;
   window.__workbenchError = null;
-  window.wbDocsPage = { scrollToExample, visibleExamples };
+  window.wbDocsPage = {
+    scrollToExample,
+    visibleExamples,
+    whenHighlighted: () => highlighting.settled(),
+  };
   wireTools();
   wireLinks();
   let results = [];
   const wanted = options?.bundle;
+  phase(trace, 'document-script');
   const module = !wanted
     ? null
     : 'info' in wanted
@@ -297,7 +336,9 @@ async function start() {
     try {
       // Against the page, not this script: in a portable export they sit in different folders.
       const bundle = await import(new URL(module, location.href).href);
+      phase(trace, 'bundle-fetched');
       const mounted = await mountExamples(document, bundle, {
+        phase: (name) => phase(trace, name),
         page: options.page,
         state: options.state ?? 'default',
         report: onAction,
@@ -323,9 +364,12 @@ async function start() {
       report('error', { message: String(error?.message ?? error) });
     }
   } else if (document.fonts) {
+    phase(trace, 'examples-mounted', { examples: 0 });
     await document.fonts.ready;
+    phase(trace, 'readiness-fonts');
   }
   restoreScroll();
+  highlightFences();
   window.__workbenchReady = true;
   report('ready', {
     state: options?.state ?? 'default',

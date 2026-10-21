@@ -233,9 +233,11 @@ pub(crate) async fn portable_docs(
         return Ok(out);
     }
     for (name, file) in [
-        ("docs/page.js", "docs-page.js"),
-        ("docs/mount-examples.js", "mount-examples.js"),
+        ("docs/page/page.js", "docs-page.js"),
+        ("docs/page/mount-examples.js", "mount-examples.js"),
+        ("docs/page/highlighting.js", "highlighting.js"),
         ("docs/docs-page.css", "docs-page.css"),
+        ("trace/browser.js", "../../trace/browser.js"),
     ] {
         let path = page_files.join(file);
         add(
@@ -296,7 +298,7 @@ pub(crate) async fn portable_docs(
                 compiled: examples_built.as_ref(),
             });
             let locations = PageLocations {
-                script: Some("../../page.js".into()),
+                script: Some("../../page/page.js".into()),
                 stylesheet: Some("../../docs-page.css".into()),
                 source: Some("./sources/".into()),
                 revision: Some(String::new()),
@@ -360,7 +362,7 @@ mod tests {
     fn fixture() -> (PathBuf, PathBuf) {
         let base = std::env::temp_dir().join(format!("wb-docs-portable-{}", std::process::id()));
         let root = base.join("acme");
-        let page = base.join("page");
+        let page = base.join("ui/src/modules/docs/page");
         std::fs::create_dir_all(root.join("docs/images")).expect("root");
         std::fs::create_dir_all(&page).expect("page");
         std::fs::write(
@@ -374,9 +376,17 @@ mod tests {
             "export const basic = () => <Card />;\n",
         )
         .expect("examples");
-        for file in ["docs-page.js", "mount-examples.js", "docs-page.css"] {
+        for file in [
+            "docs-page.js",
+            "mount-examples.js",
+            "highlighting.js",
+            "docs-page.css",
+        ] {
             std::fs::write(page.join(file), file).expect("page file");
         }
+        let trace = page.join("../../trace");
+        std::fs::create_dir_all(&trace).expect("trace folder");
+        std::fs::write(trace.join("browser.js"), "export {};").expect("trace file");
         (root, page)
     }
 
@@ -407,9 +417,11 @@ mod tests {
         assert_eq!(
             names,
             [
-                "docs/page.js",
-                "docs/mount-examples.js",
+                "docs/page/page.js",
+                "docs/page/mount-examples.js",
+                "docs/page/highlighting.js",
                 "docs/docs-page.css",
+                "trace/browser.js",
                 "docs/docs-card/web/examples.js",
                 "docs/docs-card/web/examples.css",
                 "docs/docs-card/web/sources/basic",
@@ -417,15 +429,30 @@ mod tests {
                 "docs/docs-card/web/index.html",
             ]
         );
-        let html = String::from_utf8(files[7].1.clone()).expect("html");
+        let html = String::from_utf8(
+            files
+                .iter()
+                .find(|(name, _)| name == "docs/docs-card/web/index.html")
+                .expect("page")
+                .1
+                .clone(),
+        )
+        .expect("html");
         assert!(
             html.contains(r#"<img src="./files/docs/images/shape.png""#),
             "{html}"
         );
-        assert!(html.contains(r#"<script type="module" src="../../page.js">"#));
+        assert!(html.contains(r#"<script type="module" src="../../page/page.js">"#));
         assert!(html.contains(r#""bundle":{"module":"./examples.js"}"#));
         assert!(html.contains(r#""revisionUrl":"""#));
-        let code: Value = serde_json::from_slice(&files[5].1).expect("code");
+        let code: Value = serde_json::from_slice(
+            &files
+                .iter()
+                .find(|(name, _)| name == "docs/docs-card/web/sources/basic")
+                .expect("source")
+                .1,
+        )
+        .expect("code");
         assert_eq!(code["text"], "export const basic = () => <Card />;");
         assert_eq!(
             exported.warnings,

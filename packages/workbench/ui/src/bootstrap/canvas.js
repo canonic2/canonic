@@ -73,16 +73,18 @@ function mount() {
       act(() => controller.command(board.id, 'size', size));
   }
   function present() {
-    const { visible, pending } = navigation.presentation(controller.snapshot().artboards);
+    const { visible, pending, loading } = navigation.presentation(controller.snapshot().artboards);
     canvas.style.visibility = visible ? '' : 'hidden';
     canvas.inert = review.busy() || !visible;
     $('canvas').setAttribute('aria-busy', String(pending));
     if (pending) {
       $('blank').textContent = 'Loading preview…';
-      $('blank').classList.add('is-loading');
-      $('blank').hidden = false;
+      $('blank').classList.toggle('is-loading', loading);
+      $('blank').hidden = !loading;
     } else if (visible) {
-      navigation.complete();
+      navigation.complete(
+        controller.snapshot().artboards.some((board) => board.view?.problem) ? 'failed' : 'visible',
+      );
       $('blank').hidden = true;
       $('blank').classList.remove('is-loading');
     }
@@ -356,6 +358,7 @@ function mount() {
           lens: next.lens,
           example: next.example,
           label: next.label,
+          trace: next.trace,
         },
         size: next.docs
           ? available()

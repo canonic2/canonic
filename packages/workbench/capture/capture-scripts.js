@@ -79,6 +79,7 @@ function settleScript(options) {
         if (Date.now() >= previewDeadline) throw new Error('Workbench preview did not finish rendering before capture');
         await sleep(50);
       }
+      if (window.wbDocsPage && window.wbDocsPage.whenHighlighted) await window.wbDocsPage.whenHighlighted();
     }
     if (storybook) {
       var deadline = Date.now() + 8000;

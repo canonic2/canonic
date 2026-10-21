@@ -959,7 +959,10 @@ impl Previews {
     }
 
     pub(crate) async fn docs_bundle(&self, raw: &Value) -> Result<Value> {
+        let warming = crate::trace::phase("warm-wait");
         self.warmed().await;
+        drop(warming);
+        let _building = crate::trace::phase("bundle");
         let entry = self.docs_entry(raw).await?;
         let (entry, _host, _snapshot) = self.ensure(entry).await?;
         let descriptor = Self::descriptor_of(&entry);

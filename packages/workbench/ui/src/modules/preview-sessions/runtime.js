@@ -9,6 +9,13 @@ export function createRuntime(board, callbacks) {
   const channel = crypto.randomUUID();
   const url = new URL('content.html', board.target.space.url);
   url.searchParams.set('artboard-runtime', channel);
+  if (board.target.trace) {
+    url.searchParams.set('wbTrace', board.target.trace.selection);
+    url.searchParams.set('wbTraceStart', String(board.target.trace.started));
+    url.searchParams.set('wbPage', board.target.src);
+    url.searchParams.set('wbState', board.target.state || 'default');
+    url.searchParams.set('wbLens', board.target.lens || 'design');
+  }
   url.searchParams.set('canvas-origin', location.origin);
   url.searchParams.set('canvas-host', window.parent === window ? 'browser' : 'editor');
   if (board.target.artboard) url.searchParams.set('artboard', board.target.artboard);

@@ -1,0 +1,373 @@
+{
+  "date": "2026-10-21",
+  "kind": "integrated compatibility checks; not performance samples",
+  "extension": "0.14.0",
+  "highlightjs": "11.11.1",
+  "hashes": {
+    "ui/src/modules/docs/page/highlighting.js": "f1e0be9cda07f6ed2cf60e72b22087f25a80caa2a28419ec22228fc183290f79",
+    "ui/src/modules/docs/page/highlight-worker.js": "ba949499f19534bcad3c4654c839b3d8ee85b1bc6a31ce40b2b1adb6b736950e",
+    "ui/src/modules/docs/page/highlight-worker-client.js": "b32b0f24642e8e3e6171afeac6c6524267584894e06ea1a5e9b2524d67d4c4eb",
+    "ui/src/modules/docs/page/code-colours.js": "097ae9a467188a23aeb27a32b5b748f8d7cb5e45e35358e37a48654677eb754c",
+    "ui/src/modules/docs/page/docs-page.js": "ac78bbc693231b71d3b6f688ef096120e65335bb13a0b3a6454194e6ac22447f",
+    "ui/src/modules/docs/page/docs-page.css": "47243e30cb4e9db7d6930e1c0e4795e90d1a6c11aae205db78bfb4401f0476da",
+    "ui/legacy/dom-mirror.js": "20929f02fb42cbf383afd5f34a78c9ee3a636e960bc361077a7edf864ef405d1",
+    "ui/src/vendor/highlight.js/manifest.json": "606f8e9e7c4ed219ed4edb537e29238d95265ea58bcfc091e4875a1dbdbbac0a",
+    "server/bin/darwin-x64/workbench-server": "5663597d8c69f14a9dbebc1e97c3e30176c01791285955865494db15bd1897d2"
+  },
+  "installed": [
+    {
+      "run": "2026-10-21T16-19-40-369Z-installed",
+      "fixture": "Overview",
+      "status": "passed",
+      "kind": "temporary installed source overlay; release server; compatibility only",
+      "started": "2026-10-21T16:19:40.370Z",
+      "finished": "2026-10-21T16:19:51.852Z",
+      "blocks": 1,
+      "sourceCharacters": 736,
+      "geometry": {
+        "geometry": true,
+        "coloured": 68,
+        "characters": 1402,
+        "fonts": "loaded"
+      },
+      "capture": {
+        "bytes": 98387,
+        "type": "image/jpeg",
+        "signature": [
+          255,
+          216,
+          255,
+          224,
+          0,
+          16,
+          74,
+          70
+        ],
+        "src": "system/overview.md",
+        "docs": true
+      },
+      "runtime": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.142.0 Chrome/150.0.7871.250 Electron/43.7.7 Safari/537.36",
+        "visibility": "hidden"
+      }
+    },
+    {
+      "run": "2026-10-21T16-20-46-714Z-installed",
+      "fixture": "Code-heavy",
+      "status": "passed",
+      "kind": "temporary installed source overlay; release server; compatibility only",
+      "started": "2026-10-21T16:20:46.716Z",
+      "finished": "2026-10-21T16:21:08.919Z",
+      "blocks": 20,
+      "sourceCharacters": 36897,
+      "geometry": {
+        "geometry": true,
+        "coloured": 12011,
+        "characters": 137983,
+        "fonts": "loaded"
+      },
+      "capture": {
+        "bytes": 60591,
+        "type": "image/jpeg",
+        "signature": [
+          255,
+          216,
+          255,
+          224,
+          0,
+          16,
+          74,
+          70
+        ],
+        "src": "first.md",
+        "docs": true
+      },
+      "runtime": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.142.0 Chrome/150.0.7871.250 Electron/43.7.7 Safari/537.36",
+        "visibility": "hidden"
+      }
+    }
+  ],
+  "portable": {
+    "built": true,
+    "pages": 9,
+    "files": 69,
+    "sources": 9,
+    "allSourcesPrehighlighted": true,
+    "allFontsLoaded": true,
+    "liveHighlightUrl": false,
+    "errors": [],
+    "external": []
+  },
+  "setupFailures": [
+    {
+      "run": "2026-10-21T16-14-48-323Z-installed",
+      "phase": "before selection",
+      "error": "Installed setup/content timeout; canvas hidden",
+      "resolution": "Explicitly activate the isolated Workbench editor tab"
+    },
+    {
+      "run": "2026-10-21T16-16-16-002Z-installed",
+      "phase": "before selection",
+      "error": "Installed setup/content timeout; canvas hidden",
+      "resolution": "Explicitly activate the isolated Workbench editor tab"
+    },
+    {
+      "run": "2026-10-21T16-17-48-925Z-installed",
+      "phase": "before selection",
+      "error": "Installed setup/content timeout; canvas hidden",
+      "resolution": "Explicitly activate the isolated Workbench editor tab"
+    }
+  ],
+  "sequences": {
+    "kind": "integrated sequence compatibility, not performance samples",
+    "cache": "fresh browser and server per fixture; startup path",
+    "warmups": "three source reopens, three retained cycles, three eviction cycles",
+    "cleanupFailures": [],
+    "results": [
+      {
+        "shape": "Small",
+        "status": "passed",
+        "actions": [
+          "first",
+          "second",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "evicted",
+          "capture"
+        ],
+        "source": true,
+        "copyIsolationSupersession": {
+          "copy": true,
+          "independent": true,
+          "supersession": true,
+          "inFlight": 1,
+          "released": 0,
+          "documentId": "bc01931e-d88b-4d91-b57e-fcc197b437de"
+        },
+        "edits": {
+          "fence": {
+            "exact": true
+          },
+          "example": {
+            "exact": true
+          },
+          "shared": {
+            "exact": true
+          }
+        },
+        "exampleFailure": {
+          "contained": true,
+          "neighbour": true
+        },
+        "capture": {
+          "bytes": 12700,
+          "type": "image/jpeg",
+          "signature": [
+            255,
+            216,
+            255,
+            224,
+            0,
+            16,
+            74,
+            70
+          ],
+          "src": "first.md",
+          "docs": true
+        },
+        "fixtureRestored": true
+      },
+      {
+        "shape": "Overview",
+        "status": "passed",
+        "actions": [
+          "first",
+          "second",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "evicted",
+          "capture"
+        ],
+        "source": true,
+        "copyIsolationSupersession": {
+          "copy": true,
+          "independent": true,
+          "supersession": true,
+          "inFlight": 1,
+          "released": 0,
+          "documentId": "0c24b345-1ee4-4006-9cea-a5913e591cec"
+        },
+        "edits": {
+          "fence": {
+            "exact": true
+          },
+          "example": {
+            "exact": true
+          },
+          "shared": {
+            "exact": true
+          }
+        },
+        "exampleFailure": {
+          "contained": true,
+          "neighbour": true
+        },
+        "capture": {
+          "bytes": 49050,
+          "type": "image/jpeg",
+          "signature": [
+            255,
+            216,
+            255,
+            224,
+            0,
+            16,
+            74,
+            70
+          ],
+          "src": "system/overview.md",
+          "docs": true
+        },
+        "fixtureRestored": true
+      },
+      {
+        "shape": "Code-heavy",
+        "status": "passed",
+        "actions": [
+          "first",
+          "second",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained-warmup",
+          "retained",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-warmup",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "eviction-transit",
+          "evicted",
+          "capture"
+        ],
+        "source": true,
+        "copyIsolationSupersession": {
+          "copy": true,
+          "independent": true,
+          "supersession": true,
+          "inFlight": 1,
+          "released": 0,
+          "documentId": "f7505db9-94c3-4c95-a737-ebc039d75108"
+        },
+        "edits": {
+          "fence": {
+            "exact": true
+          },
+          "example": {
+            "exact": true
+          },
+          "shared": {
+            "exact": true
+          }
+        },
+        "exampleFailure": {
+          "contained": true,
+          "neighbour": true
+        },
+        "capture": {
+          "bytes": 17170,
+          "type": "image/jpeg",
+          "signature": [
+            255,
+            216,
+            255,
+            224,
+            0,
+            16,
+            74,
+            70
+          ],
+          "src": "first.md",
+          "docs": true
+        },
+        "fixtureRestored": true
+      }
+    ]
+  }
+}

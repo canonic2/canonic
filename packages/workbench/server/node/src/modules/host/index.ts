@@ -74,6 +74,7 @@ export type HostOptions = {
   /** Warm the capture helper and build every docs page at startup. */
   eagerCapture?: boolean;
   eagerPreviews?: boolean;
+  trace?: boolean;
   /** A capture service to use, shared with other spaces when `captureShared`. */
   capture?: Capture;
   captureShared?: boolean;
@@ -255,6 +256,7 @@ export function start(options: HostOptions): Promise<Running> {
     if (options.isTrusted === false) out.push('--untrusted');
     if (options.onHandoff) out.push('--handoff');
     if (options.eagerPreviews) out.push('--eager-previews');
+    if (options.trace) out.push('--trace');
     if (options.logLimit) out.push('--log-limit', String(options.logLimit));
     if (options.exportRetentionMs) out.push('--export-retention-ms', String(options.exportRetentionMs));
     if (options.exportMaxArchiveBytes) out.push('--export-max-archive-bytes', String(options.exportMaxArchiveBytes));

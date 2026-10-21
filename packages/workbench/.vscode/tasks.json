@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Workbench: prepare development",
+      "type": "process",
+      "command": "pnpm",
+      "args": ["run", "dev:prepare"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

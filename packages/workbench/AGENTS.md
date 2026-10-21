@@ -95,10 +95,19 @@ Node dependencies and no dependency install scripts.
 | Check or action | Command |
 | --- | --- |
 | Behavior across parts | `pnpm test` |
+| Focused test files | `pnpm run test:focus <file> [--name pattern]` |
+| Source extension / cached preparation | `pnpm run dev <project>` / `pnpm run dev:prepare` |
 | TypeScript across source owners | `pnpm run check` |
 | JavaScript/Web Component lint, formatting and unit/browser tests | `pnpm run check:ui` |
 | UI lint / formatting / unit tests separately | `pnpm run lint`, `pnpm run format:check`, `pnpm run test:ui` |
-| Rust format, strict Clippy, nextest, doctests, private rustdoc and cargo-deny | `pnpm run check:server` |
+| Rust format | `pnpm run format:server` |
+| Rust format-check | `pnpm run format:check:server` |
+| Rust lint | `pnpm run lint:server` |
+| Rust types | `pnpm run types:server` |
+| Rust test | `pnpm run test:server` |
+| Rust doctest | `pnpm run doctest:server` |
+| Rust docs | `pnpm run docs:server` |
+| Rust deps | `pnpm run deps:server` |
 | Rust coverage | `pnpm run coverage:server` (HTML under `server/target/llvm-cov/`) |
 | Standalone server | `pnpm run serve <project>` |
 | VSIX packaging | `pnpm run package` or `pnpm run package:all <target>` |
@@ -117,6 +126,26 @@ The root product version, `extension/package.json` and `sdk/package.json` must
 match. A `workbench/v<version>` release tag requires a matching CHANGELOG entry;
 the workflow tests before packaging, publishes the SDK and distributes six
 VSIX targets. Never push a tag without the user's go-ahead.
+
+Run Rust verification categories individually and select only those needed for
+the task. A request for tests does not also request formatting, lint, type
+checking, doctests, API docs, dependency auditing or coverage. Name the selected
+commands before running them; there is no aggregate Rust check target.
+`docs` generates browsable HTML API reference in `target/doc/`; `doctest`
+executes Rust documentation examples. Run either as its own explicit category.
+Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
+their generated reference pages. Keep Cargo caches between runs.
+
+| Category | Command from `server/` |
+| --- | --- |
+| Apply formatting | `make format` |
+| Verify formatting | `make format-check` |
+| Strict Clippy | `make lint` |
+| Type checking | `make types` |
+| Tests | `make test` |
+| Documentation examples | `make doctest` |
+| API reference HTML | `make docs` |
+| Dependency audit | `make deps` |
 
 ---
 
@@ -139,12 +168,32 @@ VSIX targets. Never push a tag without the user's go-ahead.
 - Restore mutated globals, environment, timers and test state. Keep production
   startup independent of fixtures. Store generated evidence in the package's
   ignored artifact locations or temporary directories.
+- Be conservative about running checks. Run scoped checks when they help, such
+  as the tests covering changed code or a lint of the module being edited;
+  Markdown-only changes need only a whitespace diff check. Do not run the full
+  battery (whole suites, format, strict lint, dependency audits, coverage,
+  builds, acceptance) after each change: when a task is complete, and before a
+  commit, ask which relevant categories to run and name their individual commands.
+  Command lists in package guides say how to run a check, not that every change
+  must run it. Do not rerun a passing check unless code it covers changed since.
+- Prefer the package's focused-test and development commands for iteration;
+  preserve Cargo's `target/` cache and avoid release packaging or installation
+  unless that is the behavior being verified.
 - Select checks from the affected contract. Preserve the assertions and coverage
   scope while fixing failures; do not weaken thresholds, skip suites or broadly
   suppress rules to obtain a pass.
 - Report executed commands and observed outcomes. Missing prerequisites, optional
   captures and platform limits are distinct from behavior failures and passing
   acceptance. Do not infer untested platform coverage from another host's result.
+
+- Run Rust verification categories individually and select only those needed for
+  the task. A request for tests does not also request formatting, lint, type
+  checking, doctests, API docs, dependency auditing or coverage. Name the selected
+  commands before running them; there is no aggregate Rust check target.
+  `docs` generates browsable HTML API reference in `target/doc/`; `doctest`
+  executes Rust documentation examples. Run either as its own explicit category.
+  Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
+  their generated reference pages. Keep Cargo caches between runs.
 
 ---
 
@@ -277,7 +326,8 @@ locations, audience, publishing, and validation.
 - Keep internal requirements and investigation notes in specs. Include technical
   detail in docs when it helps the intended audience use, configure, integrate,
   or troubleshoot the product. Prefer existing topics and cross-links over copies.
-- Check links and run the package's relevant validation. Do not add tests that
+- Check links and run `git diff --check`; run focused tests only when code also
+  changes. Do not add tests that
   merely assert documentation text. Writing a spec does not authorize implementing
   proposals; writing docs does not itself authorize publishing or distribution.
 
@@ -327,10 +377,19 @@ this rule applies.
 - Return typed errors (`thiserror` enums) where callers or tests branch on the
   kind of failure. Use `anyhow` with context in application code and at the
   binary boundary.
-- Deny broken and private intra-doc links in `[lints.rustdoc]`, and build the
-  API docs with `cargo doc --no-deps --document-private-items` as a check.
+- Deny broken and private intra-doc links in `[lints.rustdoc]`. Generate API
+  reference HTML through the separate `docs` target when that category is
+  requested. Doctests are a separate `doctest` target. Never bundle Rust
+  formatting, lint, types, tests, docs or dependency audits into an aggregate
+  check command; select and run each category individually.
 - Keep `Cargo.toml` `[lints]`, `rustfmt` and Clippy settings authoritative; the
   package guide lists the commands and configuration files.
+- Run Cargo with the package guide's commands and Make targets, without extra
+  flags, features, `RUSTFLAGS` or another target directory. Cargo never removes
+  old build output, so each new combination adds another full set of artifacts
+  to `target/`. Write logs, diffs and other outputs to a temporary directory,
+  not `target/`. Do not run `cargo clean`: other sessions share `target/`, and
+  cleaning forces their next builds and tests to start over.
 
 ---
 
@@ -441,10 +500,10 @@ they do not distribute a UI package or configuration to consuming projects.
   `packages/website/src/lib/doc-groups.js`; unlisted guides appear under "More guides"
   and have no state in the Website project's Docs preview.
   Verify generated navigation, previous/next links, fragments, and search.
-- For public guide changes, run `pnpm --dir packages/website test` and
-  `pnpm --dir packages/website run build`, then inspect affected pages. For
-  Workbench behavior changes, run `pnpm --dir packages/workbench test`.
-  Markdown-only internal specs need link review and `git diff --check`.
+- Markdown changes need link review and `git diff --check`. When the user asks
+  for checks, public guide changes run `pnpm --dir packages/website test` and
+  `pnpm --dir packages/website run build`, then inspect affected pages, and
+  Workbench behavior changes run `pnpm --dir packages/workbench test`.
 - When visible behavior affects overview copy or screenshots, update the
   website's Workbench overview and screenshots. Consuming projects supply
   configuration, not copies of Workbench scripts. Publishing follows the separately authorized release workflow.

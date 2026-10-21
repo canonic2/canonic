@@ -28,7 +28,7 @@ function host(options = {}) {
   }
   Object.setPrototypeOf(window, FakeEventTarget.prototype);
   Object.setPrototypeOf(document, FakeEventTarget.prototype);
-  var context = { window: window, document: document, EventTarget: FakeEventTarget, URL: URL, AbortController: AbortController,
+  var context = { window: window, document: document, EventTarget: FakeEventTarget, URL: URL, URLSearchParams: URLSearchParams, AbortController: AbortController,
     location: { href: 'http://127.0.0.1/_workbench/preview-host.html', origin: 'http://127.0.0.1' },
     history: { replaceState: function () {} },
     fetch: async function (address) {
@@ -58,7 +58,8 @@ function host(options = {}) {
     },
   };
   var source = fs.readFileSync(path.join(__dirname, "./preview-host.js"), 'utf8');
-  vm.runInNewContext(source.replace("import '/_workbench/preview-runtime.js';", '').replace('import(content.module)', 'importModule(content.module)'), context);
+  var trace = fs.readFileSync(path.join(__dirname, '../src/modules/trace/browser.js'), 'utf8').replace(/^export /gm, '');
+  vm.runInNewContext(trace + '\nconst beginTrace = begin, tracedAddress = address;\n' + source.replace(/^import .*;$/gm, '').replace('import(content.module)', 'importModule(content.module)'), context);
   return { renderer: window.wbPreviewHost, window: window, mounted: mounted, cleaned: cleaned, fetched: fetched,
     styles: styles, document: document, imported: imported, listeners: function () { return rootListeners; }, cancelledTimers: cancelledTimers };
 }
