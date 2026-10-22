@@ -199,7 +199,7 @@ compiler fallback
 | `/_workbench/log`, `view`, `spaces`, `spaces/open`, `canvas/space`, `canvas/review`, `open`, `handoff` | Diagnostics, the [agent view](agent-context.md) ([agent_view.rs](../server/src/agent_view.rs)), spaces from the host, opening a configured source through the host, handoff prompts ([handoff.rs](../server/src/handoff.rs)) sent to the host |
 | `/_workbench/capture/*`, `shot` | Requests checked here ([capture.rs](../server/src/capture.rs)), pictures taken by the host's capture helper, screenshots saved under `.canonic/.handoffs/` |
 | `/_workbench/export` | The design export's jobs ([export.rs](../server/src/export.rs)), with portable builds from [portable.rs](../server/src/portable.rs) |
-| `/_workbench/simulator/*`, `/_workbench/window/stream` | Sandbox input and screen size for a declared Simulator; native streams started by the host and forwarded to its socket |
+| `/_workbench/simulator/*`, `/_workbench/window/stream` | Testrun input and screen size for a declared Simulator; native streams started by the host and forwarded to its socket |
 
 The routes live in [serve/routes/](../server/src/serve/routes.rs) and answer
 with the statuses and messages the canvas expects.

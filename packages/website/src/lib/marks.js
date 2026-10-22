@@ -1,9 +1,9 @@
 import workbench from '../../public/icons/workbench-blue.svg?raw';
-import sandbox from '../../public/icons/sandbox-blue.svg?raw';
+import testrun from '../../public/icons/testrun-blue.svg?raw';
 import playground from '../../public/icons/playground-blue.svg?raw';
 import shield from '../../public/icons/shield-blue.svg?raw';
 import wordmark from '../../public/logos/canonic-wordmark.svg?raw';
-const productIcons = { workbench, sandbox, playground, shield };
+const productIcons = { workbench, testrun, playground, shield };
 
 /* The Canonic wordmark and the four product marks, as SVG artwork from the
    design. Each mark has a base shape and a blue accent; `module` names the
@@ -28,7 +28,7 @@ function mark(svg, name) {
 
 export const products = [
   { name: 'Workbench', tagline: 'Design tool', module: true },
-  { name: 'Sandbox', tagline: 'QA', module: false },
+  { name: 'Testrun', tagline: 'QA', module: false },
   { name: 'Playground', tagline: 'API playground', module: false },
   { name: 'Shield', tagline: 'Agent safeguards & skills', module: false },
 ].map(product => ({ ...product, ...mark(productIcons[product.name.toLowerCase()], product.name) }));

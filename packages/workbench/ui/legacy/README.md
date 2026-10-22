@@ -304,7 +304,7 @@ An `ios-simulator` implementation with `catalog: true` adds its matching booted
 Simulator devices as implementation-only pages. In the extension, a small
 ad-hoc-signed ScreenCaptureKit helper finds the matching Simulator window and
 hardware-encodes a 30 FPS H.264 stream for the canvas. This avoids VS Code's
-webview `display-capture` restriction. The installed `sandbox` command forwards
+webview `display-capture` restriction. The installed `testrun` command forwards
 taps and drags from the canvas. The default `device:
 booted` imports every booted device; an exact device name or UDID narrows it.
 

@@ -39,7 +39,7 @@ The host is `node/src/modules/host/`, used by the extension and by
 | `host.rs`, `diagnostics.rs` | Questions and notices to the host; bounded diagnostic records with the session budget |
 | `config.rs`, `config/` | Manifest reading, checking and resolution; `edit.rs` the page form's and size dialogs' edits |
 | `docs.rs`, `docs/` | Docs pages: Markdown reading and placements, rendering, highlighting, the page document, the service, export sources and portable pages |
-| `storybook.rs`, `simulators.rs` | Storybook indexes, detection and the Storybook the server runs; booted Simulators, their catalog and Sandbox input |
+| `storybook.rs`, `simulators.rs` | Storybook indexes, detection and the Storybook the server runs; booted Simulators, their catalog and Testrun input |
 | `proxies.rs` | The implementation proxies |
 | `capture.rs`, `handoff.rs`, `agent_view.rs` | Capture requests checked and screenshots saved; handoff prompts; the canvas view agents read |
 | `export.rs`, `export/`, `portable.rs` | The design export's plan, capture, sources, archives, PDF and jobs; the portable browser build |

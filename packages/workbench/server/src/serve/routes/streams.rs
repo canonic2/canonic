@@ -162,10 +162,10 @@ async fn simulator(space: &Space, path: &str, request: Request) -> Result<Value>
             Ok(stream_answer(&started, codec))
         }
         "/_workbench/simulator" => {
-            let screen = space.sandbox.screen(&udid).await?;
+            let screen = space.testrun.screen(&udid).await?;
             Ok(json!({ "udid": udid, "screen": screen }))
         }
-        _ => space.sandbox.input(&udid, &ask).await,
+        _ => space.testrun.input(&udid, &ask).await,
     }
 }
 

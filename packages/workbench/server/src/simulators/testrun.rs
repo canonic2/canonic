@@ -1,5 +1,5 @@
-//! A Simulator's screen size and input, delegated to the installed Sandbox
-//! command line (`sandbox` on PATH, or in `~/.local/bin`). Input runs one
+//! A Simulator's screen size and input, delegated to the installed Testrun
+//! command line (`testrun` on PATH, or in `~/.local/bin`). Input runs one
 //! action at a time, in the order it arrived.
 
 use crate::refused::refused;
@@ -21,7 +21,7 @@ pub(crate) struct Screen {
     pub(crate) height: f64,
 }
 
-/// Where to look for the `sandbox` command: each PATH folder, then
+/// Where to look for the `testrun` command: each PATH folder, then
 /// `~/.local/bin`, where editors opened from the Dock often lack PATH entries.
 struct Search {
     path: Option<OsString>,
@@ -34,7 +34,7 @@ impl Search {
         let local = self.home.iter().map(|home| home.join(".local/bin"));
         folders
             .chain(local)
-            .map(|folder| folder.join("sandbox"))
+            .map(|folder| folder.join("testrun"))
             .find(|candidate| executable(candidate))
     }
 }
@@ -54,14 +54,14 @@ fn executable(path: &Path) -> bool {
     }
 }
 
-/// The project's Simulator input through Sandbox, and the queue it waits in.
-pub(crate) struct Sandbox {
+/// The project's Simulator input through Testrun, and the queue it waits in.
+pub(crate) struct Testrun {
     root: PathBuf,
     search: Search,
     queue: tokio::sync::Mutex<()>,
 }
 
-impl Sandbox {
+impl Testrun {
     pub(crate) fn new(root: &Path) -> Self {
         Self::searching(
             root,
@@ -81,7 +81,7 @@ impl Sandbox {
     /// The display size of the Simulator `udid`.
     ///
     /// # Errors
-    /// When Sandbox fails or reports no valid size.
+    /// When Testrun fails or reports no valid size.
     pub(crate) async fn screen(&self, udid: &str) -> Result<Screen> {
         let shot = self.invoke(udid, &["screenshot".to_owned()]).await?;
         let size = |key| {
@@ -92,7 +92,7 @@ impl Sandbox {
         match (size("sourceWidth"), size("sourceHeight")) {
             (Some(width), Some(height)) => Ok(Screen { width, height }),
             _ => Err(anyhow!(
-                "Sandbox screenshot omitted valid display dimensions"
+                "Testrun screenshot omitted valid display dimensions"
             )),
         }
     }
@@ -101,7 +101,7 @@ impl Sandbox {
     /// any input before it. Answers with the action.
     ///
     /// # Errors
-    /// 400 without a Simulator; invalid actions or coordinates and Sandbox
+    /// 400 without a Simulator; invalid actions or coordinates and Testrun
     /// failures say why.
     pub(crate) async fn input(&self, udid: &str, request: &Value) -> Result<Value> {
         if udid.is_empty() {
@@ -114,10 +114,10 @@ impl Sandbox {
     }
 
     async fn invoke(&self, udid: &str, args: &[String]) -> Result<Value> {
-        // Looked up on each call, so installing Sandbox needs no Workbench restart.
+        // Looked up on each call, so installing Testrun needs no Workbench restart.
         let Some(executable) = self.search.locate() else {
             return Err(anyhow!(
-                "Sandbox is not installed: no sandbox command on PATH or in ~/.local/bin"
+                "Testrun is not installed: no testrun command on PATH or in ~/.local/bin"
             ));
         };
         let mut command = tokio::process::Command::new(&executable);
@@ -129,7 +129,7 @@ impl Sandbox {
             .kill_on_drop(true);
         let output = tokio::time::timeout(TIMEOUT, command.output())
             .await
-            .map_err(|_| anyhow!("Sandbox didn’t answer within {}s", TIMEOUT.as_secs()))??;
+            .map_err(|_| anyhow!("Testrun didn’t answer within {}s", TIMEOUT.as_secs()))??;
         if output.stdout.len() > MAX_OUTPUT {
             return Err(anyhow!("stdout maxBuffer length exceeded"));
         }
@@ -147,12 +147,12 @@ impl Sandbox {
         }
         match serde_json::from_slice::<Value>(&output.stdout) {
             Ok(value @ Value::Object(_)) => Ok(value),
-            _ => Err(anyhow!("Sandbox returned invalid JSON")),
+            _ => Err(anyhow!("Testrun returned invalid JSON")),
         }
     }
 }
 
-/// Sandbox's arguments for a tap or swipe at coordinates between 0 and 1.
+/// Testrun's arguments for a tap or swipe at coordinates between 0 and 1.
 fn input_args(request: &Value) -> Result<Vec<String>> {
     let ratio = |key| {
         request
@@ -219,15 +219,15 @@ mod tests {
     use super::*;
     use crate::refused::status_of;
 
-    /// A project folder that is also a home whose `~/.local/bin/sandbox` is a
+    /// A project folder that is also a home whose `~/.local/bin/testrun` is a
     /// Node script recording its arguments.
     fn project(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
-            "sandbox-bridge-acme's-{name}-{}",
+            "testrun-bridge-acme's-{name}-{}",
             std::process::id()
         ));
         let _gone = std::fs::remove_dir_all(&root);
-        let binary = root.join(".local/bin/sandbox");
+        let binary = root.join(".local/bin/testrun");
         std::fs::create_dir_all(binary.parent().expect("folder")).expect("folders");
         let node = std::process::Command::new("node")
             .args(["-p", "process.execPath"])
@@ -253,10 +253,10 @@ mod tests {
     #[tokio::test]
     async fn delegates_literal_target_arguments_and_reports_invalid_input_and_failures() {
         let root = project("delegates");
-        let sandbox = Sandbox::searching(&root, None, Some(root.clone()));
+        let testrun = Testrun::searching(&root, None, Some(root.clone()));
         let identity = "Acme $(touch injected)";
         assert_eq!(
-            sandbox.screen(identity).await.expect("screen"),
+            testrun.screen(identity).await.expect("screen"),
             Screen {
                 width: 1206.0,
                 height: 2622.0
@@ -279,14 +279,14 @@ mod tests {
         );
         assert!(!root.join("injected").exists());
 
-        let tapped = sandbox
+        let tapped = testrun
             .input(identity, &json!({ "action": "tap", "x": 0.5, "y": 0.2 }))
             .await
             .expect("tap");
         assert_eq!(tapped, json!({ "action": "tap" }));
         let tap = read();
         assert_eq!(&tap[3..], ["tap", "0.5", "0.2"]);
-        let invalid = sandbox
+        let invalid = testrun
             .input(identity, &json!({ "action": "tap", "x": 2, "y": 0.2 }))
             .await
             .expect_err("out of range");
@@ -294,14 +294,14 @@ mod tests {
         assert_eq!(read(), tap, "invalid input runs no process");
 
         let swipe = json!({ "action": "swipe", "fromX": 0.1, "fromY": 0.1, "toX": 0.5, "toY": 0.5, "duration": 0.3 });
-        let failed = sandbox
+        let failed = testrun
             .input(identity, &swipe)
             .await
-            .expect_err("Sandbox failed");
+            .expect_err("Testrun failed");
         assert!(failed.to_string().contains("SESSION_UNCERTAIN"));
         assert_eq!(read()[read().len() - 2..], ["--duration-ms", "300"]);
 
-        let nobody = sandbox
+        let nobody = testrun
             .input("", &json!({ "action": "tap", "x": 0.5, "y": 0.5 }))
             .await
             .expect_err("no udid");
@@ -310,32 +310,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn says_when_sandbox_is_not_installed() {
+    async fn says_when_testrun_is_not_installed() {
         let nowhere = Path::new("/acme/nowhere");
-        let sandbox = Sandbox::searching(
+        let testrun = Testrun::searching(
             nowhere,
             Some(OsString::from("/acme/nowhere/bin")),
             Some(nowhere.to_owned()),
         );
-        let error = sandbox.screen("SIM-1").await.expect_err("missing");
+        let error = testrun.screen("SIM-1").await.expect_err("missing");
         assert_eq!(
             error.to_string(),
-            "Sandbox is not installed: no sandbox command on PATH or in ~/.local/bin"
+            "Testrun is not installed: no testrun command on PATH or in ~/.local/bin"
         );
     }
 
     #[test]
-    fn finds_sandbox_on_path_before_the_local_bin_folder() {
+    fn finds_testrun_on_path_before_the_local_bin_folder() {
         let home = project("search");
-        let local = home.join(".local/bin/sandbox");
+        let local = home.join(".local/bin/testrun");
         let on_path = home.join("path bin");
         std::fs::create_dir_all(&on_path).expect("folder");
-        std::fs::copy(&local, on_path.join("sandbox")).expect("copy");
+        std::fs::copy(&local, on_path.join("testrun")).expect("copy");
         let search = |path: &Path| Search {
             path: Some(std::env::join_paths([path]).expect("PATH")),
             home: Some(home.clone()),
         };
-        assert_eq!(search(&on_path).locate(), Some(on_path.join("sandbox")));
+        assert_eq!(search(&on_path).locate(), Some(on_path.join("testrun")));
         assert_eq!(search(&home.join("empty")).locate(), Some(local.clone()));
         #[cfg(unix)]
         {

@@ -15,7 +15,7 @@ use crate::diagnostics::Diagnostics;
 use crate::docs::service::DocsService;
 use crate::host::Host;
 use crate::proxies::Proxies;
-use crate::simulators::{self, Device, Sandbox};
+use crate::simulators::{self, Device, Testrun};
 use crate::storybook::{self, OwnedStorybook};
 use anyhow::{Result, anyhow};
 use futures::future::BoxFuture;
@@ -56,7 +56,7 @@ pub(crate) struct Space {
     pub(crate) diagnostics: Diagnostics,
     pub(crate) proxies: Arc<Proxies>,
     pub(crate) settings: Settings,
-    pub(crate) sandbox: Sandbox,
+    pub(crate) testrun: Testrun,
     /// The canvas view agents read, and the file announcing this server.
     pub(crate) agent: crate::agent_view::AgentView,
     pub(crate) product: PathBuf,
@@ -117,7 +117,7 @@ impl Space {
         port: u16,
         previews: Arc<Previews>,
     ) -> Self {
-        let sandbox = Sandbox::new(catalog.root());
+        let testrun = Testrun::new(catalog.root());
         let (trusted, place) = (catalog.trusted(), catalog.place().clone());
         let blocked: docs::Blocked = Arc::new(move || {
             let view = crate::config::answer(&place.dir, place.key.as_deref())
@@ -143,7 +143,7 @@ impl Space {
             diagnostics,
             proxies,
             settings,
-            sandbox,
+            testrun,
             product: product.to_path_buf(),
             port,
             previews,

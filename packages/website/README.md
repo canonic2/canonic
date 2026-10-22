@@ -23,7 +23,7 @@ release downloads and publishes to GitHub Pages.
 | `src/lib/docs.js` | docs navigation, URLs, and the Markdown link and highlighting settings |
 | `src/lib/doc-groups.js` | the docs sidebar's groups, by guide id |
 | `src/styles/docs.css` | responsive docs layout and Markdown typography |
-| `public/icons/` | original monochrome and blue-accent SVG exports for Workbench, Sandbox, Playground, Shield, Studio, and Link |
+| `public/icons/` | original monochrome and blue-accent SVG exports for Workbench, Testrun, Playground, Shield, Studio, and Link |
 | `public/logos/` | original Canonic symbol, wordmark, lockup, and app icon exports |
 | `public/canonic.svg` | the Canonic symbol favicon, with a blue accent and light/dark fills |
 | `public/images/` | screenshots of the workbench showing the Acme example |

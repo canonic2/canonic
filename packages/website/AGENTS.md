@@ -1,7 +1,7 @@
 # Website — Package Instructions
 
 The Canonic website, served at `https://canonic.sh/`. It covers four products
-(Workbench, Sandbox, Playground, Shield). Only Workbench has pages so far:
+(Workbench, Testrun, Playground, Shield). Only Workbench has pages so far:
 an overview at `/workbench/`, Docs, Install, and Changelog. `README.md`
 explains the build, the screenshots, and publishing.
 

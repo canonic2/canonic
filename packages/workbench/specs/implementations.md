@@ -117,8 +117,8 @@ Configuration: [iOS Simulator](../docs/ios-simulator.md#configure-it).
   of, or as well as, using a catalog. See the gap below.
 - The canvas shows the device through the native window stream described in
   [Native window stream](#native-window-stream). Taps and drags on the canvas
-  are sent through the Sandbox Rust CLI adapter with the displayed device's explicit
-  target ID. Sandbox needs no configuration file. Each input invocation acquires
+  are sent through the Testrun Rust CLI adapter with the displayed device's explicit
+  target ID. Testrun needs no configuration file. Each input invocation acquires
   and closes its owned run/session. A missing binary is an input setup error.
 - Simulator lenses have no state menu. `start` is reported as a problem;
   `root` and code pointers work as for other implementations.

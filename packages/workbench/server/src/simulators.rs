@@ -1,10 +1,10 @@
 //! iOS Simulators: the booted ones `simctl` lists, the implementation-only
 //! pages a catalogued Simulator implementation adds, and their screens and
-//! input through the project's Sandbox.
+//! input through the project's Testrun.
 
-mod sandbox;
+mod testrun;
 
-pub(crate) use sandbox::Sandbox;
+pub(crate) use testrun::Testrun;
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
