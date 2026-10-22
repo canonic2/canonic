@@ -34,4 +34,6 @@ belong to the product.
 - [Development](docs/contributing/development.md): checks, tests and tools.
 - [Specifications](specs/README.md): the contracts behind each module.
 
-Run the checks from this directory with `make check`.
+Select checks individually from this directory: `make format-check`, `make lint`,
+`make types`, `make test`, `make doctest`, `make docs` or `make deps`.
+See [development](docs/contributing/development.md) for their purposes and costs.

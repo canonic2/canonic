@@ -2,7 +2,9 @@
 
 ## Checks
 
-`make check` runs every gate with all features enabled:
+Select each verification category separately; feature-aware categories use all
+features. The independent Make targets are `format-check`, `lint`, `types`,
+`test`, `doctest`, `docs` and `deps`:
 
 | Gate | Command |
 | --- | --- |

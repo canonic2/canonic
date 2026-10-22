@@ -50,3 +50,9 @@ private_intra_doc_links = "deny"
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "warn"
 mod_module_files = "warn"
+
+# Without debug info, macOS builds keep no per-unit object files in deps/.
+# Kept objects pile up with every edit, and a crowded deps/ slows every test
+# process launch.
+[profile.dev]
+debug = false
