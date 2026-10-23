@@ -26,6 +26,10 @@ rustls = { version = "0.23.45", default-features = false, features = ["ring", "s
 # Non-blocking opens, so a FIFO in place of a file cannot hang a read.
 libc = "0.2"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# Safe `fsync` for durable writes; std's sync_all issues F_FULLFSYNC there.
+rustix = { version = "1.1", features = ["fs"] }
+
 [dev-dependencies]
 assert_fs = "1.1"
 insta = { version = "1.49", features = ["json"] }

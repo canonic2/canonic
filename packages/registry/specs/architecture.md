@@ -73,7 +73,9 @@ on `acquisition` to build fetchers that trust only its fixture CA.
   `serde_json`, `thiserror`, and `ureq` with Rustls and public roots; its
   re-exported `http::Uri` also parses locations in `source`, without I/O.
   On Unix, `libc` supplies the non-blocking and no-follow open flags; it is
-  already part of the graph through `ring`.
+  already part of the graph through `ring`. On macOS, `rustix` supplies a
+  safe `fsync` for [durable writes](installed-state.md#artifact-cache),
+  since the crate forbids unsafe code.
 - **Robustness:** no input can make the library panic, overflow or block:
   slicing and indexing are guarded by prior validation, size arithmetic
   saturates, and on Unix files are opened without blocking.

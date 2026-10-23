@@ -103,9 +103,9 @@ pub(crate) enum Commit {
     NotDurable(io::Error),
 }
 
-/// Writes `bytes` to `temporary`, which must not exist, syncs it, renames it
-/// over `target` and, on Unix, syncs the directory so the rename survives a
-/// crash.
+/// Writes `bytes` to `temporary`, which must not exist, flushes it with
+/// [`sync`], renames it over `target` and, on Unix, flushes the directory the
+/// same way so the rename survives a crash.
 ///
 /// An `Err` means nothing was committed: `target` is unchanged. If a step
 /// before the rename fails after the temporary file was created, that file is
@@ -121,7 +121,7 @@ pub(crate) fn replace_private(temporary: &Path, target: &Path, bytes: &[u8]) -> 
         options.mode(0o600);
     }
     let mut file = options.open(temporary)?;
-    let synced = file.write_all(bytes).and_then(|()| file.sync_all());
+    let synced = file.write_all(bytes).and_then(|()| sync(&file));
     drop(file);
     let written = synced.and_then(|()| fs::rename(temporary, target));
     if let Err(error) = written {
@@ -135,6 +135,22 @@ pub(crate) fn replace_private(temporary: &Path, target: &Path, bytes: &[u8]) -> 
     })
 }
 
+/// Flushes a file, or a directory opened as one, through the filesystem so a
+/// crash cannot lose it or reorder it after a later rename. On macOS this is
+/// `fsync`, not the `F_FULLFSYNC` that `File::sync_all` issues there: that
+/// also empties the drive's write cache and waits behind every other
+/// process's flush. Elsewhere it is `File::sync_all`.
+fn sync(file: &File) -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        rustix::fs::fsync(file).map_err(io::Error::from)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        file.sync_all()
+    }
+}
+
 /// Syncs the directory holding `path`, making a rename into it durable.
 fn sync_directory(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
@@ -143,7 +159,7 @@ fn sync_directory(path: &Path) -> io::Result<()> {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        File::open(directory)?.sync_all()
+        sync(&File::open(directory)?)
     }
     #[cfg(not(unix))]
     {

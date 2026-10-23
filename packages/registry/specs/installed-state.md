@@ -26,6 +26,10 @@ by every project.
   it, and losing it in a crash only means fetching it again. On Unix, files
   are 0600, and a cache directory and any missing parents the library
   creates are 0700.
+- Each sync, of a file or of its directory, is `fsync` on macOS and Rust's
+  `File::sync_all` elsewhere. On macOS the library does not issue
+  `F_FULLFSYNC`, which also empties the drive's write cache and waits behind
+  every other process's flush on the host.
 - Reading an artifact returns nothing when it, or the cache directory, does
   not exist. It requires a regular file within the reader's size limit, and
   verifies the digest; a mismatch is reported as corruption and the bytes are

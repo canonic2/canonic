@@ -387,8 +387,7 @@ mod tests {
             established: Arc::new(AtomicBool::new(false)),
         };
         // However late the connection opens, it carries the deadline fixed at request start.
-        std::thread::sleep(Duration::from_millis(20));
-        let transport = connector.with_inner(recording(), Instant::now());
+        let transport = connector.with_inner(recording(), deadline + Duration::from_secs(1));
         assert_eq!(transport.deadline, deadline);
     }
 

@@ -85,7 +85,8 @@ it succeeds only if the file still holds the value that was reviewed.
 6. A leftover temporary file from an interrupted writer is removed. The new
    value is written to the temporary file (0600 on Unix), synced and renamed
    over the file. On Unix the directory is then synced, so the new value
-   survives a crash.
+   survives a crash. Both syncs are the ones
+   [cache writes](installed-state.md#artifact-cache) receive.
 7. The lock is removed, whatever the outcome.
 
 A lock left behind by a crashed writer refuses every later write until it is
