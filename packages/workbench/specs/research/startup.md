@@ -25,6 +25,6 @@ A changed binary can invalidate evaluated index records, so an update can
 still expose the first-use preparation cost. These are diagnostic samples,
 not a controlled before/after benchmark.
 
-The same run verified Scope 0.9's version-1 JSON envelope is accepted alongside
-version 2. Its stopped service remains an actionable lens problem, rather than
+The same run verified the workspace CLI's version-1 JSON envelope is accepted
+alongside version 2. Its stopped service remains an actionable lens problem, rather than
 an invalid-envelope error; Workbench does not start the service automatically.

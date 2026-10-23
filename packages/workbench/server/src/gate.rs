@@ -174,7 +174,7 @@ impl Discovery {
 mod tests {
     use super::*;
     #[test]
-    fn installed_and_current_scope_envelopes_share_the_bounded_route_contract() {
+    fn supported_gate_envelopes_share_the_bounded_route_contract() {
         let report =
             json!({"routes":{"demo":{"state":"published","direct_url":"http://127.0.0.1:49173/"}}});
         for version in [1, 2] {

@@ -10,7 +10,7 @@ and leaves out headings.
 ## 0.15.0
 
 - Docs reuse loaded resources for new pages while keeping recent pages ready. Returns check for missed source updates in the background, preserving the reading position when a refresh is needed.
-- Optional Scope integration lets URL lenses follow services with `base: scope://demo/dev`, resolving each checkout's task endpoint on refresh. This requires existing access to the private, unpublished Scope CLI, which has no public distribution channel. Scope owns startup; an unready service or failed discovery appears as a lens problem.
+- Optional Gate integration lets URL lenses follow services with `base: gate://demo/dev`, resolving each checkout's task endpoint on refresh. This requires existing access to the private, unpublished Gate CLI, which has no public distribution channel. Gate owns startup; an unready service or failed discovery appears as a lens problem.
 - Docs and Show code apply syntax colours in a local background worker after the document loads, preserving the original text and layout. Captures wait for colouring to finish or fall back to plain text.
 
 ## 0.14.0

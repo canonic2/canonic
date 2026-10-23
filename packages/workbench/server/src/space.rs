@@ -70,7 +70,7 @@ pub(crate) struct Space {
     /// The annotation layer’s styles, for captures of pages the workbench doesn’t serve.
     annotations: String,
     detected: Mutex<HashMap<String, String>>,
-    scope: crate::scope::Discovery,
+    gate: crate::gate::Discovery,
     devices: ListDevices,
 }
 
@@ -155,7 +155,7 @@ impl Space {
             annotations: std::fs::read_to_string(product.join("ui/legacy/annotations.css"))
                 .unwrap_or_default(),
             detected: Mutex::new(HashMap::new()),
-            scope: crate::scope::Discovery::default(),
+            gate: crate::gate::Discovery::default(),
             devices: Arc::new(|| Box::pin(simulators::booted())),
         }
     }
@@ -179,7 +179,7 @@ impl Space {
     /// Refresh external discovery only for the explicit configuration request.
     pub(crate) async fn refreshed_view(&self) -> Result<Option<Value>> {
         if let Some(view) = self.catalog.resolved()? {
-            self.scope
+            self.gate
                 .refresh(self.catalog.root(), self.catalog.trusted(), &view)
                 .await;
         }
@@ -307,7 +307,7 @@ pub(crate) fn sockets(storybooks: Storybooks) -> crate::proxies::Sockets {
 #[async_trait::async_trait]
 impl Extras for Space {
     async fn urls(&self, implementations: &mut Map<String, Value>, _problems: &mut Vec<String>) {
-        self.scope.resolve(implementations).await;
+        self.gate.resolve(implementations).await;
     }
     async fn storybooks(
         &self,

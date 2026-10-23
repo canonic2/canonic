@@ -583,7 +583,7 @@ pub(super) fn implementations(raw: Option<&Value>, problems: &mut Problems) -> M
                 } else if kind == "storybook" && address == "auto" {
                     implementation["url"] = json!("auto");
                     implementation["auto"] = json!(true);
-                } else if kind == "url" && crate::scope::target(&address).is_some() {
+                } else if kind == "url" && crate::gate::target(&address).is_some() {
                     implementation["base"] = json!(address.trim_end_matches('/'));
                 } else if !is_http(&address) {
                     let or = if kind == "storybook" {

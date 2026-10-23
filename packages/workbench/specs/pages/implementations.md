@@ -117,7 +117,7 @@ Configuration: [Implementations](../../docs/configuration.md#implementations) an
   renderer refuses to mount it, preserving other lenses and spaces. Invalid
   configuration, such as a Workbench `start` on a Gate lens, still joins the
   shared problems list.
-- `server/node/scope.test.js` covers isolated checkouts, proxy delivery,
+- `server/node/gate.test.js` covers isolated checkouts, proxy delivery,
   readiness failure, refreshed ports and trust without a real Gate profile.
 
 ### Implementation roots and code pointers

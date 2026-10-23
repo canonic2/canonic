@@ -9,7 +9,7 @@ var http = require('node:http');
 var server = require('./server');
 
 test('Gate lenses follow checkout endpoints across refresh, readiness and trust', async function (t) {
-  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-scope-lens-'));
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-gate-lens-'));
   var running = [];
   var upstreams = [];
   t.after(async function () {
@@ -21,8 +21,8 @@ test('Gate lenses follow checkout endpoints across refresh, readiness and trust'
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, 'gate'), '#!' + process.execPath + '\n' +
     'const fs = require("node:fs");\n' +
-    'fs.appendFileSync("scope-invocations.jsonl", JSON.stringify({cwd:process.cwd(),args:process.argv.slice(2)})+"\\n");\n' +
-    'process.stdout.write(fs.readFileSync("scope-urls.json"));\n', { mode: 0o755 });
+    'fs.appendFileSync("gate-invocations.jsonl", JSON.stringify({cwd:process.cwd(),args:process.argv.slice(2)})+"\\n");\n' +
+    'process.stdout.write(fs.readFileSync("gate-urls.json"));\n', { mode: 0o755 });
   for (var name of ['first', 'second']) {
     var upstream = http.createServer(function (_req, res) { res.end('<p>Acme</p>'); });
     await new Promise(function (resolve) { upstream.listen(0, '127.0.0.1', resolve); });
@@ -32,7 +32,7 @@ test('Gate lenses follow checkout endpoints across refresh, readiness and trust'
     fs.mkdirSync(path.join(checkout, 'demo'));
     fs.writeFileSync(path.join(checkout, 'workbench.yaml'), 'name: Acme\npreviews: false\nspaces:\n  acme:\n    name: Demo\n    root: demo\n    implementations:\n      dev:\n        kind: url\n        base: gate://demo/dev\n    collections:\n      - name: Pages\n        items:\n          - label: Sign in\n            src: sign-in.html\n            implementations:\n              dev: /sign-in.html\n');
     var report = { task_id: name, routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:' + upstream.address().port + '/' } } };
-    fs.writeFileSync(path.join(checkout, 'demo', 'scope-urls.json'), JSON.stringify({ version: name === 'first' ? 1 : 2, ok: true, data: report }));
+    fs.writeFileSync(path.join(checkout, 'demo', 'gate-urls.json'), JSON.stringify({ version: name === 'first' ? 1 : 2, ok: true, data: report }));
     var oldPath = process.env.PATH;
     process.env.PATH = bin + path.delimiter + oldPath;
     try {
@@ -48,7 +48,7 @@ test('Gate lenses follow checkout endpoints across refresh, readiness and trust'
   assert.equal(rendered.status, 200);
   assert.match(await rendered.text(), /Acme/);
   var folder = path.join(root, 'first', 'demo');
-  var invocationFile = path.join(folder, 'scope-invocations.jsonl');
+  var invocationFile = path.join(folder, 'gate-invocations.jsonl');
   var beforeInput = fs.readFileSync(invocationFile, 'utf8');
   for (var attempt = 0; attempt < 2; attempt++) {
     var input = await fetch('http://127.0.0.1:' + running[0].port + '/_workbench/simulator/input', {
@@ -58,23 +58,23 @@ test('Gate lenses follow checkout endpoints across refresh, readiness and trust'
     assert.equal(input.status, 403, 'the simulator route assembles the view before rejecting an unavailable device');
   }
   assert.equal(fs.readFileSync(invocationFile, 'utf8'), beforeInput, 'simulator input must use cached Gate discovery');
-  var invocations = fs.readFileSync(path.join(folder, 'scope-invocations.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  var invocations = fs.readFileSync(path.join(folder, 'gate-invocations.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(invocations.every(function (entry) { return entry.cwd === fs.realpathSync(folder) && JSON.stringify(entry.args) === '["urls","--json"]'; }), JSON.stringify(invocations));
-  fs.writeFileSync(path.join(folder, 'scope-urls.json'), JSON.stringify({ version: 2, ok: true, data: { routes: { demo: { state: 'suspended', direct_url: first.implementations.dev.upstream } } } }));
+  fs.writeFileSync(path.join(folder, 'gate-urls.json'), JSON.stringify({ version: 2, ok: true, data: { routes: { demo: { state: 'suspended', direct_url: first.implementations.dev.upstream } } } }));
   var stopped = await config(running[0]);
   assert.match(stopped.implementations.dev.problem, /not ready.*start it with Gate/);
   assert.deepEqual(stopped.problems, [], 'a stopped service belongs to its lens, not the sidebar');
   assert.equal(stopped.implementations.dev.upstream, undefined);
-  fs.writeFileSync(path.join(folder, 'scope-urls.json'), JSON.stringify({ version: 2, ok: true, data: { routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:' + upstreams[1].address().port + '/' } } } }));
+  fs.writeFileSync(path.join(folder, 'gate-urls.json'), JSON.stringify({ version: 2, ok: true, data: { routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:' + upstreams[1].address().port + '/' } } } }));
   assert.equal((await config(running[0])).implementations.dev.upstream, second.implementations.dev.upstream);
-  fs.writeFileSync(path.join(folder, 'scope-urls.json'), JSON.stringify({ version: 2, ok: true, data: { routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:80/' } } } }));
+  fs.writeFileSync(path.join(folder, 'gate-urls.json'), JSON.stringify({ version: 2, ok: true, data: { routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:80/' } } } }));
   assert.equal((await config(running[0])).implementations.dev.upstream, 'http://127.0.0.1:80/dev');
   for (var invalid of [
     { routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:49173/' } } },
     { version: 2, ok: true, data: { routes: { demo: { state: 'published', direct_url: 'https://example.com/' } } } },
     { version: 2, ok: true, data: { routes: { demo: { state: 'published', direct_url: 'http://127.0.0.1:0/' } } } },
   ]) {
-    fs.writeFileSync(path.join(folder, 'scope-urls.json'), JSON.stringify(invalid));
+    fs.writeFileSync(path.join(folder, 'gate-urls.json'), JSON.stringify(invalid));
     var refused = await config(running[0]);
     assert.match(refused.implementations.dev.problem, /Invalid Gate/);
     assert.deepEqual(refused.problems, [], 'external CLI failures stay on the affected lens');
@@ -82,11 +82,11 @@ test('Gate lenses follow checkout endpoints across refresh, readiness and trust'
   }
   var untrusted = await server.start({ root: folder, config: { dir: path.join(root, 'first'), key: 'acme' }, isTrusted: false, capture: { close: function () {} } });
   running.push(untrusted);
-  var before = fs.readFileSync(path.join(folder, 'scope-invocations.jsonl'), 'utf8');
+  var before = fs.readFileSync(path.join(folder, 'gate-invocations.jsonl'), 'utf8');
   var blocked = await config(untrusted);
   assert.match(blocked.implementations.dev.problem, /trusted workspace/);
   assert.deepEqual(blocked.problems, []);
-  assert.equal(fs.readFileSync(path.join(folder, 'scope-invocations.jsonl'), 'utf8'), before);
+  assert.equal(fs.readFileSync(path.join(folder, 'gate-invocations.jsonl'), 'utf8'), before);
   var manifest = path.join(root, 'first', 'workbench.yaml');
   fs.writeFileSync(manifest, fs.readFileSync(manifest, 'utf8').replace('base: gate://demo/dev', 'base: gate://demo/dev\n        start: node serve.mjs'));
   var invalidConfig = await config(running[0]);
