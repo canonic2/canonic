@@ -10,6 +10,91 @@ fn local_registry() -> Source {
     local("/srv/acme-registry")
 }
 
+#[test]
+fn command_associations_are_authenticated_bounded_and_optional() {
+    let key = SigningKey::generate();
+    let mut document = json!({"schema_version":2,"registry_id":"acme","sequence":1,
+        "expires_at":"9999-12-31T00:00:00Z","packs":[entry("acme/runtime","1.0.0")],
+        "commands":{"acme/runtime":["node","npm","npx"]}});
+    let bytes = document.to_string();
+    let signature = key.sign_hex(bytes.as_bytes());
+    let catalog = Catalog::verify(
+        &signed(&key),
+        bytes.as_bytes(),
+        Some(signature.as_bytes()),
+        now(),
+    )
+    .unwrap();
+    assert_eq!(
+        catalog.commands()[&"acme/runtime".parse().unwrap()],
+        ["node", "npm", "npx"]
+    );
+    document["commands"]["acme/runtime"] = json!(["other"]);
+    assert_eq!(
+        Catalog::verify(
+            &signed(&key),
+            document.to_string().as_bytes(),
+            Some(signature.as_bytes()),
+            now()
+        ),
+        Err(CatalogError::SignatureInvalid)
+    );
+    for commands in [
+        json!(null),
+        json!({"acme/missing":["npm"]}),
+        json!({"acme/runtime":[]}),
+        json!({"acme/runtime":["npm","npm"]}),
+        json!({"acme/runtime":["/usr/bin/npm"]}),
+        json!({"acme/runtime":["bad\ncommand"]}),
+        json!({"acme/runtime":["x".repeat(65)]}),
+    ] {
+        document["commands"] = commands;
+        assert!(
+            Catalog::verify(
+                &local_registry(),
+                document.to_string().as_bytes(),
+                None,
+                now()
+            )
+            .is_err()
+        );
+    }
+    document["commands"] =
+        json!({"acme/runtime":(0..=MAX_COMMANDS).map(|i| format!("cmd{i}")).collect::<Vec<_>>()});
+    assert_eq!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        ),
+        Err(CatalogError::Limit)
+    );
+    document["schema_version"] = json!(1);
+    document["commands"] = json!({});
+    assert_eq!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        ),
+        Err(CatalogError::Malformed)
+    );
+    document.as_object_mut().unwrap().remove("commands");
+    assert!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        )
+        .unwrap()
+        .commands()
+        .is_empty()
+    );
+}
+
 /// A release with an uppercase digest, which catalogs normalize.
 fn entry(id: &str, version: &str) -> Value {
     release(id, version, 'A')
@@ -96,7 +181,7 @@ fn malformed_catalogs_refuse() {
             CatalogError::Malformed,
         ),
         (
-            json!({"schema_version":2,"packs":[]}),
+            json!({"schema_version":3,"packs":[]}),
             CatalogError::Malformed,
         ),
         (

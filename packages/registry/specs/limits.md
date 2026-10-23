@@ -23,6 +23,9 @@ lockfile can hold every pack a resolution can select.
 | Bound | Value |
 | --- | --- |
 | Releases in one catalog | 64 (`catalog::MAX_ENTRIES`) |
+| Packs with command associations | 64 (`catalog::MAX_ENTRIES`) |
+| Command basenames per pack | 16 (`catalog::MAX_COMMANDS`) |
+| Bytes per command basename | 64 (ASCII, internal) |
 
 ## Acquisition
 
@@ -41,6 +44,9 @@ lockfile can hold every pack a resolution can select.
 | --- | --- |
 | Sources with checkpoints | 256 (`checkpoint::MAX_SOURCES`) |
 | Retained releases per source | 4096 (`checkpoint::MAX_RELEASES`) |
+
+The current command index has at most 64 × 16 associations per source; it does
+not accumulate with retained releases.
 
 ## Registrations
 

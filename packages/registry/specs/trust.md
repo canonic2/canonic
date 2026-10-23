@@ -92,14 +92,14 @@ compare.
 | --- | --- |
 | `SignatureMissing` | A signed source served no signature |
 | `SignatureInvalid` | The signature is malformed or does not verify |
-| `Malformed` | Not a version 1 catalog: invalid JSON, an unknown field, or an invalid ID or version |
-| `Limit` | More bytes than the [document bound](limits.md#acquisition), or more releases than the [catalog bound](limits.md#catalogs) |
+| `Malformed` | Not a supported v1/v2 catalog: invalid JSON shape, an unknown field, an invalid ID or version, or command metadata in v1 |
+| `Limit` | More bytes than the [document bound](limits.md#acquisition), or more releases or command associations than the [catalog bounds](limits.md#catalogs) |
 | `Identity` | A signed catalog's `registry_id` differs from the enrolled one |
 | `SequenceMissing` | A signed catalog has no `sequence` |
 | `ExpiryInvalid` | `expires_at` is malformed, or missing on a signed catalog |
 | `Expired` | A signed catalog's `expires_at` is not later than the given time |
 | `DuplicateRelease` | A `publisher/name@version` appears twice |
-| `InvalidEntry` | A release has an invalid path or digest |
+| `InvalidEntry` | A release has an invalid path or digest, or command associations name a pack without a listed stable release, contain an empty list, or contain duplicate or invalid basenames |
 
 ## Checkpoints
 
@@ -134,8 +134,22 @@ so one source's catalog can never update another source's checkpoint.
 Checkpoints are a value the product stores. Their serialized form is a JSON
 object keyed by source identity, each with `sequence` (a number, or null
 for a local source that has not started sequencing), `digest`, and `releases`, an object
-from `publisher/name@version` to digest. Unknown fields are refused. Stored
-checkpoints are not checked against the bounds again; only admission
+from `publisher/name@version` to digest. An optional `commands` object maps each
+command basename to its array of pack IDs from the latest admitted catalog.
+This inverted index is advisory and does not accumulate with release history.
+Successful admission replaces it, including clearing it when catalog command
+metadata is absent or empty. Refused admissions leave it unchanged.
+
+A missing checkpoint `commands` field defaults to an empty index, so checkpoints
+written before command discovery remain readable. An empty index is omitted
+when serialized; an explicit empty object is also accepted when reading.
+Older readers reject checkpoints containing `commands` as an unknown field.
+Consumers must retain a compatible reader after persisting that field; clearing
+checkpoint history to permit a downgrade would discard rollback and replacement
+protection. Catalog v1/v2 compatibility remains a separate input contract.
+
+Other unknown fields are refused. Stored checkpoints are not checked against
+the bounds again; only admission
 enforces them.
 
 An unreachable registry or an expired catalog is not a revocation: bytes

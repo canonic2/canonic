@@ -30,6 +30,9 @@ pub struct Checkpoint {
     pub digest: String,
     /// Retained digests by `publisher/name@version`.
     pub releases: BTreeMap<String, String>,
+    /// Advisory command index from the latest catalog only, not release history.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub commands: BTreeMap<String, Vec<String>>,
 }
 
 /// Why a catalog was not admitted.
@@ -86,12 +89,22 @@ impl Checkpoints {
                 }
             }
         }
+        let mut commands: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (id, names) in catalog.commands() {
+            for name in names {
+                commands
+                    .entry(name.clone())
+                    .or_default()
+                    .push(id.to_string());
+            }
+        }
         self.0.insert(
             identity.to_owned(),
             Checkpoint {
                 sequence: catalog.sequence(),
                 digest: catalog.digest().to_owned(),
                 releases,
+                commands,
             },
         );
         Ok(())
@@ -130,6 +143,42 @@ mod tests {
     use super::*;
     use crate::test_support::{local, local_catalog, now, release};
     use serde_json::json;
+
+    #[test]
+    fn discovery_index_is_current_and_does_not_accumulate_with_release_history() {
+        let source = local("/srv/acme");
+        let mut checkpoints = Checkpoints::default();
+        let mut document = json!({"schema_version":2,"sequence":1,
+            "packs":[release("acme/runtime","1.0.0",'1'),release("acme/tools","1.0.0",'2')],
+            "commands":{"acme/runtime":["node","npm"],"acme/tools":["npm"]}});
+        let catalog =
+            Catalog::verify(&source, document.to_string().as_bytes(), None, now()).unwrap();
+        checkpoints.admit(&catalog).unwrap();
+        let index = &checkpoints.get(source.identity()).unwrap().commands;
+        assert_eq!(index["npm"], ["acme/runtime", "acme/tools"]);
+        assert_eq!(index["node"], ["acme/runtime"]);
+        let retained = serde_json::to_value(&checkpoints).unwrap();
+        assert_eq!(
+            serde_json::from_value::<Checkpoints>(retained).unwrap(),
+            checkpoints
+        );
+        document["sequence"] = json!(2);
+        document["commands"] = json!({});
+        let catalog =
+            Catalog::verify(&source, document.to_string().as_bytes(), None, now()).unwrap();
+        checkpoints.admit(&catalog).unwrap();
+        assert!(
+            checkpoints
+                .get(source.identity())
+                .unwrap()
+                .commands
+                .is_empty()
+        );
+        assert_eq!(
+            checkpoints.get(source.identity()).unwrap().releases.len(),
+            2
+        );
+    }
 
     fn catalog(sequence: Option<u64>, packs: &[(&str, &str, char)]) -> Catalog {
         let packs: Vec<_> = packs

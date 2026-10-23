@@ -4,7 +4,10 @@ A registry is a directory containing `catalog.json` and the artifact files it
 lists. Serve the directory locally or under an HTTPS base URL. HTTPS registries
 also serve `catalog.sig` and `catalog-key.pub`.
 
-## Version 1 catalog
+## Catalog
+
+Catalog versions 1 and 2 share the release format. Version 2 also accepts
+optional command associations. A version 1 catalog looks like this:
 
 ```json
 {
@@ -29,11 +32,12 @@ when publishing.
 
 | Field | Required | Rule |
 | --- | --- | --- |
-| `schema_version` | Always | Integer `1` |
+| `schema_version` | Always | Integer `1` or `2` |
 | `packs` | Always | Array of at most 64 release entries; may be empty |
 | `registry_id` | HTTPS | Stable non-blank ID, at most 4096 bytes, without NUL |
 | `sequence` | HTTPS | Non-negative `u64` publication counter |
 | `expires_at` | HTTPS | Valid whole-second UTC `YYYY-MM-DDTHH:MM:SSZ` |
+| `commands` | Optional, v2 only | Map from listed stable pack IDs to command basenames, described below |
 
 Local catalogs may omit the three trust metadata fields. A present expiry must
 still be well formed, but expiry is enforced only for signed sources.
@@ -41,6 +45,31 @@ Once a client has admitted a sequenced local catalog, that source must keep
 publishing sequences; omitting one is a rollback refusal for that client.
 Unknown fields are refused in the document and release entries. A bad release
 invalidates the entire catalog.
+
+## Command associations
+
+Version 2 can advertise a pack for multiple commands with this `commands` value:
+
+```json
+{"acme/git": ["git", "acme-git"]}
+```
+
+Each key must name a `publisher/name` with at least one stable release in the
+same catalog. The map holds at most 64 pack IDs. Each list contains 1–16 unique
+basenames, each 1–64 ASCII characters, starting with a letter or digit and
+continuing with letters, digits or `._+-`. Paths and shell syntax are refused.
+These associations indicate potential relevance, not permission to execute.
+They are authenticated as catalog metadata and can change at a higher sequence
+without changing immutable artifacts.
+
+In v2, omitting `commands` or using `{}` provides no associations. `null` and
+empty per-pack lists are refused. In v1, the field must be absent, even when empty.
+V1-only readers reject v2 catalogs; upgrade consumers before publishing v2.
+
+Successful checkpoint admission replaces the discovery index with the latest
+catalog's associations. Absent or empty metadata clears the index, including
+when admitting a v1 catalog. Retained release digests remain independent.
+See [checkpoint storage and compatibility](../../specs/trust.md#checkpoints).
 
 ## Release entries
 

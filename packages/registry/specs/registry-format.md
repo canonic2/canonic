@@ -21,16 +21,36 @@ HTTPS registry cannot be enrolled.
 
 ## Catalog
 
-`catalog.json` is a JSON object with version 1 of this schema. Unknown fields
+`catalog.json` is a JSON object with version 1 or 2 of this schema. Unknown fields
 are refused at every level.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `schema_version` | always | `1` |
+| `schema_version` | always | `1` or `2` |
 | `packs` | always | The listed releases, within the [catalog bound](limits.md#catalogs) |
 | `registry_id` | signed | The registry's stable ID: non-blank, at most [4096 bytes](limits.md#text-and-identifiers), without NUL. A signed catalog's must equal the enrolled one; a local catalog's is not checked |
 | `sequence` | signed | Non-negative publication counter |
 | `expires_at` | signed | Whole-second UTC time, `YYYY-MM-DDTHH:MM:SSZ`; the catalog is invalid from that second on |
+| `commands` | optional, v2 only | Map of listed `publisher/name` IDs to command basenames; advisory relevance, never permission |
+
+Each `commands` key must have a stable release in the same catalog. Each list
+contains 1–16 unique basenames, each 1–64 ASCII characters, starting with a letter
+or digit and continuing with letters, digits or `._+-`. Paths and shell syntax
+are refused. The map contains at most 64 packs. Associations are catalog-owner
+metadata authenticated by the same exact-byte signature, independent of artifact
+contents and immutable release digests. They may change at a higher sequence.
+
+Version 1 has no command metadata; consumers must not infer relevance from pack
+names. Version 2 preserves the release schema. Clients that support only v1 refuse
+v2; publishers must coordinate that upgrade before serving it. Pack artifact
+schemas are owned by consumers and are unchanged by this catalog version.
+
+Checkpoint admission prepares an inverted command-to-pack index from the latest
+catalog only. It replaces that index on each successful admission, including
+clearing it when metadata is absent. Release-digest retention remains separate.
+Consumers can use the bounded index without fetching artifacts, compiling policy
+or scanning retained releases. Consumers own executable-path normalization,
+current source enrollment, installed-instance exclusion and advisory presentation.
 
 A present `expires_at` must be well formed on any registry. Only signed
 registries must have one, and only for them is it enforced.

@@ -1,6 +1,6 @@
 # Hosting and signing
 
-Publish a directory containing immutable artifacts and a version 1 catalog.
+Publish a directory containing immutable artifacts and a version 1 or 2 catalog.
 Registry supplies a consuming library, not a production publishing or key
 management CLI. Use your release tooling to generate an Ed25519 key, sign the
 catalog and deploy the files.
@@ -56,6 +56,15 @@ your tooling. `testing::SigningKey` is for generated fixtures, not durable
 production key storage.
 
 ## Configure the host
+
+Catalog v2 can advertise command basenames without adding anything to artifacts:
+`"commands":{"acme/runtime":["node","npm","npx"]}`. Every ID must have a
+stable release in `packs`. Lists contain 1–16 unique names, at most 64 ASCII
+characters each, starting alphanumeric and otherwise using letters, digits or
+`._+-`. These authenticated hints establish relevance only. Checkpoint admission
+prepares the current index; consumers need no artifact reads for discovery.
+Omit the metadata for v1, and upgrade v1-only consumers before publishing v2.
+See [registry format](../../specs/registry-format.md) for the complete contract.
 
 Every response must be HTTP 200 with no `Content-Encoding`. Disable compression
 and redirects for these paths, including automatic redirects to a CDN or login

@@ -1,6 +1,6 @@
 //! Catalog schema, exact-byte authentication and release lookups.
 //!
-//! A catalog is `catalog.json`, version 1. Signed sources also serve a
+//! A catalog is `catalog.json`, version 1 or 2. Signed sources also serve a
 //! detached hexadecimal Ed25519 `catalog.sig` over the exact catalog bytes;
 //! the signature is checked before the bytes are parsed.
 
@@ -12,10 +12,15 @@ use crate::{
 };
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, time::SystemTime};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::SystemTime,
+};
 
 /// Maximum releases one catalog may list.
 pub const MAX_ENTRIES: usize = 64;
+/// Maximum command basenames advertised by one pack.
+pub const MAX_COMMANDS: usize = 16;
 /// Maximum size of a catalog document, enforced before it is verified or parsed.
 pub const MAX_CATALOG_BYTES: u64 = 1_048_576;
 
@@ -44,6 +49,8 @@ struct Document {
     sequence: Option<u64>,
     #[serde(default)]
     expires_at: Option<String>,
+    #[serde(default, deserialize_with = "present_commands")]
+    commands: Option<BTreeMap<PackId, Vec<String>>>,
 }
 
 /// A parsed catalog whose bytes were authenticated against its source.
@@ -55,6 +62,7 @@ pub struct Catalog {
     registry_id: Option<String>,
     sequence: Option<u64>,
     expires_at: Option<String>,
+    commands: BTreeMap<PackId, Vec<String>>,
 }
 
 /// Why catalog bytes were refused.
@@ -66,7 +74,7 @@ pub enum CatalogError {
     /// The signature does not verify against the enrolled key.
     #[error("registry catalog signature invalid")]
     SignatureInvalid,
-    /// The bytes are not a version 1 catalog document.
+    /// The bytes are not a supported catalog document.
     #[error("invalid registry catalog")]
     Malformed,
     /// The catalog is larger than [`MAX_CATALOG_BYTES`] or lists more than
@@ -128,7 +136,9 @@ impl Catalog {
         }
         let document: Document =
             serde_json::from_slice(bytes).map_err(|_| CatalogError::Malformed)?;
-        if document.schema_version != 1 {
+        if !matches!(document.schema_version, 1 | 2)
+            || (document.schema_version == 1 && document.commands.is_some())
+        {
             return Err(CatalogError::Malformed);
         }
         if document.packs.len() > MAX_ENTRIES {
@@ -166,6 +176,24 @@ impl Catalog {
             entry.sha256 =
                 digest::normalize_sha256(&entry.sha256).ok_or(CatalogError::InvalidEntry)?;
         }
+        let commands = document.commands.unwrap_or_default();
+        if commands.len() > MAX_ENTRIES {
+            return Err(CatalogError::Limit);
+        }
+        for (id, names) in &commands {
+            if names.len() > MAX_COMMANDS {
+                return Err(CatalogError::Limit);
+            }
+            if names.is_empty()
+                || !entries
+                    .iter()
+                    .any(|entry| entry.id == *id && entry.version.pre.is_empty())
+                || names.iter().collect::<BTreeSet<_>>().len() != names.len()
+                || names.iter().any(|name| !is_command(name))
+            {
+                return Err(CatalogError::InvalidEntry);
+            }
+        }
         Ok(Self {
             source: source.identity().to_owned(),
             digest: digest::sha256_hex(bytes),
@@ -173,7 +201,15 @@ impl Catalog {
             registry_id: document.registry_id,
             sequence: document.sequence,
             expires_at: document.expires_at,
+            commands,
         })
+    }
+
+    /// Advisory command basenames by pack ID from this authenticated catalog.
+    /// These associations carry no permission authority.
+    #[must_use]
+    pub fn commands(&self) -> &BTreeMap<PackId, Vec<String>> {
+        &self.commands
     }
 
     /// Identity of the source this catalog was authenticated against.
@@ -278,6 +314,21 @@ impl Catalog {
             )),
         }
     }
+}
+
+fn is_command(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name.as_bytes()[0].is_ascii_alphanumeric()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._+-".contains(&byte))
+}
+
+fn present_commands<'de, D: serde::Deserializer<'de>>(
+    input: D,
+) -> Result<Option<BTreeMap<PackId, Vec<String>>>, D::Error> {
+    BTreeMap::deserialize(input).map(Some)
 }
 
 /// Verifies a hexadecimal Ed25519 `signature` over the exact `bytes`.
