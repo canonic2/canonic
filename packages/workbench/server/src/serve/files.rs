@@ -329,8 +329,7 @@ impl Files {
         }
     }
 
-    /// A browser module: authored JavaScript or CSS under `ui/src/` or
-    /// `contracts/src/`, never a test.
+    /// Authored browser JavaScript/CSS and the Docs content host, never tests.
     fn browser_module(&self, path: &str, head: bool) -> Response {
         let missing = || {
             respond(
@@ -353,6 +352,9 @@ impl Files {
         let kind = match extension.as_str() {
             "js" => "text/javascript; charset=utf-8",
             "css" => "text/css; charset=utf-8",
+            "html" if relative == "ui/src/modules/docs/host/docs-host.html" => {
+                "text/html; charset=utf-8"
+            }
             _ => return missing(),
         };
         if relative.ends_with(".test.js") {
@@ -408,6 +410,10 @@ mod tests {
             ("workbench/ui/src/shell.test.js", "test();"),
             ("workbench/ui/src/shell.ts", "export {};"),
             (
+                "workbench/ui/src/modules/docs/host/docs-host.html",
+                "<!doctype html><title>Docs</title>",
+            ),
+            (
                 "acme/pages/landing.html",
                 "<!doctype html><html><head><title>Acme</title></head><body></body></html>",
             ),
@@ -452,6 +458,12 @@ mod tests {
             text(get("/_workbench/ui/src/shell.js").unwrap()).await.0,
             StatusCode::OK
         );
+        let docs = get("/_workbench/ui/src/modules/docs/host/docs-host.html").unwrap();
+        assert_eq!(
+            docs.headers()[header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
+        );
+        assert_eq!(text(docs).await.1, "<!doctype html><title>Docs</title>");
         assert_eq!(
             text(get("/_workbench/ui/src/shell.test.js").unwrap())
                 .await

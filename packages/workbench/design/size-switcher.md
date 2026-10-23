@@ -10,7 +10,7 @@ dialogs they open.
 given and says what was asked for. The canvas controller in
 `ui/legacy/workbench.js` supplies the space's sizes and the page's, owns the
 current size, and handles every request. Sizes and their rules are in
-`contracts/src/sizes/`; the product contract is `specs/sizes.md`.
+`contracts/src/sizes/`; the product contract is `specs/canvas/sizes.md`.
 
 ## Buttons
 

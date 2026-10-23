@@ -11,10 +11,10 @@ implementation's latency. All assets ship locally; no runtime CDN.
 The [integration checks](results/2026-10-21-integration/README.md) cover the
 selected worker, capture mirror, portable export and installed VS Code fixtures.
 
-Method: [Workbench labs](../../specs/labs.md). Owning contracts:
-[docs](../../specs/docs-pages.md), [performance](../../specs/preview-pipeline/performance.md),
+Method: [Workbench labs](../../specs/system/labs.md). Owning contracts:
+[docs](../../specs/pages/docs-pages.md), [performance](../../specs/system/performance.md),
 [readiness](../../specs/preview-pipeline/readiness.md) and
-[rendering flow](../../specs/rendering-flow.md).
+[rendering flow](../../specs/system/rendering-flow.md).
 
 ## Question and scope
 
@@ -34,7 +34,7 @@ runs on blocking workers without gating page readiness. The canvas still waits
 for CSS, examples and fonts before showing the page, as the owner requested.
 Captures wait for colouring to finish or fall back to plain text.
 
-The earlier [exploratory probes](../../specs/preview-pipeline/performance.md#highlighting-2026-10-20)
+The earlier [exploratory probes](../../specs/research/docs-highlighting.md#highlighting-2026-10-20)
 show first-language initialization costs and much cheaper repeat calls. They
 precede this plan and are not lab results. Hypothesis: a smaller JS highlighter
 may reduce time until code is coloured without regressing first visibility.

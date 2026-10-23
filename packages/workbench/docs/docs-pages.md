@@ -213,6 +213,12 @@ Saving the Markdown updates the page in place, at the same scroll position, and
 leaves the examples mounted. Saving an example, or anything an example imports,
 updates that example in place.
 
+Returning to a retained page restores its scroll position, open code panels and
+live examples immediately. The canvas keeps up to three inactive pages for
+15 minutes; older pages mount fresh. Workbench checks for missed source updates
+in the background when you return and keeps your reading position if it refreshes
+the page. **Reload** restarts its examples.
+
 ### Show code and Copy code
 
 Below each panel, **Show code** expands the example's source and **Copy code**

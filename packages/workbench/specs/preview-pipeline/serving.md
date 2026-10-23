@@ -7,8 +7,8 @@ build.
 
 This pipeline compiles/serves the project's previewed content. Generic UI asset
 hosting is separate from this project pipeline and from Workbench UI composition;
-artboards follow [content-only rendering](../rendering-flow.md). UI assets follow the required
-[UI/backend independence contract](../modules.md#ui-and-backend-independence).
+artboards follow [content-only rendering](../system/rendering-flow.md). UI assets follow the required
+[UI/backend independence contract](../system/modules.md#ui-and-backend-independence).
 
 ## Requirements
 
@@ -38,7 +38,7 @@ A preview's development address returns a small ES module rather than the
 entry chunk itself. It:
 
 1. Imports the preview runtime and request mocks before any project module
-   ([previews](../previews.md#data-request-mocks-and-the-project-environment)).
+   ([previews](../pages/previews.md#data-request-mocks-and-the-project-environment)).
 2. Throws the entry's build error at once if its last build failed, so the
    frame shows it ([hot updates](hot-updates.md#errors-and-recovery)).
 3. Adds the entry's stylesheets as links tagged with `data-rspack`, unless the
@@ -56,6 +56,23 @@ The descriptor tells the runtime the preview is a development build that
 receives pushed updates, so the runtime starts no revision poll
 ([hot updates](hot-updates.md#push)).
 
+### Preload selection
+
+Before inserting script preloads, the generated page module checks both the
+document's loaded-script set and the initialized runtime for the requested
+profile. A runtime chunk already supplied by that profile is neither preloaded
+nor executed again, even if its current URL is absent from the loaded-script
+set. Runtime scripts still load on a cold document. Missing shared and entry
+chunks continue to preload concurrently with styles and execute in dependency
+order after styles settle.
+
+This applies to preview and Docs entries, including both warm hosts. It must
+preserve runtime build synchronization, fresh evaluation of project modules,
+stylesheet hot updates and cold-page startup. Focused Rust client-module tests
+cover initialized and cold runtimes and load order. The warm Docs confirmation
+checks navigation for unused-runtime-preload warnings
+([evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23)).
+
 ### Routes
 
 - Output files, the event stream and preview modules never wait behind
@@ -71,13 +88,19 @@ receives pushed updates, so the runtime starts no revision poll
 Implemented in `workbench-server`, which answers
 `/_workbench/previews/` and `*.workbench.ts(x)` page addresses
 ([previews.rs](../../server/src/serve/previews.rs)) once its page tree has
-configured previews ([server](../server.md#previews)); a preview asked for
+configured previews ([server](../system/server.md#previews)); a preview asked for
 first assembles the page tree. Requests are
 answered concurrently, with no serial queue; an Astro render waits only for
 the Node evaluator's answer to it. One gap: preview and docs descriptors
 wait for pre-warming to finish, so after a restart the first descriptor
 waits for every listed entry to build
 ([compiler](compiler.md#status)).
+
+The initialized-runtime preload correction is implemented in `client.rs` for
+preview and Docs entries. Runtime/profile inspection precedes preload selection;
+cold documents retain the existing parallel-fetch and execution order. Focused
+Rust tests cover generated client selection and ordering. Docs HMR fallback and
+compiler replacement keep the dedicated Docs host and release its subscriptions.
 
 ## Verification
 

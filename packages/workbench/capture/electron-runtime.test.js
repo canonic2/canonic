@@ -35,11 +35,44 @@ test('extracts a complete runtime once, preserving executable bits and framework
   assert.equal(await runtime.prepare(f.storage, f.bundle), binary, 'Cache reuse needs no archive read');
 });
 
-test('concurrent extension hosts converge on one complete cache', async function (t) {
+test('concurrent callers share one archive verification and extraction', async function (t) {
   var f = await fixture(t);
+  var reads = 0; var events = [];
+  var original = fs.createReadStream;
+  fs.createReadStream = function (file, options) {
+    if (file === f.archive) reads++;
+    return original.call(fs, file, options);
+  };
+  t.after(function () { fs.createReadStream = original; });
+  var report = function (event, details) { events.push({ event: event, details: details }); };
+  var files = await Promise.all([runtime.prepare(f.storage, f.bundle, report), runtime.prepare(f.storage, f.bundle, report)]);
+  assert.equal(files[0], files[1]);
+  assert.equal(reads, 1, 'capture and page evaluation must not both hash the archive');
+  assert.equal(events.filter(function (entry) { return entry.event === 'runtime.extract.started'; }).length, 1);
+  assert.deepEqual(events.filter(function (entry) { return entry.event === 'runtime.prepared'; }).map(function (entry) { return entry.details.shared; }).sort(), [false, true]);
+  assert.deepEqual(fs.readdirSync(f.storage), [f.manifest.sha256]);
+});
+
+test('a failed shared extraction is released so a repaired archive can retry', async function (t) {
+  var f = await fixture(t); var original = fs.readFileSync(f.archive);
+  fs.appendFileSync(f.archive, 'damage');
+  var failures = await Promise.allSettled([runtime.prepare(f.storage, f.bundle), runtime.prepare(f.storage, f.bundle)]);
+  assert.ok(failures.every(function (result) { return result.status === 'rejected' && /damaged/.test(result.reason.message); }));
+  assert.deepEqual(fs.readdirSync(f.storage), []);
+  fs.writeFileSync(f.archive, original);
   var files = await Promise.all([runtime.prepare(f.storage, f.bundle), runtime.prepare(f.storage, f.bundle)]);
   assert.equal(files[0], files[1]);
-  assert.deepEqual(fs.readdirSync(f.storage), [f.manifest.sha256]);
+  assert.equal(fs.readFileSync(files[0], 'utf8'), 'fake native executable');
+});
+
+test('different storage roots remain independent and a removed cache can be prepared again', async function (t) {
+  var f = await fixture(t); var other = path.join(path.dirname(f.storage), 'other-storage');
+  var files = await Promise.all([runtime.prepare(f.storage, f.bundle), runtime.prepare(other, f.bundle)]);
+  assert.notEqual(files[0], files[1]);
+  assert.ok(files.every(function (file) { return fs.existsSync(file); }));
+  fs.rmSync(path.join(f.storage, f.manifest.sha256), { recursive: true, force: true });
+  assert.equal(await runtime.prepare(f.storage, f.bundle), files[0]);
+  assert.equal(fs.readFileSync(files[0], 'utf8'), 'fake native executable');
 });
 
 test('removes previous runtimes and abandoned extractions once the current one is in place', async function (t) {

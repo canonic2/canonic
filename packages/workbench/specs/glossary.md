@@ -17,10 +17,10 @@ something listed here, it uses this word and no synonym.
 | **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a Markdown page, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
 | **Page tree** | Everything a space lists, in order: its collections, their groups and pages, and each page's states. The Workbench server answers it from `workbench.yaml` and the page index; the collection list and page list show it. |
 | **State** | One variation of a page, such as *Empty* or *Wrong password*. A page has one or more states; the first is the page as authored. |
-| **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
+| **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](pages/docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
 | **Markdown page** | A page whose `src` is its Markdown: its docs, with no design lens. A `defineDocs` definition declares one. |
 | **Example** | A live render placed in docs, shown in its own panel with **Show code** and **Copy code**. |
-| **Native format** | A page format Workbench defines and renders end to end: TypeScript previews and docs (Markdown pages, `defineDocs`, and their examples). Authored HTML, implementations and catalogs are not native formats. Unrelated to React Native and the native window stream; see [performance](preview-pipeline/performance.md). |
+| **Native format** | A page format Workbench defines and renders end to end: TypeScript previews and docs (Markdown pages, `defineDocs`, and their examples). Authored HTML, implementations and catalogs are not native formats. Unrelated to React Native and the native window stream; see [performance](system/performance.md). |
 
 An address names a page and, when they aren't the defaults, its state, size,
 lens, and in a docs lens an example; see the [core contract](core.md).
@@ -34,7 +34,7 @@ one.
 | Term | Meaning |
 | --- | --- |
 | **Lens** | One way of rendering a page: its design lens or one of its implementations. A page has one or more lenses; the lens switcher shows when it has two or more. |
-| **Design lens** | The page as authored in the space: the HTML file, or the TypeScript preview. Its customizable label defaults to **Design**, or **Preview** for a TypeScript preview; see the [lens contract](lenses.md). A page imported from a catalog and a Markdown page have none. |
+| **Design lens** | The page as authored in the space: the HTML file, or the TypeScript preview. Its customizable label defaults to **Design**, or **Preview** for a TypeScript preview; see the [lens contract](canvas/lenses.md). A page imported from a catalog and a Markdown page have none. |
 | **Implementation** | Somewhere a page is built, declared once under `implementations` in `workbench.yaml` and named by its key, such as `dev` or `storybook`. A page maps to it with a value that says where the page is in it, such as a path, a story title, a preview ID, or an example source, and the implementation becomes one of that page's lenses, labeled with its `label`. |
 | **Kind** | What an implementation is and how its lens renders: `url` (a running app), `storybook` (a Storybook story), `workbench` (a TypeScript preview of a design page), `ios-simulator` and `window` (a live stream of a device or a macOS window), and `docs` (a page's docs, its examples rendered with an adapter). |
 | **Docs lens** | A page's docs seen through one renderer of its examples: an implementation of kind `docs`, or the built-in **Docs** lens of a page with Markdown and no docs implementation. Only a page with Markdown has one. A Markdown page always shows one of its lenses, its own docs lens by default. |
@@ -44,7 +44,7 @@ Under a Storybook lens, the state switcher lists the title's stories instead
 of the page's states.
 
 Every lens's display label is customizable independently of its kind. The
-[lens contract](lenses.md) defines labels, defaults, and stable identity for
+[lens contract](canvas/lenses.md) defines labels, defaults, and stable identity for
 both the authored lens and implementation lenses.
 
 "Project" is not a Workbench term. It keeps its everyday meaning: the codebase
@@ -96,7 +96,7 @@ The bar across the top of the canvas, with controls for the page showing.
 | **Actions switch** | Whether links and forms in the page work. |
 | **Lens switcher** | One button per lens, in the middle. Shown only when the page has two or more lenses. |
 | **Size switcher** | The space's configured size buttons, defaulting to **Fit**, **Laptop**, **Mobile**, and **Resizable**. A page's `sizes` limits or extends its choices. Disabled in the docs canvas mode. |
-| **Size menu** | Defined in [artboard sizes](sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
+| **Size menu** | Defined in [artboard sizes](canvas/sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
 | **Reload**, **Open the source**, **Copy reference**, **Open on its own** | Actions on the page showing, named by their labels. |
 | **Preview controls** | The panel of a preview's inputs, actions, and **Reset state**. |
 | **More menu** | Space-wide commands, such as **Configure pages** and the design-system export, and the top bar's controls that don't fit a narrow window. |
@@ -107,9 +107,9 @@ The bar across the top of the canvas, with controls for the page showing.
 | --- | --- |
 | **Canvas** | The large area that shows the page, gray and dotted, which zooms and pans. Artboards are drawn on it. `#canvas`, inside the `.wb-main` region, which also holds the toolbar and view controls. |
 | **Canvas mode** | How the canvas shows the page. **Default**: the page is in an artboard on the canvas. **Docs**: a page in a docs lens, shown on its own, has no artboard; its docs fill the canvas, on white, and scroll. The mode follows the lens. Docs beside other artboards are in an artboard like any page. |
-| **Artboard** | The box on the canvas that shows content at a size, labeled with its page's name and size by the **artboard label**. A canvas can hold more than one; see [multiple artboards](multiple-artboards.md). `#artboard`; its clipped `#artboardContent` holds the preview frames. |
+| **Artboard** | The box on the canvas that shows content at a size, labeled with its page's name and size by the **artboard label**. A canvas can hold more than one; see [multiple artboards](canvas/multiple-artboards.md). `#artboard`; its clipped `#artboardContent` holds the preview frames. |
 | **Preview frame** | The content iframe inside an artboard, loading a page or preview rather than the Workbench application. "Frame" means only this. |
-| **Content renderer** | An owned content-only viewport/adapter with mounting, readiness, interaction, capture and disposal. It may own preview frames or a native surface. It never initializes the Workbench application shell; see [rendering flow](rendering-flow.md). |
+| **Content renderer** | An owned content-only viewport/adapter with mounting, readiness, interaction, capture and disposal. It may own preview frames or a native surface. It never initializes the Workbench application shell; see [rendering flow](system/rendering-flow.md). |
 | **Toolbar** | The floating bar at the bottom of the canvas: the annotation tools (Select, Scribble, Arrow, shapes, Text, Comment), Undo, Clear, the screenshot, and **Copy handoff**. |
 | **View controls** | The floating controls at the bottom right: **Recenter view**, **Zoom out**, the zoom level and its menu, and **Zoom in**. |
 | **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, state, and artboard they were drawn on. |
@@ -124,10 +124,10 @@ document, such as a heading's section in docs or a guide.
 
 | Term | Meaning |
 | --- | --- |
-| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, answers the public port, holds the page index and compiles previews with Rspack's Rust crates; its host under `server/node/` answers what belongs to the editor and the capture helper ([server](server.md)). Every request goes through it; its child processes take no TCP port ([processes and connections](server.md#processes-and-connections)). |
+| **Workbench server** | What the extension or Studio starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, answers the public port, holds the page index and compiles previews with Rspack's Rust crates; its host under `server/node/` answers what belongs to the editor and the capture helper ([server](system/server.md)). Every request goes through it; its child processes take no TCP port ([processes and connections](system/server.md#processes-and-connections)). |
 | **Page index** | The part of the Workbench server that finds preview and docs definitions and keeps the saved index; see [page index](preview-pipeline/page-index.md). |
 | **Adapter** | What renders one kind of page: `html`, `react`, `react-native-web`, `vue`, `astro`, or a custom adapter registered in `workbench.config.ts`. A definition or docs lens names its adapter. Storybook stories are the adapter that renders through Storybook's own server: one the Workbench server runs on a local socket, or one the user runs at `url`; see [adapters](adapters/README.md). |
-| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions, `workbench.config.ts` and Astro renders. One per space, started on need in a trusted workspace, reached only by the server over stdin and stdout or a local socket, never a TCP port ([processes and connections](server.md#processes-and-connections)). |
+| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions, `workbench.config.ts` and Astro renders. One per space, started on need in a trusted workspace, reached only by the server over stdin and stdout or a local socket, never a TCP port ([processes and connections](system/server.md#processes-and-connections)). |
 
 ## Naming across interfaces
 

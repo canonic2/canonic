@@ -91,6 +91,9 @@ stays running until the extension stops, so screenshots are fast:
 - On macOS it runs as a background agent, with no Dock icon or window.
 - On first activation the runtime is unpacked into the extension's storage.
   Later activations reuse it, and runtimes from older versions are removed.
+  The first launch after a runtime update can take longer while it is unpacked;
+  page listing also waits when a definition needs that runtime to evaluate.
+  Capture and page evaluation share the preparation work.
 - If it crashes, it restarts and restores the latest view, waiting longer
   between attempts while it keeps failing. If a page hangs it, the helper is
   replaced, and the page is loaded again the next time the canvas asks for it.

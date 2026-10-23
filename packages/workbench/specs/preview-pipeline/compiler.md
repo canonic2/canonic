@@ -24,6 +24,9 @@ server-side listing; the compiler builds what its listing found.
   by a relative path rebuilds when it changes. Folders inside `node_modules`
   and folders above the root are not watched; watching above the root would
   watch the root's whole tree.
+  Dependency folders own independent watches, so registering or removing one
+  cannot interrupt the root or an already-watched dependency. Shutdown and
+  reconfiguration release the watches and their event consumers together.
 - Each compiler builds one compilation that contains every entry of its
   profile. Code that entries share is split into shared chunks, with one
   runtime chunk per profile ([serving](serving.md#chunks-and-urls)).
@@ -102,10 +105,11 @@ server-side listing; the compiler builds what its listing found.
 ### Runtime and packaging
 
 - The compiler is Rspack's Rust crates inside `workbench-server`, built with
-  Rspack's nightly toolchain ([phase 4](../server.md#previews)).
-  Project code never runs in the server, the extension host or the capture
-  renderer; it runs in the Node evaluator
-  ([processes and connections](../server.md#processes-and-connections)).
+  Rspack's nightly toolchain ([phase 4](../system/server.md#previews)).
+  Server-side project evaluation runs in the Node evaluator, outside the native
+  server and extension host. Project browser code runs in preview documents,
+  including those opened by the capture helper
+  ([processes and connections](../system/server.md#processes-and-connections)).
 - The installed extension downloads no compiler, and projects install none.
 
 The compiler is [compiler.rs](../../server/src/compiler.rs) in
@@ -125,6 +129,10 @@ The evaluator is one long-lived Node process per space
 ([node.rs](../../server/src/node.rs),
 [evaluator/](../../server/node/src/modules/evaluator/index.ts)), started on
 first need and reached over stdin and stdout with one JSON request per line:
+
+This describes compiler evaluation. The page index currently uses a separate
+short-lived evaluation/selection process; [server process ownership](../system/server.md#processes-and-connections)
+records that deviation from the shared-evaluator target.
 
 | Job | How |
 | --- | --- |
@@ -165,14 +173,14 @@ entry; no alternative start is adopted.
 The [first-page lab](../../labs/first-page/README.md#report) and
 [compiler-host lab](../../labs/instant-first-page/README.md#stage-2-plan) hold
 candidate comparisons. Packaging requirements follow the
-[extension process boundary](../vscode-extension.md#process-boundaries) and
-[code-quality gates](../code-quality.md).
+[extension process boundary](../integrations/vscode-extension.md#process-boundaries) and
+[code-quality gates](../system/code-quality.md).
 
 ## Open questions
 
 - **The first page after a restart.** The implemented eager start still
   prepares and builds every entry. A start that meets the
-  [first-page target](performance.md#measured-interactions) without scaling
+  [first-page target](../system/performance.md#measured-interactions) without scaling
   with catalog size remains open.
 
 - **Changing the entry set.** A preview or docs lens added or removed while

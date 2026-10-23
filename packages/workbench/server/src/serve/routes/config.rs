@@ -18,7 +18,7 @@ fn millis(since: Instant) -> u64 {
 async fn config(space: &Space) -> Response {
     let began = Instant::now();
     space.diagnostics.info("config.requested", json!({})).await;
-    let view = match space.view().await {
+    let view = match space.refreshed_view().await {
         Ok(view) => view,
         Err(error) => {
             space

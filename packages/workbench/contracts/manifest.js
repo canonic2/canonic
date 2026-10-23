@@ -88,7 +88,7 @@
   }
 
   /* A page written in Markdown: its docs are its own view, so it has no
-     design lens. See specs/docs-pages.md. */
+     design lens. See specs/pages/docs-pages.md. */
   function isDocs(src) {
     return DOCS.test(text(src));
   }
@@ -356,6 +356,8 @@
         } else if (kind === 'storybook' && implementationAddress === 'auto') {
           impl.url = 'auto';
           impl.auto = true;
+        } else if (kind === 'url' && /^gate:\/\/[a-z0-9][a-z0-9-]*(?:\/[^?#\s]*)?$/.test(implementationAddress)) {
+          impl.base = implementationAddress.replace(/\/+$/, '');
         } else if (!HTTP.test(implementationAddress)) {
           problems.push(where + ': needs a ' + field + ' starting with http:// or https://' +
             (kind === 'storybook' ? ', or url: auto.' : '.'));
@@ -381,7 +383,9 @@
       }
 
       if (spec.start !== undefined && !impl.owned) {
-        if (kind === 'ios-simulator' || kind === 'window' || kind === 'workbench' || kind === 'docs') {
+        if (impl.base && impl.base.startsWith('gate://')) {
+          problems.push(where + ': Gate owns service startup; omit start and run gate run TARGET from the task checkout.');
+        } else if (kind === 'ios-simulator' || kind === 'window' || kind === 'workbench' || kind === 'docs') {
           problems.push(where + ': start is available for URL and Storybook implementations.');
         } else {
           impl.start = startup(spec.start, where, problems);

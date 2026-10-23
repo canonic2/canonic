@@ -57,10 +57,9 @@ where it can be, the Node evaluator where it must.
   single-file component's template becomes a render function, `<script
   setup>`'s macros and bindings are Vue's own transform, scoped styles add
   `data-v-*` attributes to selectors and markup, and hot reload needs
-  per-component IDs. The candidate is Vize's SFC compiler
-  (`vize_atelier_sfc`, published on crates.io, actively released), whose
-  README calls it experimental and expects behavior that diverges from Vue.
-  It replaces Workbench's bundled `@vue/compiler-sfc` one for one: the
+  per-component IDs. Vize's SFC compiler (`vize_atelier_sfc`) is a candidate
+  for investigation, not an adopted or verified dependency. A replacement
+  would replace Workbench's bundled `@vue/compiler-sfc` one for one: the
   compiler is Workbench's, not the project's, and compiled Vue 3 output uses
   Vue's stable runtime helpers. It is adopted only if a lab shows render
   parity and hot-update behavior matching `@vue/compiler-sfc`.

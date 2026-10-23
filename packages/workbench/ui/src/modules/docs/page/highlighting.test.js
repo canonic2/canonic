@@ -57,7 +57,7 @@ void test(
           <figure data-wb-example="basic"><button data-wb-show-code>Show code</button><button data-wb-copy-code>Copy code</button><div class="wb-docs-example-code" data-wb-example-code hidden></div></figure></main>
           <script>window.__workbenchDocs={page:'acme.md',highlightUrl:'/colour',sourceUrl:'/source?example=',bundle:null};
           window.workerLoadStates=[];const NativeWorker=Worker;window.Worker=class extends NativeWorker{constructor(...args){window.workerLoadStates.push(document.readyState);super(...args);}};</script>
-          <script type="module" src="/_workbench/ui/src/modules/docs/page/docs-page.js"></script>`);
+          <script type="module">import {start} from '/_workbench/ui/src/modules/docs/page/docs-page.js'; start(window.__workbenchDocs);</script>`);
         }
       })().catch((error) => {
         res.statusCode = 500;

@@ -38,7 +38,8 @@ pub(crate) struct DocsPageOptions {
     pub(crate) source_url: String,
     /// Answers the page's current revision, so an edit reloads it; empty where nothing changes.
     pub(crate) revision_url: String,
-    /// Empty on a deferred page until its bundle answers.
+    /// Markdown identity and examples revision; the examples part is empty
+    /// until a deferred bundle answers.
     pub(crate) revision: String,
 }
 
@@ -78,8 +79,10 @@ pub(crate) fn page_document(input: &PageDocument<'_>) -> String {
     let _ = write!(out, "<script>window.__workbenchDocs={options}</script>");
     let _ = write!(
         out,
-        "<script type=\"module\" src=\"{}\"></script>",
-        escape_html(input.script.unwrap_or(PAGE_SCRIPT))
+        "<script type=\"module\">import {{ start }} from {}; start(window.__workbenchDocs);</script>",
+        serde_json::to_string(input.script.unwrap_or(PAGE_SCRIPT))
+            .expect("script URL")
+            .replace('<', "\\u003c")
     );
     out.push_str("</body></html>");
     out
@@ -120,7 +123,7 @@ mod tests {
         assert!(html.contains("\"bundle\":{\"info\":\"/_workbench/docs/bundle?page=x\"}"));
         assert!(html.contains("\"lensLabel\":null"));
         assert!(html.ends_with(&format!(
-            "<script type=\"module\" src=\"{PAGE_SCRIPT}\"></script></body></html>"
+            "<script type=\"module\">import {{ start }} from \"{PAGE_SCRIPT}\"; start(window.__workbenchDocs);</script></body></html>"
         )));
     }
 }

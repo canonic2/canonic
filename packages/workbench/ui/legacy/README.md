@@ -22,7 +22,7 @@ other implementations.
 
 ## Multiple-artboard support
 
-The [module layout contract](../../specs/modules.md) defines target locations for
+The [module layout contract](../../specs/system/modules.md) defines target locations for
 new and substantially migrated capabilities under `ui/src/modules/`, alongside
 shared browser components and themes. The paths below describe
 the current implementation.
@@ -48,10 +48,21 @@ The shell derives tab and artboard names from current page/story metadata;
 New artboards carry a human-readable `target.label` before their renderer starts.
 The dedicated `content.html` renderer loads content, annotations and capture ports
 without application controls or shell bootstrap; see the
-[rendering flow](../../specs/rendering-flow.md). `content-frames.js` owns its retained
+[rendering flow](../../specs/system/rendering-flow.md). `content-frames.js` owns its retained
 iframe lifecycle, and `../src/modules/preview-sessions/content.js` derives metadata
 from project data without menu DOM. The outer canvas alone owns placement, labels, grid and zoom;
 the content viewport fills its artboard at the supplied logical dimensions.
+
+The [warm Docs pool](../../specs/preview-pipeline/warm-runtime.md#warm-docs-pool)
+extends this lifecycle with a dedicated Docs host under `../src/modules/docs/host/`
+and reusable page start/stop under `../src/modules/docs/page/`. It retains recent
+Docs pages and, once three sessions are idle, reuses the oldest compatible idle
+Docs document of the same lens for a new destination. Previews and Docs share
+the existing three-idle-session, 15-minute budget. Exact retained Docs returns
+resume immediately and check their revision in the background; new pages fetch
+HTML and examples metadata in parallel. The spec owns isolation, accepted memory
+cost and shipping-code/installed-host evidence. Served standalone and portable
+pages explicitly start the same reusable page module once.
 
 `definePreview({ artboards: { id: { label, width, height, inputs } } })` declares
 1–32 children of one page. Width and height are integers from 1 to 8192; label
@@ -61,8 +72,8 @@ extra artboards. The renderer receives `context.artboard`; artboard inputs are
 merged before state inputs. The native index delegates these definitions to
 the shared evaluator so validation and metadata match compilation.
 
-See [the support-system record](../../specs/multiple-artboards.md) and
-[the module plan](../../specs/multiple-artboards-code-plan.md) for APIs and limits.
+See [the support-system record](../../specs/canvas/multiple-artboards.md) and
+[the module plan](../../specs/canvas/artboard-system.md) for APIs and limits.
 
 ## Putting it in a project
 
@@ -78,6 +89,14 @@ off the filesystem gets no injection, so it previews as authored and its links
 behave like links.
 
 ## workbench.yaml
+
+Gate integration is optional and requires existing access to its private,
+unpublished CLI, which has no public distribution channel.
+URL lenses can use `base: gate://demo/dev` to follow a Gate service in the
+space's checkout. The trusted server reads `gate urls --json` from the space
+root on refresh and uses the published direct endpoint. Gate owns startup;
+omit `start` and run `gate run demo --detach` from that checkout. Failed discovery or an
+unready service is a lens problem, with no fixed-port fallback.
 
 ```yaml
 name: Acme                    # the sidebar header, the tab title, and the space switcher
@@ -178,7 +197,7 @@ Unknown keys are reported. Fixed sizes capture their dimensions, filled axes use
 1440 wide or 900 tall, and Fit captures 1440 × 900. Resizable enables an editable
 artboard and is skipped in reference exports; a page whose only size is Resizable
 gets one 1440 × 900 reference. Duplicate dimensions are captured once. See the
-[sizes contract](../../specs/sizes.md#design-system-export).
+[sizes contract](../../specs/canvas/sizes.md#design-system-export).
 
 Use **Configure pages** in the top bar’s More menu to add or remove collections and
 pages, edit labels and source paths, and select supported sizes. Saving
@@ -512,7 +531,7 @@ implementation's own address; Workbench never switches to a stream.
 | --- | --- |
 | `index.html` | the shell: top bar, sidebar, canvas, and the toolbar and view controls floating over it |
 | `content.html` + `content.css` | content-only viewport and annotation overlay, with no Workbench application controls or canvas |
-| `content-frames.js` | retained content frame factory, warm preview mounts and Storybook channel switching |
+| `content-frames.js` | retained content frames, warm preview/Docs hosts and Storybook channel switching |
 | `../src/modules/preview-sessions/content.js` + `renderer-bridge.ts` | model-derived content navigation/metadata and authenticated canvas commands, capture locks and input forwarding |
 | `server/node/config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |
 | `config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |

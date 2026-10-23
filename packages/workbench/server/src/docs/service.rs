@@ -224,12 +224,7 @@ impl<S: DocsSource + Sync> DocsService<S> {
                 .revision
                 .clone()
                 .unwrap_or_else(|| format!("{REVISION_PATH}{query}")),
-            // A deferred page learns its revision with its bundle.
-            revision: if deferred {
-                String::new()
-            } else {
-                revision_of(&source, bundle.as_ref())
-            },
+            revision: revision_of(&source, bundle.as_ref()),
         };
         let stylesheets: Vec<String> = bundle
             .iter()
@@ -507,17 +502,17 @@ fn query(entry: &DocsPageEntry, lens: Option<&DocsLens>) -> String {
 fn revision_of(markdown: &str, bundle: Option<&DocsBundle>) -> String {
     let mut hash = Sha256::new();
     hash.update(markdown.as_bytes());
-    hash.update(b"\0");
-    hash.update(
-        bundle
-            .map_or("", |bundle| bundle.revision.as_str())
-            .as_bytes(),
-    );
     let mut out = String::with_capacity(16);
     for byte in hash.finalize().iter().take(8) {
         let _ = write!(out, "{byte:02x}");
     }
-    out
+    // Keep the Markdown identity separate so parallel HTML/bundle answers can
+    // detect a save between their reads, and returns can distinguish an
+    // in-place prose edit from examples that need runtime synchronization.
+    format!(
+        "{out}:{}",
+        bundle.map_or("", |bundle| bundle.revision.as_str())
+    )
 }
 
 #[cfg(test)]
@@ -810,7 +805,10 @@ mod tests {
     fn the_revision_follows_the_markdown_and_the_lenss_examples() {
         let docs = service(true, None);
         let first = block_on(docs.revision(&card(), Some("web"))).expect("revision");
-        assert_eq!(first.len(), 16);
+        assert_eq!(
+            first.split(':').next().expect("Markdown revision").len(),
+            16
+        );
         assert_eq!(
             block_on(docs.revision(&card(), Some("web"))).expect("again"),
             first
@@ -849,7 +847,12 @@ mod tests {
             serde_json::json!({ "info": "/_workbench/docs/bundle?page=docs%2Fcard.md&lens=web" })
         );
         assert_eq!(options["lensLabel"], "Web");
-        assert_eq!(options["revision"], "");
+        assert!(
+            options["revision"]
+                .as_str()
+                .expect("revision")
+                .ends_with(':')
+        );
 
         let info = block_on(docs.bundle_info(&card(), Some("native"))).expect("info");
         assert_eq!(

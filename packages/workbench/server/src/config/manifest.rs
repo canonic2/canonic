@@ -583,6 +583,8 @@ pub(super) fn implementations(raw: Option<&Value>, problems: &mut Problems) -> M
                 } else if kind == "storybook" && address == "auto" {
                     implementation["url"] = json!("auto");
                     implementation["auto"] = json!(true);
+                } else if kind == "url" && crate::scope::target(&address).is_some() {
+                    implementation["base"] = json!(address.trim_end_matches('/'));
                 } else if !is_http(&address) {
                     let or = if kind == "storybook" {
                         ", or url: auto."
@@ -612,7 +614,12 @@ pub(super) fn implementations(raw: Option<&Value>, problems: &mut Problems) -> M
             problems.push(format!("{where_}: render is no longer used; remove it. URL and Storybook implementations use iframes."));
         }
         if spec.contains_key("start") && !owned {
-            if ["ios-simulator", "window", "workbench", "docs"].contains(&kind.as_str()) {
+            if implementation["base"]
+                .as_str()
+                .is_some_and(|base| base.starts_with("gate://"))
+            {
+                problems.push(format!("{where_}: Gate owns service startup; omit start and run gate run TARGET from the task checkout."));
+            } else if ["ios-simulator", "window", "workbench", "docs"].contains(&kind.as_str()) {
                 problems.push(format!(
                     "{where_}: start is available for URL and Storybook implementations."
                 ));

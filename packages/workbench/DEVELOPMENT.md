@@ -13,7 +13,7 @@ compiler) and `server/node/` for its host, the standalone command and the Node
 evaluator,
 `capture/` for Electron and platform capture, `ui/` for the browser application,
 `sdk/` for the published definition API, and `contracts/` for shared pure rules
-and wire data. See [module ownership](specs/modules.md).
+and wire data. See [module ownership](specs/system/modules.md).
 
 `ui/legacy/` holds the HTML/script shell and content document; `ui/src/` holds
 native JavaScript controllers, Web Components and CSS. Hosts serve or copy these

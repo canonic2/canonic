@@ -8,7 +8,7 @@ guides have one page per adapter, listed in
 [Workbench previews](../../docs/workbench-previews.md); these specs hold
 each adapter's contract, how it is built and what remains open.
 
-[TypeScript previews](../previews.md) owns what a preview is: definitions,
+[TypeScript previews](../pages/previews.md) owns what a preview is: definitions,
 states, controls, data, readiness and errors, the same for every adapter.
 The [preview pipeline](../preview-pipeline/README.md) owns compiling,
 serving, warm documents and hot updates. An adapter spec owns only what
@@ -27,13 +27,13 @@ differs for its technology, and links to those topics for the rest.
 | A registered name | [Custom adapters](custom.md) | The project's Rspack rules and native plugin capabilities | The project's JavaScript loaders | The project's `runtime` module |
 
 Docs is not an adapter: it is a lens of a page whose examples render through
-one ([docs](../docs-pages.md)). A preview definition is not one either: it
+one ([docs](../pages/docs-pages.md)). A preview definition is not one either: it
 describes a page and names the adapter that renders its source.
 
 ## What every adapter supplies
 
 Adapters render project content, not Workbench application chrome. Their browser
-mount runs in a [content-only renderer](../rendering-flow.md); none may use
+mount runs in a [content-only renderer](../system/rendering-flow.md); none may use
 Workbench's application `index.html` as its artboard entry point. This leaves
 project compilation/evaluation/server rendering in the backend where required.
 
@@ -43,8 +43,8 @@ project compilation/evaluation/server rendering in the backend where required.
 | Project-code step | The Node evaluator, only when the adapter has one | Work that runs JavaScript from the project or its framework, such as server rendering or a JavaScript compiler |
 | Browser mount | The preview frame | `mount(canvas, source, context, environment)`, returning a cleanup. [browser.js](../../ui/preview/browser.js) runs the shared lifecycle around it |
 | Edit behavior | The frame's hot client | What an edit to each kind of source does ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)) |
-| Docs examples | The docs lens | What an example export is for the adapter ([docs](../docs-pages.md)) |
-| Portable output | The production compiler | What the [portable build](../previews.md#portable-build-and-cli) carries for its pages |
+| Docs examples | The docs lens | What an example export is for the adapter ([docs](../pages/docs-pages.md)) |
+| Portable output | The production compiler | What the [portable build](../pages/previews.md#portable-build-and-cli) carries for its pages |
 
 Built-in and custom adapters meet the same contract: a custom adapter's
 `runtime` is its browser mount, and its `rules` and `plugins` are its build
@@ -73,11 +73,17 @@ evaluator only for the parts that have to run JavaScript:
 
 | Adapter | Served by the Rust server | Node evaluator |
 | --- | --- | --- |
-| React, React Native Web, HTML | Everything | Not started |
+| React, React Native Web, HTML | Native compilation and serving | No adapter-specific evaluation; definitions/configuration can still need JavaScript |
 | Vue | Everything but compiling single-file components; a Rust compiler takes that over only if one passes conformance ([target](vue.md#target)) | Workbench's bundled `@vue/compiler-sfc`, for each `.vue` file |
-| Astro | Rendered HTML, client scripts and styles; saved renders on a warm start | Renders: first open, edits, input changes ([target](astro.md#target)) |
+| Astro | Rendered HTML, client scripts and styles; saved warm-start renders remain proposed | Renders: startup, edits, input changes ([target](astro.md#target)) |
 | Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server on a local socket ([how](storybook.md#a-storybook-the-server-runs)) |
 | Custom adapters | The browser mount, native plugin capabilities and Rust-native rules | The project's JavaScript loaders |
+
+Storybook's dev server is a separate owned child, not an operation inside the
+Node evaluator. Definition indexing currently also has a short-lived evaluator
+process, separate from the long-lived compiler evaluator. The
+[server process model](../system/server.md#processes-and-connections) records
+that implementation gap against the one-evaluator direction.
 
 - **One Node evaluator per space,** not one per adapter. The server starts
   it on first need, with the space's trust and configuration; it loads only
@@ -91,15 +97,16 @@ evaluator only for the parts that have to run JavaScript:
   stdin and stdout pipes or a local socket (a Unix socket, or a named pipe on
   Windows) and never on a TCP port, and stopped with it. A process the user
   runs on any port never conflicts with it
-  ([processes and connections](../server.md#processes-and-connections)).
+  ([processes and connections](../system/server.md#processes-and-connections)).
 
 The [glossary](../glossary.md#behind-the-canvas) defines the Workbench
-server, the page index, adapters and the Node evaluator. Project code never
-runs in the server itself, the extension host or the capture renderer.
+server, the page index, adapters and the Node evaluator. Server-side project
+evaluation never runs in the native server or extension host. Project browser
+code runs in preview documents, including the capture renderer when taking pictures.
 "Runtime" alone names neither the server nor an adapter: the preview runtime
 is the browser module every frame shares ([browser.js](../../ui/preview/browser.js)),
 and the bundled runtime is the Electron build Workbench ships
-([capture](../capture.md#bundled-electron-runtime)).
+([capture](../review/capture.md#bundled-electron-runtime)).
 
 ## Decisions
 
@@ -140,7 +147,7 @@ HTML and custom adapters compile natively; Vue compiles with Workbench's
 `@vue/compiler-sfc` in the Node evaluator and native loaders; Astro renders
 in the Node evaluator and its client side builds natively through the HTML
 loader. The evaluator takes no port
-([processes and connections](../server.md#processes-and-connections)).
+([processes and connections](../system/server.md#processes-and-connections)).
 Format handling is shared code rather than separate units: the profiles and
 Workbench's rules are in [options.rs](../../server/src/compiler/options.rs),
 the adapter-to-module map in [project.rs](../../server/src/compiler/project.rs),
@@ -157,4 +164,4 @@ describes, on a local socket ([Storybook](storybook.md#status)).
   for Vue and project loaders. It is measured before Vue's target is fixed.
 - **Where each adapter lives in the code:** a module per adapter, spanning
   the Rust server, the Node evaluator and `ui/preview/`, under the
-  [module layout](../modules.md).
+  [module layout](../system/modules.md).

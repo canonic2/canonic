@@ -1,5 +1,5 @@
 /* Every Workbench element has its docs page in the Workbench space, as
-   specs/web-components.md#design-pages requires: the page, its examples, and
+   specs/ui/web-components.md#design-pages requires: the page, its examples, and
    the definition that lists it under Components. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

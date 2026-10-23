@@ -70,6 +70,7 @@ pub(crate) struct Space {
     /// The annotation layer’s styles, for captures of pages the workbench doesn’t serve.
     annotations: String,
     detected: Mutex<HashMap<String, String>>,
+    scope: crate::scope::Discovery,
     devices: ListDevices,
 }
 
@@ -154,6 +155,7 @@ impl Space {
             annotations: std::fs::read_to_string(product.join("ui/legacy/annotations.css"))
                 .unwrap_or_default(),
             detected: Mutex::new(HashMap::new()),
+            scope: crate::scope::Discovery::default(),
             devices: Arc::new(|| Box::pin(simulators::booted())),
         }
     }
@@ -172,6 +174,16 @@ impl Space {
     /// Returns the reader's message when the configuration can't be read.
     pub(crate) async fn view(&self) -> Result<Option<Value>> {
         self.catalog.assemble(self).await
+    }
+
+    /// Refresh external discovery only for the explicit configuration request.
+    pub(crate) async fn refreshed_view(&self) -> Result<Option<Value>> {
+        if let Some(view) = self.catalog.resolved()? {
+            self.scope
+                .refresh(self.catalog.root(), self.catalog.trusted(), &view)
+                .await;
+        }
+        self.view().await
     }
 
     /// The view as the browser gets it: URL and Storybook implementations at
@@ -294,6 +306,9 @@ pub(crate) fn sockets(storybooks: Storybooks) -> crate::proxies::Sockets {
 
 #[async_trait::async_trait]
 impl Extras for Space {
+    async fn urls(&self, implementations: &mut Map<String, Value>, _problems: &mut Vec<String>) {
+        self.scope.resolve(implementations).await;
+    }
     async fn storybooks(
         &self,
         _view: &Value,

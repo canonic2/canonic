@@ -3,7 +3,7 @@
    A space's `sizes` is an ordered map of key to size; a page's `sizes` lists
    the space's keys it supports and may define sizes of its own. Anything
    malformed is reported, in the form every problem takes, and left out; the
-   rest is used. See specs/sizes.md. Pure: the config reader hands it the
+   rest is used. See specs/canvas/sizes.md. Pure: the config reader hands it the
    parsed YAML and keeps the problems. */
 
 import { defaultSize, defaultSizes, isLength, isSizeKey, labelOf } from './browser/size.js';

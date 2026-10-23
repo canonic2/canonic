@@ -18,7 +18,11 @@ export async function mountNative(canvas, Component, context, environment) {
 export async function mount(canvas, Component, context, environment) {
   let tree = React.createElement(Component, context.inputs);
   if (environment?.wrap) tree = environment.wrap(tree, context);
-  const root = createRoot(canvas);
+  // React initializes document-wide event delegation once per cached runtime.
+  // Keep those listeners with that runtime, without retaining component effects.
+  const root = window.__workbenchRetainRuntimeListeners
+    ? window.__workbenchRetainRuntimeListeners(() => createRoot(canvas))
+    : createRoot(canvas);
   let disposed = false;
   let mounted = false;
   const unmount = () => { if (!disposed) { disposed = true; root.unmount(); } };

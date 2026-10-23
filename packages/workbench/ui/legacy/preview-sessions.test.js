@@ -42,3 +42,21 @@ test('reload can forget an active session without tearing down its visible docum
   var fresh = f.visit('a'); f.visit('b'); f.pool.close();
   assert.ok(f.disposed.includes(fresh)); assert.equal(f.disposed.length, 2); assert.equal(f.timers.size, 0);
 });
+
+test('idle candidates are ordered by departure, exclude protected frames, and expire before reuse', function () {
+  var f = fixture(); var a = f.visit('a'); var b = f.visit('b'); var c = f.visit('c');
+  var loading = {}; f.pool.add('loading', loading);
+  assert.deepEqual(f.pool.idleFrames(), [a, b]);
+  f.pool.protect(a, true);
+  assert.deepEqual(f.pool.idleFrames(), [b]);
+  f.pool.activate(a);
+  assert.deepEqual(f.pool.idleFrames(), [b, c]);
+  f.pool.forget(b);
+  f.pool.add('replacement', b);
+  assert.equal(f.pool.get('b'), null);
+  assert.deepEqual(f.pool.idleFrames(), [c]);
+  f.advance(100);
+  assert.deepEqual(f.pool.idleFrames(), []);
+  assert.equal(f.pool.get('replacement').frame, b, 'loading replacement is protected');
+  f.pool.close();
+});

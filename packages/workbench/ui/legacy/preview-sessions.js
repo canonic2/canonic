@@ -28,6 +28,11 @@
     return {
       get: function (key) { trim(); return entries.get(key) || null; },
       has: function (frame) { return !!find(frame); },
+      idleFrames: function () {
+        trim();
+        return Array.from(entries.values()).filter(function (entry) { return entry !== active && !entry.protected; })
+          .sort(function (a, b) { return a.order - b.order; }).map(function (entry) { return entry.frame; });
+      },
       add: function (key, frame) {
         var previous = entries.get(key);
         if (previous && previous.frame !== frame) discard(previous);

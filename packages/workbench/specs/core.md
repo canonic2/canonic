@@ -4,10 +4,11 @@ This contract applies to every page: authored pages, discovered TypeScript
 previews, and imported catalog entries. The implementation is in
 [workbench.js](../ui/legacy/workbench.js), [page-list.js](../ui/legacy/page-list.js),
 [manifest.js](../contracts/manifest.js), [config.js](../ui/legacy/config.js)
-(browser), and [config.js](../server/node/config.js) (server). The editor host, preview
+(browser), and the native [config reader](../server/src/config/read.rs) (server).
+The Node [config reader](../server/node/config.js) is a parity-test oracle. The editor host, preview
 compilation, and screenshot processes have separate
-[extension](vscode-extension.md), [TypeScript preview](previews.md), and
-[capture](capture.md) contracts.
+[extension](integrations/vscode-extension.md), [TypeScript preview](pages/previews.md), and
+[capture](review/capture.md) contracts.
 
 ## Purpose
 
@@ -37,8 +38,8 @@ Space, collection, group, page, state, lens, and the parts of the interface
   and a local `previews` value replaces the committed one.
 - The config accepts block YAML. Names and IDs used in addresses are checked;
   invalid entries are reported rather than silently converted into pages.
-  The browser and server use the same implementation, size, and `previews`
-  rules from `manifest.js`.
+  The browser uses `manifest.js`; the native server implements matching
+  implementation, size, and `previews` rules, checked by config parity tests.
 - `collections` contains the ordered collections. Each collection contains pages
   and optionally one level of groups (`group:`). `collections` may be omitted
   unless `previews: false` and no implementation has a catalog; then a config
@@ -46,11 +47,11 @@ Space, collection, group, page, state, lens, and the parts of the interface
 - `previews` is a map (`include`, `config`, `icon`, `icons`, `lensLabel`) or `false`. Discovery is on by
   default; `false` turns it off and no preview code runs. An invalid value is
   a problem and leaves previews off until fixed. Discovery, definitions, and
-  the compiler are specified in [TypeScript previews](previews.md).
+  the compiler are specified in [TypeScript previews](pages/previews.md).
 - Icon-only authored collections style matching imported collections and stay
   in the configuration editor. Empty collections are hidden after imports. Icon
   precedence and order-independent merging are specified in
-  [preview placement](previews.md#sidebar-placement).
+  [preview placement](pages/previews.md#sidebar-placement).
 - Discovered previews and imported catalog collections join authored
   collections with the same name. A discovered preview whose definition is
   also listed as an authored `src` stays one page: the authored label,
@@ -62,28 +63,40 @@ Space, collection, group, page, state, lens, and the parts of the interface
   imported collections (`catalogCollections`), absolute source paths, and
   `problems`. It is read fresh on every request, except docs pages' example
   listings, which it shows as last known and refreshes in the background
-  ([docs pages](docs-pages.md#problems)). The VS Code sidebar asks the
+  ([docs pages](pages/docs-pages.md#problems)). The VS Code sidebar asks the
   server for imported collections because its webview cannot fetch them directly.
+
+The [Configure pages contract](pages/configuration-editor.md) owns draft editing
+and committed-file writes. [Access boundaries](system/access-boundaries.md)
+distinguishes loopback binding, execution trust and file/request containment;
+one does not imply the others. [Hosting](integrations/hosting.md) defines which
+services exist in the editor, standalone browser and portable viewer.
 
 ## Problem reporting
 
 - Every configuration, catalog, preview, and implementation problem names
   where it came from, for example
   `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
-- Every surface shows the same problems list: the VS Code
+- Every surface shows the same shared problems list: the VS Code
   sidebar above its page list, and the canvas wherever it runs (the editor tab,
   **Open Canvas in Browser**, and a standalone server). `/_workbench/config`
   lists them under `problems`.
 - The list covers every entry dropped while reading the YAML (collections,
   groups, pages, states, and invalid `src` values), implementation,
   size, mapping, code-pointer, `previews`, catalog, and
-  preview-compilation problems, and implementations that are not running,
+  preview-compilation problems, and implementations that are not running
+  (except lens-scoped Gate availability below),
   including a stopped Storybook used only by mappings and a mapped Simulator
   device that is not booted. See
-  [the extension contract](vscode-extension.md#sidebar-and-problems).
+  [the extension contract](integrations/vscode-extension.md#sidebar-and-problems).
 - Missing previews, invalid configuration, stopped implementations, and
   capture errors give a named problem. A failure in one imported catalog must
   not remove valid authored pages.
+- Gate service availability belongs to the affected lens. A stopped,
+  starting, failed or unavailable Gate service does not add a global sidebar
+  warning or delay unrelated page listing. Opening its lens shows the named
+  error on the canvas. Invalid Gate configuration remains a shared
+  configuration problem; see [implementations](pages/implementations.md#url-implementations).
 
 ## Selection and navigation
 
@@ -101,18 +114,38 @@ Space, collection, group, page, state, lens, and the parts of the interface
   its design. An imported implementation-only page always uses its own lens;
   a discovered TypeScript preview uses its own authored lens. Every lens has
   a customizable display label independent of its identity and rendering
-  kind; defaults and configuration are in the [lens contract](lenses.md).
+  kind; defaults and configuration are in the [lens contract](canvas/lenses.md).
 - In VS Code, sidebar picks and canvas selections travel as `wb-go` and
-  `wb-here`; the [extension contract](vscode-extension.md#editor-surfaces-and-messages)
+  `wb-here`; the [extension contract](integrations/vscode-extension.md#editor-surfaces-and-messages)
   defines the relay and its ordering.
+
+## Persistence
+
+[Persistence and restoration](canvas/persistence.md) owns the durable state contract.
+On opening an ordinary canvas, an explicit destination wins; otherwise restore
+the last valid selection for that space, then fall back to its first page in
+resolved order. Usable spaces must not open to an unselected blank canvas.
+VS Code owns per-workspace/per-space records independently of server ports;
+switching spaces preserves each selection. Restart restoration saves logical
+view parameters and mounts fresh content. Live frame retention below preserves
+runtime state only while those documents remain alive.
+
+Complete-selection persistence and first-page startup fallback are required
+implementation work; the existing URL and hidden-webview retention do not
+establish restart persistence. The owning spec supplies validation, lifecycle,
+storage-failure behavior, browser limits and acceptance.
 
 ## Canvas and artboard
 
-The [rendering-flow contract](rendering-flow.md) requires one Workbench shell and
+The [interaction contract](canvas/interaction.md) owns camera, focus and input
+routing; [annotations](canvas/annotations.md) owns drawing/editing and local
+annotation lifetime. Screenshot/handoff acquisition remains in [capture](review/capture.md).
+
+The [rendering-flow contract](system/rendering-flow.md) requires one Workbench shell and
 content-only renderers. Canvas labels, grid, camera and global controls belong
 to that shell; none is mounted inside an artboard. The backend provides project
 data and compiled/rendered/proxied content, not Workbench application markup.
-The [multiple-artboard system](multiple-artboards.md) owns instance state,
+The [multiple-artboard system](canvas/multiple-artboards.md) owns instance state,
 geometry and review/context. Ordinary states remain alternatives; only explicit
 page artboards create a group. Outer control layout stays unchanged by this refactor.
 
@@ -125,18 +158,22 @@ page artboards create a group. Outer control layout stays unchanged by this refa
   sizes, including page-specific sizes. With no space configuration the
   defaults are Fit, Laptop, Mobile and Resizable. Filled axes follow the
   available canvas; fixed dimensions remain fixed when the editor is smaller.
-  The [sizes contract](sizes.md) owns the schema, menu, editing and defaults.
+  The [sizes contract](canvas/sizes.md) owns the schema, menu, editing and defaults.
 
 - A content renderer may prepare a replacement in a spare content iframe. It
   must not use a spare Workbench application document. Promotion waits for
   matching destination readiness; superseded loads cannot replace a newer selection
   or put outgoing pixels beneath the new destination's label.
-- Retained preview sessions preserve their attached iframe
+- Retained content sessions, including previews and Docs, preserve their attached iframe
   across selections: one active session and up to three inactive
   sessions for 15 minutes after departure. Returning preserves form edits,
   scroll, menus, and application state. Inactive frames are inert, keep their
   layout dimensions, and cannot send navigation or keyboard commands to the
   active canvas. A loading replacement is protected until promoted or cancelled.
+- Docs use this same session budget across lenses and content kinds. Exact
+  retained returns show immediately and check revisions in the background;
+  new destinations may reuse an idle same-lens Docs document under the
+  [warm Docs pool contract](preview-pipeline/warm-runtime.md#warm-docs-pool).
 - Oldest inactive sessions are evicted first; expiry, Reload, configuration
   refresh, and canvas closure release their resources. Managed hosts dispose
   adapters and tracked page work before removal. Returning to a managed preview
@@ -170,15 +207,16 @@ page artboards create a group. Outer control layout stays unchanged by this refa
   escaping `config` ([manifest.js](../contracts/manifest.js)).
 - Merging a discovered preview into an authored page is done by
   `manifest.mergeCollections`, used by both the sidebar and the canvas.
-- Managed-preview readiness polls the host for up to 15 seconds before the
-  frame swap proceeds anyway; visible images are awaited for at most 3 seconds
-  ([workbench.js](../ui/legacy/workbench.js), [browser.js](../ui/preview/browser.js)).
+- Managed-document readiness uses a signal with a 50 ms compatibility poll.
+  After 300 unsuccessful checks the destination fails rather than becoming
+  visible unready; visible images are awaited for at most 3 seconds
+  ([content-frames.js](../ui/legacy/content-frames.js), [browser.js](../ui/preview/browser.js)).
 
 ## Implementation gaps
 
 - **Dropped authored entries are invisible in VS Code.** Problems for dropped
   collections, groups, pages, and states go only to the canvas webview's
-  console. `server/node/config.js` on the server deliberately skips them, so the sidebar's
+  console. The native [config reader](../server/src/config/read.rs) skips them, so the sidebar's
   problems list never shows them.
 - **No problems list in a standalone browser.** The canvas does not display
   `problems` from `/_workbench/config`; in a browser, catalog and preview
@@ -189,8 +227,8 @@ page artboards create a group. Outer control layout stays unchanged by this refa
 - **Some failures never become problems.** A stopped Storybook used only by
   mappings, a mapped Simulator whose device is not booted, and an authored
   entry with an invalid `src` or state id fail only on the canvas or are
-  dropped silently; see [implementations](implementations.md#current-gaps) and
-  [Storybook](storybook.md#current-gaps).
+  dropped silently; see [implementations](pages/implementations.md#current-gaps) and
+  [Storybook](pages/storybook.md#current-gaps).
 
 ## Verification points
 
@@ -206,7 +244,7 @@ page artboards create a group. Outer control layout stays unchanged by this refa
   replacement, superseded loads, warm managed-preview swaps, width modes, and
   story switching.
 - [preview-host.test.js](../ui/legacy/preview-host.test.js) and
-  [preview-runtime.test.js](../ui/preview/preview-runtime.test.cjs) check host reuse,
+  [preview-runtime.test.cjs](../ui/preview/preview-runtime.test.cjs) check host reuse,
   disposal, hidden-iframe readiness, and lazy images.
 - [preview.test.js](../server/node/preview.test.js) checks preview serving at definition
   paths, `previews: false`, and merging a discovered preview into an authored

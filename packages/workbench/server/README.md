@@ -8,7 +8,7 @@ with a library and these commands:
   previews with Rspack's Rust crates, assembles the page tree, answers the
   space's routes, keeps the page index resident and reports page-tree
   changes. The process that starts it, its host, answers what belongs to the
-  editor or the capture helper ([server spec](../specs/server.md));
+  editor or the capture helper ([server spec](../specs/system/server.md));
 - `init`, `list`, `check` and `build <project> [output]`, the command-line
   builds without a server: authoring types and a manifest, what the page
   index finds, every preview built with failures reported, and the portable
@@ -65,7 +65,7 @@ server's workspace trust check.
 `workbench-server serve --root <project> --product <workbench> [--trace] [--ports
 <port,...>] …` listens on 127.0.0.1 at the first free port of the list (0
 takes any). Its options, standard-stream messages and routes are in the
-[server spec](../specs/server.md#the-server-and-its-host).
+[server spec](../specs/system/server.md#the-server-and-its-host).
 
 It exits when its standard input closes. The host starts it in its own
 process group and kills the group when it exits, so an evaluator it left
@@ -179,7 +179,7 @@ Formatting uses rustfmt defaults. `Cargo.toml` owns the shared Rust, Clippy
 and rustdoc lint policy; `clippy.toml` permits test-only unwraps.
 `.config/nextest.toml` reports every failure and terminates tests after two
 minutes. `deny.toml` uses the shared license allowlist with the per-crate
-exceptions listed in [code quality](../specs/code-quality.md#dependency-and-artifact-policy). The extension release workflow runs
+exceptions listed in [code quality](../specs/system/code-quality.md#dependency-and-artifact-policy). The extension release workflow runs
 the native gates before packaging.
 
 Unit tests use proptest to exercise escaped strings, nested literals and the

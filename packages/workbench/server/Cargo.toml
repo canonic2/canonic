@@ -47,7 +47,7 @@ two-face = { version = "=0.4.5", default-features = false, features = ["syntect-
 url = "=2.5.8"
 futures = { version = "=0.3.32", default-features = false, features = ["std"] }
 tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12"] }
-tokio = { version = "=1.53.1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "=1.53.3", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 # The preview compiler: Rspack's Rust crates, pinned exactly because their API
 # does not follow semantic versioning. They build only on Rspack's nightly
 # toolchain (`rust-toolchain.toml`), with its own lockfile versions.

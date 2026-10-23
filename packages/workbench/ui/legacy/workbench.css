@@ -1434,7 +1434,7 @@ textarea,
 
 /* A docs page fills the canvas with no artboard of its own: the canvas is
    the page's white, with no grid, label, shadow, or rails. The size switcher
-   stays in the top bar, disabled (specs/docs-pages.md). */
+   stays in the top bar, disabled (specs/pages/docs-pages.md). */
 .wb[data-canvas-mode='docs'] .wb-canvas {
   background-color: #ffffff;
   background-image: none;

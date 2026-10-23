@@ -6,6 +6,17 @@ var vm = require('node:vm');
 
 var manifest = require('./manifest');
 
+test('Gate service bases preserve page paths and leave startup to Gate', function () {
+  var problems = [];
+  var impls = manifest.implementations({ dev: { kind: 'url', base: 'gate://demo/dev/', start: { command: 'unsafe' } } }, problems);
+  assert.equal(impls.dev.base, 'gate://demo/dev');
+  assert.equal(impls.dev.start, undefined);
+  assert.match(problems[0], /Gate owns service startup/);
+  for (var base of ['gate://', 'gate://Demo', 'gate://demo:4317', 'gate://a@demo', 'gate://demo/dev?q=1']) {
+    assert.deepEqual(manifest.implementations({ dev: { kind: 'url', base: base } }, []), {});
+  }
+});
+
 test('authored lens labels validate and retain defaults on invalid configuration', function () {
   var problems = [];
   var item = { src: 'button.html' };

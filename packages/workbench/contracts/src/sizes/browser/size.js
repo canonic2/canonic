@@ -4,7 +4,7 @@
    canvas, Resizable is dragged by its edges — or fixed, with a width and a
    height in CSS pixels, either of which may fill the canvas. A space lists
    its sizes in order; a page supports some of them and may add its own.
-   See specs/sizes.md. Pure data and constants: no DOM, no fs. */
+   See specs/canvas/sizes.md. Pure data and constants: no DOM, no fs. */
 
 /** A fixed size's length on one axis: CSS pixels, or the canvas's length. */
 

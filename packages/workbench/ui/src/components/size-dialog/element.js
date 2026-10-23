@@ -5,7 +5,7 @@
    Add is enabled once the fields make a size; it asks with wb-size-add, and
    the controller writes workbench.yaml, sets `pending` while it does, and
    closes the dialog or sets `error`. Closing by Cancel, Escape, or the
-   backdrop asks with wb-size-dialog-close. See specs/sizes.md. */
+   backdrop asks with wb-size-dialog-close. See specs/canvas/sizes.md. */
 
 import { EMPTY_DRAFT, readDraft } from './form.js';
 

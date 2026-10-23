@@ -21,7 +21,7 @@ Registering a built-in name replaces that adapter, including the built-in
 Astro adapter's server rendering. A definition naming an unregistered adapter
 fails with `Unknown adapter`. Custom adapters build in the `web` profile and
 share the entry, lifecycle and portable output of the built-ins
-([previews](../previews.md#adapters-and-project-configuration)).
+([previews](../pages/previews.md#adapters-and-project-configuration)).
 
 ## Project code on the server
 

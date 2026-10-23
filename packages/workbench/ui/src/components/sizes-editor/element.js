@@ -7,7 +7,7 @@
    the dialog's own until Save asks with wb-sizes-save; the controller writes
    workbench.yaml, sets `pending`, and closes the dialog or sets `error`.
    Cancel, Escape, or the backdrop ask with wb-sizes-close. See
-   specs/sizes.md. */
+   specs/canvas/sizes.md. */
 
 import { styles } from './styles.js';
 import { draftOf, rowsProblem, rowValue } from './rows.js';

@@ -31,6 +31,7 @@ mod protocol;
 mod proxies;
 mod refused;
 mod saved;
+mod scope;
 mod serve;
 mod simulators;
 mod space;

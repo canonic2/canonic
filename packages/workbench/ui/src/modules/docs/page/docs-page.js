@@ -1,26 +1,15 @@
-/* The script of a served docs page: it mounts the lens's examples, runs Show
-   code and Copy code, reports readiness and actions to the canvas, and reloads
-   the page, keeping its scroll position, when the Markdown or an example
-   changes. Options come from window.__workbenchDocs (page-document.ts). The
-   server answers with the Markdown at once; a page served that way asks for
-   its bundle here, and its panels wait as `pending` until then. */
-
 import { mountExamples } from './mount-examples.js';
 import { documentTrace, phase, address } from '../../trace/browser.js';
 import { createHighlighting } from './highlighting.js';
 
-/** What the canvas calls on a docs page in its frame (same origin). */
-
-const options = window.__workbenchDocs;
-const trace = documentTrace(options);
-const SCROLL_KEY = 'wb-docs-scroll:' + location.pathname;
-const actions = [];
-const sources = new Map();
-let sourceRevision = 0;
-const highlighting = createHighlighting({ report: (name) => phase(trace, name) });
-addEventListener('pagehide', () => highlighting.dispose(), { once: true });
+let current = null;
+let generation = 0;
+let transition = Promise.resolve();
+let cleanupFailure;
+const live = (page) => page === current && !page.controller.signal.aborted;
 
 function report(type, detail) {
+  const options = current?.options;
   window.dispatchEvent(new CustomEvent('workbench:' + type, { detail }));
   if (parent !== window)
     parent.postMessage(
@@ -29,46 +18,42 @@ function report(type, detail) {
     );
 }
 
-function onAction(type, detail) {
+function onAction(page, type, detail) {
+  if (!live(page)) return;
   if (type === 'action') {
-    actions.push({ name: String(detail.name), values: detail.values ?? [] });
-    actions.splice(0, Math.max(0, actions.length - 30));
+    page.actions.push({ name: String(detail.name), values: detail.values ?? [] });
+    page.actions.splice(0, Math.max(0, page.actions.length - 30));
   }
-  report(type, { ...detail, state: options?.state ?? 'default' });
+  report(type, { ...detail, state: page.options?.state ?? 'default' });
 }
 
-function source(id) {
-  let pending = sources.get(id);
+function source(page, id) {
+  let pending = page.sources.get(id);
   if (!pending) {
     const url =
-      options.sourceUrl + encodeURIComponent(id) + (options.highlightUrl ? '&plain=1' : '');
-    pending = fetch(address(url, trace), { cache: 'no-store' }).then(async (answer) => {
+      page.options.sourceUrl +
+      encodeURIComponent(id) +
+      (page.options.highlightUrl ? '&plain=1' : '');
+    pending = fetch(address(url, page.trace), {
+      cache: 'no-store',
+      signal: page.controller.signal,
+    }).then(async (answer) => {
       const body = await answer.json();
       if (!answer.ok) throw new Error(body.error || 'Couldn’t load the example’s code.');
       return body;
     });
     pending.catch(() => {
-      if (sources.get(id) === pending) sources.delete(id);
+      if (page.sources.get(id) === pending) page.sources.delete(id);
     });
-    sources.set(id, pending);
+    page.sources.set(id, pending);
   }
   return pending;
 }
 
-function wireTools() {
-  document.addEventListener('click', (event) => {
-    const button = event.target?.closest('[data-wb-show-code], [data-wb-copy-code]');
-    const figure = button?.closest('[data-wb-example]');
-    if (!button || !figure) return;
-    const id = figure.dataset.wbExample ?? '';
-    if (button.hasAttribute('data-wb-show-code')) void toggleCode(figure, id, button);
-    else void copyCode(id, button);
-  });
-}
-
 async function toggleCode(figure, id, button) {
+  const page = current;
   const panel = figure.querySelector('[data-wb-example-code]');
-  if (!panel) return;
+  if (!panel || !page || !live(page)) return;
   const opening = panel.hidden;
   button.setAttribute('aria-expanded', String(opening));
   button.setAttribute('aria-label', opening ? 'Hide code' : 'Show code');
@@ -79,22 +64,22 @@ async function toggleCode(figure, id, button) {
   }
   panel.hidden = false;
   if (panel.dataset.loaded) return;
-  const revision = sourceRevision;
+  const revision = page.sourceRevision;
   try {
-    const code = await source(id);
-    if (revision !== sourceRevision || !panel.isConnected) return;
+    const code = await source(page, id);
+    if (!live(page) || revision !== page.sourceRevision || !panel.isConnected) return;
     const pre = document.createElement('pre');
     const element = document.createElement('code');
     element.className = 'hljs';
-    if (options.highlightUrl) element.textContent = code.text;
+    if (page.options.highlightUrl) element.textContent = code.text;
     else element.innerHTML = code.html;
     pre.title = code.file;
     pre.append(element);
     panel.replaceChildren(pre);
     panel.dataset.loaded = 'true';
-    if (options.highlightUrl) highlighting.source(element, code.file?.split('.').pop());
+    if (page.options.highlightUrl) page.highlighting.source(element, code.file?.split('.').pop());
   } catch (error) {
-    if (revision !== sourceRevision || !panel.isConnected) return;
+    if (!live(page) || revision !== page.sourceRevision || !panel.isConnected) return;
     panel.replaceChildren(
       Object.assign(document.createElement('p'), {
         className: 'wb-docs-example-note',
@@ -105,20 +90,27 @@ async function toggleCode(figure, id, button) {
 }
 
 async function copyCode(id, button) {
+  const page = current;
+  if (!page || !live(page)) return;
   try {
-    await navigator.clipboard.writeText((await source(id)).text);
+    const code = await source(page, id);
+    if (!live(page)) return;
+    await navigator.clipboard.writeText(code.text);
+    if (!live(page)) return;
     button.classList.add('is-done');
     button.title = 'Copied';
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      page.timers.delete(timer);
+      if (!live(page)) return;
       button.classList.remove('is-done');
       button.title = 'Copy code';
     }, 1500);
+    page.timers.add(timer);
   } catch (error) {
-    button.title = 'Couldn’t copy: ' + String(error.message);
+    if (live(page)) button.title = 'Couldn’t copy: ' + String(error.message);
   }
 }
 
-/* A pending panel, once the bundle says what it shows: mounted, or a note. */
 function settle(figure, status, note) {
   figure.dataset.status = status;
   if (status === 'ready') return;
@@ -130,29 +122,52 @@ function settle(figure, status, note) {
   );
 }
 
-function stylesheet(href) {
+function stylesheet(href, signal) {
   return new Promise((resolve) => {
     const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href });
-    link.addEventListener('load', () => resolve(), { once: true });
-    link.addEventListener('error', () => resolve(), { once: true });
+    const done = () => {
+      link.removeEventListener('load', done);
+      link.removeEventListener('error', done);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    link.addEventListener('load', done, { once: true });
+    link.addEventListener('error', done, { once: true });
+    signal.addEventListener('abort', done, { once: true });
     document.head.append(link);
   });
 }
 
-/* Where a deferred page's bundle is, with its panels settled; null when nothing mounts. */
-async function resolveBundle(info) {
+function figures() {
+  return Array.from(document.querySelectorAll('[data-wb-example]'));
+}
+
+async function resolveBundle(page, info, early) {
   const pending = figures().filter((figure) => figure.dataset.status === 'pending');
   let answer;
   try {
-    const response = await fetch(address(info, trace), { cache: 'no-store' });
-    answer = await response.json();
-    phase(trace, 'bundle-info-fetched');
+    const target = new URL(info, location.href);
+    const response =
+      early && early.url === target.pathname + target.search
+        ? await early.response
+        : await fetch(address(info, page.trace), {
+            cache: 'no-store',
+            signal: page.controller.signal,
+          }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
+    if (!live(page)) return null;
+    answer = response.body;
+    phase(page.trace, 'bundle-info-fetched');
     if (!response.ok) throw new Error(answer.error || 'Couldn’t load the examples.');
   } catch (error) {
+    if (!live(page)) return null;
     for (const figure of pending) settle(figure, 'unavailable', String(error.message ?? error));
     return null;
   }
-  options.revision = answer.revision;
+  page.options.revision = answer.revision;
   if (answer.error || !answer.module) {
     for (const figure of pending)
       settle(figure, 'unavailable', answer.error ?? 'This page has no examples.');
@@ -161,14 +176,41 @@ async function resolveBundle(info) {
   const exported = new Set(answer.examples);
   for (const figure of pending) {
     if (exported.has(figure.dataset.wbExample ?? '')) settle(figure, 'ready');
-    else settle(figure, 'missing', 'Not available in ' + (options.lensLabel ?? options.lens));
+    else
+      settle(
+        figure,
+        'missing',
+        'Not available in ' + (page.options.lensLabel ?? page.options.lens),
+      );
   }
-  if (answer.stylesheet) await stylesheet(answer.stylesheet);
+  if (answer.stylesheet) await stylesheet(answer.stylesheet, page.controller.signal);
   return answer.module;
 }
 
-function figures() {
-  return Array.from(document.querySelectorAll('[data-wb-example]'));
+/* Imports a page module and returns which module stylesheets it asked for,
+   so stylesheets only an earlier page used can be removed and shared ones
+   stay parsed, with their fonts. */
+async function importPage(url) {
+  const requested = new Set();
+  const owned = Object.hasOwn(document, 'querySelector');
+  const original = document.querySelector;
+  document.querySelector = function (selector) {
+    const match = /^link\[data-rspack="([^"]+)"\]$/.exec(selector);
+    if (match) requested.add(match[1]);
+    return original.call(this, selector);
+  };
+  try {
+    const bundle = await import(url);
+    return { bundle, requested };
+  } finally {
+    if (owned) document.querySelector = original;
+    else delete document.querySelector;
+  }
+}
+
+function pruneModuleStyles(requested) {
+  for (const link of Array.from(document.head.querySelectorAll('link[data-rspack]')))
+    if (!requested.has(link.getAttribute('data-rspack'))) link.remove();
 }
 
 function visibleExamples() {
@@ -180,121 +222,176 @@ function visibleExamples() {
     .map((figure) => ({ id: figure.dataset.wbExample ?? '', status: figure.dataset.status ?? '' }));
 }
 
-/* An address that names an example opens the page scrolled to it. */
 function scrollToExample(id) {
   document.getElementById('example-' + id)?.scrollIntoView({ block: 'start' });
 }
 
-/* Links between docs pages open the other page on the canvas; on its own, the
-   page follows them like any link. Every other link is recorded as an action,
-   as in a preview. */
-function wireLinks() {
-  if (parent === window) return;
+function restorePosition([left = 0, top = 0] = []) {
+  // Page replacement must not inherit a project's smooth-scroll animation.
+  window.scrollTo({ left, top, behavior: 'instant' });
+}
+
+let wired = false;
+/** Installs the document's own listeners; the host calls it before it tracks page listeners. */
+export function wireOnce() {
+  if (wired) return;
+  wired = true;
+  document.addEventListener('click', (event) => {
+    const button = event.target?.closest('[data-wb-show-code], [data-wb-copy-code]');
+    const figure = button?.closest('[data-wb-example]');
+    if (!button || !figure) return;
+    const id = figure.dataset.wbExample ?? '';
+    if (button.hasAttribute('data-wb-show-code')) void toggleCode(figure, id, button);
+    else void copyCode(id, button);
+  });
+  if (parent !== window) {
+    addEventListener(
+      'click',
+      (event) => {
+        const link = event.target?.closest('a[data-wb-docs-page]');
+        if (
+          !current ||
+          current.controller.signal.aborted ||
+          !link ||
+          event.defaultPrevented ||
+          event.button !== 0
+        )
+          return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const fragment = /#example-([a-z0-9-]+)$/.exec(link.getAttribute('href') ?? '');
+        report('docs-navigate', { page: link.dataset.wbDocsPage, example: fragment?.[1] ?? null });
+      },
+      true,
+    );
+    if (window.wbPreviewActions) {
+      window.wbPreviewActions.follow = (href, kind) => {
+        if (current)
+          onAction(current, 'action', {
+            name: kind === 'submit' ? 'submit' : 'navigate',
+            values: [href],
+          });
+        return true;
+      };
+    }
+  }
   addEventListener(
-    'click',
-    (event) => {
-      const link = event.target?.closest('a[data-wb-docs-page]');
-      if (!link || event.defaultPrevented || event.button !== 0) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const fragment = /#example-([a-z0-9-]+)$/.exec(link.getAttribute('href') ?? '');
-      report('docs-navigate', { page: link.dataset.wbDocsPage, example: fragment?.[1] ?? null });
+    'pagehide',
+    () => {
+      void stop().catch((error) => console.warn('[workbench] Docs cleanup failed', error));
     },
-    true,
+    { once: true },
   );
-  if (window.wbPreviewActions) {
-    window.wbPreviewActions.follow = (href, kind) => {
-      onAction('action', { name: kind === 'submit' ? 'submit' : 'navigate', values: [href] });
-      return true;
-    };
-  }
+  window.wbDocsPage = {
+    scrollToExample,
+    visibleExamples,
+    whenHighlighted: () => current?.highlighting.settled() ?? Promise.resolve(),
+    checkRevision,
+    examplesUpdated: (entry, revision) => {
+      const page = current;
+      if (page && live(page) && page.entry === entry && revision) {
+        page.options.revision = (page.options.revision?.split(':')[0] ?? '') + ':' + revision;
+      }
+    },
+    refresh: () => (current ? swapMarkdown(current) : Promise.resolve()),
+  };
 }
 
-function restoreScroll() {
-  try {
-    const saved = sessionStorage.getItem(SCROLL_KEY);
-    if (saved === null) return;
-    sessionStorage.removeItem(SCROLL_KEY);
-    const [x, y] = saved.split(',').map(Number);
-    window.scrollTo(x ?? 0, y ?? 0);
-  } catch {
-    /* Storage can be unavailable; the page then opens at the top. */
-  }
-}
-
-/**
- * The server pushes "docs-changed" when a docs page's Markdown changes; the
- * page checks its revision once and, when it changed, swaps its Markdown in
- * place. Mounted examples stay (they hot-update on their own), and so does
- * the scroll position.
- */
-function watchRevision() {
-  if (!options?.revisionUrl) return;
-  const revisionUrl = options.revisionUrl;
+function watchRevision(page) {
+  if (!page.options?.revisionUrl) return;
   let hub = window;
   try {
     if (parent !== window && parent.location.origin === location.origin) hub = parent;
   } catch {
-    /* Another origin: use this window. */
+    /* A standalone page owns its connection. */
   }
-  const source =
+  const owned = !hub.__wbPushSource;
+  const events =
     hub.__wbPushSource ??
     (hub.__wbPushSource = new hub.EventSource('/_workbench/previews/rspack/events'));
-  let checking = false;
-  const check = async () => {
-    if (checking) return;
-    checking = true;
-    try {
-      const answer = await fetch(revisionUrl, { cache: 'no-store' });
-      const { revision } = await answer.json();
-      if (revision && revision !== options.revision) {
-        options.revision = revision;
-        await swapMarkdown();
-      }
-    } catch {
-      /* The server can restart while the page stays open. */
-    } finally {
-      checking = false;
-    }
-  };
   const onMessage = (event) => {
     try {
-      if (JSON.parse(event.data).type === 'docs-changed') void check();
+      if (JSON.parse(event.data).type === 'docs-changed') void checkRevision();
     } catch {
       /* Not a pipeline message. */
     }
   };
-  source.addEventListener('message', onMessage);
-  addEventListener('pagehide', () => source.removeEventListener('message', onMessage), {
-    once: true,
-  });
+  events.addEventListener('message', onMessage);
+  page.unsubscribe = () => {
+    events.removeEventListener('message', onMessage);
+    if (owned && hub === window && !window.__workbenchDocsHost) {
+      events.close();
+      if (hub.__wbPushSource === events) delete hub.__wbPushSource;
+    }
+  };
 }
 
-async function swapMarkdown() {
-  const answer = await fetch(location.href, { cache: 'no-store' });
+/** Return-time freshness shares the pushed Markdown update path. */
+export async function checkRevision() {
+  const page = current;
+  if (!page?.options?.revisionUrl || !live(page)) return;
+  if (page.checking) return page.checking;
+  page.checking = (async () => {
+    try {
+      const answer = await fetch(page.options.revisionUrl, {
+        cache: 'no-store',
+        signal: page.controller.signal,
+      });
+      if (!answer.ok) throw new Error('Couldn’t check the Docs revision.');
+      const { revision } = await answer.json();
+      if (live(page) && revision && revision !== page.options.revision) {
+        if (revision.split(':')[1] !== page.options.revision?.split(':')[1]) {
+          if (window.wbDocsHost) {
+            await window.wbDocsHost.load(location.href);
+          } else {
+            try {
+              sessionStorage.setItem(
+                'wb-docs-scroll:' + location.pathname,
+                window.scrollX + ',' + window.scrollY,
+              );
+            } catch {
+              /* Scroll persistence is optional; fresh examples are required. */
+            }
+            location.reload();
+          }
+          return;
+        }
+        await swapMarkdown(page);
+        if (live(page)) page.options.revision = revision;
+      }
+    } catch (error) {
+      // Keep retained content usable; a later push or return retries.
+      if (live(page))
+        phase(page.trace, 'revision-check-failed', { message: String(error.message) });
+    } finally {
+      page.checking = null;
+    }
+  })();
+  return page.checking;
+}
+
+async function swapMarkdown(page) {
+  const answer = await fetch(location.href, { cache: 'no-store', signal: page.controller.signal });
+  if (!answer.ok) throw new Error('Couldn’t refresh the Docs page.');
   const next = new DOMParser()
     .parseFromString(await answer.text(), 'text/html')
     .querySelector('main.wb-docs');
-  const current = document.querySelector('main.wb-docs');
-  if (!next || !current) {
-    try {
-      sessionStorage.setItem(SCROLL_KEY, window.scrollX + ',' + window.scrollY);
-    } catch {
-      /* See restoreScroll. */
-    }
-    location.reload();
-    return;
-  }
+  const main = document.querySelector('main.wb-docs');
+  if (!live(page)) return;
+  if (!next || !main) throw new Error('The Docs page has no content.');
+  const scroll = [window.scrollX, window.scrollY];
+  const refreshing = [];
   for (const figure of Array.from(next.querySelectorAll('[data-wb-example]'))) {
-    const live = current.querySelector(
+    const live = main.querySelector(
       '[data-wb-example="' + CSS.escape(figure.getAttribute('data-wb-example') ?? '') + '"]',
     );
     if (live) figure.replaceWith(live);
   }
-  sourceRevision += 1;
-  highlighting.reset();
-  current.replaceChildren(...Array.from(next.childNodes));
-  sources.clear();
+  page.sourceRevision += 1;
+  page.highlighting.reset();
+  main.replaceChildren(...Array.from(next.childNodes));
+  window.wbPageStates?.apply(page.options?.state ?? 'default');
+  page.sources.clear();
   for (const figure of figures()) {
     const panel = figure.querySelector('[data-wb-example-code]');
     const button = figure.querySelector('[data-wb-show-code]');
@@ -304,54 +401,59 @@ async function swapMarkdown() {
     panel.replaceChildren();
     if (open) {
       panel.hidden = true;
-      void toggleCode(figure, figure.dataset.wbExample ?? '', button);
+      refreshing.push(toggleCode(figure, figure.dataset.wbExample ?? '', button));
     }
   }
-  highlightFences();
+  if (page.options.highlightUrl) page.highlighting.fences(document);
+  await Promise.all(refreshing);
+  if (live(page)) restorePosition(scroll);
 }
 
-function highlightFences() {
-  if (options?.highlightUrl) highlighting.fences(document);
-}
-
-async function start() {
+/** Starts a page whose Markdown is already in the document. */
+async function run(options, { scroll, answer: early } = {}) {
+  const page = {
+    options,
+    trace: documentTrace(options),
+    actions: [],
+    sources: new Map(),
+    sourceRevision: 0,
+    mounted: null,
+    controller: new AbortController(),
+    timers: new Set(),
+    highlighting: createHighlighting({ report: (name) => live(page) && phase(page.trace, name) }),
+  };
+  current = page;
   window.__workbenchReady = false;
   window.__workbenchError = null;
-  window.wbDocsPage = {
-    scrollToExample,
-    visibleExamples,
-    whenHighlighted: () => highlighting.settled(),
-  };
-  wireTools();
-  wireLinks();
+  window.wbPageStates?.apply(options?.state ?? 'default');
+  watchRevision(page);
   let results = [];
   const wanted = options?.bundle;
-  phase(trace, 'document-script');
+  phase(page.trace, 'document-script');
   const module = !wanted
     ? null
     : 'info' in wanted
-      ? await resolveBundle(wanted.info)
+      ? await resolveBundle(page, wanted.info, early)
       : wanted.module;
-  if (module && options) {
+  if (!live(page)) return;
+  if (module) {
     try {
-      // Against the page, not this script: in a portable export they sit in different folders.
-      const bundle = await import(new URL(module, location.href).href);
-      phase(trace, 'bundle-fetched');
-      const mounted = await mountExamples(document, bundle, {
-        phase: (name) => phase(trace, name),
+      const { bundle, requested } = await importPage(new URL(module, location.href).href);
+      if (!live(page)) return;
+      page.entry = window.__wbCurrent;
+      pruneModuleStyles(requested);
+      phase(page.trace, 'bundle-fetched');
+      page.mounted = await mountExamples(document, bundle, {
+        phase: (name) => phase(page.trace, name),
+        signal: page.controller.signal,
         page: options.page,
         state: options.state ?? 'default',
-        report: onAction,
+        report: (type, detail) => onAction(page, type, detail),
       });
-      results = mounted.results;
-      addEventListener(
-        'pagehide',
-        () => {
-          void mounted.dispose().catch(() => {});
-        },
-        { once: true },
-      );
+      if (!live(page)) return;
+      results = page.mounted.results;
     } catch (error) {
+      if (!live(page)) return;
       window.__workbenchError = String(error?.stack ?? error);
       for (const stage of document.querySelectorAll('[data-wb-example-stage]')) {
         stage.replaceWith(
@@ -364,22 +466,85 @@ async function start() {
       report('error', { message: String(error?.message ?? error) });
     }
   } else if (document.fonts) {
-    phase(trace, 'examples-mounted', { examples: 0 });
-    await document.fonts.ready;
-    phase(trace, 'readiness-fonts');
+    phase(page.trace, 'examples-mounted', { examples: 0 });
+    await Promise.race([
+      document.fonts.ready,
+      new Promise((resolve) =>
+        page.controller.signal.addEventListener('abort', resolve, { once: true }),
+      ),
+    ]);
+    if (!live(page)) return;
+    phase(page.trace, 'readiness-fonts');
   }
-  restoreScroll();
-  highlightFences();
+  restorePosition(scroll);
+  if (!scroll) {
+    try {
+      const key = 'wb-docs-scroll:' + location.pathname;
+      const saved = sessionStorage.getItem(key);
+      if (saved) {
+        sessionStorage.removeItem(key);
+        restorePosition(saved.split(',').map(Number));
+      }
+    } catch {
+      /* Storage can be unavailable. */
+    }
+  }
+  if (!live(page)) return;
+  if (options?.highlightUrl) page.highlighting.fences(document);
   window.__workbenchReady = true;
   report('ready', {
     state: options?.state ?? 'default',
     inputs: {},
     controls: {},
     docs: '',
-    actions,
+    actions: page.actions,
     examples: results,
   });
-  watchRevision();
 }
 
-void start();
+function cancelCurrent() {
+  if (!current) return;
+  current.controller.abort();
+  current.highlighting.dispose();
+  current.unsubscribe?.();
+  for (const timer of current.timers) clearTimeout(timer);
+  current.timers.clear();
+  window.__workbenchReady = false;
+}
+
+async function disposeCurrent() {
+  const page = current;
+  current = null;
+  page?.sources.clear();
+  if (page?.mounted) {
+    try {
+      await page.mounted.dispose();
+    } catch (error) {
+      cleanupFailure = error;
+    }
+  }
+  if (cleanupFailure) throw cleanupFailure;
+}
+
+/** Serialize cleanup and mounts, including imports that cannot be aborted. */
+export function start(options, settings = {}) {
+  wireOnce();
+  const ticket = ++generation;
+  cancelCurrent();
+  const next = transition
+    .catch(() => {})
+    .then(async () => {
+      await disposeCurrent();
+      if (ticket === generation) await run(options, settings);
+    });
+  transition = next;
+  return next;
+}
+
+export function stop() {
+  ++generation;
+  cancelCurrent();
+  const stopped = transition.catch(() => {}).then(disposeCurrent);
+  transition = stopped;
+  return stopped;
+}

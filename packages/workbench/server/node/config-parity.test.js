@@ -1,7 +1,7 @@
 /* The Rust config reader (`workbench-server config`) gives the Node reader's
    answer, `config.resolve(dir, config.read({ dir, key }))`, for every
    fixture: a handwritten corpus that reaches each rule and problem, and
-   seeded random configs built from the same keys. specs/server.md, phase 2. */
+   seeded random configs built from the same keys. specs/system/server.md, phase 2. */
 var test = require('node:test');
 var assert = require('node:assert/strict');
 var cp = require('node:child_process');

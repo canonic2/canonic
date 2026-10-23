@@ -1,109 +1,75 @@
 # Workbench specifications
 
-These internal specifications are maintained separately from the
-[public user documentation](../docs/README.md), which is published on the website.
-They define what Workbench should do and how it should work: product requirements,
-workflows, system contracts, design decisions, and discoveries from investigation.
-They guide implementation and review rather than merely describe the current code.
-The [workbench README](../ui/legacy/README.md) remains the setup and operations guide.
+Internal product contracts, system boundaries and acceptance evidence live here.
+[User guides](../docs/README.md) describe supported behavior; the
+[package guide](../AGENTS.md) owns development commands and source locations.
+A specification can define agreed future behavior without claiming it is shipped.
 
-Specs describe the current desired product and its intended next steps. Keep
-implemented behavior, agreed future requirements, proposals and verification
-gaps distinct. Delete superseded designs, removed features and completed task
-lists; history belongs in release notes and lab reports. Keep rationale when it
-explains an active contract, and link supporting evidence without reproducing
-the investigation diary. Update the relevant topic when requirements,
-decisions, or findings change, and add new topics to the index below. Use the
-`product-specs` skill to write and maintain these specifications.
+Start with [core](core.md) and [glossary](glossary.md), then the folder that owns
+the change. Each requirement has one owner. Cross-cutting summaries and research
+link to that owner rather than creating another version of its rules.
 
-## Reading order and ownership
+## Layout and ownership
 
-Start with [Core workbench](core.md) and [Glossary](glossary.md) for the
-product model, and [UI/backend independence](modules.md#ui-and-backend-independence)
-for the mandatory architecture boundary. [Rendering flow](rendering-flow.md)
-defines the shell, content renderer and backend/host roles. Feature topics own user-visible behavior. The
-[preview pipeline](preview-pipeline/README.md) owns discovery, compilation,
-delivery and runtime contracts; its index separates implemented capabilities
-from lab work.
+| Area | Owns | Boundary |
+| --- | --- | --- |
+| Root: [core](core.md), [glossary](glossary.md) | Product model, configuration composition, shared navigation and problem reporting | Summarizes capabilities; detailed rules stay with their topic |
+| [Canvas](canvas/README.md) | Lens selection, sizes, durable restoration and artboard composition | Live documents and compilation belong to the preview pipeline; UI primitives belong to UI |
+| [Pages](pages/README.md) | Preview/Docs authoring, authored implementations and Storybook page workflows | Adapters own technology-specific rendering; pipeline owns shared delivery |
+| [Review](review/README.md) | Interactive capture, handoff acquisition and design-system export | Agent delivery belongs to integrations; export jobs do not redefine canvas navigation |
+| [UI](ui/README.md) | Web Components, semantic themes and presentation lifecycle | Capability controllers own state and I/O; project content keeps its own styles |
+| [Integrations](integrations/README.md) | VS Code host lifecycle and delivery of canvas context to agents | Canvas persistence owns saved data and precedence; server owns transport/process rules |
+| [System](system/README.md) | Architecture, rendering boundaries, server/proxy ownership, performance budgets, engineering gates and lab method | Capability specs own behavior; research owns dated observations |
+| [Preview pipeline](preview-pipeline/README.md) | Discovery, compilation, serving, hot updates, warm documents and readiness | Page formats own semantics; system performance owns budgets |
+| [Adapters](adapters/README.md) | Technology-specific build, server evaluation, mount and update behavior | Shared lifecycle and resource bounds stay with the pipeline |
+| [Research](research/README.md) | Dated measurements, host checks, comparisons and links to lab records | Evidence qualifies status; it does not redefine contracts or thresholds |
 
-For the Rust page-index work, read [Page index](preview-pipeline/page-index.md)
-for correctness, lifecycle, cache bounds and acceptance; then
-[Performance](preview-pipeline/performance.md#page-listing) for measured results
-and target gaps, and [Code quality](code-quality.md) for the engineering gates.
-Each requirement has one owning topic. Cross-links connect the topics without
-copying acceptance criteria or treating lab results as shipped verification.
+Keep folders one level deep. Add a topic when it has a distinct owner; split
+mixed contracts rather than splitting solely by length. Folder indexes explain
+ownership and reading paths. Keep implementation plans beside the capability
+they develop, separate from current behavior and observed acceptance.
+
+## Reading paths
+
+| Task | Read |
+| --- | --- |
+| Understand routing and failures | [Core](core.md), then the owning [page format](pages/README.md) |
+| Implement restart restoration | [Persistence](canvas/persistence.md), then [VS Code](integrations/vscode-extension.md#persistence-and-restored-editor-tabs) |
+| Change artboard composition | [Artboards](canvas/multiple-artboards.md), [artboard system](canvas/artboard-system.md), then [rendering flow](system/rendering-flow.md) |
+| Change project rendering | [Pages](pages/README.md), the relevant [adapter](adapters/README.md), then [pipeline](preview-pipeline/README.md) |
+| Change a shell component or theme | [Web Components](ui/web-components.md), [themes](ui/themes.md), then the owning capability |
+| Change drawing, focus or shortcuts | [Annotations](canvas/annotations.md) and [interaction](canvas/interaction.md) |
+| Change configuration writes | [Configure pages](pages/configuration-editor.md), [sizes](canvas/sizes.md) and [access boundaries](system/access-boundaries.md) |
+| Check host prerequisites or upgrades | [Hosting](integrations/hosting.md), then the owning host/capability |
+| Change processes or host messages | [Server](system/server.md), then [VS Code](integrations/vscode-extension.md) |
+| Investigate performance | [Budgets and measurement](system/performance.md), [research](research/README.md), then [lab method](system/labs.md) |
+| Assess verification | The capability's status/acceptance, [quality gates](system/code-quality.md) and its linked evidence |
 
 ## Delivery boundaries
 
-| Area | Current implementation and desired next step |
+| Area | Current implementation and remaining work |
 | --- | --- |
-| Shell/content boundary | One Workbench shell and dedicated content-only renderers; startup request/markup assertions and retained Storybook checks cover the boundary. See [rendering flow](rendering-flow.md) |
-| UI/backend independence | UI owns presentation; backend owns data/operations and project previews. Generic asset hosting is separate. Independent UI/backend acceptance remains unverified |
-| Preview pipeline | Native listing and the native Rspack compiler in `workbench-server` are implemented, with project JavaScript in the Node evaluator. Complete-list and first-page targets still require work and are unmeasured against the native compiler |
-| Multiple artboards | Instance isolation, mixed-space support, review composition and context APIs are implemented. User-facing multi-artboard integration is future work; arrangement is phase 2 and persistence/sharing remain open |
-| Sizes and shell | Configurable sizes and migrated Web Components are implemented. Configure pages size cards, guide alignment and the canvas theme bridge remain gaps |
+| Shell/content boundary | One shell and dedicated content renderers are implemented; independent UI/backend acceptance remains open |
+| Preview pipeline | Native listing, watching and compilation are implemented. Docs navigation and installed startup have scoped measurements; the full first-page/list target campaign remains open |
+| Artboards | Explicit page composition, isolated instances, review and context are implemented. Free artboard management, phase 2 arrangement and saved/shared layouts remain open |
+| UI and sizes | Components and configurable sizes are implemented. Configure pages size cards, public-guide alignment and the canvas theme bridge remain gaps |
+| Persistence | Current-space choice and origin-bound preferences exist. Complete selection/preference restoration and first-page fallback are agreed implementation work: IndexedDB in browsers, workspaceState in VS Code |
 
-Each owning topic supplies the detailed contract, acceptance criteria and
-verification limits. An implemented support API does not establish that its
-user-facing workflow is delivered.
+Detailed status and acceptance stay in their owning topic. An implemented
+support API, passing unit check or prototype comparison does not establish
+a complete user workflow or acceptance on every host.
 
-## Topics
+## Maintaining the boundaries
 
-| Spec | Covers |
-| --- | --- |
-| [Rendering flow](rendering-flow.md) | Required shell/content/backend flow, nested-shell defect, refactor scope and acceptance gaps |
-| [Web Components](web-components.md) | Target component structure, public APIs, Shadow DOM, lifecycle, host loading and bounded migration |
-| [Themes](themes.md) | Standalone defaults, semantic tokens, VS Code theme forwarding, live updates, accessibility and preview isolation |
-| [Glossary](glossary.md) | The agreed names for what a space holds (space, collection, group, page, state, lens) and for each part of the interface |
-| [Core workbench](core.md) | Configuration, problem reporting, navigation, selection, the canvas and artboards, and failures shared by every page |
-| [Lenses](lenses.md) | Rendering kinds, customizable display labels for every lens including the authored preview, stable identity, defaults, and configuration precedence |
-| [Multiple artboards](multiple-artboards.md) | Implemented instance/review support, desired comparison workflows, remaining UI integration, arrangement phases and persistence decisions |
-| [Artboard code plan](multiple-artboards-code-plan.md) | JavaScript UI owners, target capability boundaries, state/runtime/space contracts, remaining integration and validation |
-| [TypeScript previews](previews.md) | Preview definitions, discovery, the compiler and Node evaluator, controls, the `workbench` lens, and the portable build |
-| [Adapters](adapters/README.md) | What each technology needs to render, one spec per adapter: [HTML](adapters/html.md), [React](adapters/react.md), [React Native Web](adapters/react-native-web.md), [Vue](adapters/vue.md), [Astro](adapters/astro.md), [Storybook](adapters/storybook.md) and [custom adapters](adapters/custom.md); how the Workbench server serves pages |
-| [Artboard sizes](sizes.md) | Sizes defined by each space and limited or extended by pages: fill axes, configurable buttons and icons, the size menu with **Custom size…** and **Edit sizes…**, addresses, handoffs, and export |
-| [Docs](docs-pages.md) | Docs as a lens of any page: Markdown with live examples on the whole canvas, `docs` lenses one per renderer, Markdown pages, `defineDocs`, the docs canvas mode, and docs references in the export |
-| [Storybook](storybook.md) | Pages mapped to stories, story lookup, story selection, preview reuse, and startup |
-| [Authored pages and implementations](implementations.md) | Authored pages, URL implementations, iOS Simulator implementations, window implementations, and the native window stream |
-| [VS Code extension](vscode-extension.md) | Activation, trust, commands, webviews, refresh, start commands, and the server and helper processes |
-| [Agent context](agent-context.md) | Telling chats in the editor which page the canvas shows: the view route, the server announcement, the agent hooks and MCP server, and proposed Copilot surfaces |
-| [Implementation proxy](implementation-proxy.md) | Why URL and Storybook lenses load through a loopback proxy, what it rewrites, and why lenses must not frame implementations directly |
-| [Interactive capture](capture.md) | Bundled Electron helper, live mirroring, camera, handoff, and limits |
-| [Design-system export](export.md) | Page, collection and space scopes, ZIP/PDF/image/browser output, background captures, hashes, and warnings |
-| [Workbench server](server.md) | The server's process model, its move into the Rust `workbench-server` binary in phases, and the route inventory |
-| [Preview pipeline](preview-pipeline/README.md) | How native pages are compiled, served, kept warm, made ready and updated: [performance](preview-pipeline/performance.md) requirements and targets, the Rspack [compiler](preview-pipeline/compiler.md), [serving](preview-pipeline/serving.md), [hot updates](preview-pipeline/hot-updates.md), the [warm runtime](preview-pipeline/warm-runtime.md), [readiness](preview-pipeline/readiness.md) and [plugins](preview-pipeline/plugins.md) |
-| [Page index](preview-pipeline/page-index.md) | Native discovery and listing, literal/evaluated definition parity, invalidation, bounded saves, process lifecycle, fallback, packaging and acceptance evidence |
-| [Code quality](code-quality.md) | UI lint, formatting, types and browser tests; component structure review; Rust tooling, dependency review and release checks |
-| [Labs](labs.md) | How engineering questions are settled by comparing working variants: plans, fixtures, boundaries, correctness checks, measurement, evidence and decisions |
-| [Module layout](modules.md) | Peer product parts, capability ownership, shared contracts, delivery and bounded migration requirements |
-
-The product root holds peer `extension/`, `server/`, `capture/`, `ui/`, `sdk/`
-and `contracts/` owners. The browser canvas is in `ui/`, and the server's
-Rust index and Node services are in `server/`. Projects provide
-`workbench.yaml` and may override machine-specific values in the ignored
-`workbench.local.yaml`. They do not receive a copy of the workbench code.
-
-## Page sources
-
-A page enters the page list from `workbench.yaml`, from the iOS Simulator
-catalog, or from preview discovery. TypeScript previews (`*.workbench.ts` and
-`*.workbench.tsx`) are discovered unless `previews: false`, compile in the
-Workbench server, and render in the Workbench preview host; see
-[TypeScript previews](previews.md) and the [preview API guide](../docs/workbench-previews.md).
-
-| Source | How it enters the page list | What appears on the canvas |
-| --- | --- | --- |
-| Authored page | A `collections[].items[]` entry with `src` | The project HTML file as designed |
-| TypeScript preview | A discovered definition, placed in the collection its title names, or listed by `src` | The compiled component in the preview host, with its states and controls |
-| Markdown page | A `collections[].items[]` entry whose `src` is a `.md` file, or a discovered `defineDocs` definition | The Markdown on the whole canvas, with examples rendered through its docs lenses |
-| Docs | `docs` on any `collections[].items[]` entry, with `kind: docs` lenses | The page's Markdown as one of its lenses, beside its design |
-| Workbench mapping | A `kind: workbench` lens on an authored page | A named TypeScript preview's states beside the design |
-| URL implementation | A lens on an authored page | The configured external page in an iframe |
-| Storybook mapping | A lens on an authored page | One story from the mapped Storybook title |
-| iOS Simulator mapping | A lens on an authored page | A stream from the selected booted device |
-| iOS Simulator catalog | `catalog: true` on a Simulator implementation | Imported booted devices, without a design lens |
-| Window mapping | A lens on an authored page | A stream of the named window from the configured macOS app |
-
-The specs describe VS Code behavior unless they explicitly mention standalone
-browser or server use. A `file://` workbench has no server-backed catalog,
-story lookup, or TypeScript previews.
+- Put required behavior, failure/recovery rules and acceptance in the capability
+  that owns them. Keep current implementation, agreed future work and proposals explicit.
+- Put shared architecture and engineering policy in `system/`; UI presentation
+  contracts in `ui/`; technology-specific differences in `adapters/`.
+- Put dated findings in `research/`, with fixture, host, source identity and
+  limitations. Preserve raw plans/reports under `../labs/` according to the lab
+  method. Record the adopted behavior in the owning contract.
+- Update incoming links and anchors when moving or splitting a topic, including
+  package guides, local skills, source comments and lab records. Regenerate
+  agent instructions from `.canonic/` when their sources change.
+- Keep public guide routes stable. Reorganizing specs changes neither runtime
+  behavior nor product requirements and establishes no new test results.

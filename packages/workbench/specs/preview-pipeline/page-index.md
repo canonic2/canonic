@@ -1,19 +1,20 @@
 # Page index
 
-Status: implemented for server-side preview and docs discovery. The Rust
-compiler host is separate lab work; this index does not change compilation,
-pre-warming or definition watching.
+Status: implemented for preview and docs discovery in the native server,
+including its resident index and definition watcher. Compilation and
+pre-warming are separate responsibilities of the native compiler.
 
 ## Purpose and ownership
 
 The canvas needs a complete, ordered page list without waiting for the preview
 compiler to start. Listing must preserve the definition behavior in
-[TypeScript previews](../previews.md) and [docs](../docs-pages.md), including
+[TypeScript previews](../pages/previews.md) and [docs](../pages/docs-pages.md), including
 validation, errors, IDs, states and sidebar order.
 
 This topic owns discovery, index reuse, evaluation, failure recovery and saved
-index bounds. [Performance](performance.md#page-listing) owns measured timings
-and the agreed complete-list target. [Compiler](compiler.md) owns building the
+index bounds. [Performance](../system/performance.md#measured-interactions) owns
+the agreed complete-list target; [listing research](../research/page-listing.md)
+records measurements and their limits. [Compiler](compiler.md) owns building the
 pages after they are listed. A fast index alone does not establish that the
 first page meets its render target.
 
@@ -93,7 +94,7 @@ The Rust package in `server/` has a library and a thin binary entry
 point. `workbench-server index` consumes one JSON request on stdin and writes
 one JSON response, then exits. The protocol is documented in
 [the server README](../../server/README.md#index-protocol).
-The [native ownership contract](../modules.md#rust-ownership) separates
+The [native ownership contract](../system/modules.md#rust-ownership) separates
 pure definition rules, application stages, shared observations and adapters.
 
 The server's [catalog](../../server/src/catalog.rs) owns the request: the
@@ -109,14 +110,17 @@ answer.
 | --- | --- |
 | Saved records | At most 32 MiB of versioned postcard data per project; a larger index is not saved, and the timings report it as a save error |
 | Project saves | At most 32 root-digest directories under `canonic-workbench-index/` in the system temporary folder; evict inactive directories after seven days and oldest directories beyond the count bound during index requests |
-| Evaluator run | The request's deadline, 120 seconds by default, in the one-process index and the [server's resident index](../server.md#the-resident-index-and-watcher) alike; the evaluator is killed at the deadline |
+| Evaluator run | The request's deadline, 120 seconds by default, in the one-process index and the [server's resident index](../system/server.md#the-resident-index-and-watcher) alike; the evaluator is killed at the deadline |
 | Index answer | At most 128 MiB, the one-process index's output bound and the resident index's answer bound |
 
 Saved indexes belong outside the project. They are not authoring files or
 portable build outputs. A failing or timed-out index adds a
-`Workbench previews: …` problem to the page tree. Listing starts neither the
-compilers nor the Node evaluator; the page tree then configures the compilers,
-which build and pre-warm what it lists ([server](../server.md#previews)).
+`Workbench previews: …` problem to the page tree. Listing does not require
+preview compilation. Literal-only listing needs no JavaScript process; computed
+definitions, Docs and unsupported native glob patterns can start the index's
+short-lived evaluator in [evaluate.rs](../../server/src/evaluate.rs). This is
+separate from the compiler's long-lived evaluator. The page tree then configures the compilers,
+which build and pre-warm what it lists ([server](../system/server.md#previews)).
 
 ### Distribution
 
@@ -124,7 +128,7 @@ Every supported VSIX target contains its matching native executable. Packaging
 builds locked release dependencies for that Rust target or uses an explicitly
 provided prebuilt executable. Missing target/linker prerequisites stop
 packaging. Ship the executable, excluding Rust source, Cargo caches and test
-reports. [Code quality](../code-quality.md) owns the build and verification
+reports. [Code quality](../system/code-quality.md) owns the build and verification
 policy; [the native README](../../server/README.md#checks-and-packaging) owns
 developer commands.
 
@@ -143,18 +147,19 @@ acceptance.
 | PI-05 | A failing or timed-out index is a page-tree problem, and the rest of the configuration still answers | [Native CLI deadline test](../../server/tests/integration/main.rs); the page-tree problem has no dedicated test |
 | PI-06 | Trust and disabled-preview controls prevent project evaluation | [Preview server integration tests](../../server/node/preview.test.js) |
 | PI-07 | Cache eviction, byte bounds and process cleanup follow the resource table | Implemented bounds; dedicated boundary/eviction and descendant-cleanup assertions remain verification gaps |
-| PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [performance](performance.md#page-listing); acceptance on all six targets is not established by that probe |
+| PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [listing evidence](../research/page-listing.md); acceptance on all six targets is not established by that probe |
 
 ## Remaining work
 
 The implemented design uses directory-stamp reuse, literal parsing and the
-compiler evaluator. [Performance](performance.md#page-listing) owns measured
+compiler evaluator. [Listing research](../research/page-listing.md) records measured
 results and target gaps; [lab evidence](../../labs/instant-first-page/README.md#stage-1-report)
 supports the architecture without defining the shipping interface.
 
-- The [server](../server.md#the-resident-index-and-watcher) keeps the index
-  resident with a watcher and reports changed listings; what still lacks a
-  notice is owned by [sidebar placement](../previews.md#sidebar-placement).
+- The [server](../system/server.md#the-resident-index-and-watcher) keeps the index
+  resident with a watcher and reports changed listings to the extension,
+  which refreshes the sidebar and canvas for the current space. Component-only
+  edits stay on the compiler's update path.
 - Studio has no native-library integration contract. The presence of a Rust
   library does not establish an embeddable indexing API.
 - Metadata stamps do not establish content identity when both modification

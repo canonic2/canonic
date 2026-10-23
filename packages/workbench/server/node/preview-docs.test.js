@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const compilerFixture = require('./compiler-fixture.cjs');
+const { Browser, findChrome } = require('../../scripts/chrome.cjs');
 
 // A docs lens's examples as the native compiler lists them.
 async function listing(t, root) {
@@ -231,9 +232,10 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(html)[1]);
   assert.equal(options.lens, 'web');
   assert.equal(options.lensLabel, 'Web');
-  assert.equal(options.revision, '', 'a deferred page learns its revision with its bundle');
+  assert.match(options.revision, /^[a-f0-9]{16}:$/, 'a deferred page identifies its Markdown before the examples answer');
 
   const info = await (await request(base + options.bundle.info)).json();
+  assert.equal(info.revision.split(':')[0], options.revision.split(':')[0]);
   assert.deepEqual(info.examples.sort(), ['ghost', 'primary', 'secondary']);
   assert.equal(info.error, null);
   // The lens's preview module names its build's scripts and stylesheets.
@@ -260,8 +262,12 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   const missing = await request(base + '/_workbench/docs/source?page=docs%2Fbutton.md&lens=native&example=secondary');
   assert.equal(missing.status, 404);
 
+  // Listing another lens can repartition chunks without changing this entry.
+  const currentInfo = await (await request(base + options.bundle.info)).json();
   const revision = (await (await request(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision;
-  assert.equal(revision, info.revision);
+  assert.equal(revision, currentInfo.revision);
+  assert.equal(currentInfo.revision, info.revision, 'an unrelated entry must preserve the examples revision');
+  assert.equal(revision.split(':')[0], info.revision.split(':')[0]);
   fs.appendFileSync(path.join(root, 'docs/button.md'), '\nMore notes.\n');
   assert.notEqual((await (await request(base + '/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web')).json()).revision, revision);
 
@@ -280,6 +286,69 @@ test('docs problems join the config’s problems once listed, and the host hears
   await running.config();
   await noticed;
   assert.deepEqual((await running.config()).problems, ['Button (docs/button.md): example “ghost” in Web is not placed in docs/button.md.']);
+});
+
+test('a docs return revision detects an example edit without a Markdown save', async t => {
+  const root = docsProject(t);
+  const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
+  t.after(() => running.close());
+  await running.config();
+  const address = `http://127.0.0.1:${running.port}/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web`;
+  let first = (await (await request(address)).json()).revision;
+  const example = path.join(root, 'docs/button/primary.ts');
+  const deadline = Date.now() + 10000;
+  for (const label of ['Updated primary', 'Updated again', 'Final primary']) {
+    fs.writeFileSync(example, `export default (canvas: HTMLElement) => { canvas.textContent = ${JSON.stringify(label)}; };`);
+    let changed = first;
+    while (changed === first && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      changed = (await (await request(address)).json()).revision;
+    }
+    assert.notEqual(changed, first, 'the first edit and consecutive edits must survive dependency watch registration');
+    assert.equal(changed.split(':')[0], first.split(':')[0], 'the Markdown revision is unchanged');
+    assert.notEqual(changed.split(':')[1], first.split(':')[1], 'the example runtime revision changed');
+    first = changed;
+  }
+});
+
+test('React hot updates advance the Docs revision so a later Markdown save preserves state', {
+  skip: !findChrome() && 'Chrome is required for Docs hot updates',
+}, async t => {
+  const source = 'import { useState } from "react"; export default function Counter() { const [count, setCount] = useState(0); return <button onClick={() => setCount(count + 1)}>Before {count}</button>; }';
+  const root = fixture(t, {
+    'workbench.yaml': DOCS_YAML.replace('adapter: html', 'adapter: react'),
+    'theme.css': 'button { color: purple; }',
+    'docs/button.md': '# Button\n\n```example primary\n```\n',
+    'docs/button/primary.tsx': source,
+    'docs/button.examples.ts': 'export const primary = () => {};',
+  });
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const browser = new Browser();
+  t.after(() => browser.close());
+  await browser.launch();
+  const page = await browser.createTarget();
+  await page.navigate(`http://127.0.0.1:${running.port}/_workbench/ui/src/modules/docs/host/docs-host.html?lens=web`);
+  const wait = async expression => {
+    for (let attempt = 0; attempt < 300; attempt++) {
+      if (await page.evaluate(expression)) return;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.fail('Docs did not settle: ' + expression);
+  };
+  await wait('!!window.wbDocsHost');
+  await page.evaluate('wbDocsHost.load("/docs/button.md?lens=web")');
+  await wait('document.querySelector("[data-wb-example-stage] button")?.textContent === "Before 0"');
+  await page.evaluate('document.querySelector("[data-wb-example-stage] button").click()');
+  await wait('document.querySelector("[data-wb-example-stage] button")?.textContent === "Before 1"');
+  fs.writeFileSync(path.join(root, 'docs/button/primary.tsx'), source.replace('Before', 'After'));
+  await wait('document.querySelector("[data-wb-example-stage] button")?.textContent === "After 1"');
+  // Await the hot client's acknowledgement, rather than racing the subsequent save.
+  const latest = (await (await request(`http://127.0.0.1:${running.port}/_workbench/docs/revision?page=docs%2Fbutton.md&lens=web`)).json()).revision;
+  await wait('window.__workbenchDocs.revision === ' + JSON.stringify(latest));
+  fs.appendFileSync(path.join(root, 'docs/button.md'), '\n## More notes\n');
+  await wait('document.querySelector("h2")?.textContent === "More notes"');
+  assert.equal(await page.evaluate('document.querySelector("[data-wb-example-stage] button")?.textContent'), 'After 1');
 });
 
 test('a page with a design has its docs as a lens: served at its Markdown, listed in its sources, and in a handoff', async t => {
@@ -322,6 +391,10 @@ test('the page script and stylesheet are served unchanged from browser-ready sou
   assert.match(script.headers.get('content-type'), /text\/javascript/);
   const body = await script.text();
   assert.equal(body, fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
+  const host = await request(base + '/_workbench/ui/src/modules/docs/host/docs-host.html');
+  assert.equal(host.status, 200);
+  assert.match(host.headers.get('content-type'), /text\/html/);
+  assert.equal(await host.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/host/docs-host.html'), 'utf8'));
   const mount = await request(base + '/_workbench/ui/src/modules/docs/page/mount-examples.js');
   assert.equal(await mount.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
   assert.equal((await request(base + '/_workbench/server/node/src/modules/docs/docs-service.ts')).status, 404);
@@ -420,7 +493,7 @@ test('the portable export builds each docs page in each lens as a static page wi
     lenses: [{ key: 'web', label: 'Web', directory: 'browser/docs/docs-button/web' }, { key: 'native', label: 'Native', directory: 'browser/docs/docs-button/native' }],
     examples: [{ id: 'primary', label: 'Primary' }, { id: 'secondary', label: 'Secondary' }] }]);
   const page = files.get('browser/docs/docs-button/web/index.html').toString();
-  assert.match(page, /<script type="module" src="..\/..\/page\/page.js"><\/script>/);
+  assert.match(page, /import \{ start \} from "..\/..\/page\/page.js"; start\(window.__workbenchDocs\);/);
   assert.match(page, /<link rel="stylesheet" href="..\/..\/docs-page.css">/);
   assert.match(page, /<img src=".\/files\/docs\/anatomy.svg" alt="Anatomy">/);
   const options = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(page)[1]);

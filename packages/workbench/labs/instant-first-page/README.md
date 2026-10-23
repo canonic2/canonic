@@ -1,11 +1,11 @@
 # Instant first page lab
 
-Methodology: [Workbench labs](../../specs/labs.md). Owning contracts:
-[TypeScript previews](../../specs/previews.md) for discovery and the page
+Methodology: [Workbench labs](../../specs/system/labs.md). Owning contracts:
+[TypeScript previews](../../specs/pages/previews.md) for discovery and the page
 list, [compiler](../../specs/preview-pipeline/compiler.md) for the entry set
 and start, [hot updates](../../specs/preview-pipeline/hot-updates.md) for what
 must keep working, [core](../../specs/core.md) for the canvas, and
-[performance](../../specs/preview-pipeline/performance.md#first-open-and-edits)
+[performance](../../specs/system/performance.md#first-open-and-edits)
 for the requirement and targets.
 
 Status: the owner agreed the plan on 2026-10-15, with the
@@ -522,7 +522,7 @@ Diagnostic controls, not candidates:
 - **N: the control without its front door.** `server.js` listens on the
   public port itself, as it does when the `workbench-server` binary is
   missing. Run with `--variants 0,N`, it is the comparison the server's
-  [phase 1 acceptance](../../specs/server.md#the-resident-index-and-watcher) asks
+  [phase 1 acceptance](../../specs/system/server.md#the-resident-index-and-watcher) asks
   for: the front door's first-page, page-list and switching p50 against
   the server without it. Its renders are checked against variant 0's.
 - **D1: request overhead.** Not a variant: in every variant, the Workbench
@@ -604,13 +604,13 @@ back); a sample over 10 s keeps it in the report.
 - **Own build time:** the page's build in a one-entry Rust host with an empty
   cache (stage 1's B1), measured beside S1 on the same page.
 - **Selection to visible** (S4, S5, S5r, S9) and **edit to visible** (S6,
-  S7), as the [methodology](../../specs/labs.md#boundaries) defines them.
+  S7), as the [methodology](../../specs/system/labs.md#boundaries) defines them.
 - **D1's request parts**, from the Workbench server's and the host's own
   events.
 
 ### Correctness checks
 
-Every [methodology check](../../specs/labs.md#correctness-checks), on every
+Every [methodology check](../../specs/system/labs.md#correctness-checks), on every
 run, on the supported subset: render parity with the control's screenshots,
 isolation (the `large-system` sentinels), freshness, error containment,
 readiness and capture, clean console. Plus:

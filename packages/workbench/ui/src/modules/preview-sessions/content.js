@@ -103,6 +103,12 @@ export function createContentController(options) {
       code: (config.pages[item.src]?.code || []).filter((c) => c.exists).map((c) => c.path),
     };
     write({ ...target, src: item.src, state, lens: lens?.key || 'design' });
+    if (lens?.problem) {
+      frames.suspend();
+      services.native.hide();
+      fail(new Error(lens.problem));
+      return;
+    }
     options.surface.dataset.contentMode = isDocsLens(lens) ? 'docs' : 'preview';
     if (lens && ['ios-simulator', 'window'].includes(lens.kind)) {
       frames.suspend();

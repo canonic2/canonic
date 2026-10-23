@@ -88,6 +88,15 @@ struct State {
     project: Option<Arc<Project>>,
 }
 
+/// Keep the root stream alive when dependency watches change. On macOS,
+/// adding a path to an existing watcher stops and restarts its entire stream.
+struct Watching {
+    _root: RecommendedWatcher,
+    outside: HashMap<PathBuf, RecommendedWatcher>,
+    send: mpsc::UnboundedSender<Vec<PathBuf>>,
+    _stop: tokio::sync::oneshot::Sender<()>,
+}
+
 pub(crate) struct Previews {
     root: PathBuf,
     virtual_dir: PathBuf,
@@ -98,9 +107,7 @@ pub(crate) struct Previews {
     evaluator: Arc<Evaluator>,
     events: broadcast::Sender<String>,
     state: tokio::sync::Mutex<State>,
-    watcher: Mutex<Option<RecommendedWatcher>>,
-    /// Folders outside the root that the watcher also watches, one level deep.
-    outside: Mutex<HashSet<PathBuf>>,
+    watcher: Mutex<Option<Watching>>,
     /// Asks for `outside` to follow what builds, renders and the
     /// configuration read now.
     rewatch: Arc<tokio::sync::Notify>,
@@ -170,7 +177,6 @@ impl Previews {
                 project: None,
             }),
             watcher: Mutex::new(None),
-            outside: Mutex::new(HashSet::new()),
             rewatch: Arc::new(tokio::sync::Notify::new()),
             reloading: tokio::sync::Mutex::new(()),
             portable: tokio::sync::Mutex::new(None),
@@ -366,6 +372,9 @@ impl Previews {
                     "type": "built", "profile": profile.name(), "generation": generation,
                     "hash": snapshot.hash.clone().unwrap_or_else(|| format!("failed-{}", now())),
                     "errors": snapshot.errors_by_entry(), "time": now(), "ms": snapshot.ms.round(),
+                    "revisions": snapshot.entrypoints.iter().map(|(slug, point)| (
+                        slug.clone(), json!(point.revision(generation, snapshot.failure.as_deref()))
+                    )).collect::<serde_json::Map<String, Value>>(),
                 });
                 let _sent = events.send(message.to_string());
                 rewatch.notify_one();
@@ -964,11 +973,15 @@ impl Previews {
         drop(warming);
         let _building = crate::trace::phase("bundle");
         let entry = self.docs_entry(raw).await?;
-        let (entry, _host, _snapshot) = self.ensure(entry).await?;
+        let (entry, host, snapshot) = self.ensure(entry).await?;
         let descriptor = Self::descriptor_of(&entry);
-        // Examples update in place, so the bundle's revision stays the same.
+        let point = snapshot
+            .entrypoints
+            .get(&entry.slug)
+            .context("docs entry assets")?;
+        let revision = point.revision(host.generation, snapshot.failure.as_deref());
         Ok(json!({
-            "base": descriptor["base"], "module": descriptor["module"], "revision": "rspack",
+            "base": descriptor["base"], "module": descriptor["module"], "revision": revision,
             "stylesheet": Value::Null, "examples": entry.examples, "problems": entry.problems,
         }))
     }
@@ -981,19 +994,28 @@ impl Previews {
             return;
         }
         let (send, mut receive) = mpsc::unbounded_channel::<Vec<PathBuf>>();
+        let root_send = send.clone();
         let started = notify::recommended_watcher(move |event: notify::Result<Event>| {
             if let Ok(event) = event
                 && !matches!(event.kind, EventKind::Access(_))
             {
-                let _sent = send.send(event.paths);
+                let _sent = root_send.send(event.paths);
             }
         })
         .and_then(|mut created| {
             created.watch(&self.root, RecursiveMode::Recursive)?;
             Ok(created)
         });
+        let (stop, mut stopped) = tokio::sync::oneshot::channel();
         match started {
-            Ok(created) => *watcher = Some(created),
+            Ok(created) => {
+                *watcher = Some(Watching {
+                    _root: created,
+                    outside: HashMap::new(),
+                    send: send.clone(),
+                    _stop: stop,
+                });
+            }
             Err(error) => {
                 eprintln!("[workbench] preview watcher failed: {error}");
                 return;
@@ -1003,11 +1025,15 @@ impl Previews {
         let (weak, rewatch) = (Arc::downgrade(self), self.rewatch.clone());
         tokio::spawn(async move {
             loop {
-                rewatch.notified().await;
+                tokio::select! {
+                    biased;
+                    _ = &mut stopped => break,
+                    () = rewatch.notified() => {}
+                }
                 let Some(previews) = weak.upgrade() else {
                     break;
                 };
-                if !previews.watch_outside().await {
+                if !previews.watch_outside(&send).await {
                     break;
                 }
             }
@@ -1097,13 +1123,12 @@ impl Previews {
     /// Stops watching the root and every folder outside it.
     fn unwatch(&self) {
         self.watcher.lock().expect("watcher lock").take();
-        self.outside.lock().expect("outside lock").clear();
     }
 
     /// Watches the folders of files read from outside the root: a linked
     /// workspace package, or a render or configuration import beside the
     /// project. Returns false once the watcher has stopped.
-    async fn watch_outside(&self) -> bool {
+    async fn watch_outside(&self, send: &mpsc::UnboundedSender<Vec<PathBuf>>) -> bool {
         let mut files: Vec<PathBuf> = vec![];
         {
             let state = self.state.lock().await;
@@ -1119,23 +1144,32 @@ impl Previews {
         }
         let folders = outside_folders(&self.root, files);
         let mut watcher = self.watcher.lock().expect("watcher lock");
-        let mut outside = self.outside.lock().expect("outside lock");
         let Some(watcher) = watcher.as_mut() else {
-            outside.clear();
             return false;
         };
-        let gone: Vec<PathBuf> = outside.difference(&folders).cloned().collect();
-        for folder in gone {
-            let _unwatched = watcher.unwatch(&folder);
-            outside.remove(&folder);
+        if !watcher.send.same_channel(send) {
+            return false;
         }
+        watcher.outside.retain(|folder, _| folders.contains(folder));
         for folder in folders {
-            if outside.contains(&folder) {
+            if watcher.outside.contains_key(&folder) {
                 continue;
             }
-            match watcher.watch(&folder, RecursiveMode::NonRecursive) {
-                Ok(()) => {
-                    outside.insert(folder);
+            let send = send.clone();
+            let started = notify::recommended_watcher(move |event: notify::Result<Event>| {
+                if let Ok(event) = event
+                    && !matches!(event.kind, EventKind::Access(_))
+                {
+                    let _sent = send.send(event.paths);
+                }
+            })
+            .and_then(|mut created| {
+                created.watch(&folder, RecursiveMode::NonRecursive)?;
+                Ok(created)
+            });
+            match started {
+                Ok(created) => {
+                    watcher.outside.insert(folder, created);
                 }
                 Err(error) => {
                     eprintln!(
@@ -1218,9 +1252,54 @@ pub(crate) fn lens_requests(docs: &[Value]) -> Vec<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::outside_folders;
+    use super::{Previews, Render, outside_folders};
     use std::collections::HashSet;
     use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn restarting_watches_releases_old_consumers_without_losing_dependency_registration() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let dependency = assert_fs::TempDir::new().unwrap();
+        let file = dependency.path().join("example.js");
+        std::fs::write(&file, "export default {};").unwrap();
+        let file = std::fs::canonicalize(file).unwrap();
+        let folder = file.parent().unwrap().to_path_buf();
+        let product = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap();
+        let previews = Previews::new(root.path(), product).unwrap();
+        previews.renders.lock().unwrap().insert(
+            "acme".into(),
+            (HashSet::from([file]), Render::Docs(serde_json::json!({}))),
+        );
+        for _ in 0..2 {
+            previews.watch();
+            let sender = previews
+                .watcher
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .send
+                .downgrade();
+            previews.unwatch();
+            previews.watch();
+            previews.rewatch.notify_one();
+            tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                loop {
+                    let registered = previews.watcher.lock().unwrap().as_ref().unwrap()
+                        .outside.contains_key(&folder);
+                    if sender.upgrade().is_none() && registered {
+                        break;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("stopped watchers must release their consumers without taking a restart's notification");
+            previews.unwatch();
+        }
+    }
 
     #[test]
     fn only_folders_read_from_outside_the_root_are_watched() {

@@ -1,7 +1,7 @@
 # Storybook adapter
 
 Part of the [adapters](README.md). User guide: [Storybook](../../docs/storybook.md).
-The [Storybook contract](../storybook.md) owns configuration, story identity,
+The [Storybook contract](../pages/storybook.md) owns configuration, story identity,
 story switching, screenshots and export; this spec owns how the Workbench
 server gets Storybook to render a story.
 
@@ -17,7 +17,7 @@ Workbench uses two parts of Storybook: `/index.json` for the titles and
 stories, and `iframe.html?id=<story>&viewMode=story` for rendering one. It
 never loads Storybook's manager interface. The canvas frames stories
 through the Workbench server's
-[implementation proxy](../implementation-proxy.md), never from Storybook's
+[implementation proxy](../system/implementation-proxy.md), never from Storybook's
 own address.
 
 ## A Storybook the server runs
@@ -41,7 +41,7 @@ A Storybook implementation without `url` is the Workbench server's
   loaded with `--require`, moves every TCP listen in that process to a
   local socket in a private temporary folder: a Unix socket, or a named pipe
   on Windows. Only the Workbench server reaches it, through the
-  implementation's [proxy](../implementation-proxy.md), so a Storybook the
+  implementation's [proxy](../system/implementation-proxy.md), so a Storybook the
   user runs on 6006 or any other port never conflicts with it.
 - **Told the proxy's port.** `<port>` is the proxy's own port. Storybook's
   pages carry addresses built from it, such as Vite's live-update client
@@ -90,5 +90,5 @@ live-update client, which is why Storybook is told the proxy's port.
 ## Status
 
 Implemented in the Rust Workbench server, for both a Storybook it runs and
-one the user runs ([server](../server.md)). The Storybook it runs is started on
+one the user runs ([server](../system/server.md)). The Storybook it runs is started on
 the host's Node runtime.

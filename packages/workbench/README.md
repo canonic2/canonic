@@ -110,4 +110,4 @@ Source and contributor notes: <https://github.com/canonic2/canonic>.
 This folder is the product root. `extension/`, `server/`, `capture/`, `ui/`,
 `sdk/` and `contracts/` own separate runtime or library responsibilities.
 [Developing Workbench](DEVELOPMENT.md) describes local commands;
-[module ownership](specs/modules.md) defines the boundaries and delivery layout.
+[module ownership](specs/system/modules.md) defines the boundaries and delivery layout.

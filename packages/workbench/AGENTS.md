@@ -20,20 +20,20 @@ with annotations, screenshots and agent handoffs. Projects supply
 | `design/` | Internal design pages loading shipping components; not packaged |
 | `specs/` | Internal requirements, architecture, acceptance evidence and implementation gaps |
 | `docs/` | User guides read directly by the website |
-| `labs/` | Bounded experiments following `specs/labs.md`; production code never depends on them |
+| `labs/` | Bounded experiments following `specs/system/labs.md`; production code never depends on them |
 
 Read `ui/legacy/README.md` before changing the browser shell, and
-`specs/modules.md` for the ownership and dependency contracts. `server/README.md`
+`specs/system/modules.md` for the ownership and dependency contracts. `server/README.md`
 owns Rust layout and tooling. `workbench-server serve` is a space's whole
 HTTP server: it owns the public port, keeps the page index resident, compiles
 previews with Rspack's Rust crates and answers every route; project JavaScript
 runs in its Node evaluator. Its host (`server/node/src/modules/host/`) answers
-what belongs to the editor and the capture helper over stdio; `specs/server.md`
+what belongs to the editor and the capture helper over stdio; `specs/system/server.md`
 owns the process model and protocol.
 
 ## Engineering contracts
 
-- The UI is independent of the backend. Read `specs/modules.md#ui-and-backend-independence`.
+- The UI is independent of the backend. Read `specs/system/modules.md#ui-and-backend-independence`.
   The UI owns components, page-list/artboard presentation, navigation and rendering.
   The backend provides project data, operations and previewed content through APIs;
   backend domain services must not import UI runtime code, initialize components,
@@ -42,7 +42,7 @@ owns the process model and protocol.
   Web Components, HTML and CSS, ready for direct browser use. Do not add TypeScript,
   transpilation, bundling or generated source copies to UI delivery. Hosts serve
   or copy authored assets unchanged; project preview compilation remains separate.
-- Read `specs/rendering-flow.md`: one Workbench shell owns the canvas. Each
+- Read `specs/system/rendering-flow.md`: one Workbench shell owns the canvas. Each
   artboard loads only project content through a dedicated renderer, never the
   application `index.html`, shell bootstrap, or a full shell hidden with CSS.
   Backend compilation/rendering of project React, docs and Storybook is expected.
@@ -79,7 +79,7 @@ owns the process model and protocol.
 - Every shared component has `design/<name>.md`, `<name>.examples.ts` and a
   `<name>.workbench.ts` definition under Components/<Area>/<Label>. Examples use
   the shipping public API and meaningful states; docs end with Public API.
-  Read `specs/web-components.md` and `specs/themes.md` before UI work.
+  Read `specs/ui/web-components.md` and `specs/ui/themes.md` before UI work.
 - Keep code project-agnostic. Consuming projects receive configuration, not
   copied Workbench implementations. Update user guides when visible controls
   change, and the website overview/screenshots when those changes appear there.
@@ -346,6 +346,10 @@ this rule applies.
 - Keep `main.rs` thin: parse arguments, set up configuration, call the
   library's `run`, and exit with its status. Output formatting and all other
   logic live in the library, where they can be tested.
+- Product CLIs use `canonic-tui` as a required direct local dependency for
+  terminal UI. Do not make it optional or gate it behind a Cargo feature.
+  Runtime terminal capabilities and transport select interactive, plain or
+  structured output; MCP, hooks and piped callers must not open interactive UI.
 - Start every module with a `//!` comment saying what it owns.
 - Build scripts write only inside `OUT_DIR`. Pass values to the code with
   `cargo:rustc-env` and read them with `env!` rather than writing files beside
@@ -393,6 +397,58 @@ this rule applies.
 
 ---
 
+# Rust test speed and determinism
+
+Rust tests run in parallel, one process per test under nextest, and are
+expected to be fast and repeatable. These rules apply the shared behavioral
+testing rule to that setting.
+
+- A test that passes alone but fails or slows sharply in the full suite points
+  to a shared resource, a race or a blocking system call, not to "load". Find
+  the cause before changing anything. Do not add retries, longer deadlines,
+  serial-only execution or skips to make it pass.
+- Keep the complete output of a failing or slow run in a temporary file and
+  read the failure from it; do not filter output before the message is known.
+  Reproduce intermittent failures on the focused set with
+  `cargo nextest run --stress-count <n> --no-fail-fast` through the package's
+  focused-test target, then verify a fix with more iterations than it took to
+  reproduce.
+- Measure before optimizing. Compare a test's time alone with its time in the
+  suite: a large gap means contention, not slow code. Compare the sum of test
+  times with wall time to tell a throughput-bound suite from one waiting on its
+  longest test. For Git-heavy tests, `GIT_TRACE2_EVENT` separates Git's own
+  time from the code around it. Changing the build profile is not a first step.
+- Durable writes do not call `File::sync_all` or `sync_data` directly. On
+  macOS they issue `F_FULLFSYNC`, which also empties the drive's write cache
+  and waits behind every other process's flush, so parallel tests and frequent
+  real operations serialize on it. Route flushes through one package helper
+  that uses `fsync` on macOS and `sync_all` elsewhere, and keep the package's
+  spec stating which flush its durable state receives.
+- Tests never race work that outlives the command that started it. Wait for
+  every child process a test or fixture starts. Git's automatic maintenance
+  runs detached after commits and fetches and holds `objects/maintenance.lock`;
+  packages whose tests run Git turn it off (`maintenance.auto = false`,
+  `gc.auto = 0`) for every Git the tests start, including Git run by the code
+  under test, and keep a test that fails when the setting does not apply.
+- Tests do not depend on the developer's own configuration. Provide what tests
+  need through the package's checked-in test environment, such as
+  `.cargo/config.toml` `[env]` entries with `force = true` (so a developer's
+  exported value does not replace them) pointing tools at test-owned
+  configuration under `tests/`, rather than through a shell's environment or a
+  user's dotfiles.
+  Remember that code which scrubs variables such as `GIT_*` before starting a
+  tool also drops test settings passed that way; choose a channel the code
+  under test keeps.
+- Wait on a condition with a deadline instead of sleeping for a fixed time.
+  Deadlines bound a hang; they are not a synchronization mechanism, and a test
+  that depends on one finishing in time is a race.
+- Keep fixtures to the state an assertion needs and prefer an in-process call
+  to starting a binary when the binary's own contract is not what is tested.
+  Process-level tests stay for executables, exit statuses, output and process
+  boundaries.
+
+---
+
 # Shared UI component and interaction contracts
 
 Apply these contracts to interactive presentation code. Package guides supply
@@ -428,11 +484,11 @@ the actual component format, styles, host integration and verification commands.
 # Workbench UI architecture
 
 Apply to Workbench-owned browser presentation, not the frameworks of previewed
-projects. The target contracts are `packages/workbench/specs/web-components.md`
-and `packages/workbench/specs/themes.md`; read them before component or theme work.
+projects. The target contracts are `packages/workbench/specs/ui/web-components.md`
+and `packages/workbench/specs/ui/themes.md`; read them before component or theme work.
 
 - The UI is independent of the backend; the required contract is
-  `packages/workbench/specs/modules.md#ui-and-backend-independence`. The backend
+  `packages/workbench/specs/system/modules.md#ui-and-backend-independence`. The backend
   supplies project data, operations and previewed content through APIs. It does
   not import UI runtime code, initialize components, or depend on their DOM or
   presentation state. Hosts load the UI and inject a data/operation
@@ -440,7 +496,7 @@ and `packages/workbench/specs/themes.md`; read them before component or theme wo
   backend services; backend domain services must work without UI files. Generic
   UI asset delivery may share the API host and compiler libraries, but UI tooling
   remains independent of project compiler configuration, caches and lifecycle.
-- Follow `packages/workbench/specs/rendering-flow.md`: one application shell per
+- Follow `packages/workbench/specs/system/rendering-flow.md`: one application shell per
   canvas document; artboards load dedicated content-only renderers. Never load
   the application entry point or bootstrap a shell inside an artboard, including
   a shell hidden with CSS. Project compilation/rendering is backend work;
@@ -475,7 +531,7 @@ and `packages/workbench/specs/themes.md`; read them before component or theme wo
   shipping element through its public inputs, and `design/<name>.workbench.ts`
   (`defineDocs`, `components/<name>`, `Components/<Area>/<Label>`, grouped by the interface area it appears in). A changed API or
   visible state updates the page with it. Examples import only what they draw.
-  The contract is `specs/web-components.md#design-pages`; the
+  The contract is `specs/ui/web-components.md#design-pages`; the
   `design-pages.test.ts` check fails a component without one.
 - Existing vanilla UI is migration debt, not evidence that the target is shipped.
   Local fixes may remain in place; migrate bounded controls when substantially
@@ -490,6 +546,15 @@ they do not distribute a UI package or configuration to consuming projects.
 # Workbench writing locations and checks
 
 - Internal specs: `packages/workbench/specs/`, indexed by `specs/README.md`.
+  Root topics own the product model and vocabulary. `canvas/`, `pages/`, and
+  `review/` group capability contracts; `ui/` owns shared presentation and
+  `integrations/` owns editor/agent hosting. `system/` owns architecture,
+  performance budgets, quality gates and lab method. `preview-pipeline/` and
+  `adapters/` own shared rendering mechanics and technology differences.
+  `research/` owns dated observations and evidence; it does not redefine
+  contracts. Keep folders one level deep and maintain their ownership indexes.
+  Update incoming links when moving topics, including guide/skill sources,
+  source comments and lab records; regenerate agent instructions as needed.
 - Public user guides: `packages/workbench/docs/`, indexed by `docs/README.md`.
   The audience is people using the extension and standalone Workbench.
 - Astro reads all Markdown in `docs/` directly; keep specs outside that folder.

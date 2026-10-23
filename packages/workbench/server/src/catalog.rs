@@ -281,6 +281,9 @@ impl Catalog {
         };
         self.import_previews(&view, &mut into).await;
         extras
+            .urls(&mut into.implementations, &mut into.problems)
+            .await;
+        extras
             .storybooks(&view, &mut into.implementations, &mut into.problems)
             .await;
         extras
@@ -378,6 +381,7 @@ pub(crate) fn compiler_catalog(view: &Value, index: &IndexAnswer) -> Built {
 /// Simulator catalog and the docs pages' sources and problems.
 #[async_trait::async_trait]
 pub(crate) trait Extras: Send + Sync {
+    async fn urls(&self, _implementations: &mut Map<String, Value>, _problems: &mut Vec<String>) {}
     async fn storybooks(
         &self,
         view: &Value,

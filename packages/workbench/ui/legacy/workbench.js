@@ -912,6 +912,21 @@
       code: codeFor(item, null),
     };
 
+    if (lens && lens.problem) {
+      var lensError = new Error(lens.problem);
+      artboard.hidden = true;
+      frameReady = false;
+      parkPreview();
+      openLink.removeAttribute('href');
+      blank.textContent = lens.problem;
+      blank.classList.remove('is-loading');
+      blank.hidden = false;
+      if (window.wbMultiCanvas) window.wbMultiCanvas.fail(lensError);
+      setTitle(item, null, lens);
+      syncHash();
+      return;
+    }
+
     if (story) {
       setTitle(item, null, lens);
       commitLayout();

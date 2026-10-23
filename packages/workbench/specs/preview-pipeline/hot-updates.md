@@ -3,7 +3,7 @@
 Part of the [preview pipeline](README.md). This spec covers how an edit
 reaches the pages on the canvas: the push channel, what each kind of edit
 does to an open page, and how errors recover. The edit requirements are in
-[performance](performance.md#edits-apply-in-place); this spec defines how the
+[performance](../system/performance.md#edits-apply-in-place); this spec defines how the
 pipeline meets them.
 
 ## Requirements
@@ -13,8 +13,9 @@ pipeline meets them.
 - The server pushes build results to the canvas over one event stream per
   open canvas. Preview frames receive them through the canvas, sharing that
   stream, and open no connection of their own.
-- No frame polls for a revision. Edit latency depends only on the build and
-  the update, not on an interval.
+- No frame starts periodic revision polling. Edit latency depends on the build
+  and update, not on an interval. One-shot checks on retained return protect
+  against missed updates ([warm runtime](warm-runtime.md)).
 - The stream carries:
 
   | Event | Meaning |
@@ -31,8 +32,8 @@ pipeline meets them.
 
 - Every open frame whose document runs a profile's runtime applies that
   profile's hot updates as they arrive: the visible frame, the spare and
-  hidden retained frames. A retained frame shown again is already current,
-  so it needs no check on return.
+  hidden retained frames. Push keeps retained frames current during normal
+  operation; return-time revision checks cover updates missed while retained.
 - A frame applies updates until its document runs the build hash the `built`
   event named. An update that Rspack aborts or fails, or a document left on an
   older generation, reloads the preview into the warm host.
@@ -61,7 +62,7 @@ overrides survive every row, including reloads.
 | `workbench.config.ts` | Compilers replaced and every document reloaded ([configuration changes](#configuration-changes)) |
 
 Astro islands are outside this table, because Workbench rejects them
-([previews](../previews.md)).
+([previews](../pages/previews.md)).
 
 ### How an entry applies an update
 
@@ -100,6 +101,21 @@ mounts its preview there. Any other document reloads.
   that are still on the page keep their mounted examples. Scroll position is
   kept.
 - Example edits arrive as hot updates to the docs entry, like preview edits.
+  After successfully applying a build, the hot client records that entry's
+  examples revision on the live page, preserving its Markdown revision. Failed
+  or superseded updates cannot acknowledge an unapplied revision.
+- Examples revisions use the entry's reachable module content hashes, errors
+  and compiler generation. Adding unrelated entries or repartitioning shared
+  chunks does not change that identity.
+- A retained Docs return is shown immediately, then checks its revision once
+  in the background to catch a missed push. An unchanged page stays mounted;
+  a changed page follows these same update rules with scroll preserved.
+  This is a return-time check, not periodic polling. Superseded or disposed
+  lifecycles ignore late check/update results. The
+  [warm Docs contract](warm-runtime.md#resume-and-freshness) owns failure and
+  replacement behavior. Return revision checks are implemented alongside the
+  push path; [integration evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23)
+  records their verification scope.
 
 ### Errors and recovery
 
@@ -111,7 +127,7 @@ mounts its preview there. Any other document reloads.
 - The next successful build recovers the frame without a manual reload, by
   hot update or, when the update cannot apply, by a preview reload.
 - Thrown errors during an update follow the runtime error contract: readiness
-  clears and the frame shows the error ([previews](../previews.md#readiness-and-errors)).
+  clears and the frame shows the error ([previews](../pages/previews.md#readiness-and-errors)).
 - When saves follow each other quickly, the page ends with the last save's
   output.
 
@@ -120,6 +136,11 @@ mounts its preview there. Any other document reloads.
 Implemented: the push channel, hot updates for every native format, the reload
 rule, errors per entry and docs pages updated in place. Gaps:
 
+- Docs entries register their example modules but do not add the preview
+  entry's source-accept callback ([entries.rs](../../server/src/compiler/entries.rs)).
+  Framework/module hot handlers can update in place; an unaccepted example
+  change uses the warm Docs host's fallback and can remount examples. Do not
+  claim component state survives every Docs example edit.
 - A preview or docs lens added while pages are open joins the running
   compilers, which can move shared chunks; open pages can then miss hot
   updates until they reload ([compiler](compiler.md#open-questions)).

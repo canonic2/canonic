@@ -9,7 +9,7 @@ export or a named one; `inputs` are its props. A docs example of an
 `astro` lens is a `.astro` file in the lens's directory. The project
 installs Astro 4.9 or newer, which has the Container API. Workbench does not
 run `astro.config.*`, integrations or the application server; a whole
-application stays a [URL lens](../implementations.md#url-implementations).
+application stays a [URL lens](../pages/implementations.md#url-implementations).
 
 ## Build
 
@@ -36,7 +36,7 @@ Frontmatter and rendering. The bundled module renders through Astro's
 partial: true })`. Around each render, `globalThis.fetch` answers from the
 state's request mocks, relative URLs resolve against `http://localhost/`,
 and a render aborts after 10 seconds
-([previews](../previews.md#data-request-mocks-and-the-project-environment)).
+([previews](../pages/previews.md#data-request-mocks-and-the-project-environment)).
 
 ## Browser
 
@@ -72,7 +72,7 @@ the owner on 2026-10-16:
   `@astrojs/compiler-rs`, Rust loaded as a Node addon. The server asks the
   evaluator for each render over its private channel; a frame's input edit
   goes to the server's render route, never to the evaluator itself
-  ([processes and connections](../server.md#processes-and-connections)).
+  ([processes and connections](../system/server.md#processes-and-connections)).
 - **The client side builds in the Rust server:** the rendered HTML and its
   resources go through the [HTML adapter's](html.md#target) Rust loaders,
   with shared chunks and hot updates.

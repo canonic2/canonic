@@ -1,10 +1,10 @@
 # First page lab
 
-Methodology: [Workbench labs](../../specs/labs.md). Owning contracts:
+Methodology: [Workbench labs](../../specs/system/labs.md). Owning contracts:
 [compiler](../../specs/preview-pipeline/compiler.md) for the entry set and
 start, [warm runtime](../../specs/preview-pipeline/warm-runtime.md) for
 pre-warming, [hot updates](../../specs/preview-pipeline/hot-updates.md) for
-what must keep working, and [performance](../../specs/preview-pipeline/performance.md#measured-interactions)
+what must keep working, and [performance](../../specs/system/performance.md#measured-interactions)
 for the targets.
 
 Status: the owner agreed the plan on 2026-10-13. Run sets 1 to 3 finished by
@@ -41,7 +41,7 @@ Amendment, 2026-10-14, after run set 1 and before run set 2: run set 1
 showed that listing the project's definitions, which every variant does
 before its first page, grows with the page count. Each definition had its own
 esbuild build. The product lists them in one build since then
-([page listing](../../specs/preview-pipeline/performance.md#page-listing)), and
+([page listing](../../specs/research/page-listing.md#page-listing)), and
 every variant's copy of the compiler carries that change. Run set 2 therefore
 measures a different listing than run set 1: set 1 stays the record of the
 cost, and the decision rule is applied to set 2.
@@ -194,7 +194,7 @@ cache.
 
 ### Correctness checks
 
-Every check of the [methodology](../../specs/labs.md#correctness-checks), on
+Every check of the [methodology](../../specs/system/labs.md#correctness-checks), on
 every run, plus:
 
 - **Hot updates after entries join:** with the first page open, wait until the
@@ -219,7 +219,7 @@ every run, plus:
 Three warmups and ten samples per cell, variants in a seeded order per
 fixture. Two run sets at least an hour apart, under the lab lock, with the
 load recorded per sample. Each run set is smoked first with one sample per
-cell on every fixture, as [runner reliability](../../specs/labs.md#runner-reliability)
+cell on every fixture, as [runner reliability](../../specs/system/labs.md#runner-reliability)
 requires.
 
 ### Decision rule

@@ -178,10 +178,24 @@ impl Plugin for RefreshRuntimePlugin {
 /// in its module graph.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Point {
+    /// Content of this entry's reachable modules, independent of chunk layout.
+    pub(crate) content_hash: String,
     pub(crate) files: Vec<String>,
     pub(crate) runtime: Vec<String>,
     pub(crate) css: Vec<(Value, String)>,
     pub(crate) errors: Vec<String>,
+}
+
+impl Point {
+    pub(crate) fn revision(&self, generation: u64, failure: Option<&str>) -> String {
+        super::entries::digest(
+            &serde_json::json!({
+                "generation": generation, "modules": self.content_hash,
+                "errors": self.errors, "failure": failure,
+            })
+            .to_string(),
+        )
+    }
 }
 
 /// What serving needs from one finished build.
@@ -231,6 +245,41 @@ fn snapshot(compilation: &Compilation, ms: f64) -> Snapshot {
             .expect_get(&group.get_runtime_chunk(&artifact.chunk_group_by_ukey));
         let runtime_files: HashSet<String> = runtime_chunk.files().iter().cloned().collect();
         let mut point = Point::default();
+        let mut content = BTreeMap::new();
+        let graph = compilation.get_module_graph();
+        let mut pending: Vec<_> = compilation
+            .entries
+            .get(name)
+            .into_iter()
+            .flat_map(|entry| entry.dependencies.iter())
+            .filter_map(|dependency| {
+                graph
+                    .module_identifier_by_dependency_id(dependency)
+                    .copied()
+            })
+            .collect();
+        let mut visited = HashSet::new();
+        while let Some(id) = pending.pop() {
+            if !visited.insert(id) {
+                continue;
+            }
+            if let Some(module) = graph.module_by_identifier(&id) {
+                content.insert(
+                    id.to_string(),
+                    module
+                        .build_info()
+                        .hash
+                        .as_ref()
+                        .map(|hash| hash.encoded().to_owned()),
+                );
+            }
+            pending.extend(
+                graph
+                    .get_outgoing_connections(&id)
+                    .map(|connection| *connection.module_identifier()),
+            );
+        }
+        point.content_hash = super::entries::digest(&serde_json::json!(content).to_string());
         let mut modules = HashSet::new();
         for chunk_ukey in &group.chunks {
             let chunk = artifact.chunk_by_ukey.expect_get(chunk_ukey);

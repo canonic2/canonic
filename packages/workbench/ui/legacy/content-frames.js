@@ -94,9 +94,34 @@
   }
 
 
-  function warmFrame(target) {
+  function warmKind(src) {
+    var url = new URL(src, location.href);
+    if (url.origin !== location.origin) return null;
+    if (/\.workbench\.tsx?$/.test(url.pathname)) return 'preview';
+    if (/\.md$/.test(url.pathname) && url.searchParams.get('lens')) return 'docs:' + url.searchParams.get('lens');
+    return null;
+  }
+
+  function hostOf(target) {
+    try {
+      var content = target.contentWindow;
+      return content && (target.wbWarmKind === 'preview' ? content.wbPreviewHost : content.wbDocsHost);
+    } catch (_) { return null; }
+  }
+
+  function warmFrame(target, kind) {
     target.wbWarmHost = true;
-    target.src = new URL('preview-host.html?actions=off', location.href).href;
+    target.wbWarmKind = kind;
+    target.src = kind === 'preview' ? new URL('preview-host.html?actions=off', location.href).href :
+      new URL('/_workbench/ui/src/modules/docs/host/docs-host.html?lens=' + encodeURIComponent(kind.slice(5)), location.href).href;
+  }
+
+  function cancelReadyWait(target) {
+    var waiting = target.wbReadyWait;
+    if (!waiting) return;
+    target.wbReadyWait = null;
+    window.clearTimeout(waiting.timer);
+    waiting.preview.removeEventListener('workbench:ready', waiting.ready);
   }
 
   var previewFrames = [frame, frameBuffer];
@@ -112,12 +137,13 @@
 
   function disposeFrame(target) {
     if (target.wbDisposed) return;
+    cancelReadyWait(target);
     target.wbDisposed = true;
     target.wbLoadSequence = (target.wbLoadSequence || 0) + 1;
     previewFrames = previewFrames.filter(function (candidate) { return candidate !== target; });
     function remove() { target.removeAttribute('src'); target.remove(); }
     var renderer;
-    try { renderer = target.wbWarmHost && target.contentWindow && target.contentWindow.wbPreviewHost; } catch (_) {}
+    renderer = target.wbWarmHost && hostOf(target);
     if (renderer) renderer.reset().then(remove, function (error) { console.warn('[workbench] preview cleanup failed', error); remove(); });
     else remove();
   }
@@ -140,6 +166,7 @@
     if (!pendingFrame) return;
     var previous = pendingFrame;
     pendingFrame = null;
+    cancelReadyWait(previous);
     previous.wbLoadSequence = (previous.wbLoadSequence || 0) + 1;
     if (previous.wbRestoring) sessions.protect(previous, false);
     else sessions.remove(previous);
@@ -147,6 +174,7 @@
 
   function parkPreview() {
     cancelPendingFrame();
+    cancelReadyWait(frame);
     sessions.park();
     frame.classList.remove('is-active');
     frame.setAttribute('aria-hidden', 'true');
@@ -166,7 +194,7 @@
     var address = target.wbRequestedUrl;
     var seq = target.wbLoadSequence;
     var requestedView = target.wbContentView;
-    var renderer = target.contentWindow && target.contentWindow.wbPreviewHost;
+    var renderer = hostOf(target);
     if (!address || !renderer) return;
     renderer.load(address).then(function () {
       if (seq !== target.wbLoadSequence || target.wbRequestedUrl !== address) return;
@@ -175,14 +203,17 @@
   }
 
   function prepareFrame(target, src) {
+    cancelReadyWait(target);
     target.wbContentView = view;
     target.wbRequestedUrl = src;
     target.wbLoadSequence = (target.wbLoadSequence || 0) + 1;
-    if (/\.workbench\.tsx?(?:[?#]|$)/.test(src) && new URL(src, location.href).origin === location.origin) {
-      if (target.wbWarmHost && target.contentWindow && target.contentWindow.wbPreviewHost) startWarmLoad(target);
-      else warmFrame(target);
+    var kind = warmKind(src);
+    if (kind) {
+      if (target.wbWarmHost && target.wbWarmKind === kind && hostOf(target)) startWarmLoad(target);
+      else warmFrame(target, kind);
     } else {
       target.wbWarmHost = false;
+      target.wbWarmKind = null;
       target.src = src;
     }
   }
@@ -207,7 +238,7 @@
       sessions.protect(retained, true);
       pendingFrame = retained;
       var sequence = retained.wbLoadSequence;
-      var renderer = retained.wbWarmHost && retained.contentWindow && retained.contentWindow.wbPreviewHost;
+      var renderer = retained.wbWarmHost && hostOf(retained);
       Promise.resolve(renderer ? renderer.resume(src) : null).then(function () {
         if (pendingFrame === retained && sequence === retained.wbLoadSequence) frameLoaded({ currentTarget: retained, warm: true });
       }, function (error) {
@@ -220,8 +251,8 @@
     // The warm document: the visible warm host changes page in place, as an
     // application's router would, keeping loaded dependencies, stylesheets and
     // fonts. A new state of the same preview re-renders without reloading it.
-    if (!force && frame.wbWarmHost && frame.wbRequestedUrl && frameReady && /\.workbench\.tsx?(?:[?#]|$)/.test(src) &&
-        new URL(src, location.href).origin === location.origin) {
+    var kind = warmKind(src);
+    if (!force && frame.wbWarmHost && frame.wbWarmKind === 'preview' && frame.wbRequestedUrl && frameReady && kind === 'preview') {
       var showing = new URL(frame.wbRequestedUrl, location.href);
       var next = new URL(src, location.href);
       sessions.forget(frame);
@@ -251,6 +282,22 @@
       prepareFrame(frame, src);
       return;
     }
+    if (!force && kind && kind.indexOf('docs:') === 0) {
+      var idle = sessions.idleFrames();
+      if (idle.length >= 3) {
+        var reuse = idle.find(function (candidate) { return candidate !== frame && candidate.wbWarmKind === kind && hostOf(candidate); });
+        if (reuse) {
+          sessions.forget(reuse);
+          pendingFrame = frameBuffer = reuse;
+          reuse.wbSessionKey = key;
+          reuse.wbRestoring = false;
+          if (reuse.style) { reuse.style.width = ''; reuse.style.height = ''; }
+          sessions.add(key, reuse);
+          prepareFrame(reuse, src);
+          return;
+        }
+      }
+    }
     pendingFrame = frameBuffer = spareFrame();
     pendingFrame.wbSessionKey = key;
     pendingFrame.wbRestoring = false;
@@ -261,6 +308,7 @@
   function frameLoaded(e) {
     var loaded = e.currentTarget;
     if (previewFrames.indexOf(loaded) === -1 || (e.sequence !== undefined && e.sequence !== loaded.wbLoadSequence)) return;
+    cancelReadyWait(loaded);
     var sequence = loaded.wbLoadSequence;
     var measuredView = loaded.wbContentView;
     if (measuredView && measuredView.trace && !e.previewAttempt) {
@@ -275,7 +323,14 @@
       if (preview && (preview.__workbenchOptions || preview.__workbenchDocs) && !preview.__workbenchReady && !preview.__workbenchError) {
         var attempt = e.previewAttempt || 0;
         if (attempt < 300) {
-          window.setTimeout(function () { frameLoaded({ currentTarget: loaded, previewAttempt: attempt + 1, sequence: sequence, warm: true }); }, 50);
+          // Docs already signal when examples, fonts and images have settled.
+          // Observe that signal instead of holding ready pixels until a poll.
+          // Keep polling for older/custom renderers that only expose the flag.
+          var ready = function () {
+            frameLoaded({ currentTarget: loaded, previewAttempt: attempt + 1, sequence: sequence, warm: true });
+          };
+          loaded.wbReadyWait = { preview: preview, ready: ready, timer: window.setTimeout(ready, 50) };
+          preview.addEventListener('workbench:ready', ready);
           return;
         }
         options.failed(new Error('Preview did not become ready.'), loaded.wbContentView);
@@ -346,6 +401,7 @@
       showSeq++;
       cancelStorySwitch();
       cancelPendingFrame();
+      cancelReadyWait(frame);
       renderedStory = null;
       reportedStorySeq = null;
       view = next;

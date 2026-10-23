@@ -4,7 +4,7 @@ Part of the [preview pipeline](README.md). This spec covers how each native
 format becomes Rspack input, and the plugin contract projects use in
 `workbench.config.ts`. The rest of the config (adapters, aliases, `dedupe`,
 `resolveExtensions`, `define`, `environment`) keeps its meaning, as defined in
-[previews](../previews.md#adapters-and-project-configuration).
+[previews](../pages/previews.md#adapters-and-project-configuration).
 
 ## Requirements
 
@@ -100,7 +100,7 @@ projects write one plugin form.
 
 ## Target
 
-In the Rust Workbench server ([processes and connections](../server.md#processes-and-connections)),
+In the Rust Workbench server ([processes and connections](../system/server.md#processes-and-connections)),
 the compiler is Rspack's Rust crates, and only project JavaScript leaves the
 server, for the Node evaluator:
 

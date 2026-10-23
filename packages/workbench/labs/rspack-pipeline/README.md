@@ -1,11 +1,11 @@
 # Rspack pipeline lab
 
-Methodology: [Workbench labs](../../specs/labs.md). Owning contracts:
-[performance](../../specs/preview-pipeline/performance.md) for targets and edit behavior,
-[TypeScript previews](../../specs/previews.md) for compilation, adapters and
-readiness, [docs](../../specs/docs-pages.md) for docs pages,
-[core](../../specs/core.md) for frames, [capture](../../specs/capture.md) and
-[export](../../specs/export.md) for the other compiler consumers.
+Methodology: [Workbench labs](../../specs/system/labs.md). Owning contracts:
+[performance](../../specs/system/performance.md) for targets and edit behavior,
+[TypeScript previews](../../specs/pages/previews.md) for compilation, adapters and
+readiness, [docs](../../specs/pages/docs-pages.md) for docs pages,
+[core](../../specs/core.md) for frames, [capture](../../specs/review/capture.md) and
+[export](../../specs/review/export.md) for the other compiler consumers.
 
 Status: the owner agreed the plan on 2026-10-12 and asked for stage 1. Stage 1
 ran the same day: the pipeline is feasible with the changes in the
@@ -119,13 +119,13 @@ frame and a warm document per project.
   - 130–215 ms went to the image wait, for one SVG and one small JPEG.
   - The runtime logs each phase's duration on the event that ends it, so
     `fonts.waiting` carries the time before the font wait
-    ([gap](../../specs/previews.md#implementation-gaps)).
+    ([gap](../../specs/pages/previews.md#implementation-gaps)).
   - The probe suggests that previews mounting in a hidden spare frame wait
     for rendering updates they rarely get. This is not established.
 
 ### Hypothesis
 
-- The pipeline meets the proposed targets in [performance](../../specs/preview-pipeline/performance.md#measured-interactions)
+- The pipeline meets the proposed targets in [performance](../../specs/system/performance.md#measured-interactions)
   on the large fixtures.
 - Selecting a new page costs only that page's own chunks, its mount and any
   font or image it actually loads. Shared code, global stylesheets and
@@ -367,7 +367,7 @@ The lab runs in two stages.
 
 ### Decision rule
 
-The targets are the proposed ones in [performance](../../specs/preview-pipeline/performance.md#measured-interactions).
+The targets are the proposed ones in [performance](../../specs/system/performance.md#measured-interactions).
 They are proposed, not agreed. The 10% threshold is the owner's.
 
 - A variant that fails a correctness check is rejected.
@@ -537,7 +537,7 @@ Edit to visible, one sample each:
 again, losing component state. Times are single samples on one host, for
 feasibility only; stage 2 measures them. The control's missed recovery after
 the syntax error is consistent with the stale-output gap in
-[TypeScript previews](../../specs/previews.md#implementation-gaps), and was not
+[TypeScript previews](../../specs/pages/previews.md#implementation-gaps), and was not
 investigated further here.
 
 A selected local project was also run read-only, with Rspack forms of its
@@ -817,7 +817,7 @@ out of the aggregates.
 
 ## Confirmation run, 2026-10-13
 
-The [labs methodology](../../specs/labs.md#reports-and-decisions) asks for the
+The [labs methodology](../../specs/system/labs.md#reports-and-decisions) asks for the
 lab's sequences to be run again through the shipping product once the winning
 change is built in. Run on 2026-10-13, 16:35–17:11 UTC, with the product as
 variant 0 and the stage 2 runner unchanged, on the host above in headless

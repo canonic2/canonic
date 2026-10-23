@@ -1,6 +1,6 @@
 /* Hands the size rules to the canvas's classic scripts. workbench.js waits
    for this module before it applies the config, since every page it shows
-   needs a size; see specs/sizes.md. */
+   needs a size; see specs/canvas/sizes.md. */
 
 import {
   choose,

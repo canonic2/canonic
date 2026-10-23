@@ -28,6 +28,12 @@ one, under an error boundary. The mount resolves after the first layout
 effect; an error before then fails the mount, and one after it goes to
 `context.error`. Cleanup unmounts the root.
 
+When a warm host exposes the runtime-listener ownership hook, `createRoot()`
+runs in that scope so React's document-level event delegation survives along
+with its cached runtime. Project rendering and effects run outside the scope;
+their listeners remain page-owned. Hosts without the hook and portable pages
+use ordinary `createRoot()` initialization.
+
 ## Edits
 
 React Refresh updates a component in place with its state kept
@@ -46,4 +52,4 @@ Implemented natively in `workbench-server`'s compiler with Rspack's Rust
 crates ([options.rs](../../server/src/compiler/options.rs)), covered by
 [preview.test.js](../../server/node/preview.test.js) with project React
 versions. The retained-session browser smoke on a React preview passed on a
-debug build ([phase 4](../server.md#previews)).
+debug build ([phase 4](../system/server.md#previews)).

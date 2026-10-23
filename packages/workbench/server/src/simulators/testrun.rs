@@ -83,7 +83,7 @@ impl Testrun {
     /// # Errors
     /// When Testrun fails or reports no valid size.
     pub(crate) async fn screen(&self, udid: &str) -> Result<Screen> {
-        let shot = self.invoke(udid, &["screenshot".to_owned()]).await?;
+        let shot = self.invoke(udid, &["observe".to_owned()]).await?;
         let size = |key| {
             shot.get(key)
                 .and_then(Value::as_f64)
@@ -120,10 +120,11 @@ impl Testrun {
                 "Testrun is not installed: no testrun command on PATH or in ~/.local/bin"
             ));
         };
+        let target = format!("simulator:{udid}");
         let mut command = tokio::process::Command::new(&executable);
         command
-            .args(["ios", "--id", &format!("simulator:{udid}")])
             .args(args)
+            .args(["--target", &target])
             .current_dir(&self.root)
             .stdin(Stdio::null())
             .kill_on_drop(true);
@@ -137,7 +138,7 @@ impl Testrun {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
             return Err(anyhow!(if stderr.is_empty() {
                 format!(
-                    "Command failed: {} ios --id simulator:{udid} {}",
+                    "Command failed: {} {} --target {target}",
                     executable.display(),
                     args.join(" ")
                 )
@@ -152,7 +153,7 @@ impl Testrun {
     }
 }
 
-/// Testrun's arguments for a tap or swipe at coordinates between 0 and 1.
+/// Testrun's `act` arguments for a tap or swipe at coordinates between 0 and 1.
 fn input_args(request: &Value) -> Result<Vec<String>> {
     let ratio = |key| {
         request
@@ -160,45 +161,37 @@ fn input_args(request: &Value) -> Result<Vec<String>> {
             .and_then(Value::as_f64)
             .filter(|value| (0.0..=1.0).contains(value))
     };
-    match request.get("action").and_then(Value::as_str) {
-        Some("tap") => {
-            if let (Some(x), Some(y)) = (ratio("x"), ratio("y")) {
-                return Ok(vec!["tap".into(), number(x), number(y)]);
-            }
-        }
-        Some("swipe") => {
-            if let (Some(from_x), Some(from_y), Some(to_x), Some(to_y)) =
-                (ratio("fromX"), ratio("fromY"), ratio("toX"), ratio("toY"))
-            {
+    let action = match request.get("action").and_then(Value::as_str) {
+        Some("tap") => match (ratio("x"), ratio("y")) {
+            (Some(x), Some(y)) => Some(json!({"action":"tap","point":{"x":x,"y":y}})),
+            _ => None,
+        },
+        Some("swipe") => match (ratio("fromX"), ratio("fromY"), ratio("toX"), ratio("toY")) {
+            (Some(from_x), Some(from_y), Some(to_x), Some(to_y)) => {
                 let seconds = loose_number(request.get("duration"))
                     .filter(|value| *value != 0.0)
                     .unwrap_or(0.2);
                 let milliseconds = (seconds.clamp(0.05, 2.0) * 1000.0).round();
-                return Ok(vec![
-                    "swipe".into(),
-                    number(from_x),
-                    number(from_y),
-                    number(to_x),
-                    number(to_y),
-                    "--duration-ms".into(),
-                    number(milliseconds),
-                ]);
+                let duration = Duration::try_from_secs_f64(milliseconds / 1000.0)?;
+                let milliseconds = u64::try_from(duration.as_millis())?;
+                Some(
+                    json!({"action":"swipe","from":{"x":from_x,"y":from_y},"to":{"x":to_x,"y":to_y},"durationMs":milliseconds}),
+                )
             }
-        }
-        _ => {}
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(action) = action {
+        return Ok(vec![
+            "act".into(),
+            action.to_string(),
+            "--final-only".into(),
+        ]);
     }
     Err(anyhow!(
         "Invalid simulator action or normalized coordinates"
     ))
-}
-
-/// A number as JavaScript's `String()` writes it for these ranges.
-fn number(value: f64) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e15 {
-        format!("{value:.0}")
-    } else {
-        value.to_string()
-    }
 }
 
 /// A duration as JavaScript's `Number()` reads it: numbers, numeric text and
@@ -237,7 +230,7 @@ mod tests {
         std::fs::write(
             &binary,
             format!(
-                "#!{node}\nconst fs = require('node:fs');\nfs.writeFileSync('invocation.json', JSON.stringify(process.argv.slice(2)));\nif (process.argv.includes('swipe')) {{ console.error('SESSION_UNCERTAIN'); process.exit(1); }}\nconsole.log(JSON.stringify({{sourceWidth:1206,sourceHeight:2622}}));\n"
+                "#!{node}\nconst fs = require('node:fs');\nfs.writeFileSync('invocation.json', JSON.stringify(process.argv.slice(2)));\nif (process.argv.some((arg) => arg.includes('\"swipe\"'))) {{ console.error('SESSION_UNCERTAIN'); process.exit(1); }}\nconsole.log(JSON.stringify({{sourceWidth:1206,sourceHeight:2622}}));\n"
             ),
         )
         .expect("script");
@@ -268,15 +261,8 @@ mod tests {
             )
             .expect("args")
         };
-        assert_eq!(
-            read(),
-            [
-                "ios",
-                "--id",
-                &format!("simulator:{identity}"),
-                "screenshot"
-            ]
-        );
+        let target = format!("simulator:{identity}");
+        assert_eq!(read(), ["observe", "--target", &target]);
         assert!(!root.join("injected").exists());
 
         let tapped = testrun
@@ -285,7 +271,16 @@ mod tests {
             .expect("tap");
         assert_eq!(tapped, json!({ "action": "tap" }));
         let tap = read();
-        assert_eq!(&tap[3..], ["tap", "0.5", "0.2"]);
+        assert_eq!(
+            tap,
+            [
+                "act",
+                r#"{"action":"tap","point":{"x":0.5,"y":0.2}}"#,
+                "--final-only",
+                "--target",
+                &target
+            ]
+        );
         let invalid = testrun
             .input(identity, &json!({ "action": "tap", "x": 2, "y": 0.2 }))
             .await
@@ -299,7 +294,8 @@ mod tests {
             .await
             .expect_err("Testrun failed");
         assert!(failed.to_string().contains("SESSION_UNCERTAIN"));
-        assert_eq!(read()[read().len() - 2..], ["--duration-ms", "300"]);
+        let swiped: Value = serde_json::from_str(&read()[1]).expect("action");
+        assert_eq!(swiped["durationMs"], 300);
 
         let nobody = testrun
             .input("", &json!({ "action": "tap", "x": 0.5, "y": 0.5 }))
@@ -349,13 +345,15 @@ mod tests {
 
     #[test]
     fn swipe_durations_are_clamped_and_default_like_javascript() {
-        let args = |duration: Value| {
-            input_args(&json!({ "action": "swipe", "fromX": 0, "fromY": 0, "toX": 1, "toY": 1, "duration": duration })).expect("swipe")
+        let action = |duration: Value| -> Value {
+            let args = input_args(&json!({ "action": "swipe", "fromX": 0, "fromY": 0, "toX": 1, "toY": 1, "duration": duration })).expect("swipe");
+            serde_json::from_str(&args[1]).expect("action")
         };
-        assert_eq!(args(Value::Null).last().map(String::as_str), Some("200"));
-        assert_eq!(args(json!(9)).last().map(String::as_str), Some("2000"));
-        assert_eq!(args(json!(0.01)).last().map(String::as_str), Some("50"));
-        assert_eq!(args(json!("0.3")).last().map(String::as_str), Some("300"));
-        assert_eq!(&args(Value::Null)[1..5], ["0", "0", "1", "1"]);
+        assert_eq!(action(Value::Null)["durationMs"], 200);
+        assert_eq!(action(json!(9))["durationMs"], 2000);
+        assert_eq!(action(json!(0.01))["durationMs"], 50);
+        assert_eq!(action(json!("0.3"))["durationMs"], 300);
+        assert_eq!(action(Value::Null)["from"], json!({ "x": 0.0, "y": 0.0 }));
+        assert_eq!(action(Value::Null)["to"], json!({ "x": 1.0, "y": 1.0 }));
     }
 }

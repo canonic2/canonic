@@ -4,7 +4,7 @@
    lists every size — the buttons under Sizes, the rest under More sizes — and
    Custom size… and Edit sizes… when the host allows editing. It only shows
    sizes and says what was asked for; the canvas controller owns the current
-   size and every change to workbench.yaml. See specs/sizes.md. */
+   size and every change to workbench.yaml. See specs/canvas/sizes.md. */
 
 import { describe, dimensionsText } from '../../../../contracts/src/sizes/browser/choice.js';
 

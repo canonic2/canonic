@@ -3,13 +3,13 @@
 Part of the [preview pipeline](README.md). Readiness is the signal that a
 preview has rendered enough to show and to capture. The canvas promotes a
 loading frame when it is ready, and capture and export wait for it
-([previews](../previews.md#readiness-and-errors),
-[capture](../capture.md)). This spec defines what it waits for, so that the
+([previews](../pages/previews.md#readiness-and-errors),
+[capture](../review/capture.md)). This spec defines what it waits for, so that the
 wait covers only real work.
 
 ## Requirements
 
-Readiness belongs to the requested [content renderer](../rendering-flow.md), not
+Readiness belongs to the requested [content renderer](../system/rendering-flow.md), not
 the Workbench application document. Loading a wrapper, hiding shell chrome or
 receiving metadata alone cannot declare an artboard ready. Instance, generation
 and destination must match; a late report cannot reveal another request's pixels.
@@ -46,7 +46,7 @@ duration of that phase, on the event that ends it:
 | `ready` | Total time from mount to ready |
 
 A slow wait is then visible in the Workbench log without a profiler
-([performance](performance.md#diagnostics)).
+([performance](../system/performance.md#diagnostics)).
 
 ### Hidden frames
 
@@ -63,6 +63,12 @@ active frame receives input; the others stay inert, as
 Implemented: each phase on its own event, and loading frames rendered behind
 the visible one. Readiness still waits on `document.fonts.ready` and on every
 visible image until the font-wait lab settles a faster rule.
+
+After a managed document loads, the content-frame owner listens for its
+`workbench:ready` event and rechecks the readiness flag before scheduling
+promotion. It removes the listener and pending poll on completion, replacement,
+suspension or disposal. A 50 ms poll remains a compatibility fallback for
+renderers that expose only the flag; signalling docs do not wait for that poll.
 
 ## Verification
 

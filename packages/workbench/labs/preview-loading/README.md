@@ -1,8 +1,8 @@
 # Preview loading lab
 
-Methodology: [Workbench labs](../../specs/labs.md). Owning contracts:
-[performance](../../specs/preview-pipeline/performance.md) for the requirements and targets,
-[TypeScript previews](../../specs/previews.md) for preview behavior.
+Methodology: [Workbench labs](../../specs/system/labs.md). Owning contracts:
+[performance](../../specs/system/performance.md) for the requirements and targets,
+[TypeScript previews](../../specs/pages/previews.md) for preview behavior.
 
 Status: run set 1 reported on 2026-10-11; run set 2, on a separate day, is
 needed before a decision. Plan agreed by the owner on 2026-10-11, before any
@@ -12,7 +12,7 @@ to the machine available for the run.
 
 Amendment, 2026-10-11, before any run: the owner added hot module replacement
 with React Fast Refresh as a requirement
-([performance](../../specs/preview-pipeline/performance.md#edits-apply-in-place)). The
+([performance](../../specs/system/performance.md#edits-apply-in-place)). The
 question, variants 4 and 5, sequences S9 and S10, the HMR correctness checks
 and the decision rule's HMR clause were added for it.
 
@@ -152,7 +152,7 @@ only.
 
 S9 measures edit to visible and checks that the state survives. S10 checks
 which edits apply in place and which fall back to a reload, against
-[the requirement](../../specs/preview-pipeline/performance.md#edits-apply-in-place).
+[the requirement](../../specs/system/performance.md#edits-apply-in-place).
 
 S2 runs as a walk through ten previews not yet opened, so each sample is a
 first visit to that preview.
@@ -207,7 +207,7 @@ separate days before a decision.
 
 ### Decision rule
 
-The targets are the proposed ones in [performance](../../specs/preview-pipeline/performance.md#measured-interactions):
+The targets are the proposed ones in [performance](../../specs/system/performance.md#measured-interactions):
 for S2 on the large fixture, p50 at or below 300 ms and p95 at or below
 600 ms, and no sequence on the small fixture slower than the control by more
 than 10%. They are proposed, not agreed. If the owner changes them before the

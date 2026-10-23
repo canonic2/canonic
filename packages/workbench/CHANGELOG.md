@@ -7,6 +7,12 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## 0.15.0
+
+- Docs reuse loaded resources for new pages while keeping recent pages ready. Returns check for missed source updates in the background, preserving the reading position when a refresh is needed.
+- Optional Scope integration lets URL lenses follow services with `base: scope://demo/dev`, resolving each checkout's task endpoint on refresh. This requires existing access to the private, unpublished Scope CLI, which has no public distribution channel. Scope owns startup; an unready service or failed discovery appears as a lens problem.
+- Docs and Show code apply syntax colours in a local background worker after the document loads, preserving the original text and layout. Captures wait for colouring to finish or fall back to plain text.
+
 ## 0.14.0
 
 - Workbench runs a project's Storybook itself when its Storybook implementation has no `url`: started on the first story, on a private local socket instead of a port, so it never conflicts with a Storybook you run. See Storybook.

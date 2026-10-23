@@ -442,7 +442,9 @@ mod tests {
             html.contains(r#"<img src="./files/docs/images/shape.png""#),
             "{html}"
         );
-        assert!(html.contains(r#"<script type="module" src="../../page/page.js">"#));
+        assert!(html.contains(
+            r#"import { start } from "../../page/page.js"; start(window.__workbenchDocs);"#
+        ));
         assert!(html.contains(r#""bundle":{"module":"./examples.js"}"#));
         assert!(html.contains(r#""revisionUrl":"""#));
         let code: Value = serde_json::from_slice(

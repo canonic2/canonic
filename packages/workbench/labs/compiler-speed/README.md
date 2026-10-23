@@ -1,8 +1,8 @@
 # Compiler speed lab
 
-Methodology: [Workbench labs](../../specs/labs.md). Owning contracts:
-[performance](../../specs/preview-pipeline/performance.md) for first-open and edit targets,
-[TypeScript previews](../../specs/previews.md#runtime-selection) for the
+Methodology: [Workbench labs](../../specs/system/labs.md). Owning contracts:
+[performance](../../specs/system/performance.md) for first-open and edit targets,
+[TypeScript previews](../../specs/pages/previews.md#runtime-selection) for the
 compiler Workbench ships.
 
 Status: reported. Run sets 3 and 4 re-measured Rolldown, Rspack and Utoo on
@@ -38,7 +38,7 @@ Amendment, 2026-10-11, after run sets 1 and 2:
 
 Amendment, 2026-10-11, before any run: the owner added hot module replacement
 with React Fast Refresh as a requirement
-([performance](../../specs/preview-pipeline/performance.md#edits-apply-in-place)). Shape B6,
+([performance](../../specs/system/performance.md#edits-apply-in-place)). Shape B6,
 the HMR capability item and the decision rule's HMR clause were added for it.
 
 Amendment, 2026-10-11, after the harness's smoke run and before any run set:

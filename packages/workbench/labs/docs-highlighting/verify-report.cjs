@@ -151,12 +151,12 @@ test('reviewed plan links resolve after copying while preserving original proven
   try {
     const source = path.join(dir, 'source.md'), destination = path.join(dir, 'reviewed', 'plan.md');
     fs.mkdirSync(path.dirname(destination));
-    const original = '[Specs](../../specs/labs.md#inputs) [Web](https://example.com) [Here](#local)\n';
+    const original = '[Specs](../../specs/system/labs.md#inputs) [Web](https://example.com) [Here](#local)\n';
     fs.writeFileSync(source, original);
     publishPlan(source, destination);
     const reviewed = fs.readFileSync(destination, 'utf8');
     const link = reviewed.match(/\[Specs\]\(([^#]+)#inputs\)/)[1];
-    assert.equal(path.resolve(path.dirname(destination), link), path.resolve(__dirname, '../../specs/labs.md'));
+    assert.equal(path.resolve(path.dirname(destination), link), path.resolve(__dirname, '../../specs/system/labs.md'));
     assert.ok(reviewed.includes('[Web](https://example.com) [Here](#local)'));
     const provenance = JSON.parse(fs.readFileSync(path.join(path.dirname(destination), 'plan-provenance.json')));
     assert.equal(provenance.originalSha256, crypto.createHash('sha256').update(original).digest('hex'));

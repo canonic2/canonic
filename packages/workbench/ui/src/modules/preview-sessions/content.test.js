@@ -146,6 +146,7 @@ function fixture(t, hash = '#page~design') {
     restore.forEach((fn) => fn());
   });
   return {
+    config,
     controller,
     shown,
     catalogs,
@@ -245,4 +246,41 @@ void test('failed lookups expose their destination and disposal rejects late com
   await tick();
   assert.equal(f.shown.length, 0);
   assert.equal(f.closed(), 1);
+});
+
+void test('an unavailable implementation surfaces its problem without mounting a fallback', async (t) => {
+  const f = fixture(t, '#page~storybook');
+  f.config.implementations.storybook.problem = 'Gate service demo is not ready';
+  f.controller.start();
+  await tick();
+  assert.equal(f.controller.content.problem(), 'Gate service demo is not ready');
+  assert.equal(!!f.controller.content.read()?.ready, false);
+  assert.equal(f.shown.length, 0);
+  assert.equal(f.catalogs.size, 0);
+});
+
+void test('a stopped Dev service only shows its problem when that lens is selected', async (t) => {
+  const f = fixture(t, '#page~design');
+  f.config.implementations.dev = {
+    key: 'dev',
+    kind: 'url',
+    label: 'Dev',
+    base: 'gate://demo/dev',
+    problem: 'Gate service demo is not ready',
+  };
+  f.config.collections[0].items[0].implementations.dev = '/page';
+  f.controller.start();
+  await tick();
+  assert.equal(f.controller.content.problem(), null);
+  assert.equal(f.shown.length, 1, 'the design opens normally');
+  location.hash = '#page~dev';
+  window.dispatchEvent(new Event('hashchange'));
+  await tick();
+  assert.equal(f.controller.content.problem(), 'Gate service demo is not ready');
+  assert.equal(f.shown.length, 1, 'the unavailable Dev URL is not mounted');
+  location.hash = '#page~design';
+  window.dispatchEvent(new Event('hashchange'));
+  await tick();
+  assert.equal(f.controller.content.problem(), null);
+  assert.equal(f.shown.length, 2, 'switching away clears the lens failure');
 });

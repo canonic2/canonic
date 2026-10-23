@@ -32,10 +32,11 @@ if (module.hot && !state.client) {
   try { if (parent !== window && parent.location.origin === location.origin) hub = parent; } catch (_) {}
   if (!hub.__wbPushSource) hub.__wbPushSource = new hub.EventSource(__EVENTS__);
   const source = hub.__wbPushSource;
-  let failed = false, latest = null, queue = Promise.resolve();
+  let failed = false, latest = null, revisions = {}, queue = Promise.resolve();
   const active = () => { try { return !window.frameElement || window.frameElement.classList.contains('is-active'); } catch (_) { return true; } };
   const reload = () => {
-    if (window.__workbenchHost && window.wbPreviewHost) window.wbPreviewHost.load(location.href);
+    if (window.wbDocsHost) window.wbDocsHost.load(location.href);
+    else if (window.__workbenchHost && window.wbPreviewHost) window.wbPreviewHost.load(location.href);
     else location.reload();
   };
   // Each build's update starts from the build before it.
@@ -54,13 +55,17 @@ if (module.hot && !state.client) {
   state.sync = syncTo;
   const update = () => {
     if (failed) { failed = false; reload(); return; }
-    syncTo(latest).catch(error => { console.info('[workbench] hot update not applied; reloading the preview', String(error && error.message || error)); reload(); });
+    const target = latest, entry = window.__wbCurrent, revision = revisions[entry];
+    syncTo(target).then(() => {
+      if (!failed && __webpack_hash__ === target && window.__wbCurrent === entry && revision && window.wbDocsPage) window.wbDocsPage.examplesUpdated(entry, revision);
+    }).catch(error => { console.info('[workbench] hot update not applied; reloading the preview', String(error && error.message || error)); reload(); });
   };
   const onMessage = event => {
     let data; try { data = JSON.parse(event.data); } catch (_) { return; }
-    if (data.type === 'reload-all') { if (window.__workbenchHost) location.replace(__FRESH_HOST__); else location.reload(); return; }
+    if (data.type === 'reload-all') { if (window.wbDocsHost) window.wbDocsHost.replace(); else if (window.__workbenchHost) location.replace(__FRESH_HOST__); else location.reload(); return; }
     if (data.type !== 'built' || data.profile !== profile || (data.generation && data.generation !== generation)) return;
     latest = data.hash;
+    revisions = data.revisions || {};
     const own = window.__wbCurrent && data.errors && data.errors[window.__wbCurrent];
     if (own && own.length) {
       failed = true;
@@ -71,7 +76,9 @@ if (module.hot && !state.client) {
     update();
   };
   source.addEventListener('message', onMessage);
-  window.addEventListener('pagehide', () => source.removeEventListener('message', onMessage));
+  const stop = () => source.removeEventListener('message', onMessage);
+  window.addEventListener('pagehide', stop);
+  if (window.wbDocsHost) (window.__wbDocsRuntimeStops || (window.__wbDocsRuntimeStops = new Set())).add(stop);
 }
 ";
 
@@ -144,9 +151,11 @@ if (errors.length) throw new Error(errors.join('\n\n'));
 const slug = __SLUG__;
 const scripts = __SCRIPTS__;
 const loaded = window.__wbLoadedScripts || (window.__wbLoadedScripts = new Set());
+const profileState = window.__wbProfiles && window.__wbProfiles[__PROFILE__];
+const runtimeFiles = new Set(__RUNTIME__);
 // Fetch chunks together while styles load. Execute them below in dependency
 // order, after styles are ready: project modules can read computed styles.
-const preloads = scripts.filter(src => !loaded.has(src)).map(src => {
+const preloads = scripts.filter(src => !loaded.has(src) && !(profileState && profileState.require && runtimeFiles.has(src))).map(src => {
   const link = document.createElement('link');
   link.rel = 'preload'; link.as = 'script'; link.href = src;
   document.head.append(link);
@@ -159,11 +168,9 @@ for (const style of __STYLES__) {
   link.setAttribute('data-rspack', __UNIQUE__ + ':' + style.id);
   await new Promise(resolve => { link.onload = link.onerror = resolve; document.head.append(link); });
 }
-const profileState = window.__wbProfiles && window.__wbProfiles[__PROFILE__];
-const runtimeFiles = new Set(__RUNTIME__);
 if (profileState && profileState.require) {
   try { if (profileState.sync) await profileState.sync(__HASH__); }
-  catch (error) { if (window.__workbenchHost) location.replace(__FRESH_HOST__); else location.reload(); await new Promise(() => {}); }
+  catch (error) { if (window.wbDocsHost) window.wbDocsHost.replace(); else if (window.__workbenchHost) location.replace(__FRESH_HOST__); else location.reload(); await new Promise(() => {}); }
   for (const src of runtimeFiles) loaded.add(src);
   const cache = profileState.require.c;
   // style-loader keeps its own registry of inserted styles, which must start
@@ -191,6 +198,25 @@ window.__wbCurrent = slug;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initialized_profile_runtimes_are_excluded_before_preloads_are_inserted() {
+        let assets = EntryAssets {
+            runtime: vec!["/runtime.js".into()],
+            scripts: vec!["/runtime.js".into(), "/acme.js".into()],
+            ..EntryAssets::default()
+        };
+        for kind in [EntryKind::Preview, EntryKind::Docs] {
+            let source = preview_module_source("acme", "web", kind, &assets);
+            let runtime = source
+                .find("const runtimeFiles = new Set([\"/runtime.js\"])")
+                .unwrap();
+            let preload = source.find("const preloads = scripts.filter").unwrap();
+            assert!(runtime < preload);
+            assert!(source.contains("!loaded.has(src) && !(profileState && profileState.require && runtimeFiles.has(src))"));
+            assert!(source.contains("if (loaded.has(src)) continue;"));
+        }
+    }
 
     #[test]
     fn the_hot_client_listens_for_its_own_profile_and_generation() {

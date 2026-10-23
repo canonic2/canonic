@@ -11,6 +11,8 @@ export interface Lens {
     key: string;
     label: string;
     kind: string;
+    /** A server discovery failure; the renderer shows it instead of mounting the lens. */
+    problem?: string;
 }
 export interface LensPage {
     src: string;

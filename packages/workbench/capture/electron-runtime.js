@@ -7,6 +7,7 @@ var os = require('node:os');
 var path = require('node:path');
 var tar = require('tar');
 var BUNDLE = path.join(__dirname, "./runtime");
+var preparing = new Map();
 
 function executable(root, platform) {
   platform = platform || process.platform;
@@ -64,6 +65,21 @@ async function prepare(storage, bundle, report) {
   }
   storage = storage || path.join(os.tmpdir(), 'canonic-electron-runtime');
   var destination = path.join(storage, manifest.sha256);
+  var key = path.resolve(destination);
+  var shared = preparing.has(key);
+  var work = preparing.get(key);
+  if (!work) {
+    work = materialize(storage, bundle, manifest, destination, report).finally(function () {
+      if (preparing.get(key) === work) preparing.delete(key);
+    });
+    preparing.set(key, work);
+  }
+  var prepared = await work;
+  report('runtime.prepared', Object.assign({}, prepared.timing, { shared: shared, elapsedMs: Date.now() - began }));
+  return prepared.binary;
+}
+
+async function materialize(storage, bundle, manifest, destination, report) {
   var binary = executable(destination);
   var timing = { runtime: manifest.sha256.slice(0, 12), extracted: false };
   if (!fs.existsSync(binary)) {
@@ -73,9 +89,7 @@ async function prepare(storage, bundle, report) {
   var pruning = Date.now();
   timing.pruned = await prune(storage, manifest.sha256);
   timing.pruneMs = Date.now() - pruning;
-  timing.elapsedMs = Date.now() - began;
-  report('runtime.prepared', timing);
-  return binary;
+  return { binary: binary, timing: timing };
 }
 
 async function extract(bundle, manifest, storage, destination, binary) {

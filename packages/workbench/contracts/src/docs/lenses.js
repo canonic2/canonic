@@ -12,7 +12,7 @@
    it shows its default. Null is a page's design, and DESIGN_KEY names it in
    the address and the top bar's choice. Pure: the canvas and the
    multiple-artboard runtime decide with it, and Node tests check it. See
-   specs/docs-pages.md. */
+   specs/pages/docs-pages.md. */
 
 export const DOCS_KIND = 'docs';
 
