@@ -140,7 +140,7 @@ cargo run --locked --features gallery -- --list
 cargo run --locked --features gallery -- --component chat
 cargo run --locked --features gallery -- --component composer --scenario sending
 cargo run --locked --features gallery -- --component completion-menu --scenario main
-make check
+make test
 make coverage
 ```
 

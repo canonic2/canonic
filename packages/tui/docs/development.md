@@ -4,11 +4,36 @@ This is one unpublished Cargo package, with optional `gallery` feature and
 `tui-gallery` binary. Rust 1.99.0, Rust 2024, Cargo.lock, rustfmt, strict Clippy,
 nextest, doctests, rustdoc, cargo-deny, insta and proptest.
 
-`make check` runs the package gates; `make build` builds a release gallery.
+`make build` builds a release gallery.
 `make coverage` uses `cargo llvm-cov nextest --html` and writes to
 `target/llvm-cov/`. There is no coverage percentage gate. `CARGO_FLAGS=--offline`
 uses cached dependencies. `make run` opens the component selector. No root
 workspace, distribution script or registry publication exists.
+
+Make prefers `~/.cargo/bin/cargo` so rustup selects the pinned toolchain,
+falling back to Cargo on PATH. `CARGO` overrides that selection.
+
+## Fast iteration
+
+From this package directory:
+
+```sh
+make dev
+make test-focus FILTER='picker::'
+```
+
+`dev` uses Cargo's incremental development build, writing `target/debug/tui-gallery`.
+It does not install a command or build a release. `test-focus` requires a
+substring filter and defaults to `--test integration`, where this package keeps
+its component tests. It uses the existing nextest runner and builds with all
+features so gallery fixtures are available. `TEST_TARGET` selects other targets.
+Nextest fails when no tests match the filter.
+Keep this package's `target/` directory between iterations; Cargo checks source
+freshness on every run. Dependency, toolchain, profile and feature changes may
+require a longer rebuild. Run the development executable directly to try edits. Use release builds
+for performance measurements. Select completion/release verification categories
+individually. Existing build, installation and acceptance commands retain their
+behavior.
 
 Missing development tools can be installed at the pinned versions:
 
@@ -142,3 +167,25 @@ This is native macOS evidence; Windows and Linux acceptance remain separate.
 The library emits no logs or terminal input on import. Gallery fixture errors are
 display-only; product logging stays with the host. Review changes in each
 owning repository and run its `git diff --check`.
+
+## Individual Rust verification
+
+Run Rust verification categories individually and select only those needed for
+the task. A request for tests does not also request formatting, lint, type
+checking, doctests, API docs, dependency auditing or coverage. Name the selected
+commands before running them; there is no aggregate Rust check target.
+`docs` generates browsable HTML API reference in `target/doc/`; `doctest`
+executes Rust documentation examples. Run either as its own explicit category.
+Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
+their generated reference pages. Keep Cargo caches between runs.
+
+| Category | Command from this package |
+| --- | --- |
+| Apply formatting | `make format` |
+| Verify formatting | `make format-check` |
+| Strict Clippy | `make lint` |
+| Type checking | `make types` |
+| Tests | `make test` |
+| Documentation examples | `make doctest` |
+| API reference HTML | `make docs` |
+| Dependency audit | `make deps` |

@@ -62,7 +62,8 @@ pub fn run_editor(
     let mut temporary = Temporary(Some(path.clone()));
     let result = (|| {
         file.write_all(request.text.as_bytes())?;
-        file.sync_all()?;
+        // Closing makes the bytes visible to the editor process. The file is a
+        // short-lived handoff, not durable state, so it receives no storage flush.
         drop(file);
         let status = Command::new(shell)
             .arg("-c")

@@ -72,7 +72,13 @@ for mode in ['ansi16','ansi256','truecolor','none']:
         check_label('Continue without this server')
         os.write(master,b'\x1b[H');check_label('Use this server')
         os.write(master,b'\x1b[F');check_label('Continue without this server')
-        os.write(master,b'\x03');child.wait(timeout=5);assert child.returncode==0
+        os.write(master,b'\x03')
+        # Drain redraw output so a full PTY buffer cannot block the exit.
+        deadline=time.monotonic()+5
+        while child.poll() is None:
+            assert time.monotonic()<deadline,(mode,output[-1000:])
+            if select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
+        assert child.returncode==0
     finally:
         if child.poll() is None:child.kill();child.wait()
         os.close(master);os.close(slave)

@@ -24,7 +24,6 @@ fn storage_round_trip_retains_pastes_and_rejects_truncation_and_unknown_schema()
     {
         let mut file = std::fs::File::create(&path).unwrap();
         snapshot.write_to(&mut file).unwrap();
-        file.sync_all().unwrap();
     }
     let disk = SavedComposer::read_from(&mut std::fs::File::open(path).unwrap(), 65_536).unwrap();
     assert_eq!(disk, snapshot);

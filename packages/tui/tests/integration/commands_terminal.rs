@@ -55,7 +55,12 @@ try:
     os.write(master,b'\x03')
     wait_for(b'message ')
     assert child.poll() is None
-    os.write(master,b'\x03');child.wait(timeout=5)
+    os.write(master,b'\x03')
+    # Drain redraw output so a full PTY buffer cannot block the exit.
+    deadline=time.monotonic()+5
+    while child.poll() is None:
+        assert time.monotonic()<deadline,screen()
+        if select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
     assert child.returncode==0
     os.write(master,b'restored\r')
     assert select.select([slave],[],[],1)[0]

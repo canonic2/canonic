@@ -298,6 +298,58 @@ this rule applies.
 
 ---
 
+# Rust test speed and determinism
+
+Rust tests run in parallel, one process per test under nextest, and are
+expected to be fast and repeatable. These rules apply the shared behavioral
+testing rule to that setting.
+
+- A test that passes alone but fails or slows sharply in the full suite points
+  to a shared resource, a race or a blocking system call, not to "load". Find
+  the cause before changing anything. Do not add retries, longer deadlines,
+  serial-only execution or skips to make it pass.
+- Keep the complete output of a failing or slow run in a temporary file and
+  read the failure from it; do not filter output before the message is known.
+  Reproduce intermittent failures on the focused set with
+  `cargo nextest run --stress-count <n> --no-fail-fast` through the package's
+  focused-test target, then verify a fix with more iterations than it took to
+  reproduce.
+- Measure before optimizing. Compare a test's time alone with its time in the
+  suite: a large gap means contention, not slow code. Compare the sum of test
+  times with wall time to tell a throughput-bound suite from one waiting on its
+  longest test. For Git-heavy tests, `GIT_TRACE2_EVENT` separates Git's own
+  time from the code around it. Changing the build profile is not a first step.
+- Durable writes do not call `File::sync_all` or `sync_data` directly. On
+  macOS they issue `F_FULLFSYNC`, which also empties the drive's write cache
+  and waits behind every other process's flush, so parallel tests and frequent
+  real operations serialize on it. Route flushes through one package helper
+  that uses `fsync` on macOS and `sync_all` elsewhere, and keep the package's
+  spec stating which flush its durable state receives.
+- Tests never race work that outlives the command that started it. Wait for
+  every child process a test or fixture starts. Git's automatic maintenance
+  runs detached after commits and fetches and holds `objects/maintenance.lock`;
+  packages whose tests run Git turn it off (`maintenance.auto = false`,
+  `gc.auto = 0`) for every Git the tests start, including Git run by the code
+  under test, and keep a test that fails when the setting does not apply.
+- Tests do not depend on the developer's own configuration. Provide what tests
+  need through the package's checked-in test environment, such as
+  `.cargo/config.toml` `[env]` entries with `force = true` (so a developer's
+  exported value does not replace them) pointing tools at test-owned
+  configuration under `tests/`, rather than through a shell's environment or a
+  user's dotfiles.
+  Remember that code which scrubs variables such as `GIT_*` before starting a
+  tool also drops test settings passed that way; choose a channel the code
+  under test keeps.
+- Wait on a condition with a deadline instead of sleeping for a fixed time.
+  Deadlines bound a hang; they are not a synchronization mechanism, and a test
+  that depends on one finishing in time is a race.
+- Keep fixtures to the state an assertion needs and prefer an in-process call
+  to starting a binary when the binary's own contract is not what is tested.
+  Process-level tests stay for executables, exit statuses, output and process
+  boundaries.
+
+---
+
 # Rust TUI writing locations and checks
 
 - Specs for architecture, runtime ownership, components and acceptance live

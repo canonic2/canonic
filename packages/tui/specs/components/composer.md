@@ -233,8 +233,10 @@ while in-process recall preserves them.
 Ctrl-X e returns an `EditorRequest` with ticket, current version, expanded text, original attachment document
 and label, then locks ordinary input. `editor_command` resolves supplied VISUAL
 before EDITOR. The optional `run_editor` host adapter creates an exclusive
-owned temp file (0600 on Unix), passes its path as a separate shell argument,
-waits for the configured editor and cleans the file on success/failure.
+owned temp file (0600 on Unix), writes and closes it without a storage flush
+(it is a handoff to the editor process, not durable state), passes its path
+as a separate shell argument, waits for the configured editor and cleans the
+file on success/failure.
 Cleanup failures are returned alongside operation failures rather than hidden.
 The command is trusted host configuration; the adapter does not discover it
 or run implicitly. `TerminalSession::handoff` restores terminal modes before

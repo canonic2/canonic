@@ -42,7 +42,7 @@ def wait_for(text):
 try:
     wait_for('Search reindex');os.write(master,b'/');os.write(master,b'\x1b[200~webhook\x1b[201~');wait_for('search webhook')
     assert 'deleting' not in screen()
-    os.write(master,b'\x1b');time.sleep(0.15);os.write(master,b'd');wait_for('Keep it')
+    os.write(master,b'\x1b');wait_for('/ search');os.write(master,b'd');wait_for('Keep it')
     os.write(master,b'2');os.write(master,b'\r');wait_for('enter again')
     os.write(master,b'\x1b[200~yes\x1b[201~');os.write(master,b'\r');time.sleep(0.1)
     assert 'deleting' not in screen();os.write(master,b'\r');wait_for('deleting')

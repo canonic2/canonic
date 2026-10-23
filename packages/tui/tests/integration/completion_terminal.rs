@@ -59,7 +59,13 @@ try:
     os.write(master,b'\x12');wait_for(b'enter recalls')
     os.write(master,b'\x1b');wait_for(b'actions on')
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',12,40,0,0))
-    os.write(master,b'\x03\x03\x03');child.wait(timeout=5);assert child.returncode==0
+    os.write(master,b'\x03\x03\x03')
+    # Drain redraw output so a full PTY buffer cannot block the exit.
+    deadline=time.monotonic()+5
+    while child.poll() is None:
+        assert time.monotonic()<deadline,screen()
+        if select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
+    assert child.returncode==0
     os.write(master,b'restored\r');assert select.select([slave],[],[],1)[0]
     assert os.read(slave,1024)==b'restored\n'
     assert termios.tcgetattr(slave)==before,(before,termios.tcgetattr(slave))

@@ -1401,12 +1401,12 @@ def screen():
         if 0<=row<28 and 0<=column<100:cells[row][column]=token
         column+=1
     return '\n'.join(''.join(line) for line in cells).encode()
-def wait_for(text):
+def wait_for(text,absent=None):
     global output
     deadline=time.monotonic()+10
-    while text not in screen():
+    while text not in screen() or (absent is not None and absent in screen()):
         assert child.poll() is None,output[-2000:]
-        assert time.monotonic()<deadline,(text,screen())
+        assert time.monotonic()<deadline,(text,absent,screen())
         if select.select([master],[],[],0.1)[0]:output+=os.read(master,65536)
 try:
     wait_for(b'Choose a component')
@@ -1446,10 +1446,10 @@ try:
     wait_for(b'line two')
     os.write(master,b'\t\x07\x1b[200~PTY SECOND\x1b[201~')
     wait_for(b'PTY SECOND')
-    os.write(master,b'\x1bOR');time.sleep(0.1)
+    os.write(master,b'\x1bOR');wait_for(b'modal draft')
     os.write(master,b'\x1b[200~MODAL ONLY\x1b[201~')
     wait_for(b'MODAL ONLY')
-    os.write(master,b'\x1b');time.sleep(0.1)
+    os.write(master,b'\x1b');wait_for(b'PTY SECOND',b'modal draft')
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',8,15,0,0))
     os.kill(child.pid,signal.SIGWINCH);time.sleep(0.1)
     os.write(master,b'\x03')
