@@ -8,10 +8,11 @@ The specifications are separated by purpose. Read only the area needed for the t
 | [Architecture](architecture/README.md) | How is Lattice organized internally? | Store and package implementation design, as drafts for review |
 | [Contracts](contracts/README.md) | What must an implementation guarantee? | Detailed behavior, edge cases, performance, delivery and acceptance evidence |
 
-Contracts are agreed. The element helpers are implemented; no other framework
-capability is. The framework folder defines the element authoring shape, decided
-by measurement in the package's [research](../research/README.md); the
-architecture pages are drafts awaiting review.
+Contracts are agreed. The store core and the element helpers are implemented;
+test support, bindings and the other capabilities are not. The framework folder
+defines the element authoring shape, decided by measurement in the package's
+[research](../research/README.md); the architecture pages describe the
+implemented code.
 
 Each detailed requirement has one owning contract. Contributor instructions
 live in the package's agent rules; the

@@ -12,12 +12,18 @@ export default defineConfig({
           include: ['src/**/*.test.js', 'tests/**/*.test.js'],
           exclude: ['**/*.browser.test.js'],
           maxWorkers: 2,
+          // Retention tests force garbage collection to check what is released.
+          execArgv: ['--expose-gc'],
         },
       },
       {
         test: {
           name: 'browser',
-          include: ['src/**/*.browser.test.js', 'tests/**/*.browser.test.js'],
+          include: [
+            'src/**/*.browser.test.js',
+            'tests/**/*.browser.test.js',
+            'examples/**/*.browser.test.js',
+          ],
           maxWorkers: 1,
           browser: {
             enabled: true,

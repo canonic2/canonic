@@ -5,6 +5,8 @@
   "description": "Native JavaScript primitives for state and Web Component bindings.",
   "files": [
     "src",
+    "!src/**/*.test.js",
+    "!src/**/*.bench.js",
     "README.md"
   ],
   "type": "module",
@@ -18,7 +20,7 @@
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "typecheck": "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.pure.json && tsc --project tsconfig.dom.json && tsc --project tsconfig.json",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
     "test:browser": "vitest run --project browser",

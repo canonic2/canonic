@@ -9,8 +9,8 @@ Architecture never defines observable behavior. Every guarantee is owned by a
 When an implementation turns out to need a different guarantee, the page states
 the required contract change explicitly and the contract is changed first.
 
-**Status:** draft for review. No runtime code exists beyond the empty entry
-point.
+**Status:** the store, package and element helper pages describe implemented
+code; testing support is not started.
 
 | Page | Covers |
 | --- | --- |
@@ -23,12 +23,13 @@ point.
 
 | Location | Owns | Status |
 | --- | --- | --- |
-| `src/index.js` | The root entry point | Exists; exports nothing |
-| `src/modules/store/` | The store core | Proposed in [store](store.md) |
+| `src/index.js` | The root entry point | Exists; exports the store core |
+| `src/modules/store/` | The store core | Exists, as [store](store.md) describes |
 | `src/modules/elements/` | The element helpers behind the `canonic-lattice/elements` subpath | Exists, as [element helpers](elements.md) describes |
 | `src/testing/` | Test support behind `canonic-lattice/testing` | Location proposed in [package](package.md); no export until implemented |
 | `tests/` | Package-level import, tooling and platform tests | Exists |
-| Type-check configurations | Pure, DOM and tooling checks | Proposed in [package](package.md); one combined configuration exists today |
+| Type-check configurations | Pure, DOM and tooling checks | Exist, as [package](package.md) describes |
+| `types/shared-platform.d.ts` | Platform APIs pure modules may use; development only, not shipped | Exists |
 
 ## Dependency direction
 

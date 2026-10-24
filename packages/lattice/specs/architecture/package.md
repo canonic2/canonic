@@ -9,7 +9,7 @@ page only says where and how.
 
 | `exports` entry | File | When |
 | --- | --- | --- |
-| `.` | `src/index.js` | Exists; gains the store exports with the store implementation |
+| `.` | `src/index.js` | Exists: `createStore`, `shallow` and the store's types |
 | `./testing` | `src/testing/index.js` | Added in the change that implements test support, not before |
 | `./elements` | `src/modules/elements/elements.js` | Exists: the element helpers |
 | One entry per further DOM capability | Its module's entry file | Added with that capability |
@@ -19,25 +19,25 @@ package infrastructure for consumers' tests rather than a runtime capability.
 It is planned now so the `exports` map and type checks account for it; it gets
 no export until its code exists.
 
-`files` in `package.json` already ships `src` and the README. Tests sit beside
-modules as `*.test.js`, so the archive must exclude them; whether that is done
-with `files` patterns or an ignore file is settled by the
-[packed archive](#packed-archive) fixture.
+`files` in `package.json` ships `src` and the README, and excludes tests and
+benchmarks beside modules with the negated patterns `!src/**/*.test.js` and
+`!src/**/*.bench.js`. The [packed archive](#packed-archive) test checks that
+the archive holds runtime source and no tests, fixtures or development files.
 
 ## Type-check configurations
 
-The single `tsconfig.json` today includes Node types and the DOM library for
-every file and targets `ESNext`, which cannot enforce the compatibility
-boundary. It is replaced by three configurations, which the `typecheck` script
-runs one after another:
+Three configurations enforce the compatibility boundary; the `typecheck` script
+runs them one after another:
 
 | Configuration | Root files | Library and types |
 | --- | --- | --- |
-| `tsconfig.pure.json` | Runtime files only: `src/index.js`, `src/modules/store/**/*.js` and `src/testing/**/*.js`, excluding `**/*.test.js`, `**/*.browser.test.js` and `**/*.bench.js` | `types: []`, an ECMAScript library both minimum runtimes implement, no DOM library, plus `types/shared-platform.d.ts` |
-| `tsconfig.dom.json` | DOM capability runtime files, when they exist, with the same exclusions | `types: []`, the same ECMAScript library and the DOM library |
-| `tsconfig.tooling.json` | Tests, benchmarks and configuration files | Node types, plus the DOM library for browser tests |
+| `tsconfig.pure.json` | Runtime files only: `src/index.js` and `src/modules/store/**/*.js`, and `src/testing/**/*.js` once it exists, excluding `**/*.test.js`, `**/*.browser.test.js` and `**/*.bench.js` | `types: []`, the ES2024 library, no DOM library, plus `types/shared-platform.d.ts` |
+| `tsconfig.dom.json` | DOM capability runtime files, `src/modules/elements/**/*.js`, with the same exclusions | `types: []`, the ES2024 library and the DOM library |
+| `tsconfig.json` | Tests, benchmarks and configuration files, and through their imports every runtime file | Node types, plus the DOM library for browser tests |
 
-All three keep `allowJs`, `checkJs`, `strict` and `noEmit`.
+All three keep `allowJs`, `checkJs`, `strict` and `noEmit`. The tooling
+configuration keeps the default name, `tsconfig.json`, so editors use it for
+tests and configuration files.
 
 ### Keeping the pure program pure
 
@@ -70,20 +70,23 @@ Because it is not shipped, public types must not depend on it. The
 
 ### ECMAScript edition
 
-The pure and DOM configurations use the newest ECMAScript library edition that
-both Node 24.12 and Chromium 133 fully implement. ES2024 is the expected
-candidate; it is confirmed against both runtimes before the configurations land.
+The pure and DOM configurations use ES2024, the newest ECMAScript edition both
+Node 24.12 and Chromium 133 fully implement. Every ES2024 addition shipped in
+Chromium 119 or earlier and in Node 22 or earlier, such as
+`Promise.withResolvers`, `Object.groupBy`, resizable `ArrayBuffer` and the
+regular expression `v` flag; ES2025 additions such as iterator helpers are
+excluded.
 
 ## Tests and fixtures
 
 | Fixture | Location | Purpose |
 | --- | --- | --- |
-| Node import | `tests/import.test.js` | Exists; extended to use every root export without browser globals |
-| Tooling | `tests/tooling.test.js` | Exists; checks lint and type-check rejection of undocumented or mistyped code; gains the pure-program file listing check |
+| Node import | `tests/import.test.js` | Exists; uses every root export without browser globals |
+| Tooling | `tests/tooling.test.js` | Exists; checks lint and type-check rejection of undocumented or mistyped code, lists the pure program's files and checks that the pure configuration rejects DOM and Node globals |
 | Vitest browser tests | `*.browser.test.js` | Behavior in Chromium through Vitest; they load modules through Vitest's development server and say nothing about unchanged delivery |
-| Static delivery | `tests/static/` | Plain HTML pages served unchanged, driven by Playwright |
-| Packed archive | A test that packs the package and installs it into a temporary consumer | Added once the package has exports |
-| Consumer types | Templates in `tests/types/`, run in the packed-archive consumer | Settles the `Selection` declaration and TypeScript consumer support |
+| Static delivery | `tests/static/` | Not written yet: plain HTML pages served unchanged, driven by Playwright |
+| Packed archive | `tests/package.test.js` | Exists; packs the package, installs the archive into a temporary consumer, checks its contents and imports every entry point |
+| Consumer types | Templates in `tests/types/`, run by `tests/package.test.js` in the packed-archive consumer | Exists; settled the `Selection` declaration and the consumer configuration |
 
 ### Static delivery
 
@@ -103,11 +106,19 @@ or explicit URLs work with unchanged files. A separate fixture does:
 
 ### Packed archive
 
-Once the package has exports, a test packs the package into a temporary
-directory, creates a fresh consumer there with its own `package.json`, installs
-the archive, and imports every entry point. The consumer is outside the
-package, so it cannot reach Lattice's source tree, development dependencies or
-configuration.
+`tests/package.test.js` packs the package with `npm pack` into a temporary
+directory, creates a fresh consumer there with its own `package.json`, and
+installs the archive by extracting it into the consumer's `node_modules`, which
+is all an install does for a package with no dependencies. It then:
+
+- lists the archive and checks that it holds the runtime source and no tests,
+  type templates or platform declarations;
+- runs a script in the consumer that imports every entry point, uses their
+  exports, and checks that importing an internal path fails with
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+
+The consumer is outside the package, so it cannot reach Lattice's source tree,
+development dependencies or configuration.
 
 ### Consumer type fixture
 
@@ -124,6 +135,12 @@ The files in `tests/types/` are templates, not a program checked in place:
   lists, including a selection with a misspelled field. Expected failures are
   asserted by running the type checker and matching the specific error, as
   `tests/tooling.test.js` already does, not with suppression comments.
+- `valid.ts` and four `invalid-*.ts` files cover the root entry point and run in
+  both environments; `valid-dom.ts` covers the element helpers and runs with
+  the DOM library only, since that entry point is a DOM capability.
+- The consumer configuration is the one consumers are told to use: `allowJs`
+  with `maxNodeModuleJsDepth: 2`, as
+  [delivery](../contracts/delivery.md#types-for-typescript-consumers) records.
 
 ## Integration evidence
 
@@ -153,7 +170,6 @@ requires.
   configurations one after another. Project references would add build-mode
   machinery that a no-emit check does not need.
 
-## Open questions
-
-- Whether tests beside modules are excluded from the packed archive by `files`
-  patterns or by an ignore file; the packed-archive fixture settles it.
+- **Tests excluded by `files` patterns.** Negated patterns in `files` keep the
+  exclusion beside the inclusion it narrows, in one place, instead of in a
+  separate ignore file.

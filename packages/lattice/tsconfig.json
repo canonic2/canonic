@@ -13,5 +13,11 @@
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.js", "tests/**/*.js", "vitest.config.js"]
+  "include": [
+    "src/**/*.test.js",
+    "src/**/*.bench.js",
+    "tests/**/*.js",
+    "examples/**/*.js",
+    "vitest.config.js"
+  ]
 }

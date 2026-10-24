@@ -86,6 +86,42 @@ test('Oxlint accepts documented code and rejects undocumented declarations and p
   });
 }, 20000);
 
+test('the pure type-check program contains only runtime files, platform declarations and ECMAScript libraries', () => {
+  const listed = run('node_modules/typescript/bin/tsc', ['--project', 'tsconfig.pure.json', '--listFilesOnly']);
+  expect(listed.status, listed.stdout + listed.stderr).toBe(0);
+  const files = listed.stdout.trim().split('\n');
+  const unexpected = files.filter((file) => {
+    const library = /\/typescript\/lib\/lib\.(es\d{4}|es5|decorators)[\w.]*\.d\.ts$/.test(file);
+    const runtime = file.startsWith(join(root, 'src')) && !/\.(browser\.)?test\.js$|\.bench\.js$/.test(file);
+    return !library && !runtime && file !== join(root, 'types', 'shared-platform.d.ts');
+  });
+  expect(unexpected).toEqual([]);
+  expect(files.some((file) => file.endsWith('lib.dom.d.ts'))).toBe(false);
+  expect(files.some((file) => file.includes('@types/node'))).toBe(false);
+}, 20000);
+
+test('the pure configuration rejects DOM and Node globals', () => {
+  withFixture((path) => {
+    writeFileSync(
+      path,
+      '/** @file Pure-program probe. */\nexport const width = document.body.clientWidth + process.pid;\n',
+    );
+    const config = join(path, '..', 'tsconfig.json');
+    writeFileSync(
+      config,
+      JSON.stringify({
+        extends: join(root, 'tsconfig.pure.json'),
+        include: [],
+        files: [path, join(root, 'types', 'shared-platform.d.ts')],
+      }),
+    );
+    const result = run('node_modules/typescript/bin/tsc', ['--project', config]);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain("Cannot find name 'document'");
+    expect(result.stdout).toContain("Cannot find name 'process'");
+  });
+}, 20000);
+
 test('TypeScript checks JavaScript calls against their JSDoc types without emitting code', () => {
   withFixture((path) => {
     const args = [

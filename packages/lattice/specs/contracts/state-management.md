@@ -8,8 +8,9 @@ has three parts: a store core, the capability stores an application writes on
 it, and bindings that connect stores to elements. Elements stay unaware of
 stores.
 
-**Status:** agreed contract, not implemented. The package exports no store API
-yet. [Delivery](delivery.md) owns runtime boundaries, and
+**Status:** agreed contract. The store core is implemented and exported from
+the root entry point; the declaration check and `canonic-lattice/testing` are
+not yet. [Delivery](delivery.md) owns runtime boundaries, and
 [resource lifecycle](resources.md) owns shared cleanup guarantees.
 
 ## Layers
@@ -68,7 +69,9 @@ imports it.
 ### Snapshots
 
 - `createStore(initial, options)` copies `initial` into a snapshot. Its keys
-  define the state's shape for the store's lifetime. `options.report` receives
+  define the state's shape for the store's lifetime. State fields are string
+  keys: an `initial` that is not an object, or that has symbol keys, throws a
+  `TypeError`. `options.report` receives
   errors thrown by subscriptions during delivery, as
   [errors](#errors-during-delivery) describes. Its default is the store's
   fallback: the platform's `reportError` where one exists, and otherwise
@@ -99,9 +102,17 @@ imports it.
 - Otherwise `set` builds one new snapshot, makes it current and records which
   fields changed. Outside a batch, that write is a commit: it is delivered to
   subscribers once.
-- `set` throws only when the write itself is rejected, such as for an unknown
-  key, and then changes nothing. Errors raised by subscribers during delivery
-  never come out of `set`; see [errors](#errors-during-delivery).
+- `set` throws only when the write itself is rejected, and then changes
+  nothing. A write is rejected when:
+  - a key is not in the initial state;
+  - the patch, or the value a function patch returns, is not an object;
+  - reading the patch throws, such as a throwing getter or patch function;
+  - `set` is called while another `set` is reading its patch, from a getter or
+    a patch function. The outer write would otherwise be built from a snapshot
+    the inner one replaced, and both reject with a `TypeError`.
+
+  Errors raised by subscribers during delivery never come out of `set`; see
+  [errors](#errors-during-delivery).
 - An action that changes several fields commits once, with one patch or one
   `batch`. Commits are synchronous: there is no deferral to a microtask or an
   animation frame.
@@ -144,7 +155,7 @@ A selection is a plain object owned by the capability that defines it:
 | --- | --- |
 | `fields` | The state keys `read` depends on; a non-empty array of keys of the store's state |
 | `read(state)` | A pure function deriving the selected value from those fields |
-| `equals(a, b)` | Optional; compares two results. Defaults to `Object.is`; `shallow` compares the own enumerable keys of two objects or two arrays with `Object.is` |
+| `equals(a, b)` | Optional; compares two results. Defaults to `Object.is`; `shallow` compares two arrays item by item, or two objects with the same prototype by their own enumerable string keys, with `Object.is` |
 
 `fields` is part of the selection's correctness: `read` must not depend on a
 field it does not declare, or its subscribers miss updates. The capability that
@@ -205,7 +216,11 @@ check neither logs nor introduces other output channels on its own.
 - `run(value, previous)` applies it. `run` is called synchronously during
   `watch` with the current value and `previous` set to `undefined`.
 - A field in `fields` that is not a key of the state throws a `TypeError` and
-  subscribes nothing.
+  subscribes nothing. `watch` keeps its own copy of `fields`, so changing the
+  caller's array later has no effect.
+- A `read` that writes to the store during the initial call throws a
+  `TypeError` from `watch` and subscribes nothing: its value would describe a
+  snapshot the write already replaced, and no delivery would correct it.
 - For each commit, a subscription is considered only if one of its `fields`
   changed in that commit. A subscription none of whose fields changed is
   skipped without calling `read`.
@@ -251,7 +266,9 @@ check neither logs nor introduces other output channels on its own.
   from `watch` and leaves no subscription.
 - `report` is synchronous and does not throw; the code that supplies it is
   responsible for that. If it throws anyway, the store passes that error to its
-  fallback, the same one `report` defaults to, and delivery continues.
+  fallback, the same one `report` defaults to, and delivery continues. The
+  fallback never throws: if the platform's `reportError` throws, it rethrows
+  the original error from a microtask instead.
 
 ### Cost model
 
@@ -547,3 +564,7 @@ failure is kept as a fixed regression case beside the generator.
 
 - How the declaration check returns non-failing diagnostics to the test that
   called it.
+- Whether a symbol key in a patch should be rejected. `set` walks string keys
+  only, so such a key is ignored. Rejecting it would read the patch's symbol
+  keys on every write, an allocation the cost model rules out for unchanged
+  writes; the store's own state cannot have symbol keys.

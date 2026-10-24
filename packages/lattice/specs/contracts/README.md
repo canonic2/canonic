@@ -1,8 +1,8 @@
 # Lattice contracts
 
 These topics own required behavior, edge cases, decisions and acceptance
-evidence. They are agreed contracts; of the capabilities they describe, only
-the element helpers are implemented.
+evidence. They are agreed contracts; of the capabilities they describe, the
+store core and the element helpers are implemented.
 The [framework](../framework/README.md) folder shows how authors meet them, and
 the [architecture](../architecture/README.md) folder how Lattice implements them.
 

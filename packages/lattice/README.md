@@ -1,14 +1,35 @@
 # Lattice
 
 Lattice is an unpublished native JavaScript package for state and Web Component
-bindings. Its root ESM entry point is still empty; `canonic-lattice/elements`
-exports the element helpers `captureInputs`, `replayInputs`,
-`skipUpgradeAttribute` and `defineOnce`.
-It has no runtime dependencies.
+bindings. It has no runtime dependencies.
+
+| Entry point | Exports |
+| --- | --- |
+| `canonic-lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |
+| `canonic-lattice/elements` | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce` |
 
 Source files run unchanged in modern browsers. There is no production build,
 bundler, transpilation or CommonJS entry point. TypeScript checks JavaScript and
 JSDoc with `noEmit`; it does not produce the shipped code.
+
+## Using Lattice from TypeScript
+
+Lattice ships JavaScript with JSDoc types and no declaration files. A
+TypeScript consumer reads those types by adding these settings to its own
+configuration:
+
+```json
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "maxNodeModuleJsDepth": 2
+  }
+}
+```
+
+Without them, TypeScript treats Lattice's exports as untyped. Annotate a
+selection with `satisfies Selection<State, Value>` to check its fields and type
+its `read`.
 
 ## Development
 
@@ -27,13 +48,16 @@ Run categories independently:
 | Apply safe lint fixes             | `pnpm --dir packages/lattice run lint:fix`           |
 | Apply formatting                  | `pnpm --dir packages/lattice run format`             |
 | Check formatting                  | `pnpm --dir packages/lattice run format:check`       |
-| Check JavaScript/JSDoc types      | `pnpm --dir packages/lattice run typecheck`          |
+| Check JavaScript/JSDoc types: pure, DOM and tooling configurations in turn | `pnpm --dir packages/lattice run typecheck` |
 | Node unit tests                   | `pnpm --dir packages/lattice test`                   |
 | Watch unit tests                  | `pnpm --dir packages/lattice run test:watch`         |
 | Chromium tests through Playwright | `pnpm --dir packages/lattice run test:browser`       |
 | Watch browser tests               | `pnpm --dir packages/lattice run test:browser:watch` |
 
 Append a test path to the relevant test command for focused verification.
+The unit tests include `tests/package.test.js`, which packs the package with
+`npm pack` and type-checks consumer fixtures; it takes about a minute. Unit
+tests run with `--expose-gc` so retention tests can force garbage collection.
 Browser tests use a real browser, not a DOM emulator. Vitest's development server
 is test infrastructure; it is not a production build requirement.
 

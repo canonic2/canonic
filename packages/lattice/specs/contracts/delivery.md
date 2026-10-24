@@ -11,8 +11,10 @@ Contributor language, JSDoc and tooling instructions live in the package's
 agent rules and [README](../../README.md).
 
 **Status:** agreed contract. The package is unpublished at version `0.0.0`. The
-root entry point exports nothing yet; `canonic-lattice/elements` exports the
-element helpers.
+root entry point exports the store core; `canonic-lattice/elements` exports the
+element helpers. The Node import, packed-archive and TypeScript consumer cases
+in [acceptance](#acceptance) have tests; unchanged delivery through static
+pages, DOM subpath isolation and test support do not yet.
 
 ## Native delivery and import isolation
 
@@ -221,6 +223,21 @@ The mechanism is chosen by that case:
   development step, ships them beside the source and points to them from the
   `exports` map. They are never written by hand, a check fails when they are out
   of date, and the shipped JavaScript stays unchanged.
+
+**Result (2026-10-24).** The case passes with documented configuration, so
+Lattice ships no declarations. A TypeScript consumer sets `allowJs: true` and
+`maxNodeModuleJsDepth: 2` in its own configuration; the
+[package README](../../README.md) documents this. With the default depth of 0
+every import is untyped, and with depth 1 TypeScript reads an entry-point file
+but not the modules it re-exports, so the store's exports arrive as `any`. The
+packed-archive consumer runs the fixture with exactly the documented settings,
+in a DOM environment and a Node environment, so a change that needs a deeper
+setting fails there.
+
+The depth is tied to how far Lattice's own modules sit behind an entry point,
+and it applies to every JavaScript dependency a consumer has. If either becomes
+a problem, the generated declarations above replace it; that is a delivery
+change, decided with the same fixture.
 
 ## Versions
 

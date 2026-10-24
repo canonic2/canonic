@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lattice filters example</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "canonic-lattice": "../../src/index.js",
+          "canonic-lattice/elements": "../../src/modules/elements/elements.js"
+        }
+      }
+    </script>
+    <style>
+      body {
+        font: 14px system-ui;
+        margin: 16px;
+        max-width: 480px;
+      }
+      #app {
+        display: grid;
+        gap: 8px;
+        margin-block: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="lock" type="button">Lock</button>
+    <button id="teardown" type="button">Tear down</button>
+    <div id="app"></div>
+    <script type="module">
+      import { mountFilters } from './app.js';
+
+      const lifetime = new AbortController();
+      const filters = mountFilters(document.getElementById('app'), {
+        signal: lifetime.signal,
+        save: (query) => localStorage.setItem('acme-filter', query),
+      });
+      document.getElementById('lock').addEventListener('click', () => filters.toggleLocked(), {
+        signal: lifetime.signal,
+      });
+      document.getElementById('teardown').addEventListener('click', () => lifetime.abort(), {
+        once: true,
+      });
+    </script>
+  </body>
+</html>
