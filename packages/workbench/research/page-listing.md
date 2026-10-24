@@ -1,13 +1,13 @@
 # Page listing measurements
 
-Dated observations and comparison evidence. [Performance](../system/performance.md)
+Dated observations and comparison evidence. [Performance](../specs/system/performance.md)
 owns requirements and measurement semantics; [research ownership](README.md)
 defines this record's evidence limits. Measurements below retain their original
 conditions and do not establish acceptance for an untested build or host.
 
 ## Page listing
 
-The server's [native page index](../preview-pipeline/page-index.md) lists pages independently of
+The server's [native page index](../specs/preview-pipeline/page-index.md) lists pages independently of
 the compilers and the Node evaluator. Its saved-state, evaluation and failure contracts are
 owned there. The measurements below distinguish the lab prototype from the
 shipping-server boundary.
@@ -64,4 +64,4 @@ config response add to native work. Canvas first paint and the VS Code
 webview boundary require a separate measurement; these server probes do not
 establish that target. The server's resident index removes the process
 per request and, while nothing changed, the disk check; it has not been
-measured yet ([server](../system/server.md#the-resident-index-and-watcher)).
+measured yet ([server](../specs/system/server.md#the-resident-index-and-watcher)).

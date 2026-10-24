@@ -50,7 +50,7 @@ compiles took 2.7–11 s per preview, a split build of both about 1.8 s.
 Diagnostic controls: D1 readiness marked right after mount (no font and image
 waits); D2 a production React build; D3 no linked source maps.
 
-**Fixtures.** The [shared Acme fixture](../../fixtures/labs/README.md):
+**Fixtures.** The [shared Acme fixture](../fixtures/labs/README.md):
 `small` (5 component previews) and `large` (40 page previews sharing about
 5 MB of code, two web fonts and two images per page), each with module-level
 store and listener sentinels, a file-reading config plugin and two broken

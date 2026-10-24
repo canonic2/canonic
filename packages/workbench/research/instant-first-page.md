@@ -19,7 +19,7 @@ with a cold cache, the first page in about its own build time.
 Stage 1 reported 2026-10-15: every capability passed and the Rust host was
 faster in every build cell, but two proposed stage 2 gates were missed. The
 owner decided the same day to implement the Rust page index as measured
-([pipeline decisions](../preview-pipeline/README.md#decisions)) and continue
+([pipeline decisions](../specs/preview-pipeline/README.md#decisions)) and continue
 with stage 2 in parallel. Stage 2 reported 2026-10-16: R is the leading
 variant, much faster than control from 40 pages up, but no variant meets the
 agreed targets or the rule; adoption is the owner's decision.
@@ -117,7 +117,7 @@ Fewer moving parts wins unless another is 10% faster in S4 or S5.
 
 ### Fixtures and runs
 
-The [shared Acme fixture](../../fixtures/labs/README.md), seed 1: `small` (5),
+The [shared Acme fixture](../fixtures/labs/README.md), seed 1: `small` (5),
 `large-system` (40), `giant` (600), `colossal` (10,000 pages of 2–4 sections;
 one definition in 40 takes its title and another its states from a module, so
 5% need evaluation) and `formats`. Stage 1: three warmups and ten samples per

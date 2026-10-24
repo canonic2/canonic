@@ -1,6 +1,6 @@
 # Installed startup and runtime preparation
 
-Dated observations and comparison evidence. [Performance](../system/performance.md)
+Dated observations and comparison evidence. [Performance](../specs/system/performance.md)
 owns requirements and measurement semantics; [research ownership](README.md)
 defines this record's evidence limits. Measurements below retain their original
 conditions and do not establish acceptance for an untested build or host.

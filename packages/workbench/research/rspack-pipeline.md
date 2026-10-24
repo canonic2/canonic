@@ -25,14 +25,14 @@ first, and whether a warm spare frame or a warm document is used.
 Decided, 2026-10-13. The owner decided to implement the pipeline with the warm
 document, its state changes re-rendering in place, and to settle the font wait
 separately. The implementation is in the product and specified in the
-[preview pipeline](../preview-pipeline/README.md). A confirmation run through
+[preview pipeline](../specs/preview-pipeline/README.md). A confirmation run through
 the shipping product was inconclusive for start and edits because of host load;
 navigation matched the prototype.
 
 ## Hypothesis
 
 - The pipeline meets the proposed targets in
-  [performance](../system/performance.md#measured-interactions) on the large
+  [performance](../specs/system/performance.md#measured-interactions) on the large
   fixtures.
 - Selecting a new page costs only its own chunks, its mount and any font or
   image it actually loads; shared code, global stylesheets and loaded fonts
@@ -82,7 +82,7 @@ plugins, with project plugins accepting Rspack plugins and rules. Definition
 and config evaluation, export, the sidebar bundle and capture stayed on
 esbuild.
 
-**Fixtures.** The [shared Acme fixture](../../fixtures/labs/README.md):
+**Fixtures.** The [shared Acme fixture](../fixtures/labs/README.md):
 `small`; `large-system` (40 pages, system fonts, extended isolation
 sentinels); `large-web` (the same with heavy web fonts and a 2.5 MB photo per
 page); `huge` (200 pages); `formats` (every native format, a custom adapter,

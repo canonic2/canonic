@@ -88,7 +88,7 @@ rebuild in full. B6 runs only where HMR can be driven from code (Rspack's
 watch mode with its HMR and React Refresh plugins; Rolldown's experimental
 dev engine).
 
-**Fixtures.** The [shared Acme fixture](../../fixtures/labs/README.md),
+**Fixtures.** The [shared Acme fixture](../fixtures/labs/README.md),
 `small` and `large` sizes, the same seed for every variant.
 
 **Boundaries.** B1 and B2 run in a new process per sample with no compiler

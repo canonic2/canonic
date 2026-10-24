@@ -5,13 +5,13 @@
 How can the first page after Workbench starts show in about the time that
 page's own build takes, whatever the number of pages in the project, while hot
 updates keep working for every open page? The answer decides how the
-[preview pipeline](../preview-pipeline/README.md) starts: which work runs
+[preview pipeline](../specs/preview-pipeline/README.md) starts: which work runs
 before the first page, and how the rest of the project joins the build.
 
 ## Status
 
 Decided, 2026-10-15: no variant adopted
-([pipeline decisions](../preview-pipeline/README.md#decisions)). Run sets 1–3
+([pipeline decisions](../specs/preview-pipeline/README.md#decisions)). Run sets 1–3
 ran 2026-10-13 to 2026-10-15. The follow-up is
 [instant first page](instant-first-page.md).
 
@@ -54,7 +54,7 @@ Diagnostic controls: D1 the control's start split by worker events (listing,
 cache restore, build, serving); D2 variant 1 with Rspack's default chunk
 splitting.
 
-**Fixtures.** The [shared Acme fixture](../../fixtures/labs/README.md):
+**Fixtures.** The [shared Acme fixture](../fixtures/labs/README.md):
 `small` (5), `large-system` (40), `huge` (200), `giant` (600, new) and
 `formats` for correctness.
 

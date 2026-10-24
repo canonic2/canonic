@@ -192,6 +192,6 @@ Measured `design/sidebar.html` SHA-256:
 The packaged and installed host server binaries matched SHA-256
 `c29323dac844cfa713dfba4dab50a293e6664b671df4387b9897c58e8592b8cd`.
 
-The [performance contract](../system/performance.md) owns timing boundaries and
+The [performance contract](../specs/system/performance.md) owns timing boundaries and
 budgets. Further graphics work needs a captured failing editor transition and
 a verified rendering-path correction; removing imports alone does not establish it.
