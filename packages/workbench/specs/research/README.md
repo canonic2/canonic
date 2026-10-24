@@ -1,38 +1,32 @@
 # Research and verification evidence
 
-Dated observations explain design decisions and qualify implementation status.
-They do not replace current contracts, change budgets or certify an untested
-build, fixture or host. [Performance](../system/performance.md) owns measurement
-semantics and targets; [lab methodology](../system/labs.md) owns comparisons.
+Dated observations and comparisons explain design decisions and qualify
+implementation status. They do not replace current contracts, change budgets
+or certify an untested build, fixture or host. [Performance](../system/performance.md)
+owns measurement semantics and targets; the [lab method](../system/labs.md)
+owns how comparisons are run.
 
-| Record | Evidence and limits | Related contracts |
+Each lab ends as one record here, `<topic>.md`, named for its question, with
+the sections Question, Status, Hypothesis, Method, Conditions, Results,
+Correctness, Threats to validity, and Decision and follow-ups. A rerun or
+follow-up adds a dated section to the same record. Requirements and adopted
+behavior belong to the owning contract; the record explains the evidence and
+tradeoff. Lab runners, raw samples and reports stay in the ignored `labs/`
+folder and are not committed.
+
+| Record | Status | Related contracts |
 | --- | --- | --- |
-| [Page listing](page-listing.md) | 2026-10-15 release-server scaling probes, warm/cold indexes and loaded-host repeat; not canvas-paint acceptance | [Page index](../preview-pipeline/page-index.md), [performance](../system/performance.md) |
-| [Installed startup](startup.md) | 2026-10-23 runtime preparation race, shared extraction and isolated installed diagnostic; not a controlled speed comparison | [Capture runtime](../review/capture.md#bundled-electron-runtime), [VS Code](../integrations/vscode-extension.md) |
-| [Docs navigation](docs-navigation.md) | 2026-10-19 through 2026-10-23 navigation/readiness probes, warm-pool comparisons, shipping confirmation and installed Acme compatibility | [Docs](../pages/docs-pages.md), [warm runtime](../preview-pipeline/warm-runtime.md), [performance](../system/performance.md) |
-| [Docs highlighting](docs-highlighting.md) | 2026-10-20 through 2026-10-21 highlighting comparisons, integration/installed/portable checks and unrun warm-up follow-up | [Docs](../pages/docs-pages.md), [readiness](../preview-pipeline/readiness.md) |
+| [Compiler speed](compiler-speed.md) | Reported 2026-10-11; esbuild kept, Rspack later adopted by the pipeline decision | [TypeScript previews](../pages/previews.md), [performance](../system/performance.md) |
+| [Preview loading](preview-loading.md) | Provisional, one run set (2026-10-11); led to the Rspack pipeline comparison | [Performance](../system/performance.md), [preview pipeline](../preview-pipeline/README.md) |
+| [Rspack preview pipeline](rspack-pipeline.md) | Decided 2026-10-13: implemented with the warm document | [Preview pipeline](../preview-pipeline/README.md), [hot updates](../preview-pipeline/hot-updates.md) |
+| [First page after start](first-page.md) | Decided 2026-10-15: no variant adopted | [Compiler](../preview-pipeline/compiler.md), [warm runtime](../preview-pipeline/warm-runtime.md) |
+| [Instant first page and Rust preview host](instant-first-page.md) | Stage 1 led to the Rust page index (2026-10-15); stage 2 reported 2026-10-16, adoption open | [Page index](../preview-pipeline/page-index.md), [compiler](../preview-pipeline/compiler.md) |
+| [Page listing](page-listing.md) | 2026-10-15 release-server scaling probes; not canvas-paint acceptance | [Page index](../preview-pipeline/page-index.md), [performance](../system/performance.md) |
+| [Docs navigation and warm pool](docs-navigation.md) | Decided and confirmed 2026-10-23: warm docs pool adopted | [Docs](../pages/docs-pages.md), [warm runtime](../preview-pipeline/warm-runtime.md), [performance](../system/performance.md) |
+| [Docs highlighting](docs-highlighting.md) | Decided 2026-10-21: asynchronous highlight.js adopted; integrated latency unmeasured | [Docs](../pages/docs-pages.md), [readiness](../preview-pipeline/readiness.md) |
+| [Installed startup](startup.md) | 2026-10-23 runtime preparation race and shared extraction; not a controlled speed comparison | [Capture runtime](../review/capture.md#bundled-electron-runtime), [VS Code](../integrations/vscode-extension.md) |
+| [HTML component-page navigation](html-navigation.md) | 2026-10-23 Sidebar import correction and Chrome compiler stalls; no verified graphics fix | [Performance](../system/performance.md), [rendering flow](../system/rendering-flow.md) |
 
 Preserve dates, fixture setup, source/build identity, cache state, host/tool
-versions, sample counts, failures and limitations with each finding. Keep reviewed,
-sanitized evidence in the lab result locations. Requirements and adopted
-behavior belong to the owning contract; the record explains the evidence and
-tradeoff. New observations extend the relevant record or add a distinct topic.
-Archived plan copies with recorded provenance hashes retain their original bytes
-and historical paths. Active lab indexes link to the current contracts; use those
-indexes to resolve references from a frozen plan.
-
-## Lab records and active follow-up
-
-| Record | Current relevance and remaining work |
-| --- | --- |
-| [Warm Docs](../../labs/warm-docs/README.md) | Pool and background return checks are implemented. Shipping timing/long-walk and isolated installed Acme checks have evidence in [Docs navigation](docs-navigation.md#warm-docs-integration-2026-10-23), including tail and host limitations |
-| [Docs highlighting](../../labs/docs-highlighting/README.md) | Owner selected asynchronous highlight.js after the 1,200-trial comparison; [highlighting evidence](docs-highlighting.md) keeps prototype regressions and integration/portable/installed qualifications distinct |
-| [Preview loading](../../labs/preview-loading/README.md) | Shared-build/runtime comparison; navigation requirements belong to [performance](../system/performance.md) |
-| [Rspack pipeline](../../labs/rspack-pipeline/README.md) | Design/correctness evidence for compilation and hot updates; full shipping-server/webview confirmation remains open |
-| [First page](../../labs/first-page/README.md) | Startup-scaling comparisons; no alternative to the eager startup contract is adopted |
-| [Instant first page](../../labs/instant-first-page/README.md) | Native index and compiler decision evidence; no compared variant met every first-page target |
-| [Compiler speed](../../labs/compiler-speed/README.md) | Compiler selection evidence; the active compiler is Rspack |
-
-The warm Docs archive retains the plan, reduced reviewed reports, accepted
-memory tradeoff and adoption decision after integrated confirmation. Product
-tests own regression coverage. Archiving establishes no new performance result.
+versions, sample counts, failures and limitations with each finding. Paths and
+host details use neutral placeholders.

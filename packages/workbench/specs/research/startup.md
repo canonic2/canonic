@@ -15,8 +15,8 @@ took milliseconds once evaluation was available. Subsequent requests against
 that installed server returned 36 pages in 14–19 ms.
 
 Preparation now shares one in-flight operation per cache destination within
-the host. The [isolated installed check](../../labs/warm-docs/results/2026-10-23-installed-startup-fix/report.json)
-against the selected checkout recorded one extraction, capture/evaluator
+the host. An isolated installed check against the selected checkout recorded
+one extraction, capture/evaluator
 callers marked shared, and no cleanup failure. On an empty runtime cache,
 preparation still took 7.8 seconds (hash 2.1 seconds, unpack 5.7 seconds);
 the first measured config overlapped it and took 6.2 seconds, then reads took

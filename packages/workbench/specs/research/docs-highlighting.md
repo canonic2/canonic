@@ -1,226 +1,288 @@
-# Docs highlighting evidence
+# Docs highlighting
 
-Dated observations and comparison evidence. [Performance](../system/performance.md)
-owns requirements and measurement semantics; [research ownership](README.md)
-defines this record's evidence limits. Measurements below retain their original
-conditions and do not establish acceptance for an untested build or host.
+## Question
 
-## Highlighting, 2026-10-20
+Which highlighting approach gives docs the shortest selection-to-visible and
+Show code latency, including first use, without sacrificing readable code,
+example/font readiness, correct captures or standalone/export support?
+Highlighting stays outside the visibility path; docs warm-up, the compiler,
+frame retention and the loading-message delay are not changed.
 
-The HTML and TypeScript waits come mainly from first-use grammar regex
-compilation. The syntax set is shared, but a first HTML fence does not compile
-the TypeScript grammar needed by Show code. The installed Acme trace recorded
-43 ms highlighting its HTML fence, then 448 ms highlighting the example's
-TypeScript. This does not imply that every request costs that much.
+## Status
 
-Temporary optimized probes compared Syntect 5.3.0 with two-face 0.4.5 using
-`regex-fancy`/`syntect-fancy` and `regex-onig`/`syntect-onig`. They used the
-shipping highlighter (source SHA-256 prefix `ebfb3078d18c`) with a no-op trace
-guard and clocks around `parse_line` and scope classification. Inputs were the
-HTML fence from `demo/system/overview.md`, then the `tokensInUse` export from
-`demo/system/overview.examples.ts`. Each backend ran in ten fresh processes,
-alternating order, with one first use and eleven repeated calls per input.
+Decided, 2026-10-21. The comparison recommended keeping asynchronous Syntect:
+neither worker prototype met the overall performance rule. The owner selected
+asynchronous highlight.js, accepting its dense-colouring gain despite the
+prototype's visibility and small-page regressions. The integrated path defers
+worker creation until after document load and paints CSS Highlight ranges over
+unchanged text; integration and installed checks pass, but prototype timings
+do not measure it. All assets ship locally, with no runtime CDN.
 
-| Input | fancy first-use p50 | Oniguruma first-use p50 | fancy warm p50 | Oniguruma warm p50 |
-| --- | ---: | ---: | ---: | ---: |
-| HTML fence | 28.30 ms | 4.39 ms | 0.308 ms | 0.209 ms |
-| TypeScript example, after HTML | 368.68 ms | 20.65 ms | 0.837 ms | 0.293 ms |
+## Hypothesis
 
-Warm cells have 110 samples each. First-use maxima were 30.38/4.63 ms for
-HTML and 412.99/21.01 ms for TypeScript (fancy/Oniguruma). Parsing accounted for
-almost all the difference; scope classification took 0.03–0.08 ms. Conditions:
-macOS 15.8.1 x86_64, iMacPro1,1, 16 logical CPUs, 64 GiB RAM, Cargo/Rust 1.99.1,
-release optimization, host load about 6 with other engineering work active.
-These are focused probes, not controlled browser or installed-webview targets.
+A smaller JavaScript highlighter in a document-owned worker may reduce the time
+until code is coloured without regressing first visibility. Worker, local
+asset loading, WASM and transport costs may erase those benefits; small pages
+and retained returns may not improve.
 
-The backend is Oniguruma, compiled into the server with shipped bindings.
-It reduces on-demand work without pre-highlighting the page set. A 31-input
-comparison covered the Acme docs sources and supported-language snippets:
-all 18 Acme inputs produced byte-identical markup. Two synthetic JavaScript
-and JSX snippets had token-class differences; the JSX closing tag is treated
-as a tag rather than a regexp. Source text and escaping are preserved.
+Exploratory evidence before the plan (2026-10-20), under the earlier
+synchronous Syntect path:
 
-A second comparison used actual release servers built with the package's pinned
-`nightly-2026-04-16` toolchain (binary SHA-256 prefixes: fancy `40ff75cbb697`,
-Oniguruma `e1bce37d557`). Three fresh processes per backend alternated order on
-the same host. Each used a temporary copy of Acme's system docs and assets with
-only Overview configured, its HTML examples lens, and no project stylesheet.
-The examples bundle was fetched first to settle startup/catalog/compiler work
-without initializing the highlighter. The probe then fetched the Markdown
-document and `tokens-in-use` Show code endpoint, each once cold and three times
-warm. The first document and source responses were byte-identical between
-backends. No Workbench build or test suite ran during these measurements;
-other host work was not controlled.
+- HTML and TypeScript waits came mainly from first-use grammar regex
+  compilation. An installed Acme trace recorded 43 ms for an HTML fence, then
+  448 ms for the example's TypeScript.
+- Optimized probes of Syntect 5.3.0 with two-face 0.4.5, ten fresh processes
+  per backend, one first use and eleven repeats per input:
 
-| Request | fancy cold server p50 | Oniguruma cold server p50 | fancy warm server p50 | Oniguruma warm server p50 |
-| --- | ---: | ---: | ---: | ---: |
-| Overview document | 57.17 ms | 9.18 ms | 2.49 ms | 1.23 ms |
-| TypeScript Show code, after document | 1174.28 ms | 33.62 ms | 4.17 ms | 1.94 ms |
+  | Input | fancy first-use p50 | Oniguruma first-use p50 | fancy warm p50 | Oniguruma warm p50 |
+  | --- | ---: | ---: | ---: | ---: |
+  | HTML fence | 28.30 ms | 4.39 ms | 0.308 ms | 0.209 ms |
+  | TypeScript example, after HTML | 368.68 ms | 20.65 ms | 0.837 ms | 0.293 ms |
 
-Cold cells have three samples each; warm cells have nine. The corresponding
-Oniguruma highlighting medians were 7.70/0.43 ms for the document and
-32.40/0.59 ms for Show code (cold/warm). Loopback HTTP wall-time medians were
-10.70/2.14 ms and 34.65/2.89 ms. These release request measurements include
-the real docs service and tracing; they are distinct from the isolated probe
-and the earlier installed trace. They do not measure browser visibility or
-establish the performance targets. Docs still wait for examples and fonts
-before appearing.
+  Parsing accounted for almost all the difference; scope classification took
+  0.03–0.08 ms.
+- Release servers (three fresh processes per backend, Acme's Overview only):
 
-## Follow-up docs lab inputs
+  | Request | fancy cold p50 | Oniguruma cold p50 | fancy warm p50 | Oniguruma warm p50 |
+  | --- | ---: | ---: | ---: | ---: |
+  | Overview document | 57.17 ms | 9.18 ms | 2.49 ms | 1.23 ms |
+  | TypeScript Show code | 1174.28 ms | 33.62 ms | 4.17 ms | 1.94 ms |
 
-Live docs highlighting is deferred: escaped code is readable in the initial
-document, and a document-owned local highlight.js worker applies colours without gating page
-visibility. CSS, fonts, images and examples still gate readiness. Capture waits
-for colouring to finish or fall back to plain text. The
-[highlighting lab](../../labs/docs-highlighting/README.md) compares engine
-choices against the deferred Syntect baseline. The owner selected asynchronous
-highlight.js on 2026-10-21 after reviewing the results. The integrated path starts
-its worker after document load and two animation frames and paints CSS Highlight
-ranges over unchanged text nodes. The earlier synchronous measurements and the
-prototype performance guardrail results below remain investigation history.
+  A 31-input comparison found all 18 Acme inputs byte-identical between
+  backends; two synthetic JavaScript/JSX snippets differed in token classes.
+  The server moved to Oniguruma and highlighting became asynchronous: escaped
+  code first, colours applied without gating readiness, captures waiting for
+  colours or a bounded plain fallback.
+- A trace smoke on 2026-10-20 (debug server, headless Chrome) measured single
+  selection-to-visible samples of 556, 182 and 28 ms for first page, second
+  page and retained return, with 333 of the first document's 335 server
+  milliseconds in highlighting.
 
-Verification on 2026-10-20: the
-[browser check](../../ui/src/modules/docs/page/highlighting.test.js) held local
-fence and Show code colouring responses open while the shipping docs script
-reported ready and displayed exact plain source. On completion, code block bounds
-stayed identical. It also checked edited/disposed content and failure fallback.
-[Capture checks](../../ui/legacy/annotations-capture.test.js) verify that pixel
-reads wait for colouring. These are behavioral checks in headless Chrome on
-macOS x86_64, not installed-webview latency measurements or performance targets.
+## Method
 
-## Installed asynchronous highlighting, 2026-10-20
+**Variants.**
 
-A focused behavioral check used the installed Workbench 0.14.0 release in
-VS Code 1.142.0 (Electron 43.7.7, Chromium 150.0.7871.250) on macOS x86_64.
-A separate VS Code process used a temporary profile and a copy of Acme's
-system docs/assets, configured with Overview and Colors and their HTML examples
-lens. It loaded the installed extension without changing its files or the user's
-active window. Tracing was enabled; no lab variant or latency samples were run.
+| ID | Implementation | Visibility and subset |
+| --- | --- | --- |
+| 0 | Asynchronous Rust server, Syntect 5.3.0/two-face 0.4.5, Oniguruma, unchanged | Plain code first; includes local requests, first-language setup and transfer |
+| 1 | highlight.js with supported languages registered explicitly, in a document-owned worker | Plain code first; includes worker/module loading; no auto-detection |
+| 2 | `vscode-textmate` plus `vscode-oniguruma`, pinned grammars, in a document-owned worker | Plain code first; includes worker, grammar and WASM loading |
+| D | Escaped plain code, highlighting disabled | Diagnostic lower bound only |
 
-DevTools held the actual local fence and Show code colouring responses. Overview
-became ready and visible through the full shell/content/docs frame chain with
-plain fence text, loaded fonts and its mounted example. Show code displayed
-plain TypeScript while both colouring responses remained held. Highlighting's
-completion promise remained pending. Releasing both responses applied colours;
-the fence and source text matched the fixture files exactly, and both code
-bounding rectangles were unchanged. This establishes the installed asynchronous
-visibility path and completion signal for this fixture. Pixel capture, export,
-failure/timeout injection and the broader language matrix were not checked in
-this installed smoke; their existing behavioral checks and lab confirmation
-remain separate evidence.
+Temporary overlays copy the shipping modules and release binary; candidates
+replace only the highlighting module, loading a worker through a lazy local
+delivery adapter. Grammar files come from VS Code 1.142.0, pinned by SHA-256;
+JavaScript and WASM packages are pinned in a lab lockfile. Portable exports
+stay server-prehighlighted in every variant.
 
-The installed docs JS, highlighting JS, CSS and release binary matched the
-workspace's packaged files byte for byte. SHA-256 prefixes: highlighting
-`3d61624d7a83`, docs script `dd04ae30e2b3`, CSS `abcca825afdd`, release binary
-`5663597d8c69`; public base `6494125a13bb`, private base `16e143e52c77`, with
-uncommitted changes. The temporary structured verification report contained
-separate visibility, plain-source, pending-completion, text and geometry checks.
+**Fixtures** (seed `20261020`, Acme/example.com, one pinned local font):
 
-Preflight discovery: the temporary VS Code process initially remained in the
-background. Its canvas and descendants reported `visibilityState: hidden`, and
-animation-frame probes did not fire within one second. DevTools
-`Page.bringToFront` did not make them visible. Focusing that specific native
-process changed all documents to `visible` and animation frames progressed;
-the foreground verification then passed. A lab must independently establish
-foreground visibility before measuring. The earlier temporary fixture also
-needed a block YAML list for styles, rather than an inline list; neither setup
-failure is a product latency sample.
+| Fixture | Shape |
+| --- | --- |
+| Small | Two short pages with one shared HTML examples lens; one page without code and one with a four-line JSON fence |
+| Overview | Acme's Overview Markdown/HTML fence and its TypeScript `tokens-in-use` export, plus a second page; the motivating first-use HTML-then-TypeScript case |
+| Code-heavy | Two pages, each with 20 fences of 160 lines across supported languages, 360-character lines, Unicode, multi-line strings and comments; a 1,000-line Show code export |
+| Language corpus | Snippets for every shipping language and alias, unknown/missing languages and malicious-looking HTML |
 
-## Highlighting comparison, 2026-10-20
+The shipping language matrix is Bash (`bash`, `sh`, `shell`, `zsh`), CSS,
+Diff, JavaScript (`javascript`, `js`, `jsx`, `mjs`, `cjs`), JSON, Markdown
+(`markdown`, `md`), SCSS, TypeScript (`typescript`, `ts`, `tsx`, `mts`,
+`cts`), markup (`xml`, `html`, `svg`, `vue`, `astro`) and YAML (`yaml`,
+`yml`); unknown languages stay escaped plain text.
 
-The [lab report](../../labs/docs-highlighting/results/2026-10-20-preflight/README.md)
-records asynchronous Syntect, document-owned highlight.js and TextMate/Oniguruma
-workers, and a plain diagnostic through the shipping canvas. All four passed
-isolated installed-VS-Code and portable compatibility smokes. This does not
-establish installed-webview latency or integrated worker implementations.
+**Sequences.** Per fixture: open the first page, select the second page in a
+new document, return to a retained page, evict and revisit, open Show code for
+the first TypeScript use and reopen it, edit a fence and an example/shared
+module and restore each, rapid supersession, an example failure and a
+highlighter failure/timeout.
 
-The defined language-role corpus found an uncoloured SCSS variable in Syntect;
-the workers passed. Source text and outer code bounds matched, but raster
-differences remained, and a later character-range diagnostic measured subpixel
-bound differences when spans were applied, including in the control. Unchanged
-block bounds alone do not establish unchanged character geometry. One Markdown-edit
-timeout in the highlight.js variant remains unresolved despite a passing diagnostic repeat.
+**Boundaries.** Selection to visible (the requested generation's text and
+example painted in the promoted frame, independently observed); document
+request to response; Show code click to readable and to fully coloured;
+selection to all requested code coloured; worker, grammar and tokenization
+phases; edit to visible and to coloured. Cold cells use a fresh server, empty
+compiler caches and a new browser profile; startup-first and compiled-first
+selections are separate cells; first HTML and first TypeScript grammar use are
+separate; no highlighting warm-up.
 
-Extreme host load interrupted the preflight timing attempt before the two full
-sets and confirmation. Those diagnostic timings alone established no winner or
-accepted target. The correctness findings remain distinct from the subsequently
-completed performance comparison below.
+**Correctness checks**, every run: exact code text, escaping and copy output;
+token-role expectations (span boundaries may differ, roles may not); document
+structure, code geometry and settled screenshots; isolation; freshness and
+stale-response rejection; contained failures; no new console messages;
+independent font and image completion; captures with settled highlighting.
+Injected failures must leave exact plain source usable and settle capture
+within the control's bound.
 
-## Highlighting performance campaign, 2026-10-21
+**Metrics and runs.** Primary: time to fully coloured code per fixture and
+cache cell, for docs selection and Show code; selection-to-visible and
+readable Show code are guardrails. Two independent sets of 20 samples per
+latency cell per variant, alternated in a seeded order, then a third set
+repeating control and the leader.
 
-The [complete report](../../labs/docs-highlighting/results/2026-10-21-performance/README.md)
-records 1,200 attempted trials across two full sets and a control/highlight.js
-confirmation, using the release server and shipping canvas in standalone Chrome.
-Inputs, warm-up and retention stayed fixed. Aggregates were independently
-recomputed, including actual counts, failures, phase observations and memory.
+**Decision rule** (proposed thresholds). All correctness checks pass;
+first-use time to coloured code improves by at least 10 ms and 20% in the
+motivating or code-heavy fixture, repeats across sets and exceeds control
+run-to-run variation; no other latency cell regresses by more than the larger
+of 5 ms or 10% at p50; settled process/worker RSS grows less than the larger
+of 20 MiB or 20%. Partial winners are inconclusive.
 
-highlight.js repeatedly improved dense first-page colouring beyond the proposed
-gain threshold and control variation. It also slowed dense second-page
-visibility and smaller-page colouring beyond the latency allowance. TextMate
-was slower on motivating/dense first-page colouring and missed the settled RSS
-allowance in one cell. Neither prototype meets the overall performance rule;
-the lab recommended retaining asynchronous Syntect. The owner subsequently
-selected asynchronous highlight.js, accepting that engine choice despite the
-prototype's overall guardrail result. This decision does not change the recorded
-measurements, performance targets or correctness tolerances. Production uses
-deferred worker creation and CSS Highlight ranges to address load-event blocking
-and span-induced text shaping; prototype timings do not establish their latency.
+**Amendments.** Before the run (2026-10-20): runner defects were corrected
+(relative font URLs, selection before config readiness, token-role assertions
+requiring a single span, a fault-injection navigation that changed only the
+hash); VS Code profiles use a short owned path because macOS rejected a nested
+IPC socket; raster comparisons normalize only syntax-span foreground colour in
+a separate render and add antialias classification within code; a
+character-range diagnostic compares per-character bounds with spans and with
+plain text. After the first timing attempt reached load 283, the native
+runtime is extracted once per set and each set waits for a quiet host (load no
+higher than the logical CPU count for 60 s, up to ten minutes). On 2026-10-21
+the owner asked for the performance sets despite the preflight findings; the
+quiet-host wait stays, but after ten minutes the matrix runs with an explicit
+host qualification, and correctness eligibility stays separate from latency.
 
-All samples remain, including six execution failures and substantial host-load
-variation. A quieter third set repeated the colouring gain and visibility
-regression. Exact figures, nearest-rank tails, qualifications and unresolved
-geometry/raster, role and freshness findings belong to the linked evidence.
-Installed compatibility and the asynchronous visibility path were checked
-separately; these timing results do not establish installed-webview latency.
-The whole-project docs warm-up comparison remains a separate, unrun lab.
+## Conditions
 
-## Integrated asynchronous highlight.js, 2026-10-21
+Release binary (`5663597d8c69…`), tracing enabled identically, Node 26.12.0,
+standalone Chrome 155.0.8059.85 on macOS x86_64 (16 logical CPUs, 64 GiB).
+Installed checks used VS Code 1.142.0 / Electron 43.7.7 / Chromium
+150.0.7871.250 and Workbench 0.14.0 in isolated temporary profiles. Product and
+fixture hashes match across sets; later sets reuse the first set's frozen
+inputs. All three performance sets passed the quiet admission; subsequent
+one-minute load ranged 5.1–381.6, 6.9–156.6 and 4.3–50.2 on 16 logical CPUs.
+Power state was not inspected (host policy disallowed the query).
 
-The [integration checks](../../labs/docs-highlighting/results/2026-10-21-integration/README.md)
-cover the selected local worker and CSS Highlight range painter. Focused browser
-checks preserve exact text/copy bytes and per-character geometry while testing
-held work, fallback, cancellation and capture-mirror range transfer. Installed
-VS Code checks with the release server pass for Overview and Code-heavy: the
-latter checks 137,983 code characters and 12,011 ranges, with identical geometry
-and a successful native capture. A nine-page portable export check also passes.
-The standalone shipping canvas passes the navigation, retained/evicted return,
-source/copy, edit, supersession, failure/recovery and capture sequences for all
-three fixtures, retaining the lab's warm-up cycles.
-Three hidden-canvas setup timeouts preceded the final installed checks; explicit
-editor-tab activation resolved them. These are compatibility checks, not a new
-performance matrix or captured-pixel parity claim. Prototype timings above do
-not measure the integrated painter.
+## Results
 
-## Whole-project docs warm-up follow-up
+### Preflight, 2026-10-20
 
-Code-path inspection for tracing (2026-10-20) found that `docs_bundle()` waits
-for the compiler's `warmed()` barrier before ensuring the requested lens.
-`Space::warm_docs` also lists and requests every docs lens sequentially. These
-are separate startup paths, so an on-demand comparison must account for both.
-The content frame readiness observer retries at 50 ms intervals; the canvas
-defers loading feedback for 100 ms, independently of readiness. These
-are inspection findings, not VS Code latency measurements.
+87 canvas samples across smokes, diagnostic repeats and an interrupted timing
+attempt, plus four installed-VS-Code and four portable compatibility checks.
+All four variants ran through the shipping canvas and passed the installed and
+portable smokes. The timing attempt stopped after 37 samples at load 283; a
+shared-runtime smoke stopped on a highlight.js Overview Markdown-edit timeout
+(load 60–81). Single-sample cold-startup observations, which establish no
+ranking:
 
-After collecting installed-extension traces, plan a lab under `labs/` following
-[the lab contract](../system/labs.md). Compare shipping warm-up with on-demand Markdown
-HTML plus only the selected page's example bundle on a large docs fixture.
-Keep cold/warm build caches, syntax-set first use, first visit during startup,
-first visit after warm-up, retained return and evicted return separate. Measure
-click-to-visible, each server/browser phase, loader exposure, compile work,
-peak/settled server and evaluator RSS, and retained browser memory. Check docs,
-highlighting, examples, edits and supersession for equivalent behavior. No lab
-runner or variant is part of the trace implementation, and no performance
-target is established by this instrumentation alone.
+| Fixture | Variant | Selection to visible | Colours complete | Show code readable | Show code coloured |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Overview | 0 | 184.9 | 169.2 | 14.7 | 59.8 |
+| Overview | 1 | 197.8 | 214.7 | 12.2 | 40.4 |
+| Overview | 2 | 180.3 | 245.5 | 10.4 | 105.2 |
+| Code-heavy | 0 | 253.7 | 821.0 | 23.8 | 116.7 |
+| Code-heavy | 1 | 258.6 | 659.2 | 8.6 | 42.5 |
+| Code-heavy | 2 | 254.8 | 1406.0 | 20.2 | 98.1 |
 
-A trace smoke on 2026-10-20 used the debug server, headless Chrome and macOS
-15.8.1 x86_64, with tracing enabled. A temporary Acme fixture had two Markdown
-pages sharing one HTML lens (`basic` writes text), and one TypeScript code
-fence on the first page. Single selection-to-visible samples were 556 ms,
-182 ms and 28 ms for first page, second page and retained return. The first
-document spent 333 of its 335 server milliseconds highlighting; the deferred
-bundle's warm barrier was below 0.01 ms. The return kept the same document.
-This isolates first-use highlighting as a lab cell; it does not establish
-typical navigation latency, memory, VS Code behavior or performance targets.
-Measured uncommitted source SHA-256 prefixes: highlighting `ebfb3078d18c`,
-request timers `cab09b9b7bae`, browser trace helper `0a93d59ca5d9` (before owner
-labels were added). The fixture and trace are a smoke check, not a lab run set.
+The preflight alone was inconclusive.
+
+### Performance campaign, 2026-10-21
+
+1,200 attempted trials: two 480-trial sets and a 240-trial control/highlight.js
+confirmation, 20 attempts per variant, fixture and cache cell. Aggregates were
+recomputed independently from raw observations. Nearest-rank p50 in
+milliseconds.
+
+Cold-startup Code-heavy:
+
+| Set | Syntect coloured | highlight.js coloured | Gain | TextMate coloured | Syntect second page visible | highlight.js second page visible |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| set 1 | 874.1 | 649.8 | 25.7% | 1670.3 | 230.6 | 407.9 |
+| set 2 | 910.2 | 671.9 | 26.2% | 1769.5 | 248.5 | 414.7 |
+| confirmation | 812.0 | 633.6 | 22.0% | — | 212.2 | 402.2 |
+
+Control first-colour p50 variation was 98.2 ms (startup) and 85.6 ms
+(compiled-first); highlight.js gains were 177.0–238.3 ms across those six
+cells. Initial dense-page visibility was similar (254.1 / 251.0 ms in
+confirmation). First Show code was readable at 18.3 / 19.8 ms and coloured at
+109.3 / 50.2 ms. Overview first colouring went from 174.7 to 209.2 ms and
+Small's second-page JSON colouring from 99.7 to 115.1 ms in confirmation, with
+the same regressions in the full sets. Retained visibility stayed about
+45–49 ms; evicted returns about 132–149 ms for every variant.
+
+Phases (set 2, cold dense cell, p50): the native highlight phase 339.1 ms with
+a 346.7 ms request; highlight.js initialization/tokenization 28.8/93.6 ms and
+request-to-reply 132.4 ms; TextMate initialization/grammar/tokenization
+21.7/92.3/904.6 ms and request-to-reply 1021.6 ms. Dense first-page
+main-thread long-task total p50 was 0/0/169 ms for Syntect/highlight.js/
+TextMate.
+
+Memory: highlight.js stayed within the settled combined-RSS allowance in all
+18 measured cells; TextMate exceeded it in set 2's cold Code-heavy cell
+(+407.5 MiB, 20.95% against 20%).
+
+Execution: six failures (five TextMate trials and one Syntect fault-injection
+check); confirmation had none. All sets restored every fixture and reported no
+cleanup failures.
+
+### Integrated asynchronous highlight.js, 2026-10-21
+
+Live docs use a document-owned worker with pinned local highlight.js 11.11.1
+and ten explicit grammars, created after document load and two animation
+frames; CSS Custom Highlight ranges paint the original text nodes; capture
+mirrors transfer the ranges; portable exports keep server-prehighlighted HTML.
+
+| Installed fixture | Fences | Code characters | Colour ranges | Character geometry | Native capture |
+| --- | ---: | ---: | ---: | --- | --- |
+| Overview | 1 | 1,402 | 68 | Identical with ranges on/off | captured |
+| Code-heavy | 20 | 137,983 | 12,011 | Identical with ranges on/off | captured |
+
+Focused browser tests cover readable docs and Show code while the worker is
+held, capture waits, exact text and per-character positions, aliases, stale
+responses, cancellation, timeout, worker failure and restart, and the capture
+mirror. The standalone canvas passes the lab sequences once each for all three
+fixtures. A nine-page portable export loaded every prehighlighted page with no
+live highlighting URL and no external requests. Three hidden-canvas setup
+timeouts were resolved by activating the editor tab. The full performance
+matrix was not rerun for the integrated painter.
+
+### Installed asynchronous path, 2026-10-20
+
+In installed Workbench 0.14.0 on VS Code 1.142.0, with the colouring responses
+held through DevTools, Overview became ready and visible with plain fence text,
+loaded fonts and its mounted example, and Show code displayed plain
+TypeScript; releasing the responses applied colours without moving code
+bounds. A temporary VS Code process stayed `hidden` in the background with no
+animation frames until its native window was focused; `Page.bringToFront` did
+not establish visibility.
+
+## Correctness
+
+| Check | Syntect | highlight.js | TextMate | Plain D |
+| --- | --- | --- | --- | --- |
+| Exact text, copy, escaping | passed | passed | passed (1 unobserved) | passed |
+| Language-role corpus | SCSS `$accent` variable uncoloured in every trial | passed | passed (3 unobserved) | diagnostic |
+| Outer code bounds, typography | passed | passed | passed | passed |
+| Neutral raster against control | reference | failed (359 of 360) | 155 passed, 80 failed | differing |
+| Character bounds, spans against plain text | deltas up to 0.140625 px | up to 0.1875 px | up to 0.171875 px | zero |
+| Retention, supersession, isolation, containment | passed | passed | passed | passed |
+| Own/shared edits | passed | one unresolved preflight Markdown-edit timeout; campaign trials passed | passed | passed |
+
+Unchanged block bounds do not establish unchanged character geometry,
+including for the control. The edit timeout and the geometry/raster findings
+remain recorded; they independently prevent claiming a fully correct
+replacement, and the performance rejection does not depend on them.
+
+## Threats to validity
+
+Host load varied substantially, including after quiet admission; p95 at n=20
+is exploratory. These are release-server and standalone-Chrome measurements,
+not installed-webview latency. Prototype timings do not measure the integrated
+range painter. Single-sample preflight values establish nothing.
+
+## Decision and follow-ups
+
+- Neither worker prototype meets the overall rule. highlight.js improves dense
+  first-page colouring by 22–26% beyond control variation in every set, but
+  slows dense second-page visibility and smaller-page colouring beyond the
+  allowance. TextMate is slower on the motivating and dense cases and missed
+  the RSS allowance once. The comparison recommended keeping asynchronous
+  Syntect.
+- Owner decision, 2026-10-21: adopt asynchronous highlight.js, with deferred
+  worker creation and CSS Highlight ranges. The decision does not relax
+  correctness requirements or performance thresholds.
+- Installed-webview latency of the integrated path remains unmeasured.
+- Whole-project docs warm-up remains a separate question. Code-path inspection
+  (2026-10-20) found `docs_bundle()` waits for the compiler's `warmed()`
+  barrier and `Space::warm_docs` requests every docs lens sequentially; the
+  readiness observer retries at 50 ms and loading feedback is deferred 100 ms.
+  A comparison of shipping warm-up against on-demand Markdown plus only the
+  selected page's example bundle has not run.

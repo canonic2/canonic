@@ -1,178 +1,266 @@
-# Docs navigation and warm pool evidence
+# Docs navigation and warm pool
 
-Dated observations and comparison evidence. [Performance](../system/performance.md)
-owns requirements and measurement semantics; [research ownership](README.md)
-defines this record's evidence limits. Measurements below retain their original
-conditions and do not establish acceptance for an untested build or host.
+## Question
 
-## Acme docs navigation, 2026-10-19
+Does reusing one initialized docs document across pages, swapping only the
+page's Markdown and examples, shorten selection to visible enough to justify
+it over shortening the separate-document waterfall, with every docs contract
+intact? The decision it informs: whether docs get a warm document like managed
+previews, only earlier resource discovery inside separate documents, or
+neither.
 
-On macOS x64, an isolated server selected `acme` from the root `workbench.yaml`.
-The repository's headless Chrome harness used a 1900 × 1100 viewport and opened
-Colors, Typography and Button through the `html` docs lens, then returned to each.
-At public base `3e2a86e`, first visits to Typography/Button took 261/286 ms;
-with entry-script preloads they took 215/170 ms. Resource traces confirmed
-parallel chunk fetches during the stylesheet wait, with one fetch per chunk.
-These single samples demonstrate the waterfall correction, not a stable speed
-ratio. Fresh-server Colors startup varied from 1.4 to 2.9 seconds, including
-compiler startup. Retained returns took 17–35 ms and reused their documents.
-These samples predate the 100 ms loading-feedback grace period.
-This browser probe does not establish VS Code webview latency or other hosts.
+## Status
 
-## Loading feedback, 2026-10-20
+Decided and confirmed, 2026-10-23. The owner selected the warm pool with
+immediate resume and parallel metadata fetching (`pool-rp`), accepting about
+13 MB more JS heap with four docs documents. The shipping implementation passed
+a three-session confirmation, a final source pass and isolated installed Acme
+checks. Current requirements live in [Docs](../pages/docs-pages.md#reusable-page-lifecycle),
+[warm runtime](../preview-pipeline/warm-runtime.md#warm-docs-pool) and
+[serving](../preview-pipeline/serving.md#preload-selection).
 
-The
-[retained-session browser smoke](../../scripts/smoke-preview-sessions.cjs)
-returned to its existing docs document in 22–24 ms on macOS x86_64 and observed
-no frame painting the loading message. Its delayed Storybook lookup/render,
-failure, supersession and capture checks also passed. Controller tests use a
-controlled clock to verify the 100 ms feedback deadline and cancellation on
-completion, replacement, failure and disposal. These browser checks do not
-establish installed VS Code latency.
+## Hypothesis
 
-## Docs readiness handoff, 2026-10-21
+A warm docs document brings a first visit close to the cost of its
+page-specific work, about 30–45 ms on Acme, because it skips document
+creation, the shared module graph, stylesheet parsing and font readiness.
+Earlier resource discovery inside separate documents saves the bundle-answer
+round trip and part of the module wait (an expected 10–20 ms) but keeps
+document creation and font readiness. Retained returns are already fast and
+should not change.
 
-The user's installed 0.14.1 Acme trace (16:12 local time, macOS x86_64)
-showed repeated selection-to-visible times around 97–104 ms for Button, Icons,
-Spacing, Overview and subsequent Colors/Typography selections. Document requests
-took about 4–5 ms. The content renderer checked the docs readiness flag every
-50 ms after document load, even though docs already emitted `workbench:ready`.
-This added a wait between actual completion and promotion. Examples, bundle
-loading and fonts accounted for additional work; Overview's syntax highlighting
-completed after visibility and was not its visibility blocker.
+Exploratory evidence before the plan (a one-off probe on Acme's 13 docs pages,
+headless Chrome 1600×1000, one sample per page): first visits 74–143 ms to
+frame promotion (median about 90 ms), evicted returns 76–145 ms, retained
+returns 8 and 20 ms. A new docs document requested about 20 resources, of
+which only the Markdown page, bundle answer, page module and chunk were
+page-specific; fonts were the largest readiness wait (10–69 ms) although
+already in the HTTP cache. Earlier navigation observations are under
+[Results](#earlier-navigation-observations).
 
-A bounded correction listens to the document's existing readiness event,
-rechecks its flag, cancels the pending poll and schedules promotion. It retains
-the fallback for non-signalling renderers and the existing resource/readiness
-requirements. Focused lifecycle tests cover the signal, premature signals,
-fallback, replacement and disposal.
+## Method
 
-An isolated Chrome probe against that running Acme server compared installed
-source with the corrected content-frame script intercepted in the probe only.
-Four fresh tabs ran in installed/corrected/corrected/installed order, each
-selecting Overview, Spacing, Typography, Colors, Icons, then Overview again
-(12 selections per variant). Tracing and interception were enabled equally.
-Nearest-rank p50 from the docs ready event to frame promotion was 27.6 ms
-installed versus 1.4 ms corrected; selection-to-visible p50 was 146.5 versus
-127.1 ms. Every observed promotion had its readiness flag set and fonts loaded;
-the final probe reported no runtime exceptions. These are small diagnostic
-samples, with uncontrolled host load, not an installed-webview latency claim or
-evidence for a 4 ms end-to-end target.
+**Variants.**
 
-The readiness correction does not change warm-up, retention or
-font/image/example readiness. The subsequent
-[warm Docs decision](#warm-docs-pool-decision-2026-10-23) defines the dedicated
-host and pool that replace separate-document navigation for eligible new pages.
-The [shipping integration evidence](#warm-docs-integration-2026-10-23) records
-the implemented path and its measured limits.
-The comparison exercised Acme's HTML docs, not an Astro-versus-docs benchmark.
+| Variant | What it does |
+| --- | --- |
+| 0. Control | Shipping behavior with the readiness-event correction: one document per docs page, up to three idle documents retained for 15 minutes |
+| 1. Early discovery | Separate documents; the docs HTML carries the page's bundle answer inline plus `modulepreload` and stylesheet preloads in `<head>`, applied by a lab proxy |
+| 2. Warm docs host | One long-lived docs document per content renderer and lens: navigation disposes mounted examples, restores the document baseline, replaces `main.wb-docs` and mounts the next page's module; shared chunks, scripts, stylesheet and fonts stay loaded |
+| 3. Warm pool | Variant 2's warm documents with control's retention: a new page reuses the oldest idle docs document of its lens once three pages are idle |
 
-## Warm Docs pool decision, 2026-10-23
+Diagnostic controls: D1 control without the `document.fonts.ready` wait; D2
+variant 2 without baseline restoration. Every variant, including control, went
+through the same pass-through lab proxy; each session used a new browser
+profile. Warm-document isolation copies the preview host's tracking of
+listeners, timers, animation frames, globals, body children and root
+attributes; text `<style>` elements are removed between pages and CSSOM-built
+sheets that libraries hold are kept.
 
-Adopt the warm Docs pool with immediate retained resume and parallel page/metadata
-fetching (`pool-rp`), with a background revision check on return. The goal is
-about 40% faster browser-warm selection to visible for new Docs destinations
-when an initialized pool document can be reused, while retained returns stay
-as fast as separate-document retention and every Docs behavior remains intact.
-This is not a cold-start or universal latency claim. Pool ownership, cleanup,
-freshness and bounds belong to [warm runtime](../preview-pipeline/warm-runtime.md#warm-docs-pool);
-page behavior and compatibility belong to [Docs](../pages/docs-pages.md).
+**Inputs.** Acme, copied into the run directory (13 docs pages of the HTML
+adapter, shared stylesheet, web fonts replayed from one recording through
+request interception); `docs-small` (6 pages, system fonts, 2–4 examples);
+`docs-heavy` (30 pages with React and React Native Web lenses, an environment
+provider, three local web-font families, one 1200×800 image per page, 8–12
+examples per page with isolation sentinels). Every page carries a runner marker
+with page and revision.
 
-Evidence is the [stage 2 report](../../labs/warm-docs/results/2026-10-23-stage2/README.md)
-and [lab plan and profile](../../labs/warm-docs/README.md#stage-2-profile-report-2026-10-23).
-The comparison used a standalone server and headless Chrome 155 on macOS x64
-(16 logical CPUs, 64 GB, AC power), Node 24.12.0, three measured sessions per
-variant/fixture after one discarded session, browser-warm Acme HTML docs and
-the generated heavy React/React Native Web fixture. Acme fonts were replayed
-from one recording; local heavy-fixture fonts, inputs, readiness and retention
-were fixed across variants. Selection to visible was observed by the runner's
-own page/revision, examples, font and visible-image checks, not just the product
-ready flag. Host load was uncontrolled (session-start 1-minute load p50 12.88,
-maximum 58.83).
+**Sequences.** Cold start (generated fixtures only), first visit, retained
+return, evicted return, docs lens switch, design round trip, Markdown edit,
+example edit, and a 50-selection long walk followed by 10 s idle.
 
-The report records first-visit p50 126 → 78 ms on Acme and 134 → 80 ms on heavy
-(about 38–40%); evicted-return p50 110 → 62 and 156 → 80 ms; retained-return
-p50 26 → 27 and 29 → 29 ms. Every prototype correctness check passed. The
-owner accepts the measured extra JS heap: heavy-fixture 50-page walk plus
-10 seconds idle, four documents, about 10.3 → 22.8 MB. This is a deliberate
-exception to the lab's original heap-parity rule, not evidence of a universal
-memory ceiling or permission for heap to grow without bound. The optional
-registry cleanup did not reduce that cost; the earlier-promotion variant widened
-tails and is not adopted.
+**Boundaries.** Selection to visible (primary): from the canvas receiving the
+selection to the first animation frame where the promoted frame shows the
+selected page's marker at the selected revision, all expected example markers,
+fonts loaded and visible images complete, checked by the runner's own probe.
+Also text visible, examples mounted, fonts ready, colours settled, capture
+ready, and edit to visible.
 
-The candidate did not mechanically pass every original timing threshold:
-heavy retained-return p95 was 38 versus 30 ms and Acme example-edit p95 was
-199 versus 170 ms, with only six edit samples per fixture/variant. Host load
-and those small samples limit attribution; they do not prove regressions absent.
-The background return revision check was not part of the measured immediate-resume
-variant. Shipping-code confirmation must measure its cost as well as confirm
-freshness after a missed update. Run the same navigation, lens/design round
-trips, edit, interaction, capture/parity, isolation and long-walk sequences
-against integrated code, then confirm Acme in installed VS Code. Prototype
-numbers do not establish shipping performance or host compatibility.
+**Correctness checks**, every run: render parity against control's
+screenshots (a page fails when its share of differing pixels exceeds the
+largest share between control sessions); isolation; freshness; scroll and
+address; error containment; readiness and capture; cleanup after the canvas
+closes; clean console. A variant failing a check is rejected, not tuned.
 
-The server's initialized-runtime preload fix ships first as an independent
-change covering previews and Docs ([serving](../preview-pipeline/serving.md#preload-selection)).
-The pool and background checks are implemented. Compiler pre-warming and
-readiness boundaries are unchanged; integration evidence follows.
+**Runs.** Each session launches a new profile, walks every page once as a
+discarded warm-up, then opens a new canvas and measures; the first session per
+variant and fixture is discarded. Run 1: ten measured sessions per variant and
+fixture (at least 20 samples per first-visit and return cell), 20 cold starts
+per variant on generated fixtures. Stage 2: three measured sessions per variant
+and fixture.
 
-## Warm Docs integration, 2026-10-23
+**Decision rule** (proposed, agreed 2026-10-22). Variant 2 wins if, against
+control on Acme and `docs-heavy`, it cuts first-visit and evicted-return p50 by
+at least 30% and 25 ms, makes no cell's p95 worse by more than 5 ms, passes
+every check, and keeps its long-walk heap within control's. Variant 1 wins
+instead if it reaches two thirds of variant 2's first-visit gain. Inconclusive
+if the confirmation difference falls within control's run-to-run variation.
+Owner decisions on 2026-10-22: one warm document per content renderer and
+lens; text before examples is measured but not counted; cold start only on the
+generated fixtures.
 
-The shipping UI implements the dedicated Docs pool and reusable page lifecycle.
+**Smoke findings, 2026-10-22**, classified before the run set: canvas documents
+loaded from the server's space address bypassed the proxy (the proxy now
+rewrites the server origin and sessions fail if any frame bypasses it);
+variant 2 dropped a page's scroll one navigation early (corrected); a lens
+switch matched the old lens's marker (the probe now matches the lens); a reused
+document preloaded an already-loaded runtime chunk (the warm host leaves that
+preload out); D2 leaked every sentinel, as designed; a cold sample folder could
+not be removed while a process finished writing (removal now retries).
+
+**Stage 2 plan, agreed 2026-10-23.** A profiling pass (control and variant 3,
+one traced session each, attributing every navigation's time) followed by one
+comparison set of control against variant 3 with switchable fixes:
+`resume` (show a retained page immediately), `parallel` (fetch the bundle
+answer with the page), `memory` (release earlier pages' example registrations)
+and `promote` (remove the frame wait before promotion).
+
+## Conditions
+
+Standalone server and headless Chrome 155 on macOS x64 (16 logical CPUs,
+64 GB, AC power), Node 24.12.0, the bundled server binary at the measured
+public commit plus hashes of uncommitted measured files. Run 1 on 2026-10-22
+and 2026-10-23: session-start one-minute load p50 16.6, maximum 295 (a virtual
+machine outside the lab used about five cores). Stage 2 on 2026-10-23: load
+p50 12.88, maximum 58.83. Shipping confirmation on 2026-10-23: load p50 6.53.
+Installed checks: VS Code 1.142.0 / Electron 43.7.7 / Chromium 150, isolated
+profile and temporary Acme copy.
+
+## Results
+
+### Run 1, 2026-10-22
+
+- Warm documents (variants 2 and 3) cut first-visit p50 by about 38% (Acme
+  131 → 80 ms, heavy 148 → 93 ms) and requests per page from 22–26 to 4–6.
+  Neither met the rule: retained returns were slower (Acme 26 → 79 ms for
+  variant 2, 61 ms for variant 3) and the long-walk heap larger
+  (10.2 → 22–23 MB).
+- Early discovery (variant 1) gained 4–14%, under the threshold.
+- D1 showed the font wait is not on the critical path.
+- Cold start did not differ between variants.
+
+### Stage 2 profile, 2026-10-23
+
+Traces covered Acme only (Chrome stalled tracing the heavy fixture in
+control); every session recorded Chrome's per-step counters. New-page medians:
+
+| Path | Finding |
+| --- | --- |
+| Examples waterfall | Control: docs page requested 25 ms after selection, scripts at 56 ms, bundle answer 57–64 ms, module 63–79 ms, examples mounted 82 ms, fonts settled 106 ms, visible about 130 ms; each server answer takes 5–15 ms |
+| Fonts and CSS | A new document waits 20–24 ms for cached fonts; a warm document about 5 ms |
+| Example mounting | About 0.1 ms per example, about 1 ms per page; not a cost |
+| Frame presentation | Readiness to promotion 2–3 ms; promotion to visible 15–23 ms |
+| Retention | Control's retained returns 26–29 ms; the warm pool's 70 ms because it asked for the page's revision first (38–57 ms). Heap over a 50-page walk: control flat at about 12.7 MB, warm pool 19 → 24 MB |
+| Server | Docs page 5–14 ms, bundle answer 5–6 ms, revision 6–15 ms to first byte |
+| Background work | About 10–15 ms of canvas and renderer scripting per selection, about 5 ms of highlighting worker time, no long tasks |
+| Editing and interactions | Show code opens in 21–27 ms and is coloured at 60–86 ms; scrolling and zooming hold 60 fps; Markdown edits show in 60–80 ms, example edits in 140–160 ms |
+
+### Stage 2 comparison, 2026-10-23
+
+Three measured sessions per variant and fixture; every variant passed every
+check.
+
+- `pool-rp` / `pool-rpm`: new pages p50 126 → 78 ms on Acme and 134 → 80 ms on
+  heavy; evicted returns 110 → 62 and 156 → 80 ms; retained returns equal to
+  control (26 → 27 and 29 → 29 ms); lens switches equal.
+- They fail only the long-walk heap (10.3 → 22.8 MB) and show edit p95
+  differences of 11–29 ms from six samples each (heavy retained-return p95 38
+  against 30 ms; Acme example-edit p95 199 against 170 ms).
+- `memory` did not reduce the heap: the extra memory is the warm documents' own
+  runtime. `promote` improved p50 slightly but widened p95 tails. `resume`
+  alone fixes retained returns; `parallel` recovers the new-page time `resume`
+  alone lost.
+
+### Warm Docs pool decision, 2026-10-23
+
+The owner adopted the warm Docs pool with immediate retained resume and
+parallel page/metadata fetching (`pool-rp`), with a nonblocking background
+revision check on return (show immediately, refresh only if changed, keep
+scroll, ignore late results). The goal is about 40% faster browser-warm
+selection to visible for new docs destinations when a pool document can be
+reused, with retained returns as fast as separate-document retention. This is
+not a cold-start or universal latency claim. The accepted extra heap is a
+deliberate exception to the original heap-parity rule, not a universal memory
+ceiling. The background revision check was not part of the measured variant.
+The server's initialized-runtime preload correction shipped first as an
+independent change covering previews and docs.
+
+### Warm Docs integration, 2026-10-23
+
+The shipping UI implements the dedicated docs pool and reusable page lifecycle.
 The server serves its authored HTML host unchanged, omits initialized runtime
-preloads, and supplies separate Markdown/compiled-example revision identities.
-The latter distinguishes prose-only refreshes from missed example builds and
-detects a save between parallel HTML and metadata reads. The compiled revision
-uses the entry's reachable module content hashes, errors and compiler generation;
-shared chunk layout and unrelated entries do not change it. Successful hot updates
-advance the live page's examples revision before subsequent Markdown checks.
-A project stylesheet's smooth-scroll setting does
-not animate programmatic page reset or restoration.
+preloads, and supplies separate Markdown and compiled-example revision
+identities, which distinguish prose-only refreshes from missed example builds
+and detect a save between parallel HTML and metadata reads. The compiled
+revision uses the entry's reachable module content hashes, errors and compiler
+generation. A project stylesheet's smooth-scroll setting does not animate
+programmatic page reset or restoration.
 
-Focused Rust client/page/service/export and asset-delivery tests pass. Node
-serving tests verify authored assets and portable bootstrap; a real compiler
-test confirms an example edit changes the return revision without a Markdown
-save. Real Chrome tests cover page start/stop, mount cancellation/failure,
-isolation, revision races/failures, parallel-response consistency, smooth-scroll
-restoration and disposal. Canvas/session tests cover reuse and shared retention
-bounds. These are scoped checks, not the package's full engineering gates.
+| Shipping run | First visit p50 (Acme / heavy) | Retained return p50 | Evicted return p50 | Settled heavy heap |
+| --- | ---: | ---: | ---: | ---: |
+| Three measured sessions per fixture | 63 / 79 ms | 28 / 30 ms | 62 / 65 ms | 21.8 MB, four documents |
+| Final source pass, one session per fixture | 63 / 79 ms | 28 / 30 ms | — | 21.9 MB, four documents |
 
-The [shipping smoke summary](../../labs/warm-docs/README.md#shipping-reports-2026-10-23)
-passed every checked behavior on Acme and the generated heavy fixture, with
-no session or cleanup failures. Standalone capture preparation reports 503
-without a capture helper; its screenshot/readiness parity is not native-capture
-acceptance. Expected fixture errors and missing optional local config/favicon
-requests remain separate from runtime warnings. No unused-runtime-preload
-warning was observed. The smoke predates the immediate scroll-restoration fix
-and has too few samples to establish the timing gain.
+Every check and cleanup assertion passed in both runs. Heavy edit p95 values
+(396 ms Markdown, 262 ms examples) have six samples each. The final pass
+follows explicit application of the page-state bridge after a new start and a
+Markdown swap. Standalone capture preparation reports 503 without a capture
+helper, so screenshot parity is not native-capture acceptance.
 
-The [reviewed installed VSIX report](../../labs/warm-docs/results/2026-10-23-installed-reviewed/report.json)
-passes on VS Code 1.142.0 / Electron 43.7.7 / Chromium 150, macOS x64, using
-an isolated profile and temporary Acme copy. It walks beyond pool capacity,
-returns with scroll preserved, opens and colours Show code, and observes four
-Docs documents, and verifies Button's disabled state in page options and the
-HTML state attribute. Installed file/binary hashes are recorded. This is compatibility
-evidence, not an installed-host latency benchmark or cross-platform acceptance.
-Earlier installed attempts exposed runner assumptions about nested canvases,
-foreground animation frames and Acme's smooth scrolling; their failed reports
-remain in the lab record.
+The installed VSIX check in an isolated VS Code profile walks beyond pool
+capacity, returns with scroll preserved, opens and colours Show code, stays at
+four docs documents and applies Button's disabled state to page options and
+the HTML state attribute. Earlier installed attempts exposed runner
+assumptions about nested canvases, foreground animation frames and Acme's
+smooth scrolling.
 
-The [three-session confirmation](../../labs/warm-docs/results/2026-10-23-shipping-confirmation/README.md)
-passes every checked behavior and cleanup assertion. First-visit p50 is 63 ms
-on Acme and 79 ms on heavy, retained returns 28/30 ms, and evicted returns
-62/65 ms. Heavy's 50-selection walk plus 10-second idle settles at 21.8 MB JS
-heap with four documents. This matches the selected warm-pool design's scale;
-host load is lower (session-start p50 6.53 versus stage 2's 12.88), so it is
-not a new paired estimate of the percentage gain. Heavy edit p95 values of
-396 ms for Markdown and 262 ms for examples have only six samples each;
-tail parity is not established by that sample.
+### Earlier navigation observations
 
-The [final source confirmation](../../labs/warm-docs/results/2026-10-23-shipping-final/README.md)
-repeats the full sequences after the state-bridge correction, with one
-discarded and one measured session per fixture. Every check and cleanup
-assertion passes. First-visit p50 remains 63/79 ms and retained return p50
-28/30 ms; settled heap is 21.9 MB with four documents. It supplements the
-larger run, with the [dated method](../../labs/warm-docs/README.md#shipping-confirmation-2026-10-23)
-and source hashes recorded separately. A final scoped frame test additionally
-verifies that a reused idle document drops frozen dimensions before mounting
-at the current viewport; the timing runs used fixed viewport dimensions.
+**Acme docs navigation, 2026-10-19.** Headless Chrome 1900×1100 through the
+`html` docs lens: first visits to Typography/Button took 261/286 ms at public
+base `3e2a86e`, and 215/170 ms with entry-script preloads, which fetched chunks
+in parallel during the stylesheet wait. Fresh-server Colors startup varied from
+1.4 to 2.9 s; retained returns took 17–35 ms. Single samples, before the 100 ms
+loading-feedback grace period.
+
+**Loading feedback, 2026-10-20.** The retained-session browser smoke returned
+to its docs document in 22–24 ms with no frame painting the loading message;
+controller tests verify the 100 ms feedback deadline and its cancellation.
+
+**Docs readiness handoff, 2026-10-21.** An installed 0.14.1 Acme trace showed
+selection to visible around 97–104 ms while the content renderer polled the
+docs readiness flag every 50 ms after `workbench:ready` was already emitted. The
+correction listens for the readiness event, keeping the poll as a fallback. A
+probe of 12 selections per variant measured ready-to-promotion p50 27.6 ms
+installed against 1.4 ms corrected, and selection to visible 146.5 against
+127.1 ms.
+
+**Pending-viewport regression, 2026-10-23.** The outgoing-view grace period
+left the canvas at `display:none` on first open, so a pending content renderer
+had a 0 × 0 viewport and never promoted. An isolated foreground VS Code webview
+reproduced the hang. Pending renderers now get invisible, inert, correctly
+sized slots independently of the displayed canvas model
+([rendering flow](../system/rendering-flow.md#navigation-feedback)); the same
+probe reached the visible phase after installation.
+
+## Correctness
+
+Every variant passed every check in run 1 and stage 2; D2 leaked every
+sentinel, as designed. The shipping confirmation and final pass passed every
+check and cleanup assertion; the installed check passed after runner
+corrections.
+
+## Threats to validity
+
+Uncontrolled and often high host load; p95 values are exploratory, and edit
+cells have six samples. Standalone headless Chrome, not the installed webview,
+for timings. Shipping confirmations ran only shipping code at lower load, so
+they confirm the design's scale rather than a new paired percentage gain.
+
+## Decision and follow-ups
+
+- Adopted: `pool-rp` with a background revision check on return; `memory` not
+  required; `promote` rejected for widening tails.
+- The heap exception is accepted for four docs documents only.
+- Installed-webview latency is not measured; the installed check is
+  compatibility evidence.

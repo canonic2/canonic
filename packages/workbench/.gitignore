@@ -4,3 +4,4 @@ node_modules/
 capture/runtime/
 server/node/preview/bin/
 dist/
+/labs/

@@ -12,7 +12,7 @@ the compilers and the Node evaluator. Its saved-state, evaluation and failure co
 owned there. The measurements below distinguish the lab prototype from the
 shipping-server boundary.
 
-The [instant first page lab](../../labs/instant-first-page/README.md#stage-1-report)
+The [instant first page record](instant-first-page.md#stage-1-2026-10-15)
 holds the index design comparison. Process startup, adapter ordering and
 configuration assembly belong to the shipping-server boundary below.
 A newly placed macOS executable may also incur a one-time system launch check;
@@ -41,7 +41,7 @@ Cold reads also evaluated `workbench.config.ts`, and the 10,002-definition
 fixture evaluated 500 computed definitions. Runtime preparation uses a second
 native pass, reusing literal results saved by the first pass.
 
-Measured source: public base `6d9d0b5`, private base `bd86d29b`, plus the
+Measured source: public base `6d9d0b5` plus the
 uncommitted page-index implementation. SHA-256 prefixes identify the measured
 files: server `aac7f3b3951f`, compiler `4e9f7f3cadc7`, evaluator
 `e3c7efaaacb7`, TypeScript adapter `7a464917b48e`, native index application
