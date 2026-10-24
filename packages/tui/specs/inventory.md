@@ -7,8 +7,7 @@ Baseline inspected on **2026-10-09**: [manifest](../Cargo.toml),
 [development](../docs/development.md) and integration test modules. Structure
 and acceptance conventions follow the shared Rust package rules. This pass inspected source and
 assertions; it did not rerun Rust gates or establish fresh platform acceptance.
-Chat implementation and test coverage were updated on 2026-10-11; executed checks
-are recorded separately in [Verification](verification.md#chat-alignment-engineering-record--2026-10-11).
+Chat test coverage is mapped in [Verification](verification.md#chat).
 
 Inventory research included direct source/documentation inspection of terminal
 routes, prompt editing/completions, modal routing, permission/question flows,
@@ -54,7 +53,7 @@ Editor controls remain stored and render as safe pictures/hex; transcript contro
 are sanitized before rendering. See [Gate 1](human-testing.md#gate-1--editor-and-focus)
 for the editor and [Gate 2a](human-testing.md#gate-2a--rich-option-picker) for the
 rich picker. [Gate 2b](human-testing.md#gate-2b--dialogs) owns dialog acceptance.
-Its 36 scenarios preserve host drafts; a dedicated PTY test verifies
+Its scenarios preserve host drafts; a dedicated PTY test verifies
 nested paste, parent preservation, resize and restored terminal modes. The
 picker's sixteen local choice fixtures preserve an independent host draft while
 cycling stage/dock/full-screen placement. Engineering and human evidence remain

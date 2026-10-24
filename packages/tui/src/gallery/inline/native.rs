@@ -5,6 +5,7 @@ use super::{InlineDemo, NAMES};
 use crate::gallery::job_control;
 use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
+    picker::Choice,
     runtime::{Capabilities, InlineOptions, InlineSession},
     theme::Presentation,
 };
@@ -16,6 +17,9 @@ use std::{
 
 pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
     let name = scenario.unwrap_or("main");
+    if name == "choose-many" {
+        return choose_many();
+    }
     let index = NAMES
         .iter()
         .position(|n| *n == name)
@@ -38,6 +42,30 @@ pub(crate) fn run(scenario: Option<&str>, p: Presentation) -> Result<()> {
         return Ok(());
     }
     interactive(session, &mut demo, p)
+}
+/// Runs the shared `choose_many` prompt itself, with one context line, a short
+/// list and a minimum of one, and prints the confirmed identities.
+fn choose_many() -> Result<()> {
+    let choices = ["api", "worker", "digest"]
+        .into_iter()
+        .map(|id| Choice::new(id, format!("Acme {id}")))
+        .collect();
+    let marked = crate::runtime::prompts::choose_many(
+        "Services",
+        "Pick services to deploy",
+        choices,
+        &[],
+        1,
+        "continue",
+    )?;
+    println!(
+        "services → {}",
+        marked.map_or_else(
+            || "cancelled · nothing deployed".to_owned(),
+            |ids| ids.join(", ")
+        )
+    );
+    Ok(())
 }
 fn interactive(mut session: InlineSession, demo: &mut InlineDemo, p: Presentation) -> Result<()> {
     let signals = job_control::Suspension::install()?;

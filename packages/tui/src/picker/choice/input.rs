@@ -149,7 +149,7 @@ impl ChoicePicker {
         }
         if self.mode == SelectionMode::Multiple {
             if self.marked.len() < self.minimum {
-                self.notice = Some(format!("mark at least {}", self.minimum));
+                self.notice = Some(format!("press space to mark at least {}", self.minimum));
                 return Intent::None;
             }
             Intent::Confirmed(self.marked().into_iter().map(str::to_owned).collect())

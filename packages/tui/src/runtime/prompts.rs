@@ -4,6 +4,7 @@ use crate::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     input::{Action, LineInput},
     picker::{Choice, ChoicePicker, Filter, Intent, PickerView, SelectionMode},
+    ratatui::{layout::Rect, widgets::Paragraph},
     theme::Presentation,
 };
 use std::{io, time::Duration};
@@ -102,8 +103,7 @@ fn read_loop(
             .as_mut()
             .ok_or_else(|| io::Error::other("Terminal is closed"))?;
         tick(open)?;
-        let area = open.area();
-        open.draw(|frame| field.render(frame, area, text, title, hidden, presentation()))?;
+        open.draw(|frame| field.render(frame, frame.area(), text, title, hidden, presentation()))?;
         let Some(event) = open.poll(Duration::from_millis(100))? else {
             continue;
         };
@@ -175,7 +175,7 @@ pub fn select(title: &str, choices: Vec<String>, default: Option<usize>) -> io::
             Ok(Selection::Selected(id.parse().map_err(io::Error::other)?))
         }
         ChoiceSelection::Back => Ok(Selection::Back),
-        ChoiceSelection::Cancelled => Ok(Selection::Cancelled),
+        ChoiceSelection::Confirmed(_) | ChoiceSelection::Cancelled => Ok(Selection::Cancelled),
     }
 }
 
@@ -191,12 +191,58 @@ pub fn choose_choices(
 ) -> io::Result<Option<String>> {
     Ok(match select_choices(title, context, choices, default)? {
         ChoiceSelection::Selected(id) => Some(id),
-        ChoiceSelection::Back | ChoiceSelection::Cancelled => None,
+        ChoiceSelection::Confirmed(_) | ChoiceSelection::Back | ChoiceSelection::Cancelled => None,
     })
+}
+
+/// Mark several stable identities, starting from `marked`. Space marks the
+/// highlighted row, typing filters and Enter confirms the marked set. With
+/// `minimum` 0 an empty set confirms and, while nothing is marked, the footer
+/// reads `enter <empty>`, such as `enter continue` or `enter skip`; below a
+/// nonzero minimum Enter stays in the list and a notice row names Space.
+/// Escape and interruption return `None` and confirm nothing.
+/// # Errors
+/// Returns invalid choices, a `minimum` above the enabled choices
+/// ([`io::ErrorKind::InvalidInput`], before acquiring the terminal) and terminal
+/// acquisition, input or restoration errors.
+pub fn choose_many(
+    title: &str,
+    context: &str,
+    choices: Vec<Choice>,
+    marked: &[&str],
+    minimum: usize,
+    empty: &str,
+) -> io::Result<Option<Vec<String>>> {
+    let enabled = choices.iter().filter(|c| c.disabled.is_none()).count();
+    if minimum > enabled {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("At least {minimum} choices are required, but only {enabled} are available"),
+        ));
+    }
+    let mut picker = ChoicePicker::new(choices, None, SelectionMode::Multiple, Filter::Auto)
+        .map_err(io::Error::other)?;
+    // Without a maximum the bounds cannot conflict.
+    picker.set_selection_limits(minimum, None);
+    picker.set_marked(marked);
+    Ok(
+        match run_picker(
+            &mut picker,
+            title,
+            context,
+            16,
+            SelectionMode::Multiple,
+            empty,
+        )? {
+            ChoiceSelection::Confirmed(ids) => Some(ids),
+            _ => None,
+        },
+    )
 }
 
 enum ChoiceSelection {
     Selected(String),
+    Confirmed(Vec<String>),
     Back,
     Cancelled,
 }
@@ -212,20 +258,34 @@ fn select_choices(
     if !picker.highlight(default) {
         picker.highlight(None);
     }
+    run_picker(&mut picker, title, context, 12, SelectionMode::Single, "")
+}
+
+/// `empty` names Enter with nothing marked in multiple mode; single mode ignores it.
+fn run_picker(
+    picker: &mut ChoicePicker,
+    title: &str,
+    context: &str,
+    limit: u16,
+    mode: SelectionMode,
+    empty: &str,
+) -> io::Result<ChoiceSelection> {
     let width = super::terminal_size().map_or(80, |(width, _)| width);
+    // The notice row sits below the list, so the list keeps the context minimum.
+    let notices = u16::from(mode == SelectionMode::Multiple);
     let height = picker
         .height(
             width,
             PickerView {
                 context,
-                max_height: 12,
+                max_height: limit,
                 ..PickerView::default()
             },
         )
-        .saturating_add(1)
-        .clamp(if context.is_empty() { 5 } else { 8 }, 12);
+        .saturating_add(1 + notices)
+        .clamp(if context.is_empty() { 5 } else { 8 } + notices, limit);
     let mut session = Some(open(height)?);
-    let result = select_loop(&mut session, &mut picker, title, context);
+    let result = select_loop(&mut session, picker, title, context, limit, mode, empty);
     finish(session, result)
 }
 fn select_loop(
@@ -233,31 +293,45 @@ fn select_loop(
     picker: &mut ChoicePicker,
     title: &str,
     context: &str,
+    limit: u16,
+    mode: SelectionMode,
+    empty: &str,
 ) -> io::Result<ChoiceSelection> {
     loop {
         let open = session
             .as_mut()
             .ok_or_else(|| io::Error::other("Terminal is closed"))?;
-        let area = open.area();
         open.draw(|frame| {
+            let area = frame.area();
             if area.height >= 5 && area.width >= 12 {
-                picker.render(
+                // A multiple choice keeps its last row for the picker's notice.
+                let notices = u16::from(mode == SelectionMode::Multiple);
+                let list = Rect {
+                    height: area.height - notices,
+                    ..area
+                };
+                let used = picker.render(
                     frame,
-                    area,
+                    list,
                     PickerView {
                         title,
-                        context: if area.height >= 8 { context } else { "" },
+                        context: if list.height >= 8 { context } else { "" },
                         presentation: presentation(),
-                        max_height: 12,
+                        max_height: limit,
+                        empty,
                         ..PickerView::default()
                     },
                     true,
                 );
+                if let Some(notice) = picker.notice() {
+                    frame.render_widget(
+                        Paragraph::new(crate::text::clean(notice, 256, false))
+                            .style(presentation().warning()),
+                        Rect::new(area.x, used.bottom(), area.width, 1).intersection(area),
+                    );
+                }
             } else {
-                frame.render_widget(
-                    crate::ratatui::widgets::Paragraph::new("esc cancels; enlarge terminal"),
-                    area,
-                );
+                frame.render_widget(Paragraph::new("esc cancels; enlarge terminal"), area);
             }
         })?;
         let Some(event) = open.poll(Duration::from_millis(100))? else {
@@ -271,12 +345,15 @@ fn select_loop(
         let session = session
             .as_mut()
             .ok_or_else(|| io::Error::other("Terminal is closed"))?;
+        let area = session.area();
         if matches!(&event, Event::Key(key) if key.kind != KeyEventKind::Release && key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c' | 'd')))
         {
             return Ok(ChoiceSelection::Cancelled);
         }
         // Number keys highlight; only a later deliberate Enter can submit.
+        // A multiple choice leaves them to the picker, which marks the row.
         if let Event::Key(key) = &event
+            && mode == SelectionMode::Single
             && !picker.filtering()
             && key.kind == KeyEventKind::Press
             && key.modifiers.is_empty()
@@ -296,6 +373,11 @@ fn select_loop(
                 if area.height >= 5 && area.width >= 12 && session.confirmation_available() =>
             {
                 return Ok(ChoiceSelection::Selected(id));
+            }
+            Intent::Confirmed(ids)
+                if area.height >= 5 && area.width >= 12 && session.confirmation_available() =>
+            {
+                return Ok(ChoiceSelection::Confirmed(ids));
             }
             Intent::Cancelled => {
                 return Ok(ChoiceSelection::Back);

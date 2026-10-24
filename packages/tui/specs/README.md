@@ -31,14 +31,13 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 | [Chat and conversation content](components/chat.md) | Identified streaming, rich text/code/tables/diffs, anchors, loaded search and block selection |
 | [Presentation architecture](presentation.md) | Shared semantic tokens, drawing primitives, profiles/fallbacks and presentation decisions |
 | [Implementation plan](roadmap.md) | Dependency order, acceptance matrix, exit conditions and open decisions |
-| [Verification](verification.md) | Independent checkpoint definitions, dated engineering summary and evidence boundaries |
+| [Verification](verification.md) | Independent checkpoint definitions, test coverage per component and gaps |
 | [Design alignment](design-alignment.md) | Current handoff implementation scope, remaining component work and open decisions |
 | [Human testing gates](human-testing.md) | Smaller delivery slices, runnable acceptance steps, confirmation and commit workflow |
 | [Code quality](code-quality.md) | Existing Rust tooling and engineering gates |
 
-[Reader guides](../docs/README.md) describe implemented behavior. Baseline
-inspections and dated executed results are qualified in [Verification](verification.md);
-reorganizing specs is not a new test run. Tests present in source,
+[Reader guides](../docs/README.md) describe implemented behavior.
+[Verification](verification.md) maps test coverage and gaps. Tests present in source,
 passing gates, native terminal acceptance and consumer rollout are distinct evidence.
 Dependency declarations establish neither integration nor application coverage.
 

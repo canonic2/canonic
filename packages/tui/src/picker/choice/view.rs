@@ -38,6 +38,10 @@ pub struct PickerView<'a> {
     /// What Escape does here, shown as `esc <escape>`: `cancel` by default, or
     /// `back` when the host's flow returns to its previous step.
     pub escape: &'a str,
+    /// What Enter does in multiple mode while nothing is marked and the host
+    /// accepts an empty set, shown as `enter <empty>`: `continue` by default, or
+    /// `skip` when an empty set skips the step.
+    pub empty: &'a str,
 }
 impl Default for PickerView<'_> {
     fn default() -> Self {
@@ -48,6 +52,7 @@ impl Default for PickerView<'_> {
             max_height: PICKER_HEIGHT,
             presentation: Presentation::default(),
             escape: "cancel",
+            empty: "continue",
         }
     }
 }
@@ -449,8 +454,9 @@ impl ChoicePicker {
         if focused {
             if self.status == Status::Ready {
                 if self.mode == SelectionMode::Multiple {
-                    hints.push(format!("{} marked", self.marked.len()));
-                    hints.push("space / alt-a mark".to_owned());
+                    // The title already counts marks; the footer names the keys.
+                    hints.push("space select".to_owned());
+                    hints.push("alt-a all".to_owned());
                 } else if self.filtering() {
                     hints.push(format!("{} of {}", self.matches.len(), self.choices.len()));
                 } else {
@@ -459,8 +465,10 @@ impl ChoicePicker {
                         hints.push(keys);
                     }
                 }
-                if self.mode == SelectionMode::Multiple || self.selected.is_some() {
-                    hints.push("enter".to_owned());
+                if self.mode == SelectionMode::Multiple {
+                    hints.push(self.continue_hint(view.empty));
+                } else if self.selected.is_some() {
+                    hints.push("enter choose".to_owned());
                 }
                 hints.push(escape.clone());
                 if self.inspect && self.selected.is_some() && area.width >= 50 {
@@ -471,7 +479,7 @@ impl ChoicePicker {
             }
         }
         if area.width < 50 && focused {
-            // Compact hints keep Enter only when it confirms something, as above.
+            // Compact hints keep a bare Enter only when it confirms something, as above.
             let confirmable = self.status == Status::Ready
                 && (self.mode == SelectionMode::Multiple || self.selected.is_some());
             hints = if area.width >= 24 && confirmable {
@@ -489,6 +497,14 @@ impl ChoicePicker {
             },
             Rect::new(area.x, area.bottom() - 1, area.width, 1),
         );
+    }
+    /// What Enter does in multiple mode; the host names an allowed empty set.
+    fn continue_hint(&self, empty: &str) -> String {
+        if self.marked.is_empty() && self.minimum == 0 {
+            format!("enter {}", clean(empty, 32, false))
+        } else {
+            "enter continue".to_owned()
+        }
     }
     fn source_metadata(&self, source: &str) -> String {
         if self.mode != SelectionMode::Multiple {

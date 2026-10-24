@@ -839,7 +839,11 @@ Add `--inline` to run after ordinary shell output in the normal terminal screen:
 ```sh
 cargo run --locked --features gallery -- --inline --component inline-composition --scenario main
 cargo run --locked --features gallery -- --inline --component inline-composition --scenario streaming
+cargo run --locked --features gallery -- --inline --component inline-composition --scenario choose-many
 ```
+
+The `choose-many` scenario runs the shared `choose_many` prompt with a minimum
+of one and prints the confirmed identities.
 
 The native host draws a bounded live region and keeps settled output in normal
 scrollback. The picker uses its existing arrow/number/Enter controls; Esc or
@@ -897,6 +901,15 @@ identities and context. Missing defaults leave the highlight empty; number keys
 highlight and require Enter. Small lists omit the filter row; larger lists use
 the shared filter editor. Compact widths retain Enter and Escape; very small
 windows refuse confirmation until enough space is available.
+`choose_many` returns several stable identities, starting from host pre-marks.
+Space marks the highlighted row, also while the filter is shown, and Enter
+continues with the marked set. With a minimum of 0 and nothing marked, Enter
+returns an empty set and the footer reads `enter` followed by the host's
+`empty` label, such as `enter continue` or `enter skip`; below a nonzero
+minimum, Enter stays in the list and a notice row names Space. A minimum above
+the number of enabled choices returns an `InvalidInput` error without opening
+the prompt. Escape returns no selection. Single-choice footers read `enter choose`; compact widths keep a
+bare `enter`.
 `runtime::profile::detect` resolves `NO_COLOR`, `COLORTERM`, `TERM` and the active
 locale without acquiring a terminal. RGB and indexed terminals use their
 corresponding profiles; ANSI 16 and ASCII remain explicit capability outcomes.

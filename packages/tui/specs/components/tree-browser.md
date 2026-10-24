@@ -1,8 +1,7 @@
 # Tree Browser
 
 Status: reusable implementation and 66 live gallery scenarios are complete.
-The [engineering record](../verification.md#tree-browser-engineering-record--2026-10-12)
-reports executed checks. This contract owns a reusable tree for files,
+[Verification](../verification.md#tree-browser) maps its test coverage. This contract owns a reusable tree for files,
 diff resources and parent/child tasks. Hosts own data, placement, execution and
 the main inspection view. Engineering and human acceptance are separate.
 

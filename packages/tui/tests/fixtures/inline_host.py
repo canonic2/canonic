@@ -1,6 +1,18 @@
 """Owned native inline fixture transitions through the shared VT harness."""
-import os,time
+import os,sys,time
 from inline_pty import Host
+
+# The shared choose_many prompt: context above a short list, the minimum notice, then marks.
+h = Host(args=[sys.argv[1], '--inline', '--component', 'inline-composition', '--scenario', 'choose-many'])
+try:
+    h.wait('Acme api')
+    assert 'Pick services to deploy' in h.screen(),h.screen()
+    h.send(b'\r','press space to mark at least 1')
+    assert h.child.poll() is None
+    os.write(h.master,b' '); h.drain(.2)
+    os.write(h.master,b'\r'); h.finish()
+    assert 'services → api' in h.all_text(),h.all_text()
+finally: h.close()
 
 h = Host('main')
 try:

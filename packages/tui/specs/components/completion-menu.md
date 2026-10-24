@@ -8,8 +8,8 @@ a suggestion inserts text. Execution and submission belong to a later host Enter
 ## Current status
 
 Status: implemented as [Menu](../../src/completion.rs), with dedicated ranking and
-view modules, Composer token routing and 30 interactive gallery states. Expanded
-[engineering verification](../verification.md#completion-menu-alignment-engineering-record--2026-10-11) passed. Human
+view modules, Composer token routing and 30 interactive gallery states. Automated
+coverage is in [Verification](../verification.md#completion-menu). Human
 visual acceptance remains separate from engineering verification.
 
 ## Behavior and state transitions

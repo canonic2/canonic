@@ -372,7 +372,7 @@ checks and native human visual acceptance are distinct. Consumer rollout,
 native Linux/Windows terminals, clipboard formats, IME composition and real
 agent/shell integration require their owning host's acceptance.
 
-Executed results are recorded in [Verification](../verification.md#composer-alignment-engineering-record--2026-10-11).
+Test coverage is mapped in [Verification](../verification.md#composer).
 
 ## Remaining gaps
 

@@ -12,22 +12,23 @@ saved-state codec, external-editor conflicts and foreground terminal handoff.
 Consumers own actual execution, durable storage and clipboard integration.
 Completion Menu implements reusable source-aware queries, insertion, streaming,
 retry and its dedicated gallery. Chat implements identified rich content,
-streaming/resync, anchors/paging, search, selection/copy and 76 scenarios.
+streaming/resync, anchors/paging, search, selection/copy and gallery scenarios.
 Tool Call Card implements identified activity/output, ordered groups and selected
-copy/details/retry with host-owned execution. Its 79 gallery scenarios include
+copy/details/retry with host-owned execution. Its gallery scenarios include
 progress, child tasks/artifacts, host reorder and whole-run cancellation races.
 Question Form implements staged answers, review, cancellation/partial delivery,
-host acknowledgement races and above-dock Chat with 52 live scenarios.
+host acknowledgement races and above-dock Chat, with live gallery scenarios.
 Permission Review implements explicit choices, scope/destructive confirmation,
-inspection, host outcomes and the mixed queue with 56 live scenarios.
+inspection, host outcomes and the mixed queue, with live gallery scenarios.
 Session Browser implements dedicated navigation/search/paging and acknowledged
-row actions with retained Chat instances and 72 live scenarios. Permission policy
-and broader native acceptance remain separate. The bounded inline host and
+row actions with retained Chat instances, with live gallery scenarios. Permission
+policy and broader native acceptance remain separate. The bounded inline host and
 composition fixture are implemented in phase 6.
 Tree Browser supplies lazy files/tasks, stable folds, filtering with ancestors,
-acknowledged effects and 66 live scenarios; full engineering gates passed.
+acknowledged effects and live gallery scenarios.
 Code/Diff Inspection supplies bounded code/unified patches, navigation, folds,
-loaded find, selection, identified copy/editor/load results and 51 live scenarios.
+loaded find, selection, identified copy/editor/load results and live gallery
+scenarios.
 
 ## Delivery scope and phase order
 
@@ -60,7 +61,8 @@ shared interaction contracts. Do not defer the first slice behind all native hos
 Each acceptance ID has one owning contract below. This table maps requirements
 to dependency phases; it is not a pass/fail record. Implemented scope and current
 checkpoints are in [Components](components/README.md#completeness-checkpoints);
-executed evidence and human acceptance are in [Verification](verification.md).
+test coverage is in [Verification](verification.md) and human acceptance in
+[Human testing](human-testing.md#acceptance-record).
 “Continuous” means each implemented scope supplies applicable evidence.
 
 | Criteria | Owning contract / observable exit | Phase |
@@ -78,6 +80,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 | I-03 | [Interaction](features/interaction.md#acceptance-criteria): logical anchors and large scroll range | 3 |
 | I-04 | [Interaction](features/interaction.md#acceptance-criteria): logical copy/selection, drag and clipboard failure | 3 |
 | I-05 | [Interaction](features/interaction.md#acceptance-criteria): keyboard/hints/fallback/tiny-area access | 1, continuous |
+| I-06 | [Interaction](features/interaction.md#acceptance-criteria): Space marks, typing narrows, Enter returns the marked set or the minimum notice | 2; inline prompts 6 |
 | E-01 | [Editor](components/editor.md): Unicode movement/replacement/delete | 1 |
 | E-02 | [Editor](components/editor.md): bounded undo/redo and atomic CR/CRLF paste | 1 |
 | E-03 | [Editor](components/editor.md): limits, valid ranges and cursor bounds | 1 |
@@ -125,7 +128,7 @@ executed evidence and human acceptance are in [Verification](verification.md).
 ## Verification and consumer rollout
 
 The [verification contract](verification.md) defines independent checkpoints and
-records engineering evidence. [Human testing](human-testing.md#delivery-contract)
+maps test coverage. [Human testing](human-testing.md#delivery-contract)
 defines the review/confirmation procedure. This roadmap does not grant commit,
 push or rollout authorization.
 

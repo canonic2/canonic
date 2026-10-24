@@ -99,7 +99,7 @@ fn host_bounds_allow_empty_and_keep_unmarked_rows_reachable_at_maximum() {
     assert!(p.set_selection_limits(1, Some(2)));
     assert!(!p.set_selection_limits(3, Some(2)));
     assert_eq!(p.update(&key(KeyCode::Enter)), Intent::None);
-    assert_eq!(p.notice(), Some("mark at least 1"));
+    assert_eq!(p.notice(), Some("press space to mark at least 1"));
     p.update(&Event::Key(KeyEvent::new(
         KeyCode::Char('a'),
         KeyModifiers::ALT,
@@ -114,6 +114,56 @@ fn host_bounds_allow_empty_and_keep_unmarked_rows_reachable_at_maximum() {
     assert_eq!(p.marked(), vec!["id-0"]);
     p.replace_choices(vec![]).unwrap();
     assert_eq!(p.update(&key(KeyCode::Enter)), Intent::None);
+}
+
+#[test]
+fn choose_many_refuses_a_minimum_above_the_enabled_choices_before_opening() {
+    let mut rows = choices();
+    rows[1].disabled = Some("unavailable".into());
+    // Danger rows can still be marked, so only the disabled row is out of reach.
+    rows[2].danger = true;
+    let error = canonic_tui::runtime::prompts::choose_many("Services", "", rows, &[], 3, "skip")
+        .expect_err("two enabled choices cannot reach a minimum of three");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+}
+
+#[test]
+fn filtered_multiple_choice_marks_with_space_and_continues_with_enter() {
+    let footer = |p: &mut ChoicePicker, empty| {
+        let mut terminal = Terminal::new(TestBackend::new(72, 8)).unwrap();
+        terminal
+            .draw(|frame| {
+                let view = PickerView {
+                    empty,
+                    ..PickerView::default()
+                };
+                p.render(frame, frame.area(), view, true);
+            })
+            .unwrap();
+        super::components::dump(terminal.backend().buffer())
+    };
+    let mut p = ChoicePicker::new(choices(), None, SelectionMode::Multiple, Filter::On).unwrap();
+    let output = footer(&mut p, "continue");
+    assert!(
+        output.contains("space select") && output.contains("enter continue"),
+        "{output}"
+    );
+    // The host names what an empty set does.
+    let output = footer(&mut p, "skip");
+    assert!(output.contains("enter skip"), "{output}");
+    p.update(&key(KeyCode::Char('g')));
+    assert_eq!(p.query(), "g");
+    assert_eq!(p.selected(), Some("id-2"));
+    p.update(&key(KeyCode::Char(' ')));
+    assert_eq!(p.query(), "g", "Space marks instead of filtering");
+    assert_eq!(p.marked(), vec!["id-2"]);
+    // A marked set continues whatever the host calls the empty answer.
+    let output = footer(&mut p, "skip");
+    assert!(output.contains("enter continue"), "{output}");
+    assert_eq!(
+        p.update(&key(KeyCode::Enter)),
+        Intent::Confirmed(vec!["id-2".into()])
+    );
 }
 
 #[test]

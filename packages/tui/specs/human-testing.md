@@ -1,9 +1,9 @@
 # Human testing gates
 
-Status: complete components are the delivery unit, as requested on 2026-10-10.
-The historical gates below retain their other component acceptance records.
-Composer implements its complete local workflow; host execution, storage keys,
-clipboard formats and native human visual acceptance remain consumer checkpoints.
+Complete components are the delivery unit. Each section below gives the
+runnable review steps for a component or gate and its current human acceptance
+status. Host execution, storage keys, clipboard formats and native human visual
+acceptance remain host checkpoints.
 
 ## Tree Browser review
 
@@ -164,8 +164,8 @@ numbered gates below are its review checklists. The cycle is:
 One confirmation accepts only the demonstrated scope on the user's reported
 terminal. New material changes after confirmation reopen the affected gate.
 If engineering checks fail, the commit skill's failure handling applies; human
-acceptance does not waive a failing check. Maintain human review status here and
-record commit IDs after acceptance, without claiming untested platform coverage.
+acceptance does not waive a failing check. Maintain human review status here,
+without claiming untested platform coverage.
 
 Use `make -C packages/tui run` from the repository root for human tests.
 Catalog/scenario labels for slices 2–13 are intended deliverables. At each
@@ -255,8 +255,8 @@ make -C packages/tui run CARGO_FLAGS="-- --component completion-menu --scenario 
 7. Escape/F10 back through both pickers; searches, selections and scroll positions
    survive. Quit with Ctrl-C and verify normal shell input is restored.
 
-Status: expanded implementation complete; [engineering verification passed](verification.md#completion-menu-alignment-engineering-record--2026-10-11)
-and human visual review pending. No consumer rollout or commit is implied by this review.
+Human visual review is pending. Automated coverage is in
+[Verification](verification.md#completion-menu).
 
 ## Gate 3b.1 — box modes and protected draft
 
@@ -278,8 +278,7 @@ sizes. Native human visual acceptance is not inferred from these checks. Gallery
 storage, shell execution and clipboard responses are deterministic simulations;
 consumer integrations must verify their real host callbacks and persistence.
 
-The dated engineering summary is recorded in
-[Verification](verification.md#composer-alignment-engineering-record--2026-10-11).
+Automated coverage is in [Verification](verification.md#composer).
 These steps request human acceptance of the demonstrated component scope.
 
 ## Gate 2c — commands and bindings
@@ -311,7 +310,7 @@ make -C packages/tui run CARGO_FLAGS="-- --component commands --scenario main --
    shows mismatch feedback for 3 seconds. Paste while pending never edits the draft.
 6. F6 changes focus and F5 replaces the map; both cancel pending input. Ctrl-C
    exits at the host even while pending. With the palette/help open, the first
-   Ctrl-C arms closure and the second closes without quitting. F2 cycles 25 states, including empty,
+   Ctrl-C arms closure and the second closes without quitting. F2 cycles the states, including empty,
    unavailable and no-match. Long lists page/scroll. Resize to 40 columns and short
    heights; optional details disappear before labels/keys. F4 checks all color
    fallbacks. Modified Enter never confirms a search result.
@@ -325,22 +324,11 @@ make -C packages/tui run CARGO_FLAGS="-- --component commands --scenario main --
 
 Report pass/fail by step before committing. The
 [command contract](components/command-palette.md#commands-completion-and-help) defines behavior. Ctrl-P docking and F1 full-screen
-placement follow the user's explicit 2026-10-10 decision. Source loading/opening
+placement follow an explicit user decision. Source loading/opening
 remain host boundaries; Composer slash/file routing follows the
 [Completion Menu contract](components/completion-menu.md). The native visual gate
-is pending even when rendered-buffer and PTY checks pass.
-
-Engineering on 2026-10-10: `make check` passed formatting, strict Clippy,
-63 all-feature tests (including native macOS PTY restoration), one doctest,
-API docs and dependency audit. Gallery-disabled nextest passed 47 tests, and
-the release build passed. The final recent-shortcut and stable-filter-height
-refinements passed their rendered regressions, strict Clippy and release rebuild.
-One consumer's locked TUI dependency compilation passed; another's workspace lockfile is
-out of date, so its TUI dependency compilation used a disposable manifest/lockfile
-copy and passed without editing workspace files. Palette/keys snapshots
-were inspected; Markdown targets and scoped diff
-checks passed. Native visual acceptance and Linux/Windows remain unverified.
-
+is pending even when rendered-buffer and PTY checks pass. Linux/Windows remain
+unverified.
 
 
 ## Slice sequence and human exit tests
@@ -415,9 +403,7 @@ make -C packages/tui run
 
 Report **pass** or **fail**, with a step number and observed behavior for failures.
 If possible include terminal application/OS; no screenshot or private data is
-required. Baseline failures are fixed before starting slice 1. The plan changes
-can be committed after this gate passes; the existing foundation commits remain
-unchanged.
+required. Baseline failures are fixed before starting slice 1.
 
 ## Gate 1 — editor and focus
 
@@ -470,16 +456,13 @@ make -C packages/tui run CARGO_FLAGS="-- --component editor --scenario main --co
 make -C packages/tui run CARGO_FLAGS="-- --component editor --scenario main --colors none --ascii"
 ```
 
-The user confirmed cyan chrome and actual fixture line breaks on 2026-10-09,
-and supplied an iTerm2 screenshot showing colored focused chrome. These checks
-cover the visible fixes; the other Gate 1 actions remain pending.
+Cyan chrome, colored focused chrome and actual fixture line breaks are
+confirmed; the other Gate 1 actions remain pending.
 
 Report **pass** or **fail**, with the step and observed behavior for a failure.
 The redesigned editor is a material change after functional acceptance, so its
-human gate is reopened by the delivery contract. The user's explicit scoped
-commit request authorizes recording this implementation; it does not establish
-acceptance of unreported test actions. The user authorized slice 2a next. No native
-Linux/Windows or modified-key encoding is inferred from pure tests.
+human gate is reopened by the delivery contract. No native Linux/Windows or
+modified-key encoding is inferred from pure tests.
 
 ## Gate 2a — rich option picker
 
@@ -505,10 +488,14 @@ make -C packages/tui run CARGO_FLAGS="-- --component picker --scenario main --co
    Esc clears it first while retaining picker height; Esc again returns to scenarios, then Esc returns to catalog.
    No-match displays its own message and cannot select in single mode.
 4. **Multiple:** reach multi (seven F2 presses from default). One row is marked.
-   Space toggles the highlighted mark; Alt-A toggles matching enabled rows. Type
-   a filter: hidden marks remain included in the marked count. Enter reports
-   `Confirmed [...]` in source order, including hidden marks. An empty marked set
-   is valid explicit confirmation for this nonempty source.
+   Space toggles the highlighted mark; Alt-A toggles matching enabled rows. The
+   footer reads `space select · alt-a all · enter continue · esc cancel`, also
+   once every mark is removed. Type a filter, then press Space: the
+   highlighted row is marked and the query is unchanged. Hidden marks remain
+   included in the marked count. Enter reports `Confirmed [...]` in source
+   order, including hidden marks. An empty marked set is valid explicit
+   confirmation for this nonempty source. Single-choice footers in step 1 read
+   `enter choose`.
 5. **Paging/refresh:** scrolled starts at the last of 31 rows. Home/End/Page keys
    move without wrapping. Groups have dim headings that count in paging. Resize:
    highlight stays visible; details disappear before labels truncate. F5 removes
@@ -528,43 +515,25 @@ make -C packages/tui run CARGO_FLAGS="-- --component picker --scenario main --co
 ```
 
 Report **pass** or **fail**, with the step and observed behavior for failures.
-No commit or dialog implementation follows until this gate passes.
+No dialog implementation follows until this gate passes. Native Linux/Windows
+and human modifier-key encoding are unverified.
 
-Slice 2a engineering: formatting, strict Clippy, 34 all-feature tests (including
-native macOS PTY), one doctest, API docs and dependency audit passed. The
-gallery-disabled library passed 29 tests; release build passed. The consumers'
-TUI dependencies compiled offline, with lockfiles restored byte-for-
-byte after temporary resolution. Reviewed the compact snapshot and six actual
-TestBackend style/geometry previews. Duplicate dependency warnings remain allowed
-by auditing. Native Linux/Windows and human modifier-key encoding are unverified.
-
-## Picker visual follow-up — 2026-10-09
+## Picker visual follow-up
 
 The picker uses default foreground, bold and no dim attribute for its selected
 enabled label. Number keys are centered in three cells with one plain band cell
 before each label; both highlight edges
 leave one clear cell, and details have a two-cell gap. The gallery reserves a
 persistent activity row between picker and composer in all fixture states.
-The user explicitly authorized a scoped checkpoint commit on 2026-10-09.
-Remaining visual checks are separate from that commit authorization.
-Package checks passed: formatting, strict Clippy, 47 tests (including three native
-PTY scenarios), one doctest, generated API documentation and dependency checks.
-The tests cover centered numbers, clear highlight edges, ANSI 16 heading weight,
-detail-width thresholds and activity-row/composer stability across all fourteen
-fixtures and confirmation.
 
-Diagnosis on the macOS host: an owned PTY capture shows SGR 39 (default
-foreground), SGR 1 (bold), and SGR 27 (reverse off) before the selected label;
-the title also receives SGR 1. An additional owned PTY test verifies default
-foreground, bold and no dim on selected labels and bold on titles in all four
-color modes, including selection transitions. ANSI 16/no-color retain the
-documented reverse fallback; indexed/RGB label text is not reversed.
-Saved iTerm2 profiles enable a custom Bold color
-that is darker than Foreground. The user's shell-only comparison on 2026-10-09
-reproduced the gray bold text outside the app, confirming this terminal behavior.
-The user explicitly accepts it as a terminal-profile limitation and does not want
-iTerm2 settings changed. The selected-label color concern is closed with this
-accepted limitation; other visual checks remain separate.
+An owned PTY capture shows SGR 39 (default foreground), SGR 1 (bold) and SGR 27
+(reverse off) before the selected label; the title also receives SGR 1. ANSI
+16/no-color retain the documented reverse fallback; indexed/RGB label text is
+not reversed. Saved iTerm2 profiles enable a custom Bold color darker than
+Foreground; a shell-only comparison reproduces the gray bold text outside the
+app. The user accepts it as a terminal-profile limitation and does not want
+iTerm2 settings changed, which closes the selected-label color concern; other
+visual checks remain separate.
 iTerm2's [Colors documentation](https://iterm2.com/documentation-preferences-profiles-colors.html)
 describes this override. Terminal preferences have not been modified.
 
@@ -603,24 +572,19 @@ footers, title trails and boxed ANSI 16/no-color fallback. Human acceptance is
 pending. Typing-aware arrival and timed removal notices belong to the separate
 2b.2 gate; passing this gate does not accept its timing and caution behavior.
 
-The user rejected the first visual handoff on 2026-10-09 and supplied a revised
-contract: one centered panel in every view. The corrected panel is awaiting
-review. Inline chat alternate-screen entry/exit is pending the inline adapter;
-the gallery uses its existing alternate-screen owner throughout.
+The contract is one centered panel in every view. Inline chat alternate-screen
+entry/exit is pending the inline adapter; the gallery uses its existing
+alternate-screen owner throughout. Timing and inline chat screen transitions
+remain required before the complete dialog scope closes.
 
-On 2026-10-10 the reviewer accepted title casing, live activity styling and emoji
-cursor placement. Fade remained open; multiline growth, nesting, parent restoration
-and fallback borders were not yet visually reviewed. Both timing and inline chat
-screen transitions remain required before the complete dialog ticket closes.
-
-The subsequent review passed growth, title trails and Escape parent restoration.
-Fallback styling required correction: readable ANSI 16 faint hints, field-only
-scroll hints, no-color field-only reverse focus, plain no-color background and
-box corner spacing. Those corrections await human review. Saved iTerm2 profiles
-brighten bold cyan to a grey-green bright-cyan slot; strict ANSI 16 cannot override
-that hue while honoring the profile. See [presentation limits](presentation.md#tokens-and-fallback-behavior).
-PTY input verifies one newline each for raw/encoded Ctrl-J and Shift/Alt-Enter;
-duplicate physical key reporting was not reproduced on a native iTerm2 surface.
+Accepted: title casing, live activity styling, emoji cursor placement, growth,
+title trails and Escape parent restoration. Awaiting review: fade and the
+fallback corrections (readable ANSI 16 faint hints, field-only scroll hints,
+no-color field-only reverse focus, plain no-color background and box corner
+spacing). Saved iTerm2 profiles brighten bold cyan to a grey-green bright-cyan
+slot; strict ANSI 16 cannot override that hue while honoring the profile. See
+[presentation limits](presentation.md#tokens-and-fallback-behavior).
+Duplicate physical key reporting was not reproduced on a native iTerm2 surface.
 
 From the repository root, in iTerm2 for RGB:
 
@@ -669,17 +633,8 @@ make -C packages/tui run CARGO_FLAGS="-- --component dialog --scenario main --co
 make -C packages/tui run CARGO_FLAGS="-- --component dialog --scenario main --colors none --ascii"
 ```
 
-Report **pass** or **fail**, naming the step and observed behavior. Commit only
-the reviewed Rust TUI changes after confirmation, then proceed to 2b.2.
-
-Engineering: formatting, strict Clippy, 52 all-feature tests including macOS PTY
-scenarios, 40 gallery-disabled tests, one doctest, API docs and dependency audit
-passed. Measured geometry, fallback styles, Unicode caret cells, fixed dock and
-snapshots are covered. Native Linux/Windows and human key encodings are unverified.
-The release build and the consumers' TUI dependency compilation passed;
-consumer lockfiles were restored byte-for-byte. Scoped diff and local Markdown
-link checks passed in both owning repositories. Dependency auditing reports
-allowed duplicate-version warnings.
+Report **pass** or **fail**, naming the step and observed behavior, then proceed
+to 2b.2. Native Linux/Windows and human key encodings are unverified.
 
 ### Gate 2b.2 — arrival and removal timing
 
@@ -755,35 +710,29 @@ acceptance remain independent work.
 
 ## Acceptance record
 
-| Slice | Engineering | Human | Commit / next action |
-| --- | --- | --- | --- |
-| 0 | Passed during foundation commit; recorded in verification | Passed on 2026-10-09; user reported it works, with visual design deferred | Plan committed: `e32517d` |
-| 1 | Redesign checks recorded below | Functional editor/focus and visible newline/color fixes passed on 2026-10-09; remaining redesign actions pending | Explicitly authorized commit: `735103b`; user authorized next slice |
-| 2a | Checks recorded after Gate 2a below | Accepted on 2026-10-09; user requested next slice | Committed: `17e53d5` |
-| 2b | Foundation engineering recorded; timed policies and 36 scenarios implemented | Expanded visual review pending | Foundation checkpoint: `05857ee`; new work uncommitted; native inline transition separate |
-| 2c | Implemented; engineering results recorded at Gate 2c | Pending | Explicit checkpoint commit requested on 2026-10-10; visual acceptance remains pending |
-| Composer | Complete local workflow and native host adapters implemented; current engineering checks recorded above | Native visual review remains separate | Review complete component; commit only when requested |
-| Completion Menu | Reusable component, Composer integration and 30 interactive states; expanded engineering checks passed | Complete visual review pending | Review complete component; commit only when requested |
-| Chat | Rich component and 51 interactive states; [engineering record](verification.md#chat-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
-| Tool Call Card | Complete local cards/groups, Chat integration and 44 interactive states; [engineering record](verification.md#tool-call-card-engineering-record--2026-10-10) | Complete visual review pending | Review complete component; commit only when requested |
-| 5–13 | Other capabilities retain their documented gaps | Not presented | Complete components in dependency order |
+| Scope | Human acceptance |
+| --- | --- |
+| Gate 0 — foundation | Passed; visual design deferred |
+| Gate 1 — editor and focus | Functional editor/focus and visible newline/color fixes passed; remaining redesign actions pending |
+| Gate 2a — option picker | Passed; [visual follow-up](#picker-visual-follow-up) separate |
+| Gate 2b — dialogs | Expanded visual review pending; native inline transition separate |
+| Gate 2c — commands and bindings | Pending |
+| Composer | Complete component review pending |
+| Completion Menu | Complete visual review pending |
+| Chat | Complete visual review pending |
+| Tool Call Card and Run Activity | Complete visual review pending |
+| Question Form, Permission Review | Human visual review pending |
+| Session Browser, Tree Browser | Human visual review pending |
+| Code/Diff Inspection, Status Panels & Notices | Human visual review pending |
+| Slices 5–13 not yet delivered | Not presented; complete components in dependency order |
 
-Slice 1 engineering: `make -C packages/tui check` passed formatting, strict
-Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs
-and dependency auditing. `cargo nextest run --locked --no-default-features`
-passed 21 library tests; `make -C packages/tui build` passed release build.
-Consumer TUI dependency compilation passed offline with temporary
-lock resolution; their existing lockfiles were restored byte-for-byte to keep
-this slice scoped to Rust TUI. Consumers need lock resolution when adopting the
-polling backend dependency; this is compilation evidence, not a product rollout.
-Auditing allows duplicate hashbrown/syn/thiserror versions. Markdown link and
-both repositories' diff checks passed. Native Linux/Windows and human modifier
-key encodings remain unverified.
+Native Linux/Windows and human modifier-key encodings remain unverified for all
+scopes. Automated coverage is in [Verification](verification.md).
 
 ## Code and diff inspection review
 
-Engineering evidence is recorded separately in
-[verification](verification.md#code-and-diff-inspection-engineering-record--2026-10-12).
+Automated coverage is in
+[verification](verification.md#code-and-diff-inspection).
 Human visual acceptance is pending. Open:
 
 ```sh
@@ -831,4 +780,4 @@ error aside while its badge and list entry remain. F7 expires info/success; erro
 remain. Use `long-reason` and Alt-PageUp/PageDown, five state fixtures and ASCII,
 ANSI16, NO_COLOR, light and reduced-motion profiles. In `review`, notice arrivals
 must leave review Enter and Ctrl-G behavior intact. These steps await human visual
-acceptance; automated evidence is recorded in [verification](verification.md).
+acceptance; automated coverage is in [verification](verification.md#status-panels-and-notices).

@@ -1,734 +1,262 @@
 # Verification and acceptance
 
-This topic owns evidence interpretation and the current engineering summary.
-[Code quality](code-quality.md) owns executable package checks;
-[Human testing](human-testing.md) owns runnable review steps, human acceptance
-and historical gate/commit records. [Roadmap](roadmap.md) owns delivery order.
-Component/feature specs own the acceptance requirements; neither evidence nor
-delivery tables redefine them.
+This topic maps each component to the suites, gallery checks and native
+terminal fixtures that exercise it, and names the evidence that is still
+missing. [Code quality](code-quality.md) owns the executable package checks;
+[Human testing](human-testing.md) owns runnable review steps and human
+acceptance status. [Roadmap](roadmap.md) owns delivery order. Component and
+feature specs own the acceptance requirements; this topic does not redefine them.
+A passing run does not certify later changes.
 
 ## Independent checkpoints
 
-Track each checkpoint for a named scope and revision:
+Track each checkpoint for a named scope:
 
 | Checkpoint | Evidence required | Does not establish |
 | --- | --- | --- |
 | Specification complete | Behavior, states, keys, implementation design, host boundary, acceptance and gaps reviewed | Implementation or accepted visuals |
 | Design resolved | Layout, feedback, responsive/fallback behavior and interactions settled in the public contract | Engineering or human acceptance |
-| Functionality complete | All in-scope behavior implemented; remaining host duties explicit | Passing checks or consumer rollout |
-| Engineering verified | Dated commands/results and applicable state/render/property/native/consumer checks | Human acceptance or untested platform coverage |
+| Functionality complete | All in-scope behavior implemented; remaining host duties explicit | Passing checks or host integration |
+| Engineering verified | The package checks pass, with applicable state/render/property/native checks for the scope | Human acceptance or untested platform coverage |
 | Human accepted | Explicit reported pass for demonstrated steps on the reported terminal | Acceptance of later material changes or other hosts |
 
-Use partial or pending when any in-scope requirement lacks evidence. A checkpoint
-commit is not human acceptance. Tests found in source are not a new test run.
-These records were carried forward during the specification reorganization;
-Markdown changes do not rerun or refresh Rust engineering evidence.
-
-## Tree Browser engineering record — 2026-10-12
-
-Scope: reusable supplied file/task forests, bounded topology normalization,
-stable cursor/folds, loaded ancestor filtering, lazy/root/paged discovery,
-identified primary/custom actions, caller-owned focus and responsive placement.
-Chat has opt-in Ctrl-X F and a shared Files palette entry. The gallery retains
-the original Chat separately from its inspection fixture and supplies 66 live
-scenarios; the registry now has 640 named states plus
-eight profiles for each of twelve components.
-
-Host `make -C packages/tui check` passed 327 tests and four doctests, formatting,
-strict Clippy, private-item API documentation and dependency auditing.
-Twenty-nine component tests cover navigation/filter/paste, refresh/removal/
-reparenting, topology/limits, lazy/root/page failure/retry, cascade/collapse,
-foreign/stale/duplicate/malformed/materially changed results, bounded concurrent
-requests, disabled actions, focus, all sixteen color/glyph/theme combinations,
-tiny rendering, extension-preserving clipping, per-row narrow status, full reasons,
-authoritative error recovery, retry bookkeeping cleanup and no-color attributes/
-ASCII pending chrome. Mixed physical-row paging, undiscovered capacity waiting,
-delivered attempt counts, capacity recovery and manual collapse during bulk
-expansion have direct regression coverage.
-Two gallery tests verify all 66 named states, eight inspected snapshots, F10
-retention, file/task panel focus, filter cursor ownership, delayed/no-ack behavior
-and Chat caret/undo/reading/Ctrl-X F. Inactive inspection is rendered through an
-in-memory backend; it never acquires a terminal or claims the active filter cursor.
-The macOS native PTY test
-verifies lazy loading/failure/retry, bracketed filter paste, Chat return/caret/undo,
-resize, scenario navigation, cooked input and exact terminal attributes after
-exit. The native check consumes restored cooked input before comparing attributes,
-as the existing terminal tests do; macOS can briefly set its pending-input flag.
-
-Gallery-disabled `cargo nextest run --locked --no-default-features` passed 265
-tests. The release library/gallery build passed. Two consumers' TUI dependency
-compilation passed offline with locked disposable manifests. The third consumer's copied lock
-needed the existing TUI Markdown dependencies; offline resolution and compilation
-passed only in its disposable fixture. Original consumer manifests and lockfiles
-were unchanged; this is compilation compatibility, not consumer execution or a
-successful locked check against that consumer's original lock.
-
-All 480 public local links/anchors resolved. Public/private whitespace checks,
-all final Rust source hashes, snapshot update state and unchanged existing staging
-were verified. New source/spec/test files belong to public only. Private design
-files and generated instructions were preserved.
-
-Human visual acceptance, native Windows/input methods, inline hosting and actual
-host filesystem/Git/task adapters remain separate. The adjacent gallery view is
-existing Chat with supplied inspection fixture content, not a standalone Code/Diff
-Inspection implementation. Use [Tree Browser review](human-testing.md#tree-browser-review).
-No commit, publication, installation or consumer rollout occurred.
-
-## Session Browser engineering record — 2026-10-12
-
-Scope: reusable dedicated browser, stable host-ordered IDs/groups/parents,
-local and remote search/paging, independently ticketed row operations, safe
-host-worded deletion and opt-in Chat entry. The gallery supplies 72 live scenarios,
-bringing the named registry to 574 entries plus eight profiles per component.
-Caller-owned Chat instances retain their documents, caret/selection, undo,
-queues and logical reading/unread state across return and actual open results.
-
-Final host `make -C packages/tui check` passed 295 tests, four doctests,
-formatting, strict Clippy, private-item API documentation and dependency auditing.
-The release library/gallery build passed. Gallery-disabled
-`cargo nextest run --locked --no-default-features` passed 236 tests.
-
-Twenty-five component tests cover atomic descriptor/material validation,
-stable selection/removal, title/message matching, query/discovery/paging races,
-explicit retries, concurrent/hidden rows, pending limits, failed rename drafts,
-action availability, precise scope hints, single-use/foreign/stale tickets and
-exact host-supplied results. Rendering covers every color/symbol/theme combination,
-tiny/narrow areas, complete deletion wording, ASCII fork markers and long data.
-Two gallery tests exercise all named states and retained F10 navigation; eight
-snapshots were inspected. The new native macOS PTY test verifies isolated search
-paste, destructive arming/paste disarming, failure, mid-draft caret/undo return,
-Ctrl-X O, resize, cooked input and exact terminal attributes after exit.
-Existing native terminal flows also passed in the full suite.
-
-Two consumers' TUI dependency compilation passed offline with locked disposable
-manifests. The third consumer's copied lock required the existing TUI Markdown dependencies
-`pulldown-cmark` and `unicase`; resolution and compilation passed offline solely
-in its disposable fixture. Workspace consumer manifests and lockfiles remained
-unchanged. This establishes compilation compatibility, not consumer execution
-or a successful locked check against that consumer's existing workspace lock.
-
-Public local links resolved 461 references before this evidence update. Public
-and private whitespace checks passed; all new source/spec/test files are excluded
-from private. Existing staging and private design repairs were preserved.
-No commit, publication, consumer rollout or Tree Browser implementation occurred.
-
-Human visual acceptance and broader native/platform acceptance remain pending.
-Use the [Session Browser review](human-testing.md#session-browser-review).
-Actual discovery, storage, session lifecycle and execution remain host-owned.
-
-## Question Form and Permission Review engineering record — 2026-10-11
-
-Final scope: both reusable components, opaque single-use host acknowledgement
-tickets, one host-ordered review queue, above-dock Chat composition and receipt
-rendering. Question Form was completed and checked before Permission Review.
-The gallery adds 52 Question Form and 56 Permission Review live scenarios,
-bringing the named registry to 502 entries, plus eight profiles per component.
-Gallery host effects remain deterministic simulations.
-
-Host `make -C packages/tui check` passed 267 tests, four doctests, formatting,
-strict Clippy, private-item API documentation and dependency auditing using the
-package-pinned toolchain. `make -C packages/tui build` passed. Gallery-disabled
-`cargo nextest run --locked --no-default-features` passed 211 tests. The consumers'
-TUI dependency compilation passed offline using disposable manifests
-and lockfiles; their workspace sources and lockfiles were preserved.
-
-Ten Question Form and fifteen Permission Review behavioral tests cover bounded
-descriptors and whole field insertion rejection, staged validation/cancellation,
-deliberate numeric/Enter and exact-scope/destructive confirmation, explicit retry,
-refusal, replacement, expiry, withdrawal and foreign/stale/duplicate tickets.
-Mixed queue order/capacity and undrained-intent invalidation are checked. Chat
-checks preserve the exact Composer document, caret, selection, mode and undo,
-logical anchors/follow state and unread output. Long receipt titles cannot hide
-the actual acknowledged outcome. Rendering exercises tiny/narrow areas, long
-resources/choices/details/scopes and independent color/symbol/theme profiles.
-Four gallery tests exercise the live states; twelve snapshots were inspected.
-
-Two new native macOS PTY flows passed alongside the existing terminal checks.
-They cover isolated multiline Question Form paste, ignored Permission Review
-paste, explicit scope confirmation/Back, failed-action retry, expiry and late
-acknowledgement, draft/caret restoration, resize and retained F10 navigation.
-The harness drains shutdown output, verifies cooked input and compares exact
-terminal attributes after exit.
-
-Public local links resolved 443 references before this evidence update. Both
-repositories passed whitespace checks; all 31 new source/spec/test files belong
-only to public, and private design repairs remain untouched. No staging, commit,
-publication or consumer rollout command was run. Concurrent configuration
-and other package changes were preserved; Session Browser was not implemented.
-
-Human visual acceptance and broader native/platform acceptance remain pending.
-Use the [Question Form review](human-testing.md#question-form-review) and
-[Permission Review review](human-testing.md#permission-review) for acceptance.
-Actual delivery, permission authority and external effects remain host-owned.
-
-## Question Form engineering record — 2026-10-11
-
-Before beginning Permission Review, the complete Question Form gate passed
-248 all-feature tests, four doctests, formatting, strict Clippy, API docs and
-dependency auditing with host access. The release library/gallery build passed.
-Nine behavioral tests cover descriptor/field bounds, Unicode validation, staged
-answers, exact tickets, cancellation/partial delivery, queue timing/order and
-Composer document/caret/selection/undo plus unread preservation. Two gallery
-tests exercise 52 live states; five snapshots were inspected. The native macOS
-PTY flow verifies isolated multiline paste, deliberate submission, acknowledgement,
-mid-draft caret return, undo, resize, cooked input and terminal-mode restoration.
-The PTY harness drains shutdown output before checking exit.
-
-Gallery-disabled nextest passed 195 tests. The consumers' TUI dependency
-compilation passed offline using disposable manifests and lockfiles; workspace
-consumer lockfiles remained unchanged. Public local links resolved 410 references.
-Both repositories passed whitespace checks. No staging command was run; concurrent
-changes outside this scope were left untouched.
-
-Human visual acceptance and broader native/platform acceptance remain pending.
-The [Question Form review](human-testing.md#question-form-review) provides steps.
-
-## Gallery profiles and Run Activity engineering record — 2026-10-11
-
-Scope: named Command Palette, Completion Menu and Dialog profiles apply once
-on fixture opening and allow subsequent F4/Ctrl-T switching. Compact waiting
-and failed cancellation preserve available action keys. Run fixtures inject
-elapsed host time, keep reduced-motion decoration static, and preserve readable
-Activity outside an options panel. Tool Call Card supplies 79 scenarios,
-including twenty Run Activity scenarios; the complete registry has 394 entries.
-
-Host `make -C packages/tui check` passed 236 tests, four doctests, formatting,
-strict Clippy, API documentation and dependency auditing. The release build
-passed; gallery-disabled nextest passed 186 tests. Behavioral rendering checks exercise component-body profile changes,
-disabled options, compact hints, advancing elapsed seconds and an uncovered
-Activity row. Existing native macOS PTY checks passed. Public local links and
-both repositories' whitespace and ownership checks passed. These changes add
-no public signatures; the recorded Composer consumer compilation remains
-applicable. This record preserves
-the distinction between engineering checks and pending human visual/platform
-acceptance; Question Form and Permission Review implementation remain pending.
-
-## Chat alignment engineering record — 2026-10-11
-
-Scope: 76 interactive Chat scenarios, operation-specific pending acknowledgements
-and failures, original Markdown copy, full table/patch inspection, serial paging
-across both directions, durable newer-load failure/retry, quiet notes, host
-suggestions and narrow/fallback search. The gallery retains paging and copy as
-independent simulated host requests rather than overwriting an outstanding ticket.
-
-Host `make -C packages/tui check` passed 233 tests, four doctests, formatting,
-strict Clippy, private-item API documentation and dependency auditing. The release
-library/gallery build passed; gallery-disabled nextest passed 185 tests. New
-behavioral tests cover duplicate/cross-direction paging, fresh retry identities,
-stale completion, pending action labels, refusal, source copy and draft retention.
-All added gallery states have meaningful rendering assertions, including delayed
-inspection and simultaneous earlier-loading/copy acknowledgement.
-
-Native macOS PTY checks passed, including delayed copy/link refusal, explicit
-retry and host confirmation, caret return, resize, cooked-mode input and exact
-terminal-attribute restoration. Existing search, selection, picker return, tool
-cards, dialogs and external-editor terminal checks also passed. Public local
-links resolved 401 references across 33 Markdown files before this evidence update;
-both repositories passed whitespace and public/private ownership checks.
-These changes preserve Chat's public signatures; the consumer compilation evidence
-after Composer's expanded contracts remains applicable.
-
-Human visual acceptance, native Linux/Windows and real consumer clipboard,
-opening, inspection and storage execution remain pending. Question Form's public
-contract is written; its implementation is outside this verified Chat scope.
-
-## Design alignment engineering record — 2026-10-10
-
-Verified scope: shared profile changes, Editor kill/yank/limit/selection behavior,
-Option Picker ranking/bounds/refresh behavior, extended Tool Call Card metadata
-and states, reusable artifact selection, and whole-run cancellation/connection
-composition. Tool Call Card has 77 deterministic scenarios, including eighteen
-Run Activity scenarios. The full host `make -C packages/tui check` passed
-200 tests, four doctests, formatting, strict Clippy, private-item API documentation
-and dependency auditing. Existing native macOS PTY tests passed, including card
-details, draft/caret return, resize, picker navigation and terminal restoration.
-The release library/gallery build passed. Gallery-disabled nextest passed
-161 tests. The public documentation check resolved
-382 local links and anchors; both repositories passed whitespace checks.
-Ownership checks place source/specs in public and design references in private.
-
-Six Run Activity tests cover single-use cancellation, completion races, retry,
-stale/foreign acknowledgement, disconnection, injected motion, draft/queue
-preservation and Escape selection priority. Extended card/gallery checks cover
-progress, safe escape markers, host reordering, child tasks, artifacts and all
-additional run states. Consumer TUI dependency compilation
-passed offline with disposable manifests after the expanded public APIs;
-workspace consumer lockfiles were preserved. This is compilation evidence, not
-consumer adapter execution.
-
-Human visual acceptance, native Linux/Windows and broader keyboard/assistive
-acceptance remain pending. Dialog timing, remaining handoff changes and the new
-Question Form/Permission Review are outside this verified implementation scope.
-
-## Dialog alignment engineering record — 2026-10-10
-
-Verified scope: timed arrival and FIFO ownership, the 300 ms key guard, app-owned
-two-press closure, attention intents, removal/replacement/clear notices, exact-name
-and timed irreversible confirmation, plus artifact/options host composition.
-The gallery supplies 36 named Dialog scenarios. Host `make -C packages/tui check`
-passed 205 tests, four doctests, formatting, strict Clippy, private-item API docs
-and dependency auditing. The release library/gallery build passed. A fresh
-gallery-disabled nextest run passed 165 tests. Consumer TUI dependency
-compilation passed offline with disposable manifests after the Dialog API
-changes; workspace lockfiles were preserved.
-
-The native macOS PTY test waits for observable guard expiry, closes one nested
-layer with two Ctrl-C presses without quitting, restores parent focus and verifies
-exact terminal attributes on exit. Behavioral coverage exercises queued-body
-ownership on clear, withdrawn arrivals, stale tickets and confirmation intent
-qualification. Gallery effects remain deterministic simulations. Human visual
-acceptance, native inline hosting and Linux/Windows acceptance remain pending.
-Later Command Palette and other handoff changes require their own verification.
-
-## Command Palette alignment engineering record — 2026-10-10
-
-Verified scope: prefix/word-start/alias ranking after exact effective keys,
-captured opening height, empty scopes and complete-key-map evidence, unavailable
-and conflict wording, bounded profile rendering and timed input in the gallery.
-The palette preserves its dock above the draft and centers horizontally at up to
-72 columns. All 25 scenarios exercise public command behavior with simulated
-host effects. Host `make -C packages/tui check` passed 210 tests, four doctests,
-formatting, strict Clippy, private-item API docs and dependency auditing.
-
-Native macOS PTY coverage verifies the opening guard, first Ctrl-C arming,
-second Ctrl-C closing without quitting, draft preservation and exact terminal
-restoration. Rendering coverage verifies that a boxed palette clears caller
-attributes inside its panel while preserving the surrounding backdrop. The
-release library/gallery build passed; gallery-disabled nextest passed 169 tests.
-The strengthened border assertion also passed a focused rerun. All 391 local
-links and anchors resolved; both repositories passed whitespace checks, and
-ownership checks preserve public source/specs and private design references.
-Two consumers' TUI dependency compilation passed using disposable manifests. The
-third consumer's tree failed independently, in code unrelated to this package.
-The refreshed disposable manifest includes current consumer dependencies;
-workspace sources and lockfiles remain untouched by this check. Human
-visual acceptance, host execution and Linux/Windows acceptance remain pending.
-
-## Completion Menu alignment engineering record — 2026-10-11
-
-Verified scope: alias ranking, captured opening height, distinct five-second
-timeout warnings, source labels, partial-source insertion and Alt-R retry,
-separate activity/footer hints, unavailable-command recovery and 30 interactive
-gallery scenarios. Ctrl-R retains Composer history search. Host
-`make -C packages/tui check` passed 217 tests, four doctests, formatting, strict
-Clippy, private-item API documentation and dependency auditing. The release
-library/gallery build passed; gallery-disabled nextest passed 175 tests.
-
-Behavioral coverage checks fresh retry identities, retained successful sources,
-stale and repeated events, F1 help without draft loss, command removal before
-invocation, byte-limit refusal, disabled reasons and whole-grapheme clipping.
-Four updated rendering snapshots were reviewed and accepted. Native macOS PTY
-coverage verifies Alt-R retry, Ctrl-R history search, draft preservation, picker
-return, resize and exact terminal restoration. Gallery host effects remain
-deterministic simulations.
-
-Optional TUI consumer compilation passed with refreshed
-disposable manifests. One consumer's copied lockfile required offline resolution in the
-temporary directory before its locked check. Another consumer's earlier compilation blocker is resolved in its current tree;
-its existing unused-import warning is outside this TUI change. Consumer checks
-preserve workspace sources and lockfiles. The local documentation check resolved
-390 links and anchors across 32 Markdown files before adding this record's links.
-Both repositories passed whitespace checks, and ownership checks preserve
-public source/specs and private design references. Human visual acceptance,
-native Linux/Windows and real consumer discovery/execution remain pending.
-
-## Composer alignment engineering record — 2026-10-11
-
-Verified scope: identified host-confirmed stop/interrupt/background controls,
-completion races, acceptance-aware queue resumption, original-payload recovery
-on blank queue saves, five-second failed-save retries, explicit restore failures,
-guarded editor conflicts, late editor results and undoable returns. Typed
-paste/image/file atoms survive recall, stashing, storage and unchanged external
-editor tokens. Schema 2 decoding retains compatibility with schema 1 snapshots.
-Chat keeps queue rows directly above one activity row and the fixed dock. Shell
-previews fold logical output after twenty lines, retaining the real first three
-and last two lines even beyond the layout budget; copying retains the full loaded
-source. The gallery has 99 named Composer entries covering 97 distinct initial
-states. Named presets allow live F4 color and Ctrl-T theme switching.
-
-Host `make -C packages/tui check` passed 227 tests, four doctests, formatting,
-strict Clippy, private-item API documentation and dependency auditing. All forty
-added Composer frames exercise live public APIs. Reviewed snapshots reflect
-the fixed queue/activity order, separate completion/draft hints and retained
-narrow Escape help. Native macOS PTY checks cover cancellation failure/retry,
-host confirmation, retained drafts/carets, completion retry/history routing,
-picker restoration, resize and exact terminal restoration.
-
-The release library/gallery build passed during this alignment. Gallery-disabled
-nextest passed 182 tests after the public work-control and typed-atom contracts.
-The consumers compiled offline against the TUI dependency using disposable
-manifests and the pinned package toolchain; workspace source and lockfiles were
-preserved. Offline dependency resolution was confined to temporary verification
-directories. Documentation links, ownership and both repository whitespace diffs
-passed. Human visual acceptance, native Linux/Windows, clipboard formats, IME
-coverage and real consumer storage/execution remain separate pending acceptance.
-
-## Tool Call Card engineering record — 2026-10-10
-
-Implemented scope: public lifecycle/output/group contracts, reusable cards and
-groups, Chat selection/anchors/search and identified copy/details/retry, plus
-44 deterministic gallery scenarios. `make -C packages/tui check` passed formatting,
-strict all-target/all-feature Clippy, 179 tests, four doctests, private-item API
-documentation and dependency auditing. Seventeen card/Chat behavioral tests cover
-lifecycle/revision guards, member updates, coalescing/final flush, exact omissions,
-source safety, preview/group folding, capability gating, identified effects,
-retry history, loaded search and draft/caret/anchor preservation. Four headless
-gallery tests exercise simulated effects and navigation; five reviewed rendering
-snapshots cover main, selected failure, capped expansion, narrow diff and NO_COLOR
-diff. The native macOS PTY workflow covers expansion, details search/copy, return
-to the draft cursor, picker return, resize, quit and exact terminal restoration.
-
-The release library/gallery build passed with `make -C packages/tui build`.
-Gallery-disabled nextest (`cargo nextest run --locked --no-default-features`)
-passed 143 tests. The final card regression rerun without gallery passed all
-seventeen card tests. The consumers compiled offline against the TUI dependency
-using disposable manifests/lockfiles; workspace lockfiles were not changed.
-One consumer's existing timing/dead-code warnings remain outside this component's scope.
-All 374 local README/docs/spec links and anchors resolved. Public/private ownership
-and both repositories' whitespace checks passed; internal design work stayed private.
-
-Human visual acceptance, consumer execution/clipboard/permission adapters,
-native Linux/Windows and broader terminal/assistive acceptance remain pending.
-The [Tool Call Card review](human-testing.md#tool-call-card-review--complete-local-activity)
-provides runnable human steps. Dialog timing and Question Form are separate work.
-
-## Completion Menu engineering record — 2026-10-10
-
-`make -C packages/tui check` passed formatting, strict Clippy, all 132 tests,
-two doctests, API documentation and dependency auditing. Dedicated behavioral
-and property checks cover matching/ranking, disabled navigation, generation
-rejection, streaming order/selection, debounce/loading/timeout, retry, guesses,
-insertion budgets and editor token boundaries. The native macOS PTY trace covers
-insert-then-invoke, argument delivery, source retry, resize, quit, cooked input and
-exact terminal restoration. Gallery checks render all 15 states at tiny and
-standard sizes and assert a fixed dock, display-only argument hints and back
-navigation. Main, narrow, long-description and partial-failure layouts have
-reviewed render snapshots; the semantic-color main view was inspected visually.
-
-`make -C packages/tui build` passed the release library/gallery build.
-Gallery-disabled nextest passed all 104 tests. The consumers passed
-offline TUI dependency compilation checks using disposable
-manifests; their workspace lockfiles remained byte-for-byte unchanged.
-Human visual acceptance, native Linux/Windows acceptance and real consumer source
-discovery/execution remain separate from these local engineering results.
-
-## Composer engineering record — 2026-10-10
-
-Engineering verification on 2026-10-10: `make check` passed all 114 tests,
-formatting, strict Clippy, one doctest, API documentation and dependency auditing.
-The native Unix tests cover acknowledgement/recall/resize/quit, cooked foreground
-handoff and private editor-file ownership. Rendered screens were reviewed for
-queue edits, history, stash, editor conflicts, file insertion and paste chips.
-`make build` passed the release library/gallery build. Gallery-disabled nextest
-passed all 88 tests. These checks establish the reusable component and explicit
-host adapters; gallery host work remains simulated.
-The consumers also passed offline TUI dependency checks.
-Their original lockfiles were preserved byte-for-byte.
-
-The evidence applies to the implemented reusable workflows and explicit host
-adapters. Standalone Completion Menu, rich Chat targets and real consumer
-execution/storage/clipboard integration are outside that verified scope.
-Human acceptance remains in [Composer review](human-testing.md#gate-3a--submission-lifecycle).
-
-## Chat engineering record — 2026-10-10
-
-Scope: the rich reusable Chat component, fixed Composer composition and 51
-interactive gallery scenarios. Tests cover identified interleaving/resync,
-stale/foreign callbacks, loaded semantic search, folded content, original-source
-copy, full-inspection intents, reflow/paging anchors, unread/dock geometry,
-safe raw content, Unicode/ASCII and pathological cache bounds. Six snapshots
-cover answer, wide-table fallback, folded search, selected code, actions-off and
-the pane; Completion Menu snapshots reflect Chat's indentation/wrapping and
-reserved unread row.
-
-The macOS Unix PTY workflow covers code copy acknowledgement, loaded search,
-draft-caret restoration, picker return, resize, Ctrl-C, unchanged native mouse
-capture and exact terminal-attribute restoration. Physical keyboard/emulator
-acceptance and native Windows coverage remain separate.
-
-`make -C packages/tui check` passed formatting, strict all-target Clippy,
-157 all-feature tests, three doctests, private-item API documentation and
-dependency auditing. Gallery-disabled nextest passed 126 tests. The release
-library/gallery build passed. The consumers' TUI dependency compilation
-passed offline using disposable manifests/lockfiles; workspace lockfiles stayed
-unchanged. This is dependency compilation, not consumer UI rollout.
-
-Recorded release measurement: macOS 15.7.9, x86_64 Intel Xeon W-2140B at 3.20 GHz,
-Rust 1.99.0, ANSI16 TestBackend at 100×40, 100 turns containing 550,000 bytes of
-Unicode prose. Cold construction plus first draw took 279.25 ms. Mean warm
-draw time over 25 frames was 1.22 ms with 19,900 cached rows and no additional
-parses/layouts. This includes TestBackend construction/rendering, excludes
-physical terminal writes, and is not a p95/input-latency or portable guarantee.
-The broader performance campaign remains in [Gallery](features/gallery.md#performance-measurements--proposed-targets).
-
-Public Markdown links/anchors and private-design separation passed; all 36 Chat
-design links resolve. Public/private TUI diffs passed whitespace checks.
-Human visual acceptance remains pending;
-the [Chat review](human-testing.md#chat-review--complete-local-conversation)
-provides the complete component workflow. Clipboard/open/agent/history effects
-in the gallery are simulated, not consumer rollout evidence.
-
-## Foundation engineering record — 2026-10-09
-
-Foundation engineering checks passed during the scoped package commits
-`33fe70a` (private) and `2a6bc0f` (public): formatting, strict Clippy, ten
-all-feature nextest tests including the Unix PTY test, seven gallery-disabled
-tests, doctest, API docs, dependency audit, release build, consumer TUI dependency
-compilation and Markdown/diff checks. Dependency auditing reported
-allowed duplicate-version warnings. Foundation human acceptance passed on
-2026-10-09; the user deferred visual refinement. These results do not accept
-expanded capability contracts or establish visual design acceptance.
+Use partial or pending when any in-scope requirement lacks evidence. A commit is
+not human acceptance, and tests found in source are not a test run.
+
+## How components are tested
+
+All tests share one integration binary, [tests/integration/main.rs](../tests/integration/main.rs).
+Each component is covered at four levels:
+
+- **Behavior:** state and action tests through the public API, with proptest
+  invariants where input is open-ended.
+- **Rendering:** TestBackend rendering at tiny, narrow and standard sizes across
+  the color, symbol and theme profiles, with reviewed insta
+  [snapshots](../tests/integration/snapshots/) for representative states.
+- **Gallery:** headless gallery tests open every named scenario of the component,
+  exercise simulated host effects and check retained F10 navigation. Gallery host
+  effects are deterministic simulations, not host integration.
+- **Native terminal:** owned Unix PTY tests drive the real gallery binary for
+  paste, resize, return to the draft, cooked input and exact terminal-attribute
+  restoration after exit.
+
+## Coverage by component
+
+### Editor and Option Picker
+
+[Editor tests](../tests/integration/editor.rs) cover Unicode-safe movement,
+deletion, wrapping, selection, grouped undo/redo, paste limits and budgeted
+replacement. [Picker tests](../tests/integration/picker.rs) and the
+[picker PTY tests](../tests/integration/picker_terminal.rs) cover stable-identity
+filtering, disabled and dangerous rows, multiple marks hidden by a filter,
+paging, refresh, centered number keys, clear highlight edges, detail-width
+thresholds and a stable activity row. The picker PTY test checks default
+foreground, bold and no dim on selected labels in all four color modes;
+ANSI 16 and no-color keep the reverse fallback.
+
+I-06 (multiple-choice keys) is covered at the component level by
+`filtered_multiple_choice_marks_with_space_and_continues_with_enter` and
+`host_bounds_allow_empty_and_keep_unmarked_rows_reachable_at_maximum` in the
+picker tests, and `choose_many_refuses_a_minimum_above_the_enabled_choices_before_opening`
+covers an unreachable minimum. Through a PTY, the
+[inline host fixture](../tests/fixtures/inline_host.py) runs `choose_many` with
+one context line over a short list: the context stays visible, Enter below the
+minimum shows the Space notice, and Space then Enter returns the marked
+identity with the terminal restored.
+
+### Composer
+
+[Composer](../tests/integration/composer.rs),
+[workflow](../tests/integration/composer_workflows.rs),
+[host adapter](../tests/integration/composer_host.rs) and
+[PTY](../tests/integration/composer_terminal.rs) tests cover delayed acceptance
+and refusal, queue editing, stopping, pausing and resumption, history recall,
+stash, typed paste/image/file atoms through recall, stash, storage and external
+editor tokens, saved-state encoding including older snapshot schemas, failed-save
+retry, editor conflicts and late results, identified stop/interrupt/background
+controls, shell-output folding, private editor-file ownership and foreground
+handoff to an external editor.
+
+### Completion Menu
+
+[Completion tests](../tests/integration/completion.rs) and the
+[PTY test](../tests/integration/completion_terminal.rs) cover matching and
+ranking (including aliases), disabled navigation, generation rejection,
+streaming order and selection, debounce, loading, timeouts, retry with fresh
+identities, partial-source failure with Alt-R retry, guesses, insertion budgets,
+token boundaries, F1 help without draft loss, command removal before invocation,
+Ctrl-R history routing and insert-then-invoke argument delivery.
+
+### Command Palette
+
+[Command tests](../tests/integration/commands.rs) and the
+[PTY test](../tests/integration/commands_terminal.rs) cover ranking after exact
+effective keys, captured opening height, empty scopes, unavailable and conflict
+wording, remapped and pending bindings, bounded profile rendering, a boxed
+palette clearing caller attributes inside its panel, the opening guard and
+two-press Ctrl-C closing without quitting.
+
+### Dialog
+
+[Dialog tests](../tests/integration/dialog.rs),
+[design tests](../tests/integration/dialog_design.rs) and the
+[PTY test](../tests/integration/dialog_terminal.rs) cover FIFO ownership, timed
+arrival, the key guard, two-press closure, nested layers and parent focus
+restoration, withdrawn arrivals, stale tickets, removal notices, exact-name and
+timed irreversible confirmation, measured geometry, fallback styles and Unicode
+caret cells.
+
+### Chat
+
+[Chat tests](../tests/integration/chat.rs) and the
+[PTY test](../tests/integration/chat_terminal.rs) cover identified interleaving
+and resync, stale and foreign callbacks, loaded search, folded content,
+original-source copy, full table/patch inspection, reflow and paging anchors in
+both directions with failure and retry, unread state and dock geometry, safe raw
+content, Unicode/ASCII, pathological cache bounds, pending acknowledgements and
+refusals, and draft and caret retention across every overlay.
+
+### Tool Call Card and Run Activity
+
+[Tool Call Card tests](../tests/integration/tool_call_card.rs),
+[gallery tests](../tests/integration/tool_card_gallery.rs) and
+[Run Activity tests](../tests/integration/run_activity.rs) cover lifecycle and
+revision guards, member updates, coalescing and final flush, exact omissions,
+source safety, preview and group folding, capability gating, identified effects,
+retry history, progress, child tasks, artifacts, single-use cancellation,
+completion races, stale acknowledgements, disconnection, injected motion and
+Escape selection priority.
+
+### Question Form and Permission Review
+
+[Question Form tests](../tests/integration/question_form.rs),
+[Permission Review tests](../tests/integration/permission_review.rs),
+[gallery tests](../tests/integration/permission_gallery.rs),
+[review gallery tests](../tests/integration/review_gallery.rs) and the
+[PTY test](../tests/integration/review_terminal.rs) cover bounded descriptors,
+staged validation and cancellation, deliberate numeric/Enter and exact-scope or
+destructive confirmation, retry, refusal, replacement, expiry, withdrawal,
+foreign/stale/duplicate tickets, mixed queue order and capacity, ignored paste,
+and preservation of the Composer document, caret, selection, undo, reading
+anchors and unread output.
+
+### Session Browser
+
+[Session Browser tests](../tests/integration/session_browser.rs),
+[gallery tests](../tests/integration/session_gallery.rs) and the
+[PTY test](../tests/integration/session_terminal.rs) cover atomic validation,
+stable selection and removal, title/message matching, query, discovery and
+paging races, explicit retries, pending limits, failed rename drafts, action
+availability, single-use/foreign/stale tickets, complete deletion wording,
+destructive arming and paste disarming, and Ctrl-X O return to the draft.
+
+### Tree Browser
+
+[Tree Browser tests](../tests/integration/tree_browser.rs),
+[gallery tests](../tests/integration/tree_gallery.rs) and the
+[PTY test](../tests/integration/tree_terminal.rs) cover navigation, filtering
+and paste, refresh, removal and reparenting, topology limits, lazy/root/page
+failure and retry, cascade and collapse, stale or malformed results, bounded
+concurrent requests, disabled actions, focus, extension-preserving clipping and
+no-color/ASCII chrome. Inactive inspection renders through an in-memory backend
+and never acquires a terminal or the active filter cursor.
+
+### Code and diff inspection
+
+[Inspection tests](../tests/integration/inspection.rs),
+[gallery tests](../tests/integration/inspection_gallery.rs) and the
+[PTY test](../tests/integration/inspection_terminal.rs) cover exact, foreign,
+duplicate, stale and wrong-kind acknowledgements, malformed patch and whole-file
+validation, numbered excerpts, folds, hidden copy and search, smart case and
+Unicode mapping, bounded dense matches, page overlap, selection changes during
+copy, control text, the visible one-row find field and return to the Chat
+selection, draft and caret.
+
+### Status Panels and Notices
+
+[Status tests](../tests/integration/status_panels.rs),
+[gallery tests](../tests/integration/status_gallery.rs) and the
+[PTY test](../tests/integration/status_terminal.rs) cover stable navigation,
+folds and removal, atomic invalid updates, exact/foreign/stale/duplicate
+acknowledgements, disabled and repeated actions, pending and failure expiry,
+monotonic clock properties, persistent set-aside errors, long reasons that stay
+scrollable in a tiny viewport, review and Composer overlay priority, and caller
+caret restoration.
+
+## Terminal runtime
+
+### Inline composition
+
+[Inline composition tests](../tests/integration/inline_composition.rs),
+[inline gallery tests](../tests/integration/inline_gallery.rs) and the
+[inline PTY tests](../tests/integration/inline_terminal.rs) cover cursor
+anchoring and the missing-report fallback, contiguous settling, revisions during
+pending output, exact receipts, ambiguous-write stop, surrounding output before
+and after, growth and shrink of the preferred height (shrink keeps discarded
+rows as scrollback), zero-height rejection, deferred fitting while a borrowed
+screen is active, foreground release and resume, alternate-screen borrowing and
+return, and confirmation blocked at tiny sizes. A small VT harness records that
+no normal-screen whole-page clear occurs.
+
+### Job control
+
+The gallery's [job control](../src/gallery/job_control.rs) handles Ctrl-Alt-Z
+and external SIGTSTP; reusable runtime APIs install no job-control handlers. Owned
+controlling-PTY cases verify actual stops, canonical shell input and exact
+termios while stopped, background SIGCONT without mode acquisition or drawing,
+shell output preserved through resize, retained inline and full-screen drafts,
+repeated suspension, too-small resume and a missing controlling terminal. Each
+case owns its session and process group; no user terminal or unrelated process
+is signalled.
+
+## Native terminal findings
+
+- On macOS a controlling tty can briefly mark restored input `PENDIN`. Native
+  fixtures consume a cooked shell line before comparing the original termios
+  rather than masking the flag or changing production restoration.
+- iTerm2 profiles can apply a custom Bold color darker than Foreground;
+  shell-only output reproduces it. This is an accepted terminal-profile
+  limitation, not an application defect. See
+  [presentation limits](presentation.md#tokens-and-fallback-behavior).
+- PTY input produces one newline each for raw and encoded Ctrl-J and
+  Shift/Alt-Enter.
+
+## Chat rendering measurement
+
+A release build on macOS 15.7.9 (x86_64, Intel Xeon W-2140B at 3.20 GHz, Rust
+1.99.0) rendered 100 turns of 550,000 bytes of Unicode prose through an ANSI 16
+TestBackend at 100×40. Cold construction plus first draw took 279.25 ms; warm
+draws averaged 1.22 ms over 25 frames with 19,900 cached rows and no extra parses
+or layouts. This excludes physical terminal writes and is not a p95,
+input-latency or portable guarantee. The broader campaign is in
+[Gallery](features/gallery.md#performance-measurements--proposed-targets).
+
+## Gaps
+
+- Human visual acceptance is pending for most components; see
+  [Human testing](human-testing.md#acceptance-record).
+- Native suites run on macOS only. Linux and Windows, multiplexers, real emulator
+  reflow, IME, physical keyboard modifier encodings and assistive technology are
+  not verified.
+- Real host clipboard formats, opening, storage, discovery, permission authority
+  and execution are host-owned and not covered by gallery simulations.
+- Uncatchable SIGSTOP cannot run cleanup; termination signals and inherited
+  custom handlers need separate policies.
+- No PTY case types a filter into `choose_many`, and `choose`,
+  `choose_choices` and `select` have no PTY case; I-06's filtered keys are
+  verified at the component level only.
+- Automatic content-height policy for inline hosting remains qualified in the
+  [terminal contract](features/terminal.md#inline-runtime-api).
 
 ## Evidence and review locations
 
-- [Human acceptance record](human-testing.md#acceptance-record) distinguishes the
-  Editor/Picker functional gates, their visual follow-ups and pending Dialog,
-  Command Palette and Composer reviews.
+- [Human acceptance record](human-testing.md#acceptance-record) holds human
+  review status per component.
 - [Component checkpoints](components/README.md#completeness-checkpoints) summarize
   current scopes without upgrading partial work to complete.
 - [Inventory](inventory.md) links source/test evidence and identifies gaps.
 - [Gallery coverage](features/gallery-designs.md) records executable scenarios
   and pending coverage; harness controls are outside product layout acceptance.
 
-## Code and diff inspection engineering record — 2026-10-12
-
-Scope: reusable read-only Inspector and deterministic Chat/tool/tree hosts on
-macOS x86_64, Rust 1.99.0. The focused run passed 18 tests, including native
-search/paste/copy failure-retry, Chat return, resize and exact terminal
-restoration. Source/control/Unicode/profile/tiny/selection/fold/host-race tests,
-all 51 live gallery scenarios and ten inspection snapshots were reviewed.
-
-Visual review found full Editor chrome hiding the one-row find field. Inline
-field rendering and a visible-text/cursor regression test passed before the
-complete gate run. Final results:
-
-- `make check`: formatting, strict Clippy, **343 tests**, **4 doctests**, private
-  API documentation and cargo-deny advisories/bans/licenses/sources passed.
-- `cargo nextest run --locked --no-default-features`: **278 tests** passed,
-  including native editor handoff. Native suites used host PTY access.
-- `make build`: release library/gallery passed; the release `--list` inventory
-  exposes all 51 inspection scenarios and eight additional profiles.
-- Two consumers' TUI dependency compilation passed locked/offline in temporary
-  manifest/lock copies. The third passed with offline lock resolution in its copy;
-  its existing working lock lacks the already-used Markdown dependencies.
-  All six original consumer manifests/locks remained byte-identical.
-- Source hashes remained unchanged through final validation. Both repositories' whitespace checks and 848 local file/anchor links passed.
-  The unrelated original staging remained byte-identical.
-
-Tests cover exact/foreign/duplicate/stale/wrong-kind acknowledgements, malformed
-patch/whole-file validation, numbered excerpts, folds/hidden copy/search,
-smart case and Unicode mapping, bounded dense matches, physical page overlap,
-selection changes during copy, control text, tiny rectangles and presentation
-profiles. Ten new inspection snapshots and the changed tree snapshot were
-reviewed. Native evidence covers search/paste/copy failure and retry, retained
-Chat selection/draft/caret, reopen position, resize and terminal restoration.
-
-Human visual acceptance, broader native hosts and actual product integration
-remain separate. No product loading/clipboard/editor/Git work, publication or
-consumer rollout is established by these library/fixture checks.
-
-## Status Panels and Notices engineering record — 2026-10-12
-
-Implemented the [Status Panels & Notices contract](components/status-panels-and-notices.md):
-supplied section states/facts, stable identities/folds, exact action acknowledgements,
-explicit notice time, severity priority, set-aside errors and retained caller focus.
-The gallery exposes 27 live states plus eight shared profiles. Six snapshots were
-reviewed for sidebar, narrow status, notices, failure, ASCII and review placement.
-
-- `make check`: formatting, strict Clippy, **366 tests**, **4 doctests**, API docs
-  and dependency advisories/bans/licenses/sources passed.
-- `cargo nextest run --locked --no-default-features`: **297 tests** passed,
-  including native editor handoff. PTY suites ran with host access.
-- `make build`: release library/gallery passed. Release `--list` exposes all 27
-  status scenarios and eight profiles.
-- Two consumers' TUI dependency compilation passed locked/offline with Rust 1.99
-  in disposable manifests pointing at their actual library and binary sources.
-  The third passed after offline resolution of its existing missing Markdown
-  dependencies in the temporary lockfile. Original consumer manifests/locks
-  remained unchanged; this is compilation evidence, not product rollout.
-
-Twenty-three additional tests cover stable navigation/folds/removal, atomic invalid
-updates, exact/foreign/stale/duplicate acknowledgements, disabled and repeated
-actions, pending/failure expiry, monotonic clock properties, persistent set-aside
-errors, long reasons, clipping, profiles and caller caret restoration. Review/run
-and Composer overlays retain attention priority. A 12,000-line reason remains
-scrollable in a tiny viewport without allocating offscreen physical rows.
-The native Unix PTY exercises status/notice entry, action failure/retry/success,
-draft editing/undo, resize and exact terminal-mode restoration.
-
-Final Rust source hashes remained unchanged through validation.
-Both repositories passed whitespace review; local Markdown
-links/anchors and the renamed private design indexes were checked. Human visual
-review, broader native platforms, inline hosting and real host adapters remain
-separate acceptance work.
-
-## Inline Composition engineering record — 2026-10-12
-
-Implemented the bounded [inline runtime contract](features/terminal.md#inline-runtime-api):
-verified cursor anchoring, fresh fixed rows, ordered settled output, appended
-corrections, retained live Chat, alternate-screen borrowing and foreground
-release/resume. The gallery adds 30 entries and eight shared profiles; the native
-host is explicitly enabled with `--inline`. Seven reviewed snapshots cover the
-picker, printed/live/dock, out-of-order completion, correction, pending/refused
-review and tiny cancellation hint.
-
-- Final `make check`: format, strict Clippy, **374 tests**, **4 doctests**, API
-  documentation and dependency advisories/bans/licenses/sources passed.
-- Gallery-disabled nextest: **301 tests** passed. After the final anchor
-  refinement, the feature-off build passed and the full suite exercised the
-  native inline changes.
-- `make build`: release library/gallery passed; its headless inventory lists
-  the 30 inline entries and shared profiles.
-- Two consumers' TUI dependency compilation passed locked/offline with Rust
-  1.99 in disposable manifests pointing at their actual sources. The third passed
-  after resolving its existing missing Markdown dependencies in the temporary
-  lockfile. All original consumer manifests/locks remained unchanged.
-
-Eight added tests cover contiguous settling, revisions during pending output,
-exact/foreign/altered/duplicate receipts, atomic invalid snapshots, forgotten
-pending revisions and ambiguous-write stop. Gallery coverage checks borrowed
-view return and the retained caret, including unavailable alternate-screen entry.
-Owned Unix PTYs verify cursor reports and missing-report fallback, surrounding
-output before/after, selected result preservation after host output, confirmation
-blocked at tiny size, growth, explicit redraw, foreground release, deferred output,
-alternate resize away/back, transcript search/reading return, cancellation and
-normal cooked input plus original terminal attributes. Empty/EOF plain input
-chooses nothing. The small VT harness records no normal-screen whole-page clear.
-
-Final Rust/PTY source hashes remained unchanged through the last full gate,
-release and consumer builds. Local Markdown links/anchors and both repository
-whitespace checks passed. Module review retains pure print accounting, shared
-component state and one terminal lease; only the explicit gallery host performs
-terminal I/O and fixture acknowledgements.
-
-This establishes the reusable runtime/fixture slice, not human visual approval,
-actual product integration or the full native matrix. Automatic content-height
-policy, POSIX job-control, real emulator reflow, Windows, multiplexers, IME and
-assistive acceptance remain qualified in the terminal contract. Existing component
-bindings remain in force pending the documented design wording/key decisions.
-
-## Inline content sizing engineering record — 2026-10-12
-
-The [inline runtime](features/terminal.md#inline-runtime-api) now accepts preferred
-height updates under the existing lease. Stable-window growth reserves additional
-rows below the region; shrink clears the old owned tail while retaining its top
-anchor. Resize invalidation takes precedence. Borrowed screens defer fitting until
-return, and the preferred height survives window clamps and foreground resume.
-Zero height is rejected without mutating or stopping the accepted region.
-
-The gallery/native host reuse picker, question and permission measurements.
-`Chat::inline_height` measures dock/above-dock/review space without I/O; the host
-adds wrapped live records and notice space. Settled cards remove their live rows.
-Rendering and measurement share cell-based wrapping. Completed preview results
-measure their own text, preserving long receipts after the picker closes.
-Four updated snapshots were reviewed for compact streaming, out-of-order,
-settled/correction and pending-review placement.
-
-- Final `make check`: format, strict Clippy, **377 tests**, **4 doctests**, API docs
-  and dependency advisories/bans/licenses/sources passed.
-- Gallery-disabled nextest: **303 tests** passed, including the direct height API
-  PTY test; the final feature-off build also passed.
-- Release library/gallery build passed.
-- One consumer's TUI dependency compilation passed locked/offline with Rust 1.99 through a
-  disposable manifest pointing at actual sources. Another passed with its existing
-  missing Markdown dependencies resolved only in a temporary lockfile. The third
-  was outside this recorded consumer compilation check.
-  Original consumer manifests/locks remained unchanged.
-
-Three added tests cover measured review/draft layout, long result wrapping and
-real owned PTY growth to the window cap, shrink cleanup, atomic zero rejection,
-deferred fitting with the normal buffer untouched, return, output insertion,
-window clamp/growth and foreground release/resume. The native streaming fixture
-also verifies that a settled card reduces the live region from ten to nine rows.
-The shared VT harness preserves discarded normal rows as scrollback on height
-shrink; Python bytecode caching is disabled for fixture execution.
-
-Final Rust/PTY sources remained unchanged through the last package gate and
-build/compilation checks. Module review keeps pure measurement with components,
-physical fitting in the runtime and invocation/clock/output routing with the host.
-Human visual approval, actual emulator reflow, POSIX job control, Windows,
-multiplexers, IME and assistive acceptance remain separate. No consumer rollout
-or product execution is established by these checks.
-
-## Explicit inline suspension engineering record — 2026-10-12
-
-The native inline gallery's Ctrl-Alt-Z path verifies foreground ownership, pauses
-the existing lease and stops only the gallery process. Foreground continuation
-reacquires current geometry and restores the retained draft/borrowed view.
-Background continuation stops again without acquiring modes or drawing. Ctrl-Z
-continues to undo editor transactions. Signal effects live in the gallery's
-`native/suspension.rs` adapter; reusable runtime APIs install no job-control handlers.
-
-The new owned controlling-PTY test passes on macOS with Rust 1.99.0 and Python 3.
-Each case owns a separate session. It verifies actual SIGSTOP, canonical shell
-input and exact termios while stopped, another foreground process group and
-background SIGCONT, intervening shell output, resize, retained draft and Session
-Browser return. Too-small resume fails without a confirmation result and leaves
-canonical input intact. A missing controlling terminal reports unavailable and
-preserves cancellation. The harness handles PTY EOF without an unbounded drain.
-On macOS a controlling tty can mark restored input PENDIN; the fixture consumes
-a cooked shell line before comparing the original termios, rather than masking
-that flag or changing production restoration.
-
-- `make -C packages/tui check`: formatting, strict Clippy, **378 tests**, **4
-  doctests**, API docs and dependency checks passed.
-- Release library/gallery build and gallery-disabled locked/offline compilation
-  passed.
-- Two consumers' TUI dependency compilation passed locked/offline through the
-  reviewed disposable manifests pointing at current sources. One uses the
-  temporary lockfile resolving its pre-existing missing Markdown dependencies;
-  this does not establish that its original locked build passes. All original
-  consumer manifests/lockfiles remained unchanged. The third was outside this
-  recorded consumer compilation check.
-- Changed Markdown links, new-file whitespace and both repository whitespace
-  checks passed. Module review retains input/render state in components, terminal
-  restoration in the runtime, and stop/continue orchestration in the gallery host.
-
-External SIGTSTP, full-screen job control, real shell/emulator visual acceptance,
-native Linux/Windows, multiplexers, IME and assistive acceptance remain separate.
-This record establishes the explicit inline key path under the owned macOS PTY;
-it does not establish the complete native compatibility matrix or consumer rollout.
-
-## Gallery SIGTSTP and full-screen job control — 2026-10-12
-
-Both gallery hosts use `gallery/job_control.rs` for explicit Ctrl-Alt-Z and
-external SIGTSTP. A scoped gallery-only flag registration does no terminal I/O
-from signal delivery. The owning loop releases/restores the existing lease,
-retains polled events and pending Composer input, restarts active fixture clocks
-on return and repaints current geometry. Inline return retains borrowed views;
-full-screen return uses `TerminalSession::handoff`. Components and reusable
-runtime imports install no job-control handlers. The gallery-only optional
-signal-hook dependency is already present transitively in the package lockfile.
-The guard removes its flag registration on exit; signal-hook retains its OS
-dispatch shim for the process lifetime. The adapter targets the gallery CLI,
-not arbitrary embedders' signal policies.
-
-Owned macOS controlling-PTY cases verify key/external suspension, canonical shell
-input and exact termios while actually stopped, background SIGCONT without
-mode acquisition or drawing, shell output preserved through resize, retained
-inline draft/Session Browser and full-screen multiline draft/caret/undo. Repeated
-external suspension passes. Existing unavailable-terminal and too-small inline
-resume cases also pass. Each fixture case owns its session and secondary process
-group; no user terminal, shell or unrelated process is signalled.
-
-- `make -C packages/tui check`: formatting, strict Clippy, **379 tests**, **4
-  doctests**, API docs and dependency advisories/bans/licenses/sources passed.
-- Release library/gallery build and gallery-disabled locked/offline compilation
-  passed.
-- Two consumers' TUI dependency compilation passed through unchanged reviewed temporary
-  manifests pointing at actual sources. One uses its temporary resolved lockfile
-  for the pre-existing Markdown dependency gap; its original locked build is not
-  established by that check. Original consumer manifests/lockfiles stayed unchanged.
-- Changed Markdown links, tracked/new-file whitespace and both repository diff
-  checks passed. Module review keeps signals and host clocks in the gallery,
-  terminal release/reacquisition in the runtime and component state in existing views.
-
-Real-shell/emulator visual review, native Linux/Windows, multiplexers, IME and
-assistive acceptance remain open. Uncatchable SIGSTOP cannot run cleanup;
-termination signals and custom inherited handlers require separate policies.
-No consumer UI rollout or complete platform support claim follows from this record.
-
-For behavior changes, run the owning package checks and record observed results
-with scope, date and platform. Use real terminal evidence for terminal contracts.
-For Markdown-only changes, check local links/anchors, private-design separation
-and each affected repository's diff. Do not add tests that assert prose.
+When a change alters what a suite covers, update the coverage above. Use real
+terminal evidence for terminal contracts. Do not add tests that assert prose.

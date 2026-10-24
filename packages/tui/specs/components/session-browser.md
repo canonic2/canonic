@@ -1,8 +1,7 @@
 # Session Browser
 
 Status: reusable implementation and 72 live gallery scenarios are complete.
-The [engineering record](../verification.md#session-browser-engineering-record--2026-10-12)
-reports executed checks. This public contract owns the dedicated screen,
+[Verification](../verification.md#session-browser) maps its test coverage. This public contract owns the dedicated screen,
 independent of session storage and transport. Human visual/platform acceptance
 remains separate from engineering verification.
 

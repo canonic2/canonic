@@ -9,8 +9,8 @@ history and perform agent, storage, clipboard, opening and inspection operations
 
 The reusable component and 76 interactive gallery scenarios are implemented.
 The gallery acknowledges simulated host effects; it does not connect an agent
-or use the OS clipboard. Engineering evidence is in
-[Verification](../verification.md#chat-alignment-engineering-record--2026-10-11).
+or use the OS clipboard. Test coverage is in
+[Verification](../verification.md#chat).
 Human visual acceptance and consumer UI integration are separate checkpoints.
 
 ## Behavior and state transitions

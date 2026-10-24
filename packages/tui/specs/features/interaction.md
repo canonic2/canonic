@@ -82,6 +82,41 @@ anything; only the flow's final confirmation does. A host whose steps cannot be
 revisited (for example, one that already performed an external action) states
 that step's Escape meaning in its own contract.
 
+### Selection lists: Space marks, Enter continues
+
+This is a hard rule for the library and every consumer. It matches the model
+people know from common terminal pickers, so nothing about it needs learning.
+
+| Input | Single-choice list | Multiple-choice list |
+| --- | --- | --- |
+| Plain Enter press | Choose the highlighted enabled row | Continue with the marked set |
+| Space | Filter text when a filter is shown; otherwise inert | Mark or unmark the highlighted row, with or without a filter |
+| Other printable characters | Filter text when a filter is shown | Filter text when a filter is shown |
+| Digits 1–9 without a filter | Highlight that row | Mark or unmark that row |
+| Alt-A | Inert | Mark or unmark every visible enabled row |
+| Up/Down, PageUp/PageDown, Home/End, Ctrl-P/Ctrl-N | Move the highlight | Move the highlight |
+| Esc | Clear a nonempty filter, then follow [Escape goes back one step](#escape-goes-back-one-step) | Same |
+
+Enter never toggles a mark, and Space never confirms. Marks survive filtering;
+the title counts them, including marks hidden by the current filter.
+
+The host sets how many marks are required. When it accepts an empty set, Enter
+with nothing marked continues with that empty set, and the footer names the
+outcome (for example `enter skip`). When it requires at least one, Enter with
+nothing marked continues nothing and shows a notice naming Space. Enter never
+silently treats the highlighted row as marked.
+
+The footer names the current meaning of each key: `space select`, `enter
+continue` (or the host's verb), `esc cancel` or `esc back`, and filter state.
+Narrow layouts drop hints in the order the [option picker](../components/option-picker.md)
+defines, keeping Esc.
+
+A multiple choice is one list in multiple-selection mode. Hosts do not emulate
+it with a single-choice list reopened after each toggle, add "Continue", "Done"
+or "Cancel" rows, or draw marks in labels. A final apply/delete/publish
+confirmation is its own single-choice step after the list, with the safe choice
+as its default.
+
 Multiline inputs use the same editor event adapter. A modifier-aware Enter event
 must reach that editor without a host intercepting it as submission. Submission
 requires an unmodified Enter press and must happen only once. Empty/disabled or
@@ -204,6 +239,10 @@ a link likewise returns an ID/destination intent; rendering never opens it.
   drag release does not confirm, and clipboard failure is visible/retryable.
 - **I-05:** All controls have keyboard paths and effective hints; traditional
   newline fallback, capture-off and tiny/zero-area layouts are verified.
+- **I-06:** In a filtered multiple-choice list, Space marks the highlighted row
+  without changing the query, typed letters narrow the rows, Enter returns the
+  marked set once, and Enter below the host's minimum returns nothing and shows
+  the Space notice. Inline prompts give the same results through a PTY.
 
 ## Decisions still needed
 

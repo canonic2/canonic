@@ -50,8 +50,17 @@ With an empty source, Enter is inert and only cancellation is offered.
 conflicting bounds reject atomically. A changed maximum retains marks in source
 order up to that limit. At the maximum, unmarked rows fade but remain reachable
 and cannot gain a mark until one is removed. Below the minimum Enter emits no
-intent. Alt-A toggles matching enabled rows, including danger rows, adding only
-up to the maximum in ranked display order. Plain Enter press is the
+intent and its notice names Space as the way to mark. The keys follow
+[Selection lists](../features/interaction.md#selection-lists-space-marks-enter-continues):
+in multiple mode the footer reads `space select` and `enter continue`. While
+nothing is marked and the host accepts an empty set, it reads `enter <empty>`,
+where `PickerView::empty` names that outcome (`continue` by default, `skip` or
+the host's own answer). Single mode reads `enter choose` while a row is
+highlighted. Compact footers below 50 columns keep a bare `enter`. The inline
+`choose_many` prompt takes the host's minimum and empty-set label and shows
+the notice in a row below the picker; it refuses a minimum above the enabled
+choices with `InvalidInput` before acquiring the terminal. Alt-A toggles matching enabled rows, including danger rows,
+adding only up to the maximum in ranked display order. Plain Enter press is the
 only final confirmation; repeated/modified Enter, paste and disabled shortcuts
 are inert. Esc clears a nonempty query before returning `Cancelled`.
 
@@ -91,7 +100,7 @@ docks the measured opening height above a persistent host activity row and
 message editor. Muted
 unselected keys and bold focused headings are retained; contiguous shortcut sets
 with two or more keys use a range, while disabled holes remain explicit. The
-host activity prefix uses the warning token, with muted hints. The [visual follow-up review](../human-testing.md#picker-visual-follow-up--2026-10-09)
+host activity prefix uses the warning token, with muted hints. The [visual follow-up review](../human-testing.md#picker-visual-follow-up)
 is independent of Dialog acceptance.
 
 The compatibility index picker bounds search/labels to 4 KiB and strips
@@ -121,5 +130,5 @@ Hosts choose docked, centered-dialog or full-screen placement.
 ## Remaining gaps
 
 Native inline hosting remains a [terminal feature](../features/terminal.md).
-Visual follow-up has separate [review steps](../human-testing.md#picker-visual-follow-up--2026-10-09);
+Visual follow-up has separate [review steps](../human-testing.md#picker-visual-follow-up);
 the earlier functional acceptance does not accept every later styling change.

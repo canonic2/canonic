@@ -15,7 +15,7 @@ tasks ────────────────────────�
                       1  show task
                       2  stop this task  x
                       3  retry           only after it ends
-                    ─────────────────────────────────── 1–2 · enter · esc cancel
+                    ──────────────────────────── 1–2 · enter choose · esc cancel
 
 
 

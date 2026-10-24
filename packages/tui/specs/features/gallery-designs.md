@@ -173,7 +173,9 @@ Chat, ordered settling/corrections, queued/pending/refused responses, cancellati
 withdrawal, stopped host, wrapped results, narrow/tiny, capability fallback and
 return/profile fixtures. Eight shared profiles are additional. `--inline` runs an
 explicit normal-screen host with cursor anchoring, alternate borrowing, output
-ordering, resize/redraw and foreground release. Ordinary gallery entries render
+ordering, resize/redraw and foreground release. Its `choose-many` scenario,
+available only with `--inline`, runs the shared `choose_many` prompt itself and
+prints the confirmed identities. Ordinary gallery entries render
 the same component fixtures inside its existing full-screen lease. The fallback
 and return names provide starting states; actual native transitions require their
 keys or terminal conditions. Native human matrix and consumer integration remain
