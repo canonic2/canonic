@@ -40,7 +40,11 @@ element is described in the [elements guide](../framework/elements.md).
   touches no DOM API.
 - The constructor does not read or write the host's attributes or children,
   does not dispatch events and acquires nothing outside the element, as the
-  custom elements specification requires of upgrades.
+  custom elements specification requires of upgrades. There is one deliberate
+  exception, described in
+  [inputs set before upgrade](#inputs-set-before-upgrade): for an input with an
+  attribute that was captured as a property, the constructor checks whether
+  that attribute is present.
 - The constructor initializes inputs to their defaults through a
   constructor-safe path: it sets the element's private values and updates its
   own nodes, and never writes host attributes. Reflection to host attributes
@@ -74,8 +78,10 @@ handled like an input with an attribute.
 1. **Capture, in the constructor.** For each declared input that exists as an
    own property, the element records the value in a private pending map and
    deletes the own property. It calls no setter and writes no host attribute.
-   Only declared inputs are checked; it does not scan its properties. When
-   nothing is captured, nothing else happens.
+   Only declared inputs are checked; it does not scan its properties. For each
+   input it captured, it also records whether that input's attribute is
+   present, so that the upgrade's initial callback for it can be recognized.
+   When nothing is captured, nothing else happens and no attribute is checked.
 2. **Replay, after the initial attribute callbacks.** When something was
    captured, the constructor queues one microtask. It runs after the upgrade's
    initial attribute callbacks, and assigns each pending value through its
@@ -85,18 +91,42 @@ The microtask exists because the constructor may not write host attributes and
 because attributes present at upgrade are delivered after the constructor;
 neither concern applies to an input without an attribute.
 
+**Departure from the HTML Standard.** The HTML Standard requires that a custom
+element constructor not inspect the element's attributes. Checking presence
+for a captured input departs from that requirement on purpose. An initial
+upgrade callback and a first `setAttribute` made after the upgrade both arrive
+with a `null` old value, and the attribute is present in both cases, so
+nothing available in the callback tells them apart. Only presence at
+construction does. The departure is limited:
+
+- it happens only during an upgrade in which a property was assigned before
+  definition, since otherwise nothing is captured;
+- it covers only captured inputs that have an attribute;
+- it checks presence and never reads the attribute's value;
+- nothing the element renders depends on it; it only decides which single
+  callback to skip.
+
+Elements created with `document.createElement`, by the parser or by cloning
+capture nothing and check no attribute.
+
 Precedence and consistency, for inputs with an attribute:
 
 - A property assigned before upgrade wins over an attribute present at upgrade
-  for the same input. The upgrade's initial `attributeChangedCallback` for an
-  input that is still pending, recognized by its `null` old value, leaves the
-  input untouched, and the replay then applies the property. The reflected
-  attribute then matches the property.
-- An assignment to an input, by property or attribute, while its replay is still
-  pending is newer than the captured value: it removes that input from the
+  for the same input. The element skips exactly one `attributeChangedCallback`
+  for that input: the upgrade's initial one, for an attribute recorded as
+  present at capture. The replay then applies the property, and the reflected
+  attribute then matches it.
+- Every other assignment to an input, by property or attribute, while its
+  replay is still pending is newer than the captured value, including an
+  attribute first added after the upgrade: it removes that input from the
   pending map, then applies like any assignment. Removing the entry is enough to
   supersede the captured value, so an assignment equal to the value already
-  rendered writes nothing.
+  rendered writes no node.
+- A setter guards its node writes and its attribute reflection separately: the
+  nodes by comparing with the rendered value, the attribute by comparing with
+  the attribute's current value. An attribute present at upgrade is not
+  applied while a captured property is pending, so a captured value equal to
+  the rendered default must still replace that attribute.
 - While a value is pending, the input's getter returns it, so code that reads the
   element right after upgrade sees the value it assigned. The element's own
   field keeps the value it has rendered; a pending value lives only in the
@@ -203,21 +233,23 @@ what depends on position. Collections that move items use `moveBefore`, as
 
 ## Helpers
 
-Lattice provides three functions for elements, from a DOM subpath of their own.
+Lattice provides four functions for elements, from a DOM subpath of their own.
 Each does one step of this contract; the element keeps its state, setters,
 callbacks and connection controller.
 
 | Helper | Does | Does not |
 | --- | --- | --- |
-| `captureInputs(host, names)` | For each declared name that exists as an own property of the host, records its value in a new map and deletes the property. Returns the map, or `null` when nothing was captured | Scan other properties, call setters, write attributes or queue anything |
-| `replayInputs(host, pending)` | Assigns each entry still in the map through the host's setter, in the map's order | Apply values directly, skip setters or schedule itself; the element queues the microtask that calls it |
+| `captureInputs(host, names, attributes)` | For each declared name that exists as an own property of the host, records its value in a new map and deletes the property. For a captured name listed in `attributes`, records whether that attribute is present. Returns the map, or `null` when nothing was captured. Throws a `TypeError` naming the input when the property cannot be deleted | Scan other properties, check attributes of inputs it did not capture, read attribute values, call setters, write attributes, queue anything, or report a capture that left the property in place |
+| `skipUpgradeAttribute(pending, attribute)` | Returns `true` once, for the upgrade's initial callback of an attribute recorded as present at capture while its input is still pending; `false` for every other callback and when `pending` is `null` | Decide anything from the old or new value |
+| `replayInputs(host, pending)` | Assigns each entry still in the map through the host's setter, in the map's order. Throws a `TypeError` naming the input when an assignment is refused, applying no later entry | Apply values directly, skip setters, schedule itself or ignore a refused assignment; the element queues the microtask that calls it |
 | `defineOnce(registry, name, constructor)` | Defines the constructor under the name; does nothing when that constructor is already defined there; throws when another constructor is | Choose a tag name or define anything on import |
 
 For inputs without an attribute, the constructor calls `replayInputs`
 immediately with the map `captureInputs` returned. For inputs with an
 attribute, the element holds the map in a private field until the replay has
-run; their getters read a pending value from the map, and their setters remove
-their input from the map before comparing, as
+run; their getters read a pending value from the map, their setters remove
+their input from the map before comparing, and `attributeChangedCallback`
+returns early when `skipUpgradeAttribute` answers `true`, as
 [inputs set before upgrade](#inputs-set-before-upgrade) requires. An element
 with both kinds calls `captureInputs` once for each kind.
 
@@ -240,6 +272,11 @@ Browser tests in Chromium:
 | Early input and attribute | An element with an attribute and a pre-upgrade property for the same reflected input ends with the property's value, the attribute reflecting it, and no host attribute written during construction |
 | Assignment during replay | An input assigned after upgrade but before the replay runs keeps the newer value |
 | Superseded equal value | An input assigned, before the replay runs, the value it already renders is not written again, and the replay does not apply the captured value |
+| Captured default over an attribute | A pre-upgrade property equal to the default, with a different attribute present at upgrade, ends with the default rendered and the attribute replaced by it |
+| New attribute before replay | An attribute first added after upgrade and before the replay wins over a property captured before upgrade |
+| Changed attribute before replay | An attribute present at upgrade and changed after it, before the replay, wins over the captured property |
+| Presence checked only when captured | Upgrading or creating an element with no early properties checks no attribute |
+| Failed capture or replay | `captureInputs` throws for an early property that cannot be deleted, and `replayInputs` throws for an assignment the element refuses, each naming the input |
 | Capture helper | `captureInputs` captures only declared names that are own properties, deletes them, and returns `null` when there are none |
 | Replay helper | `replayInputs` assigns through setters and skips entries removed from the map before it runs |
 | Registration helper | `defineOnce` succeeds for the same constructor twice and throws for a different one |
@@ -287,6 +324,13 @@ Browser tests in Chromium:
   constructor safety, mixed inputs, elements with no early inputs, and parsed
   and cloned elements. No performance lab was run; the change removes work
   rather than trading one cost for another.
+- **Checking attribute presence for captured inputs** (2026-10-24). Without
+  it, an attribute first set between the upgrade and the replay was mistaken
+  for the upgrade's own callback and lost to an older captured property. No
+  information in the callback distinguishes the two. Checking presence in the
+  constructor departs from the HTML Standard's requirement that constructors
+  not inspect attributes; it was accepted as a narrow, documented exception
+  because the alternative was to let a newer assignment be overwritten.
 - **Owned-node listeners at construction, outside resources per connection.**
   Installing internal listeners once avoids work on every reconnection; tying
   everything external to the connection signal makes cleanup a single abort.
@@ -299,6 +343,3 @@ Browser tests in Chromium:
 - Whether elements should support scoped custom element registries once they
   are available in the target runtimes, so two applications can register
   different versions in one document.
-- An attribute first added between the upgrade and the replay also has a `null`
-  old value, so it is treated like an attribute present at upgrade and loses to
-  the pending property. Whether that case needs distinguishing is not settled.

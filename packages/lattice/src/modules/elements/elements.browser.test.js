@@ -1,6 +1,6 @@
 /** @file Verifies the element helpers and the early-input rules in Chromium. */
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { captureInputs, defineOnce, replayInputs } from './elements.js';
+import { captureInputs, defineOnce, replayInputs, skipUpgradeAttribute } from './elements.js';
 
 /** @returns {string} A tag name no other test defines. */
 function uniqueTag() {
@@ -87,7 +87,7 @@ function labelClass() {
     constructor() {
       super();
       this.attachShadow({ mode: 'open' }).append(this.#text);
-      const pending = captureInputs(this, ['label']);
+      const pending = captureInputs(this, ['label'], { label: 'label' });
       if (pending !== null) {
         this.#pending = pending;
         queueMicrotask(() => {
@@ -105,10 +105,11 @@ function labelClass() {
     /** @param {string} value The label to display and reflect. */
     set label(value) {
       this.#pending?.delete('label');
-      if (Object.is(value, this.#label)) return;
-      this.#label = value;
-      this.#text.data = value;
-      this.setAttribute('label', value);
+      if (!Object.is(value, this.#label)) {
+        this.#label = value;
+        this.#text.data = value;
+      }
+      if (this.getAttribute('label') !== value) this.setAttribute('label', value);
     }
 
     /**
@@ -118,7 +119,7 @@ function labelClass() {
      * @param {string | null} newValue The new value, `null` when it was removed.
      */
     attributeChangedCallback(name, oldValue, newValue) {
-      if (oldValue === null && this.#pending?.has(name)) return;
+      if (skipUpgradeAttribute(this.#pending, name)) return;
       this.label = newValue ?? '';
     }
 
@@ -171,7 +172,48 @@ describe('captureInputs', () => {
   });
 });
 
+describe('failed reflection operations', () => {
+  test('captureInputs throws when an early property cannot be removed', () => {
+    const Counter = counterClass();
+    const tag = uniqueTag();
+    customElements.define(tag, Counter);
+    const element = as(document.createElement(tag), Counter);
+    Object.defineProperty(element, 'count', { value: 5, writable: true, configurable: false });
+    expect(() => captureInputs(element, ['count'])).toThrow(/count/);
+  });
+
+  test('replayInputs throws when a captured value cannot be assigned', () => {
+    /** An element whose input has a getter and no setter. */
+    class ReadOnly extends HTMLElement {
+      /** @returns {number} Always zero. */
+      get fixed() {
+        return 0;
+      }
+    }
+    customElements.define(uniqueTag(), ReadOnly);
+    const element = new ReadOnly();
+    /** @type {Map<'fixed', unknown>} */
+    const pending = new Map([['fixed', 5]]);
+    expect(() => replayInputs(element, pending)).toThrow(/fixed/);
+  });
+});
+
 describe('replayInputs', () => {
+  test('reflects a captured value equal to the default over an attribute present at upgrade', async () => {
+    const Label = labelClass();
+    const tag = uniqueTag();
+    const element = document.createElement(tag);
+    Object.assign(element, { label: '' });
+    element.setAttribute('label', 'Attr');
+    customElements.define(tag, Label);
+    customElements.upgrade(element);
+    const label = as(element, Label);
+    await microtasks();
+    expect(label.label).toBe('');
+    expect(label.rendered).toBe('');
+    expect(label.getAttribute('label')).toBe('');
+  });
+
   test('applies a captured value once through the setter', async () => {
     const element = upgradeWith(counterClass(), { count: 5 });
     expect(element.rendered).toBe('0');
@@ -199,6 +241,48 @@ describe('replayInputs', () => {
     expect(element.writes).toBe(0);
   });
 
+  test('applies an attribute first added after upgrade and before the replay', async () => {
+    const Label = labelClass();
+    const tag = uniqueTag();
+    const element = document.createElement(tag);
+    Object.assign(element, { label: 'Prop' });
+    customElements.define(tag, Label);
+    customElements.upgrade(element);
+    const label = as(element, Label);
+    label.setAttribute('label', 'New');
+    await microtasks();
+    expect(label.label).toBe('New');
+    expect(label.rendered).toBe('New');
+    expect(label.getAttribute('label')).toBe('New');
+  });
+
+  test('applies an attribute changed after upgrade and before the replay', async () => {
+    const Label = labelClass();
+    const tag = uniqueTag();
+    const element = document.createElement(tag);
+    Object.assign(element, { label: 'Prop' });
+    element.setAttribute('label', 'Attr');
+    customElements.define(tag, Label);
+    customElements.upgrade(element);
+    const label = as(element, Label);
+    label.setAttribute('label', 'New');
+    await microtasks();
+    expect(label.label).toBe('New');
+    expect(label.rendered).toBe('New');
+    expect(label.getAttribute('label')).toBe('New');
+  });
+
+  test('checks attribute presence only for inputs captured as properties', () => {
+    const Label = labelClass();
+    const tag = uniqueTag();
+    customElements.define(tag, Label);
+    const checked = vi.spyOn(Element.prototype, 'hasAttribute');
+    const container = document.createElement('div');
+    container.innerHTML = `<${tag} label="Acme"></${tag}>`;
+    document.createElement(tag);
+    expect(checked).not.toHaveBeenCalled();
+  });
+
   test('lets a captured property win over an attribute present at upgrade', async () => {
     const Label = labelClass();
     const tag = uniqueTag();
@@ -216,6 +300,13 @@ describe('replayInputs', () => {
     observer.disconnect();
     expect(label.getAttribute('label')).toBe('Prop');
     expect(label.rendered).toBe('Prop');
+  });
+});
+
+describe('skipUpgradeAttribute', () => {
+  test('returns false when nothing is pending or the attribute was not present at capture', () => {
+    expect(skipUpgradeAttribute(null, 'label')).toBe(false);
+    expect(skipUpgradeAttribute(new Map([['label', 'Prop']]), 'label')).toBe(false);
   });
 });
 
@@ -258,7 +349,7 @@ describe('inputs without an attribute applied during construction', () => {
         this.attachShadow({ mode: 'open' }).append(this.#text);
         const early = captureInputs(this, ['count']);
         if (early !== null) replayInputs(this, early);
-        const pending = captureInputs(this, ['label']);
+        const pending = captureInputs(this, ['label'], { label: 'label' });
         if (pending !== null) {
           this.#pending = pending;
           queueMicrotask(() => {
@@ -288,10 +379,11 @@ describe('inputs without an attribute applied during construction', () => {
       /** @param {string} value The label to display and reflect. */
       set label(value) {
         this.#pending?.delete('label');
-        if (Object.is(value, this.#label)) return;
-        this.#label = value;
-        this.#render();
-        this.setAttribute('label', value);
+        if (!Object.is(value, this.#label)) {
+          this.#label = value;
+          this.#render();
+        }
+        if (this.getAttribute('label') !== value) this.setAttribute('label', value);
       }
 
       /**
@@ -301,7 +393,7 @@ describe('inputs without an attribute applied during construction', () => {
        * @param {string | null} newValue The new value, `null` when it was removed.
        */
       attributeChangedCallback(name, oldValue, newValue) {
-        if (oldValue === null && this.#pending?.has(name)) return;
+        if (skipUpgradeAttribute(this.#pending, name)) return;
         this.label = newValue ?? '';
       }
 

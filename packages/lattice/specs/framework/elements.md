@@ -9,9 +9,9 @@ replay in a microtask, are the ones their browser tests exercise. The guarantees
 them.
 
 An element is a native class that extends `HTMLElement`. Its author writes the
-class, its inputs and its callbacks by hand. Lattice supplies three narrow
-helpers, `captureInputs`, `replayInputs` and `defineOnce`, and nothing that
-renders, schedules or generates the class. The shape was chosen by measurement;
+class, its inputs and its callbacks by hand. Lattice supplies four narrow
+helpers, `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and
+`defineOnce`, and nothing that renders, schedules or generates the class. The shape was chosen by measurement;
 see the [component authoring record](../../research/component-authoring.md).
 
 ## A complete element
@@ -100,8 +100,18 @@ an input is replayed in a microtask instead:
 - the getter returns a value still in the map, so code reading the element right
   after upgrade sees what it assigned;
 - the setter first removes its input from the map, so a newer assignment wins;
-- `attributeChangedCallback` skips an input still pending during upgrade, so the
-  captured property wins over the attribute.
+- `captureInputs` receives each input's attribute name and records whether that
+  attribute is present for inputs it captured;
+- `attributeChangedCallback` asks `skipUpgradeAttribute` whether this is the
+  upgrade's own callback for such an attribute. Only that one callback is
+  skipped, so the captured property wins over an attribute present at upgrade,
+  while an attribute set or changed afterwards wins over the property.
+
+Recording presence means the constructor inspects the host's attributes, which
+the HTML Standard says a constructor must not do. Lattice departs from that
+requirement on purpose, only in this upgrade case and only for presence;
+[element lifecycle](../contracts/element-lifecycle.md#inputs-set-before-upgrade)
+explains why.
 
 An element with both kinds of input calls `captureInputs` once for each kind.
 
@@ -111,7 +121,7 @@ static observedAttributes = ['label'];
 constructor() {
   super();
   this.attachShadow({ mode: 'open' }).append(this.#labelText);
-  const pending = captureInputs(this, ['label']);
+  const pending = captureInputs(this, ['label'], { label: 'label' });
   if (pending !== null) {
     this.#pending = pending;
     queueMicrotask(() => {
@@ -129,22 +139,26 @@ get label() {
 /** @param {string} value */
 set label(value) {
   this.#pending?.delete('label');
-  if (Object.is(value, this.#label)) return;
-  this.#label = value;
-  this.#labelText.data = value;
-  this.setAttribute('label', value);
+  if (!Object.is(value, this.#label)) {
+    this.#label = value;
+    this.#labelText.data = value;
+  }
+  if (this.getAttribute('label') !== value) this.setAttribute('label', value);
 }
 
 /** @param {string} name @param {string | null} oldValue @param {string | null} newValue */
 attributeChangedCallback(name, oldValue, newValue) {
-  // An attribute present at upgrade loses to a property captured before it.
-  if (oldValue === null && this.#pending?.has(name)) return;
+  // The upgrade's own callback loses to a property captured before it.
+  if (skipUpgradeAttribute(this.#pending, name)) return;
   this.label = newValue ?? '';
 }
 ```
 
-Reflecting calls `attributeChangedCallback` again with the same value, which the
-setter skips.
+The setter guards its nodes and its attribute separately. A captured value
+equal to the rendered one, such as an empty label over an attribute present at
+upgrade, writes no node but still corrects the attribute. Reflecting calls
+`attributeChangedCallback` again with the same value, which then changes
+nothing.
 
 ### Connection resources
 

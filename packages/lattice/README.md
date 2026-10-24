@@ -2,7 +2,8 @@
 
 Lattice is an unpublished native JavaScript package for state and Web Component
 bindings. Its root ESM entry point is still empty; `canonic-lattice/elements`
-exports the element helpers `captureInputs`, `replayInputs` and `defineOnce`.
+exports the element helpers `captureInputs`, `replayInputs`,
+`skipUpgradeAttribute` and `defineOnce`.
 It has no runtime dependencies.
 
 Source files run unchanged in modern browsers. There is no production build,

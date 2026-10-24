@@ -10,7 +10,7 @@ and this page is corrected. How authors use the helpers is in the
 
 | File | Contents |
 | --- | --- |
-| `src/modules/elements/elements.js` | `captureInputs`, `replayInputs` and `defineOnce`, with their JSDoc types |
+| `src/modules/elements/elements.js` | `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce`, with their JSDoc types |
 | `src/modules/elements/elements.browser.test.js` | Chromium tests, as [tests](#tests) lists |
 
 The module is a DOM capability with its own entry point,
@@ -21,10 +21,12 @@ checked by the single existing configuration.
 
 ## Dependencies
 
-The module imports nothing. At run time it uses only ECMAScript built-ins:
-`Object.hasOwn`, `Reflect` and `Map`. It never refers to `customElements`,
-`document` or any other DOM global; the registry is always a parameter, and the
-default `customElements` belongs to each element's own registration function.
+The module imports nothing. At run time it uses ECMAScript built-ins,
+`Object.hasOwn`, `Reflect`, `Map` and `WeakMap`, and two methods of objects it
+is given: the host's `hasAttribute` and the registry's `get` and `define`. It
+never refers to `customElements`, `document` or any other DOM global; the
+registry is always a parameter, and the default `customElements` belongs to
+each element's own registration function.
 Its JSDoc types name DOM types such as `HTMLElement` and
 `CustomElementRegistry`, so it is checked with the DOM library, in the DOM
 configuration [package](package.md#type-check-configurations) describes.
@@ -34,25 +36,51 @@ src/modules/elements/  → ECMAScript built-ins only
 src/modules/elements/  ↛ src/modules/store/
 ```
 
-## `captureInputs(host, names)`
+## `captureInputs(host, names, attributes)`
 
 1. Starts with no map.
 2. For each name in `names`, in order, checks `Object.hasOwn(host, name)`. A name
    the host does not own is skipped; no other property is examined.
-3. For an owned name, reads the value with `Reflect.get`, deletes the own
-   property with `Reflect.deleteProperty`, creating the map on the first capture,
-   and stores the value under the name.
-4. Returns the map, or `null` when nothing was captured, so an element with no
-   early inputs allocates nothing and queues no replay.
+3. For an owned name, reads the value with `Reflect.get` and deletes the own
+   property with `Reflect.deleteProperty`. When the deletion returns `false`,
+   as for a non-configurable property, it throws a `TypeError` naming the
+   input: the property would keep hiding the accessor. Otherwise it creates the
+   map on the first capture and stores the value under the name.
+4. When `attributes` names an attribute for that input, calls
+   `host.hasAttribute` for it and, when present, records the attribute against
+   the input in a second, local map.
+5. When any attribute was recorded, stores the second map in a module-level
+   `WeakMap` keyed by the returned map, so `skipUpgradeAttribute` can find it
+   and the record is collected with the element's pending map.
+6. Returns the map, or `null` when nothing was captured, so an element with no
+   early inputs allocates nothing, checks no attribute and queues no replay.
 
 Deleting the own property uncovers the class's accessor, so later reads and
 writes reach the element's getter and setter. The helper calls no setter and
-writes no attribute, which keeps it safe in a constructor.
+writes no attribute, which keeps it safe in a constructor. Step 4 is the
+contract's deliberate departure from the HTML Standard's requirement that
+constructors not inspect attributes; it runs only for captured inputs.
+
+## `skipUpgradeAttribute(pending, attribute)`
+
+1. Returns `false` when `pending` is `null`.
+2. Looks up the record `captureInputs` stored for `pending`. Returns `false`
+   when there is none or it has no entry for `attribute`.
+3. Deletes the entry, so it can answer `true` at most once, and returns whether
+   the input is still in `pending`.
+
+The upgrade enqueues an `attributeChangedCallback` for each attribute already
+present before it runs the constructor, and runs them right after it, before
+any other script. The first callback for a recorded attribute is therefore the
+upgrade's own. Any later callback finds no entry and returns `false`, so it is
+applied through the setter, which removes the input from `pending`.
 
 ## `replayInputs(host, pending)`
 
 Iterates the map and assigns each value with `Reflect.set(host, name, value)`,
-which runs the element's setter with the host as receiver.
+which runs the element's setter with the host as receiver. When `Reflect.set`
+returns `false`, as for an input with no setter, it throws a `TypeError` naming
+the input and applies no later entry.
 
 The setter removes its own entry before comparing, so each replayed input is
 removed as it is applied. An entry an earlier assignment already removed is not
@@ -79,10 +107,16 @@ free of scheduling and lets the getter read the same map.
 ## Typing
 
 - `captureInputs` is generic over the host type `T`, which extends
-  `HTMLElement`. `names` is a read-only array of `keyof T & string`, so a name the
-  class does not declare is a type error. It returns
-  `Map<keyof T & string, unknown> | null`.
+  `HTMLElement`, and over the input names `K`, which extend `keyof T & string`
+  and are inferred from `names`, so a name the class does not declare is a type
+  error. `attributes` is a partial record from `K` to attribute names, so an
+  entry for an input not in `names` is a type error too. It returns
+  `Map<K, unknown> | null`. A separate `K` is needed because inside a class
+  `this` is a deferred type, against which a record keyed by `keyof this`
+  accepts no object literal.
 - `replayInputs` accepts the same host type and map.
+- `skipUpgradeAttribute` takes `Map<string, unknown> | null`, the type of an
+  element's private pending field, and an attribute name.
 - `defineOnce` takes a `CustomElementRegistry`, a string and a
   `CustomElementConstructor`.
 - `Reflect.get`, `Reflect.set` and `Reflect.deleteProperty` avoid casting the
@@ -100,7 +134,14 @@ Browser tests in Chromium, in `elements.browser.test.js`:
 | Replay through setters | `Reflect.set` | A spy on the setter sees each captured value once |
 | Newer assignment wins | Map iteration skips removed entries | An assignment after upgrade and before the replay keeps its value |
 | Superseded equal value | The setter removes before comparing | Assigning the rendered value before the replay writes nothing and the captured value is not applied |
-| Attribute at upgrade | The element's `attributeChangedCallback` skips a pending input | A pre-upgrade property beats an attribute present at upgrade and is reflected |
+| Attribute at upgrade | `skipUpgradeAttribute` answers `true` for the recorded attribute | A pre-upgrade property beats an attribute present at upgrade and is reflected |
+| New attribute before replay | No record for an attribute absent at capture | An attribute first set after upgrade and before the replay wins over the captured property |
+| Changed attribute before replay | The record is consumed by the upgrade's callback | An attribute present at upgrade and changed before the replay wins over the captured property |
+| Presence checked only when captured | Presence checked inside the capture branch | Creating and parsing elements without early properties calls no `hasAttribute` |
+| No record | `null` or unrecorded attribute | `skipUpgradeAttribute` returns `false` |
+| Captured default | The setter guards nodes and attribute separately | A pre-upgrade empty label over a `label="Attr"` attribute ends with the label empty and the attribute replaced |
+| Failed deletion | `Reflect.deleteProperty` result checked | A non-configurable early property makes `captureInputs` throw a `TypeError` naming the input |
+| Failed assignment | `Reflect.set` result checked | An input with no setter makes `replayInputs` throw a `TypeError` naming the input |
 | Constructor application | `replayInputs` called in the constructor | An input without an attribute is rendered and returned as soon as upgrade returns, with no attribute written and no event dispatched |
 | Mixed inputs | One capture per kind of input | A constructor-applied and a replayed input both end rendered, with derived output and the attribute correct |
 | Parser and clone | No early inputs to capture | Parsed and cloned elements render their attributes and defaults |

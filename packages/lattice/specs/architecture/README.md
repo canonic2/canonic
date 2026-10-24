@@ -16,7 +16,7 @@ point.
 | --- | --- |
 | [Store](store.md) | The store core's internal structures and how they meet the state management contract |
 | [Package](package.md) | Entry-point wiring, file locations, type-check configurations and test fixtures |
-| [Element helpers](elements.md) | How `captureInputs`, `replayInputs` and `defineOnce` meet the element lifecycle contract |
+| [Element helpers](elements.md) | How the element helpers meet the element lifecycle contract |
 | [Testing support](testing.md) | The declaration check's implementation; not started, written when work on the checker begins |
 
 ## Source map
@@ -36,7 +36,7 @@ point.
 src/index.js        → src/modules/store/
 src/testing/        → src/modules/store/ and platform APIs
 src/modules/store/  → ECMAScript built-ins and shared platform APIs only
-src/modules/elements/ → ECMAScript built-ins only; DOM types in JSDoc
+src/modules/elements/ → ECMAScript built-ins and methods of the objects it is given; DOM types in JSDoc
 runtime modules     ↛ src/testing/, tests/ or development tools
 ```
 
