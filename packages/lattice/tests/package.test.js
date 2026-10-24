@@ -77,7 +77,7 @@ beforeAll(() => {
   archived = run('tar', ['-tzf', archive], workspace).trim().split('\n');
 
   consumer = join(workspace, 'acme-consumer');
-  const installed = join(consumer, 'node_modules', 'canonic-lattice');
+  const installed = join(consumer, 'node_modules', '@canonic2/lattice');
   mkdirSync(installed, { recursive: true });
   run('tar', ['-xzf', archive, '-C', installed, '--strip-components=1'], workspace);
   writeFileSync(
@@ -104,15 +104,15 @@ describe('packed archive', () => {
   test('imports every entry point in the consumer and refuses internal paths', () => {
     writeFileSync(
       join(consumer, 'check.js'),
-      `import * as root from 'canonic-lattice';
-import * as elements from 'canonic-lattice/elements';
+      `import * as root from '@canonic2/lattice';
+import * as elements from '@canonic2/lattice/elements';
 const store = root.createStore({ count: 0 });
 const seen = [];
 store.watch({ fields: ['count'], read: (state) => state.count }, (value) => seen.push(value));
 store.set({ count: 1 });
 let internal = 'imported';
 try {
-  await import('canonic-lattice/src/modules/store/store.js');
+  await import('@canonic2/lattice/src/modules/store/store.js');
 } catch (error) {
   internal = error.code;
 }

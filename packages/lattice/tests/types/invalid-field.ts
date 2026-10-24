@@ -1,5 +1,5 @@
 /** @file Consumer type fixture: a misspelled selection field must fail. */
-import type { Selection } from 'canonic-lattice';
+import type { Selection } from '@canonic2/lattice';
 
 interface CounterState {
   count: number;

@@ -25,8 +25,8 @@ code; testing support is not started.
 | --- | --- | --- |
 | `src/index.js` | The root entry point | Exists; exports the store core |
 | `src/modules/store/` | The store core | Exists, as [store](store.md) describes |
-| `src/modules/elements/` | The element helpers behind the `canonic-lattice/elements` subpath | Exists, as [element helpers](elements.md) describes |
-| `src/testing/` | Test support behind `canonic-lattice/testing` | Location proposed in [package](package.md); no export until implemented |
+| `src/modules/elements/` | The element helpers behind the `@canonic2/lattice/elements` subpath | Exists, as [element helpers](elements.md) describes |
+| `src/testing/` | Test support behind `@canonic2/lattice/testing` | Location proposed in [package](package.md); no export until implemented |
 | `tests/` | Package-level import, tooling and platform tests | Exists |
 | Type-check configurations | Pure, DOM and tooling checks | Exist, as [package](package.md) describes |
 | `types/shared-platform.d.ts` | Platform APIs pure modules may use; development only, not shipped | Exists |

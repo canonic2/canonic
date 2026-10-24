@@ -95,7 +95,7 @@ resolver, so a test that imports Lattice there does not show that an import map
 or explicit URLs work with unchanged files. A separate fixture does:
 
 - `tests/static/` holds plain HTML pages: one declaring an import map for
-  `canonic-lattice` and importing the bare specifier, and one importing the
+  `@canonic2/lattice` and importing the bare specifier, and one importing the
   explicit URL of the entry-point file.
 - A Node test starts a minimal static file server that serves those pages and
   Lattice's `src/` files byte for byte, with no transformation, then drives

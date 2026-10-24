@@ -144,6 +144,58 @@ the control, absolute and relative, with sample counts and spread:
   bytes allocated. The sum of every sampled node's self size is reported, with
   objects collected by minor and major collections included.
 
+### Stage 2: allocations of writes (2026-10-24, before any stage 2 run)
+
+**Attribution, done first as the owner asked.** Chrome's sampling heap
+profiler at a 32-byte interval attributed allocations of the Lattice variant
+after 20,000 warmup calls, 20,000 sampled calls, 5 pages each at 10 and 100
+fields. A diagnostic run with inlining disabled split the store's functions
+apart:
+
+| Write | Site | Bytes per call | What it is |
+| --- | --- | --- | --- |
+| Unrelated | `set` | 210 | The new snapshot, and two growable arrays of changed keys and values |
+| Unrelated | `commit` | 97 | A commit record object, and the queue's backing store, regrown after `queue.length = 0` trims it |
+| Unrelated | `touch` and its patch arrow | 45 | The application's patch function and patch object |
+| Unchanged | `setQuery` | 16 | The application's patch object; `set` allocates nothing |
+
+The delivery walk allocates nothing in optimized code, at either size. The
+stage 1 allocation figures that grew with subscriptions were sampled after 300
+warmup calls, before optimization; they describe early, unoptimized execution,
+not steady state. The walk's time cost, which stage 1 measured after 5,000
+calls, still grows with subscriptions.
+
+**Question.** Does a targeted change to `set` and the commit queue reduce the
+steady-state allocations of a changing write without costing time?
+
+**Variants.** Variant 1 is the current store, unchanged. Variant 2 is a lab
+copy of the store with two changes, served in place of `store.js`:
+
+- `set` builds the next snapshot when it finds the first changed key and
+  writes changed values into it during the same walk, keeping only an
+  exact-size array of changed keys instead of two growable arrays. Nothing is
+  published before the walk ends, so a rejected write still changes nothing,
+  and an unchanged write still allocates nothing.
+- The queue keeps its capacity: commits are held in two parallel arrays,
+  versions and changed keys, with a count, and no commit object. After
+  delivery the count resets and the slots are cleared so no keys stay
+  referenced.
+
+Both variants run the filters example unchanged.
+
+**Measures.** Bytes per unrelated, unchanged and typing write after 20,000
+warmup calls, sampled at 32 bytes, 10 pages per variant at 10 and 100 fields.
+Time per unrelated and unchanged action, interaction task and script time,
+setup and teardown, with the stage 1 timing workloads, 20 pages per variant at
+10 fields and 10 at 100. Counted correctness on both variants, as in stage 1.
+
+**Decision rule.** Adopt variant 2 when its bytes per unrelated write are
+lower than variant 1's by a meaningful difference, no time measure is
+meaningfully slower, and every correctness check passes. A meaningful
+difference is larger than 5% and than both interquartile ranges, as in
+stage 1. Adoption then means implementing the change in the store with its
+unit tests passing; the lab result alone changes no product code.
+
 ### Host and tools
 
 The same machine and tools as the component authoring lab: Node 24, Chromium
@@ -249,6 +301,54 @@ The only difference in work is selection evaluation: Lattice calls N + 1
 `read`s per typing interaction and N per lock, where the control derives the
 summary once.
 
+### Stage 2: targeted store (2026-10-24)
+
+Variant 1 is the store as measured in stage 1; variant 2 is the targeted copy.
+Allocation pages ran 19:05–19:08 UTC, timing 19:08–19:12, counted 19:12, with
+the same host and tools; background load stayed high. The lab copy passed all
+48 of the store's unit tests before the runs.
+
+| Measure | Variant 1 | Variant 2 | Difference | Meaningful |
+| --- | --- | --- | --- | --- |
+| Bytes per unrelated write, 10 and 100 fields | 352, 351 | 98, 98 | −72% | Yes |
+| Bytes per changing write, 10 and 100 fields | 364, 364 | 110, 110 | −70% | Yes |
+| Bytes per unchanged write, 10 and 100 fields | 17, 17 | 17, 17 | +2% | No |
+| µs per unrelated write, 10 fields | 0.53 (IQR 0.015) | 0.42 (IQR 0.010) | −22% | Yes |
+| µs per unrelated write, 100 fields | 2.68 (IQR 0.18) | 2.29 (IQR 0.12) | −15% | Yes |
+| µs per unchanged write | 0.075 | 0.075 | 0% | No |
+| Interaction task time, ms, 10 and 100 fields | 2.52, 7.45 | 2.51, 7.18 | −0.4%, −3.6% | No |
+| Interaction script time, ms, 10 and 100 fields | 0.123, 0.388 | 0.120, 0.376 | −3% | No |
+| Setup and teardown, µs per field | 41–60, 15–16 | 19–21, 9–10 | Lower | No: interquartile ranges up to 50 µs |
+
+Bytes are steady-state figures after 20,000 warmup calls, from 10 pages per
+variant and size; timings from 20 pages at 10 fields and 10 at 100. Setup and
+teardown varied far more than in stage 1, which is attributed to background
+load; they are not read. Both variants passed every counted check at 10 and
+100 fields.
+
+### Retained memory explained (2026-10-24)
+
+Heap snapshots before and after churn at 10 fields, 3 pages per variant,
+grouped by node type and constructor, with the same churn as stage 1, repeated
+with 20 and 60 cycles:
+
+| Retained after churn | Hand-written, 20 / 60 cycles | Lattice, 20 / 60 cycles |
+| --- | --- | --- |
+| Application-level objects: plain objects, arrays, closures, hidden classes | 2,376 / 2,376 bytes | 3,868 / 3,868 bytes |
+| Compiled code (`InstructionStream`, `Code`, bytecode, feedback vectors) | about 23 / 23 KB | about 34 / 39 KB |
+| Paint timing entries (`LargestContentfulPaint`, `InteractionContentfulPaint`) | one of each per cycle | one of each per cycle |
+| Blink hash table and vector backings | grown capacity, no added entries | grown capacity, no added entries |
+| Stores, subscriptions, signals, controllers, elements, observers, listeners | none | none |
+
+Lattice's extra retention after churn is one-time engine state, not objects it
+keeps: more of its functions are compiled and optimized during churn, and they
+add hidden classes and some grown Blink table capacity, such as the
+context-lifecycle observer list that `AbortSignal.any` uses. Application-level
+retention is identical after 20 and 60 cycles, so nothing grows with
+mounting. The only per-cycle growth, paint timing entries, comes from the
+browser's performance timeline and is the same in both variants. No change is
+needed.
+
 ## Correctness
 
 | Variant | Counted pages | Failed checks |
@@ -291,8 +391,10 @@ listener and node checked.
 Where the overhead is, in order of size relative to the work it serves:
 
 1. **Unrelated updates scale with subscription count.** A write no element
-   depends on walks every subscription and allocates about 0.7 to 2.5 KB at
-   these sizes, where the hand-written wiring does nothing. This is the
+   depends on walks every subscription, where the hand-written wiring does
+   nothing. Its allocations of about 0.7 to 2.5 KB were measured before the
+   code was optimized; stage 2 found about 350 bytes in steady state, none of
+   it from the walk. This is the
    in-order walk the state management contract chose first, and its cost model
    names a field index as the alternative once evidence shows the walk
    dominates. This is that evidence for unrelated writes; whether it matters
@@ -316,8 +418,21 @@ Where the overhead is, in order of size relative to the work it serves:
 - **Cheaper binding setup deferred** until a representative collection
   workload shows a meaningful cost. Rollback and cleanup guarantees are not
   weakened to save a controller.
-- **Retained memory stays an unresolved finding.** Lattice retained 10 to
-  27 KB more than the control after churn, constant in the number of fields. A
-  constant retention does not establish a leak; it is not explained yet.
+- **Retained memory, explained.** Lattice retained 10 to 27 KB more than the
+  control after churn, constant in the number of fields. Heap snapshots
+  attribute it to one-time engine state, compiled code and hidden classes for
+  its functions, with no store, subscription, signal or element retained and
+  no growth from 20 to 60 cycles; see
+  [retained memory explained](#retained-memory-explained-2026-10-24).
 - No binding helper is proposed from this result: the overhead is in what each
   binding allocates, not in how it is written.
+
+**Stage 2 outcome (2026-10-24).** Under the stage's rule, variant 2 is adopted:
+allocations of a changing write fell by about 254 bytes, 70 to 72%, the time
+of an unrelated write fell by 15 to 22%, and no time measure got meaningfully
+slower. The change is implemented in `src/modules/store/store.js`, where the
+store's unit tests, the root import test and the filters example's browser
+tests pass, and
+[store architecture](../specs/architecture/store.md#measured-choices) records
+it. The walk's time still grows with the number of subscriptions; a field
+index remains unconsidered until a workload shows that walk matters.

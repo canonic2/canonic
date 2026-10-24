@@ -78,12 +78,8 @@
  * @property {boolean} active Whether it still receives commits.
  */
 
-/**
- * A commit waiting for delivery.
- * @typedef {object} Commit
- * @property {number} version This commit's number.
- * @property {readonly string[]} changed The fields it changed.
- */
+/** Placeholder for cleared queue slots, so no changed-key array stays referenced. */
+const NO_CHANGES = Object.freeze(/** @type {string[]} */ ([]));
 
 /**
  * Reports an error through the platform's `reportError` when it exists, and
@@ -154,8 +150,13 @@ export function createStore(initial, options = {}) {
   let version = 0;
   /** @type {Subscription[]} */
   const subscriptions = [];
-  /** @type {Commit[]} */
-  const queue = [];
+  // Commits waiting for delivery, as parallel arrays that keep their capacity
+  // between deliveries, so a commit allocates no record and no backing store.
+  /** @type {number[]} */
+  const queuedVersions = [];
+  /** @type {(readonly string[])[]} */
+  const queuedChanges = [];
+  let queued = 0;
   let delivering = false;
   let batchDepth = 0;
   /** @type {Readonly<Record<string, unknown>> | undefined} */
@@ -215,10 +216,12 @@ export function createStore(initial, options = {}) {
   function drain() {
     delivering = true;
     try {
-      for (const commit of queue) {
+      for (let index = 0; index < queued; index++) {
+        const commitVersion = /** @type {number} */ (queuedVersions[index]);
+        const changed = /** @type {readonly string[]} */ (queuedChanges[index]);
         for (const record of subscriptions) {
-          if (!record.active || record.version >= commit.version) continue;
-          if (!intersects(record.fields, commit.changed)) continue;
+          if (!record.active || record.version >= commitVersion) continue;
+          if (!intersects(record.fields, changed)) continue;
           const { read, equals, run } = record;
           try {
             const value = read(current);
@@ -232,7 +235,8 @@ export function createStore(initial, options = {}) {
         }
       }
     } finally {
-      queue.length = 0;
+      for (let index = 0; index < queued; index++) queuedChanges[index] = NO_CHANGES;
+      queued = 0;
       delivering = false;
       if (inactive > 0) removeInactive();
     }
@@ -246,7 +250,9 @@ export function createStore(initial, options = {}) {
    */
   function commit(changed) {
     version++;
-    queue.push({ version, changed });
+    queuedVersions[queued] = version;
+    queuedChanges[queued] = changed;
+    queued++;
     if (!delivering) drain();
   }
 
@@ -263,8 +269,9 @@ export function createStore(initial, options = {}) {
     }
     /** @type {string[] | null} */
     let changedKeys = null;
-    /** @type {unknown[] | null} */
-    let changedValues = null;
+    // Built at the first change, during the walk; published only after it.
+    /** @type {Record<string, unknown> | null} */
+    let next = null;
     writing = true;
     try {
       const values = typeof patch === 'function' ? patch(get()) : patch;
@@ -278,18 +285,18 @@ export function createStore(initial, options = {}) {
         }
         const value = Reflect.get(values, key);
         if (Object.is(value, current[key])) continue;
-        (changedKeys ??= []).push(key);
-        (changedValues ??= []).push(value);
+        if (next === null || changedKeys === null) {
+          next = { ...current };
+          changedKeys = [key];
+        } else {
+          changedKeys.push(key);
+        }
+        next[key] = value;
       }
     } finally {
       writing = false;
     }
-    if (changedKeys === null || changedValues === null) return;
-    /** @type {Record<string, unknown>} */
-    const next = { ...current };
-    for (let index = 0; index < changedKeys.length; index++) {
-      next[/** @type {string} */ (changedKeys[index])] = changedValues[index];
-    }
+    if (changedKeys === null || next === null) return;
     current = Object.freeze(next);
     if (batchDepth > 0) {
       for (const key of changedKeys) {

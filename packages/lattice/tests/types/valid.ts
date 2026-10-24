@@ -1,6 +1,6 @@
 /** @file Consumer type fixture: uses of the root entry point that must type-check. */
-import { createStore, shallow } from 'canonic-lattice';
-import type { Selection, Store } from 'canonic-lattice';
+import { createStore, shallow } from '@canonic2/lattice';
+import type { Selection, Store } from '@canonic2/lattice';
 
 interface CounterState {
   count: number;

@@ -24,7 +24,7 @@ variables; none uses `this`, so `get` and `watch` can be handed out detached.
 | `current` | The current frozen snapshot |
 | `version` | A counter incremented by every commit |
 | `subscriptions` | An array of subscription records in subscription order |
-| `queue` | Commits waiting for delivery, each with its version and changed fields |
+| `queuedVersions`, `queuedChanges`, `queued` | Commits waiting for delivery: parallel arrays of versions and changed fields, and how many are queued. The arrays keep their capacity between deliveries |
 | `delivering` | Whether a delivery is running |
 | `batchDepth`, `batchBase`, `touched` | The open batch, if any: its nesting depth, the snapshot before the outermost batch, and the distinct keys written inside it |
 | `inactive` | How many records were deactivated and not yet removed |
@@ -57,20 +57,21 @@ still active.
    enumerable string keys once with `for…in` and `Object.hasOwn`, which
    allocates no key array, reading each value exactly once into a local
    variable. An unknown key, checked with `Object.hasOwn(current, key)`,
-   throws `TypeError` before anything is built, so a rejected write changes
-   nothing; so does an error a getter throws. The same walk records each
-   changed key together with the value it read, for keys whose value is not
-   `Object.is`-equal to the current one.
-3. Returns if none changed: no snapshot, no delivery.
-4. Builds the next snapshot by spreading `current` and then assigning the
-   recorded values of the changed keys, and freezes it. The patch is never read
+   throws `TypeError`, so a rejected write changes nothing; so does an error a
+   getter throws. At the first key whose value is not `Object.is`-equal to the
+   current one, the walk builds the next snapshot by spreading `current` and
+   starts an array of changed keys with that key; it writes each changed value
+   into the next snapshot as it reads it. A write rejected later in the walk
+   discards the unpublished snapshot.
+3. Returns if none changed: no snapshot, no delivery, and nothing allocated.
+4. Freezes the next snapshot and makes it current. The patch is never read
    again, so a getter on a patch cannot make the snapshot disagree with the
    changed keys. Unchanged fields keep their references because the spread
-   copies references. Building from the recorded values avoids reading patch
-   values a second time.
+   copies references.
 5. Inside a batch, adds each changed key to `touched` if it is not already
-   there, and stops. Outside one, increments `version`, queues the commit with
-   its changed keys, and drains the queue unless a delivery is already running.
+   there, and stops. Outside one, increments `version`, stores the version and
+   the changed keys in the next queue slots, and drains the queue unless a
+   delivery is already running. Queuing allocates no commit object.
 
 The unknown-key check needs no separate key set: the snapshot's own keys are the
 state's shape, which never changes. `touched` can hold at most one entry per
@@ -134,8 +135,11 @@ The initial call does not use `equals`, since there is no previous value.
 
 Draining the queue:
 
-1. Sets `delivering` and takes commits from the queue in order. The queue is an
-   array read with an index, not shifted, and reset when empty.
+1. Sets `delivering` and takes commits from the queue in order, by index up to
+   `queued`, which grows if subscribers commit during the loop. At the end it
+   resets `queued` and replaces each used `queuedChanges` slot with a shared
+   empty array, so no changed-key array stays referenced while the arrays keep
+   their capacity.
 2. For each commit, walks `subscriptions` from the first record to the last. It
    skips a record that is inactive or was created at or after the commit's
    version: such a subscription's initial `run` already saw that state.
@@ -236,6 +240,19 @@ patch keys, `read` receiving `Readonly<S>` and `run` receiving `V` under a
 
 Work counts use wrappers around `read`, `equals` and `run`, as
 [performance and evidence](../contracts/performance.md#work-counts) describes.
+
+## Measured choices
+
+- **Snapshot built during the key walk; queue without commit objects**
+  (2026-10-24). The first versions collected changed keys and values in two
+  growable arrays and queued a commit object in an array emptied with
+  `length = 0`, which also released its backing store. In steady state those
+  were about 250 of 352 bytes per unrelated write. Building the snapshot at the
+  first change and queuing into parallel arrays that keep their capacity cut
+  that to about 98 bytes and an unrelated write's time by 15 to 22%, with no
+  time measure slower. See the
+  [full-flow record](../../research/full-flow.md), stage 2. The remaining
+  bytes are the snapshot itself and the changed-key array.
 
 ## Open questions
 

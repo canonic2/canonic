@@ -4,7 +4,7 @@
  * value. It dispatches `acme-filter-input` for typing, and observes its own size
  * while connected.
  */
-import { captureInputs, defineOnce, replayInputs, skipUpgradeAttribute } from 'canonic-lattice/elements';
+import { captureInputs, defineOnce, replayInputs, skipUpgradeAttribute } from '@canonic2/lattice/elements';
 
 /** @type {CSSStyleSheet | null} */
 let sheet = null;

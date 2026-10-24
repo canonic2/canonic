@@ -157,7 +157,7 @@ the GitHub Pages workflow.
 
 ## Publishing
 
-The [Publish website workflow](../../.github/workflows/website.yml) builds the
+The Publish website workflow (`.github/workflows/website.yml` at the repository root) builds the
 site and deploys `dist/` to GitHub Pages when a `website/v<version>` tag is
 pushed (for example, `website/v1.0.1`). A successful `workbench/v<version>`
 build and release also calls it, using the newest tagged website version and
@@ -223,9 +223,8 @@ Keep the demo on Acme and example.com placeholders.
 
 ## Product icons
 
-Store original design exports unchanged in the repository's root `assets/`
-folder. Run `node scripts/refresh-brand-assets.cjs` from the repository root
-to refresh the self-contained package copies and presentation variants.
+The icons and logos are copies generated from the original design exports,
+which are kept outside this package; don't edit them by hand.
 The website reads paths and view boxes from `public/icons/` and `public/logos/`.
 Studio and Link are stored for future use outside the current product navigation.
 

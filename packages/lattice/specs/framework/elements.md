@@ -2,7 +2,7 @@
 
 **Status:** agreed authoring shape. The helpers this page imports are
 implemented in `src/modules/elements/` and exported as
-`canonic-lattice/elements`; both patterns below, constructor application and
+`@canonic2/lattice/elements`; both patterns below, constructor application and
 replay in a microtask, are the ones their browser tests exercise. The guarantees behind each step are owned by
 [element lifecycle](../contracts/element-lifecycle.md) and
 [DOM updates](../contracts/dom-updates.md); this page shows how an author meets
@@ -17,7 +17,7 @@ see the [component authoring record](../../research/component-authoring.md).
 ## A complete element
 
 ```js
-import { captureInputs, defineOnce, replayInputs } from 'canonic-lattice/elements';
+import { captureInputs, defineOnce, replayInputs } from '@canonic2/lattice/elements';
 
 /** A counter that patches one retained text node. */
 export class AcmeCounter extends HTMLElement {

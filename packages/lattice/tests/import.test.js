@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 test('imports the root entry point in Node without browser globals and uses every export', async () => {
   expect(Reflect.has(globalThis, 'document')).toBe(false);
   expect(Reflect.has(globalThis, 'window')).toBe(false);
-  const lattice = await import('canonic-lattice');
+  const lattice = await import('@canonic2/lattice');
   expect(Object.keys(lattice).sort()).toEqual(['createStore', 'shallow']);
 
   const store = lattice.createStore({ count: 0 });

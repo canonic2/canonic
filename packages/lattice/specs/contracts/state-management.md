@@ -9,7 +9,7 @@ it, and bindings that connect stores to elements. Elements stay unaware of
 stores.
 
 **Status:** agreed contract. The store core is implemented and exported from
-the root entry point; the declaration check and `canonic-lattice/testing` are
+the root entry point; the declaration check and `@canonic2/lattice/testing` are
 not yet. [Delivery](delivery.md) owns runtime boundaries, and
 [resource lifecycle](resources.md) owns shared cleanup guarantees.
 
@@ -38,7 +38,7 @@ host without any store.
 ### API
 
 ```js
-import { createStore, shallow } from 'canonic-lattice';
+import { createStore, shallow } from '@canonic2/lattice';
 
 const store = createStore({ muted: false, unread: 3, locked: false });
 
@@ -63,7 +63,7 @@ its `createStore` and `shallow`. A store exposes `get`, `set`, `batch` and
 `watch` and nothing else. They are standalone functions that do not depend on
 `this`, so a capability can hand out `get` and `watch` detached from the store,
 as its read-only `state` view does. Test support, such as the selection declaration
-check, is exported only from `canonic-lattice/testing`; no runtime module
+check, is exported only from `@canonic2/lattice/testing`; no runtime module
 imports it.
 
 ### Snapshots
@@ -179,7 +179,7 @@ selections.
 
 ### Declaration check
 
-`canonic-lattice/testing` provides a check that compares a selection's `read`
+`@canonic2/lattice/testing` provides a check that compares a selection's `read`
 with its declared `fields`. A test supplies the selection and one or more
 representative snapshots, and the check calls `read` with each of them:
 
@@ -325,7 +325,7 @@ returns a read-only view of its state, its selections and its actions:
 /**
  * @module Preview settings: whether a preview's links and forms work.
  */
-import { createStore } from 'canonic-lattice';
+import { createStore } from '@canonic2/lattice';
 
 /**
  * Creates the preview settings capability.
@@ -547,7 +547,7 @@ failure is kept as a fixed regression case beside the generator.
   must preserve ordering and at-most-once delivery. Automatic dependency
   tracking needs evidence that a field index is insufficient.
 - **Test support outside runtime imports.** The declaration check lives in
-  `canonic-lattice/testing`, so production pays nothing for it. It checks the
+  `@canonic2/lattice/testing`, so production pays nothing for it. It checks the
   snapshots a test provides; it cannot prove every possible dependency.
 - **Unobserved is a diagnostic, undeclared is a failure.** Reading an
   undeclared field always loses updates, so it fails. A declared field no

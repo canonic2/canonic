@@ -14,7 +14,7 @@ and this page is corrected. How authors use the helpers is in the
 | `src/modules/elements/elements.browser.test.js` | Chromium tests, as [tests](#tests) lists |
 
 The module is a DOM capability with its own entry point,
-`canonic-lattice/elements`, in the `exports` map, as
+`@canonic2/lattice/elements`, in the `exports` map, as
 [package](package.md#entry-points) describes. The root entry point does not
 re-export it. Until the type-check configurations are split, the module is
 checked by the single existing configuration.

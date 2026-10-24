@@ -3,7 +3,7 @@
  * filter. Its `text` input has no attribute, so an early value is applied in the
  * constructor.
  */
-import { captureInputs, defineOnce, replayInputs } from 'canonic-lattice/elements';
+import { captureInputs, defineOnce, replayInputs } from '@canonic2/lattice/elements';
 
 /** One line of summary text. */
 export class AcmeFilterSummary extends HTMLElement {

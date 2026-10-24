@@ -5,8 +5,8 @@ bindings. It has no runtime dependencies.
 
 | Entry point | Exports |
 | --- | --- |
-| `canonic-lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |
-| `canonic-lattice/elements` | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce` |
+| `@canonic2/lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |
+| `@canonic2/lattice/elements` | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce` |
 
 Source files run unchanged in modern browsers. There is no production build,
 bundler, transpilation or CommonJS entry point. TypeScript checks JavaScript and

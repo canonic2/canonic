@@ -4,7 +4,11 @@ declare module "@canonic2/workbench" {
   export type SizeKey = 'fit' | 'laptop' | 'mobile' | 'resizable' | (string & {});
   export interface PreviewContext<T extends Record<string, unknown> = Record<string, unknown>> {
     id: string;
+    /** The independently rendered artboard within this scenario, when declared. */
+    artboard?: string;
     scenario: string;
+    /** The selected iteration of the artboard, when one is selected. */
+    iteration?: string;
     inputs: T;
     fixtures: Record<string, unknown>;
     globals: Record<string, unknown>;
@@ -48,7 +52,8 @@ declare module "@canonic2/workbench" {
     MockResponse | ((request: MockRequest, context: PreviewContext<T>) => MockResponse | Response | Promise<MockResponse | Response>);
   /** Keys: `'GET /api/items'`, `'/api/items/*'`, `'POST /graphql Operation'`, or a full URL. */
   export type RequestMocks<T extends Record<string, unknown> = Record<string, unknown>> = Record<string, MockHandler<T>>;
-  export interface PreviewScenario<T extends Record<string, unknown>> {
+  /** Another take on one artboard's design: a scenario's shape without its own artboards or iterations. */
+  export interface PreviewIteration<T extends Record<string, unknown>> {
     label?: string;
     inputs?: Partial<T>;
     fixtures?: Record<string, unknown>;
@@ -60,6 +65,29 @@ declare module "@canonic2/workbench" {
     play?: (context: PreviewContext<T> & { canvas: HTMLElement }) => void | Promise<void>;
     ready?: (context: PreviewContext<T>) => void | Promise<void>;
   }
+  /** An artboard of a scenario, rendered beside the scenario's other artboards. */
+  export interface PreviewArtboard<T extends Record<string, unknown>> {
+    label?: string;
+    /** Width and height in pixels, from 1 to 8192. */
+    width: number;
+    height: number;
+    inputs?: Partial<T>;
+    /** Other takes on this artboard's design, by kebab-case ID. */
+    iterations?: Record<string, PreviewIteration<T>>;
+  }
+  /** A scenario declares either its artboards, each with its own iterations, or the iterations of its one implicit artboard. */
+  export type PreviewScenario<T extends Record<string, unknown>> = PreviewIteration<T> & (
+    | {
+        /** Artboards rendered together in this scenario, by kebab-case ID: 1 to 32. */
+        artboards: Record<string, PreviewArtboard<T>>;
+        iterations?: never;
+      }
+    | {
+        artboards?: never;
+        /** Iterations of the scenario's one implicit artboard. */
+        iterations?: Record<string, PreviewIteration<T>>;
+      }
+  );
   export interface Control {
     type: 'text' | 'number' | 'boolean' | 'select' | 'json';
     label?: string;
@@ -68,7 +96,7 @@ declare module "@canonic2/workbench" {
     max?: number;
     step?: number;
   }
-  export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewScenario<T> {
+  export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewIteration<T> {
     id: string;
     title?: string;
     adapter: string;

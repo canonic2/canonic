@@ -2,7 +2,7 @@
  * @file The filters capability: one query shared by a group of filter fields,
  * a lock that disables them, and a revision no binding reads. Pure: no DOM.
  */
-import { createStore } from 'canonic-lattice';
+import { createStore } from '@canonic2/lattice';
 
 /**
  * @typedef {object} FiltersState
@@ -13,7 +13,7 @@ import { createStore } from 'canonic-lattice';
 
 /**
  * @typedef {object} Filters
- * @property {Pick<import('canonic-lattice').Store<FiltersState>, 'get' | 'watch'>} state Read-only view.
+ * @property {Pick<import('@canonic2/lattice').Store<FiltersState>, 'get' | 'watch'>} state Read-only view.
  * @property {FilterSelections} select The capability's selections.
  * @property {(query: string) => Promise<void> | void} setQuery Sets the query, then saves it.
  * @property {() => void} toggleLocked Locks or unlocks every field.
@@ -22,9 +22,9 @@ import { createStore } from 'canonic-lattice';
 
 /**
  * @typedef {object} FilterSelections
- * @property {import('canonic-lattice').Selection<FiltersState, string>} query The query.
- * @property {import('canonic-lattice').Selection<FiltersState, boolean>} locked Whether fields are disabled.
- * @property {import('canonic-lattice').Selection<FiltersState, string>} summary Text describing the filter.
+ * @property {import('@canonic2/lattice').Selection<FiltersState, string>} query The query.
+ * @property {import('@canonic2/lattice').Selection<FiltersState, boolean>} locked Whether fields are disabled.
+ * @property {import('@canonic2/lattice').Selection<FiltersState, string>} summary Text describing the filter.
  */
 
 /**
