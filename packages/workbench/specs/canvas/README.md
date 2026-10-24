@@ -2,7 +2,7 @@
 
 This folder owns how people select and arrange views. Shared address routing and
 problem reporting remain in [core](../core.md); the [glossary](../glossary.md)
-defines pages, states, lenses and artboards.
+defines pages, scenarios, lenses and artboards.
 
 | Topic | Owns |
 | --- | --- |

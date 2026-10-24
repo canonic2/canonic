@@ -18,8 +18,8 @@ test('joins a url implementation’s base with the page’s path there', functio
   var lenses = load();
   assert.equal(lenses.url(dev, { path: '/' }, null), 'http://localhost:3710/');
   assert.equal(lenses.url(dev, { path: '/' }, 'error'), 'http://localhost:3710/');
-  assert.equal(lenses.url(dev, { path: '/', states: { error: '/?error=1' } }, 'error'), 'http://localhost:3710/?error=1');
-  assert.equal(lenses.url(dev, { path: '/', states: { error: '/?error=1' } }, 'other'), 'http://localhost:3710/');
+  assert.equal(lenses.url(dev, { path: '/', scenarios: { error: '/?error=1' } }, 'error'), 'http://localhost:3710/?error=1');
+  assert.equal(lenses.url(dev, { path: '/', scenarios: { error: '/?error=1' } }, 'other'), 'http://localhost:3710/');
 });
 
 test('addresses one story alone, and inside Storybook', function () {
@@ -49,7 +49,7 @@ test('names a proxied address at the implementation’s own origin', function ()
 
 test('picks the story the address means, else the first', function () {
   var lenses = load();
-  var stories = [{ id: 'a--default', state: 'default' }, { id: 'a--icon-only', state: 'icon-only' }];
+  var stories = [{ id: 'a--default', scenario: 'default' }, { id: 'a--icon-only', scenario: 'icon-only' }];
   assert.equal(lenses.pick(stories, 'icon-only'), stories[1]);
   assert.equal(lenses.pick(stories, 'error'), stories[0]);
   assert.equal(lenses.pick(stories, null), stories[0]);

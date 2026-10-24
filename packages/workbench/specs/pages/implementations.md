@@ -17,14 +17,14 @@ it, and where the code falls short.
 
 - Pages need nothing added for Workbench: no script tag, import, or build
   step.
-- A state is declared in YAML, which adds the state to the page list, and in
-  the page, which decides what it looks like. Declaring a state in YAML alone
-  does not make the page render it. State IDs are kebab-case because they
-  travel in addresses and screenshot names. A page needs at least two states
-  to show its states in the page list.
-- The first state is the page as authored. The address omits it, and the page
-  sees it as `default` whatever its ID. Any other state travels as
-  `?state=<id>`.
+- A scenario is declared in YAML, which adds the scenario to the page list, and in
+  the page, which decides what it looks like. Declaring a scenario in YAML alone
+  does not make the page render it. Scenario IDs are kebab-case because they
+  travel in addresses and screenshot names. A page needs at least two scenarios
+  to show its scenarios in the page list.
+- The first scenario is the page as authored. The address omits it, and the page
+  sees it as `default` whatever its ID. Any other scenario travels as
+  `?scenario=<id>`.
 - Invalid entries are reported as problems rather than silently dropped
   ([core.md](../core.md#problem-reporting)).
 
@@ -34,16 +34,16 @@ it, and where the code falls short.
   first in `<head>` (or after `<html>`, or at the top of a fragment) of every
   HTML file it serves from the project. Compiled TypeScript previews receive
   the same injection ([previews.md](previews.md)). The bundle joins
-  `keys.js`, `actions.js`, and `states.js`: editor-shortcut forwarding, the
-  Actions switch, and state handling. The workbench's own folder never
+  `keys.js`, `actions.js`, and `scenarios.js`: editor-shortcut forwarding, the
+  Actions switch, and scenario handling. The workbench's own folder never
   receives it.
 - A page opened straight from disk gets no script and shows as authored. A
   served page loaded outside the workbench, with no `actions` parameter, has
   actions on.
-- State handling sets `data-wb-state` on `<html>` before the page renders and
-  applies the state markup once, at `DOMContentLoaded`; elements added later
+- Scenario handling sets `data-wb-scenario` on `<html>` before the page renders and
+  applies the scenario markup once, at `DOMContentLoaded`; elements added later
   are not processed. The attributes are described in
-  [Pages and states](../../docs/pages-and-states.md#states).
+  [Pages and scenarios](../../docs/pages-and-scenarios.md#scenarios).
 
 ### Actions and navigation
 
@@ -73,9 +73,9 @@ Configuration: [Implementations](../../docs/configuration.md#implementations) an
 [A page's implementations](../../docs/configuration.md#a-pages-implementations).
 
 - A page maps the implementation to one path, or to one path per declared
-  state. A state without its own path uses the first state's.
-- With a single path, the lens shows that path for every state and hides the
-  state menu. With a state map, the state menu stays and each pick loads its
+  scenario. A scenario without its own path uses the first scenario's.
+- With a single path, the lens shows that path for every scenario and hides the
+  scenario menu. With a scenario map, the scenario menu stays and each pick loads its
   path.
 - The URL lens opens the external page in an iframe, through the
   [implementation proxy](../system/implementation-proxy.md). Apps need no embedding
@@ -149,10 +149,10 @@ Configuration: [iOS Simulator](../../docs/ios-simulator.md#configure-it).
   their diagnostic details even when stderr is empty. Testrun needs no
   configuration file. Each input invocation acquires
   and closes its owned run/session. A missing binary is an input setup error.
-- Simulator lenses have no state menu. `start` is reported as a problem;
+- Simulator lenses have no scenario menu. `start` is reported as a problem;
   `root` and code pointers work as for other implementations.
 - Export reference screenshots are supported for authored design pages,
-  TypeScript preview states, and, when the export's lens is a Storybook
+  TypeScript preview scenarios, and, when the export's lens is a Storybook
   implementation, the stories of each page mapped to it. An implementation-only Simulator page
   receives an export warning instead of a fabricated reference image.
   See the [export contract](../review/export.md) for its capture plan and archive.
@@ -170,7 +170,7 @@ Configuration: [App windows](../../docs/windows.md#configure-it).
   that `window` implementation, and takes the app and title from the config,
   so a page cannot request any other window.
 - Window lenses are view-only: canvas input doesn't reach the app, and there
-  is no state menu. `start` and `catalog` are reported as problems. Export
+  is no scenario menu. `start` and `catalog` are reported as problems. Export
   captures the page's design, not the window.
 
 ## Native window stream
@@ -213,9 +213,9 @@ Repeated artboards on one device/window share that external surface.
   appears only on the canvas, contrary to the shared problems list in
   [core.md](../core.md#problem-reporting).
 - **Invalid authored entries are dropped silently.** A page whose `src`
-  starts with `/` or contains `..`, `:`, or `~`, and a state whose ID isn't
+  starts with `/` or contains `..`, `:`, or `~`, and a scenario whose ID isn't
   kebab-case, are left out with no problem (the native reader's
-  [page and states](../../server/src/config/read.rs)), contrary to the reporting requirement in
+  [page and scenarios](../../server/src/config/read.rs)), contrary to the reporting requirement in
   [core.md](../core.md).
 - **Links to unlisted project pages do nothing.** With actions on, the page
   cancels any same-origin `.html` link and hands it to the workbench, which
@@ -230,14 +230,14 @@ Repeated artboards on one device/window share that external surface.
 ## Verification points
 
 - [config.test.js](../../server/node/config.test.js) and
-  [manifest.test.js](../../contracts/manifest.test.js) cover paths, state maps
-  (including a first state named by its own ID), implementation validation,
+  [manifest.test.js](../../contracts/manifest.test.js) cover paths, scenario maps
+  (including a first scenario named by its own ID), implementation validation,
   window implementations, code pointers, and code for an implementation
   without a root.
 - [files.rs](../../server/src/serve/files.rs) tests check that served project
   HTML carries the one compatibility script first in its head, and
   [preview.test.js](../../server/node/preview.test.js) that the compat route
-  serves the bundle of actions, states and `noValidate`. [server.test.js](../../server/node/server.test.js)
+  serves the bundle of actions, scenarios and `noValidate`. [server.test.js](../../server/node/server.test.js)
   checks placement first in `<head>`, the Simulator catalog, stream
   negotiation only for a configured device or declared window, and export
   warnings for implementation-only pages.

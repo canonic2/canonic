@@ -34,15 +34,15 @@ Two builds, because frontmatter is server code:
 Frontmatter and rendering. The bundled module renders through Astro's
 `experimental_AstroContainer` with `renderToString(component, { props,
 partial: true })`. Around each render, `globalThis.fetch` answers from the
-state's request mocks, relative URLs resolve against `http://localhost/`,
+scenario's request mocks, relative URLs resolve against `http://localhost/`,
 and a render aborts after 10 seconds
 ([previews](../pages/previews.md#data-request-mocks-and-the-project-environment)).
 
 ## Browser
 
 [astro.js](../../ui/preview/astro.js) mounts the pre-rendered HTML of the
-selected state with the [HTML adapter](html.md#browser). When the inputs
-differ from the state's, it asks the server's render URL for a new render and
+selected scenario with the [HTML adapter](html.md#browser). When the inputs
+differ from the scenario's, it asks the server's render URL for a new render and
 mounts that, resolving its packaged assets against the render's own base.
 Without a live server (a portable build), input edits fail with a message.
 
@@ -55,7 +55,7 @@ re-renders in place without a document reload
 
 ## Portable output
 
-Every authored state is pre-rendered. Controls are removed and the docs get a
+Every authored scenario is pre-rendered. Controls are removed and the docs get a
 note, since input edits need a live render.
 
 ## Target
@@ -76,7 +76,7 @@ the owner on 2026-10-16:
 - **The client side builds in the Rust server:** the rendered HTML and its
   resources go through the [HTML adapter's](html.md#target) Rust loaders,
   with shared chunks and hot updates.
-- **Saved renders (proposed).** Each state's rendered HTML is saved beside
+- **Saved renders (proposed).** Each scenario's rendered HTML is saved beside
   the compiler cache, keyed by the files its render read. On a warm start
   the server serves it without the Node evaluator, which starts only to
   render again: on an edit to one of those files or an input change. When an
@@ -97,7 +97,7 @@ runs in the Node evaluator
 by esbuild, and the client side builds natively in `workbench-server`
 through the HTML loader ([astro.rs](../../server/src/compiler/astro.rs)).
 Covered by [preview-astro.test.js](../../server/node/preview-astro.test.js).
-Saved renders are not implemented: every warm start renders each state in
+Saved renders are not implemented: every warm start renders each scenario in
 the evaluator again.
 
 ## Open questions

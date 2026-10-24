@@ -10,7 +10,7 @@ pub(crate) struct CurrentView {
     pub(crate) page: String,
     pub(crate) width: u32,
     pub(crate) height: u32,
-    pub(crate) state: Option<String>,
+    pub(crate) scenario: Option<String>,
     pub(crate) lens: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) size: Option<String>,
@@ -26,7 +26,7 @@ pub(crate) struct ExportRequest {
     pub(crate) scope: String,
     pub(crate) pages: Vec<String>,
     pub(crate) variants: String,
-    pub(crate) states: Vec<String>,
+    pub(crate) scenarios: Vec<String>,
     pub(crate) sizes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) collection: Option<String>,
@@ -108,7 +108,7 @@ fn current_view(value: &Value) -> Result<CurrentView, String> {
         .ok_or_else(invalid)?;
     let width = view.get("width").and_then(dimension).ok_or_else(invalid)?;
     let height = view.get("height").and_then(dimension).ok_or_else(invalid)?;
-    for key in ["state", "lens", "size", "artboard"] {
+    for key in ["scenario", "lens", "size", "artboard"] {
         match view.get(key) {
             None | Some(Value::Null) => {}
             Some(Value::String(text)) if length(text) <= 2000 => {}
@@ -120,7 +120,7 @@ fn current_view(value: &Value) -> Result<CurrentView, String> {
         page: page.to_owned(),
         width,
         height,
-        state: text("state"),
+        scenario: text("scenario"),
         lens: text("lens"),
         size: text("size"),
         artboard: text("artboard"),
@@ -195,7 +195,7 @@ pub(crate) fn read_request(value: &Value) -> Result<ExportRequest, String> {
         scope,
         pages,
         variants,
-        states: strings(input.get("states"), "states")?,
+        scenarios: strings(input.get("scenarios"), "scenarios")?,
         sizes: strings(input.get("sizes"), "sizes")?,
         collection,
         lens,
@@ -315,7 +315,7 @@ mod tests {
         let request = read_request(&Value::Null).expect("defaults");
         assert_eq!(
             request_key(&request),
-            r#"{"format":"zip","scope":"space","pages":[],"variants":"all","states":[],"sizes":[],"lens":null,"paper":"A4","imageFormat":"png"}"#
+            r#"{"format":"zip","scope":"space","pages":[],"variants":"all","scenarios":[],"sizes":[],"lens":null,"paper":"A4","imageFormat":"png"}"#
         );
         assert_eq!(read_request(&json!({})).expect("empty"), request);
     }
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn a_visual_page_export_defaults_to_the_current_view() {
         let request = read_request(&json!({ "format": "pdf", "scope": "page",
-            "current": { "page": "a", "state": null, "width": 777, "height": 600 } }))
+            "current": { "page": "a", "scenario": null, "width": 777, "height": 600 } }))
         .expect("current");
         assert_eq!(request.variants, "current");
         assert_eq!(request.pages, ["a"]);

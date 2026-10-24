@@ -255,13 +255,13 @@ test('a space of a file that lists several tells the page where the file is and 
   assert.ok(roots.indexOf('/acme/packages/ui') > -1 && roots.indexOf('/acme') > -1);
 });
 
-test('a picked row reaches the canvas with its state', function () {
+test('a picked row reaches the canvas with its scenario', function () {
   var opened = [];
   var sidebar = resolveView(true, { open: function (target) { opened.push(JSON.parse(JSON.stringify(target))); } });
   sidebar.receive({ type: 'canonic-pick', hash: 'pages/sign-in.html:error' });
   sidebar.receive({ type: 'canonic-pick', hash: 'docs/card.md' });
   assert.deepEqual(opened, [
-    { src: 'pages/sign-in.html', state: 'error' },
-    { src: 'docs/card.md', state: null },
+    { src: 'pages/sign-in.html', scenario: 'error' },
+    { src: 'docs/card.md', scenario: null },
   ]);
 });

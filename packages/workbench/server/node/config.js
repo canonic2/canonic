@@ -36,12 +36,12 @@ function list(value) {
   return Array.isArray(value) ? value : [];
 }
 
-/* Fewer than two states is no choice to make, so the page stays one row. */
-function states(raw) {
+/* Fewer than two scenarios is no choice to make, so the page stays one row. */
+function scenarios(raw) {
   var out = list(raw)
-    .map(function (state) {
-      var id = text(state && state.id);
-      var label = text(state && state.label);
+    .map(function (scenario) {
+      var id = text(scenario && scenario.id);
+      var label = text(scenario && scenario.label);
       return id && label && /^[a-z0-9-]+$/.test(id) ? { id: id, label: label } : null;
     })
     .filter(Boolean);
@@ -65,8 +65,8 @@ function page(raw, where, impls, sizes, problems) {
   }
   var icon = text(raw.icon);
   if (icon) item.icon = icon;
-  var found = states(raw.states);
-  if (found) item.states = found;
+  var found = scenarios(raw.scenarios);
+  if (found) item.scenarios = found;
   manifest.pageMarkdown(raw, item, where + ' › ' + label, problems);
   var lenses = manifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
   if (lenses) item.implementations = lenses;

@@ -10,14 +10,14 @@ function example(container: HTMLElement, count: number, pending = false, reading
   for (let i = 0; i < count; i++) {
     const id = 'example-' + i;
     const label = reading ? 'Documentation' : 'Feedback / ' + (i ? 'Success' : 'Info');
-    state = add(state, id, { space: { id: 'acme', name: 'Acme', url: '' }, src: 'feedback.workbench.ts', label, state: null, lens: null }, { width: 320, height: 180 });
+    state = add(state, id, { space: { id: 'acme', name: 'Acme', url: '' }, src: 'feedback.workbench.ts', label, scenario: null, lens: null }, { width: 320, height: 180 });
     const frame = document.createElement('iframe'); frame.slot = id; frame.title = label;
     if (pending) frame.style.visibility = 'hidden';
     else {
       frame.srcdoc = reading
         ? `<html><body style="margin:0;font:16px system-ui;background:white"><main style="max-width:600px;margin:auto;padding:32px"><h1>Documentation</h1><p>A reading surface fills the canvas without an artboard label or selection border.</p>${'<p>Scroll to continue reading.</p>'.repeat(12)}</main></body></html>`
         : `<html><body style="font:16px system-ui;padding:24px;background:${i ? '#eefbf2' : '#eff6ff'}"><h3>${i ? 'Import complete' : 'Scheduled maintenance'}</h3><p>${i ? 'Your workspace is ready.' : 'Sync may pause on Sunday.'}</p></body></html>`;
-      state = change(state, id, { view: { src: 'feedback.workbench.ts', state: null, lens: null, label, ready: true, problem: null, hash: '', reference: '', payload: {}, states: [], lenses: [] } });
+      state = change(state, id, { view: { src: 'feedback.workbench.ts', scenario: null, lens: null, label, ready: true, problem: null, hash: '', reference: '', payload: {}, scenarios: [], lenses: [] } });
     }
     canvas.append(frame);
   }

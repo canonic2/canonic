@@ -43,7 +43,7 @@ pipeline meets them.
 ### Edit behavior
 
 What each edit does to an open page. "State kept" means component state,
-such as a counter or typed text, survives. The selected state, size and input
+such as a counter or typed text, survives. The selected scenario, size and input
 overrides survive every row, including reloads.
 
 | Edit | Behavior |
@@ -68,7 +68,7 @@ Astro islands are outside this table, because Workbench rejects them
 
 - Each entry accepts hot updates to its preview's sources. On an update it
   asks the runtime to render again with the new sources and the last
-  overrides, so the mounted preview keeps its selected state, size and inputs.
+  overrides, so the mounted preview keeps its selected scenario, size and inputs.
 - Framework components below the sources update through their own hot
   handling (React Refresh, Vue's hot reload) before the entry sees anything.
 - An update that reaches no accepting module bubbles to the entry, which
@@ -77,9 +77,9 @@ Astro islands are outside this table, because Workbench rejects them
 ### The reload rule
 
 These edits cannot apply in place and reload the preview into its warm host,
-keeping state, size and inputs:
+keeping the selected scenario, size and inputs:
 
-- the preview definition, because it can change states, inputs and controls;
+- the preview definition, because it can change scenarios, inputs and controls;
 - the project or preview environment, because providers wrap the whole tree;
 - a module with side effects that accepts no hot update, when the update
   reaches no accepting module.

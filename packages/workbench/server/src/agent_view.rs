@@ -104,7 +104,7 @@ fn clean_artboard(entry: &Value, ids: &mut Vec<String>) -> Result<Value> {
         json!({ "id": space_id, "name": space_name }),
     );
     out.insert("src".into(), json!(src));
-    out.insert("state".into(), string_or_null("state"));
+    out.insert("scenario".into(), string_or_null("scenario"));
     if let Some(artboard) = board.get("artboard").filter(|value| value.is_string()) {
         out.insert("artboard".into(), artboard.clone());
     }
@@ -141,7 +141,7 @@ pub(crate) fn clean_view(value: &Value) -> Result<Option<Value>> {
     }
     let mut out = Map::new();
     out.insert("text".into(), json!(text));
-    for key in ["src", "state", "story", "lens"] {
+    for key in ["src", "scenario", "story", "lens"] {
         if let Some(found) = some_text(view.get(key)) {
             out.insert(key.into(), json!(found));
         }

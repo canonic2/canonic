@@ -17,7 +17,7 @@ server-side listing; the compiler builds what its listing found.
   - `react-native-web`: `react-native` aliased to `react-native-web`, and
     `.web.*` extensions preferred.
 
-  Opening another page, state, size or lens never starts another compiler.
+  Opening another page, scenario, size or lens never starts another compiler.
 - The server watches the space root recursively, and every folder outside it
   that holds a file a build, an Astro render or `workbench.config.ts` read,
   one level deep: a monorepo package linked through `node_modules` or imported
@@ -139,7 +139,7 @@ records that deviation from the shared-evaluator target.
 | Evaluating definitions and `workbench.config.ts` | esbuild bundles each with packages external and only the `@canonic2/workbench` plugin, and Node runs it. A definition whose list fields are literals is read in Rust and needs no evaluation. The config returns as data |
 | A project's JavaScript loaders | One module at a time, with the common parts of the webpack loader context |
 | Vue single-file components | Workbench's bundled `@vue/compiler-sfc` returns the script and each style block ([Vue adapter](../adapters/vue.md#build)) |
-| Astro rendering | The project's Astro through its container, with the state's request mocks ([Astro adapter](../adapters/astro.md#build)) |
+| Astro rendering | The project's Astro through its container, with the scenario's request mocks ([Astro adapter](../adapters/astro.md#build)) |
 | Workbench browser UI and docs page script | Not the evaluator: browser-native JavaScript/CSS loaded or copied unchanged |
 
 The portable build and the export's docs examples use a production

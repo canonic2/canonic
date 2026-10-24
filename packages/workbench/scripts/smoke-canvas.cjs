@@ -13,7 +13,7 @@ async function main() {
   var folder = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-canvas-support-'));
   var roots = ['product','system'].map(function (name) {
     var root = path.join(folder, name); fs.mkdirSync(root);
-    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: ' + name + '\ncollections:\n  - name: Pages\n    items:\n      - label: Form\n        src: form.html\n        states:\n          - id: default\n            label: Default\n          - id: error\n            label: Error\n');
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), 'name: ' + name + '\ncollections:\n  - name: Pages\n    items:\n      - label: Form\n        src: form.html\n        scenarios:\n          - id: default\n            label: Default\n          - id: error\n            label: Error\n');
     fs.writeFileSync(path.join(root, 'form.html'), '<!doctype html><html><body><h1>' + name + '</h1><input aria-label="Name"><button>Submit</button></body></html>');
     // Test-only host: the shipping index.html and its controls stay intact.
     fs.writeFileSync(path.join(root, 'harness.html'), '<!doctype html><html><body></body></html>');
@@ -41,17 +41,17 @@ async function main() {
       'window.publisher=createPublisher({read:()=>({state:controller.snapshot(),browsed:registry[0].id,spaces:registry,activity:Date.now()}),' +
         'async send(request){const r=await fetch("/_workbench/canvas/space",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(request)});if(!r.ok)throw Error(await r.text());},' +
         'withdraw(request){fetch("/_workbench/canvas/space",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(request)});},error(e){supportErrors.push(String(e));}});' +
-      'window.first=controller.create({space:registry[0],src:"form.html",state:null,lens:null},{width:1512,height:982});' +
-      'window.second=controller.create({space:registry[0],src:"form.html",state:null,lens:null},{width:393,height:852});' +
+      'window.first=controller.create({space:registry[0],src:"form.html",scenario:null,lens:null},{width:1512,height:982});' +
+      'window.second=controller.create({space:registry[0],src:"form.html",scenario:null,lens:null},{width:393,height:852});' +
     '})()');
     await wait(1800);
-    await t.evaluate('controller.command(second,"state","1")'); await wait(700);
-    var boards = await t.evaluate('controller.snapshot().artboards.map(b=>({size:b.size,state:b.view.state,innerWidth:controller.runtime(b.id).element.contentDocument.querySelector("#frame").contentWindow.innerWidth}))');
+    await t.evaluate('controller.command(second,"scenario","1")'); await wait(700);
+    var boards = await t.evaluate('controller.snapshot().artboards.map(b=>({size:b.size,scenario:b.view.scenario,innerWidth:controller.runtime(b.id).element.contentDocument.querySelector("#frame").contentWindow.innerWidth}))');
     assert.equal(boards.length, 2); assert.equal(boards[0].innerWidth, 1512); assert.equal(boards[1].innerWidth, 393);
-    assert.equal(boards[0].state, null); assert.equal(boards[1].state, 'error');
+    assert.equal(boards[0].scenario, null); assert.equal(boards[1].scenario, 'error');
     await t.evaluate('controller.runtime(first).element.contentDocument.querySelector("#frame").contentDocument.querySelector("input").value="First only"');
     assert.equal(await t.evaluate('controller.runtime(second).element.contentDocument.querySelector("#frame").contentDocument.querySelector("input").value'), '');
-    await t.evaluate('window.third=controller.create({space:registry[1],src:"form.html",state:null,lens:null},{width:1512,height:982})');
+    await t.evaluate('window.third=controller.create({space:registry[1],src:"form.html",scenario:null,lens:null},{width:1512,height:982})');
     await wait(1800); await t.evaluate('publisher.publish()');
     for (var instance of [running, other]) {
       var context = (await (await fetch(new URL('/_workbench/view', instance.url))).json()).view;

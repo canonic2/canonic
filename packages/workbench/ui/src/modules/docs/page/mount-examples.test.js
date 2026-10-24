@@ -17,7 +17,7 @@ function fixture(images = []) {
       window: { innerWidth: 800, innerHeight: 600 },
     },
   );
-  return { root, mount, options: { page: 'acme.md', state: 'default', report() {} } };
+  return { root, mount, options: { page: 'acme.md', scenario: 'default', report() {} } };
 }
 
 test('stopping during an asynchronous mount aborts its context and releases the eventual cleanup once', async () => {

@@ -6,9 +6,9 @@ images (ZIP), or portable browser viewer (ZIP).
 
 Source packages include the selected pages' implementation sources, imports,
 reference screenshots, and a README per page. They default to all declared
-states and sizes. A single-page PDF or image export defaults to the current
-state, size, and lens; choose all declared variants to include every state and
-size instead. Select several entries in the page list with your platform's
+scenarios and sizes. A single-page PDF or image export defaults to the current
+scenario, size, and lens; choose all declared variants to include every
+scenario and size instead. Select several entries in the page list with your platform's
 multiple-selection keys.
 
 Visual PDF pages preserve the artboard's width and full document height.
@@ -56,7 +56,7 @@ From there it follows local imports and referenced assets, and includes:
 | Asset folders referenced statically | `new URL("./assets/", import.meta.url)` includes the folder, which covers plugins that build sprites or font sets from a directory. |
 | SVG sprite sources | Source SVGs for a Vite `iconDirs` folder named through `path.resolve(process.cwd(), "…")`. |
 | Package configuration | The `package.json`, `tsconfig`/`jsconfig`, and Vite, Tailwind, and PostCSS configuration files the included sources need. |
-| Reference screenshots | One JPEG per design state and TypeScript preview state, or per story when you export through a Storybook lens, at each of the page's sizes, and per docs lens, one of the whole docs and one of each example. |
+| Reference screenshots | One JPEG per design scenario and TypeScript preview scenario, or per story when you export through a Storybook lens, at each of the page's sizes, and per docs lens, one of the whole docs and one of each example. |
 | Compiled TypeScript previews and docs | A `browser/` viewer you can open without Workbench. See [The browser viewer](#the-browser-viewer). |
 
 TypeScript imports written with `.js` extensions resolve to the `.ts` or
@@ -73,9 +73,9 @@ by this space are included even when other spaces also use them.
 
 ## Reference screenshots
 
-The export captures a reference JPEG for every declared state of every design
-page and every state of every TypeScript preview, at each of the page's
-[`sizes`](pages-and-states.md#sizes):
+The export captures a reference JPEG for every declared scenario of every design
+page and every scenario of every TypeScript preview, at each of the page's
+[`sizes`](pages-and-scenarios.md#sizes):
 
 | Size | Captured at |
 | --- | --- |
@@ -127,9 +127,9 @@ To view them, serve the extracted archive with any static HTTP server and open
 `browser/index.html`. You don't need Workbench, Electron, or the project's
 packages installed.
 
-The viewer lets you search previews, pick a state and a size, and use the
+The viewer lets you search previews, pick a scenario and a size, and use the
 same preview controls as the canvas. Each page's docs are listed with them as
-their own entry, marked Docs: the **State** menu becomes a **Lens** menu, the
+their own entry, marked Docs: the **Scenario** menu becomes a **Lens** menu, the
 **Size** menu is hidden, and **Show code** works under each example. Links
 between docs open the other docs in the viewer. See [Portable exports](workbench-previews.md#portable-exports) for its controls and
 what each adapter supports there. To build the viewer on its own, without the
@@ -139,7 +139,7 @@ rest of the export, use the `build` command in
 The original definitions and sources stay editable at their project-relative
 paths. When the project has no `workbench-env.d.ts`, the export adds one with
 the `@canonic2/workbench` types. `browser/workbench.json` lists the previews and
-their states, and the docs and their lenses. `canonic-export.json` lists
+their scenarios, and the docs and their lenses. `canonic-export.json` lists
 the compiled entries and any previews that failed to build under `browser`.
 
 ## The archive

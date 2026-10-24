@@ -35,7 +35,7 @@ Feature specs own the behavior that must not change while making it faster.
 
 - A space root has one compiler per profile in the server, and at most
   one Node evaluator, shared by every native page in it. Opening another
-  page, state, size or lens in the same space never starts another compiler.
+  page, scenario, size or lens in the same space never starts another compiler.
 - Code shared by a project's native pages is compiled once per project and
   adapter. Each compatible warm document retains its initialized shared runtime
   across pages; independently retained documents own separate mutable runtimes.
@@ -58,8 +58,8 @@ Feature specs own the behavior that must not change while making it faster.
   view and show loading feedback. Pending navigation blocks preview interaction,
   screenshots and handoffs. Completion, failure, supersession and disposal cancel
   the feedback timer, so a fast return cannot flash a late loader.
-- Changing the state, size, lens or inputs of a native page does not reload
-  its compiled code. A state or input change re-renders in place; a size
+- Changing the scenario, size, lens or inputs of a native page does not reload
+  its compiled code. A scenario or input change re-renders in place; a size
   change resizes the frame.
 - Returning to a page the canvas still retains shows it without compiling,
   loading or mounting again. Docs resume immediately and check freshness in
@@ -85,7 +85,7 @@ Feature specs own the behavior that must not change while making it faster.
 - The page list appears from discovery without waiting for any page to
   compile. Discovery reads only what it needs to list pages.
 - The complete page list of Workbench definitions (every page's title,
-  group, states and icon) shows on the canvas's first paint, not filled in
+  group, scenarios and icon) shows on the canvas's first paint, not filled in
   progressively, and its time does not grow with the number of pages.
   The story lists of pages mapped to Storybook are outside this requirement.
 - The first page compiles on request. Compilation after a server restart
@@ -111,7 +111,7 @@ Feature specs own the behavior that must not change while making it faster.
   the preview definition, the project or preview environment,
   `workbench.config.ts`, and modules with side effects that do not accept hot
   updates.
-- The selected state, size and input overrides survive a hot update and a
+- The selected scenario, size and input overrides survive a hot update and a
   fallback reload.
 - A syntax or runtime error during an update shows in the frame, and the next
   successful save recovers without a manual reload.
@@ -165,7 +165,7 @@ preparation states separately; one warm cache does not imply the others.
 | --- | --- | --- |
 | Switch to another page in the same space | Selection to visible | p50 ≤ 300 ms, p95 ≤ 600 ms |
 | Return to a retained page | Selection to visible | p50 ≤ 100 ms |
-| Switch state or inputs | Command to re-rendered | Workbench overhead ≤ 50 ms |
+| Switch scenario or inputs | Command to re-rendered | Workbench overhead ≤ 50 ms |
 | Change size | Command to resized frame | No reload; Workbench overhead ≤ 50 ms |
 | Reload the current page | Command to visible | p50 ≤ 600 ms |
 | Edit a React component in the current page (hot update, state kept) | File write to visible | p50 ≤ 300 ms |
@@ -200,13 +200,13 @@ claim it. Development builds of a framework run inside project time.
 Every selection of a native page records, per phase: server work time,
 module load, mount, each readiness wait and frame promotion. They are
 logged through the existing `preview.request.*` and `preview.browser.phase`
-events, correlated by page and state, so that a slow selection in someone's
+events, correlated by page and scenario, so that a slow selection in someone's
 editor can be broken down from the Workbench log without a profiler.
 
 Enable `workbench.trace` and reload VS Code to collect these records in
 **Output → Workbench**. Standalone hosts accept `--trace`. Both default to off.
 `preview.request.completed` and `preview.browser.phase` share `selection`
-(a navigation ID), page, state and lens where available. Local document and
+(a navigation ID), page, scenario and lens where available. Local document and
 descriptor/bundle requests carry the ID as `wbTrace`; asset URLs and retained
 session identity remain stable. The server's `Server-Timing` header exposes
 its request durations in webview developer tools.

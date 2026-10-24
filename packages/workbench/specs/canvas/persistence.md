@@ -14,7 +14,7 @@ view in this order:
 1. An explicit destination, such as a sidebar pick or an addressed page link.
 2. That space's last saved selection, if its page still exists.
 3. The first page in the resolved collection/group/page order, with that page's
-   default state, lens and size under the existing routing rules.
+   default scenario, lens and size under the existing routing rules.
 
 The ordinary single-view canvas must not wait for a click when usable pages
 exist. Choose from the same ordered, merged page model as the sidebar, including
@@ -34,7 +34,7 @@ it does not reapply startup restoration over the user's navigation.
 | State | Scope and lifetime |
 | --- | --- |
 | Current space | Local to the VS Code workspace/window context; restore it if still available, otherwise use the first listed space |
-| Last selection | One record per workspace and stable space identity: page source, state/story, lens key, size and explicit Docs example anchor where applicable |
+| Last selection | One record per workspace and stable space identity: page source, scenario/story, lens key, size and explicit Docs example anchor where applicable |
 | Viewer preferences | Actions mode, sidebar width, preferred lens/size keys and custom resizable dimensions; local to the viewer, reused across its spaces and validated against the current configuration |
 | Added spaces | Existing editor-wide local list; separate from each workspace's current space and page selections |
 
@@ -118,7 +118,7 @@ durable-storage permission or automatic destructive database resets.
 
 - Use a versioned, validated record. Ignore corrupt, unsupported or invalid
   records and use the first-page fallback without blocking the canvas.
-- A deleted saved page falls back to the first page. A removed state, lens,
+- A deleted saved page falls back to the first page. A removed scenario, lens,
   size or example on an existing page follows current routing defaults; keep
   that page and persist the normalized result. An unavailable but still
   configured lens remains selected and shows its failure on the canvas.
@@ -175,7 +175,7 @@ within an active comparison session.
 - A fresh workspace opens its first page after listing; no empty-canvas click
   is required. Empty spaces and failed catalogs retain their normal errors.
 - Reloading/restarting VS Code or closing/reopening Workbench restores the
-  last page, state/story, lens, size/custom dimensions and example anchor.
+  last page, scenario/story, lens, size/custom dimensions and example anchor.
   Page runtime state mounts fresh; a hidden live tab keeps its existing state.
 - Switching A → B → A restores each space independently. Two workspace/remote
   contexts do not overwrite one another. Restarting on a different server port
@@ -206,7 +206,7 @@ only in-memory selection and uses `retainContextWhenHidden`. These do not
 implement durable complete-selection restoration or stable preference storage
 across port changes. A canvas without an explicit destination opens the first
 page from the resolved collections, including on space switches; imported
-implementation-only pages open their first named state. Config refresh does not
+implementation-only pages open their first named scenario. Config refresh does not
 reapply this fallback.
 
 Implementation must add a scoped complete-selection record, extend the host

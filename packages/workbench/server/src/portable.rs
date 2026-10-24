@@ -60,7 +60,7 @@ impl PortableCompiler for Compiler<'_> {
     }
 }
 
-/// What the build is for: which pages, states and sizes, and its name.
+/// What the build is for: which pages, scenarios and sizes, and its name.
 pub(crate) struct Request<'a> {
     pub(crate) root: &'a Path,
     pub(crate) product: &'a Path,
@@ -87,14 +87,14 @@ fn preview_entry(
     selection: Option<&Selection>,
 ) -> Value {
     let mut entry = preview.clone();
-    if let Some(selection) = selection.filter(|selection| !selection.states.is_empty())
-        && let Some(states) = entry["states"].as_array_mut()
+    if let Some(selection) = selection.filter(|selection| !selection.scenarios.is_empty())
+        && let Some(scenarios) = entry["scenarios"].as_array_mut()
     {
-        states.retain(|state| {
+        scenarios.retain(|scenario| {
             selection
-                .states
+                .scenarios
                 .iter()
-                .any(|wanted| state["id"] == wanted.as_str())
+                .any(|wanted| scenario["id"] == wanted.as_str())
         });
     }
     let note = text(&built["portableNote"]);

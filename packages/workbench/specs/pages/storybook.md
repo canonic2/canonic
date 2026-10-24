@@ -40,8 +40,8 @@ The keys, their validation, and examples are in the
 - Only index entries with `type: story`, a string ID, and a title become
   selectable stories; docs entries are skipped. Entries are grouped by their
   exact `title`.
-- A story's workbench state is the part of its ID after `--`; the address
-  stores that state and the story keeps its full Storybook ID. The preview URL
+- A story's workbench scenario is the part of its ID after `--`; the address
+  stores that scenario and the story keeps its full Storybook ID. The preview URL
   is `<url>/iframe.html?id=<story-id>&viewMode=story`. **Open on its own**
   opens the same story inside Storybook at `<url>/?path=/story/<story-id>`.
 - An authored page can map one implementation to a title, for example
@@ -49,8 +49,8 @@ The keys, their validation, and examples are in the
   a similar final segment under another prefix is not silently substituted.
   When only the prefix differs, the lookup error suggests the matching titles.
 - The Storybook lens shows the title's first story, or the one the address
-  names. The top bar's state switcher lists the title's stories in place of
-  the design's states.
+  names. The top bar's scenario switcher lists the title's stories in place of
+  the design's scenarios.
 - The server fetches stories for the selected title through
   `/_workbench/stories`. The canvas keeps each title's list for the session.
   Source paths come from Storybook's `componentPath` and `importPath`,
@@ -72,18 +72,18 @@ This work follows the iframe runtime ownership in the
 - The first story loads in the preview iframe. Later picks on the same
   Storybook origin ask the loaded preview to switch through Storybook's
   `setCurrentStory` channel. This keeps the Storybook runtime warm.
-- The ordinary single-view canvas keeps its owning renderer across page, state
+- The ordinary single-view canvas keeps its owning renderer across page, scenario
   and lens navigation. Its first paint stays hidden until the requested preview
   is ready, so the renderer's hosting interface cannot flash inside the artboard.
   Ready status requires the matching story's render event and visible iframe;
   iframe document loading alone does not make a story ready. The selected
   renderer's completion is relayed to the editor only for the requested page,
-  state and lens.
+  scenario and lens.
 - The shell follows the [200 ms navigation grace period](../system/rendering-flow.md#navigation-feedback),
   including while the story catalog is unresolved. Sidebar intent updates
   immediately; the outgoing view retains its displayed labels and context until
   the requested content is ready or the deadline expires. An ordinary preview is
-  revealed only when its reported page, state and lens match the request and
+  revealed only when its reported page, scenario and lens match the request and
   it is ready or has a named failure. Hiding does not detach its renderer or
   reload Storybook. Capture and handoff reject a pending destination; queued
   focus reports cannot route back to the inert outgoing page.
@@ -94,9 +94,9 @@ This work follows the iframe runtime ownership in the
   error and clears `aria-busy`. Superseded reports cannot overwrite that error.
   Choosing another page or retrying the failed title starts a fresh status;
   choosing no available page restores the empty message without a spinner.
-- Titles, state controls and renderer labels derive from the current page and
+- Titles, scenario controls and renderer labels derive from the current page and
   resolved story metadata. Navigation immediately names the destination page;
-  an unresolved story leaves no previous state name behind. A resolved story
+  an unresolved story leaves no previous scenario name behind. A resolved story
   updates those names before preview switching starts. `wb-view-change` relays
   label metadata independently of `wb-frame-change` and readiness, so a label
   update cannot acknowledge an unrendered story. Cold artboards receive their
@@ -180,7 +180,7 @@ mechanism. Add checks for absence of application startup before claiming this bo
   paths, the not-running and not-a-Storybook errors, and export plans.
 - [manifest.test.js](../../contracts/manifest.test.js) and
   [config.test.js](../../server/node/config.test.js) check automatic implementations, the `catalog` problem, start settings,
-  and a story's state from its ID.
+  and a story's scenario from its ID.
 - [lenses.test.js](../../ui/legacy/lenses.test.js) checks story URLs, address
   picks, and channel messages.
   [preview.test.js](../../ui/legacy/preview.test.js) checks channel reuse,

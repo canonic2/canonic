@@ -57,7 +57,7 @@ function fixture(t, hash = '#page~design') {
           {
             src: 'page',
             label: 'Authored page',
-            states: [
+            scenarios: [
               { id: 'default', label: 'Default' },
               { id: 'error', label: 'Error' },
             ],
@@ -74,7 +74,7 @@ function fixture(t, hash = '#page~design') {
             src: 'page',
             label: 'Generated page',
             workbench: true,
-            states: [
+            scenarios: [
               { id: 'default', label: 'Default' },
               { id: 'error', label: 'Error' },
             ],
@@ -118,13 +118,13 @@ function fixture(t, hash = '#page~design') {
       address: {
         parse(hash) {
           const [page, lens] = hash.replace(/^#/, '').split('~');
-          const [src, state] = page.split(':');
-          return { src: src, state: state || null, lens: lens || null };
+          const [src, scenario] = page.split(':');
+          return { src: src, scenario: scenario || null, lens: lens || null };
         },
         write(target) {
           return (
             target.src +
-            (target.state ? ':' + target.state : '') +
+            (target.scenario ? ':' + target.scenario : '') +
             (target.lens ? '~' + target.lens : '')
           );
         },
@@ -167,7 +167,7 @@ void test('content metadata comes from the authored model, without menu DOM', as
   await tick();
   const info = f.controller.content.read();
   assert.equal(info.label, 'Authored page');
-  f.controller.content.navigate({ src: 'page', state: null, lens: 'design' });
+  f.controller.content.navigate({ src: 'page', scenario: null, lens: 'design' });
   await tick();
   assert.equal(
     f.shown.length,
@@ -175,7 +175,7 @@ void test('content metadata comes from the authored model, without menu DOM', as
     'reflecting the current destination into the outer shell cannot remount it',
   );
   assert.deepEqual(
-    info.states.map((s) => [s.target, s.label]),
+    info.scenarios.map((s) => [s.target, s.label]),
     [
       [null, 'Default'],
       ['error', 'Error'],
@@ -185,9 +185,9 @@ void test('content metadata comes from the authored model, without menu DOM', as
     info.lenses.map((l) => l.id),
     ['design', 'storybook'],
   );
-  f.controller.content.pickState('1');
+  f.controller.content.pickScenario('1');
   await tick();
-  assert.equal(f.shown.at(-1).state, 'error');
+  assert.equal(f.shown.at(-1).scenario, 'error');
   assert.equal(f.controller.content.read().label, 'Authored page / Error');
   f.controller.content.size(320, 180);
   assert.equal(f.surface.style.width, '320px');
@@ -218,12 +218,12 @@ void test('a delayed catalog cannot inherit outgoing readiness or complete a sup
   );
   f.controller.content.navigate({ src: 'other', lens: 'storybook' });
   const second = f.catalogs.get('Other');
-  first.resolve([{ id: 'page--default', state: 'default', name: 'Stale story' }]);
+  first.resolve([{ id: 'page--default', scenario: 'default', name: 'Stale story' }]);
   await tick();
   assert.equal(f.shown.length, 1);
   assert.equal(f.controller.content.read().label, 'Other page');
   assert.equal(f.controller.content.read().ready, false);
-  second.resolve([{ id: 'other--default', state: 'default', name: 'Current story' }]);
+  second.resolve([{ id: 'other--default', scenario: 'default', name: 'Current story' }]);
   await tick();
   f.controller.settled();
   assert.equal(f.shown.length, 2);
@@ -242,7 +242,9 @@ void test('failed lookups expose their destination and disposal rejects late com
   assert.equal(f.controller.content.read().ready, false);
   f.controller.content.navigate({ src: 'other', lens: 'storybook' });
   f.controller.dispose();
-  f.catalogs.get('Other').resolve([{ id: 'other--default', state: 'default', name: 'Late story' }]);
+  f.catalogs
+    .get('Other')
+    .resolve([{ id: 'other--default', scenario: 'default', name: 'Late story' }]);
   await tick();
   assert.equal(f.shown.length, 0);
   assert.equal(f.closed(), 1);

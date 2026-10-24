@@ -6,11 +6,11 @@ var vm = require('node:vm');
 
 function action(target, selected, filtering, disclosureOnly) {
   var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
-  var start = source.indexOf('  function stateHeadAction(');
+  var start = source.indexOf('  function scenarioHeadAction(');
   var end = source.indexOf('\n\n  /* src -> item', start);
   var state = {};
   vm.runInNewContext(source.slice(start, end), state);
-  return state.stateHeadAction(target, selected, filtering, disclosureOnly);
+  return state.scenarioHeadAction(target, selected, filtering, disclosureOnly);
 }
 
 function empty(filter) {
@@ -22,18 +22,18 @@ function empty(filter) {
   return state.emptyText(filter);
 }
 
-function pick(item, state, index) {
+function pick(item, scenario, index) {
   var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
-  var start = source.indexOf('  function statePick(');
+  var start = source.indexOf('  function scenarioPick(');
   var end = source.indexOf('\n\n  function emptyText', start);
   var context = {};
   vm.runInNewContext(source.slice(start, end), context);
-  return context.statePick(item, state, index);
+  return context.scenarioPick(item, scenario, index);
 }
 
 function picking() {
   var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
-  var start = source.indexOf('  function statePick(');
+  var start = source.indexOf('  function scenarioPick(');
   var end = source.indexOf('\n\n  function emptyText', start);
   var context = {};
   vm.runInNewContext(source.slice(start, end), context);
@@ -42,17 +42,17 @@ function picking() {
 
 test('a collection or group opens on its first page as authored', function () {
   var first = picking().firstPick([
-    { src: 'pages/home.html', states: [{ id: 'default' }, { id: 'dark' }] },
+    { src: 'pages/home.html', scenarios: [{ id: 'default' }, { id: 'dark' }] },
     { src: 'pages/pricing.html' },
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'pages/home.html', state: null });
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'pages/home.html', scenario: null });
 });
 
-test('an imported title with no page of its own opens on its first named state', function () {
+test('an imported title with no page of its own opens on its first named scenario', function () {
   var first = picking().firstPick([
-    { src: 'Components/Button', implementationOnly: 'storybook', states: [{ id: 'primary' }, { id: 'ghost' }] },
+    { src: 'Components/Button', implementationOnly: 'storybook', scenarios: [{ id: 'primary' }, { id: 'ghost' }] },
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'Components/Button', state: 'primary' });
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'Components/Button', scenario: 'primary' });
 });
 
 test('a collection or group without pages opens nothing', function () {
@@ -65,11 +65,11 @@ test('a space opens the first page in collection and group order, skipping empty
   var first = window.wbPageList.firstPage([
     { name: 'Empty', items: [{ group: 'Empty group', items: [] }] },
     { name: 'Components', items: [{ group: 'Buttons', items: [
-      { src: 'Components/Button', implementationOnly: 'storybook', states: [{ id: 'primary' }] },
+      { src: 'Components/Button', implementationOnly: 'storybook', scenarios: [{ id: 'primary' }] },
     ] }, { src: 'card.html' }] },
     { name: 'Pages', items: [{ src: 'home.html' }] },
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'Components/Button', state: 'primary' });
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'Components/Button', scenario: 'primary' });
   assert.equal(window.wbPageList.firstPage([]), null);
 });
 
@@ -83,7 +83,7 @@ test('a group header opens its first page unless it folds', function () {
   assert.equal(groupHeadAction(caret, false), 'toggle');
 });
 
-test('the disclosure caret folds a state branch without selecting its page', function () {
+test('the disclosure caret folds a scenario branch without selecting its page', function () {
   var caret = {};
   var pathInsideCaret = {
     closest: function (selector) {
@@ -95,7 +95,7 @@ test('the disclosure caret folds a state branch without selecting its page', fun
   assert.equal(action(pathInsideCaret, false, false), 'toggle');
 });
 
-test('the rest of a state header retains its select and selected-row fold behavior', function () {
+test('the rest of a scenario header retains its select and selected-row fold behavior', function () {
   var label = { closest: function () { return null; } };
 
   assert.equal(action(label, false, false), 'pick');
@@ -111,7 +111,7 @@ test('an imported implementation title is disclosure-only', function () {
   assert.equal(action(label, false, true, true), 'toggle');
 });
 
-test('every imported story row keeps its real state id, including the first', function () {
+test('every imported story row keeps its real scenario id, including the first', function () {
   var item = { implementationOnly: 'storybook' };
   assert.equal(pick(item, { id: 'homepages-preview' }, 0), 'homepages-preview');
   assert.equal(pick(item, { id: 'default' }, 1), 'default');

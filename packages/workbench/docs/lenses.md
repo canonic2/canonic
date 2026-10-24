@@ -35,7 +35,7 @@ a single catalog, with no design, has none.
 - **The choice sticks** as you move between pages, like the artboard size.
   A page that doesn't have the chosen lens shows its default lens.
 - **The address includes it.** `#pages/sign-in.html:error@393~staging` is the
-  sign-in page in its error state, at mobile width, on staging. A copied link
+  sign-in page in its error scenario, at mobile width, on staging. A copied link
   opens the same view. See [Links and the address](canvas.md#links-and-the-address).
 - **Annotations, screenshots, and handoffs work through every lens.** A
   screenshot taken through a lens uses its implementation key in the filename
@@ -155,15 +155,15 @@ collections:
 Paths start with `/` and are appended to `base`, so `dev` shows
 `http://127.0.0.1:3000/sign-in`. A page only gets the lenses it lists.
 
-### 3. Map states to paths
+### 3. Map scenarios to paths
 
-If the implementation can show a state through its URL, give the page a map
-of state ids to paths instead of a single path:
+If the implementation can show a scenario through its URL, give the page a map
+of scenario ids to paths instead of a single path:
 
 ```yaml
 - label: Sign in
   src: design/sign-in.html
-  states:
+  scenarios:
     - id: default
       label: Default
     - id: error
@@ -177,10 +177,10 @@ of state ids to paths instead of a single path:
       locked: /sign-in?error=locked
 ```
 
-- The entry for the first state, or `default`, is required.
-- A state without an entry uses the default path.
-- Picking a state in the sidebar loads its path, so you can compare each design
-  state with the implementation in the same state.
+- The entry for the first scenario, or `default`, is required.
+- A scenario without an entry uses the default path.
+- Picking a scenario in the sidebar loads its path, so you can compare each
+  design scenario with the implementation in the same scenario.
 
 Query strings, fixtures, or mock flags are the usual way to do this. Many apps
 already have them for tests.
@@ -334,8 +334,8 @@ collections:
 
 - The value is the preview's `id`, such as `components/button`. An unknown ID
   is reported by the [config route](troubleshooting.md#read-the-resolved-config).
-- A design state loads the preview state with the same id. Any other state
-  shows the preview's first state.
+- A design scenario loads the preview scenario with the same id. Any other
+  scenario shows the preview's first scenario.
 - **Open the source** lists the preview's source file, and the handoff names
   it.
 - Previews run project code, so they need a
@@ -389,7 +389,7 @@ gets source links without a lens button.
 
 ## Examples
 
-### A dev server and staging, with per-state paths on dev
+### A dev server and staging, with per-scenario paths on dev
 
 ```yaml
 implementations:
@@ -410,7 +410,7 @@ collections:
     items:
       - label: Checkout
         src: design/checkout.html
-        states:
+        scenarios:
           - id: default
             label: Cart
           - id: payment

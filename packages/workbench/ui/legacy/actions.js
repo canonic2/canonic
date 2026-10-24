@@ -101,10 +101,10 @@
     if (url.protocol !== 'file:' && url.origin !== location.origin) return null;
     if (!/\.html?$/i.test(url.pathname)) return null;
 
-    var state = url.searchParams.get('state') || '';
+    var scenario = url.searchParams.get('scenario') || '';
     return {
       href: url.href,
-      state: /^[a-z0-9-]+$/.test(state) ? state : null,
+      scenario: /^[a-z0-9-]+$/.test(scenario) ? scenario : null,
     };
   }
 
@@ -114,7 +114,7 @@
     window.parent.postMessage({
       type: 'wb-preview-navigate',
       href: target.href,
-      state: target.state,
+      scenario: target.scenario,
     }, '*');
   }
 

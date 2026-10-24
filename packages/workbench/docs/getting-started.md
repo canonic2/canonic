@@ -1,7 +1,7 @@
 # Getting started
 
 This guide takes you from installing the extension to a working canvas with
-design pages, a page state, and a preview of a component from your code. It
+design pages, a page scenario, and a preview of a component from your code. It
 takes about five minutes.
 
 ## 1. Install the extension
@@ -62,7 +62,7 @@ collections:
     items:
       - label: Sign in
         src: pages/sign-in.html
-        states:
+        scenarios:
           - id: default
             label: Default
           - id: error
@@ -84,27 +84,27 @@ collections:
   `src` ending in `.md` is a [Markdown page](docs-pages.md#a-markdown-page)
   instead: docs with live examples of your components. Any page can also have
   docs, with `docs`.
-- `states` lists variations of one page. The first is the page as written.
+- `scenarios` lists variations of one page. The first is the page as written.
 
 The [configuration reference](configuration.md) lists every key.
 
-## 3. Make the page answer to its state
+## 3. Make the page answer to its scenario
 
-Declaring a state in the YAML adds it under its page in the page list. The page decides what
-that state looks like. The simplest way is CSS keyed off an attribute the
+Declaring a scenario in the YAML adds it under its page in the page list. The page decides what
+that scenario looks like. The simplest way is CSS keyed off an attribute the
 workbench sets on `<html>`:
 
 ```html
 <!-- pages/sign-in.html -->
 <style>
   .alert { display: none; }
-  html[data-wb-state="error"] .alert { display: block; }
+  html[data-wb-scenario="error"] .alert { display: block; }
 </style>
 
 <p class="alert">That password isn't right.</p>
 ```
 
-There are two other ways, covered in [Pages and states](pages-and-states.md).
+There are two other ways, covered in [Pages and scenarios](pages-and-scenarios.md).
 You don't add any script tags: the extension injects what a page needs when it
 serves it.
 
@@ -120,7 +120,7 @@ device width.
 
 Try these:
 
-- Pick **Wrong password** under **Sign in** to switch state.
+- Pick **Wrong password** under **Sign in** to switch scenario.
 - Use the size switcher in the top bar for **Laptop**, **Mobile**, a
   **Resizable** artboard, or **Fit**.
 - Draw on the page with the annotation tools in the toolbar at the bottom,
@@ -158,7 +158,7 @@ Workbench writes nothing else into the project unless you save
 ## 6. Preview a component from your code
 
 Design pages show what a page should look like. A TypeScript preview renders
-the real component from your source, in named states. Next to a React
+the real component from your source, in named scenarios. Next to a React
 `src/Button.tsx` that exports `Button`, add `src/Button.workbench.ts`:
 
 ```ts
@@ -170,7 +170,7 @@ export default definePreview({
   adapter: 'react',
   source: { entry: './Button.tsx', export: 'Button' },
   inputs: { label: 'Continue', disabled: false },
-  states: {
+  scenarios: {
     default: {},
     disabled: { inputs: { disabled: true } },
   },
@@ -178,7 +178,7 @@ export default definePreview({
 ```
 
 Run **Workbench: Refresh Pages**. A second **Button** appears under
-**Components**, with **Default** and **Disabled** states, rendered with your
+**Components**, with **Default** and **Disabled** scenarios, rendered with your
 project's own React. Workbench supplies `@canonic2/workbench` when it compiles
 the file; to type-check it, run `npm install --save-dev @canonic2/workbench`
 (see [Types](workbench-previews.md#types)). Other frameworks work
@@ -191,7 +191,7 @@ the same way; each has its own guide: [React](react.md),
 Delete `workbench.yaml` and `workbench.local.yaml`, along with any
 `.workbench.ts` and `.workbench.tsx` files, `workbench.config.ts`, and
 `workbench-env.d.ts` you added, and the `.canonic/.handoffs/` folder. Your
-pages contain nothing Workbench-specific beyond optional state attributes and
+pages contain nothing Workbench-specific beyond optional scenario attributes and
 CSS, which are inert without it. To remove the extension itself, see
 [Uninstalling](extension.md#uninstalling).
 
@@ -202,8 +202,8 @@ CSS, which are inert without it. To remove the extension itself, see
 - Learn the canvas's controls and shortcuts: [Using the canvas](canvas.md).
 - Hand an annotated page to your agent:
   [Annotations and handoff](annotations-and-handoff.md).
-- Give pages more states and choose their sizes:
-  [Pages and states](pages-and-states.md).
+- Give pages more scenarios and choose their sizes:
+  [Pages and scenarios](pages-and-scenarios.md).
 - Document components in Markdown with live examples:
   [Docs](docs-pages.md).
 - Show the same page as it runs on your dev server:

@@ -7,12 +7,12 @@ use std::path::Path;
 pub(super) fn list(object: &Map<String, Value>, file: &Path, root: &Path) -> Value {
     let preview_id = &object["id"];
     let directory = file.parent().unwrap_or(root);
-    let listed = states(object);
+    let listed = scenarios(object);
     let links = links(object, preview_id);
     let source = object["source"]["entry"]
         .as_str()
         .expect("validated source");
-    let mut out = json!({"id": preview_id, "title": fallback(object.get("title"), preview_id.clone()), "adapter": object["adapter"], "file": relative(root, file), "source": relative(root, &resolve(directory, source)), "states": listed, "controls": fallback(object.get("controls"), json!({})), "docs": fallback(object.get("docs"), Value::Null), "links": links});
+    let mut out = json!({"id": preview_id, "title": fallback(object.get("title"), preview_id.clone()), "adapter": object["adapter"], "file": relative(root, file), "source": relative(root, &resolve(directory, source)), "scenarios": listed, "controls": fallback(object.get("controls"), json!({})), "docs": fallback(object.get("docs"), Value::Null), "links": links});
     for key in ["sizes", "icon"] {
         if let Some(value) = object.get(key) {
             out[key] = value.clone();
@@ -21,16 +21,18 @@ pub(super) fn list(object: &Map<String, Value>, file: &Path, root: &Path) -> Val
     out
 }
 
-fn states(object: &Map<String, Value>) -> Vec<Value> {
+fn scenarios(object: &Map<String, Value>) -> Vec<Value> {
     let default = json!({"default": {}});
-    let states = object
-        .get("states")
+    let scenarios = object
+        .get("scenarios")
         .and_then(Value::as_object)
-        .filter(|states| !states.is_empty())
+        .filter(|scenarios| !scenarios.is_empty())
         .unwrap_or(default.as_object().expect("default map"));
     let mut listed = vec![];
-    for (name, state) in states {
-        listed.push(json!({"id": name, "label": fallback(state.get("label"), json!(label(name)))}));
+    for (name, scenario) in scenarios {
+        listed.push(
+            json!({"id": name, "label": fallback(scenario.get("label"), json!(label(name)))}),
+        );
     }
     listed
 }
@@ -46,8 +48,8 @@ fn links(object: &Map<String, Value>, preview_id: &Value) -> Map<String, Value> 
             };
             let mut link =
                 json!({"preview": fallback(normalized.get("preview"), preview_id.clone())});
-            if let Some(state) = normalized.get("state").filter(|value| truthy(value)) {
-                link["state"] = state.clone();
+            if let Some(scenario) = normalized.get("scenario").filter(|value| truthy(value)) {
+                link["scenario"] = scenario.clone();
             }
             links.insert(href.clone(), link);
         }

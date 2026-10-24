@@ -1,7 +1,7 @@
-# Pages and states
+# Pages and scenarios
 
 A design page is an HTML file in your repository. This guide covers how
-those pages are served, how one page shows several states, how links behave,
+those pages are served, how one page shows several scenarios, how links behave,
 and how to choose the artboard sizes a page supports. To render components
 from your codebase instead, see [TypeScript previews](workbench-previews.md).
 To document components in Markdown with live examples, see
@@ -33,7 +33,7 @@ consequences for how you write pages:
   (`/styles/app.css`) resolves from the project root.
 - **One script is added to every HTML page the server serves, and to
   TypeScript previews.** `/_workbench/preview-compat.js` goes first in `<head>`
-  and handles [states](#states), [actions](#links-and-actions), and forwarding
+  and handles [scenarios](#scenarios), [actions](#links-and-actions), and forwarding
   editor shortcuts to VS Code. You don't add it yourself.
 - **A page opened straight from disk gets no script.** It shows as
   authored, and its links behave like ordinary links.
@@ -51,22 +51,22 @@ in screenshots, and a page containing an `iframe`, `object`, or `embed`, or a
 canvas or video loaded from another origin without CORS, can't be captured.
 See [Screenshot limits](annotations-and-handoff.md#what-screenshots-can-and-cant-include).
 
-## States
+## Scenarios
 
-A state is a variation of the same page: the empty form and the form that came
+A scenario is a variation of the same page: the empty form and the form that came
 back with an error, a list with rows and the same list with none. The page
-list shows a page's states under it, the way Storybook lists stories under a
+list shows a page's scenarios under it, the way Storybook lists stories under a
 component.
 
-A state is declared twice, and the ids must match:
+A scenario is declared twice, and the ids must match:
 
-1. In `workbench.yaml`, which adds the state to the page list.
-2. In the page, which decides what the state looks like.
+1. In `workbench.yaml`, which adds the scenario to the page list.
+2. In the page, which decides what the scenario looks like.
 
 ```yaml
 - label: Sign in
   src: pages/sign-in.html
-  states:
+  scenarios:
     - id: default
       label: Default
     - id: error
@@ -75,12 +75,12 @@ A state is declared twice, and the ids must match:
       label: Signing in
 ```
 
-When you pick a state, the page loads with `?state=<id>`. The first state is
+When you pick a scenario, the page loads with `?scenario=<id>`. The first scenario is
 the page as authored and loads with no parameter. Workbench's script reads the
-parameter and sets `data-wb-state` on `<html>`: `default` for the first state,
+parameter and sets `data-wb-scenario` on `<html>`: `default` for the first scenario,
 or the id. An id that isn't kebab-case is treated as `default`.
 
-> The first state always appears in the page as `default`, whatever its id.
+> The first scenario always appears in the page as `default`, whatever its id.
 > Give it the id `default` so the YAML and the page agree. If it has another
 > id, such as `primary`, refer to it as `default` in the page.
 
@@ -90,63 +90,63 @@ A page can answer in three ways. Use the smallest one that works.
 
 ```css
 .alert { display: none; }
-html[data-wb-state="error"] .alert { display: block; }
-html[data-wb-state="error"] .field input { border-color: var(--red); }
+html[data-wb-scenario="error"] .alert { display: block; }
+html[data-wb-scenario="error"] .field input { border-color: var(--red); }
 ```
 
 This suits differences that are purely visual.
 
-### 2. Markup that exists only in some states
+### 2. Markup that exists only in some scenarios
 
 ```html
-<p class="alert" data-wb-state-only="error">That password isn't right.</p>
-<p class="hint" data-wb-state-not="error sending">Use your work email.</p>
+<p class="alert" data-wb-scenario-only="error">That password isn't right.</p>
+<p class="hint" data-wb-scenario-not="error sending">Use your work email.</p>
 ```
 
-- `data-wb-state-only="a b"` keeps the element in states `a` and `b`, and
-  removes it in every other state.
-- `data-wb-state-not="a b"` removes the element in states `a` and `b`.
+- `data-wb-scenario-only="a b"` keeps the element in scenarios `a` and `b`, and
+  removes it in every other scenario.
+- `data-wb-scenario-not="a b"` removes the element in scenarios `a` and `b`.
 
 Ids are space-separated. Elements are **removed**, not hidden, so they don't
 take up space, affect layout, or appear in a screenshot. To keep an element
-in the default state, include `default` in the list.
+in the default scenario, include `default` in the list.
 
-### 3. Attributes set in one state
+### 3. Attributes set in one scenario
 
 ```html
 <input type="email" data-wb-set-error="value=dana@example.com; aria-invalid=true">
 <button data-wb-set-sending="disabled; aria-busy=true">Sign in</button>
 ```
 
-`data-wb-set-<id>` sets attributes on that element in state `<id>`. Separate
+`data-wb-set-<id>` sets attributes on that element in scenario `<id>`. Separate
 pairs with semicolons. Write `name=value`, or a bare `name` for a boolean
-attribute. Only the active state's attribute is read; the others are left in
+attribute. Only the active scenario's attribute is read; the others are left in
 the markup as a record of what the element does elsewhere.
 
-### When states are applied
+### When scenarios are applied
 
 The script sets the root attribute immediately, then applies `only`, `not`,
 and `set` at `DOMContentLoaded`. Custom elements loaded with `defer` are already
 upgraded by then, so they receive the attributes normally. Elements that your
 scripts add later aren't processed, so key late content off the root attribute
-with CSS, or read `document.documentElement.dataset.wbState` in your script:
+with CSS, or read `document.documentElement.dataset.wbScenario` in your script:
 
 ```js
-if (document.documentElement.dataset.wbState === 'empty') renderEmptyState();
+if (document.documentElement.dataset.wbScenario === 'empty') renderEmptyList();
 ```
 
 ### Tips
 
 - Keep ids short and descriptive. They appear in links and screenshot names:
   `sign-in-error.jpg`.
-- A page needs at least two states to show any in the page list. One state
+- A page needs at least two scenarios to show any in the page list. One scenario
   is the same as none.
-- When a state needs data the page doesn't have, render it from a small inline
-  fixture keyed by `dataset.wbState`, rather than making a second page.
-- State ids also map to implementation paths, so the same state can be shown
-  on your dev server. See [Map states to paths](lenses.md#3-map-states-to-paths).
-- In a [docs lens](docs-pages.md#states), the page's state applies to every
-  example in its docs. A Markdown page's states aren't listed in the page list.
+- When a scenario needs data the page doesn't have, render it from a small inline
+  fixture keyed by `dataset.wbScenario`, rather than making a second page.
+- Scenario ids also map to implementation paths, so the same scenario can be shown
+  on your dev server. See [Map scenarios to paths](lenses.md#3-map-scenarios-to-paths).
+- In a [docs lens](docs-pages.md#scenarios), the page's scenario applies to every
+  example in its docs. A Markdown page's scenarios aren't listed in the page list.
 
 ## Links and actions
 
@@ -159,8 +159,8 @@ The top bar's **Actions** switch decides whether a page's links and forms work.
 - **On**: the page behaves normally, so you can walk through a real flow.
 
 With actions on, a link to another page listed in `workbench.yaml` switches
-the workbench to that page, and the sidebar follows. A `?state=<id>` on the
-link picks that state, as in `<a href="sign-in.html?state=error">`. A form
+the workbench to that page, and the sidebar follows. A `?scenario=<id>` on the
+link picks that scenario, as in `<a href="sign-in.html?scenario=error">`. A form
 whose `action` names a listed page does the same when it is submitted, so a
 flow can move from one page to the next.
 
@@ -217,7 +217,7 @@ Markdown page has no artboard and takes no `sizes`.
 ## Component previews
 
 For a design system, a common pattern is one preview page per component, with
-its variants as states:
+its variants as scenarios:
 
 ```yaml
 - name: Components
@@ -227,7 +227,7 @@ its variants as states:
       src: components/button.html
       sizes:
         - fit
-      states:
+      scenarios:
         - id: default
           label: Primary
         - id: secondary

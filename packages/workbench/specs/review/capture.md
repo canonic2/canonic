@@ -157,10 +157,10 @@ local routes accept only the workbench origin. Capture dimensions match the
 preview's CSS pixels, including on Retina displays. The UI requests JPEG at
 quality 90. API callers may request PNG; without a format, PNG is the
 endpoint default. JPEG is lossy and has no transparency. Filenames follow the
-page's file, state or story, size key and lens, and repeated handoffs of one view get
+page's file, scenario or story, size key and lens, and repeated handoffs of one view get
 numbered suffixes.
 
-A handoff prompt names the page, state, resolved size and dimensions, saved screenshot, each
+A handoff prompt names the page, scenario, resolved size and dimensions, saved screenshot, each
 annotation with its position and the element under it, the lens's
 implementation and URL, and any code pointers or TypeScript preview source.
 The element under an annotation comes from the visible document for local

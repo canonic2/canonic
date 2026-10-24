@@ -41,7 +41,7 @@ None. Scripts run only in the frame.
 
 [html.js](../../ui/preview/html.js) parses the HTML, copies the attributes of
 its `<html>` and `<body>` onto the frame's (restored on cleanup), inserts its
-head and body content into the canvas, applies the state, and waits for
+head and body content into the canvas, applies the scenario, and waits for
 linked stylesheets. It then runs the scripts in document order: a marked
 script by importing its compiled module (imports evaluated once, the
 module's default function on every render), any other script by replacing

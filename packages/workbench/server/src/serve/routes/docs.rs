@@ -24,7 +24,7 @@ struct Asked {
     page: String,
     lens: Option<String>,
     example: String,
-    state: Option<String>,
+    scenario: Option<String>,
     plain: bool,
 }
 
@@ -34,7 +34,7 @@ impl Asked {
             page: query(request, "page").unwrap_or_default(),
             lens: query(request, "lens"),
             example: query(request, "example").unwrap_or_default(),
-            state: query(request, "state"),
+            scenario: query(request, "scenario"),
             plain: query(request, "plain").as_deref() == Some("1"),
         }
     }
@@ -95,7 +95,7 @@ async fn page(space: &Space, path: &str, asked: Asked) -> Result<Option<String>>
     let sources: HashSet<String> = pages.iter().map(|page| page.src.clone()).collect();
     let ask = DocsRequest {
         lens: asked.lens.as_deref(),
-        state: asked.state.as_deref(),
+        scenario: asked.scenario.as_deref(),
     };
     let html = space
         .docs

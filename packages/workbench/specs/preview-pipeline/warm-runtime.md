@@ -46,9 +46,9 @@ A selection mounts into one long-lived warm document per owning content renderer
 project and profile. Independent artboards own independent mutable documents;
 they may share compiled chunks and catalog data, not a document or input state.
 Between pages it restores its baseline and loads the selected preview's project
-modules while retaining shared dependencies, stylesheets and fonts. State,
+modules while retaining shared dependencies, stylesheets and fonts. Scenario,
 input and size changes re-render the current page without reloading its modules.
-[Managed-preview lifecycle](../pages/previews.md#open-states-controls-and-actions)
+[Managed-preview lifecycle](../pages/previews.md#open-scenarios-controls-and-actions)
 defines host mounting and retained import-time resources.
 
 ### Isolation in a reused document
@@ -76,7 +76,7 @@ It also:
   Workbench's own globals. Those globals belong to the retained compiler runtime, not to a page.
 
 Import-time body nodes keep their retention rule in
-[previews](../pages/previews.md#open-states-controls-and-actions).
+[previews](../pages/previews.md#open-scenarios-controls-and-actions).
 
 ### Warm Docs pool
 
@@ -114,9 +114,9 @@ a content-only document; neither module initializes the Workbench shell.
   fonts and visible images; earlier text does not count as a ready destination.
 - The host accepts only served Docs destinations in its own space/origin and
   applies the fetched content and options without executing the standalone
-  page bootstrap again. Existing public page URLs, lens/state/example addresses
+  page bootstrap again. Existing public page URLs, lens/scenario/example addresses
   and relative links/assets keep their meaning. Each parallel response belongs
-  to the same requested page/lens/state; an edit during loading must converge
+  to the same requested page/lens/scenario; an edit during loading must converge
   to the latest revision rather than leave mismatched Markdown and examples.
 - Between assignments, keep the host/page scripts, loaded shared chunks,
   applicable module stylesheets and their fonts. Stylesheets needed by the next
@@ -133,7 +133,7 @@ a content-only document; neither module initializes the Workbench shell.
 `resume()` makes an already-ready retained page available for immediate
 promotion, then checks its revision in the background. An unchanged revision
 does no work on the page. A changed revision refreshes the same destination,
-keeping scroll and the selected state/lens. Markdown-only changes follow the
+keeping scroll and the selected scenario/lens. Markdown-only changes follow the
 in-place update contract, preserving mounted examples; example changes follow
 the adapter's hot-update or remount rules. Push updates remain the normal edit
 path; the return check catches an update missed while idle or disconnected.
@@ -175,7 +175,7 @@ page's connection. Cancellation also invalidates pending source, highlighting,
 revision, metadata and mount work. A failed cleanup cannot allow an unisolated
 document to serve the next page; replace it with a fresh host. The canvas keeps
 the current requested URL and retries it when the replacement document loads,
-including its lens, state, actions and anchor. Replacement invalidates old work
+including its lens, scenario, actions and anchor. Replacement invalidates old work
 and closes its runtime subscriptions. A late cleanup failure from a cancelled
 or disposed request cannot navigate a newer destination or reopen a removed frame.
 
@@ -205,7 +205,7 @@ or disposed request cannot navigate a newer destination or reopen a removed fram
 Implemented in `workbench-server`'s preview compiler: pre-warming every
 listed preview and docs lens once the page tree configures them
 ([compiler](compiler.md)), and the warm
-preview document. A new state, input or size of the preview a warm document shows
+preview document. A new scenario, input or size of the preview a warm document shows
 re-renders through the preview runtime without reloading its modules. Gaps:
 
 - Compilation starts when the page tree configures the compiler; the target

@@ -140,7 +140,8 @@ impl Testrun {
             // Failed result envelopes stay on stdout; Testrun deliberately
             // avoids a duplicate stderr error for these results.
             if stderr.is_empty()
-                && let Ok(value @ Value::Object(_)) = serde_json::from_slice::<Value>(&output.stdout)
+                && let Ok(value @ Value::Object(_)) =
+                    serde_json::from_slice::<Value>(&output.stdout)
                 && (value["ok"] == false || value["isError"] == true)
             {
                 return Err(anyhow!(value.to_string()));

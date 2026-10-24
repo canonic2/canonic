@@ -76,7 +76,7 @@ pub(super) fn src_problem(src: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "src “{src}” can’t contain {} — “:”, “!”, and “~” mark the state, the example, and the lens in the address.",
+        "src “{src}” can’t contain {} — “:”, “!”, and “~” mark the scenario, the example, and the lens in the address.",
         found.join(" or ")
     ))
 }
@@ -747,17 +747,17 @@ pub(super) fn page_lenses(
         ));
         return None;
     };
-    let states: Vec<String> = item
-        .get("states")
+    let scenarios: Vec<String> = item
+        .get("scenarios")
         .and_then(Value::as_array)
-        .map(|states| {
-            states
+        .map(|scenarios| {
+            scenarios
                 .iter()
-                .filter_map(|state| state["id"].as_str().map(str::to_owned))
+                .filter_map(|scenario| scenario["id"].as_str().map(str::to_owned))
                 .collect()
         })
         .unwrap_or_default();
-    let first = states
+    let first = scenarios
         .first()
         .cloned()
         .unwrap_or_else(|| "default".to_owned());
@@ -822,31 +822,31 @@ pub(super) fn page_lenses(
                     path_of(value, key, implementation, where_, problems)
                         .map(|path| json!({ "path": path }))
                 }
-                Value::Object(by_state) => {
+                Value::Object(by_scenario) => {
                     let mut path = Value::Null;
-                    let mut mapped_states = Map::new();
-                    for (state, entry) in by_state {
+                    let mut mapped_scenarios = Map::new();
+                    for (scenario, entry) in by_scenario {
                         let Some(found) = path_of(entry, key, implementation, where_, problems)
                         else {
                             continue;
                         };
-                        if *state == first || state == "default" {
+                        if *scenario == first || scenario == "default" {
                             path = Value::String(found);
-                        } else if states.contains(state) {
-                            mapped_states.insert(state.clone(), Value::String(found));
+                        } else if scenarios.contains(scenario) {
+                            mapped_scenarios.insert(scenario.clone(), Value::String(found));
                         } else {
-                            problems.push(format!("{where_}: implementation “{key}” maps state “{state}”, which this page doesn’t declare."));
+                            problems.push(format!("{where_}: implementation “{key}” maps scenario “{scenario}”, which this page doesn’t declare."));
                         }
                     }
                     if path.is_null() {
-                        problems.push(format!("{where_}: implementation “{key}” needs a path for the default state (“{first}”)."));
+                        problems.push(format!("{where_}: implementation “{key}” needs a path for the default scenario (“{first}”)."));
                         None
                     } else {
-                        Some(json!({ "path": path, "states": js::ordered(mapped_states) }))
+                        Some(json!({ "path": path, "scenarios": js::ordered(mapped_scenarios) }))
                     }
                 }
                 _ => {
-                    problems.push(format!("{where_}: implementation “{key}” needs a path, or a map of this page’s state ids to paths."));
+                    problems.push(format!("{where_}: implementation “{key}” needs a path, or a map of this page’s scenario ids to paths."));
                     None
                 }
             },

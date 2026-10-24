@@ -167,11 +167,11 @@ fn docs_pages(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembl
         if page["lens"].as_str().is_some_and(|lens| !lens.is_empty()) {
             item["lens"] = page["lens"].clone();
         }
-        if page["states"]
+        if page["scenarios"]
             .as_array()
-            .is_some_and(|states| states.len() > 1)
+            .is_some_and(|scenarios| scenarios.len() > 1)
         {
-            item["states"] = page["states"].clone();
+            item["scenarios"] = page["scenarios"].clone();
         }
         if !lenses.is_empty() {
             let mapped: Map<String, Value> = lenses
@@ -222,7 +222,7 @@ fn previews(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembly)
                 || title_icon(&settings, title, "component").0,
                 str::to_owned,
             );
-        let mut item = json!({ "src": file, "label": label, "states": preview["states"], "workbench": true, "icon": icon });
+        let mut item = json!({ "src": file, "label": label, "scenarios": preview["scenarios"], "workbench": true, "icon": icon });
         if settings["lensLabel"]
             .as_str()
             .is_some_and(|label| !label.is_empty())
@@ -281,15 +281,17 @@ fn links(index: &IndexAnswer, problems: &mut Vec<String>) {
                     "{file}: link {href} names unknown Workbench preview “{target_id}”."
                 )),
                 Some(target) => {
-                    if let Some(state) = to["state"].as_str().filter(|state| !state.is_empty())
-                        && !target["states"]
+                    if let Some(scenario) = to["scenario"]
+                        .as_str()
+                        .filter(|scenario| !scenario.is_empty())
+                        && !target["scenarios"]
                             .as_array()
                             .into_iter()
                             .flatten()
-                            .any(|candidate| candidate["id"] == state)
+                            .any(|candidate| candidate["id"] == scenario)
                     {
                         problems.push(format!(
-                            "{file}: link {href} names unknown state “{state}” of {target_id}."
+                            "{file}: link {href} names unknown scenario “{scenario}” of {target_id}."
                         ));
                     }
                 }
@@ -333,19 +335,19 @@ fn workbench_lenses(view: &Value, index: &IndexAnswer, root: &Path, into: &mut A
             let file = preview["file"].as_str().unwrap_or_default();
             let mut mapped = reference.clone();
             mapped["path"] = json!(format!("/{file}"));
-            let states: Map<String, Value> = preview["states"]
+            let scenarios: Map<String, Value> = preview["scenarios"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|state| state["id"].as_str())
+                .filter_map(|scenario| scenario["id"].as_str())
                 .map(|id| {
                     (
                         id.to_owned(),
-                        json!(format!("/{file}?state={}", encode_component(id))),
+                        json!(format!("/{file}?scenario={}", encode_component(id))),
                     )
                 })
                 .collect();
-            mapped["states"] = Value::Object(states);
+            mapped["scenarios"] = Value::Object(scenarios);
             let src = item["src"].as_str().unwrap_or_default();
             for collection in &mut into.view_collections {
                 set_reference(collection, src, &key, &mapped);

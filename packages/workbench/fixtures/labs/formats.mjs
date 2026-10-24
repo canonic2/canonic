@@ -337,7 +337,7 @@ const { title, tone = 'neutral' } = Astro.props;
 </style>
 `,
   'src/astro/card.workbench.ts': definition({ id: 'astro/card', title: 'Acme/Astro/Card', adapter: 'astro', entry: './Card.astro', owner: 'card',
-    extra: "  inputs: { title: 'Acme card' },\n  states: { default: {}, accent: { inputs: { tone: 'accent' } } },\n" }),
+    extra: "  inputs: { title: 'Acme card' },\n  scenarios: { default: {}, accent: { inputs: { tone: 'accent' } } },\n" }),
   'src/docs/buttons.workbench.ts': `import { defineDocs } from '@canonic2/workbench';
 
 export default defineDocs({
@@ -430,7 +430,7 @@ const PREVIEWS = [
   { id: 'pages/page-a', file: 'src/pages/page-a/index.workbench.tsx', adapter: 'react', source: 'src/pages/page-a/Page.tsx', owner: 'page-a', interactive: 'react' },
   { id: 'pages/page-b', file: 'src/pages/page-b/index.workbench.tsx', adapter: 'react', source: 'src/pages/page-b/Page.tsx', owner: 'page-b', interactive: 'react' },
   { id: 'vue/counter', file: 'src/vue/counter.workbench.ts', adapter: 'vue', source: 'src/vue/Counter.vue', owner: 'vue-counter', interactive: 'vue' },
-  { id: 'astro/card', file: 'src/astro/card.workbench.ts', adapter: 'astro', source: 'src/astro/Card.astro', owner: 'card', states: ['default', 'accent'] },
+  { id: 'astro/card', file: 'src/astro/card.workbench.ts', adapter: 'astro', source: 'src/astro/Card.astro', owner: 'card', scenarios: ['default', 'accent'] },
   { id: 'html/landing', file: 'src/html/landing.workbench.ts', adapter: 'html', source: 'src/html/landing.html', owner: 'landing' },
   { id: 'native/counter', file: 'src/native/counter.workbench.tsx', adapter: 'react-native-web', source: 'src/native/Counter.tsx', owner: 'native-counter' },
   { id: 'canvas/badge', file: 'src/canvas/badge.workbench.ts', adapter: 'acme-canvas', source: 'src/canvas/badge.ts', owner: 'canvas-badge' },

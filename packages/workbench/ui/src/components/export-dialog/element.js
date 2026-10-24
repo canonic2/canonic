@@ -35,7 +35,7 @@ export class WbExportDialog extends HTMLElement {
       <label>Scope<select name="scope"><option value="page">Current page</option><option value="pages">Selected pages</option><option value="collection">Collection</option><option value="space">Whole space</option></select></label>
       <label data-field="pages">Pages<select name="pages" multiple size="5"></select></label>
       <label data-field="collection">Collection<select name="collection"></select></label>
-      <label>Variants<select name="variants"><option value="all">All declared states and sizes</option><option value="current">Current view</option></select></label>
+      <label>Variants<select name="variants"><option value="all">All declared scenarios and sizes</option><option value="current">Current view</option></select></label>
       <label data-field="paper">Documentation paper<select name="paper"><option>A4</option><option>Letter</option></select></label>
       <label data-field="imageFormat">Image format<select name="imageFormat"><option value="png">PNG</option><option value="jpeg">JPEG</option></select></label>
       <p class="hint">Visual PDF pages preserve their full height. Documentation uses paginated paper.</p>

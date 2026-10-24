@@ -51,7 +51,7 @@ pub(crate) struct Story {
     pub(crate) id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) name: Option<Value>,
-    pub(crate) state: String,
+    pub(crate) scenario: String,
     #[serde(rename = "importPath")]
     pub(crate) import_path: Option<Value>,
     #[serde(rename = "componentPath")]
@@ -59,8 +59,8 @@ pub(crate) struct Story {
     pub(crate) code: Vec<PathBuf>,
 }
 
-/// The state a story ID names: what follows `--`, or the whole ID.
-pub(crate) fn story_state(id: &str) -> &str {
+/// The scenario a story ID names: what follows `--`, or the whole ID.
+pub(crate) fn story_scenario(id: &str) -> &str {
     id.find("--").map_or(id, |at| &id[at + 2..])
 }
 
@@ -193,7 +193,7 @@ pub(crate) fn stories_titled(
             Story {
                 id: id.to_owned(),
                 name: entry.get("name").cloned(),
-                state: story_state(id).to_owned(),
+                scenario: story_scenario(id).to_owned(),
                 import_path: path("importPath"),
                 component_path: path("componentPath"),
                 code: story_code(storybook.root, entry),
@@ -409,9 +409,9 @@ mod tests {
     }
 
     #[test]
-    fn a_story_id_names_its_state_after_the_double_dash() {
-        assert_eq!(story_state("components-button--icon-only"), "icon-only");
-        assert_eq!(story_state("plain"), "plain");
+    fn a_story_id_names_its_scenario_after_the_double_dash() {
+        assert_eq!(story_scenario("components-button--icon-only"), "icon-only");
+        assert_eq!(story_scenario("plain"), "plain");
     }
 
     #[test]
@@ -429,7 +429,7 @@ mod tests {
         let stories = stories_titled(&index, "Components/Button", storybook).expect("stories");
         let named: Vec<_> = stories
             .iter()
-            .map(|story| (story.id.as_str(), story.state.as_str()))
+            .map(|story| (story.id.as_str(), story.scenario.as_str()))
             .collect();
         assert_eq!(
             named,

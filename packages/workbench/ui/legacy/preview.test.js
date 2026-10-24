@@ -101,7 +101,7 @@ function storyNavigation() {
   var frameBuffer = { contentWindow: {} };
   var blankClasses = new Set();
   var state = {
-    current: 'button', currentState: null, showSeq: 1, frameReady: true,
+    current: 'button', currentScenario: null, showSeq: 1, frameReady: true,
     pendingFrame: null, frame: frame, frameBuffer: frameBuffer,
     view: { lens: lens }, pageList: null, openLink: {},
     sessionKey: function () { return 'storybook'; },
@@ -112,7 +112,7 @@ function storyNavigation() {
       contains: function (name) { return blankClasses.has(name); },
     } },
     window: { wbLenses: {
-      pick: function (list, picked) { return list.find(function (story) { return story.state === picked; }); },
+      pick: function (list, picked) { return list.find(function (story) { return story.scenario === picked; }); },
       storyUrl: function (_lens, id) { return lens.url + '/iframe.html?id=' + id + '&viewMode=story'; },
       storyOpenUrl: function (_lens, id) { return lens.url + '/?path=/story/' + id; },
       upstream: function (_lens, address) { return address; },
@@ -128,8 +128,8 @@ function storyNavigation() {
     }, wbSimulator: { hide: function () {} }, dispatchEvent: function (event) { events.push(event); } },
     CustomEvent: function (type, options) { this.type = type; this.detail = options.detail; },
     stories: function () { return Promise.resolve([
-      { id: 'components-button--default', state: 'default', name: 'Default' },
-      { id: 'components-button--secondary', state: 'secondary', name: 'Secondary' },
+      { id: 'components-button--default', scenario: 'default', name: 'Default' },
+      { id: 'components-button--secondary', scenario: 'secondary', name: 'Secondary' },
     ]); },
     setTimeout: function (fn) { var timer = { fn: fn, cleared: false }; timers.push(timer); return timer; },
     clearTimeout: function (timer) { timer.cleared = true; },
@@ -429,14 +429,14 @@ test('opening on no page still tells the host it is ready', function () {
   function noop() {}
   var el = function () { return { hidden: false, textContent: '', removeAttribute: noop, classList: { remove: noop } }; };
   var context = {
-    index: {}, showSeq: 0, view: null, current: 'old.html', currentState: null, renderedStory: null,
+    index: {}, showSeq: 0, view: null, current: 'old.html', currentScenario: null, renderedStory: null,
     pageList: { setCurrent: noop },
     lensRules: require('../../contracts/src/docs/lenses.js'),
-    cancelStorySwitch: noop, effectiveLens: function () { return null; }, stateOf: noop,
+    cancelStorySwitch: noop, effectiveLens: function () { return null; }, scenarioOf: noop,
     cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop, holdLayout: noop, commitLayout: noop,
-    updateSizeAvailability: noop, drawLenses: noop, drawStates: noop, drawStateMenu: noop,
+    updateSizeAvailability: noop, drawLenses: noop, drawScenarios: noop, drawScenarioMenu: noop,
     drawSources: noop, setActionsAvailability: noop,
-    tellHost: function (src, state, lens) { told.push([src, state, lens]); },
+    tellHost: function (src, scenario, lens) { told.push([src, scenario, lens]); },
     window: { wbSimulator: { hide: noop } },
     crumb: el(), crumbPage: el(), artboard: el(), frame: el(), frameBuffer: el(),
     blank: el(), openLink: el(), artboardName: el(), document: {}, config: { name: 'Acme' },

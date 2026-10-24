@@ -130,7 +130,7 @@ var CORPUS = [
     '      - group: Auth', '        items:',
     '          - label: Sign in', '            src: pages/sign-in.html', '            lensLabel: Reference',
     '            sizes:', '              - mobile', '              - tablet', '              - phone:', '                  width: 360', '                  height: 740', '              - laptop:', '                  width: 1', '              - mobile', '              - phone:', '                  width: 1', '                  height: 1', '              - Bad:', '                  width: 1', '                  height: 1', '              - a: 1', '                b: 2',
-    '            states:', '              - id: default', '                label: Default', '              - id: error', '                label: Wrong password', '              - id: Bad Id', '                label: x', '              - id: loading',
+    '            scenarios:', '              - id: default', '                label: Default', '              - id: error', '                label: Wrong password', '              - id: Bad Id', '                label: x', '              - id: loading',
     '            implementations:',
     '              dev:', '                default: /sign-in', '                error: /sign-in?error=1', '                missing: /x', '                loading: relative',
     '              staging: /sign-in', '              sb: Components/Button', '              sim: iPhone', '              win: Acme Window', '              wb: pages/sign-in', '              undeclared: /x',
@@ -187,7 +187,7 @@ function generator(seed) {
   }
   function page(names) {
     var out = { label: maybe(0.9) ? pick(['Sign in', 'Card', 'x', '']) : scalar(), src: pick(['pages/a.html', 'pages/b.html', 'docs/a.md', 'docs/b.md', 'a:b.html', '/abs.html', scalar()]) };
-    if (maybe(0.3)) out.states = [{ id: 'default', label: 'Default' }, { id: pick(['error', 'Bad', '']), label: pick(['Error', '']) }];
+    if (maybe(0.3)) out.scenarios = [{ id: 'default', label: 'Default' }, { id: pick(['error', 'Bad', '']), label: pick(['Error', '']) }];
     if (maybe(0.3)) out.sizes = maybe(0.5) ? [pick(['laptop', 'mobile', 'tablet', 'x'])] : [{ phone: { width: pick([360, 0, 'fill']), height: 740 } }];
     if (maybe(0.2)) out.docs = pick(['docs/a.md', 'docs/a.txt', '../x.md', scalar()]);
     if (maybe(0.2)) out.lens = pick(names.concat(['nope']));

@@ -13,7 +13,7 @@
   <!-- The sidebar as VS Code's Workbench view shows it: the space switcher,
        collection list, page list, and search, built by the same
        Web Components and page-list.js the extension ships, from a sample
-       space. States: default, menu (the space switcher's menu open over the
+       space. Scenarios: default, menu (the space switcher's menu open over the
        page list), filtered (a search typed). -->
   <wb-space-switcher id="spaces" allow-add allow-remove></wb-space-switcher>
 
@@ -27,7 +27,7 @@
     <div class="wb-search">
       <span class="wb-search-icon" data-icon="search"></span>
       <input id="search" type="text" role="searchbox" placeholder="Search pages…" autocomplete="off"
-             aria-label="Search pages and states" />
+             aria-label="Search pages and scenarios" />
     </div>
   </div>
 
@@ -53,7 +53,7 @@
       Check, ChevronDown, ChevronsUpDown, CircleDot, Component, FileText, Folder,
       Palette, Plus, Search, X,
     } };
-    var state = new URLSearchParams(location.search).get('state') || 'default';
+    var scenario = new URLSearchParams(location.search).get('scenario') || 'default';
     Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (el) {
       el.appendChild(window.wbIcon(el.dataset.icon));
     });
@@ -69,12 +69,12 @@
       {
         name: 'Pages', icon: 'file-text', items: [
           { group: 'Auth', items: [
-            { label: 'Sign in', src: 'pages/sign-in.html', states: [
+            { label: 'Sign in', src: 'pages/sign-in.html', scenarios: [
               { id: 'default', label: 'Default' }, { id: 'error', label: 'Wrong password' }, { id: 'loading', label: 'Signing in' },
             ] },
             { label: 'Reset password', src: 'pages/reset.html' },
           ] },
-          { label: 'Dashboard', src: 'pages/dashboard.html', states: [
+          { label: 'Dashboard', src: 'pages/dashboard.html', scenarios: [
             { id: 'default', label: 'Default' }, { id: 'empty', label: 'New workspace' },
           ] },
           { label: 'Projects', src: 'pages/projects.html' },
@@ -101,8 +101,8 @@
     pageList.reveal('pages/sign-in.html');
     pageList.setCurrent('pages/sign-in.html', null, 'Pages');
 
-    if (state === 'menu') { switcher.open = true; shell.classList.add('is-dimmed'); }
-    if (state === 'filtered') {
+    if (scenario === 'menu') { switcher.open = true; shell.classList.add('is-dimmed'); }
+    if (scenario === 'filtered') {
       search.value = 'sign';
       search.dispatchEvent(new Event('input', { bubbles: true }));
     }

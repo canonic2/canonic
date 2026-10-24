@@ -76,7 +76,7 @@ fn includes_both_freeform_notes_and_comments_in_the_written_request_summary() {
 #[test]
 fn reads_word_for_word_for_a_design_without_code_pointers() {
     let text = text_of(&json!({
-        "label": "Sign in", "src": "pages/sign-in.html", "state": "Wrong password",
+        "label": "Sign in", "src": "pages/sign-in.html", "scenario": "Wrong password",
         "size": "Mobile, 393 × 852", "frame": { "w": 393, "h": 852 },
         "file": ".canonic/.handoffs/sign-in-error.png",
         "annotations": [
@@ -88,7 +88,7 @@ fn reads_word_for_word_for_a_design_without_code_pointers() {
         "Here is a page from Workbench.",
         "",
         "- Page: Sign in — `pages/sign-in.html`",
-        "- State: Wrong password",
+        "- Scenario: Wrong password",
         "- Size: Mobile, 393 × 852 (artboard is 393 × 852 CSS px)",
         "- Screenshot: `.canonic/.handoffs/sign-in-error.png`",
         "",
@@ -109,7 +109,7 @@ fn reads_word_for_word_for_a_design_without_code_pointers() {
 #[test]
 fn says_which_implementation_story_and_source_a_lens_shot_is_of() {
     let text = text_of(&json!({
-        "label": "Button", "src": "preview/components-button.html", "state": "Icon Only",
+        "label": "Button", "src": "preview/components-button.html", "scenario": "Icon Only",
         "story": { "id": "components-button--icon-only", "name": "Icon Only" },
         "lens": { "key": "storybook", "label": "Storybook", "kind": "storybook", "url": "http://localhost:6006/iframe.html?id=components-button--icon-only&viewMode=story" },
         "code": ["/acme/packages/ui/src/button.tsx", "/acme/packages/ui/src/button.stories.tsx"],
@@ -117,7 +117,7 @@ fn says_which_implementation_story_and_source_a_lens_shot_is_of() {
         "file": ".canonic/.handoffs/components-button-icon-only-storybook.png",
         "annotations": [{ "type": "rect", "box": { "x": 9, "y": 10, "w": 11, "h": 12 }, "target": null }],
     }));
-    assert!(has_line(&text, "- State: Icon Only"));
+    assert!(has_line(&text, "- Scenario: Icon Only"));
     assert!(has_line(
         &text,
         "- Story: Icon Only — `components-button--icon-only`"
@@ -165,7 +165,7 @@ fn an_unannotated_lens_shot_is_the_implementation_as_it_stands() {
 #[test]
 fn a_docs_lens_handoff_names_the_markdown_lens_and_examples_in_view() {
     let text = text_of(&json!({
-        "file": ".canonic/.handoffs/card.jpg", "src": "pages/card.html", "label": "Card", "state": null,
+        "file": ".canonic/.handoffs/card.jpg", "src": "pages/card.html", "label": "Card", "scenario": null,
         "size": "Docs, filling the canvas", "frame": { "w": 1200, "h": 800 }, "annotations": [],
         "lens": { "key": "dark", "label": "Dark", "kind": "docs", "url": "http://127.0.0.1:3579/docs/card.md?lens=dark" },
         "docs": { "lens": "dark", "markdown": "docs/card.md", "lensLabel": "Dark", "examples": [

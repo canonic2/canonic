@@ -43,7 +43,7 @@ they are an artboard like any other content; see
   in docs lenses.
 - Out of scope: generated props tables (tables are written by hand in the
   Markdown), MDX, interactive controls for examples, and examples drawn from a
-  preview's states and controls.
+  preview's scenarios and controls.
 
 ## Declaring docs
 
@@ -136,7 +136,7 @@ export default defineDocs({
   name a Markdown file inside the project.
 - `lenses` is a map of kebab-case names to `{ label, adapter, examples,
   styles?, environment? }`. `lens` is the default lens, otherwise the first
-  in `lenses`. `states` is accepted with the same shape as a preview's.
+  in `lenses`. `scenarios` is accepted with the same shape as a preview's.
 - `id` and `title` follow the preview rules, and IDs are unique across
   previews and docs pages.
 - A preview's inline `docs` text belongs to its preview controls. A full
@@ -191,7 +191,7 @@ docs renderers. User-facing canvas integration follows this target behavior:
   full-height artboard.
 - **Zoom** is the canvas's, scaling every artboard alike; the docs page's own
   zoom rules apply only in the docs canvas mode.
-- **Lens, state, and example** belong to the artboard's view, so two artboards
+- **Lens, scenario, and example** belong to the artboard's view, so two artboards
   can show one page in two lenses: its design beside its docs, or its docs in
   two renderers.
 - **Capture and handoff** treat it as any artboard: its viewport in the
@@ -290,7 +290,7 @@ example Ant Design's):
 ### Mounting and readiness
 
 - Each example mounts into its own panel through the adapter's runtime, with
-  its own context: `state`, `signal`, `action`, and `navigate` as previews have.
+  its own context: `scenario`, `signal`, `action`, and `navigate` as previews have.
   `inputs` is empty and examples have no controls. One example's error shows in
   its panel and does not affect the others.
 - The page is ready when the Markdown has rendered, every example has
@@ -301,24 +301,24 @@ example Ant Design's):
   dependency graph, hot-updates the examples
   ([hot updates](../preview-pipeline/hot-updates.md#docs-pages)).
 
-## States
+## Scenarios
 
-- In a docs lens the page's states apply to the whole page: every example
-  receives the current one as `context.state`. The state switcher in the top
-  bar selects it. A Markdown page declares its own (`states` in YAML or in
+- In a docs lens the page's scenarios apply to the whole page: every example
+  receives the current one as `context.scenario`. The scenario switcher in the top
+  bar selects it. A Markdown page declares its own (`scenarios` in YAML or in
   `defineDocs`).
 - The user guide recommends showing a component's variations side by side on
-  the page instead of as states.
+  the page instead of as scenarios.
 
 ## Sidebar and address
 
 - A page has no entries for its examples in the page list.
-- The address is `#<src>[:<state>][!<example>][~<lens>]`, with the page's own
+- The address is `#<src>[:<scenario>][!<example>][~<lens>]`, with the page's own
   `src`: `#src/button/button.workbench.ts!disabled~native` for a page with a
   design, `#docs/card.md!with-custom-style~native` for a Markdown page. An
   address that names an example opens the docs scrolled to it; `!` applies
   only in a docs lens. A docs lens has no width part; one given by hand is
-  ignored. The default state is omitted, and so is a page's default lens: its
+  ignored. The default scenario is omitted, and so is a page's default lens: its
   first docs lens (a Markdown page's `lens`), or the design of a page without
   docs. The design of a page with docs is `~design`, and `design` is reserved
   as an implementation name. `!` joins `:`, `@`, and `~` as
@@ -331,13 +331,13 @@ example Ant Design's):
 
 ## Top bar
 
-The top bar shows the breadcrumb with its state switcher, the lens switcher
+The top bar shows the breadcrumb with its scenario switcher, the lens switcher
 when there are two or more lenses (a page's design first, or a Markdown
 page's docs lenses first), reload, source files, the copyable reference,
 **Open on its own**, and **More**. A page with a design lists its design file,
 then **Docs** (its Markdown), then its implementations' code and each docs
 lens's example source; a Markdown page lists its Markdown first, as **Docs**.
-In a docs lens, **Preview controls** shows **Actions** and **Reset state**
+In a docs lens, **Preview controls** shows **Actions** and **Reset scenario**
 only.
 
 ## Screenshots, handoff, and export
@@ -345,7 +345,7 @@ only.
 - A screenshot captures the visible part of the docs at the current scroll
   position, with annotations, as the camera does for other lenses. Its size
   is named "Docs, filling the canvas".
-- A handoff names the page, the docs lens, state, the Markdown file, and the
+- A handoff names the page, the docs lens, scenario, the Markdown file, and the
   examples visible in the captured area with their source files.
 - The [design-system export](../review/export.md) captures, for every page with docs
   and every docs lens, one reference per placed example (the example panel
@@ -453,7 +453,7 @@ problems update when they arrive.
   does not call start again. Markdown updates preserve mounted examples where
   the [existing edit contract](../preview-pipeline/hot-updates.md#docs-pages)
   permits, including open code panels with fresh source text. Page tools,
-  states, actions, docs links and example anchors retain the same behavior in
+  scenarios, actions, docs links and example anchors retain the same behavior in
   warm, standalone and portable delivery.
 
 ## Pilot
@@ -529,7 +529,7 @@ Client-project rollout is separate from this product contract.
   imposing viewport height on panels.
 - A declared YAML page wins when a discovered docs definition claims the same
   Markdown file. One Markdown file has one owning page.
-- The page list represents pages and states, not docs examples. Examples are
+- The page list represents pages and scenarios, not docs examples. Examples are
   addressed within their page and navigated in the docs content.
 - Whole-page references use document height up to the capture limit;
   per-example references crop to the rendered example stage.
@@ -566,13 +566,13 @@ renderer combination or source-extraction edge case. See
   and the server places them by title, in a **Docs** collection when the title has
   no `/`.
 - **Astro.** An `astro` lens takes a directory; each `.astro` file renders in the
-  Node evaluator as an Astro preview's state does, and the bundle hands the page its
+  Node evaluator as an Astro preview's scenario does, and the bundle hands the page its
   HTML with asset URLs made absolute against the bundle.
 - **Portable viewer.** [portable.rs](../../server/src/docs/portable.rs) writes each page
   in each lens as a static page under `browser/docs/`: the production bundle,
   the authored page and mount scripts copied unchanged, Show code as JSON per example, and the images
   the Markdown references; [viewer.js](../../ui/viewer/viewer.js) lists docs
-  pages, swaps the State menu for a Lens menu, and follows docs links.
+  pages, swaps the Scenario menu for a Lens menu, and follows docs links.
 - **Compilation.** The server's compiler lists a lens's examples
   ([docs.rs](../../server/src/compiler/docs.rs)): a directory's files, or a
   file's named exports read statically with SWC, following `export * from`
@@ -583,7 +583,7 @@ renderer combination or source-extraction edge case. See
   `/_workbench/previews/`: `docs/index`, and `docs/bundle`, which answers
   with the lens's preview module.
 - **Serving.** A page's Markdown is served as its docs at the Markdown's path
-  (`?lens=`, `?state=`), with its panels pending; any other `.md` is served as
+  (`?lens=`, `?scenario=`), with its panels pending; any other `.md` is served as
   a file.
   `/_workbench/docs/bundle` answers what the page mounts (the module, its
   stylesheet, the lens's example IDs, and the page's revision),
@@ -617,7 +617,7 @@ renderer combination or source-extraction edge case. See
   the authenticated content renderer. Viewport resizing and zoom retain the docs
   document. Standalone Docs capture has no canvas framing or artboard label.
   The file-based shell uses [zoom.js](../../ui/legacy/zoom.js) and docs-mode styles in
-  [workbench.css](../../ui/legacy/workbench.css). Lenses, states, addresses,
+  [workbench.css](../../ui/legacy/workbench.css). Lenses, scenarios, addresses,
   scrolling to an addressed example, and docs links in
   [workbench.js](../../ui/legacy/workbench.js).
 - **Source menu, handoff, export.** A page's Markdown, when it isn't the

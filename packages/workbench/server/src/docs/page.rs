@@ -31,7 +31,7 @@ pub(crate) struct DocsPageOptions {
     /// The lens rendering the examples, and its label, or null when the page has none.
     pub(crate) lens: Option<String>,
     pub(crate) lens_label: Option<String>,
-    pub(crate) state: Option<String>,
+    pub(crate) scenario: Option<String>,
     /// Null when nothing is mounted.
     pub(crate) bundle: Option<BundleRef>,
     /// Where Show code asks for an example's source; the example ID is appended.
@@ -99,7 +99,7 @@ mod tests {
             page: "docs/card.md".into(),
             lens: None,
             lens_label: None,
-            state: None,
+            scenario: None,
             bundle: Some(BundleRef::Info {
                 info: "/_workbench/docs/bundle?page=x".into(),
             }),

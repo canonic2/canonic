@@ -23,7 +23,7 @@ Documentation: <https://canonic.sh/workbench/docs/>
        items:
          - label: Sign in
            src: pages/sign-in.html
-           states:
+           scenarios:
              - id: default
                label: Default
              - id: error
@@ -40,13 +40,13 @@ previews supply the pages. See
 
 - **TypeScript previews**: `*.workbench.ts` and `*.workbench.tsx` files in the
   project, outside hidden folders, `node_modules`, and build output. Built-in adapters for HTML, React, Vue, Astro, and
-  React Native Web, or your own. Each preview has named states, input
+  React Native Web, or your own. Each preview has named scenarios, input
   controls, an action log, and docs. For types, install
   `@canonic2/workbench` as a dev dependency. See
   [TypeScript previews](https://canonic.sh/workbench/docs/workbench-previews/).
-- **HTML pages** listed in `workbench.yaml`. A page's states are selected
-  through `html[data-wb-state]`. See
-  [Pages and states](https://canonic.sh/workbench/docs/pages-and-states/).
+- **HTML pages** listed in `workbench.yaml`. A page's scenarios are selected
+  through `html[data-wb-scenario]`. See
+  [Pages and scenarios](https://canonic.sh/workbench/docs/pages-and-scenarios/).
 - **Implementations**, shown as lenses next to a page's design: Storybook
   stories, URLs on a dev server or staging, the iOS Simulator, or a macOS app
   window. See [Lenses](https://canonic.sh/workbench/docs/lenses/).

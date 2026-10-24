@@ -266,7 +266,7 @@ reloads and lens changes, and viewport resizing. Set `CHROME_PATH` to choose
 the browser. The extension itself never uses Chrome.
 
 `node scripts/smoke-canvas.cjs` exercises multi-artboard support through a
-temporary programmatic harness: independent instances, state and size changes,
+temporary programmatic harness: independent instances, scenario and size changes,
 cross-space context, and complete screenshot/handoff payloads. It uses the
 same Chrome driver and bundled capture runtime, without adding production UI.
 

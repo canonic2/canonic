@@ -16,7 +16,7 @@ export function begin(identity, context, owner = 'canvas') {
     previous: now,
     owner,
     page: identity?.src || identity?.page,
-    state: identity?.state || 'default',
+    scenario: identity?.scenario || 'default',
     lens: identity?.lens?.key || identity?.lens || 'design',
   };
 }
@@ -28,7 +28,7 @@ export function phase(trace, name, extra = {}) {
     selection: trace.selection,
     owner: trace.owner,
     page: trace.page,
-    state: trace.state,
+    scenario: trace.scenario,
     lens: trace.lens,
     phase: name,
     durationMs: now - trace.previous,
@@ -51,7 +51,7 @@ export function address(value, trace) {
   if (url.origin !== location.origin) return value;
   url.searchParams.set('wbTrace', trace.selection);
   if (trace.page) url.searchParams.set('wbPage', trace.page);
-  url.searchParams.set('wbState', trace.state);
+  url.searchParams.set('wbScenario', trace.scenario);
   url.searchParams.set('wbLens', trace.lens);
   return url.href;
 }
@@ -62,7 +62,7 @@ export function documentTrace(identity) {
   identity = {
     ...identity,
     src: params.get('wbPage') || identity?.src || identity?.page,
-    state: params.get('wbState') || identity?.state,
+    scenario: params.get('wbScenario') || identity?.scenario,
     lens: params.get('wbLens') || identity?.lens,
   };
   return begin(

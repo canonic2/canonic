@@ -52,8 +52,8 @@ function loadSidebar(overrides, spaces) {
         pick = options.onPick;
         return {
           reveal: function () {},
-          setCurrent: function (src, state, collection) {
-            current = { src: src, state: state, collection: collection };
+          setCurrent: function (src, scenario, collection) {
+            current = { src: src, scenario: scenario, collection: collection };
             order.push('selected');
           },
         };
@@ -91,7 +91,7 @@ function loadSidebar(overrides, spaces) {
     intent: function (name, detail) { listeners[name]({ detail: detail || {} }); },
     shell: shell,
     spaces: elements.spaces,
-    pick: function (src, state) { pick(src, state); },
+    pick: function (src, scenario) { pick(src, scenario); },
     current: function () { return current; },
     order: order,
   };
@@ -128,7 +128,7 @@ test('a sidebar pick marks the destination before sending it to the editor', fun
     { name: 'Pages', items: [{ label: 'Sign in', src: 'sign-in.html' }] },
   ] });
   sidebar.pick('sign-in.html', 'error');
-  assert.deepEqual(sidebar.current(), { src: 'sign-in.html', state: 'error', collection: 'Pages' });
+  assert.deepEqual(sidebar.current(), { src: 'sign-in.html', scenario: 'error', collection: 'Pages' });
   assert.deepEqual(sidebar.order.slice(-2), ['selected', 'sent']);
   assert.deepEqual(JSON.parse(JSON.stringify(sidebar.posted.at(-1))), {
     type: 'canonic-pick', hash: 'sign-in.html:error',

@@ -1126,7 +1126,7 @@ fn place_screenshots(
             format!("{base}.jpg")
         };
         let screenshot = PageScreenshot {
-            state: Some(shot.state.clone()).filter(|state| !state.is_empty()),
+            scenario: Some(shot.scenario.clone()).filter(|scenario| !scenario.is_empty()),
             label: or(&shot.label, "Default"),
             size: or(&shot.size, "fit"),
             path: posix_join(&[&folders[&page.id], &name]),
@@ -1233,7 +1233,7 @@ pub(crate) fn create(
             manifest: "browser/workbench.json".into(),
             previews: portable.previews.iter().map(|preview| BrowserPreview {
                 id: preview.id.clone(), source: preview.file.clone(),
-                entry: format!("{}/index.html", preview.directory), states: preview.states.clone(),
+                entry: format!("{}/index.html", preview.directory), scenarios: preview.scenarios.clone(),
             }).collect(),
             warnings: portable.warnings.clone(),
         }),
@@ -1299,12 +1299,12 @@ fn space_readme(name: Option<&str>, portable: bool) -> String {
     let mut readme = format!(
         "# {} design-system export\n\n\
          This archive was generated from Workbench. Workspace files keep their original project-relative paths at this archive’s root; sources outside the workspace are under `implementations/`.\n\n\
-         The export starts with the selected design, component, page, and story sources recorded in `canonic-export.json`, then includes their transitive local imports and referenced assets. Each generated page guide embeds reference screenshots for the requested states, stories, and sizes; a size that fills the canvas, and Fit, are captured 1440 wide or 900 tall. Duplicate capture sizes are removed. A docs page instead embeds, for each lens, the whole page at its 960-pixel layout and each example the lens renders, cropped to its panel. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n\
+         The export starts with the selected design, component, page, and story sources recorded in `canonic-export.json`, then includes their transitive local imports and referenced assets. Each generated page guide embeds reference screenshots for the requested scenarios, stories, and sizes; a size that fills the canvas, and Fit, are captured 1440 wide or 900 tall. Duplicate capture sizes are removed. A docs page instead embeds, for each lens, the whole page at its 960-pixel layout and each example the lens renders, cropped to its panel. It intentionally excludes dependencies installed in `node_modules`, build output, secrets, tests, and unrelated application files.\n\n\
          See `canonic-export.json` for the exact file list, package dependencies, unresolved references, and each page’s content hash. Each generated page guide and its `screenshots/` directory live beside that component or page’s primary exported entry point. Install the listed packages with your preferred package manager before running the copied Storybook or app setup.\n",
         name.filter(|name| !name.is_empty()).unwrap_or("Workbench")
     );
     if portable {
-        readme.push_str("\n## Portable browser previews\n\nServe this extracted directory with any static HTTP server and open `browser/index.html`. The viewer includes searchable previews, state and size selection, editable controls, reset, actions, and documentation. Copy its address to share a selection. These compiled Workbench previews need no Electron, Workbench, package installation, or build step. Direct preview pages accept `?state=<id>`. Original editable sources remain in their project-relative locations. Check `browser.warnings` in the export report for previews that could not be built.\n");
+        readme.push_str("\n## Portable browser previews\n\nServe this extracted directory with any static HTTP server and open `browser/index.html`. The viewer includes searchable previews, scenario and size selection, editable controls, reset, actions, and documentation. Copy its address to share a selection. These compiled Workbench previews need no Electron, Workbench, package installation, or build step. Direct preview pages accept `?scenario=<id>`. Original editable sources remain in their project-relative locations. Check `browser.warnings` in the export report for previews that could not be built.\n");
     }
     readme
 }
@@ -1412,7 +1412,7 @@ pub(super) mod tests {
         };
         let shot = Screenshot {
             page: "button".into(),
-            state: "default".into(),
+            scenario: "default".into(),
             variant: "default-laptop".into(),
             label: "Default".into(),
             size: "laptop".into(),
@@ -1497,7 +1497,7 @@ pub(super) mod tests {
         assert_eq!(
             serde_json::to_value(&button.screenshots).expect("json"),
             json!([{
-                "state": "default", "label": "Default", "size": "laptop",
+                "scenario": "default", "label": "Default", "size": "laptop",
                 "path": "src/button/screenshots/default-laptop.jpg", "width": 1512, "height": 982,
             }])
         );
@@ -1572,8 +1572,8 @@ pub(super) mod tests {
         let screenshots: Vec<Screenshot> = (0..4_u8)
             .map(|index| Screenshot {
                 page: "home".into(),
-                variant: format!("state-{index}-laptop"),
-                label: format!("State {index}"),
+                variant: format!("scenario-{index}-laptop"),
+                label: format!("Scenario {index}"),
                 size: "laptop".into(),
                 width: 1512,
                 height: 982,

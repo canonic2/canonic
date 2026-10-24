@@ -197,7 +197,7 @@ impl ExportHost for SpaceExport {
             .map(|story| Story {
                 id: story.id,
                 name: story.name.and_then(|name| name.as_str().map(str::to_owned)),
-                state: story.state,
+                scenario: story.scenario,
             })
             .collect())
     }

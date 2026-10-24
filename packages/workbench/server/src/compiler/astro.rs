@@ -1,4 +1,4 @@
-//! The built-in Astro adapter: each state renders in the Node evaluator with
+//! The built-in Astro adapter: each scenario renders in the Node evaluator with
 //! the project's own Astro, and the rendered HTML and its resources (styles
 //! and client scripts) become generated modules the compiler builds through
 //! the HTML loader, with shared chunks and hot updates. An edit to a file a
@@ -154,19 +154,19 @@ pub(super) async fn preview_entry(
     let mut sources = vec![];
     let mut modules = vec![];
     let render_url = format!("/_workbench/previews/render?file={}", encode(relative));
-    let mut states = vec!["default".to_owned()];
-    if let Some(map) = definition["states"].as_object() {
-        states.extend(map.keys().cloned());
+    let mut scenarios = vec!["default".to_owned()];
+    if let Some(map) = definition["scenarios"].as_object() {
+        scenarios.extend(map.keys().cloned());
     }
-    for state in states {
-        let rendered = &answer["states"][&state];
+    for scenario in scenarios {
+        let rendered = &answer["scenarios"][&scenario];
         let component = rendered["component"]
             .as_str()
             .map(PathBuf::from)
             .unwrap_or_default();
         let (module, written) = render_modules(
             previews.virtual_dir(),
-            &format!("{slug}-{state}"),
+            &format!("{slug}-{scenario}"),
             &component,
             rendered["html"].as_str().unwrap_or_default(),
             resources,
@@ -175,7 +175,7 @@ pub(super) async fn preview_entry(
         );
         modules.extend(written);
         sources.push(SourceImport::Astro {
-            state,
+            scenario,
             module,
             render_url: Some(render_url.clone()),
         });
@@ -301,7 +301,7 @@ pub(super) async fn docs_entry(
 
 /// One input edit's render: the HTML with its styles served from memory
 /// under `/_workbench/previews/preview/<variant>/`. Client scripts already
-/// ran with the state's own render, so the variant leaves them out.
+/// ran with the scenario's own render, so the variant leaves them out.
 pub(crate) struct Variant {
     pub(crate) html: String,
     pub(crate) assets: HashMap<String, Vec<u8>>,
@@ -310,17 +310,17 @@ pub(crate) struct Variant {
 pub(super) async fn render_variant(
     previews: &Previews,
     relative: &str,
-    state: &str,
+    scenario: &str,
     inputs: &Value,
 ) -> Result<Variant> {
     let answer = previews
         .evaluator()
         .call(
             "astro",
-            json!({ "file": relative, "state": state, "inputs": inputs, "options": previews.options().await }),
+            json!({ "file": relative, "scenario": scenario, "inputs": inputs, "options": previews.options().await }),
         )
         .await?;
-    let rendered = &answer["states"][state];
+    let rendered = &answer["scenarios"][scenario];
     let mut html = rendered["html"].as_str().unwrap_or_default().to_owned();
     let mut assets = HashMap::new();
     if let Some(resources) = answer["resources"].as_object() {

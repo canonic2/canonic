@@ -12,7 +12,7 @@ an [app window](windows.md), such as an Android emulator.
 The adapter works like the [React adapter](react.md), with two differences:
 imports of `react-native` load `react-native-web`, and `.web.*` files are
 preferred. Inputs, callbacks, providers, styles, aliases, and `dedupe` work as
-described in that guide. The definition keys, states, controls, and hooks are
+described in that guide. The definition keys, scenarios, controls, and hooks are
 described in [TypeScript Workbench previews](workbench-previews.md).
 
 ## Requirements
@@ -123,7 +123,7 @@ export default definePreview({
     role: { type: 'text' },
     online: { type: 'boolean' },
   },
-  states: {
+  scenarios: {
     offline: {},
     online: { inputs: { online: true } },
   },
@@ -158,7 +158,7 @@ the preview uses custom fonts or other project CSS:
 ```
 
 Run **Workbench: Refresh Pages**. **Profile Card** appears in a
-**Components** collection with the states **Offline** and **Online**, and
+**Components** collection with the scenarios **Offline** and **Online**, and
 `Platform.OS` is `web`.
 
 Keep the definition free of component imports: Workbench runs it in Node to
@@ -183,7 +183,7 @@ list previews. Import only types from component files.
 
 Providers, inputs, and data work as they do for [React](react.md#add-providers-and-context).
 A component that loads its data over the network keeps doing so: answer its
-`fetch` and XMLHttpRequest calls per state with
+`fetch` and XMLHttpRequest calls per scenario with
 [`requests`](preview-data.md#request-mocks), or wrap it in a provider
 holding fixture data from an environment.
 
@@ -260,7 +260,7 @@ The callback navigates by preview ID; `links` handles anchors using those
 addresses. Navigation runs while **Actions** is on. See
 [Links and navigation](preview-data.md#links-and-navigation). Alternatively, keep
 the other tabs decorative and report presses with `context.action('tab', tab)`
-so reviewing a state doesn't leave that screen.
+so reviewing a scenario doesn't leave that screen.
 
 Use a separate shell for modal or stack screens: their header, background,
 and available content area may differ from a tab screen. Providers shared by
@@ -375,7 +375,7 @@ is at least as tall as the frame and uses a column flex layout. A root view with
 resized. Project CSS can override the host's default layout.
 
 Choose the artboard sizes with `sizes`; `mobile` suits most app screens. See
-[Sizes](pages-and-states.md#sizes).
+[Sizes](pages-and-scenarios.md#sizes).
 
 ## Images and fonts
 

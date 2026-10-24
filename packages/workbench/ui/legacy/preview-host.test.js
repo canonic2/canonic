@@ -66,7 +66,7 @@ function host(options = {}) {
 
 test('a warm host mounts different previews and resets without replacing its compatibility bridge', async function () {
   var h = host(); var bridge = h.window.wbPreviewActions;
-  await h.renderer.load('/one.workbench.ts?state=default');
+  await h.renderer.load('/one.workbench.ts?scenario=default');
   await h.renderer.reset();
   await h.renderer.load('/two.workbench.tsx');
   assert.deepEqual(h.mounted, ['one.workbench.ts', 'two.workbench.tsx']);
@@ -141,11 +141,11 @@ test('cached imports restore their SVG sprite before every mount without retaini
       portals.push(portal); document.body.append(portal);
     },
   });
-  await h.renderer.load('/one.workbench.ts?state=default');
-  await h.renderer.load('/one.workbench.ts?state=with-filters');
+  await h.renderer.load('/one.workbench.ts?scenario=default');
+  await h.renderer.load('/one.workbench.ts?scenario=with-filters');
   await h.renderer.reset();
   assert.equal(h.document.body.children.length, 0);
-  await h.renderer.load('/one.workbench.ts?state=default');
+  await h.renderer.load('/one.workbench.ts?scenario=default');
   assert.deepEqual(h.imported, ['one.workbench.ts']);
   assert.equal(h.mounted.length, 3);
   assert.equal(h.window.__workbenchError, null);

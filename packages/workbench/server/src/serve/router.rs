@@ -54,7 +54,10 @@ async fn dispatch(State(served): State<Served>, request: Request) -> Response {
         .and_then(|value| url::Url::parse(value).ok())
     {
         for (name, value) in referer.query_pairs() {
-            if matches!(name.as_ref(), "wbTrace" | "wbPage" | "wbState" | "wbLens") {
+            if matches!(
+                name.as_ref(),
+                "wbTrace" | "wbPage" | "wbScenario" | "wbLens"
+            ) {
                 params
                     .entry(name.into_owned())
                     .or_insert_with(|| value.into_owned());
@@ -70,7 +73,7 @@ async fn dispatch(State(served): State<Served>, request: Request) -> Response {
     let mut header = format!("total;dur={total:.3}");
     let mut details = json!({
         "route": path, "page": params.get("wbPage").or_else(|| params.get("page")).or_else(|| params.get("file")).map_or(path.trim_start_matches('/'), String::as_str),
-        "lens": params.get("wbLens").or_else(|| params.get("lens")), "state": params.get("wbState").or_else(|| params.get("state")),
+        "lens": params.get("wbLens").or_else(|| params.get("lens")), "scenario": params.get("wbScenario").or_else(|| params.get("scenario")),
         "selection": params.get("wbTrace"), "status": response.status().as_u16(), "elapsedMs": total,
     });
     for (name, ms) in phases {

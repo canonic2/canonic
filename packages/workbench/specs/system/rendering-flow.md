@@ -154,7 +154,7 @@ reconciled by explicit calls such as `present()` and per-owner sequence counters
 | Field | Meaning |
 | --- | --- |
 | `id` | Opaque identity of the current navigation |
-| `requested` | The destination being navigated to: page, state, lens, example and declared artboards |
+| `requested` | The destination being navigated to: page, scenario, lens, example and declared artboards |
 | `displayed` | The destination and navigation `id` whose content is presented, or `null` |
 | `phase` | `idle`, `pending`, `loading`, `shown` or `failed` |
 | `problem` | The failure message when `phase` is `failed` |
@@ -288,10 +288,10 @@ retained frame sessions, native surface, annotation overlay and authenticated
 canvas protocol. It imports no application bootstrap and mounts no shell controls.
 
 [`content.ts`](../../ui/src/modules/preview-sessions/content.js) derives destinations,
-states, lenses and labels from project data through an injected loader/catalog.
+scenarios, lenses and labels from project data through an injected loader/catalog.
 Readiness belongs to the view submitted to the frame runtime, so a delayed lookup
 cannot inherit the outgoing document's readiness. Shared manifest rules preserve
-authored labels/mappings while merging discovered preview states. External interaction preferences do
+authored labels/mappings while merging discovered preview scenarios. External interaction preferences do
 not restart a pending or retained Storybook document.
 
 [`renderer-bridge.ts`](../../ui/src/modules/preview-sessions/renderer-bridge.js) owns
@@ -311,7 +311,7 @@ annotation/native modularization remains separate work.
 3. Verify authored HTML, compiled React/Vue previews, docs, Storybook and supported
    native adapters through the dedicated contract. Exercise cold start, failure,
    rapid supersession, size changes and close/dispose with owned fixtures.
-4. Ordinary states remain alternatives; only a page's explicit `artboards` create
+4. Ordinary scenarios remain alternatives; only a page's explicit `artboards` create
    multiple views. Each independent view retains its own size, inputs and annotations.
 5. Warm Storybook picks and returns reuse the expected content document/channel;
    assert document identity and request counts, not only elapsed time. Retained and

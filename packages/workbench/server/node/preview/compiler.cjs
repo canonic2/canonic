@@ -82,14 +82,14 @@ function validate(raw, file, root) {
   if (typeof raw.id !== 'string' || !/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(raw.id)) throw new Error(file + ': id must use kebab-case segments separated by /.');
   if (typeof raw.adapter !== 'string' || !/^[a-z0-9-]+$/.test(raw.adapter)) throw new Error(file + ': adapter must be a registered kebab-case name.');
   if (raw.icon !== undefined && (typeof raw.icon !== 'string' || !/^[a-z0-9-]+$/.test(raw.icon))) throw new Error(file + ': icon must be a kebab-case Lucide icon name.');
-  const sources = [raw.source, ...Object.values(raw.states || {}).map(state => state.source).filter(Boolean)];
+  const sources = [raw.source, ...Object.values(raw.scenarios || {}).map(scenario => scenario.source).filter(Boolean)];
   for (const source of sources) {
     if (!source || typeof source.entry !== 'string' || !source.entry.trim()) throw new Error(file + ': source.entry must name a local source file.');
     const target = path.resolve(path.dirname(file), source.entry);
     if (!inside(root, target) || !fs.existsSync(target) || !inside(fs.realpathSync(root), fs.realpathSync(target))) throw new Error(file + ': source must exist inside the project: ' + source.entry);
   }
-  if (raw.states !== undefined && (!raw.states || typeof raw.states !== 'object' || Array.isArray(raw.states))) throw new Error(file + ': states must be a map.');
-  const states = raw.states && Object.keys(raw.states).length ? raw.states : { default: {} };
+  if (raw.scenarios !== undefined && (!raw.scenarios || typeof raw.scenarios !== 'object' || Array.isArray(raw.scenarios))) throw new Error(file + ': scenarios must be a map.');
+  const scenarios = raw.scenarios && Object.keys(raw.scenarios).length ? raw.scenarios : { default: {} };
   if (raw.artboards !== undefined) {
     if (!raw.artboards || typeof raw.artboards !== 'object' || Array.isArray(raw.artboards) || !Object.keys(raw.artboards).length || Object.keys(raw.artboards).length > 32) throw new Error(file + ': artboards must be a map of 1–32 artboards.');
     for (const [id, board] of Object.entries(raw.artboards)) {
@@ -99,9 +99,9 @@ function validate(raw, file, root) {
       if (board.inputs !== undefined && (!board.inputs || typeof board.inputs !== 'object' || Array.isArray(board.inputs))) throw new Error(file + ': artboard inputs must be a map.');
     }
   }
-  for (const [id, state] of Object.entries(states)) {
-    if (!/^[a-z0-9-]+$/.test(id) || !state || typeof state !== 'object' || Array.isArray(state)) throw new Error(file + ': states need kebab-case IDs and object definitions.');
-    for (const key of ['inputs', 'fixtures', 'globals']) if (state[key] !== undefined) JSON.stringify(state[key]);
+  for (const [id, scenario] of Object.entries(scenarios)) {
+    if (!/^[a-z0-9-]+$/.test(id) || !scenario || typeof scenario !== 'object' || Array.isArray(scenario)) throw new Error(file + ': scenarios need kebab-case IDs and object definitions.');
+    for (const key of ['inputs', 'fixtures', 'globals']) if (scenario[key] !== undefined) JSON.stringify(scenario[key]);
   }
   /* Keys only; the server resolves them against the space it shows the preview in. */
   if (raw.sizes !== undefined && (!Array.isArray(raw.sizes) || !raw.sizes.length || raw.sizes.some(v => typeof v !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v) || /^[0-9-]+$/.test(v)))) throw new Error(file + ': sizes must be a list of size keys, such as laptop or mobile.');
@@ -109,7 +109,7 @@ function validate(raw, file, root) {
     if (!control || !['text', 'number', 'boolean', 'select', 'json'].includes(control.type)) throw new Error(file + ': invalid control ' + name);
     if (control.type === 'select' && (!Array.isArray(control.options) || !control.options.length)) throw new Error(file + ': select controls need options.');
   }
-  for (const [where, requests] of [['', raw.requests], ...Object.entries(states).map(([id, state]) => ['state ' + id + ' ', state.requests])]) {
+  for (const [where, requests] of [['', raw.requests], ...Object.entries(scenarios).map(([id, scenario]) => ['scenario ' + id + ' ', scenario.requests])]) {
     if (requests === undefined) continue;
     if (!requests || typeof requests !== 'object' || Array.isArray(requests)) throw new Error(file + ': ' + where + 'requests must be a map.');
     for (const [key, value] of Object.entries(requests)) {
@@ -120,32 +120,32 @@ function validate(raw, file, root) {
   if (raw.links !== undefined && (!raw.links || typeof raw.links !== 'object' || Array.isArray(raw.links))) throw new Error(file + ': links must be a map.');
   for (const [href, to] of Object.entries(raw.links || {})) {
     const target = typeof to === 'string' ? { preview: to } : to;
-    const valid = target && typeof target === 'object' && !Array.isArray(target) && (target.preview || target.state)
+    const valid = target && typeof target === 'object' && !Array.isArray(target) && (target.preview || target.scenario)
       && (target.preview === undefined || (typeof target.preview === 'string' && /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(target.preview)))
-      && (target.state === undefined || (typeof target.state === 'string' && /^[a-z0-9-]+$/.test(target.state)));
-    if (!valid) throw new Error(file + ': link ' + href + ' must name a preview ID, or { preview, state }.');
+      && (target.scenario === undefined || (typeof target.scenario === 'string' && /^[a-z0-9-]+$/.test(target.scenario)));
+    if (!valid) throw new Error(file + ': link ' + href + ' must name a preview ID, or { preview, scenario }.');
   }
-  return Object.assign({}, raw, { states });
+  return Object.assign({}, raw, { scenarios });
 }
 
 // Astro frontmatter runs here, in Node, so its fetch calls get the same
 // request mocks the browser does. Background builds and requested renders
 // share globalThis.fetch, so every render must wait for the previous one.
 let astroRenderQueue = Promise.resolve();
-function mockFetches(definition, state, inputs, render) {
-  const pending = astroRenderQueue.then(() => renderWithFetches(definition, state, inputs, render));
+function mockFetches(definition, scenario, inputs, render) {
+  const pending = astroRenderQueue.then(() => renderWithFetches(definition, scenario, inputs, render));
   astroRenderQueue = pending.then(() => undefined, () => undefined);
   return pending;
 }
 
-async function renderWithFetches(definition, state, inputs, render) {
+async function renderWithFetches(definition, scenario, inputs, render) {
   // The pipeline also renders a base source named "default", even when
-  // the preview's authored states use other IDs. That base has no overrides.
-  const spec = definition.states[state] || {};
+  // the preview's authored scenarios use other IDs. That base has no overrides.
+  const spec = definition.scenarios[scenario] || {};
   if (!spec.requests && !definition.requests) return render();
   const { mockedFetch, requestMocks } = await import(require('node:url').pathToFileURL(path.join(__dirname, "../../../ui/preview/requests.js")).href);
   const original = globalThis.fetch;
-  const context = { id: definition.id, state, inputs, fixtures: { ...definition.fixtures, ...spec.fixtures }, globals: { ...definition.globals, ...spec.globals } };
+  const context = { id: definition.id, scenario, inputs, fixtures: { ...definition.fixtures, ...spec.fixtures }, globals: { ...definition.globals, ...spec.globals } };
   // A server render awaits every fetch, so `pending` would hang it; give up
   // after ten seconds with a rendering error instead.
   const active = { mocks: requestMocks([spec.requests, definition.requests]), context, base: 'http://localhost/', signal: AbortSignal.timeout(10000) };
@@ -283,12 +283,12 @@ function projectDefinition(raw, file, root) {
     id: definition.id, title: definition.title || definition.id, adapter: definition.adapter,
     file: slash(path.relative(root, file)),
     source: slash(path.relative(root, path.resolve(path.dirname(file), definition.source.entry))),
-    states: Object.entries(definition.states).map(([id, state]) => ({ id, label: state.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
+    scenarios: Object.entries(definition.scenarios).map(([id, scenario]) => ({ id, label: scenario.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
     controls: definition.controls || {}, sizes: definition.sizes, docs: definition.docs || null,
     ...(definition.artboards ? { artboards: Object.entries(definition.artboards).map(([id, board]) => ({ id, label: board.label || id, width: board.width, height: board.height })) } : {}),
     ...(definition.icon ? { icon: definition.icon } : {}),
     links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
-      typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.state ? { state: to.state } : {}) }])),
+      typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.scenario ? { scenario: to.scenario } : {}) }])),
   } };
 }
 
@@ -317,14 +317,14 @@ function validateDocs(raw, file, root) {
       ...(lens.environment ? { environment: local(lens.environment, 'lens “' + name + '” environment') } : {}) };
   });
   if (raw.lens !== undefined && !lenses.some(lens => lens.key === raw.lens)) throw new Error('lens “' + raw.lens + '” isn’t one of its lenses.');
-  if (raw.states !== undefined && (!raw.states || typeof raw.states !== 'object' || Array.isArray(raw.states))) throw new Error('states must be a map.');
-  const states = Object.entries(raw.states || {}).map(([state, spec]) => {
-    if (!key.test(state)) throw new Error('states need kebab-case IDs.');
-    return { id: state, label: spec && typeof spec.label === 'string' && spec.label ? spec.label : state.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) };
+  if (raw.scenarios !== undefined && (!raw.scenarios || typeof raw.scenarios !== 'object' || Array.isArray(raw.scenarios))) throw new Error('scenarios must be a map.');
+  const scenarios = Object.entries(raw.scenarios || {}).map(([scenario, spec]) => {
+    if (!key.test(scenario)) throw new Error('scenarios need kebab-case IDs.');
+    return { id: scenario, label: spec && typeof spec.label === 'string' && spec.label ? spec.label : scenario.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) };
   });
   if (raw.icon !== undefined && (typeof raw.icon !== 'string' || !key.test(raw.icon))) throw new Error('icon must be a kebab-case Lucide icon name.');
   return { id: raw.id, title: typeof raw.title === 'string' && raw.title ? raw.title : raw.id, ...(raw.icon ? { icon: raw.icon } : {}), file: slash(path.relative(root, file)),
-    src: docs, lens: raw.lens || (lenses[0] ? lenses[0].key : null), lenses, states };
+    src: docs, lens: raw.lens || (lenses[0] ? lenses[0].key : null), lenses, scenarios };
 }
 
 module.exports = { Compiler, discover, validate, inside, mockFetches, projectDefinition };

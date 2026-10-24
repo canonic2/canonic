@@ -4,7 +4,7 @@ export interface PreviewContext<T extends Record<string, unknown> = Record<strin
   id: string;
   /** The independently rendered artboard within this page, when declared. */
   artboard?: string;
-  state: string;
+  scenario: string;
   inputs: T;
   fixtures: Record<string, unknown>;
   globals: Record<string, unknown>;
@@ -12,11 +12,11 @@ export interface PreviewContext<T extends Record<string, unknown> = Record<strin
   /** Report asynchronous rendering failures to the host and capture service. */
   error(error: unknown): void;
   action(name: string, ...values: unknown[]): void;
-  /** Open another preview, or another state of this one, while actions are on. */
+  /** Open another preview, or another scenario of this one, while actions are on. */
   navigate(to: PreviewLink): void;
 }
-/** A preview ID, or a preview and state; a state alone stays in this preview. */
-export type PreviewLink = string | { preview: string; state?: string } | { preview?: string; state: string };
+/** A preview ID, or a preview and scenario; a scenario alone stays in this preview. */
+export type PreviewLink = string | { preview: string; scenario?: string } | { preview?: string; scenario: string };
 export type Cleanup = void | (() => void | Promise<void>);
 /** A mocked response. `body` objects are sent as JSON. */
 export interface MockResponse {
@@ -48,7 +48,7 @@ export type MockHandler<T extends Record<string, unknown> = Record<string, unkno
   MockResponse | ((request: MockRequest, context: PreviewContext<T>) => MockResponse | Response | Promise<MockResponse | Response>);
 /** Keys: `'GET /api/items'`, `'/api/items/*'`, `'POST /graphql Operation'`, or a full URL. */
 export type RequestMocks<T extends Record<string, unknown> = Record<string, unknown>> = Record<string, MockHandler<T>>;
-export interface PreviewState<T extends Record<string, unknown>> {
+export interface PreviewScenario<T extends Record<string, unknown>> {
   label?: string;
   inputs?: Partial<T>;
   fixtures?: Record<string, unknown>;
@@ -68,7 +68,7 @@ export interface Control {
   max?: number;
   step?: number;
 }
-export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewState<T> {
+export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewScenario<T> {
   id: string;
   title?: string;
   icon?: string;
@@ -79,8 +79,8 @@ export interface Preview<T extends Record<string, unknown> = Record<string, unkn
   environment?: string;
   sizes?: SizeKey[];
   controls?: Record<string, Control>;
-  states?: Record<string, PreviewState<NoInfer<T>>>;
-  /** Artboards rendered together on this page, independently of its states. */
+  scenarios?: Record<string, PreviewScenario<NoInfer<T>>>;
+  /** Artboards rendered together on this page, independently of its scenarios. */
   artboards?: Record<string, { label?: string; width: number; height: number; inputs?: Partial<NoInfer<T>> }>;
   /** Addresses the source links or submits to, mapped to the preview each opens. */
   links?: Record<string, PreviewLink>;
@@ -160,8 +160,8 @@ export interface Docs {
   lenses?: Record<string, DocsLens>;
   /** The lens the page opens with; the first in `lenses` otherwise. */
   lens?: string;
-  /** States every example receives as `context.state`. Prefer showing variations side by side. */
-  states?: Record<string, { label?: string }>;
+  /** Scenarios every example receives as `context.scenario`. Prefer showing variations side by side. */
+  scenarios?: Record<string, { label?: string }>;
 }
 export function definePreview<T extends Record<string, unknown>>(preview: Preview<T>): Preview<T>;
 export function defineDocs(docs: Docs): Docs & { kind: 'docs' };

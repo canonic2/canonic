@@ -1,13 +1,13 @@
 import { mount as mountHtml } from './html.js';
 
-// Reference states are rendered at build time. Input edits ask the worker to
-// render again; exported previews need no server to select reference states.
+// Reference scenarios are rendered at build time. Input edits ask the worker to
+// render again; exported previews need no server to select reference scenarios.
 export async function mount(canvas, source, context, environment) {
   let html = source.html;
   if (JSON.stringify(context.inputs) !== JSON.stringify(source.inputs)) {
-    if (!source.renderUrl) throw new Error('Astro input edits require the live Workbench server. Portable previews contain the authored states.');
+    if (!source.renderUrl) throw new Error('Astro input edits require the live Workbench server. Portable previews contain the authored scenarios.');
     const url = new URL(source.renderUrl, location.href);
-    url.searchParams.set('state', context.state);
+    url.searchParams.set('scenario', context.scenario);
     url.searchParams.set('inputs', JSON.stringify(context.inputs));
     const response = await fetch(url, { signal: context.signal });
     const answer = await response.json();

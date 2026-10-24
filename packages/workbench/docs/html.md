@@ -3,7 +3,7 @@
 An HTML preview renders an HTML file, or a function that draws into the
 canvas, as a [TypeScript preview](workbench-previews.md) with
 `adapter: 'html'`. Workbench compiles the file's scripts, stylesheets, and
-assets, and gives the page states, inputs, **Preview controls**, and an action
+assets, and gives the page scenarios, inputs, **Preview controls**, and an action
 log. No framework is involved.
 
 This guide covers what is specific to HTML. For the definition keys, controls,
@@ -12,16 +12,16 @@ lifecycle hooks, and the command-line checker, see
 
 ## HTML previews or design pages
 
-Workbench shows HTML in two ways. A [design page](pages-and-states.md#design-pages)
+Workbench shows HTML in two ways. A [design page](pages-and-scenarios.md#design-pages)
 is an HTML file listed in `workbench.yaml` and served as it is. An HTML preview
 is an HTML file named by a `.workbench.ts` definition and rebuilt by Workbench.
 
 | | Design page | HTML preview |
 | --- | --- | --- |
-| Declared in | `workbench.yaml`, with its states | A `.workbench.ts` definition next to the file |
+| Declared in | `workbench.yaml`, with its scenarios | A `.workbench.ts` definition next to the file |
 | How it's served | The file itself, from the project | Compiled into a new document |
 | Scripts | Run as written | Bundled, so they can be TypeScript and import local modules, packages, CSS, and JSON |
-| States | `data-wb-*` attributes and CSS; the first state is `default` in the page | The same, plus scripts that read the state and inputs; the state ID is used as it is |
+| Scenarios | `data-wb-*` attributes and CSS; the first scenario is `default` in the page | The same, plus scripts that read the scenario and inputs; the scenario ID is used as it is |
 | Inputs, controls, actions | None | `inputs`, **Preview controls**, and **Actions** |
 | Relative links | Work as on a web server | Resolve against the compiled preview, not the file (see [Links](#links)) |
 | Portable viewer | Not included | Included in `build` output and the export's `browser/` folder |
@@ -99,8 +99,8 @@ body { font: 16px/1.5 system-ui, sans-serif; }
 .plan-cta { padding: 12px 20px; border: 0; border-radius: 8px; background: #1f5eff; color: white; }
 
 .plan-note { display: none; }
-html[data-wb-state="annual"] .plan-note { display: block; }
-html[data-wb-state="annual"] .plan { border-color: #1f5eff; }
+html[data-wb-scenario="annual"] .plan-note { display: block; }
+html[data-wb-scenario="annual"] .plan { border-color: #1f5eff; }
 ```
 
 `site/pricing/pricing.ts`:
@@ -138,7 +138,7 @@ export default definePreview({
     plan: { type: 'select', options: ['Starter', 'Team', 'Enterprise'] },
     price: { type: 'number', min: 0, step: 1 },
   },
-  states: {
+  scenarios: {
     monthly: {},
     annual: { inputs: { price: 10 } },
   },
@@ -146,7 +146,7 @@ export default definePreview({
 ```
 
 Run **Workbench: Refresh Pages**. **Pricing** appears in a **Pages** collection
-with the states **Monthly** and **Annual**. **Annual** shows $10.00 and the
+with the scenarios **Monthly** and **Annual**. **Annual** shows $10.00 and the
 "Billed yearly" note, choosing a plan in **Preview controls** renders the page
 again with that plan, and clicking **Choose plan** records `choose-plan` under
 **Actions**. The [command-line checker](workbench-previews.md#command-line-tools)
@@ -222,19 +222,19 @@ link opens its preview, and any other link, such as **Compare plans** without a
 `pages/compare` preview, is recorded under **Actions** as `navigate`. See
 [Links and navigation](preview-data.md#links-and-navigation).
 
-## Inputs, states, and actions
+## Inputs, scenarios, and actions
 
-While a state renders, `window.workbench` holds the preview's context: `id`,
-`state`, `inputs`, `fixtures`, `globals`, `signal`, `action(name, ...values)`,
+While a scenario renders, `window.workbench` holds the preview's context: `id`,
+`scenario`, `inputs`, `fixtures`, `globals`, `signal`, `action(name, ...values)`,
 `navigate(to)`, and `error(error)`. Your HTML doesn't receive inputs any other
 way; a script reads them and updates the page, as `pricing.ts` does. Outside
 Workbench, `window.workbench` is undefined.
 
 A page whose scripts load their data with `fetch` or XMLHttpRequest needs no
-changes: answer those requests per state with
+changes: answer those requests per scenario with
 [`requests`](preview-data.md#request-mocks).
 
-Every state change, input edit, and **Reset state** renders the page again from
+Every scenario change, input edit, and **Reset scenario** renders the page again from
 the start: Workbench removes the content, restores the `<html>` and `<body>`
 attributes, inserts the content again, and runs every script again, modules
 included. The window itself is kept, so globals your scripts set and listeners
@@ -245,13 +245,13 @@ listeners to the render's signal:
 document.addEventListener('keydown', onKey, { signal: window.workbench?.signal });
 ```
 
-States:
+Scenarios:
 
-- `<html>` carries `data-wb-state` with the state's ID. The first state uses its
-  own ID, such as `monthly`, not `default` as on design pages. CSS keyed off it,
+- `<html>` carries `data-wb-scenario` with the scenario's ID. The first
+  scenario uses its own ID, such as `monthly`, not `default` as on design pages. CSS keyed off it,
   as in `pricing.css`, works on the canvas and in exports.
-- `data-wb-state-only`, `data-wb-state-not`, and `data-wb-set-<id>`, described
-  in [States](pages-and-states.md#states), are applied on the canvas before your
+- `data-wb-scenario-only`, `data-wb-scenario-not`, and `data-wb-set-<id>`,
+  described in [Scenarios](pages-and-scenarios.md#scenarios), are applied on the canvas before your
   scripts run. They aren't applied in the
   [portable viewer](workbench-previews.md#portable-exports), so use CSS or a
   script when the preview must look the same there.
@@ -314,7 +314,7 @@ export default definePreview({
     message: { type: 'text' },
     tone: { type: 'select', options: ['info', 'warning'] },
   },
-  states: {
+  scenarios: {
     info: {},
     warning: { inputs: { tone: 'warning', message: 'Payment failed.' } },
   },
@@ -428,7 +428,7 @@ The [command-line checker](workbench-previews.md#command-line-tools) reports
 build errors. Errors that happen while the page renders, such as a mistyped
 `export` name or a failing script, appear only in the preview's frame. An
 uncaught error in a script or an event handler replaces the page with the error;
-fix it and save, or use **Reset state**.
+fix it and save, or use **Reset scenario**.
 
 | Error | Cause and fix |
 | --- | --- |
@@ -437,7 +437,7 @@ fix it and save, or use **Reset state**.
 | `Module build failed (from builtin:swc-loader)` | A script has a syntax error. The lines after it give the message and position. |
 | `Module parse failed` | A script imports a file type Workbench doesn't compile. See [Scripts](#scripts). |
 | `ReferenceError: <name> is not defined` from an `onclick` or other inline handler | Script declarations are private. Add the listener from the script, or assign the function to `window`. |
-| `The selected source export does not exist for <id> — <state>` | `source.export` names an export the module doesn't have. |
+| `The selected source export does not exist for <id> — <scenario>` | `source.export` names an export the module doesn't have. |
 | `An HTML JavaScript entry must export a mount function.` | The module's selected export isn't a function. |
 | `Could not load HTML resource: <url>` or `HTML resource load timed out: <url>` | A stylesheet or script failed to load, or took more than 5 seconds. Check the URL, especially an external one. |
 | An image or background is missing, with no error | The path is in an unquoted attribute or a `style` attribute. See [Images and other files](#images-and-other-files). |

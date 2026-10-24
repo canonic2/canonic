@@ -6,7 +6,7 @@ const page = {
   target: {
     space: { id: 'acme', name: 'Acme', url: 'http://example.com' },
     src: 'page',
-    state: null,
+    scenario: null,
     lens: 'storybook',
   },
   size: { width: 1000, height: 700 },
@@ -88,7 +88,7 @@ function fixture() {
 void test('ordinary stories reuse one renderer; only authored artboards create multiple instances', async () => {
   const f = fixture();
   await f.sessions.activate(page);
-  await f.sessions.activate({ ...page, target: { ...page.target, state: 'secondary' } });
+  await f.sessions.activate({ ...page, target: { ...page.target, scenario: 'secondary' } });
   assert.equal(f.visible.size, 1);
   assert.equal(f.commands[0]?.id, '1');
   assert.equal(f.commands[0]?.command, 'navigate');
@@ -139,7 +139,11 @@ void test('rapid replacements discard unpublished renderers and keep the origina
   assert.deepEqual(f.concealed, []);
   await f.sessions.activate(page);
   f.sessions.finish();
-  assert.deepEqual(f.concealed, [['1', false]], 'resuming the outgoing view cancels its deferred concealment');
+  assert.deepEqual(
+    f.concealed,
+    [['1', false]],
+    'resuming the outgoing view cancels its deferred concealment',
+  );
   f.sessions.dispose();
 });
 void test('parked sessions expire after fifteen minutes and wait while review is holding the canvas', async (t) => {

@@ -3,7 +3,7 @@
 A [Workbench preview](workbench-previews.md) renders your real component or
 page, but not your app: there is no server, no router, no API, and nobody
 signed in. This guide covers everything a preview supplies in their place, and
-how to change it for each state and while you review:
+how to change it for each scenario and while you review:
 
 - **[Inputs and controls](#inputs-and-controls)**: the props your component
   receives, and the fields that edit them live.
@@ -22,7 +22,7 @@ how to change it for each state and while you review:
 ## Choose how to give a page its data
 
 Supply data the way your page already receives it, so the component renders
-unchanged. The options combine freely, and each can change per state.
+unchanged. The options combine freely, and each can change per scenario.
 
 | The page gets its data from | Give it | With |
 | --- | --- | --- |
@@ -34,21 +34,21 @@ unchanged. The options combine freely, and each can change per state.
 
 ## What you can set, and where
 
-| Key | Set on the preview | Overridden by a state | Edited while you review | Reaches |
+| Key | Set on the preview | Overridden by a scenario | Edited while you review | Reaches |
 | --- | --- | --- | --- | --- |
 | `inputs` | Yes | Yes, key by key | Yes, through `controls` | The component: props, `Astro.props`, or `window.workbench.inputs` |
 | `fixtures`, `globals` | Yes | Yes, key by key | No | `context` in environments, hooks, and request handlers |
 | `requests` | Yes | Yes, tried first | No | The page's `fetch` and XMLHttpRequest calls |
 | `source` | Yes | Yes | No | Which file and export renders |
-| `environment` | Yes, and once for the project | No; read `context.state` | No | Providers, plugins, and setup around the component |
+| `environment` | Yes, and once for the project | No; read `context.scenario` | No | Providers, plugins, and setup around the component |
 | `setup`, `play`, `ready` | Yes | Yes, both run | No | Code before and after the component mounts |
 | `links` | Yes | No | No | Where the page's links and forms go |
 
-A state overrides a preview **key by key, one level deep**. If the preview has
-`inputs: { user: { name: 'Ada', role: 'admin' }, compact: false }` and a state
-has `inputs: { user: { name: 'Grace' } }`, the state's `user` replaces the whole
+A scenario overrides a preview **key by key, one level deep**. If the preview has
+`inputs: { user: { name: 'Ada', role: 'admin' }, compact: false }` and a scenario
+has `inputs: { user: { name: 'Grace' } }`, the scenario's `user` replaces the whole
 `user` object, so `role` is gone, while `compact` keeps the preview's value.
-Repeat the fields a state still needs, or spread a shared object:
+Repeat the fields a scenario still needs, or spread a shared object:
 
 ```ts
 const ada = { name: 'Ada', role: 'admin' };
@@ -56,7 +56,7 @@ const ada = { name: 'Ada', role: 'admin' };
 export default definePreview({
   // …
   inputs: { user: ada, compact: false },
-  states: {
+  scenarios: {
     default: {},
     viewer: { inputs: { user: { ...ada, role: 'viewer' } } },
   },
@@ -65,18 +65,18 @@ export default definePreview({
 
 ## How a render runs
 
-Workbench renders the state again whenever you pick a state, edit a control,
-or choose **Reset state**. Each render:
+Workbench renders the scenario again whenever you pick a scenario, edit a control,
+or choose **Reset scenario**. Each render:
 
 1. Merges `inputs`, `fixtures`, and `globals`: the preview's, then the
-   state's, then, for inputs, your control edits. Each render gets a fresh
+   scenario's, then, for inputs, your control edits. Each render gets a fresh
    copy, so code can't change the authored values.
-2. Turns on [request mocks](#request-mocks): the state's, then the preview's.
+2. Turns on [request mocks](#request-mocks): the scenario's, then the preview's.
 3. Runs `setup` hooks: the project's environment, the preview's environment,
-   the preview, then the state.
+   the preview, then the scenario.
 4. Mounts the component with the inputs, inside the environments' providers.
-5. Runs `play` hooks (the preview's, then the state's) and `ready` hooks (the
-   environments', the preview's, then the state's).
+5. Runs `play` hooks (the preview's, then the scenario's) and `ready` hooks (the
+   environments', the preview's, then the scenario's).
 6. Waits for fonts and visible images, then marks the preview ready.
    Screenshots and handoffs wait for this.
 
@@ -126,14 +126,14 @@ controls: {
 
 Every control also takes a `label`, which defaults to the input's name.
 
-- An edit applies when the field changes, and renders the current state again
+- An edit applies when the field changes, and renders the current scenario again
   with that input replaced. A `json` edit replaces the whole value.
-- Edits last until you choose **Reset state**, pick another state, or leave
+- Edits last until you choose **Reset scenario**, pick another scenario, or leave
   the page. They never change the definition, exports, or the screenshots
-  an export takes of each state.
+  an export takes of each scenario.
 - An Astro preview renders each edit on the Workbench server. A
   [portable export](workbench-previews.md#portable-exports) of an Astro
-  preview has its authored states but no controls.
+  preview has its authored scenarios but no controls.
 
 ### Callbacks, children, and slots
 
@@ -146,7 +146,7 @@ through a preview-only file:
   [Props, children, and callbacks](react.md#props-children-and-callbacks).
 - **Vue:** pass listeners and slots from the environment's `wrap`. See
   [Events and actions](vue.md#events-and-actions) and [Slots](vue.md#slots).
-- **Astro:** see [Props, slots, and states](astro.md#props-slots-and-states).
+- **Astro:** see [Props, slots, and scenarios](astro.md#props-slots-and-scenarios).
 - **HTML:** attach listeners in a page script or an
   [environment `mount`](html.md#environment-mount).
 
@@ -158,7 +158,7 @@ component doesn't receive them unless that code passes them on. By convention,
 `fixtures` hold records, such as customers or an order, and `globals` hold
 settings, such as a theme or a locale.
 
-They merge like inputs, key by key, and controls can't edit them. A state that
+They merge like inputs, key by key, and controls can't edit them. A scenario that
 changes only its data can change only `fixtures`:
 
 ```ts
@@ -170,7 +170,7 @@ export default definePreview({
   requests: {
     'GET /api/customers': (request, context) => ({ body: context.fixtures.customers }),
   },
-  states: {
+  scenarios: {
     default: {},
     empty: { fixtures: { customers: [] } },
   },
@@ -231,10 +231,10 @@ When a preview has both, the project's environment goes on the outside: its
 and its `wrap` receives what the preview's `wrap` returned. For exports a
 custom adapter defines itself, the preview's environment wins.
 
-An environment runs on every render, so read the current state from
+An environment runs on every render, so read the current scenario and data from
 `context`, never from a value saved when the module loaded. This project
 environment gives every React preview a theme and a signed-in user, both
-changeable per state:
+changeable per scenario:
 
 ```tsx
 // src/workbench/environment.tsx
@@ -255,14 +255,14 @@ export function wrap(element: ReactElement, context: PreviewContext) {
 }
 ```
 
-A state then shows a signed-out page with `fixtures: { user: null }`, or the
+A scenario then shows a signed-out page with `fixtures: { user: null }`, or the
 dark theme with `globals: { theme: 'dark' }`.
 
 ### Seed storage and stores
 
 `setup` runs before the component mounts, so it can put things where the
 page will look for them. Return a cleanup that puts them back, so the next
-state starts clean:
+scenario starts clean:
 
 ```ts
 export function setup(context: PreviewContext) {
@@ -288,7 +288,7 @@ the project's environment for the lens's adapter, with the lens's own
 `configure`, and `mount` run for each example. `setup` runs once for the docs
 before the first example mounts, and `ready` once after the last.
 
-An example's context has `state`, `signal`, `action`, and `navigate`, but its
+An example's context has `scenario`, `signal`, `action`, and `navigate`, but its
 `inputs`, `fixtures`, and `globals` are empty, so an environment that reads
 them gets its defaults in a docs lens. Docs have no request mocks or
 controls.
@@ -296,7 +296,7 @@ controls.
 ## Request mocks
 
 `requests` answers your page's own `fetch` and XMLHttpRequest calls, so a
-page that loads its data renders unchanged, and each state shows the data,
+page that loads its data renders unchanged, and each scenario shows the data,
 emptiness, delay, or failure you choose:
 
 ```ts
@@ -308,7 +308,7 @@ export default definePreview({
     'GET /api/customers': { body: [{ id: 'c-1', name: 'Ada' }] },
     'POST /api/customers': (request) => ({ status: 201, body: { id: 'c-2', ...request.body } }),
   },
-  states: {
+  scenarios: {
     default: {},
     empty: { requests: { 'GET /api/customers': { body: [] } } },
     loading: { requests: { 'GET /api/customers': { pending: true } } },
@@ -341,9 +341,9 @@ path without a host matches requests to any host, so the same key answers
 
 ### Which mock answers
 
-Workbench tries the state's mocks first, then the preview's, each in the order
-you wrote them, and the first match answers. A state's key doesn't have to
-repeat the preview's to win: a state's `'/api/*'` answers every request under
+Workbench tries the scenario's mocks first, then the preview's, each in the order
+you wrote them, and the first match answers. A scenario's key doesn't have to
+repeat the preview's to win: a scenario's `'/api/*'` answers every request under
 `/api/`, ahead of all of the preview's mocks. Put specific keys before broad
 ones.
 
@@ -367,7 +367,7 @@ A mock's value is a response:
 | `headers` | Response headers, such as `{ 'x-total-count': '42' }`. |
 | `body` | The body. A string is sent as it is; anything else is sent as JSON with `content-type: application/json`. |
 | `delay` | Milliseconds to wait before answering. |
-| `pending` | `true` never answers, for a loading state. The request is cancelled when the state renders again. |
+| `pending` | `true` never answers, for a loading scenario. The request is cancelled when the scenario renders again. |
 | `failed` | `true` fails like a network error, as when offline: `fetch` rejects with a `TypeError`, and XMLHttpRequest fires `error`. |
 | `passthrough` | `true` sends the request to the network after all. |
 
@@ -394,7 +394,7 @@ preview's context and returns a response, a promise of one, or a `Response`:
 | `body` | The body: an object or array for JSON, an object for a URL-encoded form, otherwise the text, or `undefined` for none. |
 | `operationName`, `variables` | For a GraphQL request; otherwise `null`. |
 
-The context is the same one hooks receive: `state`, `inputs`, `fixtures`,
+The context is the same one hooks receive: `scenario`, `inputs`, `fixtures`,
 `globals`, `action`, and the rest. Handlers run in the browser, so they can
 use anything your definition imports.
 
@@ -439,7 +439,7 @@ requests: {
     body: { data: { renameCustomer: { id: request.variables.id, name: request.variables.name } } },
   }),
 },
-states: {
+scenarios: {
   default: {},
   'load-error': { requests: { 'POST /graphql Customers': { body: { errors: [{ message: 'Internal server error' }] } } } },
 },
@@ -478,7 +478,7 @@ browser:
 
 - A relative URL, such as `fetch('/api/plans')`, resolves against
   `http://localhost/`, and a path-only key matches it.
-- The handler's context has `id`, `state`, `inputs`, `fixtures`, and
+- The handler's context has `id`, `scenario`, `inputs`, `fixtures`, and
   `globals`.
 - The page waits for every request before it renders, so a server render has
   no loading state to show. A render that waits more than 10 seconds, for a
@@ -497,7 +497,7 @@ workers or service workers.
 ## Actions
 
 **Actions**, in **Preview controls**, lists the last 30 things your page
-tried to do, newest last. **Reset state** clears it.
+tried to do, newest last. **Reset scenario** clears it.
 
 | Entry | Logged when | Values |
 | --- | --- | --- |
@@ -522,7 +522,7 @@ script:
   [Write a first preview](react-native-web.md#write-a-first-preview)
 - **Astro and HTML:** a page script calling `window.workbench?.action(…)`;
   see [Styles, scripts, and assets](astro.md#styles-scripts-and-assets) and
-  [Inputs, states, and actions](html.md#inputs-states-and-actions)
+  [Inputs, scenarios, and actions](html.md#inputs-scenarios-and-actions)
 
 ## Links and navigation
 
@@ -542,8 +542,8 @@ Workbench has already handled the click.
 
 ### Map links to previews
 
-`links` maps an address to a preview ID, to `{ preview, state }`, or to
-`{ state }` for another state of the same preview:
+`links` maps an address to a preview ID, to `{ preview, scenario }`, or to
+`{ scenario }` for another scenario of the same preview:
 
 ```ts
 export default definePreview({
@@ -552,10 +552,10 @@ export default definePreview({
   source: { entry: '../src/pages/pricing.astro' },
   links: {
     '/': 'pages/home',
-    '/checkout/': { preview: 'pages/checkout', state: 'annual' },
-    '/pricing/?billing=monthly': { state: 'monthly' },
+    '/checkout/': { preview: 'pages/checkout', scenario: 'annual' },
+    '/pricing/?billing=monthly': { scenario: 'monthly' },
   },
-  states: { annual: {}, monthly: {} },
+  scenarios: { annual: {}, monthly: {} },
 });
 ```
 
@@ -565,7 +565,7 @@ export default definePreview({
 - Write addresses the way your source writes its links. Relative addresses
   resolve against the preview's own address, as the page's relative links do.
 - A form matches by its `action`.
-- A target that names a preview or state that doesn't exist is reported with
+- A target that names a preview or scenario that doesn't exist is reported with
   the other [configuration problems](troubleshooting.md#read-the-resolved-config),
   such as `<file>: link /checkout/ names unknown Workbench preview “pages/checkout”.`
 
@@ -576,8 +576,8 @@ in a click handler, call `context.navigate` with the same kinds of targets:
 
 ```ts
 context.navigate('pages/checkout');
-context.navigate({ preview: 'pages/checkout', state: 'annual' });
-context.navigate({ state: 'monthly' });
+context.navigate({ preview: 'pages/checkout', scenario: 'annual' });
+context.navigate({ scenario: 'monthly' });
 ```
 
 It does nothing while **Actions** is off. Page scripts in HTML and Astro
@@ -634,7 +634,7 @@ export default definePreview({
   requests: {
     'GET /api/customers': (request, context) => ({ body: context.fixtures.customers }),
   },
-  states: {
+  scenarios: {
     default: {},
     empty: { fixtures: { customers: [] } },
     loading: { requests: { 'GET /api/customers': { pending: true } } },
@@ -652,7 +652,7 @@ export default definePreview({
 
 Some apps split a page into a provider that loads data and a view that reads
 it from a context. Render the view, and provide the context from an
-environment with each state's fixtures:
+environment with each scenario's fixtures:
 
 `src/pages/album/album-environment.tsx`:
 
@@ -664,8 +664,8 @@ import { AlbumContext } from './album-context';
 export function wrap(element: ReactElement, context: PreviewContext) {
   const value = {
     album: context.fixtures.album ?? null,
-    isLoading: context.state === 'loading',
-    isError: context.state === 'error',
+    isLoading: context.scenario === 'loading',
+    isError: context.scenario === 'error',
     onPlay: (trackId: string) => context.action('play', trackId),
   };
   return <AlbumContext.Provider value={value}>{element}</AlbumContext.Provider>;
@@ -684,7 +684,7 @@ export default definePreview({
   source: { entry: './AlbumView.tsx', export: 'AlbumView' },
   environment: './album-environment.tsx',
   fixtures: { album },
-  states: { default: {}, loading: {}, error: {} },
+  scenarios: { default: {}, loading: {}, error: {} },
 });
 ```
 
@@ -730,7 +730,7 @@ export default definePreview({
   adapter: 'astro',
   source: { entry: './plans.astro' },
   requests: { 'GET /api/plans': { body: [{ name: 'Team' }, { name: 'Business' }] } },
-  states: {
+  scenarios: {
     default: {},
     failed: { requests: { 'GET /api/plans': { status: 500 } } },
   },

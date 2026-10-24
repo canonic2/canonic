@@ -9,7 +9,7 @@ pre-warming are separate responsibilities of the native compiler.
 The canvas needs a complete, ordered page list without waiting for the preview
 compiler to start. Listing must preserve the definition behavior in
 [TypeScript previews](../pages/previews.md) and [docs](../pages/docs-pages.md), including
-validation, errors, IDs, states and sidebar order.
+validation, errors, IDs, scenarios and sidebar order.
 
 This topic owns discovery, index reuse, evaluation, failure recovery and saved
 index bounds. [Performance](../system/performance.md#measured-interactions) owns

@@ -305,7 +305,7 @@ pub(crate) async fn portable_docs(
             };
             let request = DocsRequest {
                 lens: lens.map(|lens| lens.key.as_str()),
-                state: None,
+                scenario: None,
             };
             let html = service
                 .page(entry, request, &docs_pages, &locations, false)

@@ -37,12 +37,12 @@ pub(crate) struct AdapterImport {
 #[derive(Clone, Debug)]
 pub(crate) enum SourceImport {
     Module {
-        state: String,
+        scenario: String,
         file: String,
         export_name: String,
     },
     Astro {
-        state: String,
+        scenario: String,
         module: String,
         render_url: Option<String>,
     },
@@ -125,7 +125,7 @@ fn environment_lines(project: Option<&str>, own: Option<&str>) -> (Vec<String>, 
 /// A preview's entry. Sources are read when `mount` runs, so a hot update to a
 /// source re-renders with the new module. Sources that refresh themselves
 /// (React components) stop an update there; anything else bubbles to the
-/// entry, which re-renders the selected state in place.
+/// entry, which re-renders the selected scenario in place.
 pub(crate) fn preview_entry_source(input: &PreviewEntry<'_>) -> String {
     let portable = input.portable;
     let mut lines = vec![];
@@ -148,7 +148,7 @@ pub(crate) fn preview_entry_source(input: &PreviewEntry<'_>) -> String {
         let name = format!("source{index}");
         match source {
             SourceImport::Astro {
-                state,
+                scenario,
                 module,
                 render_url,
             } => {
@@ -156,18 +156,22 @@ pub(crate) fn preview_entry_source(input: &PreviewEntry<'_>) -> String {
                 accepted.push(Value::String(module.clone()));
                 sources.push(format!(
                     "{}: {{ html: {name}.html, inputs: {name}.inputs, renderUrl: {} }}",
-                    quote(state),
+                    quote(scenario),
                     render_url.as_deref().map_or("null".to_owned(), quote)
                 ));
             }
             SourceImport::Module {
-                state,
+                scenario,
                 file,
                 export_name,
             } => {
                 lines.push(format!("import * as {name} from {};", quote(file)));
                 accepted.push(Value::String(file.clone()));
-                sources.push(format!("{}: {name}[{}]", quote(state), quote(export_name)));
+                sources.push(format!(
+                    "{}: {name}[{}]",
+                    quote(scenario),
+                    quote(export_name)
+                ));
             }
         }
     }
@@ -319,7 +323,7 @@ mod tests {
     fn preview_entries_register_live_and_export_portable() {
         let adapter = react();
         let sources = [SourceImport::Module {
-            state: "default".into(),
+            scenario: "default".into(),
             file: "/acme/Landing.tsx".into(),
             export_name: "default".into(),
         }];

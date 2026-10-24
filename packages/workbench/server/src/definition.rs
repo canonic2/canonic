@@ -27,7 +27,7 @@ pub(crate) fn project(
     Some(Projection { entry, sources })
 }
 
-/// A literal definition's validated value, with the default state filled in
+/// A literal definition's validated value, with the default scenario filled in
 /// as the compiler's validation does. `None` when JavaScript must decide.
 pub(crate) fn validated(
     raw: &Value,
@@ -44,11 +44,11 @@ pub(crate) fn validated(
             .map(|object| {
                 let mut object = object.clone();
                 let empty = object
-                    .get("states")
+                    .get("scenarios")
                     .and_then(Value::as_object)
                     .is_none_or(serde_json::Map::is_empty);
                 if empty {
-                    object.insert("states".into(), serde_json::json!({ "default": {} }));
+                    object.insert("scenarios".into(), serde_json::json!({ "default": {} }));
                 }
                 Value::Object(object)
             })
@@ -126,10 +126,10 @@ mod tests {
     fn projection_and_validation_match_list_fields() {
         let root = Path::new("/acme");
         let file = root.join("page.workbench.ts");
-        let raw = json!({"id":"page","adapter":"html","source":{"entry":"page.html"},"states":{"a--b":{},"-ready":{},"empty":{}},"links":{"/next":{"state":"empty"}},"sizes":["mobile"]});
+        let raw = json!({"id":"page","adapter":"html","source":{"entry":"page.html"},"scenarios":{"a--b":{},"-ready":{},"empty":{}},"links":{"/next":{"scenario":"empty"}},"sizes":["mobile"]});
         let entry = project(&raw, &file, root, |_| true).unwrap().entry.unwrap();
-        assert_eq!(entry["states"][0]["label"], "A- B");
-        assert_eq!(entry["states"][1]["label"], " Ready");
+        assert_eq!(entry["scenarios"][0]["label"], "A- B");
+        assert_eq!(entry["scenarios"][1]["label"], " Ready");
         assert_eq!(entry["links"]["/next"]["preview"], "page");
         assert_eq!(entry["title"], "page");
         insta::assert_json_snapshot!("page_list_entry", entry);

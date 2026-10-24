@@ -7,6 +7,14 @@ https://canonic.sh/workbench/changelog/. The release workflow refuses a
 Write an entry as plain paragraphs and `-` list items: the website shows those
 and leaves out headings.
 
+## 0.16.0
+
+- A page's alternative conditions are now called scenarios. Declare them with `scenarios:` in `workbench.yaml` and in `definePreview` or `defineDocs`; previews read `context.scenario`, links take `{ preview, scenario }`, and page URLs use `?scenario=<id>`. Authored HTML pages use `data-wb-scenario`, `data-wb-scenario-only` and `data-wb-scenario-not`. This replaces `states` without a fallback: rename the keys in existing projects. See Pages and scenarios.
+- Picking another page marks it in the sidebar at once. The previous artboard stays visible for up to 200 ms, a replacement that is ready sooner appears without a loader, and a slower one shows **Loading preview…** until it is ready.
+- Switching spaces opens the space's first page, skipping empty collections and groups. An addressed page link keeps its page, scenario, size and lens when the canvas opens.
+- CSS modules keep custom properties under their written names, as Vite does, so other stylesheets and SVG icon sprites can read variables a module sets.
+- Simulator input requires a Testrun command that supports `--json`.
+
 ## 0.15.0
 
 - Docs reuse loaded resources for new pages while keeping recent pages ready. Returns check for missed source updates in the background, preserving the reading position when a refresh is needed.

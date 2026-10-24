@@ -16,7 +16,7 @@ export default definePreview({
   adapter: 'react',
   source: { entry: './Button.tsx', export: 'Button' },
   inputs: { label: 'Continue', disabled: false },
-  states: {
+  scenarios: {
     default: {},
     disabled: { inputs: { disabled: true } },
   },
@@ -24,7 +24,7 @@ export default definePreview({
 ```
 
 The package lets TypeScript and your editor check preview definitions. It
-checks that each state's `inputs` match the preview's. When Workbench compiles
+checks that each scenario's `inputs` match the preview's. When Workbench compiles
 a preview, it supplies `@canonic2/workbench` itself, so the version installed
 here affects types only.
 

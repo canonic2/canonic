@@ -56,15 +56,15 @@ pub(super) fn supported(raw: &Value, file: &Path, root: &Path) -> bool {
     if !requests_valid(raw.get("requests")) {
         return false;
     }
-    if let Some(states) = raw.get("states").and_then(Value::as_object) {
-        if states
+    if let Some(scenarios) = raw.get("scenarios").and_then(Value::as_object) {
+        if scenarios
             .values()
-            .any(|state| !state.is_object() || !requests_valid(state.get("requests")))
+            .any(|scenario| !scenario.is_object() || !requests_valid(scenario.get("requests")))
         {
             return false;
         }
     } else if raw
-        .get("states")
+        .get("scenarios")
         .is_some_and(|value| !value.is_null() && !value.is_object())
     {
         return false;
@@ -79,8 +79,8 @@ pub(super) fn supported(raw: &Value, file: &Path, root: &Path) -> bool {
     // including an outside alias that resolves back inside the project.
     let directory = file.parent().unwrap_or(root);
     let mut candidates = vec![raw.get("source")];
-    if let Some(states) = raw.get("states").and_then(Value::as_object) {
-        candidates.extend(states.values().map(|state| state.get("source")));
+    if let Some(scenarios) = raw.get("scenarios").and_then(Value::as_object) {
+        candidates.extend(scenarios.values().map(|scenario| scenario.get("source")));
     }
     if candidates
         .into_iter()

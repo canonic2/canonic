@@ -77,7 +77,7 @@ test('server and browser readers retain authored lens labels', async function ()
 /* The shapes a workbench.yaml is actually written in. The tree in the sidebar
    is only ever as right as this is. */
 
-test('reads collections, groups, pages and states', function () {
+test('reads collections, groups, pages and scenarios', function () {
   var doc = yaml.parse([
     'name: Acme',
     '',
@@ -89,7 +89,7 @@ test('reads collections, groups, pages and states', function () {
     '        items:',
     '          - label: Sign in',
     '            src: pages/sign-in.html',
-    '            states:',
+    '            scenarios:',
     '              - id: default',
     '                label: Default',
     '              - id: error',
@@ -109,7 +109,7 @@ test('reads collections, groups, pages and states', function () {
   var group = collection.items[0];
   assert.equal(group.group, 'Auth');
   assert.equal(group.items[0].label, 'Sign in');
-  assert.deepEqual(group.items[0].states[1], { id: 'error', label: 'Wrong password' });
+  assert.deepEqual(group.items[0].scenarios[1], { id: 'error', label: 'Wrong password' });
 
   assert.equal(collection.items[1].src, 'pages/loose.html');
   assert.equal(collection.items[1].icon, 'panel-top');
@@ -165,7 +165,7 @@ var MAIN = [
   '        sizes:',
   '          - laptop',
   '          - mobile',
-  '        states:',
+  '        scenarios:',
   '          - id: default',
   '            label: Default',
   '          - id: error',
@@ -212,7 +212,7 @@ test('reads implementations, lenses and code pointers', function () {
     var signIn = read.collections[0].items[0];
     assert.deepEqual(signIn.sizes, ['laptop', 'mobile']);
     assert.deepEqual(signIn.implementations, {
-      dev: { path: '/', states: { error: '/?error=1' } },
+      dev: { path: '/', scenarios: { error: '/?error=1' } },
       staging: { path: '/' },
     });
     assert.deepEqual(signIn.code, [

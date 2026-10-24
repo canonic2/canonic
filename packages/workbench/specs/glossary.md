@@ -15,14 +15,14 @@ something listed here, it uses this word and no synonym.
 | **Collection** | A set of pages within a space, listed in the collection list. Pages discovered from previews, docs definitions, or catalogs join the collection their title names. `collections` in `workbench.yaml`. |
 | **Group** | A named set of pages within a collection. Groups don't nest. `group:` in `workbench.yaml`. |
 | **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a Markdown page, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
-| **Page tree** | Everything a space lists, in order: its collections, their groups and pages, and each page's states. The Workbench server answers it from `workbench.yaml` and the page index; the collection list and page list show it. |
-| **State** | One variation of a page, such as *Empty* or *Wrong password*. A page has one or more states; the first is the page as authored. |
+| **Page tree** | Everything a space lists, in order: its collections, their groups and pages, and each page's scenarios. The Workbench server answers it from `workbench.yaml` and the page index; the collection list and page list show it. |
+| **Scenario** | One of a page's alternative conditions, such as *Empty*, *Loading*, *With filters* or *Wrong password*. A page has one or more scenarios; the first, the default scenario, is the page as authored. |
 | **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](pages/docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
 | **Markdown page** | A page whose `src` is its Markdown: its docs, with no design lens. A `defineDocs` definition declares one. |
 | **Example** | A live render placed in docs, shown in its own panel with **Show code** and **Copy code**. |
 | **Native format** | A page format Workbench defines and renders end to end: TypeScript previews and docs (Markdown pages, `defineDocs`, and their examples). Authored HTML, implementations and catalogs are not native formats. Unrelated to React Native and the native window stream; see [performance](system/performance.md). |
 
-An address names a page and, when they aren't the defaults, its state, size,
+An address names a page and, when they aren't the defaults, its scenario, size,
 lens, and in a docs lens an example; see the [core contract](core.md).
 
 ### Lenses
@@ -40,8 +40,8 @@ one.
 | **Docs lens** | A page's docs seen through one renderer of its examples: an implementation of kind `docs`, or the built-in **Docs** lens of a page with Markdown and no docs implementation. Only a page with Markdown has one. A Markdown page always shows one of its lenses, its own docs lens by default. |
 | **Catalog** | An implementation that lists pages of its own instead of lensing pages in `workbench.yaml`: `catalog: true` on an `ios-simulator` implementation, one page per booted device. Its pages join the space with that implementation as their only lens. |
 
-Under a Storybook lens, the state switcher lists the title's stories instead
-of the page's states.
+Under a Storybook lens, the scenario switcher lists the title's stories instead
+of the page's scenarios.
 
 Every lens's display label is customizable independently of its kind. The
 [lens contract](canvas/lenses.md) defines labels, defaults, and stable identity for
@@ -77,12 +77,12 @@ edge of a standalone browser window.
 | **Sidebar** | The whole left side: space switcher, collection list, page list, search, and the problems list. |
 | **Space switcher** | The space showing and the others to switch to, at the top of the sidebar. |
 | **Collection list** | Every collection of the space, with how many pages each holds. Picking one shows its pages in the page list. |
-| **Page list** | The chosen collection's groups, pages, and states. |
-| **Search** | The field at the bottom of the sidebar that filters every collection's pages, groups, and states. |
+| **Page list** | The chosen collection's groups, pages, and scenarios. |
+| **Search** | The field at the bottom of the sidebar that filters every collection's pages, groups, and scenarios. |
 | **Problems list** | Configuration, catalog, and preview problems, above the page list. |
 
-The page list shows groups, pages, and states, and the collection list shows
-collections. Each is referred to by what it is: picking a state, expanding a
+The page list shows groups, pages, and scenarios, and the collection list shows
+collections. Each is referred to by what it is: picking a scenario, expanding a
 group.
 
 ### Top bar
@@ -92,13 +92,13 @@ The bar across the top of the canvas, with controls for the page showing.
 | Term | Meaning |
 | --- | --- |
 | **Top bar** | The whole bar. |
-| **Breadcrumb** | The space, page, and state showing, at the left. The state part is the **state switcher**. |
+| **Breadcrumb** | The space, page, and scenario showing, at the left. The scenario part is the **scenario switcher**. |
 | **Actions switch** | Whether links and forms in the page work. |
 | **Lens switcher** | One button per lens, in the middle. Shown only when the page has two or more lenses. |
 | **Size switcher** | The space's configured size buttons, defaulting to **Fit**, **Laptop**, **Mobile**, and **Resizable**. A page's `sizes` limits or extends its choices. Disabled in the docs canvas mode. |
 | **Size menu** | Defined in [artboard sizes](canvas/sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
 | **Reload**, **Open the source**, **Copy reference**, **Open on its own** | Actions on the page showing, named by their labels. |
-| **Preview controls** | The panel of a preview's inputs, actions, and **Reset state**. |
+| **Preview controls** | The panel of a preview's inputs, actions, and **Reset scenario**. |
 | **More menu** | Space-wide commands, such as **Configure pages** and the design-system export, and the top bar's controls that don't fit a narrow window. |
 
 ### Canvas
@@ -112,7 +112,7 @@ The bar across the top of the canvas, with controls for the page showing.
 | **Content renderer** | An owned content-only viewport/adapter with mounting, readiness, interaction, capture and disposal. It may own preview frames or a native surface. It never initializes the Workbench application shell; see [rendering flow](system/rendering-flow.md). |
 | **Toolbar** | The floating bar at the bottom of the canvas: the annotation tools (Select, Scribble, Arrow, shapes, Text, Comment), Undo, Clear, the screenshot, and **Copy handoff**. |
 | **View controls** | The floating controls at the bottom right: **Recenter view**, **Zoom out**, the zoom level and its menu, and **Zoom in**. |
-| **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, state, and artboard they were drawn on. |
+| **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, scenario, and artboard they were drawn on. |
 | **Handoff** | The prompt and screenshot **Copy handoff** prepares for an agent. |
 
 "Page" keeps its ordinary meaning inside a page's own content, such as a
@@ -135,4 +135,4 @@ The schema uses `spaces`, `collections` and `group:` for their respective
 concepts. Routes, payload fields, copied references, handoff prompts and agent
 integrations use the same vocabulary. Changes to these public names update
 consumers and guides in the same release. A sidebar entry is named by its
-content: collection, group, page or state.
+content: collection, group, page or scenario.

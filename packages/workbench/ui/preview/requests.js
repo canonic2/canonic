@@ -36,7 +36,7 @@ export function parseKey(key) {
   };
 }
 
-// Levels run from most to least specific: a state's mocks, then its preview's.
+// Levels run from most to least specific: a scenario's mocks, then its preview's.
 export function requestMocks(levels) {
   const entries = [];
   for (const map of levels) {

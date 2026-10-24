@@ -43,7 +43,7 @@ export function createPreviewSessions(ports) {
         !declared && boards.length === 1 && !boards[0].target.artboard && boards[0].initialized;
       const destination = {
         src: next.target.src,
-        state: next.target.state,
+        scenario: next.target.scenario,
         lens: next.target.lens,
         example: next.target.example,
         ...(next.target.trace ? { trace: next.target.trace } : {}),

@@ -1,14 +1,14 @@
 # React previews
 
 The `react` adapter renders one of your React components on the Workbench
-canvas, with the preview's inputs as its props. Each named state is a set of
+canvas, with the preview's inputs as its props. Each named scenario is a set of
 props, and you can edit them in **Preview controls** while you review.
 
 Use it for components and pages that render in the browser. To review your
 whole application as it runs, use a [URL lens](lenses.md). For Storybook
 stories, see [Storybook](storybook.md).
 
-This guide covers what is specific to React. The definition keys, states,
+This guide covers what is specific to React. The definition keys, scenarios,
 controls, lifecycle hooks, command-line tools, and portable exports are the
 same for every adapter and are described in
 [TypeScript Workbench previews](workbench-previews.md).
@@ -89,7 +89,7 @@ export default definePreview({
     tone: { type: 'select', options: ['primary', 'secondary'] },
     disabled: { type: 'boolean' },
   },
-  states: {
+  scenarios: {
     primary: {},
     secondary: { inputs: { tone: 'secondary' } },
     disabled: { inputs: { disabled: true } },
@@ -98,13 +98,13 @@ export default definePreview({
 ```
 
 Run **Workbench: Refresh Pages**. **Button** appears in a **Components**
-collection of the sidebar, with the states **Primary**, **Secondary**, and
+collection of the sidebar, with the scenarios **Primary**, **Secondary**, and
 **Disabled**. To build it without the canvas, run the
 [checker](workbench-previews.md#command-line-tools) on the project; it prints
 `Built components/button`.
 
 `source.export` names the component's export and defaults to `default`. Each
-state renders in a fresh React root, and the previous root is unmounted first.
+scenario renders in a fresh React root, and the previous root is unmounted first.
 
 Name the component in `source` rather than importing it into the definition.
 Workbench runs the definition in Node to list your previews, so a definition
@@ -114,7 +114,7 @@ that imports a component which imports an image fails with
 
 ## Props, children, and callbacks
 
-The merged `inputs` of the preview, the state, and any edits in
+The merged `inputs` of the preview, the scenario, and any edits in
 **Preview controls** are passed as the component's props. Inputs must be plain
 data that can be copied, such as strings, numbers, booleans, arrays, and
 objects.
@@ -124,7 +124,7 @@ objects.
   control to edit it.
 - **Elements, such as icons or slots:** an element can't be an input. Write a
   small preview-only module that supplies it, and render that module in a
-  state with the state's `source`:
+  scenario with the scenario's `source`:
 
   ```tsx
   // src/components/Button.preview.tsx
@@ -140,7 +140,7 @@ objects.
   ```
 
   ```ts
-  states: {
+  scenarios: {
     primary: {},
     'with-icon': { source: { entry: './Button.preview.tsx', export: 'WithIcon' } },
   },
@@ -157,8 +157,8 @@ objects.
 Name an `environment` module in the definition to wrap the component in the
 providers it needs: a theme, a router, translations, or a data client. The
 module's `wrap(element, context)` receives the component's element and returns
-the tree to render. It runs on every render, so read the current state from
-`context`.
+the tree to render. It runs on every render, so read the current scenario and
+globals from `context`.
 
 `src/preview/environment.tsx`:
 
@@ -194,7 +194,7 @@ export default definePreview({
   inputs: { title: 'Acme Pro', children: 'Everything your team needs.' },
   globals: { theme: 'light', locale: 'en' },
   controls: { title: { type: 'text' }, children: { type: 'text', label: 'Body' } },
-  states: {
+  scenarios: {
     light: {},
     dark: { globals: { theme: 'dark' } },
   },
@@ -207,17 +207,17 @@ export default definePreview({
   logs `select` with its argument. Use the same pattern for `onClick`,
   `onChange`, or any other callback prop.
 - `globals` carry settings for the environment, such as the theme and locale,
-  and each state can override them.
+  and each scenario can override them.
 - The environment can also export `setup` and `ready`, which run with the
   [lifecycle hooks](workbench-previews.md#lifecycle-hooks) of the preview and
-  its states.
+  its scenarios.
 - Several definitions can share one environment module. For providers every
   preview needs, name it once as the
   [project-wide environment](preview-data.md#environments)
   instead.
 - A data client such as Apollo, React Query, or SWR can stay real: wrap the
   component in it as usual and answer its requests with
-  [`requests`](preview-data.md#request-mocks), so each state shows its
+  [`requests`](preview-data.md#request-mocks), so each scenario shows its
   own data. To seed the client's cache instead, do it in `wrap` or `setup` from
   `context.fixtures`.
 
@@ -242,9 +242,9 @@ JSON, and script files. A `url()` in CSS can reference a file of any type. A
 preview waits for its fonts and visible images to load before it counts as
 ready.
 
-The `<html>` element carries `data-wb-state`, so a global stylesheet can
-change with the state, for example
-`:root[data-wb-state='dark'] body { background: #111827; }`.
+The `<html>` element carries `data-wb-scenario`, so a global stylesheet can
+change with the scenario, for example
+`:root[data-wb-scenario='dark'] body { background: #111827; }`.
 
 These need more than the built-in compiler:
 
@@ -388,7 +388,7 @@ A `*.workbench.ts` file can declare a Markdown page and its lenses with
 | --- | --- |
 | `Module not found: Can't resolve 'react/jsx-runtime'`, or another `react` or `react-dom` import | React isn't installed where the definition and component can find it. Install `react` and `react-dom` in the project. |
 | `Cannot read properties of null (reading 'useState')`, or React's invalid hook call error | Two copies of React. Add them to [`dedupe`](#use-one-copy-of-react-in-a-monorepo). |
-| `The selected source export does not exist for <id> — <state>` | `source.export` doesn't match an export of the entry. A named export needs `export: 'Button'`. |
+| `The selected source export does not exist for <id> — <scenario>` | `source.export` doesn't match an export of the entry. A named export needs `export: 'Button'`. |
 | `DataCloneError: … could not be cloned` | An input holds a function or another value that can't be copied. See [Props, children, and callbacks](#props-children-and-callbacks). |
 | `process is not defined`, or `Cannot read properties of undefined (reading 'VITE_…')` | An environment variable isn't defined. Add it to [`define`](#imports-jsx-and-environment-variables). |
 | `No loader is configured for ".<ext>" files` | The definition imports a component, which imports a file such as an image. Name the component in `source` instead. See [Write a first preview](#write-a-first-preview). |

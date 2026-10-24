@@ -133,7 +133,7 @@ test(
           const name=${JSON.stringify(url.searchParams.get('page'))};
           export const examples={basic: name};
           export const environment={setup(context){
-            (window.__wbStates ||= []).push(context.state);
+            (window.__wbScenarios ||= []).push(context.scenario);
             return ()=>{window.__wbEnvironmentStops=(window.__wbEnvironmentStops||0)+1;};
           }};
           export const adapter={async mount(stage, value, context){
@@ -141,7 +141,7 @@ test(
               portals:document.querySelectorAll('[data-acme-portal]').length,
               textStyles:document.querySelectorAll('style[data-acme-text]').length,
               body:document.body.className, html:document.documentElement.getAttribute('data-acme'),
-              state:document.documentElement.getAttribute('data-wb-state')});
+              scenario:document.documentElement.getAttribute('data-wb-scenario')});
             const listener=()=>window.__wbHits=(window.__wbHits||0)+1;
             window.addEventListener('acme-event',listener);document.addEventListener('acme-event',listener);
             document.body.addEventListener('acme-event',listener);document.documentElement.addEventListener('acme-event',listener);
@@ -171,8 +171,8 @@ test(
           res.setHeader('Content-Type', 'text/html');
           res.end(`<!doctype html><title>${page}</title><main class="wb-docs">
           <h1>${page} ${revision(page)}</h1>
-          <p data-wb-state-only="selected" id="selected-only">Selected</p>
-          <p data-wb-state-only="default" id="default-only">Default</p>
+          <p data-wb-scenario-only="selected" id="selected-only">Selected</p>
+          <p data-wb-scenario-only="default" id="default-only">Default</p>
           <figure data-wb-example="basic" data-status="pending"><div data-wb-example-stage></div>
           <button data-wb-show-code>Show code</button><button data-wb-copy-code>Copy code</button>
           <div data-wb-example-code hidden></div></figure><div style="height:2500px"></div>
@@ -180,7 +180,7 @@ test(
           <script>window.__workbenchDocs=${JSON.stringify({
             page,
             lens: 'web',
-            state: url.searchParams.get('state') || 'selected',
+            scenario: url.searchParams.get('scenario') || 'selected',
             sourceUrl: '/source?example=',
             revisionUrl: '/revision?page=' + page,
             revision: htmlRevision + ':',
@@ -197,7 +197,7 @@ test(
           res.setHeader('Content-Type', 'text/javascript');
           res.end(
             'window.wbPreviewActions={configure(){}};\n' +
-              (await readFile(new URL('../../../../legacy/states.js', import.meta.url), 'utf8')),
+              (await readFile(new URL('../../../../legacy/scenarios.js', import.meta.url), 'utf8')),
           );
         } else {
           const asset = await assets(req.url);
@@ -245,7 +245,7 @@ test(
       document.body.dispatchEvent(new Event('acme-event'));document.documentElement.dispatchEvent(new Event('acme-event'));
       return {mounts:__wbMounts,unmounts:__wbUnmounts,stops:__wbEnvironmentStops,hits:__wbHits,
         dependency:__wbDependencyLoads,sheet:sheet===__wbLibrarySheet&&sheet.isConnected,
-        scroll:scrollY,states:__wbStates,examples:wbDocsPage.visibleExamples()};
+        scroll:scrollY,scenarios:__wbScenarios,examples:wbDocsPage.visibleExamples()};
     })()`);
         assert.equal(result.mounts.length, 2);
         assert.deepEqual(result.mounts[1], {
@@ -255,7 +255,7 @@ test(
           textStyles: 0,
           body: 'wb-docs-body',
           html: null,
-          state: 'selected',
+          scenario: 'selected',
         });
         assert.equal(result.unmounts, 1);
         assert.equal(result.stops, 1);
@@ -267,7 +267,7 @@ test(
           0,
           'a new destination resets immediately despite smooth-scroll CSS',
         );
-        assert.deepEqual(result.states, ['selected', 'selected']);
+        assert.deepEqual(result.scenarios, ['selected', 'selected']);
         assert.deepEqual(result.examples, [{ id: 'basic', status: 'ready' }]);
         const pageRequests = requests.filter((url) =>
           url.startsWith('/_workbench/docs/bundle?page=two.md'),
@@ -355,7 +355,7 @@ test(
             if(__wbFailures.length)throw Error(__wbFailures.join('; '));
             if(!originalFrame){originalFrame=__wbFrames.frame();originalDocument=originalFrame.contentDocument;}
           }
-          __wbShow('/replacement.md?lens=web&state=default&actions=on#example-bottom');
+          __wbShow('/replacement.md?lens=web&scenario=default&actions=on#example-bottom');
           await wait(()=>__wbFrames.ready()||__wbFailures.length);
           const frame=__wbFrames.frame();const content=frame.contentWindow;
           return {failures:__wbFailures,ready:__wbFrames.ready(),cleanupCalls:__wbCleanupCalls,
@@ -370,7 +370,7 @@ test(
         assert.equal(result.freshDocument, true, 'failed cleanup discards the poisoned document');
         assert.equal(
           result.url,
-          '/replacement.md?lens=web&state=default&actions=on#example-bottom',
+          '/replacement.md?lens=web&scenario=default&actions=on#example-bottom',
         );
         assert.equal(result.mounts.length, 1, 'the new document mounts only the requested page');
         assert.equal(result.mounts[0].name, 'replacement.md');
@@ -464,13 +464,13 @@ test(
       await __wbWait(()=>document.querySelector('h1').textContent.includes('v2'));
       await __wbWait(()=>document.querySelector('[data-wb-example-code]').dataset.loaded);
       return {mounts:__wbMounts.length,scroll:scrollY,open:!document.querySelector('[data-wb-example-code]').hidden,
-        state:document.documentElement.getAttribute('data-wb-state'),conditional:!document.getElementById('default-only')&&!!document.getElementById('selected-only')};
+        scenario:document.documentElement.getAttribute('data-wb-scenario'),conditional:!document.getElementById('default-only')&&!!document.getElementById('selected-only')};
     })()`);
         assert.deepEqual(changed, {
           mounts: 1,
           scroll: 300,
           open: true,
-          state: 'selected',
+          scenario: 'selected',
           conditional: true,
         });
         revisions.clear();
@@ -605,16 +605,16 @@ test(
     );
 
     await t.test(
-      'reassignment applies the default state to fresh conditional Markdown',
+      'reassignment applies the default scenario to fresh conditional Markdown',
       async () => {
         const target = await open();
         const result = await target.evaluate(`(async()=>{
-        await __wbLoad('one');await wbDocsHost.load('/two.md?lens=web&state=default');
+        await __wbLoad('one');await wbDocsHost.load('/two.md?lens=web&scenario=default');
         await __wbWait(()=>__workbenchReady);
-        return {state:document.documentElement.getAttribute('data-wb-state'),
+        return {scenario:document.documentElement.getAttribute('data-wb-scenario'),
           selected:!!document.getElementById('selected-only'),fallback:!!document.getElementById('default-only')};
       })()`);
-        assert.deepEqual(result, { state: 'default', selected: false, fallback: true });
+        assert.deepEqual(result, { scenario: 'default', selected: false, fallback: true });
       },
     );
 

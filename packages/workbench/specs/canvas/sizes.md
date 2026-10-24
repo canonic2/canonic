@@ -404,7 +404,7 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 11. A `workbench.local.yaml` that sets `sizes: { sidebar: { width: 360 } }`
     for the space changes only Sidebar's width; Edit sizes… shows Sidebar
     read-only.
-12. Handoffs of one page and state at Laptop and at Mobile save two
+12. Handoffs of one page and scenario at Laptop and at Mobile save two
     screenshots, not one.
 13. A space whose `sizes` leaves out `resizable` still opens multiple
     artboards at the sizes requested.
@@ -466,7 +466,7 @@ menu, and dialogs need a browser check of keyboard use and focus with the
 
 [Configuration](../../docs/configuration.md) (`sizes` on spaces and pages),
 [Using the canvas](../../docs/canvas.md) (size switcher, size menu, addresses,
-Configure pages), [Pages and states](../../docs/pages-and-states.md),
+Configure pages), [Pages and scenarios](../../docs/pages-and-scenarios.md),
 [TypeScript previews](../../docs/workbench-previews.md), [Design-system
 export](../../docs/design-system-export.md), the iOS Simulator and window guides,
 which recommend a mobile size for streamed lenses, the [workbench

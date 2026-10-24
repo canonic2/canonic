@@ -1,6 +1,6 @@
 /* A focused, master-detail editor for the handwritten collections in
    workbench.yaml. The local server owns persistence; this surface keeps the
-   raw objects intact so states, implementation mappings, and code pointers
+   raw objects intact so scenarios, implementation mappings, and code pointers
    survive edits even when they are not exposed as form controls here. */
 (function () {
   var SIZES = [
@@ -268,7 +268,7 @@
 
       var advanced = element('div', 'wb-config-preserved');
       advanced.appendChild(icon('braces', 16));
-      advanced.appendChild(element('span', '', 'States, implementations, and code mappings stay in the YAML and are preserved when you save.'));
+      advanced.appendChild(element('span', '', 'Scenarios, implementations, and code mappings stay in the YAML and are preserved when you save.'));
       inspector.appendChild(advanced);
       inspector.appendChild(danger('Remove page', function () {
         removeSelected('Remove “' + (page.label || 'this page') + '” from the workbench?');

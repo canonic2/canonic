@@ -26,7 +26,7 @@ must not be presented as cancellation or applied to a newly opened form.
 
 The form edits authored collections, not discovered definitions, catalog imports,
 implementation services or project source content. Discovery changes continue
-to come from their source definitions. States, mappings, docs/code pointers and
+to come from their source definitions. Scenarios, mappings, docs/code pointers and
 other retained fields without form controls survive edits to an existing entry.
 
 ## Write ownership and preservation
@@ -62,7 +62,7 @@ since the form opened or complete manifest semantic validation on Save.
 
 ## Acceptance and evidence
 
-- Edit one page while preserving its states, lens mappings, code/docs pointers
+- Edit one page while preserving its scenarios, lens mappings, code/docs pointers
   and page-owned sizes. Saving one space preserves sibling spaces and unrelated
   YAML text; local overrides retain their normal precedence.
 - Closing before Save produces no write; closing during Save follows the

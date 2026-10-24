@@ -30,7 +30,7 @@ test('the shipping component design pages validate and their examples compile', 
   }
 });
 
-test('the Sidebar design loads shipping styles, scripts and interactive states in Chrome', {
+test('the Sidebar design loads shipping styles, scripts and interactive scenarios in Chrome', {
   skip: !chrome.findChrome() && 'Chrome is required for the Sidebar design check',
 }, async t => {
   const running = await server.start({ root, capture: { close() {} } });
@@ -44,8 +44,8 @@ test('the Sidebar design loads shipping styles, scripts and interactive states i
     if (event.entry.level === 'error') t.diagnostic(event.entry.text);
   });
   const base = new URL(running.url).origin;
-  for (const state of ['default', 'menu', 'filtered']) {
-    await target.navigate(base + '/design/sidebar.html?state=' + state);
+  for (const scenario of ['default', 'menu', 'filtered']) {
+    await target.navigate(base + '/design/sidebar.html?scenario=' + scenario);
     const result = await target.evaluate(`(async () => {
       await Promise.race([
         customElements.whenDefined('wb-space-switcher'),
@@ -76,7 +76,7 @@ test('the Sidebar design loads shipping styles, scripts and interactive states i
     })()`);
     assert.deepEqual(result, {
       background: 'rgb(31, 31, 31)', listReady: true, iconsReady: true, lightweightIcons: true,
-      current: 'acme', open: state === 'menu', search: state === 'filtered' ? 'sign' : '', styles: true,
-    }, state);
+      current: 'acme', open: scenario === 'menu', search: scenario === 'filtered' ? 'sign' : '', styles: true,
+    }, scenario);
   }
 });

@@ -120,7 +120,7 @@ routes and canvas the product uses, with its build, serving and frame
 lifecycle costs visible. Research, bundle-size estimates and component timings
 can select variants to try; they cannot replace a measured sequence.
 
-Keep fixtures, sequences, viewport sizes, states and checks identical across
+Keep fixtures, sequences, viewport sizes, scenarios and checks identical across
 variants. A variant that implements only part of a contract, such as React
 previews but not Astro, reports results for that subset, and the missing
 contracts stay listed. A compiler variant must accept the fixture's
@@ -165,7 +165,7 @@ A faster variant that renders something different, leaks state or hides an
 error is rejected. Every lab that changes how previews compile, load or mount
 checks, on every run:
 
-- **Render parity:** each page and state matches the control's screenshot at
+- **Render parity:** each page and scenario matches the control's screenshot at
   the same size, with request mocks, time and randomness fixed by the fixture.
 - **Isolation:** module-level state, global listeners, styles, request mocks
   and environment providers from one preview do not appear in another. The

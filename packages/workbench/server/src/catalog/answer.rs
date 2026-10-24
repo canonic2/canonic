@@ -65,7 +65,7 @@ fn walk<'a>(tree: BTreeMap<String, Node<'a>>, out: &mut Vec<Record<'a>>) {
 fn valid(entry: &Value, file: &str, docs: bool) -> bool {
     let shaped = entry["id"].is_string()
         && entry["file"].as_str() == Some(file)
-        && entry["states"].is_array();
+        && entry["scenarios"].is_array();
     shaped
         && if docs {
             entry["src"].is_string() && entry["lenses"].is_array()
@@ -115,7 +115,7 @@ mod tests {
     use serde_json::json;
 
     fn preview(id: &str, file: &str) -> String {
-        json!({ "id": id, "file": file, "states": [], "adapter": "react", "source": file })
+        json!({ "id": id, "file": file, "scenarios": [], "adapter": "react", "source": file })
             .to_string()
     }
 
@@ -124,7 +124,7 @@ mod tests {
         let a = preview("button", "src/b/button.workbench.tsx");
         let b = preview("card", "src/a.workbench.tsx");
         let c = preview("button", "src/c.workbench.tsx");
-        let docs = json!({ "id": "guide", "file": "docs/guide.workbench.ts", "states": [], "src": "docs/guide.md", "lenses": [] }).to_string();
+        let docs = json!({ "id": "guide", "file": "docs/guide.workbench.ts", "scenarios": [], "src": "docs/guide.md", "lenses": [] }).to_string();
         let answer = read(vec![
             Record {
                 file: "src/b/button.workbench.tsx",

@@ -2,7 +2,7 @@
 
 The `astro` adapter renders an Astro component or page on the server, with your
 preview's inputs as `Astro.props`, and shows the resulting HTML, styles, and
-scripts on the canvas. Use it to review components and pages in named states
+scripts on the canvas. Use it to review components and pages in named scenarios
 next to their designs, without running your site.
 
 The adapter renders one component on its own, not your application: no
@@ -22,7 +22,7 @@ the command-line checker, see [TypeScript Workbench previews](workbench-previews
 
 ## Add a component preview
 
-This example previews a pricing card in three states.
+This example previews a pricing card in three scenarios.
 
 ```text
 acme-site/
@@ -106,7 +106,7 @@ export default definePreview({
     price: { type: 'text' },
     featured: { type: 'boolean' },
   },
-  states: {
+  scenarios: {
     default: {},
     featured: { inputs: { featured: true } },
     enterprise: { inputs: { name: 'Enterprise', price: 'Contact sales' } },
@@ -115,7 +115,7 @@ export default definePreview({
 ```
 
 Run **Workbench: Refresh Pages**. **Plan Card** appears in a **Components**
-collection with **Default**, **Featured**, and **Enterprise** states. To check it
+collection with **Default**, **Featured**, and **Enterprise** scenarios. To check it
 without the canvas, run the
 [checker](workbench-previews.md#command-line-tools) on the project:
 
@@ -162,7 +162,7 @@ export default definePreview({
     ],
   },
   controls: { plans: { type: 'json' } },
-  states: {
+  scenarios: {
     default: {},
     empty: { inputs: { plans: [] } },
   },
@@ -183,7 +183,7 @@ page renders in Node as well as to scripts in the frame:
 
 ```ts
   requests: { 'GET /api/plans': { body: plans } },
-  states: {
+  scenarios: {
     default: {},
     empty: { requests: { 'GET /api/plans': { body: [] } } },
   },
@@ -211,25 +211,25 @@ Other links, including downloads and other sites, are recorded under
 
 - **In Workbench's [Node evaluator](extension.md#the-preview-compiler):** the
   frontmatter of every component, and whatever it imports, including Node
-  modules such as `node:fs`. Workbench renders each state there with your
+  modules such as `node:fs`. Workbench renders each scenario there with your
   project's own Astro when it builds the preview. Frontmatter is never sent to
   the browser.
 - **In the canvas:** the rendered HTML, its styles, its `<script>` tags, and
   your preview's `setup`, `play`, and `ready` hooks.
 
-Because the frontmatter runs once per state at build time, a frontmatter error
-in any state fails the whole preview, not just that state. Frontmatter that
+Because the frontmatter runs once per scenario at build time, a frontmatter
+error in any scenario fails the whole preview, not just that scenario. Frontmatter that
 calls an external service needs that service to be reachable.
 
-## Props, slots, and states
+## Props, slots, and scenarios
 
-- **Props:** the preview's `inputs`, merged with the state's `inputs`, become
+- **Props:** the preview's `inputs`, merged with the scenario's `inputs`, become
   `Astro.props`. They must be plain data. `fixtures` and `globals` don't reach
   the frontmatter; they are only available to hooks in the browser.
 - **Slots:** nested components fill each other's slots as usual. The preview
   itself renders with no slot content, so a component's own `<slot>` shows its
   fallback. To preview it with content, write a small example component and use
-  it as a state's `source`:
+  it as a scenario's `source`:
 
   ```astro
   ---
@@ -243,7 +243,7 @@ calls an external service needs that service to be reachable.
   ```
 
   ```ts
-  states: {
+  scenarios: {
     default: {},
     'custom-features': { source: { entry: './PlanCard.example.astro' } },
   },
@@ -256,8 +256,8 @@ calls an external service needs that service to be reachable.
 ### Edit inputs
 
 Editing a field in **Preview controls** sends the new inputs to the Node
-evaluator, which renders that state again and replaces the frame's content. Each
-edit is a full server render, so frontmatter runs again. **Reset state** returns
+evaluator, which renders that scenario again and replaces the frame's content. Each
+edit is a full server render, so frontmatter runs again. **Reset scenario** returns
 to the authored render. Edits never change your files.
 
 ## Styles, scripts, and assets
@@ -274,7 +274,7 @@ to the authored render. Edits never change your files.
 | `<img src="./logo.svg">` | Resolved from the component's folder and copied with the preview |
 | `<img src="/logo.svg">` | Found in the project root, then in the nearest package's `public/` folder |
 
-Scripts run again on every state change, input edit, and reset, and can read
+Scripts run again on every scenario change, input edit, and reset, and can read
 the current context from `window.workbench`. For example, to log a click in
 **Actions**:
 
@@ -421,7 +421,7 @@ caption: featured
 ````
 
 - **Rendering.** Workbench renders each example in Node, as it renders a
-  preview's states, and the page loads the example's styles, `<script>` tags,
+  preview's scenarios, and the page loads the example's styles, `<script>` tags,
   and assets. What runs where, the supported imports, and the
   [unsupported features](#not-supported) are the same as for previews. A
   frontmatter error in any example fails the whole lens.
@@ -438,12 +438,12 @@ caption: featured
 
 ## Portable exports
 
-`build` and **Export…** source/browser packages render every authored state when
+`build` and **Export…** source/browser packages render every authored scenario when
 they export the preview, so the [portable viewer](workbench-previews.md#portable-exports)
 shows them with no Astro installation or server. The controls are left out,
 since editing inputs needs a live render, and the preview's **Documentation**
 gains the note `Astro input edits require the live Workbench server. This export
-contains the authored states.`
+contains the authored scenarios.`
 
 Docs with an Astro lens export the same way: the viewer shows each
 example as it was rendered, with its styles and scripts.

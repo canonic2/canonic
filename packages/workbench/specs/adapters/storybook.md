@@ -8,7 +8,7 @@ server gets Storybook to render a story.
 ## Source
 
 A page maps to one exact Storybook title, and its stories are the page's
-states. Storybook renders them with the project's own Storybook, so its
+scenarios. Storybook renders them with the project's own Storybook, so its
 addons, decorators, loaders, `preview.ts` and builder configuration apply.
 
 ## How a story is served

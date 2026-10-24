@@ -226,14 +226,14 @@ restoration acceptance remain implementation work; see
 - The extension watches `workbench.yaml` and `workbench.local.yaml`. The
   server's resident index watches definitions matching the resolved discovery
   patterns (`previews.include`, or the defaults). Adding, removing, or
-  renaming a definition, or changing its title, states, or sizes, updates
+  renaming a definition, or changing its title, scenarios, or sizes, updates
   the sidebar and canvas without **Refresh Pages**. With `previews: false`,
   only the YAML files are watched. **Refresh Pages** runs the same rebuild
   by hand.
 - A rebuild first asks an open canvas to reload its config, then rebuilds the
   sidebar, which asks the server again and so re-runs preview discovery and
   catalog imports. Picks from the new sidebar wait until the canvas has
-  acknowledged the refresh, so a pick of a new page or state does not target
+  acknowledged the refresh, so a pick of a new page or scenario does not target
   an old manifest. A refresh rejected for an invalid manifest keeps the
   queued pick until a later refresh succeeds.
 - The running pipeline watches preview source dependencies and pushes build

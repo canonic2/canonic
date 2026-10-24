@@ -41,8 +41,8 @@ See the [rendering flow](../system/rendering-flow.md).
 [reference.js](../../ui/legacy/reference.js) puts in **Copy reference**:
 
 - the page's label and design file (`src`);
-- its story (label and id) on a Storybook lens, otherwise its state (label and
-  id, with the same fallback to the first or `default` state);
+- its story (label and id) on a Storybook lens, otherwise its scenario (label and
+  id, with the same fallback to the first or `default` scenario);
 - the lens (label and key) with its upstream implementation address, or the
   resolved authored lens label.
 
@@ -55,7 +55,7 @@ complete canvas record.
 
 - [agent-context.js](../../ui/legacy/agent-context.js) builds the view with
   `wbReference.text()`, the function behind **Copy reference**, so the two
-  can't differ. It adds the ids: `src`, `state` or `story`, and `lens`.
+  can't differ. It adds the ids: `src`, `scenario` or `story`, and `lens`.
 - Every canvas posts its view to `POST /_workbench/view` under a random
   client id: when it settles on a page (each `wb-here`), on `hashchange`
   and `wb-frame-change`, and every 30 seconds as a heartbeat. The VS Code tab
@@ -132,8 +132,8 @@ contract.
 ## Acceptance criteria
 
 - With the canvas on a page, the server's view text equals what
-  **Copy reference** copies, including after state/lens changes and navigation.
-- Changing page, state, story, or lens, or following a link in a live page,
+  **Copy reference** copies, including after scenario/lens changes and navigation.
+- Changing page, scenario, story, or lens, or following a link in a live page,
   changes the next answer.
 - Closing the canvas stops the context: the hook prints nothing and
   `current_view` says no canvas is open.

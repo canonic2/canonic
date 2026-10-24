@@ -6,7 +6,7 @@ This folder owns page authoring and page-specific user workflows. Start with
 
 | Topic | Owns |
 | --- | --- |
-| [TypeScript previews](previews.md) | Definition API, discovery semantics, states, inputs/actions, request mocks, navigation and portable viewer workflows |
+| [TypeScript previews](previews.md) | Definition API, discovery semantics, scenarios, inputs/actions, request mocks, navigation and portable viewer workflows |
 | [Docs](docs-pages.md) | Markdown, docs lenses, example/source panels, page lifecycle, reading presentation and Docs compatibility |
 | [Authored pages and implementations](implementations.md) | Authored HTML, URL/native mappings, source pointers, compatibility and native-window interaction |
 | [Storybook pages](storybook.md) | Title/story identity, selected-story navigation, channel reuse, capture/export mapping and failure behavior |

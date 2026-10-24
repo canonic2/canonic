@@ -57,12 +57,12 @@ export const operations: Record<string, (request: Request) => Promise<unknown>> 
   loader: request => runLoader(request as Any),
   /** A Vue single-file component's script and styles. */
   vue: async request => compileVue(String(request.file), String(request.source), request.hot === true),
-  /** An Astro preview's states, rendered; or one state with edited inputs. */
+  /** An Astro preview's scenarios, rendered; or one scenario with edited inputs. */
   async astro(request) {
     const project = compiler(request.root, request.options);
     await project.settings();
     const file = project.declared(String(request.file));
-    return renderPreview(project, request.root, file, typeof request.state === 'string' ? request.state : null, request.inputs, request.production === true);
+    return renderPreview(project, request.root, file, typeof request.scenario === 'string' ? request.scenario : null, request.inputs, request.production === true);
   },
   /** One Astro component of a docs lens's folder, rendered. */
   async astroExample(request) {

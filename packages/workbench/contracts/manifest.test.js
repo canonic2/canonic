@@ -41,7 +41,7 @@ test('authored lens labels validate and retain defaults on invalid configuration
 });
 
 test('manual preview placement overrides the discovery lens label and inherits it when omitted', function () {
-  var imported = [{ name: 'Components', items: [{ src: 'button.workbench.ts', workbench: true, lensLabel: 'Design', states: [{ id: 'default', label: 'Default' }] }] }];
+  var imported = [{ name: 'Components', items: [{ src: 'button.workbench.ts', workbench: true, lensLabel: 'Design', scenarios: [{ id: 'default', label: 'Default' }] }] }];
   for (var label of [undefined, 'Reference']) {
     var original = { src: 'button.workbench.ts', label: 'Button', implementations: { live: { path: '/button' } } };
     if (label) original.lensLabel = label;
@@ -327,7 +327,7 @@ test('legacy renderer settings keep implementations usable and report how to mig
   assert.equal(implementations.stories.render, undefined);
   assert.equal(problems.length, 2);
   assert.ok(problems.every(function (problem) { return /remove it.*iframes/.test(problem); }));
-  assert.deepEqual(manifest.pageLenses({ dev: '/login' }, { states: [] }, implementations, 'Login', problems), {
+  assert.deepEqual(manifest.pageLenses({ dev: '/login' }, { scenarios: [] }, implementations, 'Login', problems), {
     dev: { path: '/login' },
   });
 });
@@ -348,7 +348,7 @@ function impls() {
 var signIn = {
   label: 'Sign in',
   src: 'pages/sign-in.html',
-  states: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Wrong password' }],
+  scenarios: [{ id: 'default', label: 'Default' }, { id: 'error', label: 'Wrong password' }],
 };
 
 test('a local file merges sizes by key and keeps the committed order', function () {
@@ -382,15 +382,15 @@ test('reads a page’s lenses in both forms', function () {
     signIn, impls(), 'Pages › Sign in', problems
   );
   assert.deepEqual(problems, []);
-  assert.deepEqual(mapped, { dev: { path: '/', states: { error: '/?error=1' } } });
+  assert.deepEqual(mapped, { dev: { path: '/', scenarios: { error: '/?error=1' } } });
 });
 
-test('a state map may name the first state by its own id', function () {
+test('a scenario map may name the first scenario by its own id', function () {
   var problems = [];
-  var item = { label: 'Library', src: 'library.html', states: [{ id: 'filled', label: 'Filled' }, { id: 'empty', label: 'Empty' }] };
+  var item = { label: 'Library', src: 'library.html', scenarios: [{ id: 'filled', label: 'Filled' }, { id: 'empty', label: 'Empty' }] };
   var lenses = manifest.pageLenses({ dev: { filled: '/library', empty: '/library?empty' } }, item, impls(), 'App › Library', problems);
   assert.deepEqual(problems, []);
-  assert.deepEqual(lenses, { dev: { path: '/library', states: { empty: '/library?empty' } } });
+  assert.deepEqual(lenses, { dev: { path: '/library', scenarios: { empty: '/library?empty' } } });
 });
 
 test('names every problem with a page’s lenses', function () {
@@ -417,14 +417,14 @@ test('names every problem with a page’s lenses', function () {
   );
   assert.equal(lenses, undefined);
   assert.deepEqual(problems, [
-    'Pages › Sign in: implementation “dev” maps state “locked”, which this page doesn’t declare.',
-    'Pages › Sign in: implementation “dev” needs a path for the default state (“default”).',
+    'Pages › Sign in: implementation “dev” maps scenario “locked”, which this page doesn’t declare.',
+    'Pages › Sign in: implementation “dev” needs a path for the default scenario (“default”).',
   ]);
 
   problems = [];
   assert.equal(manifest.pageLenses({ dev: ['/a'] }, signIn, impls(), 'Pages › Sign in', problems), undefined);
   assert.deepEqual(problems, [
-    'Pages › Sign in: implementation “dev” needs a path, or a map of this page’s state ids to paths.',
+    'Pages › Sign in: implementation “dev” needs a path, or a map of this page’s scenario ids to paths.',
   ]);
 
   problems = [];
@@ -463,10 +463,10 @@ test('names every problem with a page’s code', function () {
   assert.deepEqual(problems, ['Pages › Sign in: code must be a map of implementation names to paths.']);
 });
 
-test('derives a story’s state from its id', function () {
-  assert.equal(manifest.storyState('components-button--icon-only'), 'icon-only');
-  assert.equal(manifest.storyState('button--default'), 'default');
-  assert.equal(manifest.storyState('odd'), 'odd');
+test('derives a story’s scenario from its id', function () {
+  assert.equal(manifest.storyScenario('components-button--icon-only'), 'icon-only');
+  assert.equal(manifest.storyScenario('button--default'), 'default');
+  assert.equal(manifest.storyScenario('odd'), 'odd');
 });
 
 test('a space mark takes a named or hex colour, and a Lucide icon or a project image', function () {
@@ -672,7 +672,7 @@ test('docs lenses need Markdown, and lens belongs to Markdown pages only', funct
 test('a src may not contain the address marks', function () {
   assert.equal(manifest.srcProblem('docs/card.md'), null);
   assert.equal(manifest.srcProblem('docs/card!.md'),
-    'src “docs/card!.md” can’t contain “!” — “:”, “!”, and “~” mark the state, the example, and the lens in the address.');
+    'src “docs/card!.md” can’t contain “!” — “:”, “!”, and “~” mark the scenario, the example, and the lens in the address.');
   assert.match(manifest.srcProblem('a:b~c.html'), /can’t contain “:” or “~”/);
   assert.equal(manifest.projectPath('src/card/'), 'src/card/');
   assert.equal(manifest.projectPath('src/../../etc'), null);

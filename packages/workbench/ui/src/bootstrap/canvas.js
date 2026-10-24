@@ -212,7 +212,7 @@ function mount() {
           !message.pending &&
           selected()?.id === board.id &&
           message.src === selection?.src &&
-          (message.state || null) === selection?.state &&
+          (message.scenario || null) === selection?.scenario &&
           (message.lens || null) === selection?.lens &&
           window.parent !== window
         )
@@ -278,7 +278,7 @@ function mount() {
     navigation
       .snapshot()
       .selection?.select(
-        board.target.state,
+        board.target.scenario,
         board.size,
         board.view?.actions?.checked,
         board.target.src,
@@ -306,7 +306,7 @@ function mount() {
   // A click inside a preview also selects its owning artboard.
   let lastSelected = '';
   const identity = (board) =>
-    JSON.stringify([board.id, board.target.src, board.target.state, board.target.lens]);
+    JSON.stringify([board.id, board.target.src, board.target.scenario, board.target.lens]);
   const focusSelection = () => {
     const { navigating, expanding } = navigation.snapshot();
     const board = selected();
@@ -321,7 +321,7 @@ function mount() {
       navigation
         .snapshot()
         .selection?.select(
-          board.target.state,
+          board.target.scenario,
           board.size,
           board.view.actions?.checked,
           board.target.src,
@@ -389,7 +389,7 @@ function mount() {
         target: {
           space,
           src: next.src,
-          state: next.state,
+          scenario: next.scenario,
           lens: next.lens,
           example: next.example,
           label: next.label,

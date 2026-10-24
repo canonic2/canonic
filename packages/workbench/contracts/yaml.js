@@ -13,7 +13,7 @@
          items:
            - label: Sign in           # a mapping opened by its first key
              src: pages/sign-in.html
-             states:
+             scenarios:
                - id: default
                  label: Default
 

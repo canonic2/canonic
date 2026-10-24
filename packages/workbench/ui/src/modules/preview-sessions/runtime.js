@@ -13,13 +13,13 @@ export function createRuntime(board, callbacks) {
     url.searchParams.set('wbTrace', board.target.trace.selection);
     url.searchParams.set('wbTraceStart', String(board.target.trace.started));
     url.searchParams.set('wbPage', board.target.src);
-    url.searchParams.set('wbState', board.target.state || 'default');
+    url.searchParams.set('wbScenario', board.target.scenario || 'default');
     url.searchParams.set('wbLens', board.target.lens || 'design');
   }
   url.searchParams.set('canvas-origin', location.origin);
   url.searchParams.set('canvas-host', window.parent === window ? 'browser' : 'editor');
   if (board.target.artboard) url.searchParams.set('artboard', board.target.artboard);
-  url.hash = `${board.target.src}${board.target.state ? ':' + board.target.state : ''}${board.target.example ? '!' + board.target.example : ''}~${board.target.lens || 'design'}`;
+  url.hash = `${board.target.src}${board.target.scenario ? ':' + board.target.scenario : ''}${board.target.example ? '!' + board.target.example : ''}~${board.target.lens || 'design'}`;
   element.src = url.href;
   let disposed = false;
   // Standalone support hosts can omit the shared canvas port.
@@ -133,7 +133,7 @@ function validInfo(value) {
     typeof v.hash === 'string' &&
     typeof v.reference === 'string' &&
     typeof v.ready === 'boolean' &&
-    Array.isArray(v.states) &&
+    Array.isArray(v.scenarios) &&
     Array.isArray(v.lenses) &&
     !!v.payload &&
     typeof v.payload === 'object'

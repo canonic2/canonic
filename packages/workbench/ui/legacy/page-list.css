@@ -1,7 +1,7 @@
 /* The page list, dressed
    ----------------------
    Everything page-list.js builds: the collection list, the heading over the
-   pages, the rows — groups, pages, states — and the search field under them.
+   pages, the rows — groups, pages, scenarios — and the search field under them.
 
    It reads like Sketch's sidebar rather than an editor's file tree: rows are
    rounded pills inset from the panel's edges, the collection showing is tinted
@@ -186,7 +186,7 @@
 }
 
 /* Rows that don't fold keep the caret's place, so every glyph at a depth
-   starts on the same line however many pages have states. */
+   starts on the same line however many pages have scenarios. */
 .wb-item:not(.wb-fold-head) {
   padding-left: calc(var(--wb-depth-pad) + 12px + 4px);
 }
@@ -241,8 +241,8 @@
   transform: rotate(-90deg);
 }
 
-/* A page whose state is on the canvas: its own row is a header, so it
-   gets the weight but not the fill — the state underneath has that. */
+/* A page whose scenario is on the canvas: its own row is a header, so it
+   gets the weight but not the fill — the scenario underneath has that. */
 .wb-fold-head[aria-current='true'],
 .wb-fold-head[aria-current='true']:hover {
   background: none;
@@ -261,12 +261,12 @@
 /* Path lines, as Sketch draws them: down from the middle of the parent's
    glyph, beside the rows it holds. */
 .wb-group > .wb-fold-list,
-.wb-states > .wb-fold-list {
+.wb-scenarios > .wb-fold-list {
   position: relative;
 }
 
 .wb-group > .wb-fold-list::before,
-.wb-states > .wb-fold-list::before {
+.wb-scenarios > .wb-fold-list::before {
   content: '';
   position: absolute;
   top: 0;
@@ -281,7 +281,7 @@
   color: var(--wb-fg-2);
 }
 
-.wb-state {
+.wb-scenario {
   color: var(--wb-fg-2);
 }
 

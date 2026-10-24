@@ -1,5 +1,5 @@
-//! The reference screenshots an export plans: every declared state of every
-//! page at each size it supports, a preview's states or artboards, and for a
+//! The reference screenshots an export plans: every declared scenario of every
+//! page at each size it supports, a preview's scenarios or artboards, and for a
 //! docs page the whole page and each example a lens renders. The capture
 //! helper loads these addresses itself, so exporting never drives the
 //! visible canvas. Pure, except that a missing design file is checked.
@@ -118,25 +118,25 @@ pub(crate) fn capture_plan(view: &Value, base_url: &str) -> Plan {
             ));
             continue;
         }
-        let default_state = [serde_json::json!({ "id": "default", "label": "Default" })];
-        let states = if list(&item["states"]).is_empty() {
-            &default_state[..]
+        let default_scenario = [serde_json::json!({ "id": "default", "label": "Default" })];
+        let scenarios = if list(&item["scenarios"]).is_empty() {
+            &default_scenario[..]
         } else {
-            list(&item["states"])
+            list(&item["scenarios"])
         };
-        for (index, state) in states.iter().enumerate() {
-            let id = text(&state["id"]);
+        for (index, scenario) in scenarios.iter().enumerate() {
+            let id = text(&scenario["id"]);
             let mut params = vec![("actions", "off")];
             if index > 0 {
-                params.push(("state", id));
+                params.push(("scenario", id));
             }
             let url = page_url(src, base_url, &params);
             for size in &sizes {
                 plan.captures.push(Reference {
                     page: src.to_owned(),
-                    state: id.to_owned(),
+                    scenario: id.to_owned(),
                     variant: format!("{id}-{}", size.key),
-                    label: text(&state["label"]).to_owned(),
+                    label: text(&scenario["label"]).to_owned(),
                     size: size.key.clone(),
                     size_label: size.label.clone(),
                     url: url.clone(),
@@ -160,16 +160,16 @@ fn plan_preview(
 ) {
     let file = text(&preview["file"]);
     let artboards = list(&preview["artboards"]);
-    for state in list(&preview["states"]) {
-        let id = text(&state["id"]);
+    for scenario in list(&preview["scenarios"]) {
+        let id = text(&scenario["id"]);
         if artboards.is_empty() {
-            let url = page_url(file, base_url, &[("state", id)]);
+            let url = page_url(file, base_url, &[("scenario", id)]);
             for size in sizes {
                 plan.captures.push(Reference {
                     page: src.to_owned(),
-                    state: id.to_owned(),
+                    scenario: id.to_owned(),
                     variant: format!("{id}-{}", size.key),
-                    label: text(&state["label"]).to_owned(),
+                    label: text(&scenario["label"]).to_owned(),
                     size: size.key.clone(),
                     size_label: size.label.clone(),
                     url: url.clone(),
@@ -186,13 +186,13 @@ fn plan_preview(
             let label = text(&board["label"]);
             plan.captures.push(Reference {
                 page: src.to_owned(),
-                state: id.to_owned(),
+                scenario: id.to_owned(),
                 artboard: Some(board_id.to_owned()),
                 variant: format!("{id}-{board_id}"),
                 label: label.to_owned(),
                 size: board_id.to_owned(),
                 size_label: label.to_owned(),
-                url: page_url(file, base_url, &[("state", id), ("artboard", board_id)]),
+                url: page_url(file, base_url, &[("scenario", id), ("artboard", board_id)]),
                 external: false,
                 width: dimension(&board["width"]),
                 height: dimension(&board["height"]),
@@ -260,7 +260,7 @@ pub(crate) fn docs_capture_plan(pages: &[DocsPagePlan], base_url: &str) -> Plan 
             };
             let base = Reference {
                 page: page.page.clone(),
-                state: "default".into(),
+                scenario: "default".into(),
                 size: "docs".into(),
                 size_label: "Docs page".into(),
                 url,
@@ -296,13 +296,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn plans_every_local_state_for_export_capture_and_warns_for_a_catalogued_simulator_page() {
+    fn plans_every_local_scenario_for_export_capture_and_warns_for_a_catalogued_simulator_page() {
         let view = json!({
             "implementations": { "ios": { "kind": "ios-simulator", "device": "booted", "catalog": true } },
             "collections": [{ "items": [{
                 "label": "Sign in", "src": "pages/sign-in.html",
                 "sizes": ["laptop", "mobile", "resizable", "fit"],
-                "states": [{ "id": "default", "label": "Default" }, { "id": "error", "label": "Error" }],
+                "scenarios": [{ "id": "default", "label": "Default" }, { "id": "error", "label": "Error" }],
             }] }],
             "catalogCollections": [{ "items": [{ "label": "iPhone 17", "src": "__ios-simulator/ios/SIM-1.html", "implementationOnly": "ios" }] }],
             "pages": {},
@@ -314,7 +314,7 @@ mod tests {
             .map(|capture| {
                 (
                     capture.page.as_str(),
-                    capture.state.as_str(),
+                    capture.scenario.as_str(),
                     capture.size.as_str(),
                     capture.width,
                     capture.height,
@@ -337,7 +337,7 @@ mod tests {
             plan.captures[0].url,
             "http://127.0.0.1:3579/pages/sign-in.html?actions=off"
         );
-        assert!(plan.captures[3].url.contains("state=error"));
+        assert!(plan.captures[3].url.contains("scenario=error"));
         assert_eq!(
             plan.warnings,
             ["iPhone 17: reference screenshots are not supported for ios-simulator."]
@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn previews_plan_their_states_or_their_artboards_and_markdown_pages_none() {
+    fn previews_plan_their_scenarios_or_their_artboards_and_markdown_pages_none() {
         let view = json!({
             "sizes": [{ "key": "mobile", "label": "Mobile", "kind": "fixed", "width": 393, "height": 852 }],
             "collections": [{ "items": [
@@ -355,8 +355,8 @@ mod tests {
                 { "label": "Missing", "src": "missing.html" },
             ] }],
             "pages": {
-                "button.workbench.ts": { "preview": { "file": "button.workbench.ts", "states": [{ "id": "primary", "label": "Primary" }] } },
-                "toast.workbench.ts": { "preview": { "file": "toast.workbench.ts", "states": [{ "id": "default", "label": "Default" }],
+                "button.workbench.ts": { "preview": { "file": "button.workbench.ts", "scenarios": [{ "id": "primary", "label": "Primary" }] } },
+                "toast.workbench.ts": { "preview": { "file": "toast.workbench.ts", "scenarios": [{ "id": "default", "label": "Default" }],
                     "artboards": [{ "id": "info", "label": "Info", "width": 560, "height": 79 }] } },
                 "missing.html": { "design": "/nonexistent/acme/missing.html" },
             },
@@ -372,11 +372,11 @@ mod tests {
             [
                 (
                     "primary-mobile",
-                    "http://127.0.0.1:3579/button.workbench.ts?state=primary"
+                    "http://127.0.0.1:3579/button.workbench.ts?scenario=primary"
                 ),
                 (
                     "default-info",
-                    "http://127.0.0.1:3579/toast.workbench.ts?state=default&artboard=info"
+                    "http://127.0.0.1:3579/toast.workbench.ts?scenario=default&artboard=info"
                 ),
             ]
         );

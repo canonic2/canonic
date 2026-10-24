@@ -887,26 +887,26 @@
     copyToastPath();
   });
 
-  /* The shell says what the canvas is showing — page, state, lens, story.
+  /* The shell says what the canvas is showing — page, scenario, lens, story.
      Anything asked before it has settled is the design as addressed. */
   function viewNow() {
     var view = options.view ? options.view() : window.wbView ? window.wbView() : null;
     if (view) return view;
     var target = options.target ? options.target() : window.wbTarget();
-    return { src: target.src, state: target.state, stateLabel: null, lens: null, story: null, url: null, code: [] };
+    return { src: target.src, scenario: target.scenario, scenarioLabel: null, lens: null, story: null, url: null, code: [] };
   }
 
   /* "#pages/sign-in.html@mobile"        -> "sign-in-mobile.jpg".
      "#pages/sign-in.html:error@mobile"  -> "sign-in-error-mobile.jpg", so two
-     states of one page don't land on top of each other in .canonic/.handoffs/ —
+     scenarios of one page don't land on top of each other in .canonic/.handoffs/ —
      and through a lens "sign-in-error-staging-mobile.jpg", so neither do the
      design and the implementation, nor one page at two sizes. A story stands
-     where the state does; a docs page has no size. */
+     where the scenario does; a docs page has no size. */
   function shotName() {
     var view = viewNow();
     var base = String(view.src || '').split('/').pop().replace(/\.[^.]+$/, '');
-    var state = view.story ? view.story.state : view.state;
-    if (state) base += '-' + state;
+    var scenario = view.story ? view.story.scenario : view.scenario;
+    if (scenario) base += '-' + scenario;
     if (view.lens) base += '-' + view.lens.key;
     var size = docsShowing() ? null : (options.size ? options.size() : window.wbSize && window.wbSize());
     if (size) base += '-' + size.key;
@@ -1382,14 +1382,14 @@
   /* An agent told "Wrong password" knows which of the page's versions it is
      looking at; one told "error" has to guess. The shell already has the
      label — and, through a Storybook lens, the story's name in its place. */
-  function stateName(view) {
-    if (view.stateLabel) return view.stateLabel;
+  function scenarioName(view) {
+    if (view.scenarioLabel) return view.scenarioLabel;
     var item = options.item ? options.item(view.src) : window.wbItem(view.src);
-    var states = (item && item.states) || [];
-    for (var i = 0; i < states.length; i++) {
-      if (states[i].id === view.state) return states[i].label;
+    var scenarios = (item && item.scenarios) || [];
+    for (var i = 0; i < scenarios.length; i++) {
+      if (scenarios[i].id === view.scenario) return scenarios[i].label;
     }
-    return view.state;
+    return view.scenario;
   }
 
   /* Through a lens the prompt also says which implementation, at what
@@ -1407,7 +1407,7 @@
       file: file,
       src: view.src,
       label: item ? item.label : view.src,
-      state: view.state ? stateName(view) : null,
+      scenario: view.scenario ? scenarioName(view) : null,
       size: sizeName(),
       frame: { w: Math.round(box.width), h: Math.round(box.height) },
       annotations: annotations.map(function (annotation, i) {
@@ -1600,7 +1600,7 @@
      comparison. */
   function pageOf(hash) {
     var target = window.wbAddress.parse(hash);
-    return target.src + ':' + (target.state || '');
+    return target.src + ':' + (target.scenario || '');
   }
 
   var loaded = pageOf(location.hash);

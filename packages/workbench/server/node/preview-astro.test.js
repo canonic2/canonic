@@ -46,7 +46,7 @@ function fixture(t, files = {}) {
     'button.workbench.ts': `import { definePreview } from '@canonic2/workbench';
       export default definePreview({ id: 'components/button', adapter: 'astro', source: { entry: './Button.astro' },
         inputs: { label: 'Continue', disabled: false }, controls: { label: { type: 'text' } },
-        states: { default: {}, disabled: { inputs: { disabled: true } }, alternate: { source: { entry: './Alternate.astro' } } } });`,
+        scenarios: { default: {}, disabled: { inputs: { disabled: true } }, alternate: { source: { entry: './Alternate.astro' } } } });`,
     'Button.astro': `---
       import Frame from './nested/Frame.astro';
       import './button.css';
@@ -71,7 +71,7 @@ function fixture(t, files = {}) {
   return root;
 }
 
-test('Astro renders props, states, slots and alternate sources, packages client assets and keeps frontmatter in Node', async t => {
+test('Astro renders props, scenarios, slots and alternate sources, packages client assets and keeps frontmatter in Node', async t => {
   const root = fixture(t);
   const built = await build(t, root, 'button.workbench.ts');
   assert.match(built.rendered.default.html, /<article[^>]*><button/);
@@ -96,12 +96,12 @@ test('Astro renders props, states, slots and alternate sources, packages client 
   assert.match(changed.rendered.default.html, /<section>/);
 });
 
-test('Astro frontmatter fetches are answered by the state request mocks', async t => {
+test('Astro frontmatter fetches are answered by the scenario request mocks', async t => {
   const root = fixture(t, {
     'plans.workbench.ts': `import { definePreview } from '@canonic2/workbench';
       export default definePreview({ id: 'pages/plans', adapter: 'astro', source: { entry: './Plans.astro' },
         requests: { 'GET /api/plans': { body: [{ name: 'Team' }, { name: 'Business' }] } },
-        states: { default: {}, empty: { requests: { 'GET /api/plans': { body: [] } } },
+        scenarios: { default: {}, empty: { requests: { 'GET /api/plans': { body: [] } } },
           failed: { requests: { 'GET /api/plans': { status: 500 } } } } });`,
     'Plans.astro': `---
       const response = await fetch('/api/plans');
@@ -118,10 +118,10 @@ test('Astro frontmatter fetches are answered by the state request mocks', async 
   assert.match(built.rendered.failed.html, /Plans could not load/);
 });
 
-test('concurrent Astro renders isolate state request mocks and restore fetch after failure', async t => {
+test('concurrent Astro renders isolate scenario request mocks and restore fetch after failure', async t => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });
-  const definition = { id: 'pages/guide', states: {
+  const definition = { id: 'pages/guide', scenarios: {
     overview: { requests: { 'GET /api/message': { body: { text: 'Overview' } } } },
     details: { requests: { 'GET /api/message': { body: { text: 'Details' } } } },
     plain: {},
@@ -147,14 +147,14 @@ test('concurrent Astro renders isolate state request mocks and restore fetch aft
   assert.equal(globalThis.fetch, original);
 });
 
-test('live Astro input renders have their own served assets and validate state and input requests', async t => {
+test('live Astro input renders have their own served assets and validate scenario and input requests', async t => {
   const root = fixture(t);
   const running = await server.start({ root, capture: { close: async () => {} } });
   t.after(() => running.close());
   const base = 'http://127.0.0.1:' + running.port;
-  const page = await fetch(base + '/button.workbench.ts?state=disabled');
+  const page = await fetch(base + '/button.workbench.ts?scenario=disabled');
   assert.equal(page.status, 200);
-  const render = async (state, inputs) => fetch(base + '/_workbench/previews/render?file=button.workbench.ts&state=' + state + '&inputs=' + encodeURIComponent(JSON.stringify(inputs)));
+  const render = async (scenario, inputs) => fetch(base + '/_workbench/previews/render?file=button.workbench.ts&scenario=' + scenario + '&inputs=' + encodeURIComponent(JSON.stringify(inputs)));
   const response = await render('disabled', { label: '<Edited>', disabled: false });
   assert.equal(response.status, 200);
   const answer = await response.json();
@@ -168,11 +168,11 @@ test('live Astro input renders have their own served assets and validate state a
   assert.deepEqual(config.problems, []);
 });
 
-test('Astro previews without a default state render their base and named request mocks', async t => {
+test('Astro previews without a default scenario render their base and named request mocks', async t => {
   const root = fixture(t, {
     'button.workbench.ts': `export default { id: 'pages/guide', adapter: 'astro', source: { entry: './Guide.astro' },
       inputs: { title: 'Base' }, requests: { 'GET /api/message': { body: { text: 'Base response' } } },
-      states: { index: { inputs: { title: 'Overview' }, requests: { 'GET /api/message': { body: { text: 'Overview response' } } } },
+      scenarios: { index: { inputs: { title: 'Overview' }, requests: { 'GET /api/message': { body: { text: 'Overview response' } } } },
         details: { inputs: { title: 'Details' } } } };`,
     'Guide.astro': `---
       const { title } = Astro.props;
@@ -186,12 +186,12 @@ test('Astro previews without a default state render their base and named request
   assert.match(built.rendered.details.html, /<h1>Details<\/h1><p>Base response<\/p>/);
   const running = await server.start({ root, capture: { close: async () => {} } });
   t.after(() => running.close());
-  const response = await fetch('http://127.0.0.1:' + running.port + '/_workbench/previews/render?file=button.workbench.ts&state=index&inputs=%7B%7D');
+  const response = await fetch('http://127.0.0.1:' + running.port + '/_workbench/previews/render?file=button.workbench.ts&scenario=index&inputs=%7B%7D');
   assert.equal(response.status, 200);
   assert.match((await response.json()).html, /<h1>Overview<\/h1><p>Overview response<\/p>/);
 });
 
-test('portable Astro exports retain all reference states without requiring a rendering server', async t => {
+test('portable Astro exports retain all reference scenarios without requiring a rendering server', async t => {
   const root = fixture(t);
   const { result, files } = portableFiles(root);
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -297,7 +297,7 @@ test('a restarted server rebuilds an Astro render edited while it was stopped', 
     const running = await server.start({ root, capture: { close: async () => {} } });
     try {
       const base = 'http://127.0.0.1:' + running.port;
-      const html = await (await fetch(base + '/button.workbench.ts?state=default')).text();
+      const html = await (await fetch(base + '/button.workbench.ts?scenario=default')).text();
       const modulePath = /import \{ mount \} from "([^"]+)"/.exec(html)[1];
       const scripts = JSON.parse(/const scripts = (\[[^\]]*\]);/.exec(await (await fetch(base + modulePath)).text())[1]);
       return (await Promise.all(scripts.map(async script => (await fetch(base + script)).text()))).join('\n');

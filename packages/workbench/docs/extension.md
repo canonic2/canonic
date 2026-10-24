@@ -77,7 +77,7 @@ Each space gets its own server:
 - It serves the project at `/` and the workbench at `/_workbench/` on the same
   origin, which is what lets the workbench read and capture the live page.
 - It adds one `preview-compat.js` bundle to served HTML and managed previews. See
-  [How pages are served](pages-and-states.md#how-pages-are-served).
+  [How pages are served](pages-and-scenarios.md#how-pages-are-served).
 
 **Workbench: Copy Canvas URL** gives the actual address.
 
@@ -230,7 +230,7 @@ What works where:
 
 | | VS Code, or **Open Canvas in Browser** | `server/node/server.js` in a browser |
 | --- | --- | --- |
-| Pages, states, sizes, zoom | Yes | Yes |
+| Pages, scenarios, sizes, zoom | Yes | Yes |
 | Lenses, including Simulator and window streams | Yes | Yes |
 | TypeScript previews | Yes | Yes |
 | Docs and their examples | Yes | Yes |

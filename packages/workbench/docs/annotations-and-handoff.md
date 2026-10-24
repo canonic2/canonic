@@ -52,7 +52,7 @@ screenshots are cropped to the artboard either way.
   it.
 - **Annotations belong to an artboard.** Selecting another artboard preserves
   each artboard's annotations. Changing size keeps them. Picking a different
-  page, state, or lens opens fresh artboards.
+  page, scenario, or lens opens fresh artboards.
 - Annotations stay in place when you zoom and pan, because they scale with the
   artboard. In a docs lens, they stay on the docs as they scroll and zoom.
 
@@ -117,7 +117,7 @@ act on:
    notification. Paste it into Claude Code, Codex, Cursor's chat, or any other
    conversation.
 
-The prompt identifies every labelled image region, its space, page, state,
+The prompt identifies every labelled image region, its space, page, scenario,
 lens, dimensions and capture time. Each artboard's section describes its
 annotations in local CSS-pixel coordinates and names the element under each one:
 
@@ -182,8 +182,8 @@ in your project. Nothing is sent anywhere until you paste it.
 - **Hand off through the lens you mean.** To fix the implementation, annotate
   the implementation's lens, so the agent gets its URL and code. To change the
   design, use the Design lens.
-- **Use states.** Pick the error state in the page list before handing off,
-  so the prompt and filename say which state it is.
+- **Use scenarios.** Pick the error scenario in the page list before handing
+  off, so the prompt and filename say which scenario it is.
 
 ## In a docs lens
 

@@ -31,7 +31,7 @@ var TITLE = 'Workbench';
 
 var panel = null;   /* the one open panel, or null */
 var current = null; /* the hash the workbench has acknowledged with wb-here */
-var where = { src: null, state: null }; /* the page it settled on */
+var where = { src: null, scenario: null }; /* the page it settled on */
 var watchers = [];
 var loaded = false;
 var pendingTarget = '';
@@ -146,7 +146,7 @@ function html(url, origin) {
     '    if (!ready || refreshing || refreshBlocked || !pending || !frame.contentWindow) return;',
     '    /* A target is an instruction, not a request to poll until the child',
     '       echoes it. The workbench may reject a stale page or normalize an',
-    '       unknown state; retrying either response creates a message loop that',
+    '       unknown scenario; retrying either response creates a message loop that',
     '       can starve the whole webview. Clear before posting so even a',
     '       synchronous test double cannot observe the target as pending. */',
     '    var target = pending;',
@@ -282,15 +282,15 @@ function show(context, url, hash, options) {
         return;
       }
       if (!message || message.type !== 'wb-here') return;
-      current = message.src ? message.src + (message.state ? ':' + message.state : '') : null;
-      moved({ src: message.src || null, state: message.state || null });
+      current = message.src ? message.src + (message.scenario ? ':' + message.scenario : '') : null;
+      moved({ src: message.src || null, scenario: message.scenario || null });
     });
 
     panel.onDidDispose(function () {
       panel = null;
       loaded = false;
       current = null;
-      moved({ src: null, state: null });
+      moved({ src: null, scenario: null });
     }, null, context.subscriptions);
 
   }
@@ -332,7 +332,7 @@ function retarget(url) {
   current = null;
   pendingTarget = '';
   navigation += 1;
-  moved({ src: null, state: null });
+  moved({ src: null, scenario: null });
   if (!panel) return Promise.resolve(null);
   loaded = false;
   panel.webview.html = loadingHtml(false);

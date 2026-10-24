@@ -106,10 +106,10 @@
 
       /* No width in the hash: how the canvas is framed is the canvas's
          business, and a pick from here shouldn't resize it. */
-      onPick: function (src, state) {
+      onPick: function (src, scenario) {
         var item = index[src];
-        pageList.setCurrent(src, state, item && item.collection);
-        send({ type: 'canonic-pick', hash: src + (state ? ':' + state : '') });
+        pageList.setCurrent(src, scenario, item && item.collection);
+        send({ type: 'canonic-pick', hash: src + (scenario ? ':' + scenario : '') });
       },
     });
 
@@ -160,7 +160,7 @@
     if (data.type !== 'canonic-here' || !pageList) return;
     var item = index[data.src];
     pageList.reveal(data.src);
-    pageList.setCurrent(item ? data.src : null, data.state, item && item.collection);
+    pageList.setCurrent(item ? data.src : null, data.scenario, item && item.collection);
   });
 
   window.wbConfig.load(start, refuse);

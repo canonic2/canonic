@@ -24,7 +24,7 @@ function onAction(page, type, detail) {
     page.actions.push({ name: String(detail.name), values: detail.values ?? [] });
     page.actions.splice(0, Math.max(0, page.actions.length - 30));
   }
-  report(type, { ...detail, state: page.options?.state ?? 'default' });
+  report(type, { ...detail, scenario: page.options?.scenario ?? 'default' });
 }
 
 function source(page, id) {
@@ -390,7 +390,7 @@ async function swapMarkdown(page) {
   page.sourceRevision += 1;
   page.highlighting.reset();
   main.replaceChildren(...Array.from(next.childNodes));
-  window.wbPageStates?.apply(page.options?.state ?? 'default');
+  window.wbPageScenarios?.apply(page.options?.scenario ?? 'default');
   page.sources.clear();
   for (const figure of figures()) {
     const panel = figure.querySelector('[data-wb-example-code]');
@@ -425,7 +425,7 @@ async function run(options, { scroll, answer: early } = {}) {
   current = page;
   window.__workbenchReady = false;
   window.__workbenchError = null;
-  window.wbPageStates?.apply(options?.state ?? 'default');
+  window.wbPageScenarios?.apply(options?.scenario ?? 'default');
   watchRevision(page);
   let results = [];
   const wanted = options?.bundle;
@@ -447,7 +447,7 @@ async function run(options, { scroll, answer: early } = {}) {
         phase: (name) => phase(page.trace, name),
         signal: page.controller.signal,
         page: options.page,
-        state: options.state ?? 'default',
+        scenario: options.scenario ?? 'default',
         report: (type, detail) => onAction(page, type, detail),
       });
       if (!live(page)) return;
@@ -493,7 +493,7 @@ async function run(options, { scroll, answer: early } = {}) {
   if (options?.highlightUrl) page.highlighting.fences(document);
   window.__workbenchReady = true;
   report('ready', {
-    state: options?.state ?? 'default',
+    scenario: options?.scenario ?? 'default',
     inputs: {},
     controls: {},
     docs: '',

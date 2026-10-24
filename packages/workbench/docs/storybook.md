@@ -4,7 +4,7 @@ Workbench can show Storybook stories in its canvas without Storybook's own
 interface: one story at a time, at a real device width, with annotations and
 handoffs. You list the pages in `workbench.yaml` and map each one to a story
 title: the page gets a Storybook lens, so you can compare the design with the
-built component, and in that lens the state switcher lists the title's stories.
+built component, and in that lens the scenario switcher lists the title's stories.
 
 Workbench reads Storybook's live `/index.json`, which Storybook 7 and later
 serve. Either Workbench runs your Storybook for you, or you run it and give
@@ -87,11 +87,11 @@ Set the implementation's `label` to rename **Storybook**, and the page's
 `lensLabel` to rename **Design**. The implementation key and story address
 stay the same. See [Customize lens labels](lenses.md#customize-lens-labels).
 Choosing
-Storybook shows the title's first story. The state switcher, after the page's
+Storybook shows the title's first story. The scenario switcher, after the page's
 name in the top bar's breadcrumb, lists the title's stories instead of the
-design's states. Switch between them without leaving the frame.
+design's scenarios. Switch between them without leaving the frame.
 
-The address records the story in the state slot, as the part of its id after
+The address records the story in the scenario slot, as the part of its id after
 `--`: the story `components-button--icon-only` is
 `#design/button.html:icon-only~storybook`.
 

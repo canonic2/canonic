@@ -41,10 +41,10 @@ export function createContentController(options) {
     options.viewport.classList.add('has-problem');
     changed();
   }
-  function flags(src, state) {
+  function flags(src, scenario) {
     const url = new URL(src, options.root);
     url.searchParams.set('actions', actions ? 'on' : 'off');
-    if (state) url.searchParams.set('state', state);
+    if (scenario) url.searchParams.set('scenario', scenario);
     const id = new URLSearchParams(location.search).get('artboard');
     if (id) url.searchParams.set('artboard', id);
     return address(url.href, trace);
@@ -88,23 +88,25 @@ export function createContentController(options) {
     }
     const lens = chooseLens(item, config.implementations, target.lens);
     const storybook = lens?.kind === 'storybook';
-    const state =
+    const scenario =
       lens && ['ios-simulator', 'window'].includes(lens.kind)
         ? null
         : storybook
-          ? target.state
-          : item.states?.slice(1).find((s) => s.id === target.state)?.id || null;
+          ? target.scenario
+          : item.scenarios?.slice(1).find((s) => s.id === target.scenario)?.id || null;
     view = {
       src: item.src,
       item,
       lens,
-      state: storybook ? null : state,
-      stateLabel: state ? item.states?.find((s) => s.id === state)?.label || null : null,
+      scenario: storybook ? null : scenario,
+      scenarioLabel: scenario
+        ? item.scenarios?.find((s) => s.id === scenario)?.label || null
+        : null,
       story: null,
       url: null,
       code: (config.pages[item.src]?.code || []).filter((c) => c.exists).map((c) => c.path),
     };
-    write({ ...target, src: item.src, state, lens: lens?.key || 'design' });
+    write({ ...target, src: item.src, scenario, lens: lens?.key || 'design' });
     if (lens?.problem) {
       frames.suspend();
       services.native.hide();
@@ -130,16 +132,16 @@ export function createContentController(options) {
       try {
         const list = await options.stories(lens.key, item.implementations?.[lens.key]?.title || '');
         if (closed || sequence !== generation) return;
-        const picked = list.find((s) => s.state === state) || list[0];
+        const picked = list.find((s) => s.scenario === scenario) || list[0];
         if (!picked) throw new Error('No stories available.');
         view.story = picked;
-        view.stateLabel = picked.name;
+        view.scenarioLabel = picked.name;
         view.url = services.lenses.storyUrl(lens, picked.id);
         view.code = [...new Set([...(picked.code || []), ...view.code])];
-        write({ ...target, state: picked.state });
+        write({ ...target, scenario: picked.scenario });
         rows = list.map((s, i) => ({
           id: String(i),
-          target: s.state,
+          target: s.scenario,
           label: s.name,
           current: s.id === picked.id,
         }));
@@ -148,31 +150,31 @@ export function createContentController(options) {
         return;
       }
     } else {
-      const mapped = !lens || isDocsLens(lens) || !!item.implementations?.[lens.key]?.states;
+      const mapped = !lens || isDocsLens(lens) || !!item.implementations?.[lens.key]?.scenarios;
       rows =
-        mapped && (item.states?.length || 0) > 1
-          ? item.states.map((s, i) => ({
+        mapped && (item.scenarios?.length || 0) > 1
+          ? item.scenarios.map((s, i) => ({
               id: String(i),
               target: item.implementationOnly ? s.id : i ? s.id : null,
               label: s.label,
-              current: i ? s.id === state : !state,
+              current: i ? s.id === scenario : !scenario,
             }))
           : [];
       if (isDocsLens(lens)) {
-        const url = new URL(flags(item.markdown, state));
+        const url = new URL(flags(item.markdown, scenario));
         url.searchParams.set('lens', lens.key);
         view.url = url.href;
-      } else if (!lens) view.url = flags(item.src, state);
+      } else if (!lens) view.url = flags(item.src, scenario);
       else {
-        view.url = services.lenses.url(lens, item.implementations[lens.key], state);
-        if (lens.kind === 'workbench') view.url = flags(view.url, state);
+        view.url = services.lenses.url(lens, item.implementations[lens.key], scenario);
+        if (lens.kind === 'workbench') view.url = flags(view.url, scenario);
       }
     }
     changed();
     mounted = view;
     if (trace) {
       trace.page = item.src;
-      trace.state = state || 'default';
+      trace.scenario = scenario || 'default';
       trace.lens = view.lens?.key || 'design';
       view.trace = trace;
       view.phase = phase;
@@ -182,7 +184,7 @@ export function createContentController(options) {
   function navigate(next) {
     const same =
       next.src === target.src &&
-      (next.state || null) === (target.state || null) &&
+      (next.scenario || null) === (target.scenario || null) &&
       (next.lens || 'design') === (target.lens || 'design') &&
       (next.example || null) === (target.example || null);
     if (same && content.read()?.ready) return;
@@ -193,24 +195,24 @@ export function createContentController(options) {
     problem: () => problem,
     read() {
       if (!view || !config) return null;
-      const { item, lens, stateLabel } = view;
+      const { item, lens, scenarioLabel } = view;
       const id = new URLSearchParams(location.search).get('artboard');
       const declared = config.pages[item.src]?.preview?.artboards?.find((b) => b.id === id);
       const disabled = !!lens && !['workbench', 'docs'].includes(lens.kind);
       return {
         src: item.src,
-        state: target.state,
+        scenario: target.scenario,
         lens: lens?.key || null,
         hash: location.hash,
         label: declared
           ? item.label + ' / ' + declared.label
-          : [item.label, stateLabel].filter(Boolean).join(' / '),
+          : [item.label, scenarioLabel].filter(Boolean).join(' / '),
         ready:
           !problem &&
           (lens && ['ios-simulator', 'window'].includes(lens.kind)
             ? services.native.ready()
             : mounted === view && frames.ready()),
-        states: rows,
+        scenarios: rows,
         lenses: [
           ...pageLenses(item, config.implementations).filter(isDocsLens),
           ...(hasDesignLens(item) ? [{ key: 'design', label: 'Design' }] : []),
@@ -225,7 +227,7 @@ export function createContentController(options) {
       if (!value || typeof value !== 'object' || !('src' in value) || typeof value.src !== 'string')
         throw new Error('Invalid content target.');
       const next = value;
-      navigate({ ...next, state: next.state || null, lens: next.lens || 'design' });
+      navigate({ ...next, scenario: next.scenario || null, lens: next.lens || 'design' });
     },
     size(w, h) {
       width = w;
@@ -248,9 +250,9 @@ export function createContentController(options) {
       )
         doc.scrollTo(doc.scrollX, scrollAfterZoom(doc.scrollY, value.pointY, value.from, value.to));
     },
-    pickState(id) {
+    pickScenario(id) {
       const row = rows.find((r) => r.id === id);
-      if (row) navigate({ ...target, state: row.target || null });
+      if (row) navigate({ ...target, scenario: row.target || null });
     },
     lens(key) {
       navigate({ ...target, lens: key || 'design' });
@@ -308,13 +310,13 @@ export function createContentController(options) {
         const page = [...pages.values()].find(
           (p) => config?.pages[p.src]?.preview?.id === data.preview,
         );
-        if (page) navigate({ src: page.src, state: data.state || null, lens: 'design' });
+        if (page) navigate({ src: page.src, scenario: data.scenario || null, lens: 'design' });
       } else if (data.event === 'docs-navigate' && isDocsLens(view?.lens)) {
         const page = [...pages.values()].find((p) => p.markdown === data.page);
         if (page)
           navigate({
             src: page.src,
-            state: null,
+            scenario: null,
             lens: view?.lens?.key || null,
             example: data.example,
           });
@@ -323,7 +325,7 @@ export function createContentController(options) {
       const url = new URL(String(data.href), options.root);
       if (!url.href.startsWith(options.root)) return;
       const src = decodeURIComponent(url.pathname.slice(new URL(options.root).pathname.length));
-      if (pages.has(src)) navigate({ src, state: data.state || null, lens: 'design' });
+      if (pages.has(src)) navigate({ src, scenario: data.scenario || null, lens: 'design' });
     }
   }
   window.addEventListener('hashchange', hashChanged);

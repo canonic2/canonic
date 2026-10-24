@@ -55,15 +55,15 @@ test('opening another space without a destination routes to its first resolved p
   assert.equal(app.routed[0].src, 'home.html');
 });
 
-test('an imported-only space opens its first named state after catalog resolution', function () {
+test('an imported-only space opens its first named scenario after catalog resolution', function () {
   var app = startup('', [], [{ name: 'Stories', items: [
-    { src: 'Components/Button', implementationOnly: 'storybook', states: [{ id: 'primary' }] },
+    { src: 'Components/Button', implementationOnly: 'storybook', scenarios: [{ id: 'primary' }] },
   ] }]);
   app.apply(true);
   assert.equal(app.routed.length, 0);
   app.finish();
   assert.equal(app.routed[0].src, 'Components/Button');
-  assert.equal(app.routed[0].state, 'primary');
+  assert.equal(app.routed[0].scenario, 'primary');
 });
 
 test('explicit destinations, including invalid links, take precedence over the first page', function () {

@@ -42,19 +42,19 @@
           <span class="wb-crumb-sep" aria-hidden="true">/</span>
         </span>
 
-        <!-- The page, then which of its states — or, under a Storybook
+        <!-- The page, then which of its scenarios — or, under a Storybook
              lens, which of its stories — is showing, with the others one
              click away. Rows are built in workbench.js. -->
         <div class="wb-crumb" id="crumb" hidden>
           <span class="wb-crumb-page" id="crumbPage"></span>
-          <span class="wb-states-control" id="stateControl" hidden>
+          <span class="wb-scenarios-control" id="scenarioControl" hidden>
             <span class="wb-crumb-sep" aria-hidden="true">/</span>
-            <button class="wb-action wb-crumb-state" type="button" id="stateButton"
-                    aria-haspopup="true" aria-expanded="false" title="Pick a state">
-              <span id="stateName"></span>
+            <button class="wb-action wb-crumb-scenario" type="button" id="scenarioButton"
+                    aria-haspopup="true" aria-expanded="false" title="Pick a scenario">
+              <span id="scenarioName"></span>
               <span class="wb-crumb-caret" data-icon="chevron-down"></span>
             </button>
-            <div class="wb-menu wb-menu-column" id="stateMenu" role="menu" aria-label="State" hidden></div>
+            <div class="wb-menu wb-menu-column" id="scenarioMenu" role="menu" aria-label="Scenario" hidden></div>
           </span>
         </div>
       </div>
@@ -146,7 +146,7 @@
 
       <div class="wb-search">
         <span class="wb-search-icon" data-icon="search"></span>
-        <input id="search" type="search" placeholder="Search pages…" autocomplete="off" aria-label="Search pages and states" />
+        <input id="search" type="search" placeholder="Search pages…" autocomplete="off" aria-label="Search pages and scenarios" />
       </div>
 
       <!-- Drag to resize, double-click to reset. -->

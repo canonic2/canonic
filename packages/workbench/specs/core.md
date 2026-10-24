@@ -21,7 +21,7 @@ device but keeps them on the same canvas as everything else.
 
 ## Terminology
 
-Space, collection, group, page, state, lens, and the parts of the interface
+Space, collection, group, page, scenario, lens, and the parts of the interface
 (sidebar, top bar, canvas, artboard, toolbar, view controls) are defined in
 [glossary](glossary.md), which code, guides, and specs follow.
 
@@ -55,7 +55,7 @@ Space, collection, group, page, state, lens, and the parts of the interface
 - Discovered previews and imported catalog collections join authored
   collections with the same name. A discovered preview whose definition is
   also listed as an authored `src` stays one page: the authored label,
-  lenses, and code pointers are kept, and the definition supplies its states.
+  lenses, and code pointers are kept, and the definition supplies its scenarios.
 - A failed catalog or preview compilation leaves usable authored pages
   available and adds a problem. One invalid preview definition does not hide
   the others.
@@ -76,13 +76,13 @@ services exist in the editor, standalone browser and portable viewer.
 
 - Every configuration, catalog, preview, and implementation problem names
   where it came from, for example
-  `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
+  `Pages › Auth › Sign in: scenario id “Error” must be kebab-case`.
 - Every surface shows the same shared problems list: the VS Code
   sidebar above its page list, and the canvas wherever it runs (the editor tab,
   **Open Canvas in Browser**, and a standalone server). `/_workbench/config`
   lists them under `problems`.
 - The list covers every entry dropped while reading the YAML (collections,
-  groups, pages, states, and invalid `src` values), implementation,
+  groups, pages, scenarios, and invalid `src` values), implementation,
   size, mapping, code-pointer, `previews`, catalog, and
   preview-compilation problems, and implementations that are not running
   (except lens-scoped Gate availability below),
@@ -100,15 +100,15 @@ services exist in the editor, standalone browser and portable viewer.
 
 ## Selection and navigation
 
-- One selection is encoded as `#<src>[:<state>]@<size>[~<lens>]`. For example,
-  `#pages/sign-in.html:error@mobile~staging` names a page, state, artboard size,
-  and implementation. The default state and design lens are omitted; the
+- One selection is encoded as `#<src>[:<scenario>]@<size>[~<lens>]`. For example,
+  `#pages/sign-in.html:error@mobile~staging` names a page, scenario, artboard size,
+  and implementation. The default scenario and design lens are omitted; the
   workbench writes the resolved size key for an artboard and omits it in a
   docs lens. Docs addresses can also name `!<example>`. It normalizes the
   address after routing to the view it actually shows.
 - The sidebar lists the collections, then the chosen collection's pages;
-  search finds pages across collections, including state and group labels. A
-  page with multiple states expands to its states. A single-state authored
+  search finds pages across collections, including scenario and group labels. A
+  page with multiple scenarios expands to its scenarios. A single-scenario authored
   page does not expand.
 - A lens choice persists across page picks. A page without that lens shows
   its design. An imported implementation-only page always uses its own lens;
@@ -147,7 +147,7 @@ content-only renderers. Canvas labels, grid, camera and global controls belong
 to that shell; none is mounted inside an artboard. The backend provides project
 data and compiled/rendered/proxied content, not Workbench application markup.
 The [multiple-artboard system](canvas/multiple-artboards.md) owns instance state,
-geometry and review/context. Ordinary states remain alternatives; only explicit
+geometry and review/context. Ordinary scenarios remain alternatives; only explicit
 page artboards create a group. Outer control layout stays unchanged by this refactor.
 
 - Config and catalog discovery show **Loading pages…**. Sidebar selection updates
@@ -189,7 +189,7 @@ page artboards create a group. Outer control layout stays unchanged by this refa
   ready. Offscreen lazy images keep native lazy loading and do not delay the
   frame swap. Readiness must also progress when the browser suspends animation
   frames in the hidden loading iframe.
-- The top bar exposes the page with its state or Storybook story picker, the
+- The top bar exposes the page with its scenario or Storybook story picker, the
   lens switcher, the size switcher, reload, source files when resolved, a copyable
   reference, **Open on its own**, preview controls for a ready TypeScript
   preview, and **More** (page configuration and design-system export when the
@@ -217,7 +217,7 @@ page artboards create a group. Outer control layout stays unchanged by this refa
 ## Implementation gaps
 
 - **Dropped authored entries are invisible in VS Code.** Problems for dropped
-  collections, groups, pages, and states go only to the canvas webview's
+  collections, groups, pages, and scenarios go only to the canvas webview's
   console. The native [config reader](../server/src/config/read.rs) skips them, so the sidebar's
   problems list never shows them.
 - **No problems list in a standalone browser.** The canvas does not display
@@ -228,7 +228,7 @@ page artboards create a group. Outer control layout stays unchanged by this refa
   server, so implementation and mapping problems are not shown there.
 - **Some failures never become problems.** A stopped Storybook used only by
   mappings, a mapped Simulator whose device is not booted, and an authored
-  entry with an invalid `src` or state id fail only on the canvas or are
+  entry with an invalid `src` or scenario id fail only on the canvas or are
   dropped silently; see [implementations](pages/implementations.md#current-gaps) and
   [Storybook](pages/storybook.md#current-gaps).
 
@@ -236,7 +236,7 @@ page artboards create a group. Outer control layout stays unchanged by this refa
 
 - [address.test.js](../ui/legacy/address.test.js) checks address parsing,
   writing, and round trips.
-- [page-list.test.js](../ui/legacy/page-list.test.js) checks listed states and empty
+- [page-list.test.js](../ui/legacy/page-list.test.js) checks listed scenarios and empty
   versus filtered lists.
 - [config.test.js](../server/node/config.test.js) checks YAML reading, the local merge,
   and server-resolved paths and problems;

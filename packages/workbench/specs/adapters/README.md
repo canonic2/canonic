@@ -9,7 +9,7 @@ guides have one page per adapter, listed in
 each adapter's contract, how it is built and what remains open.
 
 [TypeScript previews](../pages/previews.md) owns what a preview is: definitions,
-states, controls, data, readiness and errors, the same for every adapter.
+scenarios, controls, data, readiness and errors, the same for every adapter.
 The [preview pipeline](../preview-pipeline/README.md) owns compiling,
 serving, warm documents and hot updates. An adapter spec owns only what
 differs for its technology, and links to those topics for the rest.

@@ -18,7 +18,7 @@
     return {
       text: text,
       src: view.src,
-      state: view.story ? null : view.state,
+      scenario: view.story ? null : view.scenario,
       story: view.story ? view.story.id : null,
       lens: view.lens ? view.lens.key : null,
     };

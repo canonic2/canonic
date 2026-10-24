@@ -1,5 +1,5 @@
 /* Inputs and actions are transient experiments. Definitions and reference
-   state screenshots remain unchanged; Reset restores the selected state. */
+   scenario screenshots remain unchanged; Reset restores the selected scenario. */
 (function () {
   var button = document.getElementById('previewControls');
   var panel = document.createElement('aside');
@@ -14,9 +14,9 @@
   var port = null;
   function frame() { return document.querySelector('iframe.is-active'); }
   function send(command) {
-    if (port) { port.send({ command: command, state: selected && selected.state, inputs: overrides }); return; }
+    if (port) { port.send({ command: command, scenario: selected && selected.scenario, inputs: overrides }); return; }
     var active = frame();
-    if (active && selected) active.contentWindow.postMessage({ type: 'workbench-preview-command', command: command, state: selected.state, inputs: overrides }, new URL(active.src).origin);
+    if (active && selected) active.contentWindow.postMessage({ type: 'workbench-preview-command', command: command, scenario: selected.scenario, inputs: overrides }, new URL(active.src).origin);
   }
   function element(tag, text) { var node = document.createElement(tag); if (text) node.textContent = text; return node; }
   function draw() {
@@ -45,7 +45,7 @@
       label.appendChild(input);
       panel.appendChild(label);
     });
-    var reset = element('button', 'Reset state');
+    var reset = element('button', 'Reset scenario');
     reset.type = 'button';
     reset.addEventListener('click', function () { overrides = {}; log = []; send('reset'); draw(); });
     panel.appendChild(reset);
@@ -74,10 +74,10 @@
   function receive(data) {
     if (!data) return;
     var active = frame();
-    var requested = !port && active ? new URL(active.src).searchParams.get('state') : null;
-    if (requested && data.state && requested !== data.state) return;
+    var requested = !port && active ? new URL(active.src).searchParams.get('scenario') : null;
+    if (requested && data.scenario && requested !== data.scenario) return;
     if (data.event === 'ready') {
-      if (!selected || selected.id !== data.id || selected.state !== data.state) { overrides = {}; log = []; }
+      if (!selected || selected.id !== data.id || selected.scenario !== data.scenario) { overrides = {}; log = []; }
       selected = data;
       overrides = Object.assign({}, data.inputs);
       log = data.actions || [];

@@ -304,8 +304,8 @@ async fn answer(previews: Arc<Previews>, request: Request) -> Response {
             let Some(inputs) = inputs else {
                 return failure(&anyhow::anyhow!("Astro inputs must be an object."));
             };
-            let state = param(query, "state").unwrap_or_else(|| "default".into());
-            match previews.render(&file, &state, &inputs).await {
+            let scenario = param(query, "scenario").unwrap_or_else(|| "default".into());
+            match previews.render(&file, &scenario, &inputs).await {
                 Ok(answer) => json_response(StatusCode::OK, &answer),
                 Err(error) => failure(&error),
             }

@@ -7,7 +7,7 @@ Actions, and drawing tools apply to that artboard. In a
 [docs lens](docs-pages.md), a page's docs fill the canvas instead; see
 [Docs on the canvas](#docs-on-the-canvas). This page covers each part of it.
 
-States are alternatives: the state switcher changes which state of the page
+Scenarios are alternatives: the scenario switcher changes which scenario of the page
 is showing. Storybook stories also remain alternatives. They do not create
 artboards. A page without an `artboards` declaration shows one preview; docs
 show one viewport. Inputs and annotations stay independent while selecting
@@ -19,13 +19,13 @@ When you pick another page, the sidebar marks it immediately. The previous
 artboard stays visible for up to 200 ms, keeping its own label and reference.
 If the requested page becomes ready sooner, it appears immediately without a
 loader. If it takes longer, the old view is hidden and **Loading preview…**
-appears until the replacement is ready. States and lenses use the same grace
+appears until the replacement is ready. Scenarios and lenses use the same grace
 period. The outgoing preview is not interactive during the transition;
 screenshots and handoffs wait for the requested page to finish loading.
 A failure ends the transition and shows the error. Rapid picks follow the
 latest destination. This keeps fast switches visually continuous without
 delaying ready content.
-Labels use the page's name and the selected story or state. Declared artboards
+Labels use the page's name and the selected story or scenario. Declared artboards
 include their own names while loading. During a Storybook lookup, the tab names
 the destination page; the story name joins it once resolved.
 The grid belongs to the main canvas. Each embedded preview fills its artboard
@@ -43,9 +43,9 @@ natural bounds, including after live input edits.
 | Sidebar | The **Workbench** view in VS Code's activity bar, or the left edge of a standalone browser window | The space switcher, the collection list, the page list, and search |
 | Space switcher | Top of the sidebar | The space showing, and the others to switch to. In VS Code it's always there, for **Add a space…**; in a browser, only with more than one space. See [Several spaces](spaces.md). |
 | Collection list | Sidebar, under the heading **Collections** | The space's collections |
-| Page list | Sidebar | The chosen collection's groups, pages, and states |
-| Search | Bottom of the sidebar | Filters every collection's pages, groups, and states |
-| Top bar | Top of the canvas | The breadcrumb with the state switcher, lenses, size, actions, reload, source, reference, and more |
+| Page list | Sidebar | The chosen collection's groups, pages, and scenarios |
+| Search | Bottom of the sidebar | Filters every collection's pages, groups, and scenarios |
+| Top bar | Top of the canvas | The breadcrumb with the scenario switcher, lenses, size, actions, reload, source, reference, and more |
 | Artboard | Middle | The page, labeled with its name and size by the artboard label |
 | Toolbar | Floating at the bottom | Annotation tools, undo, clear, screenshot, and handoff |
 | View controls | Floating at the bottom right | Recenter view, zoom out, the zoom level and its menu, and zoom in |
@@ -61,21 +61,21 @@ editor's theme, and the canvas tab doesn't repeat it.
 - **Groups** in the page list hold related pages. Select a group to expand it
   and open its first page. Selecting the group of the page showing, or a
   group's arrow, expands or collapses it.
-- **Pages** with two or more states expand to show them. Pick a state to show
-  it; the first is the page as authored. Selecting the page itself shows its
-  first state, and selecting it again while it is showing collapses it. A
+- **Pages** with two or more scenarios expand to show them. Pick a scenario to
+  show it; the first is the page as authored. Selecting the page itself shows
+  its first scenario, and selecting it again while it is showing collapses it. A
   [Markdown page](docs-pages.md#a-markdown-page) has nothing listed under it.
 - **Search**, the field at the bottom (*Search pages…*), filters every
-  collection's pages, groups, and states as you type, and groups the results
+  collection's pages, groups, and scenarios as you type, and groups the results
   by collection.
 - [TypeScript previews](workbench-previews.md) and Markdown pages defined in
   `*.workbench.ts` files appear in the collections their titles name, beside the
   pages listed in `workbench.yaml`.
 
 In VS Code, the page list is one stop in the tab order. **Up** and **Down**
-move through its groups, pages, and states, **Right** expands a group or page,
+move through its groups, pages, and scenarios, **Right** expands a group or page,
 **Left** collapses it, **Home** and **End** jump to the first and last, and
-**Enter** or **Space** shows the focused page or state. The problems list,
+**Enter** or **Space** shows the focused page or scenario. The problems list,
 above the page list, shows problems importing a catalog or TypeScript previews.
 
 In a standalone browser, ⌘K or Ctrl+K jumps to search. Drag the sidebar's edge
@@ -87,15 +87,15 @@ reset the width. The width is remembered.
 | Control | Does |
 | --- | --- |
 | **Breadcrumb: space** | The space's mark and name, before the page. Select it to switch to another [space](spaces.md). Shown when there is more than one space. |
-| **Breadcrumb: page and state** | The page's name, then the state showing. The state is the state switcher: select it to pick another state. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
+| **Breadcrumb: page and scenario** | The page's name, then the scenario showing. The scenario is the scenario switcher: select it to pick another scenario. On a [Storybook lens](storybook.md), it picks a story of the current title instead. Shown when there is more than one to choose from. |
 | **Lens switcher** | Switches between the page's [docs](docs-pages.md) lenses, the authored page, and each [implementation](lenses.md) the page has, in that order. Shown when the page has two or more lenses. A page with docs opens on its first docs lens, one for each renderer of its examples. The authored lens defaults to **Design**, or **Preview** for a TypeScript preview. [Every label is customizable](lenses.md#customize-lens-labels). |
 | **Size switcher** | **Fit**, **Laptop**, **Mobile**, and **Resizable**. See [Artboard sizes](#artboard-sizes). Disabled in a docs lens, because the docs fill the canvas. |
-| **Actions** (pointer icon and switch) | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-states.md#links-and-actions). |
+| **Actions** (pointer icon and switch) | Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they're mapped to and everything else is recorded under **Actions**; see [Links and navigation](preview-data.md#links-and-navigation). Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can't be switched. See [Links and actions](pages-and-scenarios.md#links-and-actions). |
 | **Reload** | Reloads the current page. |
 | **Open the source** (`</>`) | Lists the design file and the page's [code pointers](lenses.md#point-at-the-code), and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file; for a page with docs, its design file, then **Docs**, its Markdown, then each docs lens's example source. On a Markdown page, **Docs** is the first row. A path that isn't on this machine is listed but can't be opened. |
 | **Copy reference** | Copies a short text reference to the current view. See [Copy a reference](#copy-a-reference). |
 | **Open on its own** | Opens the current page in your browser, outside the workbench. |
-| **Preview controls** | Opens the inputs, **Reset state**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Preview data, mocks, and actions](preview-data.md). |
+| **Preview controls** | Opens the inputs, **Reset scenario**, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See [Preview data, mocks, and actions](preview-data.md). |
 | **More** | **Configure pages** and **Download design-system ZIP**, which [exports the whole current space](design-system-export.md) across its collections and pages. Shown when the workbench server is running. |
 
 When the canvas is narrow, **Reload**, **Open the source**, **Copy reference**,
@@ -123,7 +123,7 @@ the canvas is zoomed out to fit, never squeezed, so a 1512-pixel layout is
 still 1512 pixels wide to the page. Screenshots are always taken at the
 artboard's real size, whatever the zoom.
 
-A page's [`sizes`](pages-and-states.md#sizes) decide which sizes are
+A page's [`sizes`](pages-and-scenarios.md#sizes) decide which sizes are
 enabled.
 
 ## Zoom and pan
@@ -219,25 +219,25 @@ Shift 0 and Shift 1 don't apply while you type in a field or a note.
 | ⌘ K | Standalone browser | Jump to search |
 | Escape | In search | Clear it |
 | Down | In search, in VS Code | Move to the first result in the page list |
-| Up, Down, Home, End | In the page list, in VS Code | Move between groups, pages, and states |
-| Right, Left | In the page list, in VS Code | Expand or collapse a group or page; Left on a page or state inside one moves to it |
-| Enter or Space | On a page or state | Show it |
+| Up, Down, Home, End | In the page list, in VS Code | Move between groups, pages, and scenarios |
+| Right, Left | In the page list, in VS Code | Expand or collapse a group or page; Left on a page or scenario inside one moves to it |
+| Enter or Space | On a page or scenario | Show it |
 | Left, Right, Shift + Left or Right | On the sidebar's edge, in a standalone browser | Resize the sidebar by 8 or 32 pixels |
 
 ## Links and the address
 
 The current view is recorded in the address's hash, so reloading or opening a
-copied link lands on the same page, state, size, and lens:
+copied link lands on the same page, scenario, size, and lens:
 
 ```text
 #pages/sign-in.html:error@1512~staging
- └ src              └ state └ width └ lens
+ └ src              └ scenario └ width └ lens
 ```
 
 | Part | Values | Left out when |
 | --- | --- | --- |
 | src | The page's `src` | Never |
-| `:state` | A state id, or on a Storybook lens the part of the story's id after `--` | The first state is showing, or the page has no states |
+| `:scenario` | A scenario id, or on a Storybook lens the part of the story's id after `--` | The first scenario is showing, or the page has no scenarios |
 | `!example` | In a docs lens, an example's ID; the docs open scrolled to that example | No example is named, or the lens isn't a docs lens |
 | `@width` | `fit`, `1512`, `393`, or `resizable` | In a docs lens, which has no width. Elsewhere the workbench always writes it, though a link you type may omit it |
 | `~lens` | An implementation name, or `design` for the authored lens of a page with docs | The page's default lens is showing: its first docs lens (a Markdown page's `lens`), or the authored lens of a page without docs |
@@ -264,7 +264,7 @@ after a restart; the hash part stays valid. Share a
 ## Copy a reference
 
 **Copy reference** identifies every artboard and the selection, with each page's
-label, design file, state or story, size, and lens. Paste it into a conversation
+label, design file, scenario or story, size, and lens. Paste it into a conversation
 to point an agent or a colleague at the canvas. It doesn't take a screenshot or include annotations. For
 those, use a [handoff](annotations-and-handoff.md#hand-off-to-an-agent).
 
@@ -288,7 +288,7 @@ form:
 - Choose each page's supported sizes.
 
 Saving rewrites only the `collections` block of `workbench.yaml`, and the
-sidebar refreshes. States, implementation mappings, and code pointers in that
+sidebar refreshes. Scenarios, implementation mappings, and code pointers in that
 block are preserved. Everything outside it, including comments, is left alone;
 comments inside it are removed. The form edits `workbench.yaml` only, so
 collections that `workbench.local.yaml` overrides on your machine keep showing

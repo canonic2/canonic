@@ -185,7 +185,7 @@ export default definePreview({
     label: { type: 'text' },
     disabled: { type: 'boolean' },
   },
-  states: {
+  scenarios: {
     default: {},
     disabled: { inputs: { disabled: true } },
   },
@@ -193,7 +193,7 @@ export default definePreview({
 ```
 
 Run **Workbench: Refresh Pages**. **Button** appears under **Components**
-with **Default** and **Disabled** states. Editing **label** in
+with **Default** and **Disabled** scenarios. Editing **label** in
 **Preview controls** mounts the element again with the new value, and pressing
 the button logs `acme-press` in **Actions**. The
 [checker](workbench-previews.md#command-line-tools) reports:
@@ -213,15 +213,15 @@ module.
 | Argument | Value |
 | --- | --- |
 | `canvas` | The empty element to render into. |
-| `source` | The export of the state's `source.entry` named by `source.export` (`default` when omitted), after your rules and plugins compile it. |
-| `context` | The [preview context](workbench-previews.md#lifecycle-hooks): `id`, `state`, `inputs`, `fixtures`, `globals`, `signal`, `action`, `navigate`, and `error`. |
+| `source` | The export of the scenario's `source.entry` named by `source.export` (`default` when omitted), after your rules and plugins compile it. |
+| `context` | The [preview context](workbench-previews.md#lifecycle-hooks): `id`, `scenario`, `inputs`, `fixtures`, `globals`, `signal`, `action`, `navigate`, and `error`. |
 | `environment` | Everything the definition's `environment` module exports, or `{}` when it has none. Define your own hooks here, such as `wrap` above. With a [project-wide environment](preview-data.md#environments) too, the two are combined: `setup`, `mount`, `ready`, `configure`, and `wrap` run both, the project's outside, and other exports come from the definition's module first. |
 
 - `mount` may return a cleanup function, or a promise for one. Workbench waits
   for the promise before it runs `play` and `ready` hooks and marks the preview
   ready, so resolve it once the component has rendered.
-- Workbench calls `mount` again for every state change, input edit, and
-  **Reset state**, after aborting `context.signal` and running the previous
+- Workbench calls `mount` again for every scenario change, input edit, and
+  **Reset scenario**, after aborting `context.signal` and running the previous
   cleanup. Remove anything you added outside `canvas` in the cleanup.
 - An error thrown by `mount`, or a rejected promise, shows in the frame. Pass
   errors that happen later, such as in an event handler, to
@@ -481,7 +481,7 @@ build fails with `Module parse failed`. Replacing
 | `adapter must be a registered kebab-case name.` | Configuration problems | Use lowercase letters, digits, and hyphens in the adapter name. |
 | `Module not found: Can't resolve '<path>'` on a runtime path | The frame and `check` | Fix `runtime`. It is relative to the project root. |
 | `adapter.mount is not a function` | The frame | Export a function named `mount` from the runtime. |
-| `The selected source export does not exist for <id> — <state>` | The frame only; `check` passes | Fix `source.export`, or export that name from the entry. |
+| `The selected source export does not exist for <id> — <scenario>` | The frame only; `check` passes | Fix `source.export`, or export that name from the entry. |
 | `Module parse failed` on a file type Workbench doesn't compile | The frame and `check` | Add a rule with a loader for the file type. |
 | `workbench.config.ts: “<name>” is an esbuild plugin.` or `is a JavaScript Rspack plugin.` | Configuration problems | Use a plugin from `@canonic2/workbench`, or a loader rule. |
 | `Workbench previews: <message>` | Configuration problems | `workbench.config.ts` threw while loading. No previews load until it's fixed; `check` prints the same message. |

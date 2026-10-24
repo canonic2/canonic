@@ -1,7 +1,7 @@
 /**
  * Astro renders for the built-in Astro adapter, with the project's own Astro
  * through its container API (`preview/astro.cjs`). Frontmatter runs here, so
- * its fetch calls get the state's request mocks. A renderer is reused until
+ * its fetch calls get the scenario's request mocks. A renderer is reused until
  * a file it read changes.
  */
 import fs from 'node:fs';
@@ -32,21 +32,21 @@ function resources(created: Any): Record<string, { contents: string; resolveDir:
   return out;
 }
 
-/** Each state of an Astro preview, or one state with edited inputs. */
-export async function renderPreview(project: Any, root: string, file: string, state: string | null, inputs: unknown, production = false): Promise<unknown> {
+/** Each scenario of an Astro preview, or one scenario with edited inputs. */
+export async function renderPreview(project: Any, root: string, file: string, scenario: string | null, inputs: unknown, production = false): Promise<unknown> {
   const { validate, mockFetches } = require('../../../preview/compiler.cjs');
   const config = await project.settings();
   const definition = validate((await project.definition(file)).value, file, root);
   if (inputs !== undefined && (!inputs || typeof inputs !== 'object' || Array.isArray(inputs))) throw new Error('Astro inputs must be an object.');
-  const all: Array<[string, Any]> = Object.entries({ default: { source: definition.source }, ...definition.states });
-  if (state !== null && !all.some(([id]) => id === state)) throw new Error('Unknown preview state: ' + state);
-  const states: Record<string, unknown> = {};
+  const all: Array<[string, Any]> = Object.entries({ default: { source: definition.source }, ...definition.scenarios });
+  if (scenario !== null && !all.some(([id]) => id === scenario)) throw new Error('Unknown preview scenario: ' + scenario);
+  const scenarios: Record<string, unknown> = {};
   const found: Record<string, unknown> = {};
   const dependencies = new Set<string>();
   let publicDir: string | null = null;
   let astroPackage: unknown = null;
   for (const [id, spec] of all) {
-    if (state !== null && id !== state) continue;
+    if (scenario !== null && id !== scenario) continue;
     const source = spec.source || definition.source;
     const component = path.resolve(path.dirname(file), source.entry);
     const created = await renderer(root, component, config, production);
@@ -54,11 +54,11 @@ export async function renderPreview(project: Any, root: string, file: string, st
     Object.assign(found, resources(created));
     publicDir = created.publicDir;
     astroPackage = created.package;
-    const values = { ...definition.inputs, ...spec.inputs, ...(state === id && inputs ? inputs as object : {}) };
+    const values = { ...definition.inputs, ...spec.inputs, ...(scenario === id && inputs ? inputs as object : {}) };
     const html = await mockFetches(definition, id, values, () => created.render(values, source.export));
-    states[id] = { html, inputs: values, component };
+    scenarios[id] = { html, inputs: values, component };
   }
-  return { states, resources: found, dependencies: local(dependencies), publicDir, package: astroPackage };
+  return { scenarios, resources: found, dependencies: local(dependencies), publicDir, package: astroPackage };
 }
 
 /** One docs example: an Astro component rendered with no props. */

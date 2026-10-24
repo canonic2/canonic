@@ -89,8 +89,8 @@ not a new test run or complete editing/accessibility acceptance.
 
 - There is no dedicated behavioral suite covering every drawing/editing gesture,
   text-input composition, touch/pen input and keyboard-only creation.
-- The legacy reset keys annotations by page source/state and does not include
-  lens identity. The user guide describes a fresh artboard on page/state/lens
+- The legacy reset keys annotations by page source/scenario and does not include
+  lens identity. The user guide describes a fresh artboard on page/scenario/lens
   changes. Verify ordinary-renderer retention and explicit artboard replacement
   together before promising consistent cross-lens clearing or preservation.
 - Annotation count, freehand-point and text-length bounds are unspecified.

@@ -16,11 +16,11 @@
       lines.push('- Story: ' + named(view.story.name, view.story.id));
     } else {
       var ref = lens && item.implementations && item.implementations[lens.key];
-      var mapped = !lens || (ref && ref.states);
-      var states = mapped ? item.states || [] : [];
-      var state = states.find(function (entry) { return entry.id === view.state; });
-      if (!state) state = states[0] || { id: 'default', label: 'Default' };
-      lines.push('- State: ' + named(state.label, state.id));
+      var mapped = !lens || (ref && ref.scenarios);
+      var scenarios = mapped ? item.scenarios || [] : [];
+      var scenario = scenarios.find(function (entry) { return entry.id === view.scenario; });
+      if (!scenario) scenario = scenarios[0] || { id: 'default', label: 'Default' };
+      lines.push('- Scenario: ' + named(scenario.label, scenario.id));
     }
     var address = lens && window.wbLenses ? window.wbLenses.upstream(lens, view.url) : view.url;
     lines.push('- Lens: ' + (lens ? named(lens.label, lens.key) + ' — `' + address + '`' : window.wbManifest.authoredLensLabel(item)));

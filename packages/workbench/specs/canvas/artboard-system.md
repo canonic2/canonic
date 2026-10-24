@@ -17,7 +17,7 @@ inside an artboard. The dedicated content entry point implements that boundary.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui/src/bootstrap/canvas.js` | Explicit page artboards, selected-instance commands, preview controls, review and publication in the existing shell; states remain alternatives. |
+| `ui/src/bootstrap/canvas.js` | Explicit page artboards, selected-instance commands, preview controls, review and publication in the existing shell; scenarios remain alternatives. |
 | `ui/src/components/canvas/element.js` | Keyed artboard shells, labels, resizing and shared camera; no chrome or server operations. |
 | `ui/src/modules/canvas/model.js`, `geometry.js` | Serializable state and pure geometry/size policy. |
 | `ui/src/modules/canvas/controller.js` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, park/resume outside visible state, capture locks. |
@@ -46,7 +46,7 @@ one controller owner; renderer handles never enter serializable state.
 Tests live with these capabilities. `scripts/smoke-canvas.cjs` exercises real
 Chrome and the packaged capture runtime through a temporary programmatic harness,
 including full handoff persistence. `smoke-canvas-ui.cjs` exercises the production
-shell, declared page artboards, ordinary state switching, input/size/annotation isolation, preview
+shell, declared page artboards, ordinary scenario switching, input/size/annotation isolation, preview
 controls and composite native handoff. See the implementation record for actual native-host and
 performance verification limits.
 
@@ -128,7 +128,7 @@ type SpaceId = string;
 interface ViewTarget {
   spaceId: SpaceId;
   src: string;
-  state: string | null;
+  scenario: string | null;
   lens: string | null;
 }
 
@@ -239,7 +239,7 @@ checks. Surface server, startup, and trust failures per space/artboard.
    external state.
 2. **Select and edit:** selection changes the model only; existing DOM/runtime
    instances remain keyed by ID. Derive top bar/catalog state and notify the
-   host. Size/lens/state edits target a named artboard, not a global frame.
+   host. Size/lens/scenario edits target a named artboard, not a global frame.
 3. **Navigate or reload:** increment that instance's generation, cancel its old
    pending work, and retain its settled runtime until replacement is ready.
    Outgoing pixels may stay visible only under their outgoing identity; conceal

@@ -145,7 +145,7 @@ function `(canvas, context)` that draws into `canvas` for `html`. With
 in Node, as it renders [Astro previews](astro.md), and the docs load its
 client scripts and assets. An Astro lens takes a folder, since an `.astro`
 file holds one component. Examples get
-the preview context: `context.state`, `context.signal`, `context.action(name,
+the preview context: `context.scenario`, `context.signal`, `context.action(name,
 ...values)`, and `context.navigate(to)`. They have no inputs or controls.
 
 Each example mounts in its own panel. An example that throws shows its error in
@@ -200,7 +200,7 @@ implementation restores the artboard and its size.
   them. **Zoom to fit** and **100%** both return to 100%. **Recenter view**
   centers the docs and keeps their scroll position.
 - **The top bar** shows the lens switcher when the page has two or more
-  lenses, and the state switcher when it has states. The size switcher stays
+  lenses, and the scenario switcher when it has scenarios. The size switcher stays
   visible but is disabled, because the docs fill the canvas. **Open the
   source** lists the page's design file, then **Docs**, its Markdown, then each
   docs lens's example source. On a Markdown page, **Docs** is the first row.
@@ -260,15 +260,15 @@ entry is used and the definition is skipped.
 To give a page with a design its docs, use `docs` on its entry in
 `workbench.yaml`, as in [Add docs to a page](#add-docs-to-a-page).
 
-## States
+## Scenarios
 
-In a docs lens, the page's state applies to the whole of its docs: every
-example receives it as `context.state`, and the state switcher in the top
-bar's breadcrumb changes it. A page with a design declares its states as
-usual. A Markdown page can declare states in `workbench.yaml` or in
-`defineDocs` (`states: { loading: { label: 'Loading' } }`), and the page list
+In a docs lens, the page's scenario applies to the whole of its docs: every
+example receives it as `context.scenario`, and the scenario switcher in the top
+bar's breadcrumb changes it. A page with a design declares its scenarios as
+usual. A Markdown page can declare scenarios in `workbench.yaml` or in
+`defineDocs` (`scenarios: { loading: { label: 'Loading' } }`), and the page list
 doesn't list them. Showing a component's variations side by side in the docs
-is usually clearer than states.
+is usually clearer than scenarios.
 
 ## Addresses
 

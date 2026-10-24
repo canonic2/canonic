@@ -10,12 +10,12 @@ import { cleanView } from '../../../../contracts/src/agent-context/report.js';
 const target = {
   space: { id: 'acme', name: 'Acme', url: 'http://127.0.0.1:3579/_workbench/' },
   src: 'sign-in.html',
-  state: null,
+  scenario: null,
   lens: null,
 };
 const ready = {
   src: target.src,
-  state: null,
+  scenario: null,
   lens: null,
   label: 'Sign in',
   reference: 'Page: sign-in.html',
@@ -23,7 +23,7 @@ const ready = {
   ready: true,
   problem: null,
   payload: {},
-  states: [],
+  scenarios: [],
   lenses: [],
 };
 const dimensions = { width: 1512, height: 982 };

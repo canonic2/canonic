@@ -19,13 +19,13 @@
    root-relative everywhere else, including the hash.
 
    The selection lives in the URL hash, so a reload or a copied link lands on
-   the same page, in the same state, at the same width, through the same
+   the same page, in the same scenario, at the same width, through the same
    lens: #pages/sign-in.html:error@mobile~staging — address.js reads and writes
-   it. The default state and the design lens are left out, so a page without
-   states — or on the version you land on — reads as it always did.
+   it. The default scenario and the design lens are left out, so a page without
+   scenarios — or on the version you land on — reads as it always did.
 
-   States themselves are the page's business, not the shell's: the id travels
-   in the frame's URL and states.js applies it inside.
+   Scenarios themselves are the page's business, not the shell's: the id
+   travels in the frame's URL and scenarios.js applies it inside.
 
    A lens is an implementation of the page in the design's place: a story
    in a Storybook, the page on a dev server, the page on staging. The config
@@ -67,10 +67,10 @@
   var lensesBox = document.getElementById('lenses');
   var crumb = document.getElementById('crumb');
   var crumbPage = document.getElementById('crumbPage');
-  var stateControl = document.getElementById('stateControl');
-  var stateButton = document.getElementById('stateButton');
-  var stateName = document.getElementById('stateName');
-  var stateMenu = document.getElementById('stateMenu');
+  var scenarioControl = document.getElementById('scenarioControl');
+  var scenarioButton = document.getElementById('scenarioButton');
+  var scenarioName = document.getElementById('scenarioName');
+  var scenarioMenu = document.getElementById('scenarioMenu');
   var spaceName = document.getElementById('spaceName');
   var sourceControl = document.getElementById('sourceControl');
   var sourceButton = document.getElementById('openSource');
@@ -90,7 +90,7 @@
   var BLANK_TEXT = 'Pick a page or a component to see it here.';
 
   var current = null;      /* src of the picked page */
-  var currentState = null; /* its state id, or null for the default one */
+  var currentScenario = null; /* its scenario id, or null for the default one */
   var currentExample = null; /* on a docs page, the example the address names */
   var lensPref = null;     /* the lens the top bar was left on, or null for the design */
   var view = null;         /* what the canvas is showing — see wbView below */
@@ -165,7 +165,7 @@
     var dialog = document.getElementById('exportDialog');
     dialog.pages = Object.keys(resolved.pages).map(function (id) { return { id: id, label: resolved.pages[id].label }; });
     dialog.collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
-    dialog.current = current ? { page: current, state: currentState, lens: view && view.lens ? view.lens.key : null,
+    dialog.current = current ? { page: current, scenario: currentScenario, lens: view && view.lens ? view.lens.key : null,
       artboard: window.wbMultiCanvas ? window.wbMultiCanvas.selectedArtboard() : undefined,
       size: canvas.dataset.size, width: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().width : Math.round(frame.offsetWidth) || 1440,
       height: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().height : Math.round(frame.offsetHeight) || 900 } : undefined;
@@ -221,21 +221,21 @@
     },
   });
 
-  /* "#pages/sign-in.html:error@mobile~staging" -> { src, state, size, lens }.
-     address.js does the reading; the size, the state, and the lens are
+  /* "#pages/sign-in.html:error@mobile~staging" -> { src, scenario, size, lens }.
+     address.js does the reading; the size, the scenario, and the lens are
      checked against the page and the config when they're used. */
   function parseHash() {
     return window.wbAddress.parse(location.hash);
   }
 
-  /* The default state and the page's default lens are addressed by leaving
-     them out, so the hash for a page with states and the hash for one
+  /* The default scenario and the page's default lens are addressed by leaving
+     them out, so the hash for a page with scenarios and the hash for one
      without look the same. A pick that names no lens keeps the one the top
      bar is on. */
-  function writeHash(src, state, size, lens, example) {
+  function writeHash(src, scenario, size, lens, example) {
     /* A docs lens has no size, and only a docs lens has examples. */
     var docs = lensRules.isDocsLens(lensRules.chooseLens(index[src], config.implementations, lens || lensPref));
-    location.hash = window.wbAddress.write({ src: src, state: state, size: docs ? null : size || null,
+    location.hash = window.wbAddress.write({ src: src, scenario: scenario, size: docs ? null : size || null,
       lens: lens || null, example: docs ? example || null : null });
   }
 
@@ -251,34 +251,34 @@
     var docs = !!view && lensRules.isDocsLens(view.lens);
     var size = docs ? null : sizeKey() || null;
     var example = docs ? currentExample : null;
-    if (have.src === current && have.state === currentState && have.size === size && have.lens === lens &&
+    if (have.src === current && have.scenario === currentScenario && have.size === size && have.lens === lens &&
         have.example === example) return;
-    var want = window.wbAddress.write({ src: current, state: currentState, size: size, lens: lens, example: example });
+    var want = window.wbAddress.write({ src: current, scenario: currentScenario, size: size, lens: lens, example: example });
     history.replaceState(null, '', location.pathname + location.search + (want ? '#' + want : ''));
   }
 
   window.wbTarget = parseHash;
 
-  /* A single state is a page with a note attached, not a fold — the list
+  /* A single scenario is a page with a note attached, not a fold — the list
      only splits a page open when there is a choice to make. Same rule the
      panel folds by, so it comes from the same place. */
-  var statesOf = window.wbPageList.states;
+  var scenariosOf = window.wbPageList.scenarios;
 
   /* An id the item actually declares, or null for its default — which is
      what an unknown one falls back to rather than a blank frame. */
-  function stateOf(item, id) {
-    var states = statesOf(item);
-    if (!states || !id) return null;
-    for (var i = 1; i < states.length; i++) {
-      if (states[i].id === id) return id;
+  function scenarioOf(item, id) {
+    var scenarios = scenariosOf(item);
+    if (!scenarios || !id) return null;
+    for (var i = 1; i < scenarios.length; i++) {
+      if (scenarios[i].id === id) return id;
     }
     return null;
   }
 
-  function stateLabel(item, id) {
-    var states = statesOf(item) || [];
-    for (var i = 0; i < states.length; i++) {
-      if (states[i].id === (id || 'default')) return states[i].label;
+  function scenarioLabel(item, id) {
+    var scenarios = scenariosOf(item) || [];
+    for (var i = 0; i < scenarios.length; i++) {
+      if (scenarios[i].id === (id || 'default')) return scenarios[i].label;
     }
     return null;
   }
@@ -333,18 +333,18 @@
 
   /* The address the frame loads: the design with its flags, or the page's
      path on the implementation. Stories are asked for first — see loadStory. */
-  function viewUrl(item, lens, state) {
+  function viewUrl(item, lens, scenario) {
     /* The server serves a page's Markdown as its docs, in the lens named. */
-    if (lensRules.isDocsLens(lens)) return withFlags(item.markdown, state) + '&lens=' + encodeURIComponent(lens.key);
-    if (!lens) return withFlags(item.src, state);
+    if (lensRules.isDocsLens(lens)) return withFlags(item.markdown, scenario) + '&lens=' + encodeURIComponent(lens.key);
+    if (!lens) return withFlags(item.src, scenario);
     if (lens.kind === 'workbench') {
-      var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], state), config.root);
+      var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], scenario), config.root);
       target.searchParams.set('actions', actionsOn ? 'on' : 'off');
       var artboard = new URLSearchParams(location.search).get('artboard');
       if (artboard) target.searchParams.set('artboard', artboard);
       return target.href;
     }
-    return window.wbLenses.url(lens, item.implementations[lens.key], state);
+    return window.wbLenses.url(lens, item.implementations[lens.key], scenario);
   }
 
   /* The page into the iframe, the usual way. */
@@ -352,14 +352,14 @@
     if (window.wbMultiCanvas) {
       var sequence = showSeq;
       var declared = (!view.lens || view.lens.kind === 'workbench') && resolved && resolved.pages[current] && resolved.pages[current].preview ? resolved.pages[current].preview.artboards : undefined;
-      window.wbMultiCanvas.show({ src: current, label: titleParts(view.item, view.stateLabel, view.lens).join(' / '), pageLabel: view.item.label, state: currentState, lens: view.lens ? view.lens.key : null,
+      window.wbMultiCanvas.show({ src: current, label: titleParts(view.item, view.scenarioLabel, view.lens).join(' / '), pageLabel: view.item.label, scenario: currentScenario, lens: view.lens ? view.lens.key : null,
         example: currentExample, docs: lensRules.isDocsLens(view.lens), size: sizeByKey(canvas.dataset.size) || spaceSizes[0], actions: actionsOn,
         artboards: declared,
-        select: function (state, size, actions, src, lens) {
+        select: function (scenario, size, actions, src, lens) {
           if (actions !== undefined) setActions(actions);
           var preset = sizesOf(view.item).find(function (entry) { return entry.kind === 'fixed' && entry.width === size.width && entry.height === size.height; });
           if (preset) canvas.dataset.size = preset.key;
-          if ((src && src !== current) || currentState !== state) writeHash(src || current, state, canvas.dataset.size, lens || (view.lens ? view.lens.key : null), currentExample);
+          if ((src && src !== current) || currentScenario !== scenario) writeHash(src || current, scenario, canvas.dataset.size, lens || (view.lens ? view.lens.key : null), currentExample);
         },
       }).catch(function (error) { if (sequence === showSeq) window.wbMultiCanvas.fail(error); });
       if (url) openLink.href = view && view.lens ? window.wbLenses.upstream(view.lens, url) : url;
@@ -401,7 +401,7 @@
         renderedStory.frame !== frame || renderedStory.seq !== showSeq || !view ||
         !view.story || view.story.id !== renderedStory.id) return;
     reportedStorySeq = showSeq;
-    tellHost(current, currentState, view.lens.key);
+    tellHost(current, currentScenario, view.lens.key);
   }
 
   /* Keep Storybook's loaded preview warm. The channel does not promise that
@@ -501,7 +501,7 @@
       button.setAttribute('aria-pressed', String(showing === key));
       button.addEventListener('click', function () {
         setLensPref(key);
-        writeHash(current, currentState, sizeKey(), key, currentExample);
+        writeHash(current, currentScenario, sizeKey(), key, currentExample);
       });
       lensesBox.appendChild(button);
     });
@@ -559,24 +559,24 @@
     return request;
   }
 
-  function openStates(open) {
-    stateMenu.hidden = !open;
-    stateButton.setAttribute('aria-expanded', String(open));
+  function openScenarios(open) {
+    scenarioMenu.hidden = !open;
+    scenarioButton.setAttribute('aria-expanded', String(open));
   }
 
   /* The breadcrumb's second half: which version of the page is showing,
-     and the others to pick from — the page's states on the design, the
+     and the others to pick from — the page's scenarios on the design, the
      title's stories under a Storybook lens. rows: [{ label, current, pick }],
      or null when there is nothing to choose between. */
-  function drawStateMenu(rows, kind) {
-    stateMenu.innerHTML = '';
-    openStates(false);
-    stateControl.hidden = !rows;
-    if (!rows) { stateName.textContent = ''; stateButton.removeAttribute('title'); return; }
+  function drawScenarioMenu(rows, kind) {
+    scenarioMenu.innerHTML = '';
+    openScenarios(false);
+    scenarioControl.hidden = !rows;
+    if (!rows) { scenarioName.textContent = ''; scenarioButton.removeAttribute('title'); return; }
     var picked = rows.filter(function (row) { return row.current; })[0] || rows[0];
-    stateName.textContent = picked.label;
-    stateButton.title = (kind === 'story' ? 'Story: ' : 'State: ') + picked.label + ' — pick another';
-    stateMenu.setAttribute('aria-label', kind === 'story' ? 'Story' : 'State');
+    scenarioName.textContent = picked.label;
+    scenarioButton.title = (kind === 'story' ? 'Story: ' : 'Scenario: ') + picked.label + ' — pick another';
+    scenarioMenu.setAttribute('aria-label', kind === 'story' ? 'Story' : 'Scenario');
     rows.forEach(function (entry) {
       var row = document.createElement('button');
       row.className = 'wb-menu-row';
@@ -584,52 +584,52 @@
       row.setAttribute('role', 'menuitem');
       row.setAttribute('aria-current', String(entry === picked));
       row.textContent = entry.label;
-      row.dataset.state = entry.target || '';
+      row.dataset.scenario = entry.target || '';
       row.addEventListener('click', function () {
-        openStates(false);
+        openScenarios(false);
         entry.pick();
       });
-      stateMenu.appendChild(row);
+      scenarioMenu.appendChild(row);
     });
   }
 
   function drawStories(list, picked, lens) {
-    drawStateMenu(list && list.map(function (story) {
+    drawScenarioMenu(list && list.map(function (story) {
       return {
         label: story.name,
-        target: story.state,
+        target: story.scenario,
         current: story.id === picked.id,
-        pick: function () { writeHash(current, story.state, sizeKey(), lens.key); },
+        pick: function () { writeHash(current, story.scenario, sizeKey(), lens.key); },
       };
     }), 'story');
   }
 
-  /* A design's states, or a lens that answers to them. An implementation
+  /* A design's scenarios, or a lens that answers to them. An implementation
      with none of its own shows the page itself and nothing to pick. Every
-     example in a docs lens gets the page's state. */
-  function drawStates(item, lens) {
-    var states = statesOf(item);
-    var mapped = !lens || item.implementationOnly || lensRules.isDocsLens(lens) || !!item.implementations[lens.key].states;
-    if (!states || !mapped || window.wbManifest.streamed(lens)) {
-      drawStateMenu(null);
+     example in a docs lens gets the page's scenario. */
+  function drawScenarios(item, lens) {
+    var scenarios = scenariosOf(item);
+    var mapped = !lens || item.implementationOnly || lensRules.isDocsLens(lens) || !!item.implementations[lens.key].scenarios;
+    if (!scenarios || !mapped || window.wbManifest.streamed(lens)) {
+      drawScenarioMenu(null);
       return;
     }
-    drawStateMenu(states.map(function (state, i) {
+    drawScenarioMenu(scenarios.map(function (scenario, i) {
       return {
-        label: state.label,
-        target: window.wbPageList.statePick(item, state, i),
-        current: currentState ? currentState === state.id : i === 0,
+        label: scenario.label,
+        target: window.wbPageList.scenarioPick(item, scenario, i),
+        current: currentScenario ? currentScenario === scenario.id : i === 0,
         pick: function () {
-          writeHash(current, window.wbPageList.statePick(item, state, i), sizeKey(), lens ? lens.key : null);
+          writeHash(current, window.wbPageList.scenarioPick(item, scenario, i), sizeKey(), lens ? lens.key : null);
         },
       };
-    }), 'state');
+    }), 'scenario');
   }
 
   /* The story's turn of show(): the title's stories are asked for, the one
      the address names — or the first — goes in the frame. `seq` is show()'s
      count; an answer for a page that's no longer up is dropped. */
-  function loadStory(item, lens, state, seq, previousView) {
+  function loadStory(item, lens, scenario, seq, previousView) {
     var ref = item.implementations[lens.key];
     if (!window.wbMultiCanvas) {
       blank.textContent = 'Loading preview…';
@@ -640,11 +640,11 @@
     stories(lens, ref.title).then(
       function (list) {
         if (seq !== showSeq) return;
-        var picked = window.wbLenses.pick(list, state);
-        currentState = picked.state;
-        if (item.implementationOnly && pageList) pageList.setCurrent(current, currentState, item.collection);
+        var picked = window.wbLenses.pick(list, scenario);
+        currentScenario = picked.scenario;
+        if (item.implementationOnly && pageList) pageList.setCurrent(current, currentScenario, item.collection);
         view.story = picked;
-        view.stateLabel = picked.name;
+        view.scenarioLabel = picked.name;
         view.url = window.wbLenses.storyUrl(lens, picked.id);
         view.code = codeFor(item, picked);
         drawStories(list, picked, lens);
@@ -655,7 +655,7 @@
       },
       function (error) {
         if (seq !== showSeq) return;
-        currentState = null;
+        currentScenario = null;
         artboard.hidden = true;
         frameReady = false;
         parkPreview();
@@ -750,20 +750,20 @@
 
   var showSeq = 0;
 
-  function titleParts(item, stateLabelText, lens) {
-    var states = statesOf(item);
-    var shown = stateLabelText || (states && !lens ? states[0].label : null);
+  function titleParts(item, scenarioLabelText, lens) {
+    var scenarios = scenariosOf(item);
+    var shown = scenarioLabelText || (scenarios && !lens ? scenarios[0].label : null);
     return [item.label, shown].filter(Boolean);
   }
 
-  function setTitle(item, stateLabelText, lens) {
-    /* The state and the lens are part of what you're looking at, so they
+  function setTitle(item, scenarioLabelText, lens) {
+    /* The scenario and the lens are part of what you're looking at, so they
        belong in the tab title next to the page's name. */
-    var parts = titleParts(item, stateLabelText, lens);
+    var parts = titleParts(item, scenarioLabelText, lens);
     document.title = parts.concat([lens ? lens.label : null, config.name])
       .filter(Boolean)
       .join(' · ');
-    /* Above the frame, a page with states always names the one showing,
+    /* Above the frame, a page with scenarios always names the one showing,
        its first included — the breadcrumb does the same. */
     artboardName.textContent = parts.join(' / ');
     window.dispatchEvent(new Event('wb-view-change'));
@@ -830,20 +830,20 @@
     exampleToReveal = null;
   }
 
-  function show(src, state, example) {
+  function show(src, scenario, example) {
     var item = index[src];
     var nextLens = item ? effectiveLens(item) : null;
     var docsItem = lensRules.isDocsLens(nextLens);
-    var nextState = docsItem ? stateOf(item, state) : null;
+    var nextScenario = docsItem ? scenarioOf(item, scenario) : null;
     /* Another example on the docs already showing only scrolls them. */
-    if (docsItem && view && view.src === src && view.state === nextState && frameReady &&
+    if (docsItem && view && view.src === src && view.scenario === nextScenario && frameReady &&
         (view.lens ? view.lens.key : null) === nextLens.key) {
       currentExample = example || null;
       scrollToExample(currentExample);
       syncHash();
       /* Routing still acknowledges the selection when its preview is reused.
          The editor holds sidebar picks until a config refresh is acknowledged. */
-      tellHost(src, nextState, nextLens ? nextLens.key : null);
+      tellHost(src, nextScenario, nextLens ? nextLens.key : null);
       return;
     }
     if (window.wbMultiCanvas) window.wbMultiCanvas.begin();
@@ -860,17 +860,17 @@
     current = item ? src : null;
     var lens = nextLens;
     var story = !!lens && lens.kind === 'storybook';
-    /* Under a Storybook lens the state slot carries the story; it's checked
+    /* Under a Storybook lens the scenario slot carries the story; it's checked
        against the title's stories once they're in. */
-    currentState = !item ? null : story ? state || null : stateOf(item, state);
+    currentScenario = !item ? null : story ? scenario || null : scenarioOf(item, scenario);
     updateSizeAvailability(item, lens);
 
     /* The list marks the row and follows it into its collection, wherever the
        pick came from — its own rows, a link in the preview, or the editor.
-       Through a lens that doesn't answer to the page's states, the row
+       Through a lens that doesn't answer to the page's scenarios, the row
        marked is the page itself. */
-    var mapped = !item || item.implementationOnly || docsItem || !lens || (!story && !!item.implementations[lens.key].states);
-    var reported = mapped ? currentState : null;
+    var mapped = !item || item.implementationOnly || docsItem || !lens || (!story && !!item.implementations[lens.key].scenarios);
+    var reported = mapped ? currentScenario : null;
     if (pageList) pageList.setCurrent(current, reported, item && item.collection);
     tellHost(current, reported, lens ? lens.key : null, story);
 
@@ -880,8 +880,8 @@
     crumb.hidden = !item;
     crumbPage.textContent = item ? item.label : '';
     /* A story's turn comes once the title's stories are in. */
-    if (item && !story) drawStates(item, lens);
-    else drawStateMenu(null);
+    if (item && !story) drawScenarios(item, lens);
+    else drawScenarioMenu(null);
     drawSources(item);
     setActionsAvailability(lens);
 
@@ -905,8 +905,8 @@
       src: src,
       item: item,
       lens: lens,
-      state: story ? null : currentState,
-      stateLabel: null,
+      scenario: story ? null : currentScenario,
+      scenarioLabel: null,
       story: null,
       url: null,
       code: codeFor(item, null),
@@ -930,7 +930,7 @@
     if (story) {
       setTitle(item, null, lens);
       commitLayout();
-      loadStory(item, lens, state, seq, previousView);
+      loadStory(item, lens, scenario, seq, previousView);
       return;
     }
 
@@ -938,7 +938,7 @@
       commitLayout();
       if (window.wbMultiCanvas) { setTitle(item, null, lens); syncHash(); showFrame(null); return; }
       var streamRef = item.implementations[lens.key];
-      currentState = null;
+      currentScenario = null;
       view.url = null;
       frameReady = false;
       parkPreview();
@@ -958,10 +958,10 @@
       return;
     }
 
-    var url = viewUrl(item, lens, currentState);
+    var url = viewUrl(item, lens, currentScenario);
     view.url = url;
-    view.stateLabel = currentState ? stateLabel(item, currentState) : null;
-    setTitle(item, view.stateLabel, lens);
+    view.scenarioLabel = currentScenario ? scenarioLabel(item, currentScenario) : null;
+    setTitle(item, view.scenarioLabel, lens);
     syncHash();
 
     showFrame(url);
@@ -983,14 +983,14 @@
 
   /* The address the frame loads: the page resolved against the project root,
      carrying both flags it needs — whether the preview is live, and which
-     state of the page to render. Same trip, same reason — the shell can't
+     scenario of the page to render. Same trip, same reason — the shell can't
      reach across the origin, so it hands them over in the URL. */
-  function withFlags(src, state) {
+  function withFlags(src, scenario) {
     var url = root + src + (src.indexOf('?') > -1 ? '&' : '?') +
       'actions=' + (actionsOn ? 'on' : 'off');
     var artboard = new URLSearchParams(location.search).get('artboard');
     if (artboard) url += '&artboard=' + encodeURIComponent(artboard);
-    return state ? url + '&state=' + encodeURIComponent(state) : url;
+    return scenario ? url + '&scenario=' + encodeURIComponent(scenario) : url;
   }
 
   /* Keep the current document visible while its replacement loads in the
@@ -1116,7 +1116,7 @@
     }
     // The warm document: the visible warm host changes page in place, as an
     // application's router would, keeping loaded dependencies, stylesheets and
-    // fonts. A new state of the same preview re-renders without reloading it.
+    // fonts. A new scenario of the same preview re-renders without reloading it.
     if (!force && frame.wbWarmHost && frame.wbRequestedUrl && frameReady && /\.workbench\.tsx?(?:[?#]|$)/.test(src) &&
         new URL(src, location.href).origin === location.origin) {
       var showing = new URL(frame.wbRequestedUrl, location.href);
@@ -1131,7 +1131,7 @@
         frame.wbLoadSequence = (frame.wbLoadSequence || 0) + 1;
         host.history.replaceState(host.history.state, '', next.href);
         host.__workbenchReady = false;
-        host.postMessage({ type: 'workbench-preview-command', command: 'state', state: next.searchParams.get('state') || undefined }, location.origin);
+        host.postMessage({ type: 'workbench-preview-command', command: 'scenario', scenario: next.searchParams.get('scenario') || undefined }, location.origin);
         frameLoaded({ currentTarget: frame, warm: true });
         return;
       }
@@ -1253,11 +1253,11 @@
   }
 
   /* The lens rides along for whoever wants it; the editor's list only marks
-     pages and states, and reads past it. */
-  function tellHost(src, state, lens, pending) {
+     pages and scenarios, and reads past it. */
+  function tellHost(src, scenario, lens, pending) {
     if (window.wbAgentContext) window.wbAgentContext.report();
     if (!host) return;
-    host.postMessage({ type: 'wb-here', src: src || null, state: state || null,
+    host.postMessage({ type: 'wb-here', src: src || null, scenario: scenario || null,
       lens: lens || null, pending: !!pending }, '*');
   }
 
@@ -1404,7 +1404,7 @@
       });
       if (!target) return;
       if (pageList) pageList.reveal(target);
-      writeHash(target, stateOf(index[target], data.state), sizeKey());
+      writeHash(target, scenarioOf(index[target], data.scenario), sizeKey());
       return;
     }
 
@@ -1435,7 +1435,7 @@
     if (!index[src]) return;
 
     if (pageList) pageList.reveal(src);
-    writeHash(src, stateOf(index[src], data.state), sizeKey());
+    writeHash(src, scenarioOf(index[src], data.scenario), sizeKey());
   });
 
   function setActions(on) {
@@ -1802,7 +1802,7 @@
   /* Reloading is what applies it — the flag is read as the page parses. */
   actionsToggle.addEventListener('wb-actions-toggle', function (e) {
     setActions(e.detail.checked);
-    if (current) show(current, currentState);
+    if (current) show(current, currentScenario);
   });
 
   reload.addEventListener('click', function () {
@@ -1812,30 +1812,30 @@
       return;
     }
     if (!frame.getAttribute('src')) {
-      show(current, currentState);
+      show(current, currentScenario);
       return;
     }
     loadPreview(view && view.url ? view.url : frame.src, true);
   });
 
-  stateButton.addEventListener('click', function () {
+  scenarioButton.addEventListener('click', function () {
     openSources(false);
-    openStates(stateMenu.hidden);
+    openScenarios(scenarioMenu.hidden);
   });
 
   sourceButton.addEventListener('click', function () {
-    openStates(false);
+    openScenarios(false);
     openSources(sourceMenu.hidden);
   });
 
   document.addEventListener('pointerdown', function (e) {
-    if (!stateMenu.hidden && !e.target.closest('.wb-states-control')) openStates(false);
+    if (!scenarioMenu.hidden && !e.target.closest('.wb-scenarios-control')) openScenarios(false);
     if (!sourceMenu.hidden && !e.target.closest('.wb-sources')) openSources(false);
   });
 
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    openStates(false);
+    openScenarios(false);
     openSources(false);
   });
 
@@ -1849,7 +1849,7 @@
     var item = index[target.src];
     var known = config.implementations[target.lens] || lensRules.hasLens(item, config.implementations, target.lens);
     if (target.lens !== null) setLensPref(known ? target.lens : null);
-    show(target.src, target.state, target.example);
+    show(target.src, target.scenario, target.example);
   }
 
   window.addEventListener('hashchange', route);
@@ -1958,8 +1958,8 @@
       if (first) restore();
 
       /* The list is built here and picked from there: a row hands back the
-         page and the state it stands for, and the shell turns that into the
-         hash, which is the one place the selection lives. */
+         page and the scenario it stands for, and the shell turns that into
+         the hash, which is the one place the selection lives. */
       if (pageList) {
         pageList.update(collections);
       } else {
@@ -1970,8 +1970,8 @@
           title: document.getElementById('collectionName'),
           list: document.getElementById('pageList'),
           collections: collections,
-          onPick: function (src, state) {
-            writeHash(src, state, sizeKey());
+          onPick: function (src, scenario) {
+            writeHash(src, scenario, sizeKey());
           },
         });
       }

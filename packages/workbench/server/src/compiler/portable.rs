@@ -190,7 +190,7 @@ use base64::Engine as _;
 use serde_json::{Map, Value, json};
 use std::path::Path;
 
-const ASTRO_NOTE: &str = "Astro input edits require the live Workbench server. This export contains the authored states.";
+const ASTRO_NOTE: &str = "Astro input edits require the live Workbench server. This export contains the authored scenarios.";
 const OMIT: [&str; 5] = ["node_modules", ".git", "dist", "build", "coverage"];
 
 fn text(path: &Path) -> String {
@@ -395,11 +395,11 @@ impl Previews {
         let mut rendered = Map::new();
         let mut read: Vec<PathBuf> = vec![file.clone()];
         read.extend(project_files.files.iter().cloned());
-        let mut states = vec![("default".to_owned(), json!({}))];
-        if let Some(map) = definition["states"].as_object() {
-            states.extend(
+        let mut scenarios = vec![("default".to_owned(), json!({}))];
+        if let Some(map) = definition["scenarios"].as_object() {
+            scenarios.extend(
                 map.iter()
-                    .map(|(name, state)| (name.clone(), state.clone())),
+                    .map(|(name, scenario)| (name.clone(), scenario.clone())),
             );
         }
         let renders = if astro {
@@ -412,14 +412,14 @@ impl Previews {
         } else {
             None
         };
-        for (state, spec) in states {
+        for (scenario, spec) in scenarios {
             let source = if spec["source"].is_object() {
                 &spec["source"]
             } else {
                 &definition["source"]
             };
             if let Some(answer) = &renders {
-                let render = &answer["states"][&state];
+                let render = &answer["scenarios"][&scenario];
                 let empty = Map::new();
                 let component = render["component"]
                     .as_str()
@@ -427,7 +427,7 @@ impl Previews {
                     .unwrap_or_default();
                 let (module, written) = super::astro::render_modules(
                     &self.virtual_portable(),
-                    &format!("{slug}-{state}"),
+                    &format!("{slug}-{scenario}"),
                     &component,
                     render["html"].as_str().unwrap_or_default(),
                     answer["resources"].as_object().unwrap_or(&empty),
@@ -436,7 +436,7 @@ impl Previews {
                 );
                 modules.extend(written);
                 rendered.insert(
-                    state.clone(),
+                    scenario.clone(),
                     json!({ "html": render["html"], "inputs": render["inputs"] }),
                 );
                 for dependency in answer["dependencies"]
@@ -449,14 +449,14 @@ impl Previews {
                     }
                 }
                 sources.push(SourceImport::Astro {
-                    state,
+                    scenario,
                     module,
                     render_url: None,
                 });
             } else {
                 let entry = source["entry"].as_str().context("source entry")?;
                 sources.push(SourceImport::Module {
-                    state,
+                    scenario,
                     file: text(&crate::paths::resolve(directory, entry)),
                     export_name: source["export"].as_str().unwrap_or("default").to_owned(),
                 });

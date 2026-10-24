@@ -53,7 +53,12 @@ void test('disabled tracing does no timing or transport work and preserves addre
 
 void test('phases preserve selection identity across documents without including page payloads', () => {
   const { api, records, tick } = fixture(true);
-  const identity = { src: 'card.md', state: 'error', lens: 'html', inputs: { secret: 'PRIVATE' } };
+  const identity = {
+    src: 'card.md',
+    scenario: 'error',
+    lens: 'html',
+    inputs: { secret: 'PRIVATE' },
+  };
   const trace = api.begin(identity);
   tick(20);
   api.phase(trace, 'selection');
@@ -65,7 +70,7 @@ void test('phases preserve selection identity across documents without including
   assert.equal(records[1].details.elapsedMs, 50);
   assert.equal(records[1].details.selection, 'acme-selection');
   assert.equal(records[1].details.page, 'card.md');
-  assert.equal(records[1].details.state, 'error');
+  assert.equal(records[1].details.scenario, 'error');
   assert.equal(records[1].details.lens, 'html');
   assert.doesNotMatch(JSON.stringify(records), /PRIVATE/);
   assert.equal(
@@ -75,7 +80,7 @@ void test('phases preserve selection identity across documents without including
   const url = new URL(api.address('card.md?lens=html', trace));
   assert.equal(url.searchParams.get('wbPage'), 'card.md');
   assert.equal(url.searchParams.get('wbLens'), 'html');
-  assert.equal(url.searchParams.get('wbState'), 'error');
+  assert.equal(url.searchParams.get('wbScenario'), 'error');
   assert.equal(
     api.address('https://other.example.com/page', trace),
     'https://other.example.com/page',

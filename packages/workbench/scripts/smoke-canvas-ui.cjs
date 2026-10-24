@@ -1,4 +1,4 @@
-/* Production acceptance: pages own artboards; ordinary states stay alternatives. */
+/* Production acceptance: pages own artboards; ordinary scenarios stay alternatives. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -29,7 +29,7 @@ collections:
     items:
       - label: Form
         src: form.html
-        states:
+        scenarios:
           - id: default
             label: Default
           - id: error
@@ -41,7 +41,7 @@ collections:
 `);
   fs.writeFileSync(path.join(folder, 'form.html'), '<html><body><input aria-label="Name"><p>Form</p></body></html>');
   fs.writeFileSync(path.join(folder, 'other.html'), '<html><body>Other page</body></html>');
-  fs.writeFileSync(path.join(folder, 'comparison.workbench.ts'), `import {definePreview} from '@canonic2/workbench';export default definePreview({id:'comparison',adapter:'html',source:{entry:'./component.ts'},inputs:{text:'First'},states:{default:{},alternate:{inputs:{text:'Alternate'}}},artboards:{one:{label:'One',width:320,height:120},two:{label:'Two',width:480,height:160,inputs:{text:'Second'}}}});`);
+  fs.writeFileSync(path.join(folder, 'comparison.workbench.ts'), `import {definePreview} from '@canonic2/workbench';export default definePreview({id:'comparison',adapter:'html',source:{entry:'./component.ts'},inputs:{text:'First'},scenarios:{default:{},alternate:{inputs:{text:'Alternate'}}},artboards:{one:{label:'One',width:320,height:120},two:{label:'Two',width:480,height:160,inputs:{text:'Second'}}}});`);
   fs.writeFileSync(path.join(folder, 'component.ts'), `export default function(canvas,context){const field=document.createElement('input');field.value=context.inputs.text;canvas.append(field);}`);
   const browser = new Browser(); let running, demo, design, handoff;
   try {
@@ -80,19 +80,19 @@ collections:
     await target.evaluate('location.hash="#form.html@mobile"');
     await until(`${state}.artboards.length===1 && ${state}.artboards[0].view?.ready`);
     assert.equal(await target.evaluate('document.querySelectorAll(".wb-topbar").length'), 1);
-    assert.equal(await target.evaluate('!!document.querySelector("#stateButton") && !!document.querySelector("#topbarOverflowMenu") && !!document.querySelector("#shapeTool") && !!document.querySelector("#zoomCenter")'), true);
-    assert.equal(await target.evaluate('!!document.querySelector("#showStates,#add,#picker,.canvas-actions,.inspector")'), false);
-    await target.evaluate('document.getElementById("stateMenu").querySelectorAll("button")[1].click()');
+    assert.equal(await target.evaluate('!!document.querySelector("#scenarioButton") && !!document.querySelector("#topbarOverflowMenu") && !!document.querySelector("#shapeTool") && !!document.querySelector("#zoomCenter")'), true);
+    assert.equal(await target.evaluate('!!document.querySelector("#showScenarios,#add,#picker,.canvas-actions,.inspector")'), false);
+    await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[1].click()');
     await until('location.hash.includes(":error")');
-    await until(`${state}.artboards.length===1 && ${state}.artboards[0].view?.ready && ${state}.artboards[0].target.state==='error'`);
+    await until(`${state}.artboards.length===1 && ${state}.artboards[0].view?.ready && ${state}.artboards[0].target.scenario==='error'`);
     await target.evaluate('location.hash="#comparison.workbench.ts"');
     await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready)`);
-    assert.deepEqual(await target.evaluate(`${state}.artboards.map(b=>[b.target.artboard,b.target.state,b.size.width,b.size.height])`), [['one',null,320,120],['two',null,480,160]]);
-    await target.evaluate('document.getElementById("stateMenu").querySelectorAll("button")[1].click()');
-    await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.state==='alternate')`);
+    assert.deepEqual(await target.evaluate(`${state}.artboards.map(b=>[b.target.artboard,b.target.scenario,b.size.width,b.size.height])`), [['one',null,320,120],['two',null,480,160]]);
+    await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[1].click()');
+    await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.scenario==='alternate')`);
     assert.equal(await target.evaluate(`[...${frames}].every(f=>f.contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value==='Alternate')`), true);
-    await target.evaluate('document.getElementById("stateMenu").querySelectorAll("button")[0].click()');
-    await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.state===null)`);
+    await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[0].click()');
+    await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.scenario===null)`);
     await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value='First only'`);
     assert.equal(await target.evaluate(`${frames}[1].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value`), 'Second');
     await target.evaluate('document.getElementById("artboards").shadowRoot.querySelectorAll("section button")[1].click()');
@@ -126,9 +126,9 @@ collections:
     await target.navigate(demo.url + '#previews/alert.workbench.ts~design');
     await until(`${state}?.artboards.length===5 && ${state}.artboards.every(b=>b.view?.ready && b.size.width===560 && b.size.height<150)`);
     assert.deepEqual(await target.evaluate(`${state}.artboards.map(b=>b.target.artboard)`), ['info','success','warning','danger','autopilot']);
-    assert.equal(await target.evaluate(`${state}.artboards.every(b=>b.target.state===null)`), true);
-    assert.equal(await target.evaluate('document.getElementById("stateControl").hidden'), true);
-    assert.equal(await target.evaluate(`document.querySelectorAll('#pageList [data-src="previews/alert.workbench.ts"][data-state]').length`), 0);
+    assert.equal(await target.evaluate(`${state}.artboards.every(b=>b.target.scenario===null)`), true);
+    assert.equal(await target.evaluate('document.getElementById("scenarioControl").hidden'), true);
+    assert.equal(await target.evaluate(`document.querySelectorAll('#pageList [data-src="previews/alert.workbench.ts"][data-scenario]').length`), 0);
     await until('!document.getElementById("previewControls").hidden');
     await target.evaluate('document.getElementById("previewControls").click()');
     await target.evaluate('document.getElementById("topbarOverflowButton").click()');
@@ -152,9 +152,9 @@ collections:
     fs.writeFileSync('/private/tmp/canonic-existing-chrome-artboards.png', Buffer.from(shot.data, 'base64'));
     await target.evaluate('location.hash="#previews/button.workbench.ts~design"');
     await until(`${state}.artboards.length===1 && ${state}.artboards[0].target.src==='previews/button.workbench.ts' && ${state}.artboards[0].view?.ready`);
-    assert.equal(await target.evaluate('document.getElementById("stateControl").hidden'), false);
-    await target.evaluate('document.getElementById("stateMenu").querySelectorAll("button")[2].click()');
-    await until(`${state}.artboards.length===1 && ${state}.artboards[0].target.state==='gradient' && ${state}.artboards[0].view?.ready`);
+    assert.equal(await target.evaluate('document.getElementById("scenarioControl").hidden'), false);
+    await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[2].click()');
+    await until(`${state}.artboards.length===1 && ${state}.artboards[0].target.scenario==='gradient' && ${state}.artboards[0].view?.ready`);
     design = await server.start({ root: fixtureWorkbench, config: { dir: fixtureRepo, key: 'workbench' } });
     const config = await (await fetch(new URL('config', design.url))).json();
     const canvasPage = Object.keys(config.pages).find(src => src === 'design/canvas.md' || src === 'design/canvas.workbench.ts');
@@ -166,7 +166,7 @@ collections:
     assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="loading"] wb-canvas').shadowRoot.querySelector('section button').textContent`), 'Feedback / Info · 320 × 180 · Loading…', 'a standalone pending canvas uses the supplied name instead of its source filename');
     assert.deepEqual(nestedApplicationResources, [], 'no transition or artboard starts the Workbench application inside content');
     assert.deepEqual(errors, []);
-    console.log('Page artboards passed: ordinary HTML and Button states remain single views; Feedback has five declared artboards with no variant states; independent sizes, controls, annotations, handoff and design examples work.');
+    console.log('Page artboards passed: ordinary HTML and Button scenarios remain single views; Feedback has five declared artboards with no variant scenarios; independent sizes, controls, annotations, handoff and design examples work.');
   } finally { await browser.close(); await running?.close(); await demo?.close(); await design?.close(); fs.rmSync(folder, { recursive: true, force: true }); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

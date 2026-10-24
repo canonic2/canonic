@@ -2,7 +2,7 @@
 //!
 //! A screenshot alone is a poor brief, so the prompt says in words what the
 //! workbench already knows exactly. It establishes, in order, that the red
-//! annotations are not part of the design; which page, state, lens and width
+//! annotations are not part of the design; which page, scenario, lens and width
 //! were being looked at; and which element each annotation is attached to.
 //! Payloads are the canvas's JSON, read with JavaScript's value rules so the
 //! wording matches what the browser composed. A canvas review (version 2)
@@ -139,8 +139,8 @@ fn facts(payload: &Value, docs: Option<&Value>, lens: Option<&Value>) -> Vec<Str
         format!("- Page: {} — `{}`", field("label"), field("src")),
     ];
     // Only when it isn't the default one.
-    if js::truthy(payload.get("state")) {
-        out.push(format!("- State: {}", field("state")));
+    if js::truthy(payload.get("scenario")) {
+        out.push(format!("- Scenario: {}", field("scenario")));
     }
     if let Some(story) = present(payload.get("story")) {
         out.push(format!(

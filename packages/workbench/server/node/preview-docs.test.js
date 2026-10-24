@@ -248,7 +248,7 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.ok(styles.length, 'the lens’s styles come with the bundle');
   assert.match(await (await request(base + styles[0].href)).text(), /purple/);
 
-  const native = await (await request(base + '/docs/button.md?lens=native&state=loading')).text();
+  const native = await (await request(base + '/docs/button.md?lens=native&scenario=loading')).text();
   const nativeOptions = JSON.parse(/window\.__workbenchDocs=(.*?)<\/script>/.exec(native)[1]);
   assert.deepEqual((await (await request(base + nativeOptions.bundle.info)).json()).examples, ['primary'], 'Native lacks secondary, so its panel says so');
 

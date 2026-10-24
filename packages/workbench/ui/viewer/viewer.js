@@ -3,7 +3,7 @@
   var frame = document.getElementById('previewFrame');
   var list = document.getElementById('previews');
   var search = document.getElementById('search');
-  var state = document.getElementById('state');
+  var scenario = document.getElementById('scenario');
   var size = document.getElementById('size');
   var status = document.getElementById('status');
   var selected = null;
@@ -23,8 +23,8 @@
     if (!selected) return;
     var url = new URL(location.href);
     url.searchParams.set('preview', selected.id);
-    url.searchParams.set(selected.docs ? 'lens' : 'state', state.value);
-    url.searchParams.delete(selected.docs ? 'state' : 'lens');
+    url.searchParams.set(selected.docs ? 'lens' : 'scenario', scenario.value);
+    url.searchParams.delete(selected.docs ? 'scenario' : 'lens');
     if (selected.docs) url.searchParams.delete('size'); else url.searchParams.set('size', size.value);
     if (sizeOf(size.value).kind === 'resizable') {
       url.searchParams.set('width', document.getElementById('width').value);
@@ -54,18 +54,18 @@
   }
   function target() {
     if (selected.docs) {
-      var lens = selected.lenses.find(function (entry) { return entry.key === state.value; }) || selected.lenses[0];
+      var lens = selected.lenses.find(function (entry) { return entry.key === scenario.value; }) || selected.lenses[0];
       return new URL('./' + lens.directory.replace(/^browser\//, '') + '/index.html', location.href);
     }
     var url = new URL('./' + selected.directory.replace(/^browser\//, '') + '/index.html', location.href);
-    url.searchParams.set('state', state.value); return url;
+    url.searchParams.set('scenario', scenario.value); return url;
   }
   function load() {
     if (!selected) return;
     window.wbPreviewControls.reset();
     var url = target(); document.getElementById('open').href = url.href;
     document.getElementById('open').hidden = false;
-    frame.title = selected.title + ' — ' + state.options[state.selectedIndex].textContent;
+    frame.title = selected.title + ' — ' + scenario.options[scenario.selectedIndex].textContent;
     notice('Rendering ' + frame.title + '…'); frame.src = url.href;
     resize();
   }
@@ -89,21 +89,21 @@
     selected = preview;
     document.getElementById('previewTitle').textContent = preview.title;
     document.title = preview.title + ' — ' + catalog.name;
-    [state, size, document.getElementById('reload')].forEach(function (control) { control.disabled = false; });
-    state.parentElement.firstChild.textContent = preview.docs ? 'Lens' : 'State';
+    [scenario, size, document.getElementById('reload')].forEach(function (control) { control.disabled = false; });
+    scenario.parentElement.firstChild.textContent = preview.docs ? 'Lens' : 'Scenario';
     size.parentElement.hidden = !!preview.docs;
     if (preview.docs) {
-      options(state, preview.lenses.map(function (lens) { return { id: lens.key, label: lens.label }; }), query && query.get('lens') || preview.lens);
+      options(scenario, preview.lenses.map(function (lens) { return { id: lens.key, label: lens.label }; }), query && query.get('lens') || preview.lens);
       draw(); load();
       return;
     }
-    options(state, preview.states, query && query.get('state'));
+    options(scenario, preview.scenarios, query && query.get('scenario'));
     options(size, sizesOf(preview).map(function (entry) { return { id: entry.key, label: entry.label }; }), query && query.get('size') || size.value);
     if (query) ['width', 'height'].forEach(function (key) { if (query.has(key)) document.getElementById(key).value = query.get(key); });
     draw(); load();
   }
   search.addEventListener('input', draw);
-  state.addEventListener('change', load);
+  scenario.addEventListener('change', load);
   size.addEventListener('change', resize);
   ['width', 'height'].forEach(function (key) { document.getElementById(key).addEventListener('change', resize); });
   document.getElementById('reload').addEventListener('click', load);
@@ -112,15 +112,15 @@
     if (event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.type !== 'workbench-preview' || event.data.id !== selected?.id) return;
     if (event.data.event === 'docs-navigate') {
       var page = entries().find(function (entry) { return entry.docs && entry.src === event.data.page; });
-      if (page) choose(page, new URLSearchParams({ lens: state.value }));
+      if (page) choose(page, new URLSearchParams({ lens: scenario.value }));
       return;
     }
     if (event.data.event === 'navigate') {
       var next = catalog.previews.find(function (preview) { return preview.id === event.data.preview; });
-      if (next) choose(next, new URLSearchParams({ state: event.data.state || '', size: size.value }));
+      if (next) choose(next, new URLSearchParams({ scenario: event.data.scenario || '', size: size.value }));
       return;
     }
-    if (!selected.docs && event.data.state && event.data.state !== state.value) return;
+    if (!selected.docs && event.data.scenario && event.data.scenario !== scenario.value) return;
     if (event.data.event === 'ready') notice('Ready · ' + (selected.docs ? 'docs page' : selected.adapter));
     if (event.data.event === 'error') notice(event.data.message, true);
   });

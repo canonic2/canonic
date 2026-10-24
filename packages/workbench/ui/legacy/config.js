@@ -157,20 +157,20 @@
     return Object.prototype.toString.call(value) === '[object Array]' ? value : [];
   }
 
-  /* A page with fewer than two states has no choice to offer, so it stays a
-     single row and its states are dropped. The first state is the page as
+  /* A page with fewer than two scenarios has no choice to offer, so it stays a
+     single row and its scenarios are dropped. The first scenario is the page as
      authored, whatever it calls itself. */
-  function states(raw, where, problems) {
+  function scenarios(raw, where, problems) {
     var out = [];
-    list(raw).forEach(function (state, i) {
-      var id = text(state && state.id);
-      var label = text(state && state.label);
+    list(raw).forEach(function (scenario, i) {
+      var id = text(scenario && scenario.id);
+      var label = text(scenario && scenario.label);
       if (!id || !label) {
-        problems.push(where + ': state ' + (i + 1) + ' needs both an id and a label.');
+        problems.push(where + ': scenario ' + (i + 1) + ' needs both an id and a label.');
         return;
       }
       if (!/^[a-z0-9-]+$/.test(id)) {
-        problems.push(where + ': state id “' + id + '” must be kebab-case — it travels in a URL.');
+        problems.push(where + ': scenario id “' + id + '” must be kebab-case — it travels in a URL.');
         return;
       }
       out.push({ id: id, label: label });
@@ -201,8 +201,8 @@
     window.wbManifest.pageLensLabel(raw.lensLabel, item, where + ' › ' + label, problems);
     var icon = text(raw.icon);
     if (icon) item.icon = icon;
-    var found = states(raw.states, where + ' › ' + label, problems);
-    if (found) item.states = found;
+    var found = scenarios(raw.scenarios, where + ' › ' + label, problems);
+    if (found) item.scenarios = found;
     window.wbManifest.pageMarkdown(raw, item, where + ' › ' + label, problems);
     var lenses = window.wbManifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
     if (lenses) item.implementations = lenses;

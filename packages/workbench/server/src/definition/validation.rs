@@ -34,18 +34,18 @@ pub(super) fn check<'a>(
         sources,
     )?;
     if object
-        .get("states")
-        .is_some_and(|states| !states.is_object())
+        .get("scenarios")
+        .is_some_and(|scenarios| !scenarios.is_object())
     {
-        return Err(failure("states must be a map."));
+        return Err(failure("scenarios must be a map."));
     }
-    if let Some(states) = object.get("states").and_then(Value::as_object)
-        && states
+    if let Some(scenarios) = object.get("scenarios").and_then(Value::as_object)
+        && scenarios
             .iter()
-            .any(|(name, state)| !kebab(name) || !state.is_object())
+            .any(|(name, scenario)| !kebab(name) || !scenario.is_object())
     {
         return Err(failure(
-            "states need kebab-case IDs and object definitions.",
+            "scenarios need kebab-case IDs and object definitions.",
         ));
     }
     sizes(object)?;
@@ -62,11 +62,11 @@ fn sources_valid(
     sources: &mut Vec<PathBuf>,
 ) -> Result<(), String> {
     let mut source_values = vec![object.get("source")];
-    if let Some(states) = object.get("states").and_then(Value::as_object) {
+    if let Some(scenarios) = object.get("scenarios").and_then(Value::as_object) {
         source_values.extend(
-            states
+            scenarios
                 .values()
-                .filter_map(|state| state.get("source"))
+                .filter_map(|scenario| scenario.get("source"))
                 .filter(|value| truthy(value))
                 .map(Some),
         );
@@ -140,18 +140,18 @@ fn links(object: &Map<String, Value>) -> Result<(), String> {
     }
     if let Some(raw_links) = object.get("links").and_then(Value::as_object) {
         for (href, target) in raw_links {
-            let (preview, state) = if target.is_string() {
+            let (preview, scenario) = if target.is_string() {
                 (Some(target), None)
             } else {
-                (target.get("preview"), target.get("state"))
+                (target.get("preview"), target.get("scenario"))
             };
             let valid = (target.is_object() || target.is_string())
-                && (preview.is_some_and(truthy) || state.is_some_and(truthy))
+                && (preview.is_some_and(truthy) || scenario.is_some_and(truthy))
                 && preview.is_none_or(|value| string(Some(value), id))
-                && state.is_none_or(|value| string(Some(value), kebab));
+                && scenario.is_none_or(|value| string(Some(value), kebab));
             if !valid {
                 return Err(failure(&format!(
-                    "link {href} must name a preview ID, or {{ preview, state }}."
+                    "link {href} must name a preview ID, or {{ preview, scenario }}."
                 )));
             }
         }

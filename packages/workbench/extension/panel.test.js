@@ -158,7 +158,7 @@ test('keeps sidebar navigation ready when wb-here precedes the iframe load event
      the parent wrapper. This was the order that permanently stalled picks. */
   windowMessage({
     source: frame.contentWindow,
-    data: { type: 'wb-here', src: 'pages/login.html', state: null, pending: true },
+    data: { type: 'wb-here', src: 'pages/login.html', scenario: null, pending: true },
   });
   windowMessage({ data: { type: 'canonic-go', hash: 'pages/login.html:welcome-dark' } });
 
@@ -169,9 +169,9 @@ test('keeps sidebar navigation ready when wb-here precedes the iframe load event
   assert.deepEqual(dispatched, []);
 
   windowMessage({ source: frame.contentWindow,
-    data: { type: 'wb-here', src: 'pages/login.html', state: null } });
+    data: { type: 'wb-here', src: 'pages/login.html', scenario: null } });
   assert.deepEqual(plain(editorMessages), [
-    { type: 'wb-here', src: 'pages/login.html', state: null },
+    { type: 'wb-here', src: 'pages/login.html', scenario: null },
   ]);
 
   /* A stale sidebar can name a page the already-open workbench has not read
@@ -179,14 +179,14 @@ test('keeps sidebar navigation ready when wb-here precedes the iframe load event
      immediate reject/retry loop that starves the whole editor webview. */
   windowMessage({
     source: frame.contentWindow,
-    data: { type: 'wb-here', src: null, state: null },
+    data: { type: 'wb-here', src: null, scenario: null },
   });
   assert.deepEqual(plain(forwarded), [
     { type: 'wb-go', hash: 'pages/login.html:welcome-dark' },
   ]);
   assert.deepEqual(plain(editorMessages), [
-    { type: 'wb-here', src: 'pages/login.html', state: null },
-    { type: 'wb-here', src: null, state: null },
+    { type: 'wb-here', src: 'pages/login.html', scenario: null },
+    { type: 'wb-here', src: null, scenario: null },
   ]);
 
   windowMessage({ data: { type: 'canonic-go', hash: 'preview/components-code-input.html' } });
@@ -383,7 +383,7 @@ test('retries an unacknowledged pick and stops after wb-here', async function ()
     { type: 'canonic-go', hash: target },
   ]);
 
-  f.receive({ type: 'wb-here', src: 'pages/login.html', state: 'welcome-quiet' });
+  f.receive({ type: 'wb-here', src: 'pages/login.html', scenario: 'welcome-quiet' });
   await f.panel.show(f.context, url, target);
   assert.equal(f.messages.length, 2, 'acknowledged target is the only repeat suppressed');
 
@@ -419,7 +419,7 @@ test('refreshes an open workbench and queues new picks until its config is ready
 
   windowMessage({
     source: frame.contentWindow,
-    data: { type: 'wb-here', src: 'pages/login.html', state: null },
+    data: { type: 'wb-here', src: 'pages/login.html', scenario: null },
   });
   await f.panel.refresh();
   windowMessage({ data: f.messages.pop() });
@@ -431,7 +431,7 @@ test('refreshes an open workbench and queues new picks until its config is ready
 
   windowMessage({
     source: frame.contentWindow,
-    data: { type: 'wb-here', src: 'pages/login.html', state: null },
+    data: { type: 'wb-here', src: 'pages/login.html', scenario: null },
   });
   assert.deepEqual(plain(forwarded), [
     { type: 'wb-refresh' },
@@ -466,7 +466,7 @@ test('retries refresh after an invalid manifest without releasing a queued pick'
 
   windowMessage({
     source: frame.contentWindow,
-    data: { type: 'wb-here', src: 'pages/login.html', state: null },
+    data: { type: 'wb-here', src: 'pages/login.html', scenario: null },
   });
   windowMessage({ data: { type: 'canonic-refresh' } });
   windowMessage({ data: { type: 'canonic-go', hash: 'preview/new.html' } });
@@ -477,7 +477,7 @@ test('retries refresh after an invalid manifest without releasing a queued pick'
   assert.deepEqual(plain(forwarded), [{ type: 'wb-refresh' }, { type: 'wb-refresh' }]);
   windowMessage({
     source: frame.contentWindow,
-    data: { type: 'wb-here', src: 'pages/login.html', state: null },
+    data: { type: 'wb-here', src: 'pages/login.html', scenario: null },
   });
   assert.deepEqual(plain(forwarded), [
     { type: 'wb-refresh' },
@@ -511,19 +511,19 @@ test('refreshing a rendered docs page releases the next sidebar pick without rel
   child = vm.createContext({
     lensRules: require('../contracts/src/docs/lenses.js'),
     index: { 'docs/card.md': { src: 'docs/card.md', markdown: 'docs/card.md' } },
-    view: { src: 'docs/card.md', state: null, lens: lens },
+    view: { src: 'docs/card.md', scenario: null, lens: lens },
     frameReady: true,
-    stateOf: function () { return null; },
+    scenarioOf: function () { return null; },
     effectiveLens: function () { return lens; },
     scrollToExample: function () {}, syncHash: function () {},
     setCanvasMode: function () { previewReloads += 1; },
-    tellHost: function (src, state, key, pending) {
-      receive({ source: frame.contentWindow, data: { type: 'wb-here', src: src, state: state, lens: key, pending: !!pending } });
+    tellHost: function (src, scenario, key, pending) {
+      receive({ source: frame.contentWindow, data: { type: 'wb-here', src: src, scenario: scenario, lens: key, pending: !!pending } });
     },
   });
   var source = fs.readFileSync(path.join(__dirname, "../ui/legacy/workbench.js"), 'utf8');
   vm.runInContext(source.slice(source.indexOf('  function show('), source.indexOf('  /* ----------------------------------------------------------- actions */')), child);
-  receive({ source: frame.contentWindow, data: { type: 'wb-here', src: 'docs/card.md', state: null } });
+  receive({ source: frame.contentWindow, data: { type: 'wb-here', src: 'docs/card.md', scenario: null } });
   receive({ data: { type: 'canonic-refresh' } });
   receive({ data: { type: 'canonic-go', hash: 'pages/sidebar.html' } });
   assert.deepEqual(picks, [], 'the new pick waits while the config is loading');

@@ -18,7 +18,7 @@ highlighting, startup warm-up wait and bundle work when those phases run.
 The docs document and its examples bundle are separate requests.
 `preview.browser.phase` lines show selection, renderer/document loading,
 bundle loading, example mounting, readiness and frame promotion. Match their
-`selection` IDs, page, state and lens; the final `visible` phase's `totalMs`
+`selection` IDs, page, scenario and lens; the final `visible` phase's `totalMs`
 shows the selection-to-visible time. A retained page can skip loading/mounting.
 
 **Developer: Open Webview Developer Tools** also shows server durations in
@@ -57,7 +57,7 @@ Use **Workbench: Copy Canvas URL** for the actual port. The answer includes:
 
 Read `problems` first whenever a lens, story, preview, catalog page, docs
 example, or source link is missing. A hand-written page dropped for a bad
-`src`, label, state id, or group isn't listed there; see
+`src`, label, scenario id, or group isn't listed there; see
 [A page is missing from the list](#a-page-is-missing-from-the-list).
 
 In VS Code, the problems list in the sidebar shows the same problems when
@@ -72,7 +72,7 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 
 | Answer | Means |
 | --- | --- |
-| 200 | The title's stories, with ids, names, states, and resolved source paths. |
+| 200 | The title's stories, with ids, names, scenarios, and resolved source paths. |
 | 404 | The title doesn't exist. The answer names the nearest titles, including the prefixed title when only the prefix differs. |
 | 400 | No Storybook implementation has that name, `url: auto` found no running Storybook, or the request has no `title`. |
 | 502 | Something answered at the address, but `/index.json` returned an error. It may not be Storybook 7 or later. |
@@ -167,8 +167,8 @@ and the previews and docs pages that `*.workbench.ts` files define.
 - **The canvas shows an error instead of the component:** the message is the
   compile or render error, such as an unknown adapter or a framework package
   that isn't installed in the project.
-- **`link … names unknown Workbench preview` or `… unknown state`:** an entry
-  in the definition's `links` names a preview ID or state no definition
+- **`link … names unknown Workbench preview` or `… unknown scenario`:** an entry
+  in the definition's `links` names a preview ID or scenario no definition
   declares. See [Links and navigation](preview-data.md#links-and-navigation).
 - **`request … must be "[METHOD] /path [Operation]" or a full URL`:** a
   `requests` key isn't in that form. Paths start with `/`.
@@ -208,7 +208,7 @@ See [Requirements and problems](docs-pages.md#requirements-and-problems).
   stop reaching live services.
 - **A mock doesn't apply:** check the method, that the path starts with `/`,
   and that a GraphQL key's operation name matches the one the client sends. A
-  state's `requests` replace the preview's for the same key only.
+  scenario's `requests` replace the preview's for the same key only.
 - **A request isn't mocked at all:** request mocks answer `fetch` and
   XMLHttpRequest. WebSocket, EventSource, `navigator.sendBeacon`, synchronous
   XMLHttpRequest, and requests from workers reach the network.
@@ -227,27 +227,27 @@ project. It builds each preview and lists the failures:
 
 See [TypeScript Workbench previews](workbench-previews.md).
 
-## States don't show or don't change anything
+## Scenarios don't show or don't change anything
 
-- **No states in the page list:** a page needs at least two valid states.
+- **No scenarios in the page list:** a page needs at least two valid scenarios.
   Each needs an `id` and a `label`, and ids must be kebab-case.
-- **The state is listed, but the page doesn't change:** the page has to answer to
-  the id. Check the spelling matches, and that you used one of the
-  [three hooks](pages-and-states.md#states).
-- **The first state doesn't match:** the first state always appears in the page
-  as `data-wb-state="default"`, whatever its id.
-- **Content added by scripts doesn't change:** `data-wb-state-only`, `-not`, and
-  `data-wb-set-*` are applied once, at `DOMContentLoaded`. Style late content
-  with `html[data-wb-state=…]` instead.
-- **The page opened from disk ignores states:** only pages served by Workbench
-  get `states.js`.
+- **The scenario is listed, but the page doesn't change:** the page has to
+  answer to the id. Check the spelling matches, and that you used one of the
+  [three hooks](pages-and-scenarios.md#scenarios).
+- **The first scenario doesn't match:** the first scenario always appears in
+  the page as `data-wb-scenario="default"`, whatever its id.
+- **Content added by scripts doesn't change:** `data-wb-scenario-only`, `-not`,
+  and `data-wb-set-*` are applied once, at `DOMContentLoaded`. Style late
+  content with `html[data-wb-scenario=…]` instead.
+- **The page opened from disk ignores scenarios:** only pages served by
+  Workbench get `scenarios.js`.
 
 ## Links don't work in a page
 
 Actions are off by default, so links don't navigate and forms don't submit.
 Turn on **Actions** in the top bar. With actions on, a link to an `.html` page
 in the project that isn't listed in `workbench.yaml` still does nothing; add
-the page there. See [Links and actions](pages-and-states.md#links-and-actions).
+the page there. See [Links and actions](pages-and-scenarios.md#links-and-actions).
 
 In a [Workbench preview](preview-data.md#links-and-navigation), a link
 opens another page only when the definition's `links` maps its address to a
@@ -259,7 +259,7 @@ preview. Every other link and form is recorded under **Actions** in
 The page's `sizes` doesn't list it. In a docs lens, every size in the size
 switcher is disabled, because the docs fill the canvas and there is no
 artboard; switch to the design lens to choose a size. Hover over the button to
-see why. See [Sizes](pages-and-states.md#sizes).
+see why. See [Sizes](pages-and-scenarios.md#sizes).
 
 ## A lens is missing
 
@@ -268,8 +268,8 @@ see why. See [Sizes](pages-and-states.md#sizes).
   and the implementation must be declared at the top level. Read `problems`.
 - A docs lens needs the page's Markdown: a `.md` `src`, or `docs` on the
   page. A Markdown page has no design lens. See [Lenses](docs-pages.md#lenses).
-- For `url`, every path must start with `/`, and a state map needs a path for
-  the default state.
+- For `url`, every path must start with `/`, and a scenario map needs a path
+  for the default scenario.
 - For `storybook`, the title must match exactly. [Check the title](#check-a-storybook-title).
 - An implementation whose `base` or `url` isn't an `http://` or `https://`
   address is dropped.

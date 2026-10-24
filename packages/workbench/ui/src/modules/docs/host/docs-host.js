@@ -266,7 +266,7 @@ function resume(address) {
   const url = new URL(address, location.href);
   const current = new URL(location.href);
   const identity = (value) => {
-    for (const key of ['wbTrace', 'wbPage', 'wbState', 'wbLens']) value.searchParams.delete(key);
+    for (const key of ['wbTrace', 'wbPage', 'wbScenario', 'wbLens']) value.searchParams.delete(key);
     return value.pathname + value.search;
   };
   if (!window.__workbenchReady || !shown || identity(url) !== identity(current))

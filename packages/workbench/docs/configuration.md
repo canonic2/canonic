@@ -14,7 +14,7 @@ to be the top of an open folder; see
 - [Collections](#collections)
 - [Groups](#groups)
 - [Pages](#pages)
-- [States](#states)
+- [Scenarios](#scenarios)
 - [Sizes](#sizes)
 - [Implementations](#implementations)
 - [A page's implementations](#a-pages-implementations)
@@ -84,7 +84,7 @@ collections:
             sizes:
               - laptop
               - mobile
-            states:
+            scenarios:
               - id: default
                 label: Default
               - id: error
@@ -139,7 +139,7 @@ it.*
 ## Previews
 
 Preview definitions can declare [multiple artboards](workbench-previews.md#multiple-artboards)
-inside one page. This uses the definition's `artboards` map; `states` remain
+inside one page. This uses the definition's `artboards` map; `scenarios` remain
 alternatives and do not create additional artboards.
 
 Workbench discovers [TypeScript previews](workbench-previews.md) in
@@ -192,7 +192,7 @@ load. An invalid definition icon makes that definition a preview problem.
 
 A page whose `src` is a preview definition, such as
 `src: src/button.workbench.ts`, keeps its place in your collections and takes
-its states from the definition. Its sizes come from the page's own `sizes`,
+its scenarios from the definition. Its sizes come from the page's own `sizes`,
 not from the definition's.
 
 An explicitly placed preview keeps its handwritten page icon when set;
@@ -277,7 +277,7 @@ items:
 | `src` | path | yes | The HTML file, [preview definition](#previews), or Markdown file of a [Markdown page](docs-pages.md#a-markdown-page), relative to the project root. |
 | `docs` | path | no | The page's [docs](docs-pages.md): a `.md` file relative to the project root. Gives the page its docs lenses. Reported on a Markdown page, which is its own docs. |
 | `icon` | Lucide icon name | no | Overrides the collection's icon for this page. |
-| `states` | list of [states](#states) | no | Variations of the page. Shown only when there are two or more. |
+| `scenarios` | list of [scenarios](#scenarios) | no | Variations of the page. Shown only when there are two or more. |
 | `sizes` | list of [sizes](#sizes) | no | Which artboard sizes the page supports. Defaults to all four. A Markdown page has no artboard; `sizes` on one is reported and ignored. In a docs lens, the docs fill the canvas whatever the sizes. |
 | `implementations` | map | no | [Where this page is in each implementation](#a-pages-implementations). For a page with docs, also its docs lenses: each `docs` implementation and its example source. |
 | `lens` | implementation name | no | A Markdown page only: the docs lens it opens with, one of its `docs` implementations. Defaults to its first. On any other page, it is reported. |
@@ -286,7 +286,7 @@ items:
 `src` rules:
 
 - It is relative to the project root. It can't start with `/` or contain `..`.
-- It can't contain `:`, `!`, or `~`, which mark the state, an
+- It can't contain `:`, `!`, or `~`, which mark the scenario, an
   example in the docs, and the lens in the [address](canvas.md#links-and-the-address).
 - A page without both `label` and `src` is dropped and reported, and the rest
   of the sidebar still builds.
@@ -297,10 +297,10 @@ A `src` ending in `.md` is a [Markdown page](docs-pages.md#a-markdown-page):
 docs with live examples and no design, filling the canvas instead of an
 artboard. Any other page can have docs too, with `docs`.
 
-## States
+## Scenarios
 
 ```yaml
-states:
+scenarios:
   - id: default
     label: Default
   - id: error
@@ -309,16 +309,16 @@ states:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | kebab-case string | yes | Travels in the URL (`?state=error`), in the address, and in screenshot filenames. Lowercase letters, digits, and hyphens only. |
-| `label` | string | yes | The state's name in the sidebar and the handoff. |
+| `id` | kebab-case string | yes | Travels in the URL (`?scenario=error`), in the address, and in screenshot filenames. Lowercase letters, digits, and hyphens only. |
+| `label` | string | yes | The scenario's name in the sidebar and the handoff. |
 
-- The **first** state is the page as authored, whatever its id. The page loads
-  without a `?state=` parameter for it. By convention it is called `default`.
-- A page with fewer than two states shows no states in the page list.
-- Declaring a state only adds it to the sidebar. The page has to answer to the
-  id; see [Pages and states](pages-and-states.md#states).
-- In a [docs lens](docs-pages.md#states), every example receives the page's
-  state. A Markdown page can declare states too, and the page list doesn't
+- The **first** scenario is the page as authored, whatever its id. The page loads
+  without a `?scenario=` parameter for it. By convention it is called `default`.
+- A page with fewer than two scenarios shows no scenarios in the page list.
+- Declaring a scenario only adds it to the sidebar. The page has to answer to the
+  id; see [Pages and scenarios](pages-and-scenarios.md#scenarios).
+- In a [docs lens](docs-pages.md#scenarios), every example receives the page's
+  scenario. A Markdown page can declare scenarios too, and the page list doesn't
   list them.
 
 ## Sizes
@@ -424,7 +424,7 @@ implementations:
   native: src/components/card/card.examples.native.tsx
 ```
 
-**`url`**: one path for every state, or a map of the page's state ids to
+**`url`**: one path for every scenario, or a map of the page's scenario ids to
 paths. Paths start with `/` and are appended to `base`.
 
 ```yaml
@@ -435,14 +435,14 @@ implementations:
     error: /sign-in?error=1
 ```
 
-- In a map, the first state's id or `default` gives the path for the page as
+- In a map, the first scenario's id or `default` gives the path for the page as
   authored, and it is required.
-- A state without its own entry uses the default path.
-- A map key that isn't one of the page's state ids is reported.
+- A scenario without its own entry uses the default path.
+- A map key that isn't one of the page's scenario ids is reported.
 
 **`workbench`**: a preview ID, such as `components/button`: kebab-case
-segments separated by `/`. Each of the page's states opens the preview state
-with the same id, and any other state opens the preview's first state. The
+segments separated by `/`. Each of the page's scenarios opens the preview scenario
+with the same id, and any other scenario opens the preview's first scenario. The
 preview's source file is added to the page's code pointers.
 
 ```yaml
@@ -680,9 +680,9 @@ nothing loads until it is fixed.
 Workbench reports what it can't use rather than guessing, and builds
 everything else:
 
-- A page, group, collection, state, or implementation that is invalid is
+- A page, group, collection, scenario, or implementation that is invalid is
   dropped. Its problem names where it was, such as
-  `Pages › Auth › Sign in: state id “Error” must be kebab-case`.
+  `Pages › Auth › Sign in: scenario id “Error” must be kebab-case`.
 - In the canvas, every problem found while reading the file is written to the
   browser console.
 - `GET /_workbench/config` on the workbench server lists, under `problems`,
@@ -690,7 +690,7 @@ everything else:
   mappings, and `code`, plus catalogs and previews that couldn't load, and
   [docs problems](docs-pages.md#requirements-and-problems). It sits
   alongside the config as your machine resolves it. A page dropped for a bad
-  `src`, label, state id, or group is left out of it without a problem, so
+  `src`, label, scenario id, or group is left out of it without a problem, so
   check the console for those. See
   [Troubleshooting](troubleshooting.md#read-the-resolved-config).
 - When previews or a catalog are on, the problems list in VS Code's sidebar
@@ -701,6 +701,6 @@ everything else:
 **Configure pages**, in the top bar's **More** menu, edits collections,
 groups, pages, labels, source paths, and sizes in a form. See
 [Configure pages](canvas.md#configure-pages). Saving rewrites only the
-`collections` block of `workbench.yaml`. Implementations, states, implementation
+`collections` block of `workbench.yaml`. Implementations, scenarios, implementation
 mappings, and code pointers are preserved. Comments outside `collections` are
 kept; comments inside it are not.

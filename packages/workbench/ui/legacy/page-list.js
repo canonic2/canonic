@@ -2,7 +2,7 @@
    -------------
    Built the way Sketch's sidebar is: the config's collections listed on top,
    as Sketch lists its pages, and the chosen collection's pages below —
-   groups, states, and the filter over all of them.
+   groups, scenarios, and the filter over all of them.
 
    It is its own file because two places need the same list. In a browser it
    is the workbench's own left edge. In an editor it is the Canonic sidebar, a
@@ -11,8 +11,8 @@
    and that arrives as onPick.
 
    So nothing here knows about hashes, frames, or editors. It is handed the
-   config's collections and answers with a list that calls onPick(src, state) —
-   state being null for the page as authored. Everything about what to *do*
+   config's collections and answers with a list that calls onPick(src, scenario) —
+   scenario being null for the page as authored. Everything about what to *do*
    with that stays with the host.
 */
 
@@ -32,22 +32,22 @@
     return out;
   }
 
-  /* A single state is a page with a note attached, not a fold — the panel
+  /* A single scenario is a page with a note attached, not a fold — the panel
      only splits a page open when there is a choice to make. */
-  function statesOf(item) {
-    return item && item.states && item.states.length > 1 ? item.states : null;
+  function scenariosOf(item) {
+    return item && item.scenarios && item.scenarios.length > 1 ? item.scenarios : null;
   }
 
-  /* An authored page's state header carries two actions in one row: its
+  /* An authored page's scenario header carries two actions in one row: its
      caret folds, while its label selects the page. Imported titles are
-     disclosure-only because their named states are the actual pages. */
-  function stateHeadAction(target, selected, filtering, disclosureOnly) {
+     disclosure-only because their named scenarios are the actual pages. */
+  function scenarioHeadAction(target, selected, filtering, disclosureOnly) {
     var caret = target && target.closest && target.closest('.wb-fold');
     return disclosureOnly || caret || (selected && !filtering) ? 'toggle' : 'pick';
   }
 
-  function statePick(item, state, index) {
-    return item && item.implementationOnly ? state.id : index === 0 ? null : state.id;
+  function scenarioPick(item, scenario, index) {
+    return item && item.implementationOnly ? scenario.id : index === 0 ? null : scenario.id;
   }
 
   /* A group header folds from its caret, and folds when it holds the page
@@ -58,13 +58,13 @@
   }
 
   /* The page a collection or group opens on: its first page, as authored,
-     or the first named state of an imported title that has no page of its
+     or the first named scenario of an imported title that has no page of its
      own. Null when it holds no pages. */
   function firstPick(pages) {
     var item = pages[0];
     if (!item) return null;
-    var states = item.implementationOnly && item.states && item.states.length ? item.states : null;
-    return { src: item.src, state: states ? statePick(item, states[0], 0) : null };
+    var scenarios = item.implementationOnly && item.scenarios && item.scenarios.length ? item.scenarios : null;
+    return { src: item.src, scenario: scenarios ? scenarioPick(item, scenarios[0], 0) : null };
   }
 
   function firstPage(collections) {
@@ -99,7 +99,7 @@
   /* options: list — where the pages go; collectionList — where the collections
      go, with collectionsBlock, the part of the panel to hide when there is only
      one; title — the heading over the pages, which names the collection showing;
-     search — the filter; collections — the config's collections; onPick(src, state) —
+     search — the filter; collections — the config's collections; onPick(src, scenario) —
      what a picked row does; and treeKeyboard, when the host wants the list to
      behave like a tree with one tab stop and arrow-key focus. Only list and
      collections are required. */
@@ -115,7 +115,7 @@
 
     var showing = collections.length ? collections[0].name : null; /* the collection showing */
     var current = null;      /* src of the picked page */
-    var currentState = null; /* its state id, or null for the default one */
+    var currentScenario = null; /* its scenario id, or null for the default one */
 
     /* ------------------------------------------------------ collections */
 
@@ -172,7 +172,7 @@
     function openFirst(pages) {
       var holdsCurrent = pages.some(function (item) { return item.src === current; });
       var first = holdsCurrent ? null : firstPick(pages);
-      if (first) onPick(first.src, first.state);
+      if (first) onPick(first.src, first.scenario);
     }
 
     /* ------------------------------------------------------------ panel */
@@ -208,7 +208,7 @@
     }
 
     /* Folds the user worked by hand, keyed by the fold's own key. A fold left
-       alone follows its default — a group starts open, a page's states open
+       alone follows its default — a group starts open, a page's scenarios open
        while that page is the one showing — and a hand fold outranks it.
        Filtering opens everything: a row that matched the search has to be
        visible to be picked, and a fold that can't close shouldn't be recorded
@@ -301,11 +301,11 @@
       return parts.box;
     }
 
-    /* A page with states: the page's own row, then one row per state, the
+    /* A page with scenarios: the page's own row, then one row per scenario, the
        way Storybook stacks a component's stories. */
-    function stateGroup(item, states, depth) {
+    function scenarioGroup(item, scenarios, depth) {
       var parts = fold({
-        className: 'wb-states',
+        className: 'wb-scenarios',
         key: item.src,
         src: item.src,
         label: item.label,
@@ -316,29 +316,29 @@
       parts.head.dataset.src = item.src;
       parts.head.title = item.label;
 
-      states.forEach(function (state, i) {
+      scenarios.forEach(function (scenario, i) {
         var row = document.createElement('button');
-        row.className = 'wb-item wb-state';
+        row.className = 'wb-item wb-scenario';
         row.type = 'button';
         indent(row, depth + 1);
-        /* Same glyph on every state row, on every page: these rows are all
+        /* Same glyph on every scenario row, on every page: these rows are all
            the same kind of thing, and the label is what tells them apart. */
         row.appendChild(window.wbIcon('circle-dot', 13));
-        row.appendChild(labelFor(state.label));
-        row.title = state.label;
+        row.appendChild(labelFor(scenario.label));
+        row.title = scenario.label;
         row.dataset.src = item.src;
-        row.dataset.state = state.id;
+        row.dataset.scenario = scenario.id;
         row.addEventListener('click', function () {
-          onPick(item.src, statePick(item, state, i));
+          onPick(item.src, scenarioPick(item, scenario, i));
         });
         parts.list.appendChild(row);
       });
 
-      /* An imported implementation has no page apart from its named states,
+      /* An imported implementation has no page apart from its named scenarios,
          so its title is disclosure-only. Authored pages retain the shortcut
-         where their title picks the default state and folds when reselected. */
+         where their title picks the default scenario and folds when reselected. */
       parts.head.addEventListener('click', function (e) {
-        if (stateHeadAction(
+        if (scenarioHeadAction(
           e.target,
           current === item.src,
           filtering,
@@ -355,16 +355,16 @@
     }
 
     function rowFor(item, depth) {
-      var states = statesOf(item);
-      return states ? stateGroup(item, states, depth) : itemButton(item, depth);
+      var scenarios = scenariosOf(item);
+      return scenarios ? scenarioGroup(item, scenarios, depth) : itemButton(item, depth);
     }
 
-    /* Group and state labels are searchable too, so "auth" or "wrong password"
+    /* Group and scenario labels are searchable too, so "auth" or "wrong password"
        finds the pages they belong to rather than nothing. */
     function haystack(item) {
       var text = item.label + ' ' + item.src;
-      (item.states || []).forEach(function (state) {
-        text += ' ' + state.label;
+      (item.scenarios || []).forEach(function (scenario) {
+        text += ' ' + scenario.label;
       });
       return text.toLowerCase();
     }
@@ -429,7 +429,7 @@
     /* Marks the picked row and opens or closes the folds, without rebuilding
          the list — a rebuild would drop focus mid-keyboard-walk.
 
-       Only one row lights up. On a page with states that is the state row:
+       Only one row lights up. On a page with scenarios that is the scenario row:
        the page's own row above it is a header, so it takes the weight of the
        current page but not the selected background. */
     function markCurrent() {
@@ -437,7 +437,7 @@
         var mine = b.dataset.src === current;
         b.setAttribute(
           'aria-current',
-          String(b.dataset.state ? mine && b.dataset.state === (currentState || 'default') : mine)
+          String(b.dataset.scenario ? mine && b.dataset.scenario === (currentScenario || 'default') : mine)
         );
       });
 
@@ -540,7 +540,7 @@
 
     /* Navigation that didn't start here — a link followed in the preview, a
        page picked in the other half of the tool — can land inside a group
-       the user collapsed. Open every ancestor plus the state fold so the
+       the user collapsed. Open every ancestor plus the scenario fold so the
        active row is visible, not merely selected somewhere out of sight. */
     function reveal(src) {
       collections.forEach(function (collection) {
@@ -554,7 +554,7 @@
             parents.forEach(function (key) {
               opened[key] = true;
             });
-            if (statesOf(entry)) opened[src] = true;
+            if (scenariosOf(entry)) opened[src] = true;
           });
         }
         visit(collection.items, []);
@@ -565,10 +565,10 @@
        A new page brings its collection into view — a linked hash, or a pick
        made in the other half of the tool — but the same page reported
        again leaves the collection you went browsing in alone. */
-    function setCurrent(src, state, collection) {
+    function setCurrent(src, scenario, collection) {
       var moved = (src || null) !== current;
       current = src || null;
-      currentState = state || null;
+      currentScenario = scenario || null;
       if (moved && current && collection && collection !== showing) setCollection(collection);
       else markCurrent();
     }
@@ -620,8 +620,8 @@
     index: index,
     firstPage: firstPage,
     create: create,
-    states: statesOf,
-    statePick: statePick,
+    scenarios: scenariosOf,
+    scenarioPick: scenarioPick,
     pagesIn: pagesIn,
     isGroup: isGroup,
   };

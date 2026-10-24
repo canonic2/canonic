@@ -54,7 +54,7 @@ const SIZES = {
   // The first page lab's largest project.
   giant: { components: 140, features: 60, pages: 600, componentBytes: 6000, sections: [14, 34], fonts: 'system', sentinels: true },
   // The instant first page lab's largest project: 10,000 lighter pages, one in
-  // 20 with its title or states computed by an imported module.
+  // 20 with its title or scenarios computed by an imported module.
   colossal: { components: 140, features: 60, pages: 10000, componentBytes: 6000, sections: [2, 4], fonts: 'system', sentinels: true, computed: true },
 };
 
@@ -392,10 +392,10 @@ ${Array.from({ length: sections }, (_, section) => `      <${Name}Section${secti
 }
 `);
     const operation = `${pascal(pageFeatures[0])}ListQuery`;
-    // One page in 40 takes its title, and another its states, from a module.
-    const computed = !shape.computed ? null : index % 40 === 7 ? 'title' : index % 40 === 27 ? 'states' : null;
+    // One page in 40 takes its title, and another its scenarios, from a module.
+    const computed = !shape.computed ? null : index % 40 === 7 ? 'title' : index % 40 === 27 ? 'scenarios' : null;
     writer.write(`${dir}/index.workbench.tsx`, `import { definePreview } from '@canonic2/workbench';
-${computed === 'title' ? "import { pageTitle } from '../../app/page-list';\n" : computed === 'states' ? "import { listStates } from '../../app/page-list';\n" : ''}
+${computed === 'title' ? "import { pageTitle } from '../../app/page-list';\n" : computed === 'scenarios' ? "import { listScenarios } from '../../app/page-list';\n" : ''}
 export default definePreview({
   id: 'pages/${slug}',
   title: ${computed === 'title' ? `pageTitle('${Name}')` : `'Acme/Pages/${Name}'`},
@@ -404,7 +404,7 @@ export default definePreview({
   requests: {
     'POST /graphql ${operation}': { body: { data: { items: ${JSON.stringify(records(rand, 12))} } } },
 ${shape.sentinels ? `    'GET /api/only-${slug}': { body: { owner: 'pages/${slug}' } },\n` : ''}  },
-  states: ${computed === 'states' ? `listStates('${operation}')` : `{
+  scenarios: ${computed === 'scenarios' ? `listScenarios('${operation}')` : `{
     default: {},
     empty: { requests: { 'POST /graphql ${operation}': { body: { data: { items: [] } } } } },
   }`},
@@ -596,7 +596,7 @@ export const slowPlugin = {
     if (shape.computed) writer.write('src/app/page-list.ts', `// List fields some definitions compute instead of writing literally.
 export const pageTitle = (name: string) => 'Acme/Pages/' + name;
 
-export function listStates(operation: string) {
+export function listScenarios(operation: string) {
   return {
     default: {},
     empty: { requests: { ['POST /graphql ' + operation]: { body: { data: { items: [] } } } } },
@@ -616,7 +616,7 @@ export default definePreview({
   adapter: 'react',
   source: { entry: './${name}.tsx', export: '${name}' },
   inputs: { title: '${name}', tone: 'neutral' },
-  states: { default: {}, accent: { inputs: { tone: 'accent' } } },
+  scenarios: { default: {}, accent: { inputs: { tone: 'accent' } } },
 });
 `);
       previews.push({ id: `components/${name.toLowerCase()}`, file: `src/ui/${name}.workbench.tsx`, selector: `[data-component="${name}"]`, edit: { component: `src/ui/${name}.tsx`, module: `src/ui/${name}.tsx` } });

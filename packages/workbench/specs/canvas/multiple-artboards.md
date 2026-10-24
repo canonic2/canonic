@@ -51,7 +51,7 @@ resolve booted names or UDIDs without requiring a catalog.
 
 These APIs have no layout persistence or shared configuration schema. The production
 browser check drives existing controls and declared page artboards, and proves
-ordinary HTML and Button states remain single alternative views. The support
+ordinary HTML and Button scenarios remain single alternative views. The support
 harness also exercises injected ports. Verification covers instance/state/size isolation, two-space
 context, combined image geometry, handoff persistence, and disposal, plus the Node
 suite and strict TypeScript check. Actual native capture and Simulator input require
@@ -60,12 +60,12 @@ the appropriate host/devices; no performance benchmark has been performed.
 ## UI and integration scope
 
 Artboard management controls remain separate design work. The shipping integration
-opens one page's explicitly declared artboards together. States and Storybook
+opens one page's explicitly declared artboards together. Scenarios and Storybook
 stories remain alternatives. The `definePreview.artboards` map declares stable
-IDs, labels, dimensions and input overrides independently of `states`; the
-renderer receives `context.artboard`. Artboard inputs precede state overrides.
-Feedback declares five artboards and no variant states. Docs show one viewport.
-Ordinary single-view pages reuse one renderer across page, state and lens
+IDs, labels, dimensions and input overrides independently of `scenarios`; the
+renderer receives `context.artboard`. Artboard inputs precede scenario overrides.
+Feedback declares five artboards and no variant scenarios. Docs show one viewport.
+Ordinary single-view pages reuse one renderer across page, scenario and lens
 navigation. The required content-only renderer owns the retained preview sessions and Storybook
 channel; navigating it does not replace its iframe. Explicit artboard groups
 own independent renderers. While a group is visible, at most one ordinary
@@ -80,9 +80,9 @@ and sharing policy remain open.
 ## Purpose
 
 Review related views together: one page at laptop and mobile sizes,
-several states of a component, a design beside its implementation, or several
+several scenarios of a component, a design beside its implementation, or several
 pages in a flow. An artboard is an instance of a view, not a new page in
-the space's catalog. Two instances may point to the same page and state.
+the space's catalog. Two instances may point to the same page and scenario.
 Developers and designers decide what belongs together; these examples do not
 restrict the tool to a particular comparison workflow.
 
@@ -109,14 +109,14 @@ restrict the tool to a particular comparison workflow.
 ## Suggested phase 1 interactions
 
 - Start with the existing single-artboard experience. **Add artboard** opens
-  a page/state choice; a sidebar action can add a page directly.
+  a page/scenario choice; a sidebar action can add a page directly.
   Ordinary sidebar picks replace the selected artboard's view. Add is an
   explicit action so normal navigation does not accumulate artboards.
-- **Duplicate artboard** copies page, state, lens, and dimensions into a
+- **Duplicate artboard** copies page, scenario, lens, and dimensions into a
   fresh preview instance. Runtime form edits, scroll, and application state
   are not cloned. Control overrides and annotations need a decided copy
   policy before implementation; the recommended default is a fresh instance.
-- Each artboard has its own page, state/story, lens, size and dimensions,
+- Each artboard has its own page, scenario/story, lens, size and dimensions,
   controls, actions, loading/error state, and annotations. Its descriptor
   includes space identity and source/server resolution. Different spaces,
   content types, and repeated instances can coexist on the same canvas.
@@ -144,14 +144,14 @@ restrict the tool to a particular comparison workflow.
   and selects a predictable neighbor; closing the last returns to an empty
   canvas.
 - Keep annotations local to each artboard. Selection changes preserve them;
-  replacing its page/state clears them, while lens and size changes follow
+  replacing its page/scenario clears them, while lens and size changes follow
   the existing comparison behavior. Undo targets the selected artboard.
 - Screenshots capture all artboards, including ones outside the current camera
   viewport, with their labels and annotations. Capture geometry is independent
   of camera zoom. Suggested output: a composite image retaining their relative
   positions, plus per-artboard images in a handoff for legibility. Exact output
   format and large-canvas handling remain open.
-- Handoffs include every artboard's space, source, state/story, lens, size,
+- Handoffs include every artboard's space, source, scenario/story, lens, size,
   code pointers, and annotations, mapped to the corresponding captured image
   region or image. Keep stable IDs so repeated views remain distinguishable.
 - Agent context reports the whole canvas through the existing agent-context
@@ -174,7 +174,7 @@ restrict the tool to a particular comparison workflow.
 - Docs lenses in artboards follow
   [their contract](../pages/docs-pages.md#in-a-multiple-artboard-canvas): 1056 × 900 by
   default and resizable, scrolling inside the artboard, the canvas's zoom, and
-  per-artboard lens, state, and example.
+  per-artboard lens, scenario, and example.
 
 ## Proposed system and edge-case contracts
 
@@ -239,7 +239,7 @@ those proposals do not reopen established support-API limits.
 - Removing a space or losing its server leaves its artboards as named
   unavailable placeholders with Retry and Close; other spaces stay usable.
   Configuration refresh reconciles only artboards owned by that space.
-  Missing source/state/lens produces a named problem rather than silently
+  Missing source/scenario/lens produces a named problem rather than silently
   changing the reviewed view. Shared servers and stream producers stop only
   when their owner and remaining subscribers no longer need them.
 - Native producers may be shared by source and codec with separate artboard

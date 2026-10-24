@@ -25,13 +25,13 @@ fn list(value: Option<&Value>) -> &[Value] {
     value.and_then(Value::as_array).map_or(&[], Vec::as_slice)
 }
 
-/// A page's states, when there are at least two to choose between.
-fn states(raw: Option<&Value>) -> Option<Value> {
+/// A page's scenarios, when there are at least two to choose between.
+fn scenarios(raw: Option<&Value>) -> Option<Value> {
     let out: Vec<Value> = list(raw)
         .iter()
-        .filter_map(|state| {
-            let id = text(state.get("id"));
-            let label = text(state.get("label"));
+        .filter_map(|scenario| {
+            let id = text(scenario.get("id"));
+            let label = text(scenario.get("label"));
             let valid = !id.is_empty() && !label.is_empty() && manifest::is_key(&id);
             valid.then(|| json!({ "id": id, "label": label }))
         })
@@ -73,8 +73,8 @@ fn page(raw: &Value, where_: &str, space: &Space<'_>, problems: &mut Problems) -
     if !icon.is_empty() {
         item.insert("icon".to_owned(), json!(icon));
     }
-    if let Some(found) = states(raw.get("states")) {
-        item.insert("states".to_owned(), found);
+    if let Some(found) = scenarios(raw.get("scenarios")) {
+        item.insert("scenarios".to_owned(), found);
     }
     manifest::page_markdown(raw, &mut item, &at, problems);
     if let Some(lenses) = manifest::page_lenses(

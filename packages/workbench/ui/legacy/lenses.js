@@ -5,7 +5,7 @@
    browser.
 
    url         the implementation's base plus the page's path there — the
-               path for the current state when the page mapped one, else the
+               path for the current scenario when the page mapped one, else the
                one path it gave.
    storyUrl    a single story, alone: Storybook's iframe.html with the story's
                id and viewMode=story shows the story and none of Storybook's
@@ -14,12 +14,12 @@
    selectStory asks a loaded preview to switch stories without navigation.
    storybookEvent reads acknowledgements from that preview's channel.
    pick        which of a title's stories the address means: the one whose
-               state matches, else the first.
+               scenario matches, else the first.
    upstream    an address at the implementation's own origin rather than its
                proxy, for what people and agents read. */
 (function () {
-  function url(impl, ref, state) {
-    var path = (state && ref.states && ref.states[state]) || ref.path;
+  function url(impl, ref, scenario) {
+    var path = (scenario && ref.scenarios && ref.scenarios[scenario]) || ref.path;
     return (impl.base || '') + path;
   }
 
@@ -78,9 +78,9 @@
     } catch (error) { return address; }
   }
 
-  function pick(stories, state) {
+  function pick(stories, scenario) {
     for (var i = 0; i < stories.length; i++) {
-      if (stories[i].state === state) return stories[i];
+      if (stories[i].scenario === scenario) return stories[i];
     }
     return stories[0] || null;
   }

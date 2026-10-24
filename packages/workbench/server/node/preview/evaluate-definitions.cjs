@@ -32,7 +32,7 @@ async function evaluate(request) {
         }
       } else {
         local(evaluated.value.source?.entry);
-        for (const state of Object.values(evaluated.value.states || {})) local(state?.source?.entry);
+        for (const scenario of Object.values(evaluated.value.scenarios || {})) local(scenario?.source?.entry);
       }
       entries.push({ file: path.relative(root, file).split(path.sep).join('/'), ...projected,
         files: [...dependencies].map(file => path.relative(root, file)), cacheable: true });

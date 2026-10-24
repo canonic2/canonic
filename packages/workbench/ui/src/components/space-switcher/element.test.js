@@ -54,7 +54,9 @@ void test(
       const target = await browser.createTarget();
       await target.navigate(`http://127.0.0.1:${address.port}/${host}`);
       assert.deepEqual(
-        await target.evaluate(`performance.getEntriesByType('resource').map(entry=>new URL(entry.name).pathname).filter(name=>/components\\/(?:canvas|export-dialog|size-switcher|size-dialog|sizes-editor|actions-switch)\\//.test(name))`),
+        await target.evaluate(
+          `performance.getEntriesByType('resource').map(entry=>new URL(entry.name).pathname).filter(name=>/components\\/(?:canvas|export-dialog|size-switcher|size-dialog|sizes-editor|actions-switch)\\//.test(name))`,
+        ),
         [],
         'the sidebar loads no unrelated component families',
       );
@@ -87,8 +89,14 @@ void test(
       const end = trace.find((event) => event.name === 'closed-space-update-end');
       assert.ok(start && end, 'the browser recorded the closed update boundary');
       assert.deepEqual(
-        trace.filter((event) => event.name === 'Layout' && event.pid === start.pid &&
-          event.tid === start.tid && event.ts >= start.ts && event.ts < end.ts),
+        trace.filter(
+          (event) =>
+            event.name === 'Layout' &&
+            event.pid === start.pid &&
+            event.tid === start.tid &&
+            event.ts >= start.ts &&
+            event.ts < end.ts,
+        ),
         [],
         'closed component creation and inputs leave layout to the browser paint cycle',
       );

@@ -21,7 +21,7 @@ test('trace is opt-in and times static, space, docs and failed requests through 
       var running = await server.start({ root: root, trace: trace, capture: { close: function () {} },
         onLog: function (record) { events.push(record); } });
       try {
-        for (var pathname of ['/_workbench/', '/_workbench/config', '/card.md?lens=docs&state=default&wbTrace=acme-pick', '/_workbench/docs/highlight?page=card.md&lens=docs&wbTrace=acme-pick', '/missing']) {
+        for (var pathname of ['/_workbench/', '/_workbench/config', '/card.md?lens=docs&scenario=default&wbTrace=acme-pick', '/_workbench/docs/highlight?page=card.md&lens=docs&wbTrace=acme-pick', '/missing']) {
           var answer = await getRaw(running.port, pathname);
           assert.equal(!!answer.headers['server-timing'], trace, pathname);
           if (trace) {
@@ -35,7 +35,7 @@ test('trace is opt-in and times static, space, docs and failed requests through 
               assert.doesNotMatch(answer.headers['server-timing'], /highlight;dur=/);
               assert.equal(request.details.selection, 'acme-pick');
               assert.equal(request.details.lens, 'docs');
-              assert.equal(request.details.state, 'default');
+              assert.equal(request.details.scenario, 'default');
               assert.ok(answer.body.toString().includes('data-wb-code="ts"'));
               assert.ok(!answer.body.toString().includes('hljs-keyword'));
             }
@@ -67,13 +67,13 @@ test('traced docs bundles expose the startup barrier separately from requested b
   try {
     running = await server.start({ root: root, trace: true, eagerPreviews: true, capture: { close: function () {} },
       onLog: function (record) { events.push(record); } });
-    var answer = await getRaw(running.port, '/_workbench/docs/bundle?page=card.md&lens=html&wbTrace=acme-first&wbPage=card.md&wbState=default&wbLens=html');
+    var answer = await getRaw(running.port, '/_workbench/docs/bundle?page=card.md&lens=html&wbTrace=acme-first&wbPage=card.md&wbScenario=default&wbLens=html');
     assert.equal(answer.status, 200);
     assert.ok(JSON.parse(answer.body).module);
     var request = events.filter(function (entry) { return entry.event === 'preview.request.completed'; }).at(-1);
     assert.equal(request.details.selection, 'acme-first');
     assert.equal(request.details.page, 'card.md');
-    assert.equal(request.details.state, 'default');
+    assert.equal(request.details.scenario, 'default');
     for (var name of ['docs-ready', 'warm-wait', 'bundle']) {
       var measured = Number(new RegExp(name + ';dur=([0-9.]+)').exec(answer.headers['server-timing'])[1]);
       assert.ok(Math.abs(measured - request.details[name + 'Ms']) < 0.001, name + ' matches the log');
@@ -644,7 +644,7 @@ test('coalesces overlapping exports into one capture job', async function () {
   }
 });
 
-test('a current-page PDF prints only its selected state and actual viewport', async function () {
+test('a current-page PDF prints only its selected scenario and actual viewport', async function () {
   var made = project('http://localhost:6006');
   var PDFDocument = require('pdf-lib').PDFDocument;
   var printed = [];
@@ -899,7 +899,7 @@ test('lists a title’s stories from the Storybook’s index, with their code', 
   try {
     var answer = await get(running.port, server.STORIES_PATH + '?implementation=storybook&title=Components%2FButton');
     assert.strictEqual(answer.status, 200);
-    assert.deepStrictEqual(answer.body.stories.map(function (s) { return [s.id, s.name, s.state]; }), [
+    assert.deepStrictEqual(answer.body.stories.map(function (s) { return [s.id, s.name, s.scenario]; }), [
       ['components-button--default', 'Default', 'default'],
       ['components-button--icon-only', 'Icon Only', 'icon-only'],
     ]);
@@ -1061,7 +1061,7 @@ test('serves the canvas view to agents and announces itself to a Canonic project
   t.after(function () { fs.rmSync(root, { recursive: true, force: true }); });
 
   assert.equal(JSON.parse(fs.readFileSync(announced, 'utf8')).url, 'http://127.0.0.1:' + running.port + '/');
-  var view = { text: '- Page: Home — `home.html`\n- State: Default — `default`\n- Lens: Design', src: 'home.html' };
+  var view = { text: '- Page: Home — `home.html`\n- Scenario: Default — `default`\n- Lens: Design', src: 'home.html' };
   var posted = await post(running.port, '/_workbench/view', { client: 'tab', view: view });
   assert.equal(posted.status, 200);
   var read = await (await fetch('http://127.0.0.1:' + running.port + '/_workbench/view')).json();

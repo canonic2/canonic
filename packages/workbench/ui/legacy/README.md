@@ -67,10 +67,10 @@ pages explicitly start the same reusable page module once.
 
 `definePreview({ artboards: { id: { label, width, height, inputs } } })` declares
 1–32 children of one page. Width and height are integers from 1 to 8192; label
-and inputs are optional. Artboards are independent of `states`: state switching
-shows an alternative page state, and ordinary states or stories produce no
+and inputs are optional. Artboards are independent of `scenarios`: scenario switching
+shows an alternative page scenario, and ordinary scenarios or stories produce no
 extra artboards. The renderer receives `context.artboard`; artboard inputs are
-merged before state inputs. The native index delegates these definitions to
+merged before scenario inputs. The native index delegates these definitions to
 the shared evaluator so validation and metadata match compilation.
 
 See [the support-system record](../../specs/canvas/multiple-artboards.md) and
@@ -83,9 +83,9 @@ See [the support-system record](../../specs/canvas/multiple-artboards.md) and
 
 That is the whole of it. Pages need nothing added to preview well: the
 server puts one `preview-compat.js` bundle into served HTML and managed
-previews (including Astro). It bundles `keys.js`, `actions.js` and `states.js`:
-keyboard forwarding, action handling, and page states, to keep navigation
-inside Workbench and make `?state=…` mean something. A page opened straight
+previews (including Astro). It bundles `keys.js`, `actions.js` and `scenarios.js`:
+keyboard forwarding, action handling, and page scenarios, to keep navigation
+inside Workbench and make `?scenario=…` mean something. A page opened straight
 off the filesystem gets no injection, so it previews as authored and its links
 behave like links.
 
@@ -138,7 +138,7 @@ collections:                  # one entry in the collection list, in this order
               - laptop
               - mobile
               - resizable             # resizable artboard; skipped in reference exports
-            states:                    # optional; the first is the page as authored
+            scenarios:                 # optional; the first is the page as authored
               - id: default
                 label: Default
               - id: error
@@ -162,20 +162,20 @@ collections:                  # one entry in the collection list, in this order
 TypeScript previews in `.workbench.ts` and `.workbench.tsx` files are
 discovered without being listed. Each definition's title places it: the first
 segment is a collection (`Previews` when there is only one segment), middle
-segments one group, and the last the page's label; its states come from the
+segments one group, and the last the page's label; its scenarios come from the
 definition. `previews: false` turns discovery and execution off. Definitions
 run project code, so they need a trusted workspace. A handwritten page may
 name a definition as its `src`; it keeps its place in `collections` and takes its
-states from the definition. See [TypeScript previews](../../docs/workbench-previews.md)
+scenarios from the definition. See [TypeScript previews](../../docs/workbench-previews.md)
 for definitions, the HTML, React, Vue, Astro and React Native Web adapters,
 controls, plugins, and portable exports. The page index discovers them, and
 `workbench-server` compiles them, running project JavaScript in its Node
 evaluator.
 
-State ids are kebab-case — they travel in a URL and in a screenshot's filename.
+Scenario ids are kebab-case — they travel in a URL and in a screenshot's filename.
 Declaring one here is half of it: the page has to answer to the id, which
-`states.js` explains and does. A `src` can't hold `:`, `!`, or `~`, which mark the
-state, an example in the docs, and the lens in the address.
+`scenarios.js` explains and does. A `src` can't hold `:`, `!`, or `~`, which mark the
+scenario, an example in the docs, and the lens in the address.
 
 Docs are a lens. A page's Markdown, its `docs` file or a `.md` `src`, places
 examples with fenced `example <id>` blocks, and each `docs` implementation the
@@ -203,7 +203,7 @@ gets one 1440 × 900 reference. Duplicate dimensions are captured once. See the
 Use **Configure pages** in the top bar’s More menu to add or remove collections and
 pages, edit labels and source paths, and select supported sizes. Saving
 rewrites only the `collections` block in `workbench.yaml`; implementations and
-comments outside that block are preserved. Advanced state, implementation, and
+comments outside that block are preserved. Advanced scenario, implementation, and
 code mappings remain in the YAML and survive form edits.
 
 ### Implementations
@@ -245,8 +245,8 @@ collections:
       - label: Sign in
         src: pages/sign-in.html
         implementations:
-          staging: /          # url kind: one path for every state…
-          dev:                # …or a map of this page's state ids to paths
+          staging: /          # url kind: one path for every scenario…
+          dev:                # …or a map of this page's scenario ids to paths
             default: /
             error: /?error=1
         code:                 # implementation -> path or list of paths, relative to its root
@@ -280,7 +280,7 @@ their implementations' labels; a Markdown page has no authored lens.
 
 Storybook pages are the pages listed in `collections` with a Storybook lens:
 each maps to one exact title, read from Storybook's live `/index.json`, and
-its stories replace the design's states in that lens. `catalog` is
+its stories replace the design's scenarios in that lens. `catalog` is
 available only for `ios-simulator` implementations, as `true` or a map
 with a fallback `icon`.
 
@@ -538,16 +538,16 @@ implementation's own address; Workbench never switches to a stream.
 | `config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |
 | `server/node/yaml.js` | the part of YAML a config is written in |
 | `manifest.js` | the rules for implementations, lenses and code pointers — shared with the server |
-| `address.js` | reads and writes the hash: src, state, width, lens |
+| `address.js` | reads and writes the hash: src, scenario, width, lens |
 | `lenses.js` | where a lens points: a url implementation's page, a single story |
 | `describe.js` | names the element under a point — here, and inside pages the server's browser opens |
 | `workbench.js` | routing, frame loading, resizing, the lens switcher, stories, the source menu |
-| `reference.js` | copies the current page, state or story, and lens as a text reference |
+| `reference.js` | copies the current page, scenario or story, and lens as a text reference |
 | `top-bar.js` | builds the top bar’s More menu, and folds secondary actions into it before the bar’s regions collide |
 | `preview-host.html` + `preview-host.js` | the reusable document a TypeScript preview mounts into |
 | `preview-controls.js` + `preview-controls.css` | shared input controls, reset, actions and docs, also included in portable browser exports |
 | `zoom.js` | zooms and pans the artboard on the canvas, Figma-style, and labels it with its name and size |
-| `page-list.js` + `page-list.css` | the collection list and page list, laid out like Sketch's sidebar: collections, then the chosen one's groups, pages, and states, then search |
+| `page-list.js` + `page-list.css` | the collection list and page list, laid out like Sketch's sidebar: collections, then the chosen one's groups, pages, and scenarios, then search |
 | `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
 | `../src/components/space-switcher/` + `../src/components/space-mark/` | Web Components for the space switcher and its mark, with owned Shadow DOM styles |
 | `../src/theme/defaults.css` | shared shell theme defaults and direct webview host mappings for migrated controls |
@@ -563,7 +563,7 @@ implementation's own address; Workbench never switches to a stream.
 | `simulator.js` | the canvas side of the native window stream, and Simulator input |
 | `keys.js` | forwards editor shortcuts out of the workbench and its previews |
 | `actions.js` | the preview's half of the Actions toggle, and the hook a TypeScript preview uses to claim its links and forms |
-| `states.js` | the preview's half of page states |
+| `scenarios.js` | the preview's half of page scenarios |
 
 `page-list.js` is the list and nothing else: it is handed the config's collections and
 answers with a collection list and a page list that call back with the page you picked. Two
@@ -572,9 +572,9 @@ the Workbench sidebar in VS Code, where it stands in for a file tree. `page-list
 draws it in either place; it names no colours of its own, so `workbench.css`
 dresses it in the tool's grays and `sidebar.css` in the editor's theme.
 
-The `preview-compat.js` bundle, `keys.js`, `actions.js` and `states.js` joined
+The `preview-compat.js` bundle, `keys.js`, `actions.js` and `scenarios.js` joined
 by the server, runs inside
-previews served by Workbench. Its `actions.js` and `states.js` modules are
+previews served by Workbench. Its `actions.js` and `scenarios.js` modules are
 the reason those pages can apply shell state without project code: off
 `file://` the frame is a foreign origin the shell can't reach into, so both
 flags travel in the URL and the page applies them to itself. Nothing references
@@ -586,7 +586,7 @@ form and navigation handling would change how those apps behave.
 ## The address bar
 
 **Copy reference** in the top bar copies a short text reference for pasting into
-a conversation: the page's label and design file, its state (including the
+a conversation: the page's label and design file, its scenario (including the
 default) or Storybook story, and the active lens with its implementation URL.
 It uses the resolved selection and works in both the editor and the standalone
 browser. Copying does not capture a screenshot, include annotations, or send a handoff.
@@ -609,8 +609,8 @@ outside the hash. The export excludes installed dependencies, build output,
 secrets, tests, and source that is not reachable from the workbench. The button
 requires the local workbench server.
 
-The export also captures JPEGs for every declared design state and every
-TypeScript preview state, or through a Storybook lens every story of each
+The export also captures JPEGs for every declared design scenario and every
+TypeScript preview scenario, or through a Storybook lens every story of each
 mapped page, at each page's supported `sizes`, except Resizable.
 Fixed sizes use their dimensions and filled axes use 1440 wide or 900 tall.
 A page whose only size is Resizable gets one 1440 × 900 reference. Duplicate
@@ -658,18 +658,18 @@ at runtime. TypeScript source imports written with `.js` output extensions
 resolve to their `.ts` or `.tsx` files when the JavaScript file is absent.
 
 The selection lives in the hash, so a reload or a copied link lands on the same
-page, in the same state, at the same width, through the same lens:
+page, in the same scenario, at the same width, through the same lens:
 
 ```text
 #pages/sign-in.html:error@1512~staging
-   └ src        └ state └ width └ lens — an implementation's name
-                          fit, a device width, or resizable
+   └ src        └ scenario └ width └ lens — an implementation's name
+                             fit, a device width, or resizable
 ```
 
-The default state and the page's default lens are addressed by leaving them
+The default scenario and the page's default lens are addressed by leaving them
 out: its first docs lens, or its design when it has no docs. The design of a
 page with docs is `~design`, so `design` is reserved as an implementation name.
-Under a Storybook lens the state slot carries the story. The lens is the
+Under a Storybook lens the scenario slot carries the story. The lens is the
 canvas's to keep, like the width: a pick that names none keeps the one the lens
 switcher is on, and a page without it shows its default lens. Once the canvas has settled, the
 address is rewritten to say exactly what's showing.
@@ -694,7 +694,7 @@ It is also how the workbench is driven from outside. Embedded in an editor —
 the Workbench extension puts it in a tab with the page list in the sidebar —
 a picked page arrives as a `wb-go` message carrying that same hash, from the
 host and only the host, and the workbench answers every routing with a
-`wb-here` saying which page and state it settled on — and which lens, which
+`wb-here` saying which page and scenario it settled on — and which lens, which
 the editor's list reads past. An editor pick and a copied link are the same
 instruction, which is why there is only one of them to maintain, and
 `wb-here` is what keeps the sidebar's selection current when the canvas moves on its own —
@@ -721,5 +721,5 @@ spaces the extension lists in its page.
 
 On first loading a space without an addressed page, the canvas opens its first
 page in resolved collection/group order, skipping empty collections and groups.
-Imported implementation-only pages open their first named state. Explicit page
+Imported implementation-only pages open their first named scenario. Explicit page
 links and config refreshes keep their destination.

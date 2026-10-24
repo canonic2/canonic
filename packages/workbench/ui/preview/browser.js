@@ -33,8 +33,8 @@ export async function boot(preview, sources, adapter, environment, options) {
   let cleanup = [];
   let controller;
   let pending = Promise.resolve();
-  const initial = new URL(location.href).searchParams.get('state') || Object.keys(preview.states || {})[0] || 'default';
-  const states = preview.states && Object.keys(preview.states).length ? preview.states : { default: {} };
+  const initial = new URL(location.href).searchParams.get('scenario') || Object.keys(preview.scenarios || {})[0] || 'default';
+  const scenarios = preview.scenarios && Object.keys(preview.scenarios).length ? preview.scenarios : { default: {} };
   const artboardId = options?.artboard || new URL(location.href).searchParams.get('artboard');
   const artboard = artboardId ? preview.artboards?.[artboardId] : null;
   if (artboardId && !artboard) throw new Error('Unknown preview artboard: ' + artboardId);
@@ -76,7 +76,7 @@ export async function boot(preview, sources, adapter, environment, options) {
     try {
       fetch('/_workbench/log', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level: 'info', event: 'preview.browser.phase',
-          details: { id: preview.id, owner: 'preview-runtime', page: new URL(location.href).searchParams.get('wbPage') || decodeURIComponent(location.pathname.slice(1)), selection: trace, lens: new URL(location.href).searchParams.get('wbLens') || 'design', state: selected, phase, elapsedMs: now - loadStarted,
+          details: { id: preview.id, owner: 'preview-runtime', page: new URL(location.href).searchParams.get('wbPage') || decodeURIComponent(location.pathname.slice(1)), selection: trace, lens: new URL(location.href).searchParams.get('wbLens') || 'design', scenario: selected, phase, elapsedMs: now - loadStarted,
             phaseMs: now - phaseStarted, ...details } }), keepalive: true }).catch(() => {});
     } catch (_) { /* Loading must not depend on diagnostics. */ }
     phaseStarted = now;
@@ -115,8 +115,8 @@ export async function boot(preview, sources, adapter, environment, options) {
   }
   function navigate(rendered, to) {
     if (rendered.signal.aborted || window.wbPreviewActions?.on?.() === false) return;
-    const target = typeof to === 'string' ? { preview: to, state: null } : { preview: to?.preview || preview.id, state: to?.state || null };
-    if (parent === window) rendered.action('navigate', target.preview + (target.state ? '?state=' + target.state : ''));
+    const target = typeof to === 'string' ? { preview: to, scenario: null } : { preview: to?.preview || preview.id, scenario: to?.scenario || null };
+    if (parent === window) rendered.action('navigate', target.preview + (target.scenario ? '?scenario=' + target.scenario : ''));
     else report('navigate', target);
   }
   function follow(href, kind, element) {
@@ -156,23 +156,23 @@ export async function boot(preview, sources, adapter, environment, options) {
     window.__workbenchReady = false;
     await dispose().catch(() => {});
     canvas.replaceChildren(Object.assign(document.createElement('pre'), { textContent: window.__workbenchError }));
-    report('error', { state: selected, message: String(error?.message || error) });
+    report('error', { scenario: selected, message: String(error?.message || error) });
   }
-  async function render(state, overrides = {}) {
+  async function render(scenario, overrides = {}) {
     if (stopped) return;
-    if (!Object.prototype.hasOwnProperty.call(states, state)) throw new Error('Unknown preview state: ' + state);
+    if (!Object.prototype.hasOwnProperty.call(scenarios, scenario)) throw new Error('Unknown preview scenario: ' + scenario);
     window.__workbenchReady = false;
     window.__workbenchError = null;
     loadStarted = phaseStarted = Date.now();
     diagnostic('started');
     await dispose();
     canvas.replaceChildren();
-    selected = state;
+    selected = scenario;
     lastOverrides = overrides;
-    const spec = states[state];
+    const spec = scenarios[scenario];
     controller = new AbortController();
     const rendered = context = {
-      id: preview.id, state, ...(artboardId ? { artboard: artboardId } : {}),
+      id: preview.id, scenario, ...(artboardId ? { artboard: artboardId } : {}),
       inputs: structuredClone({ ...preview.inputs, ...artboard?.inputs, ...spec.inputs, ...overrides }),
       fixtures: structuredClone({ ...preview.fixtures, ...spec.fixtures }),
       globals: structuredClone({ ...preview.globals, ...spec.globals }),
@@ -189,13 +189,13 @@ export async function boot(preview, sources, adapter, environment, options) {
         const entry = { name, values: values.map(text) };
         actions.push(entry);
         actions = actions.slice(-30);
-        report('action', { ...entry, state });
+        report('action', { ...entry, scenario });
       },
       navigate: to => navigate(rendered, to),
     };
     window.workbench = context;
     window.__workbenchRequests?.activate([spec.requests, preview.requests], rendered, rendered.action, rendered.signal);
-    document.documentElement.dataset.wbState = state;
+    document.documentElement.dataset.wbScenario = scenario;
     for (const setup of [environment?.setup, preview.setup, spec.setup]) {
       if (setup) {
         const stop = await setup(context);
@@ -203,9 +203,9 @@ export async function boot(preview, sources, adapter, environment, options) {
         if (typeof stop === 'function') cleanup.push(stop);
       }
     }
-    const source = Object.prototype.hasOwnProperty.call(sources, state) ? sources[state] : sources.default;
+    const source = Object.prototype.hasOwnProperty.call(sources, scenario) ? sources[scenario] : sources.default;
     diagnostic('setup.completed');
-    if (source === undefined) throw new Error('The selected source export does not exist for ' + preview.id + ' — ' + state);
+    if (source === undefined) throw new Error('The selected source export does not exist for ' + preview.id + ' — ' + scenario);
     const stop = await adapter.mount(canvas, source, context, environment);
     if (rendered.signal.aborted) { if (typeof stop === 'function') await stop(); return; }
     if (typeof stop === 'function') cleanup.push(stop);
@@ -243,28 +243,28 @@ export async function boot(preview, sources, adapter, environment, options) {
     diagnostic('images.completed', { pendingImages, deferredImages: document.images.length - images.length, stillPending: images.filter(image => !image.complete).length });
     window.__workbenchReady = true;
     diagnostic('ready');
-    report('ready', { state, inputs: context.inputs, controls: preview.controls || {}, docs: preview.docs || '', actions });
+    report('ready', { scenario, inputs: context.inputs, controls: preview.controls || {}, docs: preview.docs || '', actions });
   }
   listen('message', event => {
     if (stopped) return;
     if (event.source !== parent || event.origin !== location.origin || event.data?.type !== 'workbench-preview-command') return;
     const data = event.data;
     if (data.command === 'inspect') {
-      if (context && window.__workbenchReady) report('ready', { state: selected, inputs: context.inputs, controls: preview.controls || {}, docs: preview.docs || '', actions });
+      if (context && window.__workbenchReady) report('ready', { scenario: selected, inputs: context.inputs, controls: preview.controls || {}, docs: preview.docs || '', actions });
       return;
     }
     pending = pending.then(() => {
       if (data.command === 'reset') actions = [];
-      // A state command comes from the address: no state there is the first one.
-      if (data.command === 'state') return render(data.state || Object.keys(states)[0], {});
-      return render(data.state || selected, data.inputs || {});
+      // A scenario command comes from the address: no scenario there is the first one.
+      if (data.command === 'scenario') return render(data.scenario || Object.keys(scenarios)[0], {});
+      return render(data.scenario || selected, data.inputs || {});
     }).catch(fail);
   });
   listen('pagehide', () => { void shutdown().catch(() => {}); });
   listen('error', event => { if (event.message) context?.error(event.error || new Error(event.message)); });
   listen('unhandledrejection', event => context?.error(event.reason));
   // A hot update to a source that does not refresh itself re-renders the
-  // selected state with its inputs, without reloading the document. Edits
+  // selected scenario with its inputs, without reloading the document. Edits
   // arrive pushed from the server; nothing here polls.
   window.__workbenchRerender = next => {
     if (stopped) return;

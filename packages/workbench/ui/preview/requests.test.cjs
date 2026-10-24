@@ -9,7 +9,7 @@ async function mocked(levels, options = {}) {
   const { mockedFetch, requestMocks } = await load();
   const log = [];
   const network = [];
-  const active = { mocks: requestMocks(levels), context: { state: 'default', fixtures: { customers: ['Ada'] } },
+  const active = { mocks: requestMocks(levels), context: { scenario: 'default', fixtures: { customers: ['Ada'] } },
     log: (name, ...values) => log.push([name, ...values]), base: 'http://127.0.0.1/', signal: options.signal };
   const fetch = mockedFetch(request => { network.push(request.url); return Promise.resolve(new Response('live')); }, () => active,
     url => url.pathname.startsWith('/_workbench/'));
@@ -28,15 +28,15 @@ test('request keys match method, path wildcards, origin, query, and GraphQL oper
   assert.throws(() => parseKey('api/customers'), /must be/);
 });
 
-test('mocks answer JSON, prefer the state, read the context, and keep reads out of the log', async () => {
+test('mocks answer JSON, prefer the scenario, read the context, and keep reads out of the log', async () => {
   const { fetch, log, network } = await mocked([
     { 'GET /api/customers': { body: [] } },
-    { 'GET /api/customers': { body: ['Grace'] }, 'GET /api/me': (request, context) => ({ body: { state: context.state, query: request.query } }) },
+    { 'GET /api/customers': { body: ['Grace'] }, 'GET /api/me': (request, context) => ({ body: { scenario: context.scenario, query: request.query } }) },
   ]);
   const response = await fetch('/api/customers');
   assert.equal(response.headers.get('content-type'), 'application/json');
   assert.deepEqual(await response.json(), []);
-  assert.deepEqual(await (await fetch('https://api.example.com/api/me?team=acme')).json(), { state: 'default', query: { team: 'acme' } });
+  assert.deepEqual(await (await fetch('https://api.example.com/api/me?team=acme')).json(), { scenario: 'default', query: { team: 'acme' } });
   assert.deepEqual(log, []);
   assert.deepEqual(network, []);
 });

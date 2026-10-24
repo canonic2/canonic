@@ -57,7 +57,7 @@ function load(options) {
 function design() {
   return {
     src: 'pages/sign-in.html', item: { label: 'Sign in' },
-    state: null, lens: null, story: null, url: 'http://localhost:3579/pages/sign-in.html',
+    scenario: null, lens: null, story: null, url: 'http://localhost:3579/pages/sign-in.html',
   };
 }
 
@@ -80,21 +80,21 @@ test('copies a design reference with an explicit default, without capture or han
   view.code = ['/example/source.js'];
   assert.equal(load().text(view), [
     '- Page: Sign in — `pages/sign-in.html`',
-    '- State: Default — `default`',
+    '- Scenario: Default — `default`',
     '- Lens: Design',
   ].join('\n'));
 });
 
-test('uses the declared default and selected state names and ids', function () {
+test('uses the declared default and selected scenario names and ids', function () {
   var view = design();
-  view.item.states = [{ id: 'empty', label: 'Empty form' }, { id: 'error', label: 'Wrong password' }];
+  view.item.scenarios = [{ id: 'empty', label: 'Empty form' }, { id: 'error', label: 'Wrong password' }];
   var format = load().text;
-  assert.match(format(view), /State: Empty form — `empty`/);
-  view.state = 'error';
-  assert.match(format(view), /State: Wrong password — `error`/);
+  assert.match(format(view), /Scenario: Empty form — `empty`/);
+  view.scenario = 'error';
+  assert.match(format(view), /Scenario: Wrong password — `error`/);
 });
 
-test('names the resolved story and lens instead of a design state', function () {
+test('names the resolved story and lens instead of a design scenario', function () {
   var view = design();
   view.lens = { key: 'storybook', label: 'Storybook', kind: 'storybook' };
   view.story = { name: 'Icon Only', id: 'button--icon-only' };
@@ -102,22 +102,22 @@ test('names the resolved story and lens instead of a design state', function () 
   var result = load().text(view);
   assert.match(result, /Story: Icon Only — `button--icon-only`/);
   assert.match(result, /Lens: Storybook — `storybook` — `http:\/\/localhost:6006\/iframe.html\?id=button--icon-only&viewMode=story`/);
-  assert.doesNotMatch(result, /State:/);
+  assert.doesNotMatch(result, /Scenario:/);
 });
 
-test('reports mapped URL states and does not carry design states into an unmapped lens', function () {
+test('reports mapped URL scenarios and does not carry design scenarios into an unmapped lens', function () {
   var view = design();
   view.lens = { key: 'dev', label: 'Development', kind: 'url' };
-  view.state = 'error';
-  view.item.states = [{ id: 'empty', label: 'Empty form' }, { id: 'error', label: 'Wrong password' }];
-  view.item.implementations = { dev: { states: { empty: '/', error: '/?error=1' } } };
+  view.scenario = 'error';
+  view.item.scenarios = [{ id: 'empty', label: 'Empty form' }, { id: 'error', label: 'Wrong password' }];
+  view.item.implementations = { dev: { scenarios: { empty: '/', error: '/?error=1' } } };
   view.url = 'http://localhost:3000/?error=1';
   var format = load().text;
-  assert.match(format(view), /State: Wrong password — `error`/);
+  assert.match(format(view), /Scenario: Wrong password — `error`/);
   assert.match(format(view), /Lens: Development — `dev` — `http:\/\/localhost:3000\/\?error=1`/);
   view.item.implementations.dev = { path: '/' };
   view.url = 'http://localhost:3000/';
-  assert.match(format(view), /State: Default — `default`/);
+  assert.match(format(view), /Scenario: Default — `default`/);
 });
 
 test('does not copy a missing or unresolved selection', async function () {

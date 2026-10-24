@@ -41,7 +41,7 @@ export async function mountExamples(root, bundle, options) {
   function context(id, figure) {
     return {
       id,
-      state: options.state,
+      scenario: options.scenario,
       inputs: {},
       fixtures: {},
       globals: {},

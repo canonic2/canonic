@@ -2,12 +2,12 @@ use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 fn sign_in() -> Value {
-    json!({ "text": "- Page: Sign in — `pages/sign-in.html`\n- State: Error — `error`\n- Lens: Design",
-        "src": "pages/sign-in.html", "state": "error" })
+    json!({ "text": "- Page: Sign in — `pages/sign-in.html`\n- Scenario: Error — `error`\n- Lens: Design",
+        "src": "pages/sign-in.html", "scenario": "error" })
 }
 
 fn home() -> Value {
-    json!({ "text": "- Page: Home — `pages/home.html`\n- State: Default — `default`\n- Lens: Design",
+    json!({ "text": "- Page: Home — `pages/home.html`\n- Scenario: Default — `default`\n- Lens: Design",
         "src": "pages/home.html" })
 }
 
@@ -94,11 +94,11 @@ fn follows_the_canvas_changed_most_recently_and_keeps_its_change_time_across_hea
 
     time.tick(1000);
     let mut locked = sign_in();
-    locked["state"] = json!("locked");
+    locked["scenario"] = json!("locked");
     shown
         .report(&json!({ "client": "tab", "view": locked }))
         .expect("reported");
-    assert_eq!(shown.current()["view"]["state"], json!("locked"));
+    assert_eq!(shown.current()["view"]["scenario"], json!("locked"));
     assert_eq!(
         shown.current()["changedAt"],
         json!("2026-10-03T12:00:03.000Z")
@@ -148,7 +148,7 @@ fn keeps_only_the_reference_and_its_ids() {
     let shown = AgentView::new(&std::env::temp_dir(), None);
     let mut noisy = home();
     noisy["html"] = json!("<p>secret</p>");
-    noisy["state"] = json!(5);
+    noisy["scenario"] = json!(5);
     shown
         .report(&json!({ "client": "tab", "view": noisy }))
         .expect("reported");
@@ -179,7 +179,7 @@ fn canvas_report(selected: &Value) -> Value {
         "artboards": [
             { "id": "a", "space": { "id": "s", "name": "Acme", "extra": 1 }, "src": "pages/home.html",
               "size": { "width": 393, "height": 852 }, "lens": "dev", "html": "<p>dropped</p>" },
-            { "id": "b", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "state": "error",
+            { "id": "b", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "scenario": "error",
               "artboard": "wide", "size": { "width": 1440, "height": 900 }, "status": "ready" },
         ],
     })
@@ -195,9 +195,9 @@ fn a_canvas_report_keeps_each_artboard_without_truncating() {
         json!({
             "text": "- Canvas: two artboards",
             "artboards": [
-                { "id": "a", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "state": null,
+                { "id": "a", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "scenario": null,
                   "lens": "dev", "size": { "width": 393, "height": 852 }, "status": "loading" },
-                { "id": "b", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "state": "error",
+                { "id": "b", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "scenario": "error",
                   "artboard": "wide", "lens": null, "size": { "width": 1440, "height": 900 }, "status": "ready" },
             ],
             "version": 2, "canvas": "acme", "selected": "b",

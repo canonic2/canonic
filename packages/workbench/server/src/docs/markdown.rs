@@ -80,7 +80,7 @@ static EMPHASIS: LazyLock<Regex> = LazyLock::new(|| {
 static PUNCTUATION: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[^\p{L}\p{N}\s_-]").expect("punctuation"));
 
-/// Example IDs are kebab-case, like state IDs.
+/// Example IDs are kebab-case, like scenario IDs.
 pub(crate) fn is_example_id(value: &str) -> bool {
     KEBAB.is_match(value)
 }

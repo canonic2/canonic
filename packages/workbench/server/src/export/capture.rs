@@ -342,7 +342,7 @@ pub(super) mod tests {
     fn story(id: &str, size: &str) -> Reference {
         Reference {
             page: id.into(),
-            state: "default".into(),
+            scenario: "default".into(),
             variant: format!("default-{size}"),
             label: id.into(),
             size: size.into(),

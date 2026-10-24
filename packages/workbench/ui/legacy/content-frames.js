@@ -130,7 +130,7 @@
   function sessionKey(url) {
     var lens = view && view.lens;
     var identity = new URL(url, location.href);
-    ['wbTrace', 'wbPage', 'wbState', 'wbLens'].forEach(function (key) { identity.searchParams.delete(key); });
+    ['wbTrace', 'wbPage', 'wbScenario', 'wbLens'].forEach(function (key) { identity.searchParams.delete(key); });
     return lens && lens.kind === 'storybook' ? 'storybook|' + lens.key + '|' + lens.url :
       (lens ? lens.key : 'design') + '|' + identity.href;
   }
@@ -250,7 +250,7 @@
     }
     // The warm document: the visible warm host changes page in place, as an
     // application's router would, keeping loaded dependencies, stylesheets and
-    // fonts. A new state of the same preview re-renders without reloading it.
+    // fonts. A new scenario of the same preview re-renders without reloading it.
     var kind = warmKind(src);
     if (!force && frame.wbWarmHost && frame.wbWarmKind === 'preview' && frame.wbRequestedUrl && frameReady && kind === 'preview') {
       var showing = new URL(frame.wbRequestedUrl, location.href);
@@ -266,7 +266,7 @@
         frame.wbLoadSequence = (frame.wbLoadSequence || 0) + 1;
         host.history.replaceState(host.history.state, '', next.href);
         host.__workbenchReady = false;
-        host.postMessage({ type: 'workbench-preview-command', command: 'state', state: next.searchParams.get('state') || undefined }, location.origin);
+        host.postMessage({ type: 'workbench-preview-command', command: 'scenario', scenario: next.searchParams.get('scenario') || undefined }, location.origin);
         frameLoaded({ currentTarget: frame, warm: true });
         return;
       }

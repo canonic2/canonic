@@ -564,14 +564,14 @@ impl Previews {
         let directory = file.parent().unwrap_or(&self.root);
         let base = &definition["source"];
         let mut sources = vec![];
-        let mut states = vec![("default".to_owned(), json!({}))];
-        if let Some(map) = definition["states"].as_object() {
-            states.extend(
+        let mut scenarios = vec![("default".to_owned(), json!({}))];
+        if let Some(map) = definition["scenarios"].as_object() {
+            scenarios.extend(
                 map.iter()
-                    .map(|(name, state)| (name.clone(), state.clone())),
+                    .map(|(name, scenario)| (name.clone(), scenario.clone())),
             );
         }
-        for (state, spec) in states {
+        for (scenario, spec) in scenarios {
             let source = if spec["source"].is_object() {
                 &spec["source"]
             } else {
@@ -579,7 +579,7 @@ impl Previews {
             };
             let entry = source["entry"].as_str().context("source entry")?;
             sources.push(SourceImport::Module {
-                state,
+                scenario,
                 file: text(&crate::paths::resolve(directory, entry)),
                 export_name: source["export"].as_str().unwrap_or("default").to_owned(),
             });
@@ -763,7 +763,7 @@ impl Previews {
     pub(crate) async fn render(
         &self,
         relative: &str,
-        state: &str,
+        scenario: &str,
         inputs: &Value,
     ) -> Result<Value> {
         self.warmed().await;
@@ -773,8 +773,8 @@ impl Previews {
         if !project::built_in_astro(&project.config, adapter) {
             bail!("This preview does not use the built-in Astro adapter.");
         }
-        let variant = super::astro::render_variant(self, relative, state, inputs).await?;
-        let name = digest(&format!("{relative}\0{state}\0{inputs}"));
+        let variant = super::astro::render_variant(self, relative, scenario, inputs).await?;
+        let name = digest(&format!("{relative}\0{scenario}\0{inputs}"));
         let html = variant.html.clone();
         let mut variants = self.variants.lock().expect("variants lock");
         variants.retain(|(existing, _)| *existing != name);

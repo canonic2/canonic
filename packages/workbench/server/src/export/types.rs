@@ -103,12 +103,12 @@ impl ExportView {
     }
 }
 
-/// One reference screenshot the export plans: a page in a state at a size.
+/// One reference screenshot the export plans: a page in a scenario at a size.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub(crate) struct Reference {
     pub(crate) page: String,
-    pub(crate) state: String,
+    pub(crate) scenario: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) artboard: Option<String>,
     pub(crate) variant: String,
@@ -129,7 +129,7 @@ pub(crate) struct Reference {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Screenshot {
     pub(crate) page: String,
-    pub(crate) state: String,
+    pub(crate) scenario: String,
     pub(crate) variant: String,
     pub(crate) label: String,
     pub(crate) size: String,
@@ -143,7 +143,7 @@ impl Screenshot {
     pub(crate) fn of(reference: &Reference, body: Vec<u8>) -> Self {
         Self {
             page: reference.page.clone(),
-            state: reference.state.clone(),
+            scenario: reference.scenario.clone(),
             variant: reference.variant.clone(),
             label: reference.label.clone(),
             size: reference.size.clone(),
@@ -162,7 +162,7 @@ pub(crate) struct PortablePreview {
     pub(crate) id: String,
     pub(crate) file: String,
     pub(crate) directory: String,
-    pub(crate) states: Vec<Value>,
+    pub(crate) scenarios: Vec<Value>,
     /// The local files the preview was built from, absolute.
     pub(crate) files: Vec<String>,
     pub(crate) packages: Vec<PortablePackage>,
@@ -221,7 +221,7 @@ pub(crate) struct PageEntry {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PageScreenshot {
-    pub(crate) state: Option<String>,
+    pub(crate) scenario: Option<String>,
     pub(crate) label: String,
     pub(crate) size: String,
     pub(crate) path: String,
@@ -253,7 +253,7 @@ pub(crate) struct BrowserPreview {
     pub(crate) id: String,
     pub(crate) source: String,
     pub(crate) entry: String,
-    pub(crate) states: Vec<Value>,
+    pub(crate) scenarios: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]

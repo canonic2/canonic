@@ -1,7 +1,7 @@
 # TypeScript Workbench previews
 
 A Workbench preview renders a component or page from a project's own source,
-in named states, from a `.workbench.ts` or `.workbench.tsx` definition. The
+in named scenarios, from a `.workbench.ts` or `.workbench.tsx` definition. The
 user guide is [Workbench previews](../../docs/workbench-previews.md); this spec
 records the contract, how it is built, and what is still open. See
 [compiler.cjs](../../server/node/preview/compiler.cjs), [compiler.rs](../../server/src/compiler.rs),
@@ -36,7 +36,7 @@ project-registered adapters. They do not run a project's application server,
 - Source compiles in the Workbench server's compiler, with project code in
   the Node evaluator ([server processes](#server-processes-lifecycle-and-trust)).
   Live and portable output share one
-  adapter and state lifecycle, and that lifecycle is shared by every built-in
+  adapter and render lifecycle, and that lifecycle is shared by every built-in
   and custom adapter.
 - Managed previews use retained iframe sessions and become ready only
   after mounting, fonts, and visible images.
@@ -104,20 +104,20 @@ an artboard, even while loading or displaying errors.
   position and metadata; later pages append in source order. Matching names
   in different collections remain separate, as do names with different casing.
 - An authored page whose `src` is a definition file keeps its place and
-  label and takes the definition's states and icon unless it has an explicit
+  label and takes the definition's scenarios and icon unless it has an explicit
   authored icon; the imported duplicate is dropped.
   The file must still match discovery. Authored-page size precedence follows
   the [sizes contract](../canvas/sizes.md#typescript-previews).
 - **Requirement:** the sidebar and canvas update when a
   definition file matching discovery is added, removed, renamed, or changes
-  its title, states, or sizes, without **Workbench: Refresh Pages**; see
+  its title, scenarios, or sizes, without **Workbench: Refresh Pages**; see
   [the extension's refresh contract](../integrations/vscode-extension.md#refresh).
   In VS Code, the [server](../system/server.md#the-resident-index-and-watcher) watches
   the space and the extension runs the same rebuild as a `workbench.yaml`
   edit when the listed definitions change. **Gap:** the standalone canvas in
   a browser gets no such notice and needs a reload.
 
-### Open, states, controls, and actions
+### Open, scenarios, controls, and actions
 
 For the [multiple-artboard support system](../canvas/multiple-artboards.md), each instance
 owns its renderer, requested/settled view, controls, action log, and pending-load
@@ -131,8 +131,8 @@ applies independently within each isolated artboard.
 - A discovered page's design lens is the preview itself. Its customizable
   label defaults to **Preview**; `previews.lensLabel` sets the discovery
   fallback and an explicit page's `lensLabel` overrides it under the
-  [lens contract](../canvas/lenses.md). Its address is the definition path; `?state=<id>` selects a
-  state and the first state is the default. An unknown state renders an error.
+  [lens contract](../canvas/lenses.md). Its address is the definition path; `?scenario=<id>` selects a
+  scenario and the first scenario is the default. An unknown scenario renders an error.
 - Same-origin `.workbench.ts(x)` addresses load into a warm preview host
   rather than navigating the iframe. A newer load supersedes a queued one, and
   page-level listeners, timers, and animation frames remain owned by that
@@ -148,8 +148,8 @@ applies independently within each isolated artboard.
   later return; a failed mount does not discard import-time nodes.
 - When ready, the preview reports its inputs, controls, docs, and last 30
   actions to the canvas, which shows **Preview controls**: one field per
-  control (`text`, `number`, `boolean`, `select`, `json`), **Reset state**,
-  **Actions**, and **Documentation**. Edits re-render the current state with
+  control (`text`, `number`, `boolean`, `select`, `json`), **Reset scenario**,
+  **Actions**, and **Documentation**. Edits re-render the current scenario with
   input overrides and last until reset, reload, source revision change, or session eviction;
   they never write files or affect references or exports.
 - Saving the definition or any file in its dependency graph updates the open
@@ -161,12 +161,12 @@ applies independently within each isolated artboard.
 
 ### Links and navigation
 
-- `links` maps addresses to targets: a preview ID, `{ preview, state }`, or
-  `{ state }` for the same preview. Validation rejects a non-map and targets
+- `links` maps addresses to targets: a preview ID, `{ preview, scenario }`, or
+  `{ scenario }` for the same preview. Validation rejects a non-map and targets
   that are neither; the catalog carries each target normalized to
-  `{ preview, state? }`. A target naming an unknown preview or state is a
+  `{ preview, scenario? }`. A target naming an unknown preview or scenario is a
   problem (`<file>: link <href> names unknown Workbench preview “<id>”.`, or
-  `… names unknown state “<state>” of <id>.`); the other previews still load.
+  `… names unknown scenario “<scenario>” of <id>.`); the other previews still load.
 - While a preview is mounted, the runtime ([browser.js](../../ui/preview/browser.js))
   registers `wbPreviewActions.follow`, which [actions.js](../../ui/legacy/actions.js)
   calls for every link click and form submit with actions on, after in-page
@@ -174,15 +174,15 @@ applies independently within each isolated artboard.
   the key, both resolved against `document.baseURI`, have the same origin,
   path, and query; the fragment is ignored.
 - A match posts `{ type: 'workbench-preview', event: 'navigate', id, preview,
-  state }` to the parent. The canvas finds the page whose resolved preview
-  has that ID, reveals it, and routes to it with the state (unknown states fall
+  scenario }` to the parent. The canvas finds the page whose resolved preview
+  has that ID, reveals it, and routes to it with the scenario (unknown scenarios fall
   back to the default); an ID with no page is ignored. The portable viewer
   selects the preview from its catalog.
 - No match: the click or submit is prevented and logged through the context's
   `action`: `navigate` with the raw `href`, or `submit` with the raw `action`
   (omitted when empty) and the form's fields as an object (files by name).
 - `context.navigate(to)` takes the same targets, does nothing with actions
-  off, and without a parent frame logs `navigate` with `<id>[?state=<state>]`.
+  off, and without a parent frame logs `navigate` with `<id>[?scenario=<scenario>]`.
 - A portable page has no `actions.js`; the runtime installs its own capture
   listeners and behaves as actions on, leaving fragment links to the browser.
 - With actions off, `actions.js` stops links and forms before the runtime sees
@@ -196,10 +196,10 @@ applies independently within each isolated artboard.
   the page's own network calls, and `aliases` for modules. Projects can run
   any code in environments and hooks; `requests` is the built-in tool for the
   common case.
-- `requests` (preview and state) maps keys `[METHOD] /path [Operation]` or a
+- `requests` (preview and scenario) maps keys `[METHOD] /path [Operation]` or a
   full URL to a response object or a function `(request, context)`.
   Validation checks key shape and value type. Matching
-  ([requests.js](../../ui/preview/requests.js)): the state's map before the
+  ([requests.js](../../ui/preview/requests.js)): the scenario's map before the
   preview's, declaration order within each; a bare path matches any origin;
   `*` matches any characters; a key's query parameters must be present with
   those values; the operation is the body's `operationName`, or the name in
@@ -216,7 +216,7 @@ applies independently within each isolated artboard.
   signal aborts; `failed` rejects with a `TypeError` (XHR: `error` event);
   `passthrough` sends the original request. The Actions switch does not
   affect requests.
-- Astro: the compiler swaps `globalThis.fetch` for the state's maps around
+- Astro: the compiler swaps `globalThis.fetch` for the scenario's maps around
   each server render, relative URLs resolving against `http://localhost/`,
   with a 10-second abort. Unmatched requests are not logged there.
 - `workbench.config.ts` `environment` (a path from the project root, inside
@@ -230,8 +230,8 @@ applies independently within each isolated artboard.
 
 - An implementation with `kind: workbench` has no `base` or `url`; `start`,
   `catalog`, and a `root` other than `.` are reported. A page maps it to a preview
-  ID. The lens loads the definition path, and a design state loads the preview
-  state with the same ID; other states show the preview's first state. The
+  ID. The lens loads the definition path, and a design scenario loads the preview
+  scenario with the same ID; other scenarios show the preview's first scenario. The
   preview's source is added to the page's code pointers for **Open the
   source** and handoffs.
 - An unknown ID is reported as `<label>: unknown Workbench preview “<id>”`.
@@ -245,8 +245,8 @@ after 8 seconds.
 
 ### Export
 
-The [design-system export](../review/export.md) plans one reference per preview state at
-the page's sizes, loading the definition URL with `?state=`. After
+The [design-system export](../review/export.md) plans one reference per preview scenario at
+the page's sizes, loading the definition URL with `?scenario=`. After
 references, it asks the compiler for the portable build and adds the `browser/`
 package and catalog. A preview that fails to build is a warning. **Requirement:** a portable build that fails entirely, including a
 compiler or evaluator failure, is also a warning, and the export still delivers its sources
@@ -260,12 +260,12 @@ reached through `node_modules` are listed by name and version.
 - The portable build writes each preview's production bundle, an interactive
   viewer (`index.html`, `viewer.js`, `viewer.css`), the canvas's own
   `preview-controls.js`/`.css`, and `workbench.json` (version 1, name,
-  previews, warnings). The viewer offers search, State and Size menus,
+  previews, warnings). The viewer offers search, Scenario and Size menus,
   resizable dimensions, Reload, the shared controls, and **Open preview**;
   its address keeps the selection (`size` is a resolved size key, with `width`
   and `height` when that size is resizable). The menu uses the selected page's
   resolved sizes, including configured and page-owned keys.
-- Astro previews carry every authored state pre-rendered. Their controls are
+- Astro previews carry every authored scenario pre-rendered. Their controls are
   removed and a note is appended to their docs, since input edits need a live
   render.
 - `workbench-server` ships in the extension with `init`, `list`, `check` and
@@ -283,20 +283,20 @@ reached through `node_modules` are listed by name and version.
 ### Definition contract
 
 - `id`: kebab-case segments separated by `/`, unique per project. `adapter`:
-  a kebab-case name. `source.entry`, and any per-state `source.entry`, must
+  a kebab-case name. `source.entry`, and any per-scenario `source.entry`, must
   exist inside the project after resolving symbolic links.
-- `states`: a map of kebab-case IDs to objects; absent or empty means one
-  `default` state. Labels default to title case.
-- `inputs`, `fixtures`, `globals` merge preview, then state, then (for inputs)
+- `scenarios`: a map of kebab-case IDs to objects; absent or empty means one
+  `default` scenario. Labels default to title case.
+- `inputs`, `fixtures`, `globals` merge preview, then scenario, then (for inputs)
   control overrides, and are structured-cloned per render. Validation only
-  checks that state values serialize as JSON.
+  checks that scenario values serialize as JSON.
 - `sizes`: a nonempty list of kebab-case `SizeKey` values, including keys
   declared by the space. The [sizes contract](../canvas/sizes.md#typescript-previews)
   owns resolution, unknown-key reporting and authored-page precedence.
   `controls`: known types; `select` needs nonempty `options`.
 - `styles`, `assets`, and `environment` resolve from the definition. Declared
   assets must stay inside the project.
-- [api.d.ts](../../sdk/api.d.ts) types state inputs against preview inputs.
+- [api.d.ts](../../sdk/api.d.ts) types scenario inputs against preview inputs.
 - `preview/` is published to npm as `@canonic2/workbench` (`api.js`,
   `api.d.ts`) at the extension's version by each `workbench/v*` release, so
   `tsc` and editors resolve the import from an ordinary dev dependency. It
@@ -379,31 +379,31 @@ compiler, and the installed extension downloads none.
 
 - A render aborts the previous signal and runs cleanups in reverse; a failed
   cleanup does not stop the others. `setup` runs environment, preview, then
-  state; the source mounts; `play` and `ready` follow; then fonts, then visible
+  scenario; the source mounts; `play` and `ready` follow; then fonts, then visible
   images (offscreen lazy images excluded) or 3 seconds. Each phase is logged on its own event
   ([readiness](../preview-pipeline/readiness.md)).
 - Thrown errors, unhandled rejections, adapter errors, and `context.error`
   clear readiness, release resources, and show the error in the frame.
-  **Reset state** recovers.
+  **Reset scenario** recovers.
 - Problems from discovery, validation, compiler configuration, and lens mapping join
   the config's `problems`; see [core](../core.md#problem-reporting).
 
 ## Acceptance criteria and verification points
 
-- [preview.test.js](../../server/node/preview.test.js): discovery, ID and state validation, and
+- [preview.test.js](../../server/node/preview.test.js): discovery, ID and scenario validation, and
   isolation of invalid definitions; HTML scripts, inline modules, CSS,
   `srcset`, and assets; React and Vue SFCs with project framework versions;
   custom adapters and plugins on the shared path; project escape and excluded
   definitions; server catalog, compiled pages, runnable export, and closing
   previews; untrusted and disabled workspaces never executing definitions; manual
-  placement (via `mergeCollections`); `workbench` lens state mapping; source
+  placement (via `mergeCollections`); `workbench` lens scenario mapping; source
   closure hashing; authoring type checks; portable viewer and partial
   success; CLI `build` refusing nonempty output.
 - [preview-runtime.test.js](../../ui/preview/preview-runtime.test.cjs): renderer disposal,
   font and image readiness, hidden-frame readiness, lifecycle merging and
   cleanup, failed cleanups, concurrent host commands, async adapter errors.
-- [preview-astro.test.js](../../server/node/preview-astro.test.js): props, states, slots,
-  assets, Node-only frontmatter, live input renders, portable states, missing
+- [preview-astro.test.js](../../server/node/preview-astro.test.js): props, scenarios, slots,
+  assets, Node-only frontmatter, live input renders, portable scenarios, missing
   dependencies and unsupported integrations, aliases and defines.
 - [workbench/preview-host.test.js](../../ui/legacy/preview-host.test.js): warm
   host reuse, superseded loads, style and import-time body node retention,
@@ -413,7 +413,7 @@ compiler, and the installed extension downloads none.
 - [files.rs](../../server/src/serve/files.rs) tests check the shared
   compatibility injection.
 - [preview-runtime.test.js](../../ui/preview/preview-runtime.test.cjs) "links open mapped
-  previews…" and "without the actions switch…" cover matching, state-only
+  previews…" and "without the actions switch…" cover matching, scenario-only
   targets, logged links and forms, `navigate` with actions off, release of
   `follow` on dispose, and the portable fallback. [preview.test.js](../../server/node/preview.test.js)
   "preview links are validated…" covers validation, normalization, and the
@@ -423,7 +423,7 @@ compiler, and the installed extension downloads none.
   requests, Workbench bypass, and `pending`/`failed`/`delay`/`passthrough`.
   [preview-runtime.test.js](../../ui/preview/preview-runtime.test.cjs) covers activation per
   render and `combine`; [preview-astro.test.js](../../server/node/preview-astro.test.js)
-  covers frontmatter fetches per state. [preview.test.js](../../server/node/preview.test.js) "the project environment
+  covers frontmatter fetches per scenario. [preview.test.js](../../server/node/preview.test.js) "the project environment
   applies…" covers the single and per-adapter forms and a missing file.
 - Dedicated verification gaps include XMLHttpRequest replacement in a compiled
   preview, project environments with third-party clients/routers, and canvas
@@ -468,7 +468,7 @@ compiler, and the installed extension downloads none.
   unavailable discovery must yield an explicit unavailable lens. Decide
   whether to hide that lens or render its named error; never navigate to an
   unresolved path.
-- **State data.** Validation uses JSON serialization while runtime isolation
+- **Scenario data.** Validation uses JSON serialization while runtime isolation
   uses `structuredClone`. Decide whether JSON data or the broader cloneable
   set is the authoring contract.
 - **Evaluator exit.** Decide whether an unexpected evaluator exit should publish a

@@ -151,7 +151,7 @@ impl Files {
             }
         }
         let legacy = product.join("ui/legacy");
-        let compat = ["keys.js", "actions.js", "states.js"]
+        let compat = ["keys.js", "actions.js", "scenarios.js"]
             .iter()
             .map(|name| std::fs::read_to_string(legacy.join(name)).unwrap_or_default())
             .collect::<Vec<_>>()
@@ -405,7 +405,7 @@ mod tests {
             ),
             ("workbench/ui/legacy/keys.js", "keys();"),
             ("workbench/ui/legacy/actions.js", "actions();"),
-            ("workbench/ui/legacy/states.js", "states();"),
+            ("workbench/ui/legacy/scenarios.js", "scenarios();"),
             ("workbench/ui/src/shell.js", "export {};"),
             ("workbench/ui/src/shell.test.js", "test();"),
             ("workbench/ui/src/shell.ts", "export {};"),
@@ -455,7 +455,7 @@ mod tests {
         )));
         assert_eq!(
             text(get("/_workbench/preview-compat.js").unwrap()).await.1,
-            "keys();\n;\nactions();\n;\nstates();"
+            "keys();\n;\nactions();\n;\nscenarios();"
         );
         assert_eq!(
             text(get("/_workbench/").unwrap()).await.1,

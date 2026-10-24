@@ -15,7 +15,7 @@ function fixture() {
         target: {
           space: { id: 'acme', name: 'Acme', url: 'http://example.com' },
           src: 'page',
-          state: null,
+          scenario: null,
           lens: null,
         },
         size: { width: 320, height: 120 },
@@ -24,7 +24,7 @@ function fixture() {
         generation: 1,
         view: {
           src: 'page',
-          state: null,
+          scenario: null,
           lens: null,
           label: 'Page',
           hash: '#page',
@@ -32,7 +32,7 @@ function fixture() {
           ready: true,
           problem: null,
           payload: {},
-          states: [],
+          scenarios: [],
           lenses: [],
         },
       },

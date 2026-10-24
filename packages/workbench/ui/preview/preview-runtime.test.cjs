@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function runtime(state = 'default', painted = true, actions = null, trace = false) {
+function runtime(scenario = 'default', painted = true, actions = null, trace = false) {
   const handlers = new Map();
   const documentHandlers = new Map();
   const messages = [];
@@ -21,14 +21,14 @@ function runtime(state = 'default', painted = true, actions = null, trace = fals
     createElement: () => canvas,
     body: { append() {} },
     documentElement: { dataset: {} },
-    baseURI: 'http://127.0.0.1/previews/page.workbench.ts?state=' + state,
+    baseURI: 'http://127.0.0.1/previews/page.workbench.ts?scenario=' + scenario,
     addEventListener(name, handler) { documentHandlers.set(name, handler); },
     removeEventListener(name, handler) { if (documentHandlers.get(name) === handler) documentHandlers.delete(name); },
     images: [], fonts: { ready: Promise.resolve() },
   };
   const source = fs.readFileSync(path.join(__dirname, "./browser.js"), 'utf8');
   const boot = vm.runInNewContext(source.replace(/^export /gm, '') + '\nboot;', {
-    window, parent, document, location: { href: 'http://127.0.0.1/preview?state=' + state + (trace ? '&wbTrace=acme-selection' : ''), pathname: '/preview', origin: 'http://127.0.0.1' },
+    window, parent, document, location: { href: 'http://127.0.0.1/preview?scenario=' + scenario + (trace ? '&wbTrace=acme-selection' : ''), pathname: '/preview', origin: 'http://127.0.0.1' },
     URL, AbortController, structuredClone, FormData: class { constructor(form) { return Object.entries(form.fields); } },
     CustomEvent: class { constructor(name, options) { this.type = name; this.detail = options.detail; } },
     requestAnimationFrame: painted ? queueMicrotask : () => {},
@@ -58,13 +58,13 @@ test('a reusable renderer disposes its adapter, listeners and canvas exactly onc
   assert.equal(r.window.workbench, null);
 });
 
-test('artboard inputs are independent of states and survive control reset', async () => {
+test('artboard inputs are independent of scenarios and survive control reset', async () => {
   const r = runtime('default');
   let context;
   await r.boot({ id: 'feedback', inputs: { tone: 'info', title: 'Base' },
     artboards: { success: { width: 560, height: 119, inputs: { tone: 'success' } } },
   }, { default: 'component' }, { mount(_canvas, _source, value) { context = value; } }, {}, { artboard: 'success' });
-  assert.equal(context.state, 'default');
+  assert.equal(context.scenario, 'default');
   assert.equal(context.artboard, 'success');
   assert.equal(context.inputs.tone, 'success');
   await r.command({ inputs: { title: 'Edited' } });
@@ -142,22 +142,22 @@ test('visible lazy images still load before preview readiness', async () => {
   assert.equal(r.window.__workbenchReady, true);
 });
 
-test('preview lifecycle merges state data, aborts and cleans up before resetting', async () => {
+test('preview lifecycle merges scenario data, aborts and cleans up before resetting', async () => {
   const r = runtime('disabled');
   const order = [];
   const contexts = [];
   const preview = { id: 'button', inputs: { label: 'Continue', disabled: false }, fixtures: { root: true },
     setup: () => { order.push('preview'); return () => order.push('stop preview'); },
-    states: { disabled: { inputs: { disabled: true }, fixtures: { state: true },
-      setup: () => { order.push('state'); return () => order.push('stop state'); } } } };
+    scenarios: { disabled: { inputs: { disabled: true }, fixtures: { scenario: true },
+      setup: () => { order.push('scenario'); return () => order.push('stop scenario'); } } } };
   const adapter = { mount: (_canvas, source, context) => { assert.equal(source, 'component'); contexts.push(context); order.push('mount'); return () => order.push('stop mount'); } };
   await r.boot(preview, { default: 'component' }, adapter, { setup: () => { order.push('environment'); return () => order.push('stop environment'); } });
   assert.equal(r.window.__workbenchReady, true);
   assert.deepEqual(contexts[0].inputs, { label: 'Continue', disabled: true });
-  assert.deepEqual(contexts[0].fixtures, { root: true, state: true });
+  assert.deepEqual(contexts[0].fixtures, { root: true, scenario: true });
   await r.command({ inputs: { label: 'Edited' } });
   assert.equal(contexts[0].signal.aborted, true);
-  assert.deepEqual(order.slice(4, 8), ['stop mount', 'stop state', 'stop preview', 'stop environment']);
+  assert.deepEqual(order.slice(4, 8), ['stop mount', 'stop scenario', 'stop preview', 'stop environment']);
   assert.equal(contexts[1].inputs.label, 'Edited');
   await r.command({ command: 'reset' });
   assert.equal(contexts[2].inputs.label, 'Continue');
@@ -165,7 +165,7 @@ test('preview lifecycle merges state data, aborts and cleans up before resetting
 
 test('actions from initial play remain available when the host inspects the ready preview', async () => {
   const r = runtime();
-  await r.boot({ id: 'button', states: { default: { play: context => context.action('clicked', 'Continue') } } },
+  await r.boot({ id: 'button', scenarios: { default: { play: context => context.action('clicked', 'Continue') } } },
     { default: 'component' }, { mount() {} }, {});
   await r.command({ command: 'inspect' });
   const ready = r.messages.at(-1);
@@ -178,13 +178,13 @@ test('links open mapped previews and log every other destination as an action', 
   let on = true;
   const actions = { configure() {}, on: () => on, follow: null };
   const r = runtime('default', true, actions);
-  const preview = { id: 'pages/start', links: { '/next/': 'pages/next', 'done.html': { state: 'done' } }, states: { default: {}, done: {} } };
+  const preview = { id: 'pages/start', links: { '/next/': 'pages/next', 'done.html': { scenario: 'done' } }, scenarios: { default: {}, done: {} } };
   const renderer = await r.boot(preview, { default: 'page', done: 'page' }, { mount() {} }, {});
   const sent = () => r.messages.at(-1);
   assert.equal(actions.follow('/next/', 'link'), true);
-  assert.deepEqual({ ...sent(), state: sent().state }, { type: 'workbench-preview', event: 'navigate', id: 'pages/start', preview: 'pages/next', state: null });
+  assert.deepEqual({ ...sent(), scenario: sent().scenario }, { type: 'workbench-preview', event: 'navigate', id: 'pages/start', preview: 'pages/next', scenario: null });
   actions.follow('http://127.0.0.1/previews/done.html#top', 'link');
-  assert.deepEqual([sent().preview, sent().state], ['pages/start', 'done']);
+  assert.deepEqual([sent().preview, sent().scenario], ['pages/start', 'done']);
   actions.follow('https://example.com/acme.zip', 'link');
   assert.deepEqual([sent().event, sent().name, [...sent().values]], ['action', 'navigate', ['https://example.com/acme.zip']]);
   actions.follow('/sign-up', 'submit', { fields: { email: 'ada@example.com' } });
@@ -211,16 +211,16 @@ test('without the actions switch a portable preview still claims links but not i
   assert.equal(r.messages.at(-1).preview, 'pages/next');
 });
 
-test('each render activates its state request mocks before setup and disposal deactivates them', async () => {
+test('each render activates its scenario request mocks before setup and disposal deactivates them', async () => {
   const r = runtime('empty');
   const activations = [];
   r.window.__workbenchRequests = {
-    activate: (levels, context) => activations.push([levels, context.state]),
+    activate: (levels, context) => activations.push([levels, context.scenario]),
     deactivate: () => activations.push('off'),
   };
   const preview = { id: 'pages/customers', requests: { '/api/customers': { body: ['Ada'] } },
     setup: () => { activations.push('setup'); },
-    states: { default: {}, empty: { requests: { '/api/customers': { body: [] } } } } };
+    scenarios: { default: {}, empty: { requests: { '/api/customers': { body: [] } } } } };
   const renderer = await r.boot(preview, { default: 'page' }, { mount() {} }, {});
   assert.deepEqual(JSON.parse(JSON.stringify(activations)), [
     [[{ '/api/customers': { body: [] } }, { '/api/customers': { body: ['Ada'] } }], 'empty'], 'setup']);
@@ -246,10 +246,10 @@ test('a project environment wraps outside a preview environment and its hooks ru
   assert.equal(combine({}, only), only);
 });
 
-test('missing state exports and render failures prevent capture readiness', async () => {
+test('missing scenario exports and render failures prevent capture readiness', async () => {
   const r = runtime('missing');
   let mounted = false;
-  await r.boot({ id: 'button', states: { missing: {} } }, { default: 'component', missing: undefined },
+  await r.boot({ id: 'button', scenarios: { missing: {} } }, { default: 'component', missing: undefined },
     { mount() { mounted = true; } }, {});
   assert.equal(mounted, false);
   assert.match(r.window.__workbenchError, /selected source export does not exist/);

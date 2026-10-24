@@ -31,7 +31,7 @@ addresses follow [core.md](../core.md#selection-and-navigation).
   the authored lens of a page without docs. The authored lens of a page with
   docs is addressed `~design`, so `design` is a reserved implementation name.
 - Lens names shown by the interface and in review outputs use the resolved
-  display label consistently. Rendering, startup, actions, states, and capture
+  display label consistently. Rendering, startup, actions, scenarios, and capture
   behavior continue to depend on kind and configuration.
 - An authored page has its own lens plus the implementations it maps to,
   its docs lenses among them. Catalog pages and Markdown pages have no

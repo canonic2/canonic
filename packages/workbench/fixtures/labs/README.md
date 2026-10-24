@@ -20,17 +20,17 @@ directory, and install scripts do not run.
 
 | Size | Shape |
 | --- | --- |
-| `small` | 5 component previews in `src/ui/`, each with two states. React only, no fonts or images |
+| `small` | 5 component previews in `src/ui/`, each with two scenarios. React only, no fonts or images |
 | `large` | 40 page previews plus 2 broken previews. An environment wraps every preview in an Apollo provider and an app shell that eagerly registers 60 features, so most code is shared by every page, as in an app whose route tree imports every feature |
 | `large-system` | The `large` shape with system fonts only, and the extended isolation sentinels: each page leaves a listener, an interval, a portal, a `<body>` class, a global and a request mock, and records in `<html data-acme-leaks>` what an earlier page left. The check runs after mount, so it does not delay readiness. Uses the `large` lockfile |
 | `large-web` | `large-system` plus the environment's web fonts (Inter variable, Noto Sans JP with 320 characters from across the CJK block, a variable icon font with ligatures), JetBrains Mono on every fourth page only, and a deterministic 1200×800 PNG of about 2.5 MB per page. Its own lockfile |
 | `huge` | `large-system` with 200 pages. Uses the `large` lockfile |
 | `giant` | `large-system` with 600 pages. Uses the `large` lockfile |
-| `colossal` | `large-system` with 10,000 pages of 2–4 sections each. One definition in 40 takes its title from `src/app/page-list.ts`, and another its states, so 5% of definitions compute their list fields. Uses the `large` lockfile |
+| `colossal` | `large-system` with 10,000 pages of 2–4 sections each. One definition in 40 takes its title from `src/app/page-list.ts`, and another its scenarios, so 5% of definitions compute their list fields. Uses the `large` lockfile |
 | `formats` | One preview or page in every native format: React pages, a Vue single-file component, an Astro component, an HTML page, a React Native Web screen, a preview through a project adapter, a docs page with web and React Native Web lenses, and 2 broken previews. Project plugins in esbuild and Rspack form, and named edit targets |
 
 Each large page has its own sections (14–34 modules), an Apollo query
-answered by a request mock (with an `empty` state), two SVG images, a page
+answered by a request mock (with an `empty` scenario), two SVG images, a page
 stylesheet, a dynamically imported country locale, and, on some pages, a
 TanStack table or phone-number formatting. Its `Interactive.tsx` holds a
 counter and a text field for Fast Refresh checks, plus an edit marker.
@@ -45,7 +45,7 @@ The two React pages share `src/shared/format.ts` and `src/shared/constants.ts`,
 import the global stylesheet through the React environment and a CSS module,
 fetch `/api/greeting` from a request mock, and hold a counter, a text field
 and a `Revision 0` marker. The Vue component has a scoped style, a counter and
-a text field. The Astro component has props, two states and a style block, and
+a text field. The Astro component has props, two scenarios and a style block, and
 no islands, which Workbench rejects. The HTML page links a stylesheet, shows an
 image and runs an inline script. The `acme-canvas` adapter is registered in
 `workbench.config.ts`. The docs page is a `defineDocs` definition whose canvas

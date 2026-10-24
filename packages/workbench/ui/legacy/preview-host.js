@@ -99,7 +99,7 @@ function reset() {
 
 function load(address) {
   const url = new URL(address, location.href);
-  const trace = beginTrace({ page: url.searchParams.get('wbPage') || decodeURIComponent(url.pathname.slice(1)), state: url.searchParams.get('wbState') || url.searchParams.get('state'), lens: url.searchParams.get('wbLens') || 'design' }, { selection: url.searchParams.get('wbTrace') }, 'preview-host');
+  const trace = beginTrace({ page: url.searchParams.get('wbPage') || decodeURIComponent(url.pathname.slice(1)), scenario: url.searchParams.get('wbScenario') || url.searchParams.get('scenario'), lens: url.searchParams.get('wbLens') || 'design' }, { selection: url.searchParams.get('wbTrace') }, 'preview-host');
   if (url.origin !== location.origin || !/\.workbench\.tsx?$/.test(url.pathname)) {
     return Promise.reject(new Error('The warm renderer accepts local Workbench preview definitions.'));
   }

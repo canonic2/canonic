@@ -31,10 +31,10 @@ async function buildDocs(t, root, request) {
   return compiler.compileDocs(request);
 }
 // The compatibility script every project page loads first.
-const COMPAT = ['keys.js', 'actions.js', 'states.js'].map(name => fs.readFileSync(path.join(__dirname, '../../ui/legacy', name), 'utf8')).join('\n;\n');
+const COMPAT = ['keys.js', 'actions.js', 'scenarios.js'].map(name => fs.readFileSync(path.join(__dirname, '../../ui/legacy', name), 'utf8')).join('\n;\n');
 const definition = (adapter, entry, extra = '') => `import { definePreview } from '@canonic2/workbench';
 export default definePreview({ id: 'components/button', title: 'Components/Button', adapter: '${adapter}', source: { entry: '${entry}' },
-inputs: { label: 'Continue' }, states: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
+inputs: { label: 'Continue' }, scenarios: { default: {}, disabled: { inputs: { label: 'Disabled' } } }, ${extra} });`;
 
 test('built-in browser adapters resolve framework imports from the previewed project', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acme-project-framework-'));
@@ -57,21 +57,21 @@ test('built-in browser adapters resolve framework imports from the previewed pro
   assert.match(script, /ACME_PROJECT_REACT_DOM/);
 });
 
-test('a preview page declares artboards independently of its state list', async t => {
+test('a preview page declares artboards independently of its scenario list', async t => {
   const root = fixture(t, {
     'alert.ts': 'export default () => {};',
     'alert.workbench.ts': `import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'feedback',adapter:'html',source:{entry:'./alert.ts'},artboards:{info:{label:'Info',width:560,height:79},success:{label:'Success',width:560,height:119,inputs:{tone:'success'}}}});`,
   });
   const index = await new Compiler(root).index();
   assert.deepEqual(index.errors, []);
-  assert.deepEqual(index.previews[0].states, [{ id: 'default', label: 'Default' }]);
+  assert.deepEqual(index.previews[0].scenarios, [{ id: 'default', label: 'Default' }]);
   assert.deepEqual(index.previews[0].artboards, [{ id: 'info', label: 'Info', width: 560, height: 79 }, { id: 'success', label: 'Success', width: 560, height: 119 }]);
   assert.deepEqual(compilerFixture.list(root), JSON.parse(JSON.stringify(index)));
 });
 
 test('native listing matches the compiler on preview fixtures and validation edge cases', async t => {
   const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
-  const cases = ['', "sizes: []", "sizes: ['123']", "sizes: ['small--wide']", "states: null", "states: []", "states: { default: null }", "states: { '1': {}, '10': {}, '2': {} }", "title: 42", "controls: { tone: {type: 'select', options: []} }", "controls: { tone: null }", "links: null", "links: {'/next': {state: 'ready'}}", "links: {'/next': {preview: 3}}", "requests: {'bad request': {}}", "requests: {'GET /acme': {body: {ok: true}}}", "states: { empty: { requests: {'GET /acme': []} } }", "states: { empty: { label: 42 } }"];
+  const cases = ['', "sizes: []", "sizes: ['123']", "sizes: ['small--wide']", "scenarios: null", "scenarios: []", "scenarios: { default: null }", "scenarios: { '1': {}, '10': {}, '2': {} }", "title: 42", "controls: { tone: {type: 'select', options: []} }", "controls: { tone: null }", "links: null", "links: {'/next': {scenario: 'ready'}}", "links: {'/next': {preview: 3}}", "requests: {'bad request': {}}", "requests: {'GET /acme': {body: {ok: true}}}", "scenarios: { empty: { requests: {'GET /acme': []} } }", "scenarios: { empty: { label: 42 } }"];
   cases.push("artboards: []", "artboards: {}", "artboards: {info:{width:0,height:79}}", "artboards: {info:{width:560,height:8193}}", "artboards: {'bad id':{width:560,height:79}}", "artboards: {info:{width:560,height:79,inputs:[]}}", "artboards: {info:{width:560,height:79,label:42}}", "artboards: {info:{width:560,height:79}}");
   for (const fields of cases) {
     fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields));
@@ -139,7 +139,7 @@ test('preview collection and page icons respect mappings and configured fallback
   }
 });
 
-test('discovers TypeScript previews, validates IDs and states, and isolates invalid definitions', async t => {
+test('discovers TypeScript previews, validates IDs and scenarios, and isolates invalid definitions', async t => {
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts'),
     'button.ts': 'export default function(canvas, ctx) { canvas.textContent = ctx.inputs.label; }',
@@ -149,7 +149,7 @@ test('discovers TypeScript previews, validates IDs and states, and isolates inva
   assert.equal(discover(root).length, 2);
   const index = await new Compiler(root).index();
   assert.equal(index.previews.length, 1);
-  assert.deepEqual(index.previews[0].states.map(state => state.id), ['default', 'disabled']);
+  assert.deepEqual(index.previews[0].scenarios.map(scenario => scenario.id), ['default', 'disabled']);
   assert.equal(index.errors.length, 1);
   assert.match(index.errors[0], /kebab-case/);
   assert.throws(() => new Compiler(root, { include: ['src/**'] }).declared('button.workbench.ts'), /declared/);
@@ -321,7 +321,7 @@ test('preview mounts fill flex-body artboards and React Native Web fills frames 
     'workbench.yaml': 'name: Acme\n',
     'flex.workbench.ts': `import { definePreview } from '@canonic2/workbench';
       export default definePreview({ id:'pages/jobs', title:'Pages/Jobs', adapter:'react',
-        source:{entry:'./Flex.tsx'}, states:{loading:{inputs:{label:'Loading'}},
+        source:{entry:'./Flex.tsx'}, scenarios:{loading:{inputs:{label:'Loading'}},
           empty:{inputs:{label:'No jobs'}}, 'load-error':{inputs:{label:'Load error'}}} });`,
     'Flex.tsx': `import './flex.css';
       export default function Jobs({label}) { return <section data-testid="screen" style={{width:'100%'}}>
@@ -377,9 +377,9 @@ test('preview mounts fill flex-body artboards and React Native Web fills frames 
       };
       for (const surface of ['portable','live']) {
         if (surface === 'live') await win.loadURL(${JSON.stringify(new URL(running.url).origin)} + '/_workbench/preview-host.html');
-        for (const [state,label] of [['loading','Loading'],['empty','No jobs'],['load-error','Load error']]) {
-          if (surface === 'portable') await load('/flex/index.html?state=' + state);
-          else await evaluate('window.wbPreviewHost.load(' + JSON.stringify(${JSON.stringify(new URL(running.url).origin)} + '/flex.workbench.ts?state=' + state) + ')');
+        for (const [scenario,label] of [['loading','Loading'],['empty','No jobs'],['load-error','Load error']]) {
+          if (surface === 'portable') await load('/flex/index.html?scenario=' + scenario);
+          else await evaluate('window.wbPreviewHost.load(' + JSON.stringify(${JSON.stringify(new URL(running.url).origin)} + '/flex.workbench.ts?scenario=' + scenario) + ')');
           assert.equal(await evaluate('document.querySelector("[data-testid=screen]").textContent.trim()'),label);
           for (const [width,height] of [[1512,982],[393,852],[800,600]]) {
             win.setContentSize(width,height);
@@ -387,8 +387,8 @@ test('preview mounts fill flex-body artboards and React Native Web fills frames 
             const box = await evaluate(\`(() => { const mount=document.querySelector('#workbench-preview').getBoundingClientRect();
               const screen=document.querySelector('[data-testid=screen]').getBoundingClientRect();
               return {mount:mount.width,screen:screen.width,width:innerWidth,height:mount.height,viewportHeight:innerHeight}; })()\`);
-            assert.equal(box.mount,box.width,surface + ' ' + state);
-            assert.equal(box.screen,box.width,surface + ' ' + state);
+            assert.equal(box.mount,box.width,surface + ' ' + scenario);
+            assert.equal(box.screen,box.width,surface + ' ' + scenario);
             assert.ok(box.height >= box.viewportHeight);
           }
         }
@@ -576,12 +576,12 @@ test('the server serves previews from the live pipeline, pushes builds, exports 
   const preview = config.catalogCollections[0].items[0];
   assert.equal(preview.src, 'button.workbench.ts');
   assert.equal(preview.workbench, true);
-  const page = await fetch(base + '/button.workbench.ts?state=disabled');
+  const page = await fetch(base + '/button.workbench.ts?scenario=disabled');
   const html = await page.text();
   assert.match(page.headers.get('content-type'), /text\/html/);
   assert.match(html, /<head><script src="\/_workbench\/preview-compat\.js"><\/script>/);
   assert.equal((html.match(/preview-compat\.js/g) || []).length, 1);
-  assert.doesNotMatch(html, /<script src="\/_workbench\/(keys|actions|states)\.js"/);
+  assert.doesNotMatch(html, /<script src="\/_workbench\/(keys|actions|scenarios)\.js"/);
   assert.match(html, /"push":true/);
   const compatibility = await fetch(base + '/_workbench/preview-compat.js');
   assert.equal(compatibility.status, 200);
@@ -794,9 +794,9 @@ test('untrusted and disabled workspaces never execute preview definitions', asyn
   }
 });
 
-test('manual preview placement receives definition states and stays unique', () => {
+test('manual preview placement receives definition scenarios and stays unique', () => {
   const original = [{ name: 'Authored', items: [{ label: 'My button', src: 'button.workbench.ts', implementations: { storybook: { title: 'Button' } } }] }];
-  const imported = [{ name: 'Components', items: [{ label: 'Button', src: 'button.workbench.ts', workbench: true, states: [{ id: 'default', label: 'Default' }] }] }];
+  const imported = [{ name: 'Components', items: [{ label: 'Button', src: 'button.workbench.ts', workbench: true, scenarios: [{ id: 'default', label: 'Default' }] }] }];
   const merged = manifest.mergeCollections(original, imported);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].items[0].label, 'My button');
@@ -805,7 +805,7 @@ test('manual preview placement receives definition states and stays unique', () 
   assert.equal(original[0].items[0].workbench, undefined);
 });
 
-test('a Workbench implementation maps a design to managed preview states', async t => {
+test('a Workbench implementation maps a design to managed preview scenarios', async t => {
   const root = fixture(t, {
     'workbench.yaml': 'name: Acme\nimplementations:\n  built:\n    kind: workbench\ncollections:\n  - name: Pages\n    items:\n      - label: Design\n        src: design.html\n        implementations:\n          built: components/button\n',
     'design.html': '<button>Design</button>',
@@ -820,9 +820,9 @@ test('a Workbench implementation maps a design to managed preview states', async
   try {
     const config = await running.config();
     assert.deepEqual(config.problems, []);
-    assert.equal(config.collections[0].items[0].implementations.built.states.disabled, '/button.workbench.ts?state=disabled');
+    assert.equal(config.collections[0].items[0].implementations.built.scenarios.disabled, '/button.workbench.ts?scenario=disabled');
     assert.equal(config.pages['design.html'].code[0].relative, 'button.ts');
-    // An export in the Workbench lens captures the managed preview's states.
+    // An export in the Workbench lens captures the managed preview's scenarios.
     const base = `http://127.0.0.1:${running.port}`;
     const started = await (await fetch(base + '/_workbench/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ format: 'zip', scope: 'pages', pages: ['design.html'], lens: 'built' }) })).json();
@@ -832,7 +832,7 @@ test('a Workbench implementation maps a design to managed preview states', async
       status = await (await fetch(base + '/_workbench/export?job=' + started.id)).json();
     }
     assert.equal(status.status, 'complete', JSON.stringify(status));
-    assert.ok(loaded.some(url => url.includes('/button.workbench.ts?state=default')), loaded.join(' '));
+    assert.ok(loaded.some(url => url.includes('/button.workbench.ts?scenario=default')), loaded.join(' '));
   } finally { await running.close(); }
 });
 
@@ -850,31 +850,31 @@ test('the project environment applies to every preview, or per adapter name', as
   await assert.rejects(build(t, fixture(t, files(`{ environment: './missing.ts' }`)), 'button.workbench.ts'), /must be a file inside the project/);
 });
 
-test('preview links are validated and name previews and states that exist', async t => {
+test('preview links are validated and name previews and scenarios that exist', async t => {
   const page = (id, links) => `import { definePreview } from '@canonic2/workbench';
-export default definePreview({ id: '${id}', adapter: 'html', source: { entry: './page.ts' }, states: { default: {}, sent: {} }, links: ${links} });`;
+export default definePreview({ id: '${id}', adapter: 'html', source: { entry: './page.ts' }, scenarios: { default: {}, sent: {} }, links: ${links} });`;
   const root = fixture(t, {
     'workbench.yaml': 'name: Acme\n',
     'page.ts': 'export default function(canvas) { canvas.textContent = "Acme"; }',
-    'start.workbench.ts': page('pages/start', `{ '/next/': 'pages/next', '/reset/': { state: 'sent' }, '/gone/': 'pages/gone', '/lost/': { preview: 'pages/next', state: 'lost' } }`),
+    'start.workbench.ts': page('pages/start', `{ '/next/': 'pages/next', '/reset/': { scenario: 'sent' }, '/gone/': 'pages/gone', '/lost/': { preview: 'pages/next', scenario: 'lost' } }`),
     'next.workbench.ts': page('pages/next', `{ '/': 'pages/start' }`),
     'broken.workbench.ts': page('pages/broken', `{ '/next/': { label: 'Next' } }`),
   });
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   try {
     const config = await running.config();
-    assert.deepEqual(config.pages['start.workbench.ts'].preview.links['/reset/'], { preview: 'pages/start', state: 'sent' });
+    assert.deepEqual(config.pages['start.workbench.ts'].preview.links['/reset/'], { preview: 'pages/start', scenario: 'sent' });
     assert.equal(config.problems.length, 3);
-    assert.match(config.problems[0], /^broken\.workbench\.ts: .*link \/next\/ must name a preview ID, or \{ preview, state \}\.$/);
+    assert.match(config.problems[0], /^broken\.workbench\.ts: .*link \/next\/ must name a preview ID, or \{ preview, scenario \}\.$/);
     assert.deepEqual(config.problems.slice(1), [
       'start.workbench.ts: link /gone/ names unknown Workbench preview “pages/gone”.',
-      'start.workbench.ts: link /lost/ names unknown state “lost” of pages/next.',
+      'start.workbench.ts: link /lost/ names unknown scenario “lost” of pages/next.',
     ]);
   } finally { await running.close(); }
 });
 
 
-test('authoring declarations infer input types and reject invalid state inputs', t => {
+test('authoring declarations infer input types and reject invalid scenario inputs', t => {
   const cp = require('node:child_process');
   const root = fixture(t, {
     'button.workbench.ts': definition('html', './button.ts'),
@@ -932,7 +932,7 @@ test('the portable build includes the interactive viewer and shared controls whi
   assert.equal(catalog.name, 'Acme');
   assert.equal(catalog.previews.length, 1);
   assert.equal(catalog.warnings.length, 1);
-  assert.deepEqual(catalog.previews[0].states.map(state => state.id), ['default', 'disabled']);
+  assert.deepEqual(catalog.previews[0].scenarios.map(scenario => scenario.id), ['default', 'disabled']);
   assert.equal(catalog.previews[0].files, undefined);
   assert.ok(fs.existsSync(path.join(output, catalog.previews[0].directory.replace(/^browser\//, ''), 'index.html')));
   assert.deepEqual(contents('preview-controls.js'), fs.readFileSync(path.join(__dirname, "../../ui/legacy/preview-controls.js")));
@@ -953,7 +953,7 @@ test('portable export compiles only selected previews and filters declared varia
   const base = 'http://127.0.0.1:' + running.port;
   await (await fetch(base + '/_workbench/config')).json();
   const started = await fetch(base + '/_workbench/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ format: 'browser', scope: 'pages', pages: ['button.workbench.ts'], variants: 'custom', states: ['disabled'], sizes: ['mobile'] }) });
+    body: JSON.stringify({ format: 'browser', scope: 'pages', pages: ['button.workbench.ts'], variants: 'custom', scenarios: ['disabled'], sizes: ['mobile'] }) });
   const job = await started.json();
   assert.equal(started.status, 202, JSON.stringify(job));
   let status = job;
@@ -967,7 +967,7 @@ test('portable export compiles only selected previews and filters declared varia
   assert.ok(at > 0, 'the archive holds the viewer\'s catalog');
   const catalog = JSON.parse(archive.subarray(at, archive.indexOf('\n}', at) + 2).toString('utf8'));
   assert.deepEqual(catalog.previews.map(p => p.file), ['button.workbench.ts']);
-  assert.deepEqual(catalog.previews[0].states.map(s => s.id), ['disabled']);
+  assert.deepEqual(catalog.previews[0].scenarios.map(s => s.id), ['disabled']);
   assert.deepEqual(catalog.previews[0].sizes.map(s => s.key), ['mobile']);
 });
 

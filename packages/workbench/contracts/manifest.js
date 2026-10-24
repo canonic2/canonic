@@ -27,7 +27,7 @@
            - label: Sign in
              src: pages/sign-in.html
              implementations:
-               dev: /                     # one path, or a map of state ids to paths
+               dev: /                     # one path, or a map of scenario ids to paths
                staging:
                  default: /
                  error: /?error=1
@@ -52,7 +52,7 @@
   var BUNDLE = /^[A-Za-z0-9.-]+$/;
   /* Kinds shown as a live stream of a native window rather than an iframe. */
   var STREAMED = ['ios-simulator', 'window'];
-  /* Characters that mark the state, the example, and the lens in the address
+  /* Characters that mark the scenario, the example, and the lens in the address
      (see address.js), so no src may contain them. */
   var RESERVED = [':', '!', '~'];
   var DOCS = /\.md$/i;
@@ -84,7 +84,7 @@
     var found = RESERVED.filter(function (mark) { return src.indexOf(mark) !== -1; });
     if (!found.length) return null;
     return 'src “' + src + '” can’t contain ' + found.map(function (mark) { return '“' + mark + '”'; }).join(' or ') +
-      ' — “:”, “!”, and “~” mark the state, the example, and the lens in the address.';
+      ' — “:”, “!”, and “~” mark the scenario, the example, and the lens in the address.';
   }
 
   /* A page written in Markdown: its docs are its own view, so it has no
@@ -161,8 +161,8 @@
 
   /* A story id is Storybook's kebab of the title, two dashes, the kebab of
      the story's name: "components-button--icon-only". The part after the
-     dashes is what stands in the address where a design state would. */
-  function storyState(id) {
+     dashes is what stands in the address where a design scenario would. */
+  function storyScenario(id) {
     var at = String(id).indexOf('--');
     return at === -1 ? String(id) : String(id).slice(at + 2);
   }
@@ -456,7 +456,7 @@
       function remaining(items) { return (items || []).map(function (item) {
         if (item.group) { var children = remaining(item.items); return children.length ? Object.assign({}, item, { items: children }) : null; }
         var original = item.workbench && existing(item.src);
-        if (original) { original.states = item.states; original.workbench = true; if (!original.lensLabel && item.lensLabel) original.lensLabel = item.lensLabel; if (!original.icon && item.icon) original.icon = item.icon; return null; }
+        if (original) { original.scenarios = item.scenarios; original.workbench = true; if (!original.lensLabel && item.lensLabel) original.lensLabel = item.lensLabel; if (!original.icon && item.icon) original.icon = item.icon; return null; }
         return item;
       }).filter(Boolean); }
       var items = remaining(clone(collection.items));
@@ -478,7 +478,7 @@
   }
 
   /* The lenses one page has, checked against what's declared and against
-     the page's own states. Answers with the map, or undefined when nothing
+     the page's own scenarios. Answers with the map, or undefined when nothing
      survived — a page without lenses carries no key at all. */
   function pageLenses(raw, item, impls, where, problems) {
     if (raw === undefined || raw === null || raw === '') return undefined;
@@ -488,10 +488,10 @@
     }
     var out = {};
     var count = 0;
-    var states = (item && item.states ? item.states : []).map(function (state) {
-      return state.id;
+    var scenarios = (item && item.scenarios ? item.scenarios : []).map(function (scenario) {
+      return scenario.id;
     });
-    var first = states.length ? states[0] : 'default';
+    var first = scenarios.length ? scenarios[0] : 'default';
 
     Object.keys(raw).forEach(function (key) {
       var impl = impls[key];
@@ -569,32 +569,32 @@
 
       if (!isMap(value)) {
         problems.push(
-          where + ': implementation “' + key + '” needs a path, or a map of this page’s state ids to paths.'
+          where + ': implementation “' + key + '” needs a path, or a map of this page’s scenario ids to paths.'
         );
         return;
       }
 
-      var ref = { path: null, states: {} };
-      Object.keys(value).forEach(function (stateId) {
-        var p = pathOf(value[stateId], key, impl, where, problems);
+      var ref = { path: null, scenarios: {} };
+      Object.keys(value).forEach(function (scenarioId) {
+        var p = pathOf(value[scenarioId], key, impl, where, problems);
         if (p === null) return;
-        /* The first state is the page as authored, whatever it calls itself,
+        /* The first scenario is the page as authored, whatever it calls itself,
            and "default" always means it too. */
-        if (stateId === first || stateId === 'default') {
+        if (scenarioId === first || scenarioId === 'default') {
           ref.path = p;
           return;
         }
-        if (states.indexOf(stateId) === -1) {
+        if (scenarios.indexOf(scenarioId) === -1) {
           problems.push(
-            where + ': implementation “' + key + '” maps state “' + stateId + '”, which this page doesn’t declare.'
+            where + ': implementation “' + key + '” maps scenario “' + scenarioId + '”, which this page doesn’t declare.'
           );
           return;
         }
-        ref.states[stateId] = p;
+        ref.scenarios[scenarioId] = p;
       });
       if (ref.path === null) {
         problems.push(
-          where + ': implementation “' + key + '” needs a path for the default state (“' + first + '”).'
+          where + ': implementation “' + key + '” needs a path for the default scenario (“' + first + '”).'
         );
         return;
       }
@@ -790,7 +790,7 @@
     projectPath: projectPath,
     pageCode: pageCode,
     labelOf: labelOf,
-    storyState: storyState,
+    storyScenario: storyScenario,
     address: address,
     mergeCollections: mergeCollections,
     titleIcon: titleIcon,

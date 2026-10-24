@@ -44,7 +44,7 @@ pub(crate) trait DocsSource {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct DocsRequest<'request> {
     pub(crate) lens: Option<&'request str>,
-    pub(crate) state: Option<&'request str>,
+    pub(crate) scenario: Option<&'request str>,
 }
 
 /// Where a page finds its script, stylesheet and example code: the server's
@@ -214,7 +214,7 @@ impl<S: DocsSource + Sync> DocsService<S> {
             page: entry.src.clone(),
             lens: lens.map(|lens| lens.key.clone()),
             lens_label: lens.map(|lens| lens.label.clone()),
-            state: request.state.map(str::to_owned),
+            scenario: request.scenario.map(str::to_owned),
             bundle: bundle_ref,
             source_url: locations
                 .source
@@ -683,7 +683,7 @@ mod tests {
             &card(),
             DocsRequest {
                 lens: Some("native"),
-                state: Some("loading"),
+                scenario: Some("loading"),
             },
             false,
         )
@@ -693,7 +693,7 @@ mod tests {
         assert!(html.contains(
             r#"<link rel="stylesheet" href="/_workbench/previews/docs/native/examples.css">"#
         ));
-        assert_eq!(options_of(&html)["state"], "loading");
+        assert_eq!(options_of(&html)["scenario"], "loading");
     }
 
     #[test]

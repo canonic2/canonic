@@ -24,8 +24,8 @@ pub(crate) use super::plan::{DocsLensPlan, DocsPagePlan};
 pub(crate) struct Story {
     pub(crate) id: String,
     pub(crate) name: Option<String>,
-    /// The state the story is shown as.
-    pub(crate) state: String,
+    /// The scenario the story is shown as.
+    pub(crate) scenario: String,
 }
 
 /// What an export needs from the server it runs in.
@@ -154,13 +154,13 @@ async fn storybook_references(
         for story in host.stories(lens, title).await? {
             for reference in &sizes {
                 replacements.push(Reference {
-                    state: story.state.clone(),
+                    scenario: story.scenario.clone(),
                     label: story
                         .name
                         .clone()
                         .filter(|name| !name.is_empty())
-                        .unwrap_or_else(|| story.state.clone()),
-                    variant: format!("{}-{}", story.state, reference.size),
+                        .unwrap_or_else(|| story.scenario.clone()),
+                    variant: format!("{}-{}", story.scenario, reference.size),
                     external: true,
                     url: format!(
                         "{address}/iframe.html?id={}&viewMode=story",
@@ -204,7 +204,7 @@ fn map_to_lens(view: &Value, plan: &mut Plan, lens: &str, base_url: &str) -> Res
         if kind != "url" && kind != "workbench" {
             bail!("Export of this lens is not supported: {lens}");
         }
-        let target = mapping["states"][&reference.state]
+        let target = mapping["scenarios"][&reference.scenario]
             .as_str()
             .filter(|target| !target.is_empty())
             .or(mapping["path"].as_str())
@@ -300,7 +300,7 @@ async fn assemble(
             .as_object()
             .map(|pages| pages.keys().cloned().collect())
             .unwrap_or_default(),
-        states: request.states.clone(),
+        scenarios: request.scenarios.clone(),
         sizes: request.sizes.clone(),
     };
     match request.format.as_str() {
@@ -375,12 +375,12 @@ mod tests {
                 Story {
                     id: "components-button--primary".into(),
                     name: Some("Primary".into()),
-                    state: "primary".into(),
+                    scenario: "primary".into(),
                 },
                 Story {
                     id: "components-button--ghost".into(),
                     name: None,
-                    state: "ghost".into(),
+                    scenario: "ghost".into(),
                 },
             ])
         }
@@ -430,10 +430,10 @@ mod tests {
             },
             "collections": [{ "name": "Pages", "items": [{
                 "label": "Sign in", "src": "pages/sign-in.html", "sizes": ["laptop", "mobile"],
-                "states": [{ "id": "default", "label": "Default" }, { "id": "error", "label": "Error" }],
+                "scenarios": [{ "id": "default", "label": "Default" }, { "id": "error", "label": "Error" }],
                 "implementations": {
                     "storybook": { "title": "Components/Button" },
-                    "dev": { "path": "/sign-in", "states": { "error": "/sign-in?error=1" } },
+                    "dev": { "path": "/sign-in", "scenarios": { "error": "/sign-in?error=1" } },
                 },
             }] }],
             "pages": { "pages/sign-in.html": { "label": "Sign in", "design": design.to_string_lossy(), "code": [] } },
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_space_export_captures_every_state_and_size_and_archives_sources_with_the_failed_preview_cause()
+    async fn a_space_export_captures_every_scenario_and_size_and_archives_sources_with_the_failed_preview_cause()
      {
         let project = Project::new("pipeline");
         let view = space(&project);
@@ -502,7 +502,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_current_page_pdf_prints_only_its_selected_state_and_actual_viewport() {
+    async fn a_current_page_pdf_prints_only_its_selected_scenario_and_actual_viewport() {
         let project = Project::new("pdf");
         let view = space(&project);
         let host = host(Fake {

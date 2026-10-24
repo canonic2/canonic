@@ -3,7 +3,7 @@
 A Vue preview renders a Vue 3 component from your project on the canvas, with
 the preview's inputs as its props. It is a
 [TypeScript preview](workbench-previews.md) with `adapter: 'vue'`: you write a
-`.workbench.ts` definition next to the component, and each state appears in the
+`.workbench.ts` definition next to the component, and each scenario appears in the
 sidebar like any other page. Workbench compiles your `.vue` files itself, so
 you don't need Vite or a build step.
 
@@ -86,7 +86,7 @@ export default definePreview({
     tone: { type: 'select', options: ['primary', 'secondary'] },
     disabled: { type: 'boolean' },
   },
-  states: {
+  scenarios: {
     default: {},
     secondary: { inputs: { tone: 'secondary' } },
     disabled: { inputs: { disabled: true } },
@@ -95,7 +95,7 @@ export default definePreview({
 ```
 
 Run **Workbench: Refresh Pages**. **Button** appears in a **Components**
-collection with the states **Default**, **Secondary**, and **Disabled**, and
+collection with the scenarios **Default**, **Secondary**, and **Disabled**, and
 **Preview controls** lets you edit the label, tone, and disabled flag. To check
 the project without the editor, run the
 [command-line checker](workbench-previews.md#command-line-tools); it prints
@@ -110,18 +110,19 @@ component to render, such as a `defineComponent(...)` export, and defaults to
 
 Workbench renders the component with `h(Component, inputs)`. That means:
 
-- Each input is passed as a prop. A state's `inputs` override the preview's, and
-  edits in **Preview controls** override both until you reset or change state.
+- Each input is passed as a prop. A scenario's `inputs` override the preview's,
+  and edits in **Preview controls** override both until you reset or change
+  scenario.
 - An input that the component doesn't declare as a prop falls through to its
   root element as an HTML attribute, as Vue does for any undeclared attribute.
 - Inputs must be plain data. A function, such as an `onClick` handler, fails
   the render with `DataCloneError: … could not be cloned`. To handle events, see
   [Events and actions](#events-and-actions).
-- Props stay as the state sets them. When the component emits
+- Props stay as the scenario sets them. When the component emits
   `update:modelValue`, the event can be recorded, but the `modelValue` input
-  doesn't change. Add a state for the result you want to review.
+  doesn't change. Add a scenario for the result you want to review.
 
-A state can render a different component by setting its own `source`, such as
+A scenario can render a different component by setting its own `source`, such as
 `{ entry: './AcmeButtonGroup.vue' }`.
 
 ## Events and actions
@@ -232,7 +233,7 @@ export default definePreview({
     body: { type: 'text' },
     editable: { type: 'boolean' },
   },
-  states: {
+  scenarios: {
     default: {},
     'no-actions': { inputs: { editable: false } },
   },
@@ -246,13 +247,13 @@ section records its `edit` event. The file name is up to you: only
 ## App setup: plugins, provide, router, and i18n
 
 Each render creates a new app with Vue's `createApp` and mounts it in the
-preview frame. Changing state, editing an input, or resetting unmounts that
+preview frame. Changing scenario, editing an input, or resetting unmounts that
 app and creates another. Before each app mounts, Workbench calls the environment's
 `configure(app, context)` export, which may be async. Install plugins and
 `provide` values there. For plugins every preview needs, name the module once
 as the [project-wide environment](preview-data.md#environments).
 A component that loads its own data with `fetch`, axios, or a client built on
-them needs no store setup: answer its requests per state with
+them needs no store setup: answer its requests per scenario with
 [`requests`](preview-data.md#request-mocks).
 
 `src/i18n.ts`, a small plugin for this example:
@@ -288,7 +289,7 @@ export function configure(app: App, context: PreviewContext) {
 }
 ```
 
-Use `globals` to vary the setup by state. `src/components/AcmeGreeting.vue`:
+Use `globals` to vary the setup by scenario. `src/components/AcmeGreeting.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -320,7 +321,7 @@ export default definePreview({
   styles: ['../styles/tokens.css'],
   inputs: { name: 'Dana' },
   globals: { locale: 'en-US' },
-  states: {
+  scenarios: {
     english: {},
     french: { globals: { locale: 'fr-FR' } },
   },
@@ -333,7 +334,7 @@ Install a router, a store, or an i18n library the same way: create it inside
 `configure` and pass it to `app.use`, so every render starts from a fresh
 instance. A router reads the preview's own address unless you give it memory
 history, so for Vue Router use `createMemoryHistory()` and push the route the
-state needs before `configure` returns.
+scenario needs before `configure` returns.
 
 If `configure` sets `app.config.errorHandler`, Workbench still reports the
 error in the preview's frame, then calls your handler.

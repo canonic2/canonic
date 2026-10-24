@@ -1,7 +1,7 @@
 /* The sidebar view
    ----------------
    The space's pages in the editor's own sidebar: the collection list, groups,
-   pages, and the states under a page — the same list the workbench draws
+   pages, and the scenarios under a page — the same list the workbench draws
    down its left edge, because it is literally the same list.
    The page is this extension's own `workbench/sidebar.html`, and the code that
    builds the rows is `page-list.js` beside it, which the workbench uses too.
@@ -9,7 +9,7 @@
 
    A webview rather than a TreeView. A tree gives
    you the editor's keyboard and collapse memory for free, but it can only
-   draw the rows the editor draws: no collection list, no state rows reading
+   draw the rows the editor draws: no collection list, no scenario rows reading
    as versions of the page above them, no filter of our own. The list is the
    part of this tool people look at all day, so it is drawn rather than
    configured — and `sidebar.css` dresses it in VS Code's own theme colours so
@@ -143,8 +143,8 @@ function catalogFailure(error) {
    `space()` with the one showing as { root, dir, key }: the folder it
    serves, the folder of its workbench.yaml, and its key in that file when
    the file lists several. `open` is given
-   { src, state } and puts it on the canvas. `follow` takes a listener called
-   with { src, state } whenever the canvas moves, and answers with the way to
+   { src, scenario } and puts it on the canvas. `follow` takes a listener called
+   with { src, scenario } whenever the canvas moves, and answers with the way to
    stop listening. `catalog` asks the running server for the collections it
    imported (previews, docs and Simulator catalogs), which the webview cannot fetch cross-origin. `shown`
    is called whenever the view comes into sight — selecting Workbench in the
@@ -171,10 +171,10 @@ function register(context, options) {
 
   /* What the canvas is showing, as far as this side knows — so a view that
      was closed and reopened, or a page that reloaded, comes back marked. */
-  var where = { src: null, state: null };
+  var where = { src: null, scenario: null };
 
   function post(at) {
-    if (view) view.webview.postMessage({ type: 'canonic-here', src: at.src, state: at.state });
+    if (view) view.webview.postMessage({ type: 'canonic-here', src: at.src, scenario: at.scenario });
   }
 
   /* Counted so every build is a different string — see page(). */
@@ -234,7 +234,7 @@ function register(context, options) {
           var colon = hash.indexOf(':');
           open({
             src: colon === -1 ? hash : hash.slice(0, colon),
-            state: colon === -1 ? null : hash.slice(colon + 1),
+            scenario: colon === -1 ? null : hash.slice(colon + 1),
           });
           return;
         }
@@ -332,7 +332,7 @@ function register(context, options) {
       var moved = !next || !space || next.dir !== space.dir || next.key !== space.key;
       var refile = !next || !space || next.dir !== space.dir;
       space = next;
-      if (moved) where = { src: null, state: null };
+      if (moved) where = { src: null, scenario: null };
       if (refile) watch();
     }
     build();

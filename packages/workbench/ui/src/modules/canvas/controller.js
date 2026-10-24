@@ -46,7 +46,7 @@ export function createController(ports) {
         const parsed = {
           ...current.target,
           src: info.src,
-          state: info.state,
+          scenario: info.scenario,
           lens: info.lens,
           label: info.label,
         };

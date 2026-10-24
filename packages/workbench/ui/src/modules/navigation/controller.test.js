@@ -6,7 +6,7 @@ const selection = (src) => ({
   src,
   label: src,
   pageLabel: src,
-  state: null,
+  scenario: null,
   lens: 'design',
   docs: false,
   actions: false,
@@ -53,7 +53,11 @@ void test('fast retained returns stay busy without showing loading feedback or d
   });
   t.mock.timers.tick(22);
   t.mock.timers.tick(128);
-  assert.equal(navigation.presentation([board]).loading, false, 'a page ready at 150 ms still avoids the loader');
+  assert.equal(
+    navigation.presentation([board]).loading,
+    false,
+    'a page ready at 150 ms still avoids the loader',
+  );
   board.view.ready = true;
   assert.deepEqual(navigation.presentation([board]), {
     visible: true,
@@ -112,10 +116,10 @@ void test('retained destinations consume the requested size once, after matching
   const docs = { ...selection('page'), lens: 'docs', docs: true };
   await navigation.show(docs);
   assert.equal(navigation.takeSize(docs), null, 'Docs owns its reading viewport');
-  const story = { ...selection('page'), state: 'default', lens: 'storybook' };
+  const story = { ...selection('page'), scenario: 'default', lens: 'storybook' };
   await navigation.show(story);
   assert.equal(navigation.takeSize(docs), null, 'outgoing Docs cannot consume the Storybook size');
-  assert.equal(navigation.takeSize({ ...story, state: 'previous' }), null);
+  assert.equal(navigation.takeSize({ ...story, scenario: 'previous' }), null);
   assert.equal(navigation.takeSize(story), story.size);
   assert.equal(
     navigation.takeSize(story),
@@ -261,8 +265,8 @@ void test('presentation accepts only the requested preview or the complete decla
   });
   const next = selection('one');
   const board = {
-    target: { src: 'one', state: null, lens: 'design', artboard: 'info' },
-    view: { src: 'one', state: null, lens: 'design', ready: true, problem: null },
+    target: { src: 'one', scenario: null, lens: 'design', artboard: 'info' },
+    view: { src: 'one', scenario: null, lens: 'design', ready: true, problem: null },
   };
   navigation.begin();
   assert.deepEqual(navigation.presentation([board]), {
@@ -295,7 +299,7 @@ void test('presentation accepts only the requested preview or the complete decla
     false,
   );
   assert.equal(
-    navigation.presentation([{ ...board, target: { ...board.target, state: 'old' } }]).visible,
+    navigation.presentation([{ ...board, target: { ...board.target, scenario: 'old' } }]).visible,
     false,
   );
   navigation.dispose();

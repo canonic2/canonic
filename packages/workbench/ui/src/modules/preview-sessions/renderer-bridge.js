@@ -27,7 +27,7 @@ function start(ports, channel, origin) {
       const src = location.hash.replace(/^#/, '').split(/[:!@~]/)[0] || 'unavailable';
       const info = {
         src,
-        state: null,
+        scenario: null,
         lens: null,
         label: src,
         hash: location.hash,
@@ -35,7 +35,7 @@ function start(ports, channel, origin) {
         problem,
         reference: '',
         payload: {},
-        states: [],
+        scenarios: [],
         lenses: [],
       };
       const serial = JSON.stringify(info);
@@ -92,7 +92,13 @@ function start(ports, channel, origin) {
       emit('view', info);
       if (info.ready)
         window.parent.postMessage(
-          { type: 'wb-here', src: info.src, state: info.state, lens: info.lens, pending: false },
+          {
+            type: 'wb-here',
+            src: info.src,
+            scenario: info.scenario,
+            lens: info.lens,
+            pending: false,
+          },
           origin,
         );
     }
@@ -138,8 +144,8 @@ function start(ports, channel, origin) {
         case 'scroll':
           ports.content.scroll(data.value);
           break;
-        case 'state':
-          ports.content.pickState(String(data.value));
+        case 'scenario':
+          ports.content.pickScenario(String(data.value));
           break;
         case 'lens':
           ports.content.lens(String(data.value || ''));
@@ -218,7 +224,13 @@ function start(ports, channel, origin) {
       const info = read();
       if (data.command === 'navigate' && info?.ready && before === previous)
         window.parent.postMessage(
-          { type: 'wb-here', src: info.src, state: info.state, lens: info.lens, pending: false },
+          {
+            type: 'wb-here',
+            src: info.src,
+            scenario: info.scenario,
+            lens: info.lens,
+            pending: false,
+          },
           origin,
         );
       emit('response', result, data.id);

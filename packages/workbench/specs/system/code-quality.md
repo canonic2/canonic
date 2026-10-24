@@ -91,7 +91,7 @@ hooks, JSX lint rules and native-platform runners do not apply.
 | Component organization | Element folders own presentation, styles and helpers; design pages load shipping implementations. Shared modal styles live under `components/shared/`; startup and registration live under `bootstrap/` |
 | Behavior testing | Existing browser tests cover upgrade-time inputs, independent instances, reconnects, events, keyboard/focus and CSP for migrated controls. Canvas interaction also has a separate browser smoke script; this is not complete keyboard/accessibility coverage for every element |
 | Registration | Elements register through explicit bootstrap functions, including the export dialog. Browser tests verify importing its class is silent and registration is repeatable |
-| Application state | Navigation owns requested destinations and supersession. The content controller derives renderer routes, states, lenses and labels from project data; the outer shell owns its visible controls |
+| Application state | Navigation owns requested destinations and supersession. The content controller derives renderer routes, scenarios, lenses and labels from project data; the outer shell owns its visible controls |
 | Renderer isolation | Artboards load `content.html` with a dedicated bootstrap, viewport and annotation/capture ports. Browser assertions reject nested application startup |
 | Lifecycle and dependencies | Controllers expose runtime/disposal ports, and migrated elements release connection resources. Global shell APIs, event interception and renderer polling remain integration debt |
 

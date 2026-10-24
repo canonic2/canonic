@@ -211,8 +211,8 @@ textarea,
 
 /* ------------------------------------------------------------ breadcrumb */
 
-/* Page / State ▾. The page is plain text — the list picks pages; the
-   state is a button, because its siblings are one click away here. */
+/* Page / Scenario ▾. The page is plain text — the list picks pages; the
+   scenario is a button, because its siblings are one click away here. */
 .wb-crumb {
   display: flex;
   align-items: center;
@@ -222,7 +222,7 @@ textarea,
 }
 
 .wb-crumb[hidden],
-.wb-states-control[hidden] {
+.wb-scenarios-control[hidden] {
   display: none;
 }
 
@@ -251,7 +251,7 @@ textarea,
   text-overflow: ellipsis;
 }
 
-.wb-states-control {
+.wb-scenarios-control {
   position: relative;
   display: flex;
   align-items: center;
@@ -263,7 +263,7 @@ textarea,
   color: var(--wb-fg-3);
 }
 
-.wb-action.wb-crumb-state {
+.wb-action.wb-crumb-scenario {
   width: auto;
   min-width: 0;
   max-width: 240px;
@@ -274,12 +274,12 @@ textarea,
   font-weight: 590;
 }
 
-.wb-crumb-state > span:first-child {
+.wb-crumb-scenario > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.wb-crumb-state[aria-expanded='true'] {
+.wb-crumb-scenario[aria-expanded='true'] {
   background: var(--wb-hover);
 }
 
@@ -289,7 +289,7 @@ textarea,
   color: var(--wb-fg-3);
 }
 
-.wb-states-control .wb-menu {
+.wb-scenarios-control .wb-menu {
   right: auto;
   left: 0;
   max-height: 60vh;
@@ -355,7 +355,7 @@ textarea,
    beside it, the measured top bar script folds the view actions into More.
    The size switcher stays visible because changing the artboard size is the
    most spatially important action in a narrow editor. Tighter still, the
-   page's name goes; the state stays. */
+   page's name goes; the scenario stays. */
 .wb-topbar.is-topbar-compact #reload,
 .wb-topbar.is-topbar-compact #sourceControl,
 .wb-topbar.is-topbar-compact #copyReference,
@@ -366,11 +366,11 @@ textarea,
 
 .wb-topbar.is-topbar-measuring .wb-topbar-left > *,
 .wb-topbar.is-topbar-measuring .wb-crumb > *,
-.wb-topbar.is-topbar-measuring .wb-states-control > * {
+.wb-topbar.is-topbar-measuring .wb-scenarios-control > * {
   flex-shrink: 0;
 }
 
-.wb-topbar.is-topbar-measuring .wb-action.wb-crumb-state {
+.wb-topbar.is-topbar-measuring .wb-action.wb-crumb-scenario {
   max-width: none;
 }
 

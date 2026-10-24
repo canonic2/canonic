@@ -123,8 +123,8 @@ disconnect/restart/cancel acceptance is not established by them.
 
 `POST` accepts JSON: `format` (`zip`, `pdf`, `images`, `browser`), `scope`
 (`space`, `page`, `pages`, `collection`), page IDs, collection name, `variants`
-(`all`, `current`, `custom`), optional state/size filters, and lens. Current-view
-requests include the selected page, state, lens, size and viewport dimensions.
+(`all`, `current`, `custom`), optional scenario/size filters, and lens. Current-view
+requests include the selected page, scenario, lens, size and viewport dimensions.
 Unknown pages, invalid options and mismatched current selections answer `400`.
 Empty requests and direct GET downloads default to a whole-space source ZIP.
 
@@ -140,7 +140,7 @@ warnings; no successful pages fails the job. PDF returns `application/pdf`.
 Visual pages above 19,200 CSS pixels fail their capture rather than clip. Images
 above 8,192 pixels likewise warn rather than silently truncate.
 
-The portable build receives the selected page IDs and optional state/size
+The portable build receives the selected page IDs and optional scenario/size
 filters. Browser-only output fails if no compiled previews or docs are available.
 
 - A failed portable build never fails a source ZIP. If the
@@ -155,8 +155,8 @@ filters. Browser-only output fails if no compiled previews or docs are available
 
 ## Reference capture plan
 
-- The plan covers every declared state of every authored design page and
-  each state of every TypeScript preview, at the page's sizes. Pages are
+- The plan covers every declared scenario of every authored design page and
+  each scenario of every TypeScript preview, at the page's sizes. Pages are
   planned once each, across collections and the iOS Simulator catalog.
 - An export whose lens (the request's `lens`, or the current lens for
   current-view requests) is a Storybook implementation captures, for every
@@ -170,11 +170,11 @@ filters. Browser-only output fails if no compiled previews or docs are available
   Duplicate dimensions are removed. Screenshot records carry the size key
   as `size` and its label as `sizeLabel`; README headings read `Label · Laptop`.
   See the [sizes contract](../canvas/sizes.md#design-system-export).
-- Design pages load as designed with actions off; the first state loads
-  without a `state` parameter. Current-view or explicit lens requests use the
+- Design pages load as designed with actions off; the first scenario loads
+  without a `scenario` parameter. Current-view or explicit lens requests use the
   page's declared URL/workbench mapping, or a Storybook lens's mapped stories.
   Native lenses do not support visual export.
-- TypeScript preview states load the preview's page with `?state=<id>`. A
+- TypeScript preview scenarios load the preview's page with `?scenario=<id>`. A
   capture waits up to 8 seconds for the preview to report it has rendered; a
   preview render error fails that reference instead of capturing an error
   page.
@@ -196,7 +196,7 @@ this export's own reference plan, scheduling, warnings, and archive contract.
 
 | | Interactive camera and handoff | Design-system export |
 | --- | --- | --- |
-| Target | Current visible selection, scroll, annotations, and live document state | Planned design states, TypeScript preview states, and, with a Storybook lens, mapped pages' stories at configured sizes |
+| Target | Current visible selection, scroll, annotations, and live document state | Planned design scenarios, TypeScript preview scenarios, and, with a Storybook lens, mapped pages' stories at configured sizes |
 | Preparation | Continuous live mirror into one warm view; flush on click | Direct background loads and settling for each planned reference |
 | Renderer use | Single queued helper | Up to four workers, each page's or story's references on one; the existing warm service is one of them |
 | Reuse | Reprepare the selected view | Keep all reference sizes of one URL on its worker; switch Storybook stories in a loaded `iframe.html` runtime when possible |
@@ -206,7 +206,7 @@ Export calls the same capture service but has its own jobs and scheduling.
 References for one page or story stay on one worker to reuse the loaded
 document across reference sizes. Each export supplies a fresh revision for
 local references, so another export loads updated sources. Within one export,
-local scripts initialize once per state URL and subsequent sizes resize and
+local scripts initialize once per scenario URL and subsequent sizes resize and
 settle that document. Other pages and stories run in parallel on
 extra workers that start cold, each with its own helper; they close when the
 export ends. Storybook reuse inside a worker does not navigate the visible
@@ -248,11 +248,11 @@ When the project has TypeScript previews, the archive contains a `browser/`
 directory: an interactive viewer at `browser/index.html` over a versioned
 catalog, `browser/workbench.json`, with each preview compiled under its own
 directory. Served by any static HTTP server, it opens without Electron,
-Workbench, or the project's packages, and offers search, states, sizes,
+Workbench, or the project's packages, and offers search, scenarios, sizes,
 resizable dimensions, shared input controls, actions, and docs. Direct preview
-pages accept `?state=<id>`. A preview that fails to build is listed under
+pages accept `?scenario=<id>`. A preview that fails to build is listed under
 `browser.warnings` while successful previews remain. `canonic-export.json`
-records the entry, catalog, and each preview's id, source, entry, and states.
+records the entry, catalog, and each preview's id, source, entry, and scenarios.
 The [previews spec](../pages/previews.md) owns the compiler, adapters, viewer, and the
 CLI `build` command that produces the same viewer without a server.
 
@@ -279,7 +279,7 @@ above do not yet have a dedicated end-to-end test.
   and a stand-in capture service, progress, waiting for warm-up, coalesced
   jobs, the current-page PDF, retention and expiry (`404`), bounded retained
   bundles, job and part downloads, and the direct ZIP download.
-- The export module's tests check the capture plan for states, artboards,
+- The export module's tests check the capture plan for scenarios, artboards,
   docs pages and a Storybook lens's stories, the four-worker pool, per-story
   worker reuse, cleanup warnings, revision reuse within a job and refresh
   across jobs, the source closure, linked packages, Storybook configuration,
@@ -287,15 +287,15 @@ above do not yet have a dedicated end-to-end test.
   portable fallback, successful partial builds and archive failures after a
   portable failure.
 - [preview.test.js](../../server/node/preview.test.js) checks that a Workbench
-  lens's export captures the managed preview's states, that a browser export
-  builds only the selected previews, states and sizes, and that the portable
+  lens's export captures the managed preview's scenarios, that a browser export
+  builds only the selected previews, scenarios and sizes, and that the portable
   build keeps successful previews beside a failed one.
   [preview-astro.test.js](../../server/node/preview-astro.test.js) checks Astro reference
-  states in portable output.
+  scenarios in portable output.
 - [capture-page.test.js](../../ui/legacy/capture-page.test.js) checks that
   reference capture waits for a TypeScript preview to render and fails on a
   render error. [preview-runtime.test.cjs](../../ui/preview/preview-runtime.test.cjs) checks
-  that missing states and render failures block readiness.
+  that missing scenarios and render failures block readiness.
 - [electron-capture.test.js](../../capture/electron-capture.test.js),
   [capture-helper.test.js](../../capture/capture-helper.test.js), and
   [capture-scripts.test.js](../../capture/capture-scripts.test.js) check the export pool, in-place

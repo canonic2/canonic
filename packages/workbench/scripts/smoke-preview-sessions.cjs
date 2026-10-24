@@ -20,8 +20,8 @@ async function main() {
     res.setHeader('Content-Type', 'text/html');
     if (req.url === '/index.json') {
       res.setHeader('Content-Type', 'application/json');
-      const body = JSON.stringify({ entries: Object.fromEntries((includeMissing ? ['Page', 'Other', 'Missing'] : ['Page', 'Other']).flatMap(title => ['default', 'secondary'].map(state => [
-        title.toLowerCase() + '--' + state, { id: title.toLowerCase() + '--' + state, type: 'story', title: 'Components/' + title, name: state === 'default' ? 'Text field' : 'Error field' },
+      const body = JSON.stringify({ entries: Object.fromEntries((includeMissing ? ['Page', 'Other', 'Missing'] : ['Page', 'Other']).flatMap(title => ['default', 'secondary'].map(scenario => [
+        title.toLowerCase() + '--' + scenario, { id: title.toLowerCase() + '--' + scenario, type: 'story', title: 'Components/' + title, name: scenario === 'default' ? 'Text field' : 'Error field' },
       ]))) });
       if (catalogDelay) setTimeout(() => res.end(body), catalogDelay);
       else res.end(body);
@@ -49,7 +49,7 @@ async function main() {
   fs.symlinkSync(path.resolve(__dirname, "../node_modules"), path.join(root, 'node_modules'), 'junction');
   fs.writeFileSync(path.join(root, 'page.workbench.ts'), `import {definePreview} from '@canonic2/workbench';
     export default definePreview({id:'pages/page',adapter:'react',source:{entry:'./page.tsx'},
-      states:{default:{}},controls:{label:{type:'text'}},inputs:{label:'Original'}});`);
+      scenarios:{default:{}},controls:{label:{type:'text'}},inputs:{label:'Original'}});`);
   fs.writeFileSync(path.join(root, 'page.tsx'), `import React from 'react';
     export default function Page(props){const [count,setCount]=React.useState(0);
       React.useLayoutEffect(()=>{window.mounts=(window.mounts||0)+1},[]);
@@ -109,7 +109,7 @@ collections:
         const canvas=document.getElementById('artboards');
         if(canvas && getComputedStyle(canvas).display!=='none' && getComputedStyle(canvas).visibility==='visible'){
           const sample={page:document.getElementById('crumbPage').textContent,title:document.title,
-            story:document.getElementById('stateControl').hidden?null:document.getElementById('stateName').textContent,
+            story:document.getElementById('scenarioControl').hidden?null:document.getElementById('scenarioName').textContent,
             preset:document.getElementById('sizeSwitcher').current,size:canvas.state.artboards[0]?.size,
             labels:[...canvas.shadowRoot.querySelectorAll('section button')].map(b=>b.textContent)};
           const serial=JSON.stringify(sample);if(serial!==previousLabels){labelTimeline.push(sample);previousLabels=serial;}
@@ -125,18 +125,18 @@ collections:
       }
       throw new Error('Retained preview did not settle: ' + expression + '\n' + await target.evaluate(`JSON.stringify({hash:location.hash,state:document.getElementById('artboards')?.state,reports:window.reports,fixtureReports:document.querySelector('wb-canvas > iframe')?.contentWindow.fixtureReports})`));
     }
-    async function pick(lens, state = 'default', expectPending = false) {
+    async function pick(lens, scenario = 'default', expectPending = false) {
       const started = performance.now();
-      await target.evaluate('location.hash=' + JSON.stringify('page.workbench.ts:' + state + '@laptop~' + (lens || 'design')));
+      await target.evaluate('location.hash=' + JSON.stringify('page.workbench.ts:' + scenario + '@laptop~' + (lens || 'design')));
       if (expectPending) {
-        await until(`${canvas}.artboards[0]?.target.state==='secondary' && !${canvas}.artboards[0]?.view?.ready`);
+        await until(`${canvas}.artboards[0]?.target.scenario==='secondary' && !${canvas}.artboards[0]?.view?.ready`);
         assert.equal(await target.evaluate('getComputedStyle(document.getElementById("artboards")).visibility'), 'hidden', 'outgoing pixels stay private while the requested story renders');
         await until(`!document.getElementById('blank').hidden && document.getElementById('blank').classList.contains('is-loading')`);
         assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'slow story rendering shows the loading status');
         assert.equal(await target.evaluate('document.title'), 'Page · Error field · Storybook · Acme');
         await until(`${canvas}.artboards[0].view.label==='Page / Error field' && !${canvas}.artboards[0].view.ready`);
       }
-      await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].target.lens===${JSON.stringify(lens || null)}${lens === 'storybook' ? ` && ${canvas}.artboards[0].target.state===${JSON.stringify(state)}` : ''}`);
+      await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].target.lens===${JSON.stringify(lens || null)}${lens === 'storybook' ? ` && ${canvas}.artboards[0].target.scenario===${JSON.stringify(scenario)}` : ''}`);
       if (lens !== 'docs') {
         assert.deepEqual(await target.evaluate(`${canvas}.artboards[0].size`), {width:1512,height:982}, 'navigation applies its selected Laptop preset to the retained artboard');
         await until(`${renderer}.innerWidth===1512 && ${renderer}.innerHeight===982`);
@@ -146,11 +146,11 @@ collections:
       assert.equal((await loadingStatus()).busy, 'false');
       assert.deepEqual(await target.evaluate(`({width:${renderer}.document.getElementById('artboardContent').clientWidth,height:${renderer}.document.getElementById('artboardContent').clientHeight,nestedCanvas:!!${renderer}.document.getElementById('canvas')})`), {...await target.evaluate(`({width:${renderer}.innerWidth,height:${renderer}.innerHeight})`),nestedCanvas:false}, 'every lens uses the complete owning viewport without an inner canvas');
       if (lens === 'storybook') {
-        const name = state === 'default' ? 'Text field' : 'Error field';
-        assert.deepEqual(await target.evaluate(`({title:document.title,page:document.getElementById('crumbPage').textContent,story:document.getElementById('stateName').textContent,label:${canvas}.artboards[0].view.label,target:${canvas}.artboards[0].target.label,frame:document.querySelector('wb-canvas > iframe').title})`), {title:`Page · ${name} · Storybook · Acme`,page:'Page',story:name,label:`Page / ${name}`,target:`Page / ${name}`,frame:`Page / ${name}`});
+        const name = scenario === 'default' ? 'Text field' : 'Error field';
+        assert.deepEqual(await target.evaluate(`({title:document.title,page:document.getElementById('crumbPage').textContent,story:document.getElementById('scenarioName').textContent,label:${canvas}.artboards[0].view.label,target:${canvas}.artboards[0].target.label,frame:document.querySelector('wb-canvas > iframe').title})`), {title:`Page · ${name} · Storybook · Acme`,page:'Page',story:name,label:`Page / ${name}`,target:`Page / ${name}`,frame:`Page / ${name}`});
       }
       if (lens === 'docs') await readingSurface();
-      console.log(JSON.stringify({ lens: lens || 'workbench', state, ms: Math.round(performance.now() - started), storybookDocuments: requests.filter(url=>url.startsWith('/iframe.html')).length }));
+      console.log(JSON.stringify({ lens: lens || 'workbench', scenario, ms: Math.round(performance.now() - started), storybookDocuments: requests.filter(url=>url.startsWith('/iframe.html')).length }));
     }
     const canvas = 'document.getElementById("artboards").state';
     const renderer = 'document.querySelector("wb-canvas > iframe").contentWindow';
@@ -231,7 +231,7 @@ collections:
     await target.evaluate('location.hash="#other.md:default@laptop~storybook"');
     await until('document.getElementById("crumbPage").textContent === "Other"');
     assert.equal(await target.evaluate('document.title'), 'Other · Storybook · Acme', 'a pending lookup names its destination rather than the previous docs page');
-    assert.equal(await target.evaluate('document.getElementById("stateName").textContent'), '', 'an unresolved story cannot retain the previous state label');
+    assert.equal(await target.evaluate('document.getElementById("scenarioName").textContent'), '', 'an unresolved story cannot retain the previous scenario label');
     assert.deepEqual(await target.evaluate('({visibility:getComputedStyle(document.getElementById("artboards")).visibility,inert:document.getElementById("artboards").inert})'), {visibility:'hidden',inert:true}, 'the docs view is concealed as soon as the destination changes, including during catalog lookup');
     await until(`!document.getElementById('blank').hidden && document.getElementById('blank').classList.contains('is-loading')`);
     assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'one canvas status covers slow catalog lookup');
@@ -348,14 +348,14 @@ collections:
     await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:default~storybook'");
     await until("reports.some(r=>r.pending && r.lens==='storybook')");
     assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.lens==='storybook')"), false);
-    await until("reports.some(r=>!r.pending && r.lens==='storybook' && r.state==='default')");
+    await until("reports.some(r=>!r.pending && r.lens==='storybook' && r.scenario==='default')");
     await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:secondary~storybook'");
     const embedded = "document.getElementById('workbench').contentDocument.getElementById('artboards').state.artboards[0]";
-    await until(`${embedded}?.target.state==='secondary' && !${embedded}.view?.ready`);
+    await until(`${embedded}?.target.scenario==='secondary' && !${embedded}.view?.ready`);
     assert.equal(await target.evaluate('getComputedStyle(document.getElementById("workbench").contentDocument.getElementById("artboards")).visibility'), 'hidden');
     await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:default~storybook'");
-    await until("reports.filter(r=>!r.pending && r.lens==='storybook' && r.state==='default').length===2");
-    assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.state==='secondary')"), false, 'a superseded story cannot acknowledge the current selection');
+    await until("reports.filter(r=>!r.pending && r.lens==='storybook' && r.scenario==='default').length===2");
+    assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.scenario==='secondary')"), false, 'a superseded story cannot acknowledge the current selection');
     await target.navigate(running.url + 'index.html#page.workbench.ts:default@laptop~storybook');
     await until("!!document.querySelector('wb-canvas > iframe')");
     assert.equal(await target.evaluate("getComputedStyle(document.querySelector('wb-canvas > iframe')).visibility"), 'hidden', 'cold startup cannot expose the nested Workbench UI');

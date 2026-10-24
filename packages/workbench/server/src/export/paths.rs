@@ -385,9 +385,9 @@ mod tests {
             page_url(
                 "pages/sign in.html",
                 base,
-                &[("actions", "off"), ("state", "an error")]
+                &[("actions", "off"), ("scenario", "an error")]
             ),
-            "http://127.0.0.1:3579/pages/sign%20in.html?actions=off&state=an+error"
+            "http://127.0.0.1:3579/pages/sign%20in.html?actions=off&scenario=an+error"
         );
         assert_eq!(
             resolve_url("/a.html?x=1", base),

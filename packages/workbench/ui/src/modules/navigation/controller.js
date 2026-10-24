@@ -50,7 +50,7 @@ export function createNavigation(ports) {
         !view ||
         view.problem ||
         view.src !== selection.src ||
-        view.state !== selection.state ||
+        view.scenario !== selection.scenario ||
         view.lens !== selection.lens
       )
         return null;
@@ -66,7 +66,7 @@ export function createNavigation(ports) {
       const matches = (view) =>
         !!view &&
         view.src === selection?.src &&
-        view.state === selection?.state &&
+        view.scenario === selection?.scenario &&
         view.lens === selection?.lens;
       const visible =
         !disposed &&
@@ -138,7 +138,7 @@ export function createNavigation(ports) {
       const declared = !next.docs ? next.artboards : undefined;
       const key = JSON.stringify([
         next.src,
-        next.state,
+        next.scenario,
         next.lens,
         next.docs ? next.example : null,
         declared,

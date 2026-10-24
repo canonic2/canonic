@@ -80,7 +80,7 @@ logging at its byte budget after saying so once.
 passes that flag to each space on startup; the standalone Node command accepts
 `--trace` too and prints diagnostics to its terminal. Tracing is off by default.
 Every response, including space routes, static assets and failures, records
-`preview.request.completed` with route, page, state, lens, selection ID when
+`preview.request.completed` with route, page, scenario, lens, selection ID when
 provided, status and `elapsedMs`, and carries `Server-Timing: total;dur=…`.
 For streaming responses this measures producing the response headers, not the
 lifetime of the stream or network transfer.

@@ -6,11 +6,11 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::path::Path;
 
-/// The pages, states and sizes a portable build covers.
+/// The pages, scenarios and sizes a portable build covers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Selection {
     pub(crate) pages: Vec<String>,
-    pub(crate) states: Vec<String>,
+    pub(crate) scenarios: Vec<String>,
     pub(crate) sizes: Vec<String>,
 }
 
@@ -33,7 +33,7 @@ pub(crate) async fn build(
     if let Some(previews) = previews {
         let selection = options.request.as_ref().map(|request| Selection {
             pages: view.pages.iter().map(|(src, _)| src.clone()).collect(),
-            states: request.states.clone(),
+            scenarios: request.scenarios.clone(),
             sizes: request.sizes.clone(),
         });
         match previews.export(selection).await {
