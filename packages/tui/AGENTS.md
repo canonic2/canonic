@@ -7,10 +7,19 @@ workspace or publication pipeline exists.
 
 ## Ownership and boundaries
 
-- picker.rs and chat.rs own component state, input-to-action translation and
-  rendering. Hosts own approvals, agent connections, policy and Git operations.
-- theme.rs owns semantic styling; text.rs owns bounded sanitized display text and
-  grapheme wrapping. runtime.rs owns one terminal lease and restores modes on drop.
+- Component modules own their state, input-to-action translation and rendering:
+  picker, editor, composer, completion, commands (palette), dialog, chat,
+  tool_call_card, run_activity, question_form, permission_review,
+  session_browser, tree_browser, inspection (code/diff), status_panels and
+  inline_composition. review_queue.rs and review_ticket.rs share host-ordered
+  review queues and operation identity; focus.rs owns focus order and modal
+  return scopes; input.rs owns single-line input over caller-owned storage;
+  output.rs owns settled CLI documents. Hosts own approvals, agent connections,
+  policy and Git operations.
+- theme.rs and theme/ own semantic styling and tokens; ui.rs owns shared
+  presentation primitives; text.rs owns bounded sanitized display text and
+  grapheme wrapping. runtime.rs and runtime/ own one terminal lease, inline
+  mode, profiles and the shared prompts, restoring modes on drop.
 - gallery.rs composes the public components with deterministic fixtures; main.rs
   only parses options and reports errors. It never calls agents or product CLIs.
 - Components do not read terminal input, enter raw mode or start event loops.
@@ -94,15 +103,13 @@ their generated reference pages. Keep Cargo caches between runs.
 - Restore mutated globals, environment, timers and test state. Keep production
   startup independent of fixtures. Store generated evidence in the package's
   ignored artifact locations or temporary directories.
-- Be conservative about running checks. Run scoped checks when they help, such
-  as the tests covering changed code or a lint of the module being edited;
-  Markdown-only changes need only a whitespace diff check. Do not run the full
-  battery (whole suites, format, strict lint, dependency audits, coverage,
-  builds, acceptance) after each change: when a task is complete, ask which
-  relevant categories to run and name their individual commands. A commit
-  request does not ask again; it reports what was and was not verified.
-  Command lists in package guides say how to run a check, not that every change
-  must run it. Do not rerun a passing check unless code it covers changed since.
+- Do not run checks on your own, including focused tests, lint, type checks,
+  formatting checks, dependency audits, coverage, verification builds,
+  acceptance suites and whitespace diff checks. Run checks only when the user
+  explicitly requests them. Checklists in package guides are reference, not
+  permission to run checks. Do not ask which
+  checks to run after a task or before a commit; report existing results and
+  unverified areas. Do not rerun a passing check unless code it covers changed since.
 - Prefer the package's focused-test and development commands for iteration;
   preserve Cargo's `target/` cache and avoid release packaging or installation
   unless that is the behavior being verified.
@@ -112,15 +119,6 @@ their generated reference pages. Keep Cargo caches between runs.
 - Report executed commands and observed outcomes. Missing prerequisites, optional
   captures and platform limits are distinct from behavior failures and passing
   acceptance. Do not infer untested platform coverage from another host's result.
-
-- Run Rust verification categories individually and select only those needed for
-  the task. A request for tests does not also request formatting, lint, type
-  checking, doctests, API docs, dependency auditing or coverage. Name the selected
-  commands before running them; there is no aggregate Rust check target.
-  `docs` generates browsable HTML API reference in `target/doc/`; `doctest`
-  executes Rust documentation examples. Run either as its own explicit category.
-  Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
-  their generated reference pages. Keep Cargo caches between runs.
 
 ---
 
@@ -215,12 +213,24 @@ locations, audience, publishing, and validation.
 - Record durable discoveries with evidence and rationale. Label hypotheses;
   include dates and conditions for measurements where relevant. Keep current
   requirements prominent rather than accumulating a conversation transcript.
-- Build experiments, probes and prototypes in temporary folders, not in the
-  repository. Record their findings in the relevant spec, with enough detail
-  about each fixture's setup to rebuild it, then delete the scripts. Product
-  code and tests replace prototypes; they are not kept alongside them. The
-  exception is a planned lab in a package whose labs spec allows committed
-  labs; delete its runners once the decision ships.
+- Verification specs map each contract to the tests that exercise it and list
+  the gaps. They do not log check runs: no pass records, run dates, product or
+  tool versions of a run, test or link counts, or coverage results. Report run
+  results to the user, not in specs or docs.
+- Build experiments, probes and prototypes in temporary folders, and labs in
+  the package's ignored `labs/` folder; none of them is committed, and no
+  committed file links into `labs/`. Product code and tests replace
+  prototypes; they are not kept alongside them.
+- Each lab ends as one research record, `research/<topic>.md` at the package's
+  top level, named for its question and listed with its status in
+  `research/README.md`. Its sections, in order: Question, Status, Hypothesis,
+  Method, Conditions, Results, Correctness, Threats to validity, and Decision
+  and follow-ups, with enough fixture and variant detail to rebuild the lab.
+  Follow-ups add dated subsections to the same record. An optional
+  `research/<topic>.json` holds small summaries only; raw samples, logs,
+  archives and runner code stay in `labs/`. Reusable fixture generators are
+  committed under `fixtures/labs/`. Research uses neutral paths and host
+  details: no usernames, home or temporary paths, hostnames or device IDs.
 - Update affected documentation when supported behavior changes. Verify claims,
   examples, labels, commands, defaults, and recovery instructions against the
   product. A specification does not establish that a proposed feature is available.
@@ -232,8 +242,8 @@ locations, audience, publishing, and validation.
 - Keep internal requirements and investigation notes in specs. Include technical
   detail in docs when it helps the intended audience use, configure, integrate,
   or troubleshoot the product. Prefer existing topics and cross-links over copies.
-- Check links and run `git diff --check`; run focused tests only when code also
-  changes. Do not add tests that
+- Run documentation checks, `git diff --check` and focused tests only when the
+  user explicitly requests them. Do not add tests that
   merely assert documentation text. Writing a spec does not authorize implementing
   proposals; writing docs does not itself authorize publishing or distribution.
 
@@ -354,6 +364,38 @@ testing rule to that setting.
   to starting a binary when the binary's own contract is not what is tested.
   Process-level tests stay for executables, exit statuses, output and process
   boundaries.
+
+---
+
+# Terminal selection lists
+
+Every interactive list in a product CLI follows one keyboard model, the one
+people know from common terminal pickers. The TUI interaction spec owns the
+full contract; this rule is what product code must not break.
+
+- Enter continues. In a single-choice list it chooses the highlighted row; in a
+  multiple-choice list it confirms the marked set. Enter never toggles a row.
+- Space marks and unmarks the highlighted row in a multiple-choice list,
+  including while the list shows a filter. Space never confirms and never types
+  into the filter of a multiple-choice list.
+- Typing other printable characters filters. Up/Down, Page, Home/End and
+  Ctrl-P/Ctrl-N move the highlight. Esc clears a nonempty filter first, then
+  goes back or cancels as the interaction's Escape contract says.
+- Pick several items with the picker's multiple-selection mode and its marks.
+  Do not build multi-select from a single-choice list that is reopened after each
+  choice, and do not add "Continue", "Done" or "Cancel" rows or `[x]` text in
+  labels to stand in for marks or keys.
+- The footer names what the keys do here, such as `space select · enter
+  continue · esc cancel`. When the host accepts an empty set, the footer says
+  what Enter does with nothing marked (for example `enter skip`). When it needs
+  at least one, Enter with nothing marked stays put and says to press Space.
+- Final confirmations (apply, delete, publish) stay a separate single-choice
+  step with the safe choice as default; they are not rows in the selection list.
+- Product CLIs reach these lists through the TUI library's components and
+  prompts. When a prompt the flow needs is missing, add it to the library
+  rather than emulating it in the product.
+- Test the keys on the real component: Space toggles with a filter visible,
+  Enter confirms the marked set, and a typed query still narrows the rows.
 
 ---
 

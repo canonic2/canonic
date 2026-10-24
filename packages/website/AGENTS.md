@@ -2,8 +2,9 @@
 
 The Canonic website, served at `https://canonic.sh/`. It covers four products
 (Workbench, Testrun, Playground, Shield). Only Workbench has pages so far:
-an overview at `/workbench/`, Docs, Install, and Changelog. `README.md`
-explains the build, the screenshots, and publishing.
+an overview at `/workbench/`, Docs, Install, and Changelog; the site root
+redirects to `/workbench/`. `README.md` explains the build, the screenshots,
+and publishing.
 
 ## Layout
 
@@ -11,13 +12,19 @@ explains the build, the screenshots, and publishing.
 - `src/pages/workbench/`: the Docs pages (built from the Workbench guides),
   the Install page, and the Changelog.
 - `src/layouts/Base.astro`: the product bar, section nav, and footer.
+- `src/components/`: reusable page, download, install and control components.
+- `src/scripts/`: browser scripts for downloads, platform detection and copying.
 - `src/lib/`: `workbench.js` (page URLs, nav, release data), `docs.js` (guide
-  order and link rewriting), `releases.js` (release selection and notes),
-  `marks.js` (logo and product marks), each with tests where they have logic.
+  order and link rewriting), `doc-groups.js` (guide sidebar groups),
+  `releases.js` (release selection and notes), `marks.js` (logo, product
+  marks and taglines) and `base.js` (the deployment base path), each with
+  tests where they have logic.
 - `src/styles/global.css` and `docs.css`: tokens and components.
 - `src/data/screenshots.json`, `public/images/`, `screenshots/`: Workbench
   screenshots, their regions, and the script that captures them from the
   repository's Acme demo.
+- `previews/` and `workbench.config.ts`: Workbench previews of the site's
+  pages, shown in the repository's Website space.
 
 ## Architecture direction
 
@@ -90,15 +97,13 @@ Never push a tag without the user's go-ahead.
 - Restore mutated globals, environment, timers and test state. Keep production
   startup independent of fixtures. Store generated evidence in the package's
   ignored artifact locations or temporary directories.
-- Be conservative about running checks. Run scoped checks when they help, such
-  as the tests covering changed code or a lint of the module being edited;
-  Markdown-only changes need only a whitespace diff check. Do not run the full
-  battery (whole suites, format, strict lint, dependency audits, coverage,
-  builds, acceptance) after each change: when a task is complete, ask which
-  relevant categories to run and name their individual commands. A commit
-  request does not ask again; it reports what was and was not verified.
-  Command lists in package guides say how to run a check, not that every change
-  must run it. Do not rerun a passing check unless code it covers changed since.
+- Do not run checks on your own, including focused tests, lint, type checks,
+  formatting checks, dependency audits, coverage, verification builds,
+  acceptance suites and whitespace diff checks. Run checks only when the user
+  explicitly requests them. Checklists in package guides are reference, not
+  permission to run checks. Do not ask which
+  checks to run after a task or before a commit; report existing results and
+  unverified areas. Do not rerun a passing check unless code it covers changed since.
 - Prefer the package's focused-test and development commands for iteration;
   preserve Cargo's `target/` cache and avoid release packaging or installation
   unless that is the behavior being verified.
@@ -108,15 +113,6 @@ Never push a tag without the user's go-ahead.
 - Report executed commands and observed outcomes. Missing prerequisites, optional
   captures and platform limits are distinct from behavior failures and passing
   acceptance. Do not infer untested platform coverage from another host's result.
-
-- Run Rust verification categories individually and select only those needed for
-  the task. A request for tests does not also request formatting, lint, type
-  checking, doctests, API docs, dependency auditing or coverage. Name the selected
-  commands before running them; there is no aggregate Rust check target.
-  `docs` generates browsable HTML API reference in `target/doc/`; `doctest`
-  executes Rust documentation examples. Run either as its own explicit category.
-  Rustdoc can recheck dependencies even with `--no-deps`, which only suppresses
-  their generated reference pages. Keep Cargo caches between runs.
 
 ---
 
@@ -211,12 +207,24 @@ locations, audience, publishing, and validation.
 - Record durable discoveries with evidence and rationale. Label hypotheses;
   include dates and conditions for measurements where relevant. Keep current
   requirements prominent rather than accumulating a conversation transcript.
-- Build experiments, probes and prototypes in temporary folders, not in the
-  repository. Record their findings in the relevant spec, with enough detail
-  about each fixture's setup to rebuild it, then delete the scripts. Product
-  code and tests replace prototypes; they are not kept alongside them. The
-  exception is a planned lab in a package whose labs spec allows committed
-  labs; delete its runners once the decision ships.
+- Verification specs map each contract to the tests that exercise it and list
+  the gaps. They do not log check runs: no pass records, run dates, product or
+  tool versions of a run, test or link counts, or coverage results. Report run
+  results to the user, not in specs or docs.
+- Build experiments, probes and prototypes in temporary folders, and labs in
+  the package's ignored `labs/` folder; none of them is committed, and no
+  committed file links into `labs/`. Product code and tests replace
+  prototypes; they are not kept alongside them.
+- Each lab ends as one research record, `research/<topic>.md` at the package's
+  top level, named for its question and listed with its status in
+  `research/README.md`. Its sections, in order: Question, Status, Hypothesis,
+  Method, Conditions, Results, Correctness, Threats to validity, and Decision
+  and follow-ups, with enough fixture and variant detail to rebuild the lab.
+  Follow-ups add dated subsections to the same record. An optional
+  `research/<topic>.json` holds small summaries only; raw samples, logs,
+  archives and runner code stay in `labs/`. Reusable fixture generators are
+  committed under `fixtures/labs/`. Research uses neutral paths and host
+  details: no usernames, home or temporary paths, hostnames or device IDs.
 - Update affected documentation when supported behavior changes. Verify claims,
   examples, labels, commands, defaults, and recovery instructions against the
   product. A specification does not establish that a proposed feature is available.
@@ -228,8 +236,8 @@ locations, audience, publishing, and validation.
 - Keep internal requirements and investigation notes in specs. Include technical
   detail in docs when it helps the intended audience use, configure, integrate,
   or troubleshoot the product. Prefer existing topics and cross-links over copies.
-- Check links and run `git diff --check`; run focused tests only when code also
-  changes. Do not add tests that
+- Run documentation checks, `git diff --check` and focused tests only when the
+  user explicitly requests them. Do not add tests that
   merely assert documentation text. Writing a spec does not authorize implementing
   proposals; writing docs does not itself authorize publishing or distribution.
 
@@ -285,6 +293,7 @@ the actual component format, styles, host integration and verification commands.
 - For site content or behavior changes, run `pnpm --dir packages/website test`
   and `pnpm --dir packages/website run build` when the user asks for checks,
   then inspect affected output.
-  Check the rendered pages visually when layout or screenshots change. Internal Markdown-only specs need link review and `git diff --check`.
+  Requested visual verification covers rendered layouts and screenshots.
+  Requested Markdown-only verification uses link review and `git diff --check`.
 - Writing content does not itself authorize deployment; publish only when
   requested.

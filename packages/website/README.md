@@ -123,7 +123,7 @@ the version's entry in `workbench/CHANGELOG.md`, which the release workflow
 publishes. The generated "Full Changelog" line becomes the entry's changelog
 button, and headings and the New Contributors list are left out. A release
 with no notes of its own shows only its links and builds. To correct a
-published release's notes, follow the `workbench-release` skill, then deploy
+published release's notes, edit them on the GitHub release, then deploy
 the site again. In dev the changelog still asks GitHub, and shows a link to the
 releases if it can't reach them.
 
