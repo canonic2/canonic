@@ -4,6 +4,7 @@ use crate::{
     editor::{Editor, EditorView, Outcome},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     focus::Focus,
+    input::{Action as InputAction, LineInput},
     theme::Presentation,
 };
 use ratatui::{
@@ -17,6 +18,8 @@ pub(super) struct EditorDemo {
     focus: Focus<usize>,
     scenario: usize,
     note: String,
+    line: LineInput,
+    line_text: String,
 }
 
 fn binding_fixture(editor: &mut Editor, scenario: usize) -> &'static str {
@@ -57,12 +60,26 @@ impl EditorDemo {
             focus,
             scenario: 0,
             note: String::new(),
+            line: LineInput::new("", 8192),
+            line_text: String::new(),
         };
         demo.reset();
         demo
     }
 
+    fn reset_line(&mut self) {
+        self.line_text = match self.scenario {
+            25 => "Acme".into(),
+            27 | 28 => "A long default with Unicode 界 and a horizontally scrolling caret".into(),
+            29 => "fixture-token-never-rendered".into(),
+            30 => "12345678".into(),
+            _ => String::new(),
+        };
+        self.line = LineInput::new(&self.line_text, if self.scenario == 30 { 8 } else { 8192 });
+    }
+
     fn reset(&mut self) {
+        self.reset_line();
         self.editors = std::array::from_fn(|_| Editor::default());
         self.focus =
             Focus::new(vec![0, 1]).unwrap_or_else(|| unreachable!("fixture IDs are unique"));
@@ -166,6 +183,23 @@ impl EditorDemo {
     }
 
     pub(super) fn update(&mut self, event: &Event) -> bool {
+        if matches!(event, Event::Key(key) if key.kind != KeyEventKind::Release && key.code == KeyCode::F(2))
+        {
+            self.scenario = (self.scenario + 1) % 32;
+            self.reset();
+            return true;
+        }
+        if self.scenario >= 25 {
+            self.note = match self.line.update(&mut self.line_text, event) {
+                InputAction::Submit => "Submitted · local simulation",
+                InputAction::Back => "Back · local simulation",
+                InputAction::Cancel => "Cancelled · local simulation",
+                InputAction::Invalid => "Input refused · bounded single line required",
+                InputAction::None => "Enter submits · Esc back · Ctrl-C cancels · F2 next fixture",
+            }
+            .into();
+            return true;
+        }
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Release {
                 return false;
@@ -195,11 +229,6 @@ impl EditorDemo {
                     self.focus.push(vec![2]);
                     return true;
                 }
-                KeyCode::F(2) => {
-                    self.scenario = (self.scenario + 1) % 25;
-                    self.reset();
-                    return true;
-                }
                 KeyCode::Enter if key.modifiers.is_empty() => {
                     if key.kind == KeyEventKind::Press
                         && let Some(index) = self.focus.active().copied()
@@ -225,6 +254,33 @@ impl EditorDemo {
     }
 
     pub(super) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: Presentation) {
+        if self.scenario >= 25 {
+            let [field, note] =
+                Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(area);
+            let field = if self.scenario == 28 {
+                Rect::new(field.x, field.y, field.width.min(22), field.height)
+            } else {
+                field
+            };
+            self.line.render(
+                frame,
+                field,
+                &self.line_text,
+                "Single-line prompt",
+                self.scenario == 29,
+                theme,
+            );
+            frame.render_widget(
+                Paragraph::new(if self.scenario == 31 {
+                    "Cancelled · no action executed"
+                } else {
+                    &self.note
+                })
+                .style(theme.muted()),
+                note,
+            );
+            return;
+        }
         let [first, second, hints] = Layout::vertical([
             Constraint::Percentage(60),
             Constraint::Min(0),

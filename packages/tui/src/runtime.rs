@@ -1,6 +1,8 @@
 //! Owns one interactive terminal lease and restores its modes on drop or unwinding.
 
 mod inline;
+pub mod profile;
+pub mod prompts;
 pub use inline::{Capabilities, InlineOptions, InlineSession, PausedInline};
 
 #[cfg(unix)]
@@ -19,6 +21,13 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
+
+/// Read terminal dimensions without taking a terminal lease.
+/// # Errors
+/// Returns the platform error when dimensions are unavailable.
+pub fn terminal_size() -> io::Result<(u16, u16)> {
+    terminal::size()
+}
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -43,6 +52,7 @@ impl TerminalSession {
         self,
         operation: impl FnOnce() -> io::Result<T>,
     ) -> (io::Result<Self>, io::Result<T>) {
+        let screen = self.screen;
         #[cfg(unix)]
         let original = self.original.clone();
         if let Err(error) = self.close() {
@@ -54,7 +64,11 @@ impl TerminalSession {
             );
         }
         let result = operation();
-        let terminal = Self::open();
+        let terminal = if screen {
+            Self::open()
+        } else {
+            Self::open_input()
+        };
         #[cfg(unix)]
         let terminal = terminal.map(|mut terminal| {
             terminal.original = original;
@@ -72,11 +86,17 @@ impl TerminalSession {
         Ok(session)
     }
 
+    /// Acquire raw input and paste modes on the normal screen for a streaming host.
+    /// Views acquire their own region only during an explicit `handoff`.
+    /// # Errors
+    /// Returns noninteractive, conflicting-lease and terminal acquisition errors.
+    pub fn open_input() -> io::Result<Self> {
+        Self::acquire_modes(false)
+    }
+
     fn acquire_modes(screen: bool) -> io::Result<Self> {
         if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-            return Err(io::Error::other(
-                "The gallery requires an interactive terminal; use --list for plain output",
-            ));
+            return Err(io::Error::other("The TUI requires an interactive terminal"));
         }
         if ACTIVE
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -135,7 +155,7 @@ impl TerminalSession {
     /// # Errors
     /// Returns terminal input errors.
     pub fn poll(&self, timeout: Duration) -> io::Result<Option<Event>> {
-        if self.terminal.is_none() {
+        if self.held.is_none() {
             return Err(io::Error::other("Terminal is closed"));
         }
         if event::poll(timeout)? {

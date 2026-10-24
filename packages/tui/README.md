@@ -25,8 +25,10 @@ scenarios. Ctrl-X I opens status and Ctrl-X N lists notices when the host enable
 the adapter. See [usage](docs/usage.md#status-panels-and-notices) and the
 [contract](specs/components/status-panels-and-notices.md).
 The Cargo package is `canonic-tui`; Rust code imports it as `canonic_tui`.
-Consuming CLIs declare it through optional local Cargo path dependencies, behind
-a `tui` feature; without it they keep plain prompts. Ratatui
+Consuming CLIs declare it as a required, versioned local Cargo path dependency.
+Every CLI build includes the shared TUI. Interactive prompts use its components
+and leases; unsupported terminals return errors. Plain and structured
+noninteractive output remain host-owned. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
@@ -144,10 +146,10 @@ make test
 make coverage
 ```
 
-Each consumer has an optional `tui` Cargo feature enabling the dependency:
+Consumers compile the dependency through their ordinary package targets:
 
 ```sh
-cargo check --locked --features tui --manifest-path path/to/consumer/Cargo.toml
+cargo check --locked --manifest-path path/to/consumer/Cargo.toml
 ```
 
 Existing product interfaces retain their behavior; their UI migrations are

@@ -94,8 +94,9 @@ Never push a tag without the user's go-ahead.
   as the tests covering changed code or a lint of the module being edited;
   Markdown-only changes need only a whitespace diff check. Do not run the full
   battery (whole suites, format, strict lint, dependency audits, coverage,
-  builds, acceptance) after each change: when a task is complete, and before a
-  commit, ask which relevant categories to run and name their individual commands.
+  builds, acceptance) after each change: when a task is complete, ask which
+  relevant categories to run and name their individual commands. A commit
+  request does not ask again; it reports what was and was not verified.
   Command lists in package guides say how to run a check, not that every change
   must run it. Do not rerun a passing check unless code it covers changed since.
 - Prefer the package's focused-test and development commands for iteration;

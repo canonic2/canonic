@@ -31,7 +31,7 @@ loaded find, selection, identified copy/editor/load results and 51 live scenario
 
 ## Delivery scope and phase order
 
-Keep local unpublished library/gallery and optional consumer dependencies. No
+Keep local unpublished library/gallery and required consumer dependencies. No
 publication, installation, agent integration or product UI rollout is added by
 this plan. Complete one component with its owned state, host boundaries, scenarios and
 relevant checks before broadening. Dependency order matters more

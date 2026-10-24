@@ -29,9 +29,10 @@ records implementation gaps; [Verification](verification.md) records evidence.
 ## Package and consumers
 
 `canonic-tui` is an unpublished Rust library with an optional `gallery`
-feature and `tui-gallery` binary. Consuming CLIs declare optional local
-path dependencies behind their `tui` features. There is no root Cargo workspace
-or registry publication pipeline. Dependency compilation is distinct from a
+feature and `tui-gallery` binary. Consuming CLIs declare required, versioned local
+path dependencies on `canonic-tui`, with no build-time terminal UI opt-out.
+Terminal capabilities and transports select presentation at runtime. There is no
+root Cargo workspace or registry publication pipeline. Dependency compilation is distinct from a
 consumer UI rollout.
 
 ## Implemented module map

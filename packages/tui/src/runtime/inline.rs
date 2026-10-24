@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-/// Host-resolved capabilities. Unknown cursor control requires plain fallback.
+/// Host-resolved capabilities. Unknown cursor control refuses interactive input.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Capabilities {
     pub cursor: bool,
@@ -76,12 +76,12 @@ impl InlineSession {
     /// Acquire raw/paste modes, verify the cursor and reserve fresh rows below it.
     /// # Errors
     /// Unknown capabilities, noninteractive/tiny terminals and failed cursor reports return
-    /// errors. Hosts use numbered text fallback; no anchor is guessed.
+    /// errors. Hosts report the prerequisite; no anchor is guessed.
     pub fn open(options: InlineOptions) -> io::Result<Self> {
         if !options.capabilities.cursor {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "no safe cursor control; use plain input",
+                "no safe cursor control; use a cursor-capable terminal",
             ));
         }
         if options.height == 0 {
@@ -101,7 +101,7 @@ impl InlineSession {
         if size.0 < 20 || size.1 < 5 {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "window too small; use plain input",
+                "window too small; enlarge the terminal and retry",
             ));
         }
         let lease = TerminalSession::acquire_modes(false)?;
@@ -109,7 +109,7 @@ impl InlineSession {
         if row >= size.1 {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "cursor report outside window; use plain input",
+                "cursor report outside window; retry in a supported terminal",
             ));
         }
         let mut session = Self {

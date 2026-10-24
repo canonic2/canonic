@@ -40,7 +40,7 @@ has one owning topic. Stable acceptance IDs are mapped to phases in [Delivery](r
 inspections and dated executed results are qualified in [Verification](verification.md);
 reorganizing specs is not a new test run. Tests present in source,
 passing gates, native terminal acceptance and consumer rollout are distinct evidence.
-Optional dependency declarations establish neither integration nor application coverage.
+Dependency declarations establish neither integration nor application coverage.
 
 Editor/focus, rich picker, dialog foundations and commands have their recorded
 [human gates](human-testing.md). Composer implements submission, queue, history,

@@ -442,7 +442,7 @@ const PICKER: [Scenario; 20] = [
         "Own a bounded region in the primary screen and preserve surrounding shell output. Terminal slice pending."
     ),
 ];
-const EDITOR: [Scenario; 29] = [
+const EDITOR: [Scenario; 35] = [
     live!("main", 0),
     live!("blurred", 1),
     live!("empty", 2),
@@ -478,10 +478,13 @@ const EDITOR: [Scenario; 29] = [
         "composer-host",
         "The design's message editor shares history, stash and queue rules with Composer. Use the complete composer main view for history, stash and queue workflows."
     ),
-    planned!(
-        "prompt-host",
-        "The design's small inline reply owns Enter as confirmation. A dedicated editor prompt host fixture is pending."
-    ),
+    live!("prompt-host", 25),
+    live!("prompt-empty", 26),
+    live!("prompt-long", 27),
+    live!("prompt-narrow", 28),
+    live!("prompt-hidden", 29),
+    live!("prompt-limit", 30),
+    live!("prompt-cancelled", 31),
     planned!(
         "external-host",
         "Suspend the terminal for an external editor, then restore it. Process handoff is pending."

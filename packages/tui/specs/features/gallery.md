@@ -164,7 +164,7 @@ belongs to [Human testing](../human-testing.md).
 | Rendering / TestBackend | Readability, labeled state, cursor/hit bounds, style and reflow at zero/tiny/narrow/normal sizes; assertions accompany reviewed snapshots |
 | Property | Arbitrary Unicode edits preserve UTF-8/grapheme ranges; undo round trips; navigation bounds; scroll/resize anchors; revision rejection; bounded projection/cache; tree validity |
 | Real owned PTY | Encoded key/paste/resize/input delivery, raw/paste/cursor/alternate restoration, inline output region, handled cancellation/suspend and native behavior |
-| Consumer boundary | Gallery-disabled library plus optional consumer compilation; later host integration tests prove actual product routing/headless invariance |
+| Consumer boundary | Gallery-disabled library plus ordinary consumer dependency compilation; host integration tests prove actual product routing/headless invariance |
 
 Do not snapshot every intermediate frame or test private file structure. Snapshot
 representative semantic states with controlled time/IDs and accompanying assertions

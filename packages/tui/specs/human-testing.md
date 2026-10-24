@@ -335,8 +335,8 @@ Engineering on 2026-10-10: `make check` passed formatting, strict Clippy,
 API docs and dependency audit. Gallery-disabled nextest passed 47 tests, and
 the release build passed. The final recent-shortcut and stable-filter-height
 refinements passed their rendered regressions, strict Clippy and release rebuild.
-One consumer's locked optional TUI compilation passed; another's workspace lockfile is
-out of date, so its optional TUI compilation used a disposable manifest/lockfile
+One consumer's locked TUI dependency compilation passed; another's workspace lockfile is
+out of date, so its TUI dependency compilation used a disposable manifest/lockfile
 copy and passed without editing workspace files. Palette/keys snapshots
 were inspected; Markdown targets and scoped diff
 checks passed. Native visual acceptance and Linux/Windows remain unverified.
@@ -533,7 +533,7 @@ No commit or dialog implementation follows until this gate passes.
 Slice 2a engineering: formatting, strict Clippy, 34 all-feature tests (including
 native macOS PTY), one doctest, API docs and dependency audit passed. The
 gallery-disabled library passed 29 tests; release build passed. The consumers'
-optional `tui` features compiled offline, with lockfiles restored byte-for-
+TUI dependencies compiled offline, with lockfiles restored byte-for-
 byte after temporary resolution. Reviewed the compact snapshot and six actual
 TestBackend style/geometry previews. Duplicate dependency warnings remain allowed
 by auditing. Native Linux/Windows and human modifier-key encoding are unverified.
@@ -676,7 +676,7 @@ Engineering: formatting, strict Clippy, 52 all-feature tests including macOS PTY
 scenarios, 40 gallery-disabled tests, one doctest, API docs and dependency audit
 passed. Measured geometry, fallback styles, Unicode caret cells, fixed dock and
 snapshots are covered. Native Linux/Windows and human key encodings are unverified.
-The release build and the consumers' optional TUI feature compilation passed;
+The release build and the consumers' TUI dependency compilation passed;
 consumer lockfiles were restored byte-for-byte. Scoped diff and local Markdown
 link checks passed in both owning repositories. Dependency auditing reports
 allowed duplicate-version warnings.
@@ -772,7 +772,7 @@ Slice 1 engineering: `make -C packages/tui check` passed formatting, strict
 Clippy, 25 all-feature tests including native macOS PTY, one doctest, API docs
 and dependency auditing. `cargo nextest run --locked --no-default-features`
 passed 21 library tests; `make -C packages/tui build` passed release build.
-Consumer `cargo check --offline --features tui` passed with temporary
+Consumer TUI dependency compilation passed offline with temporary
 lock resolution; their existing lockfiles were restored byte-for-byte to keep
 this slice scoped to Rust TUI. Consumers need lock resolution when adopting the
 polling backend dependency; this is compilation evidence, not a product rollout.

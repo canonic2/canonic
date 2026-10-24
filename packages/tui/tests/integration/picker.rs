@@ -28,6 +28,47 @@ fn picker(filter: Filter, mode: SelectionMode) -> ChoicePicker {
 }
 
 #[test]
+fn explicit_empty_highlight_and_narrow_confirmation_hints() {
+    let mut p = picker(Filter::Off, SelectionMode::Single);
+    assert!(p.highlight(None));
+    // Without a highlight, Enter confirms nothing and no width advertises it.
+    for width in [24, 48] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 7)).unwrap();
+        terminal
+            .draw(|frame| {
+                p.render(frame, frame.area(), PickerView::default(), true);
+            })
+            .unwrap();
+        let output = super::components::dump(terminal.backend().buffer());
+        assert!(
+            !output.contains("enter") && output.contains("esc"),
+            "{output}"
+        );
+    }
+    assert_eq!(p.update(&key(KeyCode::Enter)), Intent::None);
+    assert!(!p.highlight(Some("missing")));
+    assert_eq!(p.selected(), None);
+    p.update(&key(KeyCode::Down));
+    assert_eq!(
+        p.update(&key(KeyCode::Enter)),
+        Intent::Selected("id-0".into())
+    );
+    for width in [24, 32, 48] {
+        let mut terminal = Terminal::new(TestBackend::new(width, 7)).unwrap();
+        terminal
+            .draw(|frame| {
+                p.render(frame, frame.area(), PickerView::default(), true);
+            })
+            .unwrap();
+        let output = super::components::dump(terminal.backend().buffer());
+        assert!(
+            output.contains("enter") && output.contains("esc"),
+            "{output}"
+        );
+    }
+}
+
+#[test]
 fn ranking_uses_match_classes_and_preserves_source_order_for_ties() {
     let mut detail = Choice::new("detail", "Other");
     detail.detail = "deploy".into();

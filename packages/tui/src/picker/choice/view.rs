@@ -471,7 +471,14 @@ impl ChoicePicker {
             }
         }
         if area.width < 50 && focused {
-            hints = vec![escape];
+            // Compact hints keep Enter only when it confirms something, as above.
+            let confirmable = self.status == Status::Ready
+                && (self.mode == SelectionMode::Multiple || self.selected.is_some());
+            hints = if area.width >= 24 && confirmable {
+                vec!["enter".to_owned(), escape]
+            } else {
+                vec![escape]
+            };
         }
         frame.render_widget(
             Rule {

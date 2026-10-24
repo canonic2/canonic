@@ -11,6 +11,38 @@ use proptest::prelude::*;
 use std::time::Duration;
 use unicode_segmentation::UnicodeSegmentation;
 
+#[cfg(feature = "gallery")]
+#[test]
+fn single_line_prompt_gallery_covers_hidden_limits_and_cancellation() {
+    use canonic_tui::gallery::{Component, Gallery};
+    let mut gallery = Gallery::new();
+    for scenario in [
+        "prompt-host",
+        "prompt-empty",
+        "prompt-long",
+        "prompt-narrow",
+        "prompt-hidden",
+        "prompt-limit",
+        "prompt-cancelled",
+    ] {
+        gallery.open_scenario(Component::Editor, scenario).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(50, 12)).unwrap();
+        terminal.draw(|frame| gallery.render(frame)).unwrap();
+        let text = super::components::dump(terminal.backend().buffer());
+        assert!(text.contains("Single-line prompt"), "{scenario}: {text}");
+        assert!(!text.contains("fixture-token-never-rendered"));
+    }
+    gallery
+        .open_scenario(Component::Editor, "prompt-limit")
+        .unwrap();
+    gallery.update(&Event::Paste("extra".into()));
+    let mut terminal = Terminal::new(TestBackend::new(70, 12)).unwrap();
+    terminal.draw(|frame| gallery.render(frame)).unwrap();
+    let text = super::components::dump(terminal.backend().buffer());
+    assert!(text.contains("Input refused"), "{text}");
+    assert!(text.contains("12345678"), "{text}");
+}
+
 fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
     Event::Key(KeyEvent::new(code, modifiers))
 }

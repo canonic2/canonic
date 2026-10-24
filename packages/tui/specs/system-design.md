@@ -106,7 +106,7 @@ compatibility remains available. Future capability migrations introduce stable
 IDs before concurrent parts/targeted streams and preserve or explicitly adapt
 existing consumer contracts. Do not make callers supply full
 application state. Every changed public API has docs/examples, gallery-off compile
-checks and each consumer's optional-feature check.
+checks and each consumer's ordinary dependency compilation check.
 
 ## Acceptance criteria
 

@@ -531,9 +531,12 @@ through OSC 11 is not implemented; select light tokens explicitly.
 
 ## Local consumers
 
-Consuming CLIs declare `canonic-tui` as an optional, versioned local
-path dependency. Enable their `tui` feature; no package registry is involved for
-this library. Upstream dependencies are resolved through their Cargo lockfiles.
+Consuming CLIs declare `canonic-tui` as a required, versioned local path
+dependency. Every build includes the shared terminal UI. Interactive prompts use
+its components and leases; unsupported terminals return errors. Hosts retain
+plain and structured noninteractive protocols. No package registry is involved
+for this library. Upstream dependencies
+are resolved through their Cargo lockfiles.
 
 ```rust
 use canonic_tui::{picker::{Action, Picker}, event::{Event, KeyCode, KeyEvent, KeyModifiers}};
@@ -874,6 +877,37 @@ empty input and EOF choose nothing. Plain reviews display supplied scopes;
 questions collect typed answers and require final `send`. Chat without cursor
 control reports its retained draft and ends without sending it. A host without
 alternate-screen support reports unavailable browser/inspection entry.
+
+Product CLIs require Canonic TUI for interactive prompts. Their terminal failures
+return actionable errors; JSON and piped protocols remain noninteractive. The
+numbered plain scenarios above belong to the standalone gallery fixture host.
+For simple single-line prompts, explicitly call `runtime::prompts::read` with a
+caller-owned buffer, hidden flag and byte limit. It borrows the buffer and keeps
+no history. It reserves `limit` bytes before editing, so edits never reallocate
+the buffer or leave stray copies of a hidden value; zeroize the buffer yourself
+when you are done with it. An insertion past the limit or containing a
+line break is refused with a note in the field title, and editing continues; a
+paste's single trailing line break is dropped first. `choose` returns an original index or no
+selection; guided flows use `select` to distinguish Escape from Ctrl-C/Ctrl-D.
+The editor gallery's `prompt-*` scenarios demonstrate the shared field states.
+
+The prompt hosts render `ChoicePicker` with labeled rules, separate details,
+current-value marks and responsive hints. `choose_choices` accepts stable
+identities and context. Missing defaults leave the highlight empty; number keys
+highlight and require Enter. Small lists omit the filter row; larger lists use
+the shared filter editor. Compact widths retain Enter and Escape; very small
+windows refuse confirmation until enough space is available.
+`runtime::profile::detect` resolves `NO_COLOR`, `COLORTERM`, `TERM` and the active
+locale without acquiring a terminal. RGB and indexed terminals use their
+corresponding profiles; ANSI 16 and ASCII remain explicit capability outcomes.
+
+For settled CLI output, `output::Document` accepts headings, prose, labeled fields
+and tables. `render(width)` returns inert, wrapped text; `render_with` adds semantic
+heading accents for an explicitly selected terminal profile. Tables stack labeled
+records when columns do not fit. `output::sanitize` removes complete terminal
+control sequences and shows invisible direction, zero-width, word-joiner and
+line or paragraph separator characters as `<U+XXXX>`. Hosts retain JSON
+serialization, operation execution, write errors and stdout/stderr ownership.
 
 Library hosts explicitly open `runtime::InlineSession` with resolved
 `Capabilities` and a preferred content `height`. Recompute it from the existing

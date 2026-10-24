@@ -98,8 +98,9 @@ their generated reference pages. Keep Cargo caches between runs.
   as the tests covering changed code or a lint of the module being edited;
   Markdown-only changes need only a whitespace diff check. Do not run the full
   battery (whole suites, format, strict lint, dependency audits, coverage,
-  builds, acceptance) after each change: when a task is complete, and before a
-  commit, ask which relevant categories to run and name their individual commands.
+  builds, acceptance) after each change: when a task is complete, ask which
+  relevant categories to run and name their individual commands. A commit
+  request does not ask again; it reports what was and was not verified.
   Command lists in package guides say how to run a check, not that every change
   must run it. Do not rerun a passing check unless code it covers changed since.
 - Prefer the package's focused-test and development commands for iteration;
@@ -251,6 +252,12 @@ this rule applies.
 - Keep `main.rs` thin: parse arguments, set up configuration, call the
   library's `run`, and exit with its status. Output formatting and all other
   logic live in the library, where they can be tested.
+- Product CLIs use `canonic-tui` as a required direct local dependency for
+  terminal UI. Do not make it optional or gate it behind a Cargo feature.
+  Interactive prompts always use its components and terminal leases; unsupported
+  terminals return explicit errors without handwritten prompt fallbacks.
+  Preserve plain/structured noninteractive output; MCP, hooks and piped callers
+  must not open interactive UI.
 - Start every module with a `//!` comment saying what it owns.
 - Build scripts write only inside `OUT_DIR`. Pass values to the code with
   `cargo:rustc-env` and read them with `env!` rather than writing files beside

@@ -91,7 +91,7 @@ const docsMarkdown = [
         <ol class="areas">
           <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s states are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
           <li><span class="n">02</span><h3>Top bar</h3><p>The page and its state on the left. The lens switcher, the size switcher, and the Actions switch in the middle; the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
-          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. States remain alternatives selected with the state switcher. Zoom and pan keep each page’s layout width. Fast page returns reuse their content without flashing a loader; longer waits show a loading message.</p></li>
+          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. States remain alternatives selected with the state switcher. Zoom and pan keep each page’s layout width. Page picks update the sidebar immediately and keep the previous artboard visible for up to 200 ms. Ready content appears at once; longer waits show a loading message.</p></li>
           <li><span class="n">04</span><h3>Toolbar</h3><p>Annotation tools and the handoff, under the artboard. Select returns to using the page.</p></li>
         </ol>
       </div>
@@ -113,7 +113,7 @@ const docsMarkdown = [
               <div class="controls-group">
                 <h3>Only in some setups</h3>
                 <dl class="controls">
-                  <div><dt>Space switcher</dt><dd>At the top of the VS Code sidebar, and in the canvas breadcrumb when several spaces are available. Pick a space with the pointer or arrow keys; Escape closes the menu and Tab moves to the next control.</dd></div>
+                  <div><dt>Space switcher</dt><dd>At the top of the VS Code sidebar, and in the canvas breadcrumb when several spaces are available. Pick a space with the pointer or arrow keys to open its first page; Escape closes the menu and Tab moves to the next control.</dd></div>
                   <div><dt>State switcher</dt><dd>Beside the page’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview, with one loading status until the requested story is ready. Page and story names stay consistent across the breadcrumb, tab, and artboard label.</dd></div>
                   <div><dt>Lens switcher</dt><dd>The page’s docs, then the authored page, then additional implementations declared in <code>workbench.yaml</code>. A page with docs opens on them. Every lens label is customizable; defaults are Preview for TypeScript previews and Design for HTML pages. See <a href="#lenses">Lenses</a>.</dd></div>
                   <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected state, inspect actions, and read documentation. Changes stay temporary.</dd></div>

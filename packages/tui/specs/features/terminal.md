@@ -9,7 +9,7 @@ compatibility remains unverified. [Inventory](../inventory.md) records the scope
 Host explicitly acquires one lease and chooses inline or full-screen. Acquisition
 checks input/output interactivity and required capabilities before changing modes.
 Import and component construction perform no I/O. Noninteractive refusal emits
-no escape bytes; host supplies plain fallback. Components receive frames/events
+no escape bytes; product hosts retain their noninteractive protocols. Components receive frames/events
 but cannot acquire raw mode or poll/read terminals. Nested views share the lease.
 
 Lease tracks successfully acquired raw/paste/screen/cursor/mouse/enhanced-input
@@ -39,7 +39,7 @@ the host prompt. It acquires only required raw/paste/cursor modes, never alterna
 screen by default. Exit leaves a readable confirmed/cancelled result or clears
 temporary rows according to an explicit host policy, then returns the cursor to
 where ordinary output resumes. Window shrink and scrolling must not overwrite
-unrelated preceding output; if safe anchoring is unavailable, use host plain fallback.
+unrelated preceding output; if safe anchoring is unavailable, return an explicit error.
 
 Chat dialogs follow the [dialog panel contract](../components/dialog.md#official-dialog-design):
 temporarily enter an alternate screen, redraw the visible conversation tail there,
@@ -54,9 +54,29 @@ layouts in scrollback are outside that first slice.
 
 ## Inline runtime API
 
+Shared prompt hosts resolve the environment through `runtime::profile::detect`:
+`NO_COLOR` takes precedence, then RGB `COLORTERM`, indexed `TERM`, and ANSI 16.
+Non-UTF locales select ASCII chrome. Resolution performs no terminal queries.
+Rich inline choices use `ChoicePicker`; absent defaults remain unhighlighted.
+Numbers highlight and a deliberate Enter submits. Narrow hints retain Enter and
+Escape when space permits, with Escape retained at the smallest widths. When
+choices cannot be shown, confirmation is refused. Unsupported terminals return
+errors without a handwritten input fallback.
+
+`output::Document` owns settled CLI text layout without terminal acquisition:
+headings, prose, fields and tables. Width is measured in cells, narrow tables
+stack labeled records, and display text strips whole control sequences and
+exposes invisible controls. Product hosts own facts, machine serialization,
+operation status and fallible writes.
+
+`TerminalSession::open_input` owns raw input and bracketed paste for streaming
+normal-screen hosts without creating a view. `handoff` releases that lease before
+an explicit inline prompt and restores the original screen mode afterward.
+Drone uses this lifecycle to retain cancellation between streamed reply fragments.
+
 `runtime::InlineSession` acquires modes only after host-resolved cursor capability,
 TTY and initial size checks. A real cursor report establishes its first anchor;
-unknown/missing reports return an error for plain fallback. `InlineOptions::height`
+unknown/missing reports return an error without starting a prompt. `InlineOptions::height`
 is the preferred content height, capped at window height minus two rows. A fixed Ratatui
 viewport occupies freshly reserved rows. It never uses the inline autoresize path
 that can clear the normal screen when width shrinks. Size changes abandon stale
@@ -234,7 +254,7 @@ Cross-compiling and TestBackend rendering do not establish native acceptance.
 - **T-02:** Inline picker/review preserves surrounding output and resumes ordinary
   printing on confirm/cancel/resize/error; full-screen returns to previous screen.
 - **T-03:** Suspend/resume/editor success/failure restore modes/size/redraw and
-  retain data; unsupported capabilities return an explicit fallback outcome.
+  retain data; unsupported capabilities return an explicit refusal.
 - **T-04:** Complete and fragmented control sequences cannot cause terminal effects;
   Unicode/cell mapping, truncation and pathological narrow layouts remain valid.
 - **T-05:** Themes/no-color/default/ASCII/reduced-motion retain labeled meaning,

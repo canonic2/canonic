@@ -115,6 +115,42 @@ height; no host-height policy lives inside the editor.
 
 ## Host boundary
 
+### Single-line prompts and secret storage
+
+`input::LineInput` is a separate bounded field for product prompts. It borrows
+host-owned UTF-8 text on each event/render call; the host retains storage. If
+the host shortens or replaces that text, the caret moves to the nearest earlier
+grapheme boundary; a new field starts at the end. It stores only the caret
+and byte limit, with no history, kills, clipboard or text copies. A hidden field
+renders a fixed marker without inspecting the secret for display or length.
+Hosts such as Drone retain secrets in zeroizing buffers. `runtime::prompts::read`
+reserves the buffer to its limit before editing, so edits never reallocate it.
+
+Complete typed/paste insertions reject control characters and overflow without
+changing the buffer; a paste first drops one trailing line break. The prompt
+host shows a refusal in the field title and keeps editing. Cursor movement and deletion preserve grapheme boundaries.
+Only unmodified Enter press submits; repeat/release/paste never submits. Escape
+returns Back and Ctrl-C/Ctrl-D returns Cancel. The host determines the operation.
+Narrow and empty areas keep rendering and the caret inside the supplied rectangle.
+
+`runtime::prompts` explicitly hosts inline fields and pickers. It returns terminal
+prerequisite errors without switching to handwritten input. Its picker defaults
+are host-supplied, cancellation never chooses a default, and `select` distinguishes
+Back from Cancelled for guided flows. Input buffers and defaults are validated
+before acquiring terminal modes. The editor gallery's `prompt-*` scenarios cover
+default, empty, long, narrow, hidden, limit and cancelled states.
+
+Prompt hosts register no signal handlers, so the host process's signal
+dispositions are the same before, during and after a prompt. Raw mode delivers
+Ctrl-C and Ctrl-Z as keys: Ctrl-C cancels. On Unix, Ctrl-Alt-Z, or plain Ctrl-Z
+where it is not undo (the line field, and a picker that is not filtering),
+releases modes, stops the process and reacquires a fresh inline region only
+after foreground continuation, retaining the field or picker state. External
+INT, TERM and HUP follow the host's dispositions; restoring modes after them is
+the host's concern, because a library cannot restore a process's previous
+handlers safely. Windows retains the runtime's existing event and restoration
+contract.
+
 Hosts choose focus, area, height policy, limits and explicit elapsed time.
 They decide how Enter is routed into submission and validate or execute returned
 text. The editor performs no terminal acquisition, clipboard reads or transport.

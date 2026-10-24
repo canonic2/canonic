@@ -89,6 +89,20 @@ impl ChoicePicker {
     pub fn selected(&self) -> Option<&str> {
         self.selected.as_deref()
     }
+    /// Set a safe highlight, or clear it when the host requires an explicit choice.
+    /// Returns false for a missing, disabled or dangerous identity.
+    pub fn highlight(&mut self, id: Option<&str>) -> bool {
+        if let Some(id) = id
+            && !self
+                .choices
+                .iter()
+                .any(|choice| choice.id == id && choice.disabled.is_none() && !choice.danger)
+        {
+            return false;
+        }
+        self.selected = id.map(str::to_owned);
+        true
+    }
     /// Bounded Unicode filter text.
     #[must_use]
     pub fn query(&self) -> &str {

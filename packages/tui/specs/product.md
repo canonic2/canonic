@@ -91,9 +91,12 @@ generic tool card represents unfamiliar tools. Missing data appears as unknown.
 
 ## Scope decisions
 
-Keep one unpublished Rust package, Ratatui/Crossterm and local optional consumer
-dependencies. Components work without the chat screen or gallery feature. No
-required workspace, background service, plugin loader or agent dependency exists.
+Keep one unpublished Rust package, Ratatui/Crossterm and required local consumer
+dependencies. Every product CLI uses `canonic-tui` as its terminal UI library;
+runtime capability detection preserves plain, piped and protocol output without
+making the dependency optional. Components work without the chat screen or
+gallery feature. No required workspace, background service, plugin loader or
+agent dependency exists.
 New traits need an actual replaceable boundary or second implementation.
 
 Attachments and links have text representations. Native image protocols, embedded

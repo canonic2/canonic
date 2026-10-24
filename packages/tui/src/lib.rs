@@ -19,7 +19,9 @@ pub mod focus;
 #[cfg(feature = "gallery")]
 pub mod gallery;
 pub mod inline_composition;
+pub mod input;
 pub mod inspection;
+pub mod output;
 pub mod permission_review;
 pub mod picker;
 pub mod question_form;

@@ -56,7 +56,7 @@ exit. The native check consumes restored cooked input before comparing attribute
 as the existing terminal tests do; macOS can briefly set its pending-input flag.
 
 Gallery-disabled `cargo nextest run --locked --no-default-features` passed 265
-tests. The release library/gallery build passed. Two consumers' optional `tui`
+tests. The release library/gallery build passed. Two consumers' TUI dependency
 compilation passed offline with locked disposable manifests. The third consumer's copied lock
 needed the existing TUI Markdown dependencies; offline resolution and compilation
 passed only in its disposable fixture. Original consumer manifests and lockfiles
@@ -100,7 +100,7 @@ paste, destructive arming/paste disarming, failure, mid-draft caret/undo return,
 Ctrl-X O, resize, cooked input and exact terminal attributes after exit.
 Existing native terminal flows also passed in the full suite.
 
-Two consumers' optional `tui` compilation passed offline with locked disposable
+Two consumers' TUI dependency compilation passed offline with locked disposable
 manifests. The third consumer's copied lock required the existing TUI Markdown dependencies
 `pulldown-cmark` and `unicase`; resolution and compilation passed offline solely
 in its disposable fixture. Workspace consumer manifests and lockfiles remained
@@ -129,7 +129,7 @@ Host `make -C packages/tui check` passed 267 tests, four doctests, formatting,
 strict Clippy, private-item API documentation and dependency auditing using the
 package-pinned toolchain. `make -C packages/tui build` passed. Gallery-disabled
 `cargo nextest run --locked --no-default-features` passed 211 tests. The consumers'
-optional `tui` compilation passed offline using disposable manifests
+TUI dependency compilation passed offline using disposable manifests
 and lockfiles; their workspace sources and lockfiles were preserved.
 
 Ten Question Form and fifteen Permission Review behavioral tests cover bounded
@@ -174,7 +174,7 @@ PTY flow verifies isolated multiline paste, deliberate submission, acknowledgeme
 mid-draft caret return, undo, resize, cooked input and terminal-mode restoration.
 The PTY harness drains shutdown output before checking exit.
 
-Gallery-disabled nextest passed 195 tests. The consumers' optional `tui`
+Gallery-disabled nextest passed 195 tests. The consumers' TUI dependency
 compilation passed offline using disposable manifests and lockfiles; workspace
 consumer lockfiles remained unchanged. Public local links resolved 410 references.
 Both repositories passed whitespace checks. No staging command was run; concurrent
@@ -251,7 +251,7 @@ Six Run Activity tests cover single-use cancellation, completion races, retry,
 stale/foreign acknowledgement, disconnection, injected motion, draft/queue
 preservation and Escape selection priority. Extended card/gallery checks cover
 progress, safe escape markers, host reordering, child tasks, artifacts and all
-additional run states. Optional `tui` consumer compilation
+additional run states. Consumer TUI dependency compilation
 passed offline with disposable manifests after the expanded public APIs;
 workspace consumer lockfiles were preserved. This is compilation evidence, not
 consumer adapter execution.
@@ -268,8 +268,8 @@ and timed irreversible confirmation, plus artifact/options host composition.
 The gallery supplies 36 named Dialog scenarios. Host `make -C packages/tui check`
 passed 205 tests, four doctests, formatting, strict Clippy, private-item API docs
 and dependency auditing. The release library/gallery build passed. A fresh
-gallery-disabled nextest run passed 165 tests. The consumers' optional
-TUI compilation passed offline with disposable manifests after the Dialog API
+gallery-disabled nextest run passed 165 tests. Consumer TUI dependency
+compilation passed offline with disposable manifests after the Dialog API
 changes; workspace lockfiles were preserved.
 
 The native macOS PTY test waits for observable guard expiry, closes one nested
@@ -298,7 +298,7 @@ release library/gallery build passed; gallery-disabled nextest passed 169 tests.
 The strengthened border assertion also passed a focused rerun. All 391 local
 links and anchors resolved; both repositories passed whitespace checks, and
 ownership checks preserve public source/specs and private design references.
-Two consumers' optional TUI compilation passed using disposable manifests. The
+Two consumers' TUI dependency compilation passed using disposable manifests. The
 third consumer's tree failed independently, in code unrelated to this package.
 The refreshed disposable manifest includes current consumer dependencies;
 workspace sources and lockfiles remain untouched by this check. Human
@@ -356,7 +356,7 @@ picker restoration, resize and exact terminal restoration.
 
 The release library/gallery build passed during this alignment. Gallery-disabled
 nextest passed 182 tests after the public work-control and typed-atom contracts.
-The consumers compiled offline with optional `tui` using disposable
+The consumers compiled offline against the TUI dependency using disposable
 manifests and the pinned package toolchain; workspace source and lockfiles were
 preserved. Offline dependency resolution was confined to temporary verification
 directories. Documentation links, ownership and both repository whitespace diffs
@@ -381,7 +381,7 @@ to the draft cursor, picker return, resize, quit and exact terminal restoration.
 The release library/gallery build passed with `make -C packages/tui build`.
 Gallery-disabled nextest (`cargo nextest run --locked --no-default-features`)
 passed 143 tests. The final card regression rerun without gallery passed all
-seventeen card tests. The consumers compiled offline with optional `tui`
+seventeen card tests. The consumers compiled offline against the TUI dependency
 using disposable manifests/lockfiles; workspace lockfiles were not changed.
 One consumer's existing timing/dead-code warnings remain outside this component's scope.
 All 374 local README/docs/spec links and anchors resolved. Public/private ownership
@@ -407,7 +407,7 @@ reviewed render snapshots; the semantic-color main view was inspected visually.
 
 `make -C packages/tui build` passed the release library/gallery build.
 Gallery-disabled nextest passed all 104 tests. The consumers passed
-offline compilation checks with their optional `tui` feature using disposable
+offline TUI dependency compilation checks using disposable
 manifests; their workspace lockfiles remained byte-for-byte unchanged.
 Human visual acceptance, native Linux/Windows acceptance and real consumer source
 discovery/execution remain separate from these local engineering results.
@@ -422,8 +422,8 @@ queue edits, history, stash, editor conflicts, file insertion and paste chips.
 `make build` passed the release library/gallery build. Gallery-disabled nextest
 passed all 88 tests. These checks establish the reusable component and explicit
 host adapters; gallery host work remains simulated.
-The consumers also passed offline checks with their optional `tui`
-feature. Their original lockfiles were preserved byte-for-byte.
+The consumers also passed offline TUI dependency checks.
+Their original lockfiles were preserved byte-for-byte.
 
 The evidence applies to the implemented reusable workflows and explicit host
 adapters. Standalone Completion Menu, rich Chat targets and real consumer
@@ -449,7 +449,7 @@ acceptance and native Windows coverage remain separate.
 `make -C packages/tui check` passed formatting, strict all-target Clippy,
 157 all-feature tests, three doctests, private-item API documentation and
 dependency auditing. Gallery-disabled nextest passed 126 tests. The release
-library/gallery build passed. The consumers' optional TUI compilation
+library/gallery build passed. The consumers' TUI dependency compilation
 passed offline using disposable manifests/lockfiles; workspace lockfiles stayed
 unchanged. This is dependency compilation, not consumer UI rollout.
 
@@ -473,8 +473,8 @@ in the gallery are simulated, not consumer rollout evidence.
 Foundation engineering checks passed during the scoped package commits
 `33fe70a` (private) and `2a6bc0f` (public): formatting, strict Clippy, ten
 all-feature nextest tests including the Unix PTY test, seven gallery-disabled
-tests, doctest, API docs, dependency audit, release build, consumer optional
-feature compilation and Markdown/diff checks. Dependency auditing reported
+tests, doctest, API docs, dependency audit, release build, consumer TUI dependency
+compilation and Markdown/diff checks. Dependency auditing reported
 allowed duplicate-version warnings. Foundation human acceptance passed on
 2026-10-09; the user deferred visual refinement. These results do not accept
 expanded capability contracts or establish visual design acceptance.
@@ -508,7 +508,7 @@ complete gate run. Final results:
   including native editor handoff. Native suites used host PTY access.
 - `make build`: release library/gallery passed; the release `--list` inventory
   exposes all 51 inspection scenarios and eight additional profiles.
-- Two consumers' `tui` feature compilation passed locked/offline in temporary
+- Two consumers' TUI dependency compilation passed locked/offline in temporary
   manifest/lock copies. The third passed with offline lock resolution in its copy;
   its existing working lock lacks the already-used Markdown dependencies.
   All six original consumer manifests/locks remained byte-identical.
@@ -541,7 +541,7 @@ reviewed for sidebar, narrow status, notices, failure, ASCII and review placemen
   including native editor handoff. PTY suites ran with host access.
 - `make build`: release library/gallery passed. Release `--list` exposes all 27
   status scenarios and eight profiles.
-- Two consumers' optional `tui` compilation passed locked/offline with Rust 1.99
+- Two consumers' TUI dependency compilation passed locked/offline with Rust 1.99
   in disposable manifests pointing at their actual library and binary sources.
   The third passed after offline resolution of its existing missing Markdown
   dependencies in the temporary lockfile. Original consumer manifests/locks
@@ -579,7 +579,7 @@ review and tiny cancellation hint.
   native inline changes.
 - `make build`: release library/gallery passed; its headless inventory lists
   the 30 inline entries and shared profiles.
-- Two consumers' optional `tui` compilation passed locked/offline with Rust
+- Two consumers' TUI dependency compilation passed locked/offline with Rust
   1.99 in disposable manifests pointing at their actual sources. The third passed
   after resolving its existing missing Markdown dependencies in the temporary
   lockfile. All original consumer manifests/locks remained unchanged.
@@ -629,10 +629,11 @@ settled/correction and pending-review placement.
 - Gallery-disabled nextest: **303 tests** passed, including the direct height API
   PTY test; the final feature-off build also passed.
 - Release library/gallery build passed.
-- One consumer's optional `tui` compilation passed locked/offline with Rust 1.99 through a
+- One consumer's TUI dependency compilation passed locked/offline with Rust 1.99 through a
   disposable manifest pointing at actual sources. Another passed with its existing
   missing Markdown dependencies resolved only in a temporary lockfile. The third
-  declares no `tui` feature/dependency, so no TUI feature check applies to it. Original consumer manifests/locks remained unchanged.
+  was outside this recorded consumer compilation check.
+  Original consumer manifests/locks remained unchanged.
 
 Three added tests cover measured review/draft layout, long result wrapping and
 real owned PTY growth to the window cap, shrink cleanup, atomic zero rejection,
@@ -673,11 +674,12 @@ that flag or changing production restoration.
   doctests**, API docs and dependency checks passed.
 - Release library/gallery build and gallery-disabled locked/offline compilation
   passed.
-- Two consumers' optional `tui` compilation passed locked/offline through the
+- Two consumers' TUI dependency compilation passed locked/offline through the
   reviewed disposable manifests pointing at current sources. One uses the
   temporary lockfile resolving its pre-existing missing Markdown dependencies;
   this does not establish that its original locked build passes. All original
-  consumer manifests/lockfiles remained unchanged. The third declares no TUI feature.
+  consumer manifests/lockfiles remained unchanged. The third was outside this
+  recorded consumer compilation check.
 - Changed Markdown links, new-file whitespace and both repository whitespace
   checks passed. Module review retains input/render state in components, terminal
   restoration in the runtime, and stop/continue orchestration in the gallery host.
@@ -713,7 +715,7 @@ group; no user terminal, shell or unrelated process is signalled.
   doctests**, API docs and dependency advisories/bans/licenses/sources passed.
 - Release library/gallery build and gallery-disabled locked/offline compilation
   passed.
-- Two consumers' optional `tui` compilation passed through unchanged reviewed temporary
+- Two consumers' TUI dependency compilation passed through unchanged reviewed temporary
   manifests pointing at actual sources. One uses its temporary resolved lockfile
   for the pre-existing Markdown dependency gap; its original locked build is not
   established by that check. Original consumer manifests/lockfiles stayed unchanged.

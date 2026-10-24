@@ -17,8 +17,8 @@ Coverage uses cargo-llvm-cov without an invented threshold.
 
 Keep one integration binary with component/gallery modules. PTY tests require
 host access in an agent sandbox and run separately from other process-heavy
-suites. State, buffer rendering and PTY tests prove different boundaries. Product
-feature checks prove local dependency compatibility, not completed UI migrations.
+suites. State, buffer rendering and PTY tests prove different boundaries. Consumer
+compilation checks prove local dependency compatibility, not completed UI migrations.
 
 Dependency policy allows approved upstream registries and MIT/Apache/Unicode
 licenses, ignores unpublished proprietary package licenses, warns on duplicate
