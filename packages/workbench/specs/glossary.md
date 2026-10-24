@@ -16,7 +16,8 @@ something listed here, it uses this word and no synonym.
 | **Group** | A named set of pages within a collection. Groups don't nest. `group:` in `workbench.yaml`. |
 | **Page** | What the canvas shows: an authored HTML page, a TypeScript preview, a Markdown page, or a catalog entry. Every entry the page list shows under a collection or group is a page. |
 | **Page tree** | Everything a space lists, in order: its collections, their groups and pages, and each page's scenarios. The Workbench server answers it from `workbench.yaml` and the page index; the collection list and page list show it. |
-| **Scenario** | One of a page's alternative conditions, such as *Empty*, *Loading*, *With filters* or *Wrong password*. A page has one or more scenarios; the first, the default scenario, is the page as authored. |
+| **Scenario** | One of a page's alternative conditions, such as *Empty*, *Loading*, *With filters* or *Wrong password*. A page has one or more scenarios; the first, the default scenario, is the page as authored. A scenario has one or more artboards. |
+| **Iteration** | Another take on one artboard's design, such as *Compact table* or *Illustrated*, kept beside it to try an idea. An artboard has zero or more; with none selected it shows its design as authored. Iterations are not listed in the page list. See [artboards and iterations](pages/iterations.md). |
 | **Docs** | A page's Markdown with live examples, read through a docs lens in the docs canvas mode; see [docs](pages/docs-pages.md). Any page can have docs (`docs` in `workbench.yaml`). |
 | **Markdown page** | A page whose `src` is its Markdown: its docs, with no design lens. A `defineDocs` definition declares one. |
 | **Example** | A live render placed in docs, shown in its own panel with **Show code** and **Copy code**. |
@@ -24,6 +25,18 @@ something listed here, it uses this word and no synonym.
 
 An address names a page and, when they aren't the defaults, its scenario, size,
 lens, and in a docs lens an example; see the [core contract](core.md).
+
+### The page hierarchy
+
+```text
+Space › Collection › (Group) › Page › Scenario › Artboard › Iteration
+```
+
+A page that declares no scenarios has one implicit default scenario, and a
+scenario that declares no artboards has one implicit artboard, so a page with
+one scenario and one artboard is the same as a page that declares neither.
+Iterations are optional and belong to one artboard of one scenario. Size and
+lens are how an artboard is viewed, not levels of the hierarchy.
 
 ### Lenses
 
@@ -107,12 +120,12 @@ The bar across the top of the canvas, with controls for the page showing.
 | --- | --- |
 | **Canvas** | The large area that shows the page, gray and dotted, which zooms and pans. Artboards are drawn on it. `#canvas`, inside the `.wb-main` region, which also holds the toolbar and view controls. |
 | **Canvas mode** | How the canvas shows the page. **Default**: the page is in an artboard on the canvas. **Docs**: a page in a docs lens, shown on its own, has no artboard; its docs fill the canvas, on white, and scroll. The mode follows the lens. Docs beside other artboards are in an artboard like any page. |
-| **Artboard** | The box on the canvas that shows content at a size, labeled with its page's name and size by the **artboard label**. A canvas can hold more than one; see [multiple artboards](canvas/multiple-artboards.md). `#artboard`; its clipped `#artboardContent` holds the preview frames. |
+| **Artboard** | One view of a scenario at its own size, and the box on the canvas that shows it, labeled with its page's name and size by the **artboard label**. A scenario has one implicit artboard unless it declares several, which the canvas shows together; see [artboards and iterations](pages/iterations.md) and [multiple artboards](canvas/multiple-artboards.md). `#artboard`; its clipped `#artboardContent` holds the preview frames. |
 | **Preview frame** | The content iframe inside an artboard, loading a page or preview rather than the Workbench application. "Frame" means only this. |
 | **Content renderer** | An owned content-only viewport/adapter with mounting, readiness, interaction, capture and disposal. It may own preview frames or a native surface. It never initializes the Workbench application shell; see [rendering flow](system/rendering-flow.md). |
 | **Toolbar** | The floating bar at the bottom of the canvas: the annotation tools (Select, Scribble, Arrow, shapes, Text, Comment), Undo, Clear, the screenshot, and **Copy handoff**. |
 | **View controls** | The floating controls at the bottom right: **Recenter view**, **Zoom out**, the zoom level and its menu, and **Zoom in**. |
-| **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, scenario, and artboard they were drawn on. |
+| **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, scenario, artboard, and iteration they were drawn on. |
 | **Handoff** | The prompt and screenshot **Copy handoff** prepares for an agent. |
 
 "Page" keeps its ordinary meaning inside a page's own content, such as a

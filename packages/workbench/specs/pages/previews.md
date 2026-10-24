@@ -287,9 +287,13 @@ reached through `node_modules` are listed by name and version.
   exist inside the project after resolving symbolic links.
 - `scenarios`: a map of kebab-case IDs to objects; absent or empty means one
   `default` scenario. Labels default to title case.
-- `inputs`, `fixtures`, `globals` merge preview, then scenario, then (for inputs)
-  control overrides, and are structured-cloned per render. Validation only
-  checks that scenario values serialize as JSON.
+- A scenario's `artboards` and its artboards' `iterations` follow
+  [artboards and iterations](iterations.md#declaring-artboards-and-iterations).
+  A definition has no top-level `artboards` or `iterations`.
+- `inputs`, `fixtures`, `globals` merge preview, then scenario, then artboard,
+  then iteration, then (for inputs) control overrides, and are
+  structured-cloned per render. Validation only checks that scenario,
+  artboard and iteration values serialize as JSON.
 - `sizes`: a nonempty list of kebab-case `SizeKey` values, including keys
   declared by the space. The [sizes contract](../canvas/sizes.md#typescript-previews)
   owns resolution, unknown-key reporting and authored-page precedence.

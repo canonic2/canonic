@@ -7,6 +7,7 @@ This folder owns page authoring and page-specific user workflows. Start with
 | Topic | Owns |
 | --- | --- |
 | [TypeScript previews](previews.md) | Definition API, discovery semantics, scenarios, inputs/actions, request mocks, navigation and portable viewer workflows |
+| [Artboards and iterations](iterations.md) | Scenario-owned artboards, iterations of an artboard, render merge order, lens behavior, review/agent naming and promotion by handoff |
 | [Docs](docs-pages.md) | Markdown, docs lenses, example/source panels, page lifecycle, reading presentation and Docs compatibility |
 | [Authored pages and implementations](implementations.md) | Authored HTML, URL/native mappings, source pointers, compatibility and native-window interaction |
 | [Storybook pages](storybook.md) | Title/story identity, selected-story navigation, channel reuse, capture/export mapping and failure behavior |

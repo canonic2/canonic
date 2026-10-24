@@ -21,9 +21,13 @@ device but keeps them on the same canvas as everything else.
 
 ## Terminology
 
-Space, collection, group, page, scenario, lens, and the parts of the interface
-(sidebar, top bar, canvas, artboard, toolbar, view controls) are defined in
-[glossary](glossary.md), which code, guides, and specs follow.
+Space, collection, group, page, scenario, artboard, iteration, lens, and the
+parts of the interface (sidebar, top bar, canvas, toolbar, view controls) are
+defined in [glossary](glossary.md), which code, guides, and specs follow. Pages
+nest as Space › Collection › (Group) › Page › Scenario › Artboard › Iteration,
+with an implicit scenario and artboard when none is declared
+([the page hierarchy](glossary.md#the-page-hierarchy)); [artboards and iterations](pages/iterations.md)
+owns the lower levels.
 
 ## Configuration and serving
 
@@ -105,7 +109,10 @@ services exist in the editor, standalone browser and portable viewer.
   and implementation. The default scenario and design lens are omitted; the
   workbench writes the resolved size key for an artboard and omits it in a
   docs lens. Docs addresses can also name `!<example>`. It normalizes the
-  address after routing to the view it actually shows.
+  address after routing to the view it actually shows. Selected iterations
+  follow the scenario as `+<iteration>` or `+<artboard>/<iteration>` parts
+  ([address](pages/iterations.md#address)); `+` is reserved like `:`, `!`,
+  `~` and `@`.
 - The sidebar lists the collections, then the chosen collection's pages;
   search finds pages across collections, including scenario and group labels. A
   page with multiple scenarios expands to its scenarios. A single-scenario authored
@@ -147,8 +154,10 @@ content-only renderers. Canvas labels, grid, camera and global controls belong
 to that shell; none is mounted inside an artboard. The backend provides project
 data and compiled/rendered/proxied content, not Workbench application markup.
 The [multiple-artboard system](canvas/multiple-artboards.md) owns instance state,
-geometry and review/context. Ordinary scenarios remain alternatives; only explicit
-page artboards create a group. Outer control layout stays unchanged by this refactor.
+geometry and review/context. Scenarios remain alternatives; a scenario's declared
+artboards are shown together as a group, each with at most one selected
+iteration ([artboards and iterations](pages/iterations.md)). Outer control layout
+stays unchanged by this refactor.
 
 - Config and catalog discovery show **Loading pages…**. Sidebar selection updates
   immediately. Preview navigation follows the [200 ms grace period](system/rendering-flow.md#navigation-feedback):

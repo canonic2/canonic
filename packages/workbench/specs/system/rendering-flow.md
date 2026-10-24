@@ -311,8 +311,9 @@ annotation/native modularization remains separate work.
 3. Verify authored HTML, compiled React/Vue previews, docs, Storybook and supported
    native adapters through the dedicated contract. Exercise cold start, failure,
    rapid supersession, size changes and close/dispose with owned fixtures.
-4. Ordinary scenarios remain alternatives; only a page's explicit `artboards` create
-   multiple views. Each independent view retains its own size, inputs and annotations.
+4. Scenarios remain alternatives; only a scenario's explicit `artboards` create
+   multiple views. Each independent view retains its own size, inputs,
+   iteration and annotations.
 5. Warm Storybook picks and returns reuse the expected content document/channel;
    assert document identity and request counts, not only elapsed time. Retained and
    pending documents cannot navigate or acknowledge a different active destination.

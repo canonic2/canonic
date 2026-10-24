@@ -60,11 +60,14 @@ the appropriate host/devices; no performance benchmark has been performed.
 ## UI and integration scope
 
 Artboard management controls remain separate design work. The shipping integration
-opens one page's explicitly declared artboards together. Scenarios and Storybook
-stories remain alternatives. The `definePreview.artboards` map declares stable
-IDs, labels, dimensions and input overrides independently of `scenarios`; the
-renderer receives `context.artboard`. Artboard inputs precede scenario overrides.
-Feedback declares five artboards and no variant scenarios. Docs show one viewport.
+opens one scenario's explicitly declared artboards together. Scenarios and Storybook
+stories remain alternatives. Each scenario's `artboards` map declares stable
+IDs, labels, dimensions, input overrides and iterations
+([artboards and iterations](../pages/iterations.md)); the renderer receives
+`context.artboard`. Artboard inputs apply after scenario inputs. There are no
+page-level artboards; the current implementation still reads them from the
+page ([gap](../pages/iterations.md#implementation-gaps)). Feedback declares
+five artboards in its default scenario. Docs show one viewport.
 Ordinary single-view pages reuse one renderer across page, scenario and lens
 navigation. The required content-only renderer owns the retained preview sessions and Storybook
 channel; navigating it does not replace its iframe. Explicit artboard groups
