@@ -1,7 +1,7 @@
 import { definePreview } from '@canonic2/workbench';
 
 // The build lists releases from GitHub's API; here the request is answered
-// with fixed releases, so each state shows one of the page's cases.
+// with fixed releases, so each scenario shows one of the page's cases.
 const repo = 'https://github.com/canonic2/canonic';
 const targets = ['darwin-arm64', 'darwin-x64', 'win32-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'];
 const release = (version: string, published: string, notes: string[], builds = true) => ({
@@ -29,7 +29,7 @@ export default definePreview({
   adapter: 'astro',
   source: { entry: '../src/pages/workbench/changelog.astro' },
   requests: { 'GET /repos/canonic2/canonic/releases': { body: releases } },
-  states: {
+  scenarios: {
     default: { label: 'Releases' },
     empty: { label: 'No releases yet', requests: { 'GET /repos/canonic2/canonic/releases': { body: [] } } },
     unavailable: { label: 'GitHub unavailable', requests: { 'GET /repos/canonic2/canonic/releases': { status: 503 } } },

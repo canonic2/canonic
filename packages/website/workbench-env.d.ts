@@ -4,7 +4,7 @@ declare module "@canonic2/workbench" {
   export type SizeKey = 'fit' | 'laptop' | 'mobile' | 'resizable' | (string & {});
   export interface PreviewContext<T extends Record<string, unknown> = Record<string, unknown>> {
     id: string;
-    state: string;
+    scenario: string;
     inputs: T;
     fixtures: Record<string, unknown>;
     globals: Record<string, unknown>;
@@ -12,11 +12,11 @@ declare module "@canonic2/workbench" {
     /** Report asynchronous rendering failures to the host and capture service. */
     error(error: unknown): void;
     action(name: string, ...values: unknown[]): void;
-    /** Open another preview, or another state of this one, while actions are on. */
+    /** Open another preview, or another scenario of this one, while actions are on. */
     navigate(to: PreviewLink): void;
   }
-  /** A preview ID, or a preview and state; a state alone stays in this preview. */
-  export type PreviewLink = string | { preview: string; state?: string } | { preview?: string; state: string };
+  /** A preview ID, or a preview and scenario; a scenario alone stays in this preview. */
+  export type PreviewLink = string | { preview: string; scenario?: string } | { preview?: string; scenario: string };
   export type Cleanup = void | (() => void | Promise<void>);
   /** A mocked response. `body` objects are sent as JSON. */
   export interface MockResponse {
@@ -48,7 +48,7 @@ declare module "@canonic2/workbench" {
     MockResponse | ((request: MockRequest, context: PreviewContext<T>) => MockResponse | Response | Promise<MockResponse | Response>);
   /** Keys: `'GET /api/items'`, `'/api/items/*'`, `'POST /graphql Operation'`, or a full URL. */
   export type RequestMocks<T extends Record<string, unknown> = Record<string, unknown>> = Record<string, MockHandler<T>>;
-  export interface PreviewState<T extends Record<string, unknown>> {
+  export interface PreviewScenario<T extends Record<string, unknown>> {
     label?: string;
     inputs?: Partial<T>;
     fixtures?: Record<string, unknown>;
@@ -68,7 +68,7 @@ declare module "@canonic2/workbench" {
     max?: number;
     step?: number;
   }
-  export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewState<T> {
+  export interface Preview<T extends Record<string, unknown> = Record<string, unknown>> extends PreviewScenario<T> {
     id: string;
     title?: string;
     adapter: string;
@@ -78,7 +78,7 @@ declare module "@canonic2/workbench" {
     environment?: string;
     sizes?: SizeKey[];
     controls?: Record<string, Control>;
-    states?: Record<string, PreviewState<NoInfer<T>>>;
+    scenarios?: Record<string, PreviewScenario<NoInfer<T>>>;
     /** Addresses the source links or submits to, mapped to the preview each opens. */
     links?: Record<string, PreviewLink>;
     docs?: string;

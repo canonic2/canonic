@@ -17,9 +17,9 @@ const downloads = await loadDownloads();
 const version = downloads && downloads.version;
 const mark = products.find(p => p.name === 'Workbench');
 
-const statesYaml = `- label: Sign in
+const scenariosYaml = `- label: Sign in
   src: pages/sign-in.html
-  states:
+  scenarios:
     - id: default
       label: Default
     - id: error
@@ -89,9 +89,9 @@ const docsMarkdown = [
           Workbench reads <code>workbench.yaml</code> at the root of your project. The sidebar lists the pages it declares, the TypeScript previews it finds, and the devices of an iOS Simulator catalog you enable. Matching collection and group names bring those pages together in one list. Its bundled native compiler caches unchanged preview builds across restarts.
         </SectionHead>
         <ol class="areas">
-          <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s states are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
-          <li><span class="n">02</span><h3>Top bar</h3><p>The page and its state on the left. The lens switcher, the size switcher, and the Actions switch in the middle; the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
-          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. States remain alternatives selected with the state switcher. Zoom and pan keep each page’s layout width. Page picks update the sidebar immediately and keep the previous artboard visible for up to 200 ms. Ready content appears at once; longer waits show a loading message.</p></li>
+          <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s scenarios are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
+          <li><span class="n">02</span><h3>Top bar</h3><p>The page and its scenario on the left. The lens switcher, the size switcher, and the Actions switch in the middle; the page’s actions on the right. Controls that don’t fit move into the More menu.</p></li>
+          <li><span class="n">03</span><h3>Canvas</h3><p>A page can contain several explicitly defined artboards, each at its own size. Click a label to select one; the existing controls apply to it. Scenarios remain alternatives selected with the scenario switcher. Zoom and pan keep each page’s layout width. Page picks update the sidebar immediately and keep the previous artboard visible for up to 200 ms. Ready content appears at once; longer waits show a loading message.</p></li>
           <li><span class="n">04</span><h3>Toolbar</h3><p>Annotation tools and the handoff, under the artboard. Select returns to using the page.</p></li>
         </ol>
       </div>
@@ -114,9 +114,9 @@ const docsMarkdown = [
                 <h3>Only in some setups</h3>
                 <dl class="controls">
                   <div><dt>Space switcher</dt><dd>At the top of the VS Code sidebar, and in the canvas breadcrumb when several spaces are available. Pick a space with the pointer or arrow keys to open its first page; Escape closes the menu and Tab moves to the next control.</dd></div>
-                  <div><dt>State switcher</dt><dd>Beside the page’s name in the top bar when it has states, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview, with one loading status until the requested story is ready. Page and story names stay consistent across the breadcrumb, tab, and artboard label.</dd></div>
+                  <div><dt>Scenario switcher</dt><dd>Beside the page’s name in the top bar when it has scenarios, or under a Storybook lens, listing the title’s stories. Story picks reuse the loaded preview, with one loading status until the requested story is ready. Page and story names stay consistent across the breadcrumb, tab, and artboard label.</dd></div>
                   <div><dt>Lens switcher</dt><dd>The page’s docs, then the authored page, then additional implementations declared in <code>workbench.yaml</code>. A page with docs opens on them. Every lens label is customizable; defaults are Preview for TypeScript previews and Design for HTML pages. See <a href="#lenses">Lenses</a>.</dd></div>
-                  <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected state, inspect actions, and read documentation. Changes stay temporary.</dd></div>
+                  <div><dt>Preview controls</dt><dd>For Workbench previews: edit inputs, reset the selected scenario, inspect actions, and read documentation. Changes stay temporary.</dd></div>
                   <div><dt>Copy handoff</dt><dd>In VS Code only, at the end of the toolbar, beside a count of your annotations. See <a href="#annotations">Annotations and handoff</a>.</dd></div>
                 </dl>
               </div>
@@ -160,7 +160,7 @@ const docsMarkdown = [
               <dl class="controls" data-group="page">
                 <div data-label="Reload"><dt>Reload</dt><dd>Reloads the page.</dd></div>
                 <div data-label="Open the source"><dt>Open the source</dt><dd>Lists the page’s design file and any implementation code, and opens one in the editor.</dd></div>
-                <div data-label="Copy reference"><dt>Copy reference</dt><dd>Copies a short text reference to the page, state, and lens, for pasting into a conversation. It doesn’t include a screenshot or your annotations.</dd></div>
+                <div data-label="Copy reference"><dt>Copy reference</dt><dd>Copies a short text reference to the page, scenario, and lens, for pasting into a conversation. It doesn’t include a screenshot or your annotations.</dd></div>
                 <div data-label="Open on its own"><dt>Open on its own</dt><dd>Opens the page directly in a browser tab.</dd></div>
                 <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections and pages, editing labels and paths, and choosing each page’s sizes; it rewrites only the <code>collections</code> part of <code>workbench.yaml</code>. <b>Export…</b>: choose a page, selected pages, a collection, or the space, then download sources, a PDF, images, or a portable viewer. ZIP parts stay at 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
               </dl>
@@ -173,13 +173,13 @@ const docsMarkdown = [
 
   <section class="features">
     <div class="wrap">
-      <Feature id="states" kicker="States and artboards" title="Several views of a page">
-          <p>A page can have several states, such as a sign-in form when empty and after a wrong password. States are listed under their page, like stories under a component in Storybook.</p>
-          <p>An HTML page reads its state from <code>html[data-wb-state]</code>. Match CSS on <code>html[data-wb-state="error"]</code>, keep an element only in some states with <code>data-wb-state-only="error"</code>, or set a value with <code>data-wb-set-error="value=…"</code>. No scripts are added to your pages.</p>
-          <CodeBlock file="workbench.yaml" code={statesYaml} copies="the states example" />
-          <p>A preview page can also declare several artboards shown together. The Feedback page, pictured here, contains Info, Success, Warning, Danger, and Autopilot artboards. These are children of one page; its variants are not states in the sidebar. Each preview fills its artboard; the grid belongs to the surrounding canvas.</p>
+      <Feature id="scenarios" kicker="Scenarios and artboards" title="Several views of a page">
+          <p>A page can have several scenarios, such as a sign-in form when empty and after a wrong password. Scenarios are listed under their page, like stories under a component in Storybook.</p>
+          <p>An HTML page reads its scenario from <code>html[data-wb-scenario]</code>. Match CSS on <code>html[data-wb-scenario="error"]</code>, keep an element only in some scenarios with <code>data-wb-scenario-only="error"</code>, or set a value with <code>data-wb-set-error="value=…"</code>. No scripts are added to your pages.</p>
+          <CodeBlock file="workbench.yaml" code={scenariosYaml} copies="the scenarios example" />
+          <p>A preview page can also declare several artboards shown together. The Feedback page, pictured here, contains Info, Success, Warning, Danger, and Autopilot artboards. These are children of one page; its variants are not scenarios in the sidebar. Each preview fills its artboard; the grid belongs to the surrounding canvas.</p>
         <figure class="feature-media shot" slot="media">
-          <img src={`${base}images/states.jpg`} width="1120" height="860" loading="lazy" alt="One Feedback page containing five independently sized artboards, with the existing Workbench toolbar and sidebar.">
+          <img src={`${base}images/scenarios.jpg`} width="1120" height="860" loading="lazy" alt="One Feedback page containing five independently sized artboards, with the existing Workbench toolbar and sidebar.">
         </figure>
       </Feature>
 
@@ -187,21 +187,21 @@ const docsMarkdown = [
           <p>Boxes, arrows, scribbles, and pinned comments are drawn over the running page, which stays usable with Select. Select an annotation to move it, nudge it with the arrow keys, or delete it with <kbd>Delete</kbd>.</p>
           <p>In VS Code, <b>Copy handoff</b> saves a screenshot to the project’s ignored <code>.canonic/.handoffs/</code> folder, clears the annotations, and copies a text description of each annotation to the clipboard: the element under it and the page’s source file. Paste it into a coding agent’s chat.</p>
         <figure class="feature-media shot" slot="media">
-          <img src={`${base}images/annotations.jpg`} width="1120" height="860" loading="lazy" alt="The error state with annotations: a red box around the error message, an arrow pointing to it, and a wavy line under the password field.">
+          <img src={`${base}images/annotations.jpg`} width="1120" height="860" loading="lazy" alt="The error scenario with annotations: a red box around the error message, an arrow pointing to it, and a wavy line under the password field.">
         </figure>
       </Feature>
 
       <Feature id="lenses" kicker="Lenses" title="TypeScript previews and lenses">
-          <p>Define components and pages in <code>.workbench.ts</code> files. Built-in adapters render HTML, React, Vue, Astro, and React Native Web, and you can register others. React Native Web screens with a root view using <code>flex: 1</code> fill the frame without extra CSS. Each preview has named states, editable inputs, and an action log. A page can also show its implementation as a lens: a Storybook story, a dev or staging URL, the iOS Simulator, or a macOS app window.</p>
-          <p>Each state gives the preview its data: props, providers from a project-wide environment, or mocked responses to the page’s <code>fetch</code> and XMLHttpRequest calls. Links can open other previews; other navigation, such as a download or a route without a preview, is logged as an action. See <a href={`${pages.docs}preview-data/#choose-how-to-give-a-page-its-data`}>Give a page its data</a>.</p>
-          <p>The selected lens stays as you change pages and is part of the address, so a copied link opens the same view. You can choose sidebar icons for TypeScript previews individually or by title prefix, and give a shared collection its own icon. SVG icon sprites in TypeScript previews remain available as you switch states or return to a page. For a Storybook or local server, you can configure a start command and a readiness check; in a trusted workspace, Workbench runs the command in a terminal when the check fails. For users with existing access to the private, unpublished Gate CLI, an optional integration lets a URL lens follow a task’s allocated service port, keeping concurrent task demos separate. Gate has no public distribution channel. The design-system export includes a static viewer for the previews; Astro previews export their authored states only. If the viewer cannot be built, the export still delivers sources and reference screenshots with a warning.</p>
-          <img src={`${base}images/workbench-previews.jpg`} alt="Acme TypeScript preview with its named states and editable input controls" loading="lazy" />
+          <p>Define components and pages in <code>.workbench.ts</code> files. Built-in adapters render HTML, React, Vue, Astro, and React Native Web, and you can register others. React Native Web screens with a root view using <code>flex: 1</code> fill the frame without extra CSS. Each preview has named scenarios, editable inputs, and an action log. A page can also show its implementation as a lens: a Storybook story, a dev or staging URL, the iOS Simulator, or a macOS app window.</p>
+          <p>Each scenario gives the preview its data: props, providers from a project-wide environment, or mocked responses to the page’s <code>fetch</code> and XMLHttpRequest calls. Links can open other previews; other navigation, such as a download or a route without a preview, is logged as an action. See <a href={`${pages.docs}preview-data/#choose-how-to-give-a-page-its-data`}>Give a page its data</a>.</p>
+          <p>The selected lens stays as you change pages and is part of the address, so a copied link opens the same view. You can choose sidebar icons for TypeScript previews individually or by title prefix, and give a shared collection its own icon. SVG icon sprites in TypeScript previews remain available as you switch scenarios or return to a page. For a Storybook or local server, you can configure a start command and a readiness check; in a trusted workspace, Workbench runs the command in a terminal when the check fails. For users with existing access to the private, unpublished Gate CLI, an optional integration lets a URL lens follow a task’s allocated service port, keeping concurrent task demos separate. Gate has no public distribution channel. The design-system export includes a static viewer for the previews; Astro previews export their authored scenarios only. If the viewer cannot be built, the export still delivers sources and reference screenshots with a warning.</p>
+          <img src={`${base}images/workbench-previews.jpg`} alt="Acme TypeScript preview with its named scenarios and editable input controls" loading="lazy" />
         <div class="feature-media" slot="media">
           <CodeBlock file="address" code="#pages/sign-in.html:error@393~staging" copies="the address example" />
           <table class="address">
             <tbody>
               <tr><td><code>pages/sign-in.html</code></td><td>the page’s design file</td></tr>
-              <tr><td><code>:error</code></td><td>the state, left out for the default</td></tr>
+              <tr><td><code>:error</code></td><td>the scenario, left out for the default</td></tr>
               <tr><td><code>@393</code></td><td>the size: a device width, <code>fit</code>, or a resizable size</td></tr>
               <tr><td><code>~staging</code></td><td>the lens, left out for the page’s default lens</td></tr>
             </tbody>

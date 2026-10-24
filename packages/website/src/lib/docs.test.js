@@ -6,14 +6,14 @@ import { docsHref, docsNavigation, isExternalLink, rewriteDocLink } from './docs
 const source = fileURLToPath(new URL('../../../workbench/docs/README.md', import.meta.url));
 
 test('Markdown links point to published guides and preserve fragments and deployment base', () => {
-  assert.equal(rewriteDocLink('configuration.md#states', source), '/workbench/docs/configuration/#states');
+  assert.equal(rewriteDocLink('configuration.md#scenarios', source), '/workbench/docs/configuration/#scenarios');
   assert.equal(docsHref('index', '/canonic'), '/canonic/workbench/docs/');
 });
 
 test('repository source links go to GitHub while external and fragment links stay intact', () => {
   assert.equal(rewriteDocLink('../workbench/README.md', source), 'https://github.com/canonic2/canonic/blob/main/workbench/workbench/README.md');
   assert.equal(rewriteDocLink('../specs/README.md', source), 'https://github.com/canonic2/canonic/blob/main/workbench/specs/README.md');
-  for (const url of ['#states', 'https://example.com/docs.md', 'mailto:acme@example.com', '/absolute/path']) {
+  for (const url of ['#scenarios', 'https://example.com/docs.md', 'mailto:acme@example.com', '/absolute/path']) {
     assert.equal(rewriteDocLink(url, source), url);
   }
 });
@@ -22,7 +22,7 @@ test('only links to another origin count as external', () => {
   const site = 'https://example.com';
   assert.equal(isExternalLink('https://github.com/canonic2/canonic', site), true);
   assert.equal(isExternalLink('http://example.org/', site), true);
-  for (const url of ['https://example.com/workbench/docs/', '/workbench/docs/', '#states', 'mailto:acme@example.com', undefined]) {
+  for (const url of ['https://example.com/workbench/docs/', '/workbench/docs/', '#scenarios', 'mailto:acme@example.com', undefined]) {
     assert.equal(isExternalLink(url, site), false);
   }
 });

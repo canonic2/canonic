@@ -26,7 +26,7 @@ var REPOSITORY = path.resolve(__dirname, '../../..');
 var OUT = path.resolve(__dirname, '../public/images');
 var PAGE = path.resolve(__dirname, '../src/pages/workbench/index.astro');
 var DATA = path.resolve(__dirname, '../src/data/screenshots.json');
-// The overview is a full desktop window. The state and annotations shots use
+// The overview is a full desktop window. The scenarios and annotations shots use
 // a narrower window, which the canvas zooms to fit.
 var W = 1440, SIDE = 1120, H = 860, SCALE = 2;
 // Control crops render at 4x and are shown at ZOOM times their CSS size.
@@ -124,7 +124,7 @@ async function main() {
     writeData('controls', strip);
 
     await open('#previews/alert.workbench.ts~design', SIDE);
-    await shot('states.jpg');
+    await shot('scenarios.jpg');
 
     await open('#pages/sign-in.html:error@mobile', SIDE);
     var alert = await rectOf('.alert');

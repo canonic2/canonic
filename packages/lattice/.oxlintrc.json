@@ -1,0 +1,42 @@
+{
+  "plugins": ["oxc", "import", "jsdoc"],
+  "jsPlugins": [{ "name": "documentation", "specifier": "eslint-plugin-jsdoc" }],
+  "categories": { "correctness": "error" },
+  "env": { "browser": true, "node": true },
+  "settings": { "jsdoc": { "mode": "typescript" } },
+  "ignorePatterns": ["node_modules", "coverage", "test-results", "playwright-report"],
+  "rules": {
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-debugger": "error",
+    "import/no-commonjs": "error",
+    "documentation/check-param-names": "error",
+    "jsdoc/require-param": "error",
+    "jsdoc/require-param-type": "error",
+    "jsdoc/require-param-description": "error",
+    "jsdoc/require-returns": "error",
+    "jsdoc/require-returns-type": "error",
+    "jsdoc/require-returns-description": "error",
+    "jsdoc/require-property-type": "error",
+    "jsdoc/require-property-description": "error",
+    "documentation/require-file-overview": "error",
+    "documentation/require-jsdoc": [
+      "error",
+      {
+        "exemptEmptyFunctions": false,
+        "exemptEmptyConstructors": false,
+        "require": {
+          "FunctionDeclaration": true,
+          "ClassDeclaration": true,
+          "MethodDefinition": true,
+          "ArrowFunctionExpression": false,
+          "FunctionExpression": false
+        },
+        "contexts": [
+          "VariableDeclarator > ArrowFunctionExpression",
+          "VariableDeclarator > FunctionExpression"
+        ]
+      }
+    ]
+  }
+}

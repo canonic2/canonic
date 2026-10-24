@@ -1,0 +1,225 @@
+# Store
+
+**Status:** draft for review, not implemented. This page explains how the store
+core meets [state management](../contracts/state-management.md). It adds no
+behavior; where the contract and this page differ, the contract wins and this
+page is corrected.
+
+## Files
+
+| File | Contents |
+| --- | --- |
+| `src/modules/store/store.js` | `createStore` and the `Store`, `Selection` and related typedefs |
+| `src/modules/store/shallow.js` | `shallow` |
+| `src/modules/store/*.test.js` | Node unit tests, grouped by contract area as [tests](#tests) lists |
+| `src/index.js` | Re-exports `createStore`, `shallow` and the public types |
+
+## Store state
+
+`createStore` returns an object of four functions that close over private
+variables; none uses `this`, so `get` and `watch` can be handed out detached.
+
+| Variable | Holds |
+| --- | --- |
+| `current` | The current frozen snapshot |
+| `version` | A counter incremented by every commit |
+| `subscriptions` | An array of subscription records in subscription order |
+| `queue` | Commits waiting for delivery, each with its version and changed fields |
+| `delivering` | Whether a delivery is running |
+| `batchDepth`, `batchBase`, `touched` | The open batch, if any: its nesting depth, the snapshot before the outermost batch, and the distinct keys written inside it |
+| `inactive` | How many records were deactivated and not yet removed |
+| `report` | The delivery error policy: the injected `report` or, by default, `fallback` |
+
+`fallback(error)` is the single last-resort path: it calls the platform's
+`reportError` when one exists and otherwise queues a microtask that rethrows the
+error. Every report goes through `deliverError(error)`, which calls `report`
+inside `try`/`catch` and sends anything `report` throws to `fallback`. Neither
+can throw into the delivery loop.
+
+A subscription record holds `fields`, `read`, `equals`, `run`, the last value
+delivered successfully, the version at which it was created, and whether it is
+still active.
+
+## Writes
+
+`set(patch)`:
+
+1. Resolves a function patch by calling it with `current`.
+2. Walks the patch's own keys once, reading each value exactly once into a
+   local variable. An unknown key, checked with `Object.hasOwn(current, key)`,
+   throws `TypeError` before anything is built, so a rejected write changes
+   nothing. The same walk records each changed key together with the value it
+   read, for keys whose value is not `Object.is`-equal to the current one.
+3. Returns if none changed: no snapshot, no delivery.
+4. Builds the next snapshot by spreading `current` and then assigning the
+   recorded values of the changed keys, and freezes it. The patch is never read
+   again, so a getter on a patch cannot make the snapshot disagree with the
+   changed keys. Unchanged fields keep their references because the spread
+   copies references. Building from the recorded values avoids reading patch
+   values a second time.
+5. Inside a batch, adds each changed key to `touched` if it is not already
+   there, and stops. Outside one, increments `version`, queues the commit with
+   its changed keys, and drains the queue unless a delivery is already running.
+
+The unknown-key check needs no separate key set: the snapshot's own keys are the
+state's shape, which never changes. `touched` can hold at most one entry per
+state field, so checking it before adding keeps it free of duplicates at a cost
+bounded by the state's size.
+
+## Batches and savepoints
+
+`batch(fn)` uses the JavaScript call stack as its savepoint stack:
+
+1. Remembers `current` in a local variable as this batch's start. If
+   `batchDepth` is zero, also stores it as `batchBase` and clears `touched`.
+2. Increments `batchDepth` and calls `fn`.
+3. If `fn` throws, or returns a value with a `then` method, restores `current`
+   to this batch's start, decrements `batchDepth` and rethrows, or throws
+   `TypeError` for the thenable. Nothing is delivered for the rolled-back
+   writes.
+4. Otherwise decrements `batchDepth`. A nested batch stops here; its writes stay
+   in `current` and `touched` for the outer batch.
+5. When the outermost batch returns, builds a new array of the keys in `touched`
+   whose value in `current` differs from `batchBase`. If any remain, increments
+   `version`, queues one commit with that array and drains as `set` does.
+6. On every exit from the outermost batch, whether it commits, has nothing to
+   commit, throws or is rejected as a thenable, sets `batchBase` to `undefined`
+   and empties `touched`, in a `finally` block. The commit's changed keys were
+   already copied into their own array, so clearing loses nothing, and no
+   obsolete snapshot stays referenced until the next batch.
+
+Snapshots are immutable, so restoring a savepoint is one assignment. Changed-field
+rollback needs no bookkeeping either: keys a rolled-back nested batch left in
+`touched` are filtered out at the outer commit because their values equal
+`batchBase` again, and a key changed and changed back is filtered the same way.
+
+## Subscriptions
+
+`watch(selection, run, { signal })`:
+
+1. Throws `TypeError` if a batch is open, as the contract requires.
+2. Validates `fields`: a non-empty array whose entries are all own keys of
+   `current`. Otherwise throws `TypeError`.
+3. Returns if the signal is already aborted.
+4. Calls `read(current)`. If it throws, the error propagates and nothing was
+   registered. If the signal aborted during `read`, returns without registering.
+5. Appends a record created at the current `version`, with `last` set to the
+   initial value, and adds an `abort` listener with `{ once: true }` that
+   deactivates the record. Both happen before any further user code runs.
+6. Calls `run(value, undefined)`. The record is registered first so that a
+   commit made by `run` itself is delivered to the new subscription and
+   compared against the initial value. If `run` aborts the signal, the listener
+   has already deactivated the record, so nothing stays active. If `run`
+   throws, the record is deactivated, the abort listener removed and the error
+   propagates.
+
+The initial call does not use `equals`, since there is no previous value.
+
+## Delivery
+
+Draining the queue:
+
+1. Sets `delivering` and takes commits from the queue in order. The queue is an
+   array read with an index, not shifted, and reset when empty.
+2. For each commit, walks `subscriptions` from the first record to the last. It
+   skips a record that is inactive or was created at or after the commit's
+   version: such a subscription's initial `run` already saw that state.
+3. For each remaining record, checks whether any of its `fields` is among the
+   commit's changed keys, with two small array scans. Records with no changed
+   field are skipped without calling `read`.
+4. For a matching record, calls `read(current)`, reading the latest snapshot
+   rather than the commit's, then `equals(value, last)`. If the value changed,
+   calls `run(value, last)` and only then stores the value as `last`, so a
+   throwing `run` leaves the previous value in place.
+5. Catches any error from `read`, `equals` or `run`, passes it to
+   `deliverError`, and continues with the next record.
+6. When the queue is empty, clears `delivering` in a `finally` block, so the
+   store can never stay marked as delivering, and removes inactive records if
+   `inactive` is above zero.
+
+Commits made by subscribers during step 4 are appended to the queue and drained
+by the same loop, so they never reenter. The outermost `set` or `batch` returns
+only after the loop ends.
+
+### Removal and additions during delivery
+
+Records are deactivated, never removed, while a delivery runs; a deactivated
+record is skipped from that moment on, including later in the same commit.
+Deactivating increments `inactive`. Additions are appended and excluded from
+commits made before them by the version check. Inactive records are removed in
+one pass after delivery, or immediately when no delivery is running, and that
+pass is skipped entirely when `inactive` is zero. No delivery copies the
+subscription array.
+
+## Errors
+
+| Error | Handling |
+| --- | --- |
+| Unknown key in `set` | `TypeError` before any change |
+| `watch` while a batch is open, invalid `fields` | `TypeError` before any registration |
+| Initial `read` or `run` in `watch` | Propagates; no subscription remains |
+| `read`, `equals` or `run` during delivery | Caught per record and passed to `deliverError`; delivery continues |
+| `report` throws | Caught by `deliverError` and passed to `fallback`; delivery continues |
+| `fallback` | The platform's `reportError` when it exists, otherwise a microtask that rethrows; the same path for the default `report` and for a throwing injected one |
+| `fn` in `batch` throws or returns a thenable | Rollback to the batch's start, then rethrow or `TypeError` |
+
+## Typing
+
+The typedefs are written in JSDoc in `store.js`:
+
+- `createStore` is generic over the state type `S`, inferred from `initial`.
+- `set` accepts `Partial<S>` or a function from `Readonly<S>` to `Partial<S>`,
+  so an object literal with an unknown key is a type error.
+- `Selection<S, V>` has `fields` as an array of keys of `S`, `read` from
+  `Readonly<S>` to `V`, and an optional `equals` over `V`.
+- `watch` is generic over `V`, taking a `Selection<S, V>` and a `run` that
+  receives `V` and the previous `V` or `undefined`.
+
+The exact declaration of `Selection` is not final. It is settled by the type
+fixture [package](package.md#type-fixtures) describes, which must show valid
+inference, rejected misspelled fields, `read` receiving `S` and `run` receiving
+`V` under a `@satisfies` annotation.
+
+## Tests
+
+| Guarantee | Mechanism | Test |
+| --- | --- | --- |
+| Rejected writes change nothing | Validation before building | Unknown key leaves `get()` identical and delivers nothing |
+| Unchanged writes are silent | Change detection in the key walk | Same values: no new snapshot identity, no `read` |
+| One snapshot per changing write | One spread per changing `set` | Identity changes once per changing write, also inside a batch |
+| Unchanged fields keep references | Spread copies references | Nested object field identical across a write to another field |
+| Skipping unrelated subscriptions | Field check before `read` | Counter on `read` stays zero for unrelated commits |
+| At most one evaluation per commit | One walk per commit | Counter on `read` is one per matching commit |
+| Nested writes do not reenter | Queue plus `delivering` flag | A subscriber's `set` returns before its subscribers run; order of `run` calls recorded |
+| Latest snapshot, never older | `read(current)` at notification | Subscriber reading during queued commits sees non-decreasing versions |
+| Removal during delivery | Deactivation | A record aborted by an earlier subscriber is not called in the same or queued commits |
+| Addition during delivery | Version check | A subscription added by a subscriber is not notified for the current commit |
+| Delivery errors isolated | Per-record catch | Throwing `read`, `equals` and `run` each reach `report`; later records still run; `set` returns |
+| Batch rollback | Savepoint in a local variable | Throwing callback restores the start snapshot and delivers nothing |
+| Nested savepoint | Same, per call | Caught inner throw keeps outer writes; outer commits once |
+| Thenable callback | Result check | Returning a promise or thenable rolls back and throws `TypeError` |
+| Initial `watch` failures | Registration order | Throwing `read` or `run` leaves no subscription |
+| Abort during initialization | Abort listener installed before `run` | A `run` that aborts its own signal leaves nothing active; later commits do not call it |
+| Already aborted signal | Early return | Nothing registered, `read` and `run` not called |
+| Patch read once | Values captured in the key walk | A patch getter returning different values on each read yields a snapshot whose changed fields match, and its subscribers are notified |
+| No `watch` in a batch | Batch check first | `watch` inside a batch throws `TypeError`; after a rollback no subscription shows the discarded value |
+| Reporter fallback | `deliverError` and `fallback` | With no platform `reportError` and a throwing injected `report`, the error is rethrown from a microtask, the rest of the delivery runs and later writes are delivered |
+| Batch bookkeeping released | `finally` on the outermost batch | After a batch commits, has nothing to commit or throws, the pre-batch snapshot is no longer referenced by the store |
+
+Work counts use wrappers around `read`, `equals` and `run`, as
+[performance and evidence](../contracts/performance.md#work-counts) describes.
+
+## Open questions
+
+- **Field check representation.** Two array scans per record are the simplest
+  check and fit selections with one or two fields. A batch that changes many
+  fields may favor a `Set` of changed keys built once per commit. The choice is
+  measured on the wide fan-out and burst workloads before any change.
+- **When inactive records are removed.** Removing them after each delivery that
+  deactivated something, or immediately when idle, costs a pass over the array
+  per removal in the churn workload. Removing in bulk once inactive records exceed a share of the array
+  would cost less there but keep dead records longer. The simple rule comes
+  first; the churn workload decides.
+- **Savepoint cost.** The mechanism above suggests savepoints add no structure
+  beyond `batchBase` and `touched`. If implementation shows otherwise, the
+  contract simplification is proposed explicitly before coding continues.

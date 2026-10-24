@@ -108,6 +108,8 @@ their generated reference pages. Keep Cargo caches between runs.
   permission to run checks. Do not ask which
   checks to run after a task or before a commit; report existing results and
   unverified areas. Do not rerun a passing check unless code it covers changed since.
+  While debugging a reported failure, running the failing test or reproduction
+  command, and rerunning it after the fix, needs no request.
 - Prefer the package's focused-test and development commands for iteration;
   preserve Cargo's `target/` cache and avoid release packaging or installation
   unless that is the behavior being verified.

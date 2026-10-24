@@ -13,5 +13,5 @@ code sample.
 ## With a code sample
 
 ```example code-sample
-caption: kicker="States" title="Pages with several states"
+caption: kicker="Scenarios" title="Pages with several scenarios"
 ```

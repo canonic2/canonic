@@ -14,7 +14,7 @@ export default definePreview({
   },
   links: { '/workbench/': 'website/overview' },
   controls: { title: { type: 'text' }, version: { type: 'text' }, nav: { type: 'json' } },
-  states: {
+  scenarios: {
     default: {},
     versioned: { inputs: { version: '1.0.0' } },
   },

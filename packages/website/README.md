@@ -1,7 +1,7 @@
 # Workbench website
 
 A static site, built with [Astro](https://astro.build), that documents the
-extension's UI: the workbench layout, each control, page states, annotations
+extension's UI: the workbench layout, each control, page scenarios, annotations
 and handoff, lenses, and how to install a platform build. The build fills in
 release downloads and publishes to GitHub Pages.
 
@@ -63,12 +63,12 @@ the docs sidebar's search index request.
 ## Developing
 
 Every page and the page shell have Astro `.workbench.ts` definitions in
-`previews/`: Overview, Install, Changelog, and Docs, which has a state per
+`previews/`: Overview, Install, Changelog, and Docs, which has a scenario per
 guide in the docs sidebar. They are the **Website** space of the repository's
 `workbench.yaml`, served from this folder: pick **Website** in the Workbench
 view's space switcher, or run `node packages/workbench/server/node/server.js .` from the
 repository root and open the address printed beside *Website*. The shell exposes
-editable props and a versioned state. These previews use the project's installed
+editable props and a versioned scenario. These previews use the project's installed
 Astro compiler; they do not start the Astro application server.
 
 The docs route reads the guides through `astro:content`, which needs Astro's
@@ -86,9 +86,9 @@ and each guide under `/workbench/docs/`, so with Actions on the header, buttons,
 and docs navigation move between them on the canvas. Links to GitHub and the
 `.vsix` downloads are recorded under **Actions** instead of followed. When you add a page preview,
 add its route to the other definitions' `links`. The Changelog preview answers
-the GitHub releases request with fixed releases, with a state for each case:
+the GitHub releases request with fixed releases, with a scenario for each case:
 releases with and without builds, no releases, and GitHub unavailable. In
-development, release data isn't cached, so each preview state gets its own
+development, release data isn't cached, so each preview scenario gets its own
 answer.
 
 The site uses pnpm; `packageManager` in `package.json` pins its version.
@@ -211,9 +211,9 @@ the same demo people try in the editor, so a change to the demo can change them.
   `data-label` attributes in `index.astro` match the workbench's control labels
   in order, and stops with both lists if they don't. When a control is added,
   removed, or renamed, update the list, then rerun.
-- The States and Annotations shots are 1120 × 860. States shows Feedback's
+- The Scenarios and Annotations shots are 1120 × 860. Scenarios shows Feedback's
   five artboards together. Annotations shows the sign-in page's Wrong password
-  state at mobile width; the script scales page coordinates to the canvas zoom
+  scenario at mobile width; the script scales page coordinates to the canvas zoom
   when it draws the annotations.
 - The Workbench previews and Docs shots are 1120 × 860: the demo's Button
   preview with its controls open, then the same page through its Docs lens
