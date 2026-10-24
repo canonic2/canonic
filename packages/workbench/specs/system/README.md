@@ -2,7 +2,7 @@
 
 This folder owns architecture and engineering rules applied across capabilities.
 Feature workflows and their acceptance remain in the owning capability; dated
-measurements belong to [research](../research/README.md).
+measurements belong to the package's [research](../../research/README.md).
 
 | Topic | Owns |
 | --- | --- |
@@ -13,7 +13,7 @@ measurements belong to [research](../research/README.md).
 | [Implementation proxy](implementation-proxy.md) | Loopback proxy routing, HTML/header/cookie rewriting and implementation framing |
 | [Performance](performance.md) | Agreed/proposed budgets, timed boundaries, diagnostics, resource expectations and measurement acceptance |
 | [Code quality](code-quality.md) | Engineering gates, dependency/artifact policy and behavioral evidence conventions |
-| [Lab methodology](labs.md) | Experiment planning, fair comparisons, fixture ownership, runner reliability and decision/confirmation lifecycle |
+| [Lab methodology](labs.md) | Experiment planning in ignored local labs, fair comparisons, shared fixtures, runner reliability, research records and decision/confirmation lifecycle |
 
 The server composes services; it does not own page behavior or Workbench UI.
 The [preview pipeline](../preview-pipeline/README.md) owns compilation and runtime

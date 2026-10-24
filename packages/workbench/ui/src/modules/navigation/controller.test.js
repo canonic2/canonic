@@ -52,6 +52,8 @@ void test('fast retained returns stay busy without showing loading feedback or d
     loading: false,
   });
   t.mock.timers.tick(22);
+  t.mock.timers.tick(128);
+  assert.equal(navigation.presentation([board]).loading, false, 'a page ready at 150 ms still avoids the loader');
   board.view.ready = true;
   assert.deepEqual(navigation.presentation([board]), {
     visible: true,
@@ -79,12 +81,12 @@ void test('slow selections show loading feedback and replacement, failure and di
   });
   t.after(() => navigation.dispose());
   navigation.begin();
-  t.mock.timers.tick(99);
+  t.mock.timers.tick(199);
   assert.equal(navigation.presentation([]).loading, false);
   navigation.begin();
   t.mock.timers.tick(1);
   assert.equal(navigation.presentation([]).loading, false, 'the previous deadline is cancelled');
-  t.mock.timers.tick(99);
+  t.mock.timers.tick(199);
   assert.deepEqual(navigation.presentation([]), { visible: false, pending: true, loading: true });
   navigation.begin();
   assert.equal(navigation.presentation([]).loading, false);
@@ -139,7 +141,7 @@ void test('retained destinations consume the requested size once, after matching
   navigation.dispose();
   assert.equal(navigation.takeSize(story), null);
 });
-void test('navigation conceals outgoing content before accepting a destination and reuses repeated routes', async () => {
+void test('navigation tracks requested destinations separately and reuses repeated routes', async () => {
   const activations = [],
     settled = [];
   let fits = 0,
@@ -283,6 +285,11 @@ void test('presentation accepts only the requested preview or the complete decla
     artboards: [{ id: 'info', label: 'Info', width: 320, height: 120 }],
   });
   assert.equal(navigation.presentation([board]).visible, true);
+  assert.equal(
+    navigation.presentation([{ ...board, view: { ...board.view, ready: false } }]).visible,
+    false,
+    'a declared group waits for its content rather than only its instance metadata',
+  );
   assert.equal(
     navigation.presentation([{ ...board, target: { ...board.target, artboard: 'wrong' } }]).visible,
     false,

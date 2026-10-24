@@ -79,12 +79,14 @@ This work follows the iframe runtime ownership in the
   iframe document loading alone does not make a story ready. The selected
   renderer's completion is relayed to the editor only for the requested page,
   state and lens.
-- The shell conceals the outgoing canvas before changing its destination,
-  including while the story catalog is unresolved. An ordinary preview is
+- The shell follows the [200 ms navigation grace period](../system/rendering-flow.md#navigation-feedback),
+  including while the story catalog is unresolved. Sidebar intent updates
+  immediately; the outgoing view retains its displayed labels and context until
+  the requested content is ready or the deadline expires. An ordinary preview is
   revealed only when its reported page, state and lens match the request and
   it is ready or has a named failure. Hiding does not detach its renderer or
   reload Storybook. Capture and handoff reject a pending destination; queued
-  focus reports cannot route back to the hidden outgoing page.
+  focus reports cannot route back to the inert outgoing page.
 - One outer canvas status, `Loading preview…`, covers catalog lookup and
   rendering. The preview's own loading documents and host labels stay hidden
   during this transition. Story lookup emits no progress toast. A matching

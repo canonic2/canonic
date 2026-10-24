@@ -76,6 +76,6 @@ every local preference or captured artifact.
 
 Packaging and process tests are linked by [modules](../system/modules.md#asset-and-packaging-checks)
 and [server](../system/server.md#verification). The
-[installed evidence](../research/README.md) records fixture/build/host limits.
+[installed evidence](../../research/README.md) records fixture/build/host limits.
 No complete cross-platform/browser matrix, browser-only editor implementation
 or Studio integration is established by those checks.

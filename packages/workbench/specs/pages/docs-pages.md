@@ -542,9 +542,9 @@ host. Parallel HTML/metadata reads compare their Markdown identity before
 mounting. Return checks distinguish Markdown and compiled example revisions,
 so missed prose updates preserve examples and missed example updates refresh
 the host with scroll kept. See the
-[decision and measured limits](../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
+[decision and measured limits](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
 Shipping confirmation is tracked by
-[integration evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23).
+[integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
 
 Docs lenses, Markdown rendering, example compilation/mounting, source-code
 controls, annotations, capture, handoff and portable output have source tests

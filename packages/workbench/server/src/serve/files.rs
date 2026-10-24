@@ -32,7 +32,7 @@ fn content_type(file: &Path) -> &'static str {
         .unwrap_or_default();
     match extension.as_str() {
         "html" => "text/html; charset=utf-8",
-        "js" => "text/javascript; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
         "json" => "application/json; charset=utf-8",
         "svg" => "image/svg+xml",
@@ -419,6 +419,7 @@ mod tests {
             ),
             ("acme/pages/notes.md", "# Notes"),
             ("acme/assets/logo.svg", "<svg/>"),
+            ("acme/assets/icons.mjs", "export const check = [];"),
             ("acme/workbench.yaml", "name: Acme\n"),
         ] {
             let path = dir.join(file);
@@ -441,6 +442,12 @@ mod tests {
         let (root, product) = product();
         let files = Files::new(&root, &product, None, None);
         let get = |path: &str| files.answer(&Method::GET, path);
+        let module = get("/assets/icons.mjs").unwrap();
+        assert_eq!(
+            module.headers()[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(text(module).await.1, "export const check = [];");
         let (status, page) = text(get("/pages/landing.html").unwrap()).await;
         assert_eq!(status, StatusCode::OK);
         assert!(page.starts_with(&format!(

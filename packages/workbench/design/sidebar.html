@@ -31,12 +31,28 @@
     </div>
   </div>
 
-  <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
   <script src="../ui/legacy/icons.js"></script>
   <script src="../ui/legacy/page-list.js"></script>
-  <script type="module" src="/_workbench/ui/src/bootstrap/sidebar.js"></script>
   <script src="spaces.js"></script>
-  <script>
+  <script type="module">
+    import Check from '../node_modules/lucide/dist/esm/icons/check.mjs';
+    import ChevronDown from '../node_modules/lucide/dist/esm/icons/chevron-down.mjs';
+    import ChevronsUpDown from '../node_modules/lucide/dist/esm/icons/chevrons-up-down.mjs';
+    import CircleDot from '../node_modules/lucide/dist/esm/icons/circle-dot.mjs';
+    import Component from '../node_modules/lucide/dist/esm/icons/component.mjs';
+    import FileText from '../node_modules/lucide/dist/esm/icons/file-text.mjs';
+    import Folder from '../node_modules/lucide/dist/esm/icons/folder.mjs';
+    import Palette from '../node_modules/lucide/dist/esm/icons/palette.mjs';
+    import Plus from '../node_modules/lucide/dist/esm/icons/plus.mjs';
+    import Search from '../node_modules/lucide/dist/esm/icons/search.mjs';
+    import X from '../node_modules/lucide/dist/esm/icons/x.mjs';
+    import '/_workbench/ui/src/bootstrap/sidebar.js';
+
+    // Keep this authored HTML page as small as its displayed controls.
+    window.lucide = { icons: {
+      Check, ChevronDown, ChevronsUpDown, CircleDot, Component, FileText, Folder,
+      Palette, Plus, Search, X,
+    } };
     var state = new URLSearchParams(location.search).get('state') || 'default';
     Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (el) {
       el.appendChild(window.wbIcon(el.dataset.icon));

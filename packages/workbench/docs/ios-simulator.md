@@ -106,7 +106,9 @@ terminal app that started it.
 ## Configure input
 
 Install Testrun's `testrun` command on your PATH or in `~/.local/bin`; Workbench
-looks in both. Testrun needs no configuration file; Workbench selects the Simulator shown on the canvas
+looks in both. The installed command must support `--json`, which Workbench uses
+for screen queries and input results. Testrun needs no configuration file;
+Workbench selects the Simulator shown on the canvas
 by its device ID. Testrun owns validation, controller
 acquisition, native touch dispatch and cleanup for each input command. The
 simulator input path requires no guest helper. Workbench's display path uses the

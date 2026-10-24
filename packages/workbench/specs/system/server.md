@@ -233,8 +233,8 @@ with the statuses and messages the canvas expects.
 - The macOS x86_64 release was packaged and installed. The 2026-10-23 isolated
   installed Acme run verifies Docs pool compatibility; the installed startup
   probe separates runtime extraction from warm config responses. Conditions
-  and limits are in [Docs integration](../research/docs-navigation.md#warm-docs-integration-2026-10-23)
-  and [runtime preparation](../research/startup.md#installed-runtime-preparation-2026-10-23).
+  and limits are in [Docs integration](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
+  and [runtime preparation](../../research/startup.md#installed-runtime-preparation-2026-10-23).
   These probes do not establish general installed-webview navigation latency.
 
 ## Known gaps

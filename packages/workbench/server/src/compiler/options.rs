@@ -155,9 +155,12 @@ fn rules(build: &Build<'_>) -> Vec<ModuleRule> {
         ]),
         ..Default::default()
     });
+    // Custom properties stay global, as Vite's and Vue's CSS modules leave
+    // them: other stylesheets and SVG sprites read them by their written name.
     let css_module = || {
         ParserOptions::CssAutoOrModule(CssAutoOrModuleParserOptions {
             named_exports: Some(false),
+            dashed_idents: Some(false),
             ..Default::default()
         })
     };

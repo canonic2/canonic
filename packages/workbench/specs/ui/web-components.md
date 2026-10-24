@@ -68,7 +68,8 @@ Inputs may arrive before connection or custom-element upgrade. Preserve those
 values, handle later updates, and do not mutate caller-owned data. Application
 selection and pending/error state belong to the controller; focus, hover, and
 temporary interaction state belong to the component. Avoid mirrored application
-state that can drift away from its owner.
+state that can drift away from its owner. Components do not subscribe to stores;
+a capability's binding supplies their inputs, following Lattice's state management.
 
 Emit named, typed custom events from the host for user intent. Events intended
 for ancestor controllers bubble and are composed; document their detail payload

@@ -59,9 +59,10 @@ shell inside an artboard.
 - Returning to an ordinary page or Storybook lens preserves its retained content
   session within the documented resource bounds. Removing the nested shell must
   not reintroduce full Storybook startup or iframe reloads on every selection.
-- Navigation revokes the outgoing destination before publishing new metadata.
-  Old pixels may remain only while identified as the outgoing view; they cannot
-  appear beneath the next destination's label. The shell owns transition status;
+- Navigation revokes interaction with the outgoing destination before accepting
+  new work. Its pixels remain during the bounded grace period under its outgoing
+  labels and context; they cannot appear beneath the next destination's label.
+  The shell owns transition status;
   renderers report data rather than creating competing application loading UI.
 - The target content must actually finish rendering before it is ready. Loading
   the renderer wrapper or hiding shell chrome is not a readiness signal. Failure
@@ -73,6 +74,195 @@ artboard label or selection border. Docs beside explicitly composed artboards us
 a content viewport, not another Workbench shell. Embedded docs examples likewise
 mount content. Workbench's own design examples may intentionally render individual
 Workbench components as project content; they still do not initialize the application.
+
+## Navigation feedback
+
+Page selection expresses the user's intent immediately, while the canvas keeps
+the identity of the content it actually displays. The sidebar marks the picked
+page synchronously, before editor messaging, story lookup or rendering finishes.
+The breadcrumb may identify the requested destination while its artboard is pending.
+
+| Time or outcome | Canvas presentation |
+| --- | --- |
+| Pick begins | Keep the outgoing artboard or Docs viewport visible, with its existing label, geometry, camera, reading mode and reference; make it inert |
+| Destination ready before 200 ms | Swap to its ready content and metadata immediately, with no loading message |
+| Still pending at 200 ms | Conceal the outgoing view and show **Loading preview…**; it no longer contributes visible artboards to reference/context publication |
+| Ready after the deadline | Replace loading feedback with the ready destination and its metadata |
+| Failure | End the grace period and show the destination's failure without outgoing pixels under its label |
+
+The 200 ms period starts at each new selection, including a selection whose story
+metadata is still being resolved. It delays feedback, never the rendering work or
+a ready page. On first open there is no outgoing content to retain; the loader
+still observes the grace period. Rapid picks restart the deadline for the latest
+destination, preserve the last displayed view while its new grace period applies,
+and invalidate older readiness/error callbacks. A view already concealed at a
+deadline is not resurrected by another pending pick. Completion, clear, failure
+and disposal release pending deadlines and transient outgoing renderers.
+
+Only a complete ready declared-artboard group is published as the replacement;
+creating the expected instances alone does not establish content readiness.
+Pending renderers must already have a correctly sized layout viewport. The
+canvas supplies invisible, inert staging slots independently of the displayed
+state. It cannot defer all slot creation or use `display:none` until readiness:
+the renderer's paint/readiness callbacks may depend on that layout, producing
+a startup deadlock. Promotion preserves the prepared iframe document and its
+state; it changes presentation without reloading content.
+Existing warm ordinary/Storybook/Docs sessions keep their retention semantics.
+Outgoing declared instances may remain parked until the grace period ends or the
+replacement commits, then are disposed. This transition does not authorize an
+unbounded pool of outgoing runtimes.
+
+Screenshots and handoffs remain unavailable throughout pending navigation, even
+when outgoing pixels are visible. The canvas reference and agent context describe
+the displayed outgoing view during the grace period, then no visible artboards
+while loading feedback is shown, then the committed replacement. Incoming labels,
+sizes, automatic camera fitting and reading mode must not be applied to the
+outgoing presentation.
+
+### Why the grace period exists
+
+Immediate sidebar feedback confirms the pick independently of rendering latency.
+Keeping the previous view briefly provides visual continuity through fast page
+changes, while suppressing both a blank canvas flash and a loading-message flash.
+A page ready at 25 ms appears at once; it does not wait for 200 ms. A slower page
+receives explicit loading feedback at the deadline so the old content cannot
+linger indefinitely and suggest that the pick was ignored. The threshold is a
+product interaction choice, not a claim that rendering completes within 200 ms.
+
+Keeping requested selection separate from displayed identity also prevents a
+reference or handoff from describing a new page while showing the old one's
+pixels. This improves perceived responsiveness without changing rendering speed,
+weakening readiness, or permitting capture of unfinished content.
+
+The navigation controller tests cover deadline cancellation, restart, supersession
+and group readiness. Preview-session tests cover transient outgoing retention and
+cleanup. The host's [browser regression](../../server/node/src/modules/host/navigation.test.ts)
+exercises sidebar selection, outgoing pixels/labels/reference, ready commit,
+deadline loading, late readiness and failure through the actual shell and renderer.
+
+## Navigation state
+
+**Status:** agreed, not implemented. Navigation will hold its state in a store
+built on Lattice's state management (`canonic-lattice`), which defines stores,
+selectors, bindings, phases, transitions and asynchronous work. Today the same
+facts live in closures across the legacy shell, the navigation and
+preview-session controllers, the canvas bootstrap and the content renderer,
+reconciled by explicit calls such as `present()` and per-owner sequence counters.
+
+### State
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Opaque identity of the current navigation |
+| `requested` | The destination being navigated to: page, state, lens, example and declared artboards |
+| `displayed` | The destination and navigation `id` whose content is presented, or `null` |
+| `phase` | `idle`, `pending`, `loading`, `shown` or `failed` |
+| `problem` | The failure message when `phase` is `failed` |
+
+| Phase | Meaning | Canvas presentation |
+| --- | --- | --- |
+| `idle` | Nothing requested yet | Empty canvas |
+| `pending` | Requested, inside the grace period | Outgoing view retained and inert |
+| `loading` | Requested, grace period elapsed | **Loading preview…**, no outgoing pixels |
+| `shown` | Requested content is ready and displayed | Requested content, interactive |
+| `failed` | The requested destination failed | Its failure, no outgoing pixels |
+
+Requested and displayed are separate fields, as [navigation feedback](#navigation-feedback)
+requires. The canvas accepts input exactly when `phase` is `shown` or `failed`
+and no capture is running. One binding writes the canvas's `inert`,
+`aria-busy`, visibility and loading message; no other code writes them. The
+camera during pan, zoom and reading scroll stays in `<wb-canvas>`; navigation
+receives settled values only.
+
+### Events
+
+| Event | Source | Effect |
+| --- | --- | --- |
+| `picked(destination)` | Sidebar, route, editor | New `id`; `requested` set; `pending` |
+| `deadline(id)` | Grace timer | `pending` → `loading` when `id` is current |
+| `ready(id, view)` | Renderer | `shown`, `displayed` = view, when `id` is current |
+| `failed(id, problem)` | Renderer or activation | `failed` when `id` is current |
+| `navigated(from, id, destination)` | Renderer, after a link or form inside the preview | Adopted as the current navigation when `from` is current |
+| `captureStarted` / `captureEnded` | Review | Input blocked for the capture's duration |
+
+### Identity across documents
+
+The canvas document and each content renderer own separate stores and exchange
+messages that carry navigation identity:
+
+- The shell sends every render request with its navigation `id`. The renderer
+  tags readiness, failure and metadata reports with the `id` of the request
+  they answer, as the [content renderer contract](#content-renderer-contract)
+  requires.
+- When the preview navigates itself, through a link or form the shell hands
+  back to it, the renderer mints a new `id` in its own namespace and reports
+  `navigated(from, id, destination)`. The shell adopts it only when `from` is
+  its current `id`; later reports for the new `id` then match.
+- Reports whose `id` is not current change nothing. A late report from a
+  superseded navigation, a parked session or a reused warm renderer can never
+  mark the current navigation ready or replace what is displayed.
+- The shell and each renderer runtime mint identities with distinct prefixes,
+  unique per document lifetime.
+
+### Invariants
+
+These hold after every event, in any order:
+
+1. When `phase` is `shown`, `displayed.id` equals `id` and `displayed`
+   matches `requested`.
+2. An event carrying a non-current `id` returns an empty patch.
+3. The canvas accepts input if and only if `phase` is `shown` or `failed` and no
+   capture is running.
+4. In `loading` and `failed`, no outgoing content is presented.
+5. A navigation that receives `ready` or `failed` for its `id` leaves
+   `pending` and `loading`; a link followed inside the preview, once reported,
+   reaches `shown` or `failed` the same way as a pick.
+
+Transition tests drive generated event sequences through these invariants.
+Browser regressions through the shell and renderer cover the discoveries below.
+
+### Migration
+
+- Workbench first adds Lattice as a dependency: the server serves its modules
+  unchanged beside the UI, the canvas, renderer and sidebar entry points resolve
+  its import, the webview CSP admits it, and VSIX packaging includes it.
+- Navigation state, transitions and the grace timer move into a navigation store
+  under `ui/src/modules/navigation/`, with its binding beside it. The canvas
+  bootstrap's displayed and painted copies, and the navigation controller's flag
+  set, are replaced by the store's fields and selectors.
+- Renderer messages carry navigation identity as specified above.
+- The legacy shell keeps its route and sidebar code; an adapter at its boundary
+  turns route changes into `picked` and `shown` destinations into route writes.
+- Other capabilities move to Lattice stores when they are substantially reworked.
+
+### Discoveries
+
+- **Link inside a preview froze the canvas (2026-10-23).** Acme demo, App ›
+  Dashboard, **Actions** on: clicking **Inbox** inside the preview loaded
+  `app/inbox.html` in the artboard while the shell's selection stayed on the
+  dashboard. The canvas computed itself as pending, set `inert` on the artboards
+  and skipped the step that adopts the renderer's destination as the route, so it
+  never left that state. Every click and key on the artboard was ignored until
+  another page was picked. Cause: the requested destination had two owners (the
+  shell's selection and the renderer's target) reconciled by a call that a later
+  change gated on the very state it was meant to resolve. Invariants 3 and 5 and
+  the `navigated` event cover it.
+- **Blank Docs page after rapid collection switches (2026-10-23).** In the
+  Workbench space, switching from the Actions switch Docs page to Interface ›
+  Sidebar and back within about a second left a blank Docs viewport that stayed
+  blank. Observed in a screen recording; not yet reproduced or traced.
+  Hypothesis: a late report from the superseded visit or the retained Docs
+  session was accepted as readiness for the returning navigation. Invariants 1
+  and 2 cover that class of failure.
+
+### Open questions
+
+- Whether a renderer that never reports for its navigation needs a readiness
+  timeout that produces `failed`, or whether `loading` may last indefinitely
+  for slow compilation.
+- Whether the first migration also moves the legacy shell's route state into
+  the navigation store, or leaves it behind the adapter until the shell itself
+  is migrated.
 
 ## Backend and asset delivery
 

@@ -73,7 +73,7 @@ renderers that expose only the flag; signalling docs do not wait for that poll.
 ## Verification
 
 [Preview runtime tests](../../ui/preview/preview-runtime.test.cjs) cover font/image waits,
-errors and hidden-frame progress. The [web-font fixture](../../labs/rspack-pipeline/README.md#stage-2-report)
+errors and hidden-frame progress. The [web-font fixture](../../research/rspack-pipeline.md#stage-2-2026-10-13)
 is the correctness boundary for any faster font rule: an independently observed
 font download must be complete before readiness. A status-only check before
 layout cannot establish that the page has started its own font loads.

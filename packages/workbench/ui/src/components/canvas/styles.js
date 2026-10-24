@@ -1,6 +1,8 @@
 export const styles = `
       :host{display:block;position:relative;overflow:hidden;min-width:0;min-height:0;background:transparent;color:var(--wb-fg);outline:none;touch-action:none}
       .world{position:absolute;inset:0 auto auto 0;transform-origin:0 0}
+      .staging{position:absolute;inset:0;visibility:hidden;pointer-events:none}
+      .staging>div{position:absolute;left:0;top:0}
       section{position:absolute;box-shadow:0 0 0 1px var(--wb-line);background:var(--wb-raised)}
       section[data-content-fitted=true]{background:transparent;box-shadow:none}
       section[data-selected=true]{box-shadow:0 0 0 2px var(--wb-accent)}

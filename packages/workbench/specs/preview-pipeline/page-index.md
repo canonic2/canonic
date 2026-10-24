@@ -13,7 +13,7 @@ validation, errors, IDs, states and sidebar order.
 
 This topic owns discovery, index reuse, evaluation, failure recovery and saved
 index bounds. [Performance](../system/performance.md#measured-interactions) owns
-the agreed complete-list target; [listing research](../research/page-listing.md)
+the agreed complete-list target; [listing research](../../research/page-listing.md)
 records measurements and their limits. [Compiler](compiler.md) owns building the
 pages after they are listed. A fast index alone does not establish that the
 first page meets its render target.
@@ -147,13 +147,13 @@ acceptance.
 | PI-05 | A failing or timed-out index is a page-tree problem, and the rest of the configuration still answers | [Native CLI deadline test](../../server/tests/integration/main.rs); the page-tree problem has no dedicated test |
 | PI-06 | Trust and disabled-preview controls prevent project evaluation | [Preview server integration tests](../../server/node/preview.test.js) |
 | PI-07 | Cache eviction, byte bounds and process cleanup follow the resource table | Implemented bounds; dedicated boundary/eviction and descendant-cleanup assertions remain verification gaps |
-| PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [listing evidence](../research/page-listing.md); acceptance on all six targets is not established by that probe |
+| PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [listing evidence](../../research/page-listing.md); acceptance on all six targets is not established by that probe |
 
 ## Remaining work
 
 The implemented design uses directory-stamp reuse, literal parsing and the
-compiler evaluator. [Listing research](../research/page-listing.md) records measured
-results and target gaps; [lab evidence](../../labs/instant-first-page/README.md#stage-1-report)
+compiler evaluator. [Listing research](../../research/page-listing.md) records measured
+results and target gaps; [comparison evidence](../../research/instant-first-page.md#stage-1-2026-10-15)
 supports the architecture without defining the shipping interface.
 
 - The [server](../system/server.md#the-resident-index-and-watcher) keeps the index

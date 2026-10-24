@@ -107,6 +107,8 @@
       /* No width in the hash: how the canvas is framed is the canvas's
          business, and a pick from here shouldn't resize it. */
       onPick: function (src, state) {
+        var item = index[src];
+        pageList.setCurrent(src, state, item && item.collection);
         send({ type: 'canonic-pick', hash: src + (state ? ':' + state : '') });
       },
     });

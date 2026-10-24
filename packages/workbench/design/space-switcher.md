@@ -73,6 +73,7 @@ Arrow keys open the menu from its trigger and move through all pick/remove/add
 actions with wrapping; Home/End select the ends. Escape closes and restores the
 trigger; Tab closes while allowing normal focus traversal. Enter/Space activate
 native buttons. Outside pointer presses and window blur close the menu. Updates
-preserve focus on surviving actions; if a focused action disappears, focus moves
-to the first available action. Disconnect releases connection listeners and
+preserve the open menu's scroll position and focus on surviving actions; if a
+focused action disappears, focus moves to the first available action.
+Disconnect releases connection listeners and
 closes the menu; reconnect restores an interactive closed control.

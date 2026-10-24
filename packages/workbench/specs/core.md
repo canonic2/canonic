@@ -130,7 +130,8 @@ switching spaces preserves each selection. Restart restoration saves logical
 view parameters and mounts fresh content. Live frame retention below preserves
 runtime state only while those documents remain alive.
 
-Complete-selection persistence and first-page startup fallback are required
+First-page startup fallback is implemented for a canvas without an addressed
+page, including space switches. Complete-selection persistence remains required
 implementation work; the existing URL and hidden-webview retention do not
 establish restart persistence. The owning spec supplies validation, lifecycle,
 storage-failure behavior, browser limits and acceptance.
@@ -149,11 +150,12 @@ The [multiple-artboard system](canvas/multiple-artboards.md) owns instance state
 geometry and review/context. Ordinary states remain alternatives; only explicit
 page artboards create a group. Outer control layout stays unchanged by this refactor.
 
-- Config and catalog discovery show **Loading pages…**. The first iframe
-  preview shows **Loading preview…** until the target content is ready. A later
-  transition may retain outgoing content only under its actual settled identity;
-  it is concealed before new destination labels are displayed. The shell owns
-  application loading status. Loading indicators honor reduced motion.
+- Config and catalog discovery show **Loading pages…**. Sidebar selection updates
+  immediately. Preview navigation follows the [200 ms grace period](system/rendering-flow.md#navigation-feedback):
+  retain the outgoing view under its settled labels and context until the target
+  is ready or the deadline expires, then swap or show **Loading preview…**.
+  The first preview uses the same delayed loader without outgoing content.
+  The shell owns application loading status. Loading indicators honor reduced motion.
 - The size switcher uses the space's ordered sizes and each page's supported
   sizes, including page-specific sizes. With no space configuration the
   defaults are Fit, Laptop, Mobile and Resizable. Filled axes follow the

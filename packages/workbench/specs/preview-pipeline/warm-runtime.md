@@ -194,7 +194,7 @@ or disposed request cannot navigate a newer destination or reopen a removed fram
   (one active and three idle), based on the heavy-fixture long walk. This
   replaces the lab's requirement that the pool stay within control's heap;
   it does not authorize more retained frames or unbounded growth. See
-  [measured conditions](../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
+  [measured conditions](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
 - Warm-document and retained-frame memory must have measured bounds. A
   document whose retained resources exceed its bound is replaced without
   losing the requested view. Choosing the threshold and safe replacement
@@ -224,14 +224,14 @@ selection in `content-frames.js`/`preview-sessions.js`. The server preload
 correction is implemented independently in the generated client
 ([serving](serving.md#preload-selection)). The selected design is the lab's
 `pool-rp`; no compiler warm-up redesign is part of this change. Shipping-code
-confirmation is tracked in [performance](../research/docs-navigation.md#warm-docs-integration-2026-10-23).
+confirmation is tracked in [performance](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
 
 ## Verification
 
 Isolation and warm-host lifecycle are covered by
 [preview-host tests](../../ui/legacy/preview-host.test.js) and
 [preview-runtime tests](../../ui/preview/preview-runtime.test.cjs). The
-[pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report) holds design
+[pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13) holds design
 comparisons. Long-session heap bounds and real-host confirmation remain
 acceptance work, not properties established by those prototype runs.
 

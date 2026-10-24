@@ -230,6 +230,9 @@ export class WbSpaceSwitcher extends HTMLElement {
   }
 
   #render() {
+    // Only an open, connected menu has a scroll position to preserve. Reading
+    // after DOM writes forces layout even when the menu is closed.
+    const scroll = this.#open && this.isConnected ? this.#menu.scrollTop : null;
     const shown = this.#spaces.find((space) => space.id === this.#current);
     this.#mark.hidden = !shown;
     this.#mark.iconRenderer = this.#icons;
@@ -241,7 +244,6 @@ export class WbSpaceSwitcher extends HTMLElement {
       : 'Switch space';
     this.#trigger.disabled = this.disabled;
     const active = this.#root.activeElement;
-    const scroll = this.#menu.scrollTop;
     let cursor = this.#menu.children[1] || this.#rule;
     const wanted = new Set();
     for (const space of this.#spaces) {
@@ -307,7 +309,7 @@ export class WbSpaceSwitcher extends HTMLElement {
     this.#add.disabled = this.disabled;
     this.#add.replaceChildren(this.#glyph('plus', '+'), document.createTextNode('Add a space…'));
     this.#setOpen(this.#open);
-    this.#menu.scrollTop = scroll;
+    if (scroll !== null) this.#menu.scrollTop = scroll;
     if (active && this.#open) {
       if (active.isConnected && !active.hidden) active.focus({ preventScroll: true });
       else (this.#items()[0] || this.#trigger).focus({ preventScroll: true });

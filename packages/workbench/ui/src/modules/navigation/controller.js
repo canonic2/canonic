@@ -16,7 +16,7 @@ export function createNavigation(ports) {
       if (disposed || !navigating) return;
       loading = true;
       ports.present();
-    }, 100);
+    }, 200);
   }
   let sequence = 0,
     group = '',
@@ -78,6 +78,8 @@ export function createNavigation(ports) {
             boards.every(
               (board) =>
                 matches(board.target) &&
+                matches(board.view) &&
+                !!(board.view?.ready || board.view?.problem) &&
                 declared.some((child) => child.id === board.target.artboard),
             )
           : boards.length === 1 &&

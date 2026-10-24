@@ -20,8 +20,9 @@ immediately. It shows **Opening Workbench** while configured services, such as
 Storybook, start. The sidebar shows which catalogs it is waiting for, or
 **Finding previews…** during preview discovery. Search becomes available when
 the list is ready. The canvas shows **Loading pages…** while reading its
-catalogs, and **Loading preview…** for the first preview. Later page changes
-keep the current preview visible until its replacement is ready.
+catalogs. Preview loads show **Loading preview…** after 200 ms if still pending.
+Later page changes mark the sidebar immediately and keep the previous preview
+visible for up to 200 ms; a ready replacement appears immediately.
 
 If the server cannot start, the tab says **Workbench couldn't start** and
 points to the Workbench log; reload the window to retry. Closing a loading tab

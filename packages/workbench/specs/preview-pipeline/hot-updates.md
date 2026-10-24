@@ -114,7 +114,7 @@ mounts its preview there. Any other document reloads.
   lifecycles ignore late check/update results. The
   [warm Docs contract](warm-runtime.md#resume-and-freshness) owns failure and
   replacement behavior. Return revision checks are implemented alongside the
-  push path; [integration evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23)
+  push path; [integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
   records their verification scope.
 
 ### Errors and recovery
@@ -153,7 +153,7 @@ The compiler's Rust unit tests (in [compiler.rs](../../server/src/compiler.rs)'s
 modules, such as the hot client in [client.rs](../../server/src/compiler/client.rs)),
 [preview integration tests](../../server/node/preview.test.js) and
 [docs integration tests](../../server/node/preview-docs.test.js) exercise the implemented
-build, serving and docs paths. The [pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report)
+build, serving and docs paths. The [pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13)
 holds format-by-format edit and isolation evidence. Event-stream reconnects
 must still be tested against missed builds, and entry-set replacement must
 preserve hot updates in already-open documents.

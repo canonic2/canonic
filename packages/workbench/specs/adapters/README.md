@@ -111,7 +111,7 @@ and the bundled runtime is the Electron build Workbench ships
 ## Decisions
 
 Decided by the owner on 2026-10-16, after the
-[instant first page lab's stage 2](../../labs/instant-first-page/README.md#stage-2-report):
+[instant first page comparison's stage 2](../../research/instant-first-page.md#stage-2-2026-10-16):
 
 - **The Workbench server is one Rust runtime:** HTTP, the page index and
   the compiler (Rspack's Rust crates) in one binary. Node runs only as the

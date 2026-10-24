@@ -28,8 +28,10 @@ function fixture() {
     busy = false,
     fetched = 0;
   let failAt;
+  let displayed = [];
   const sessions = createPreviewSessions({
     visible: () => [...visible.values()],
+    displayed: () => displayed,
     create(target) {
       const id = String(++serial);
       if (serial === failAt) throw new Error('Renderer could not mount');
@@ -78,6 +80,9 @@ function fixture() {
     failAt(value) {
       failAt = value;
     },
+    display(ids) {
+      displayed = ids;
+    },
   };
 }
 void test('ordinary stories reuse one renderer; only authored artboards create multiple instances', async () => {
@@ -101,6 +106,40 @@ void test('ordinary stories reuse one renderer; only authored artboards create m
     ['1', false],
   ]);
   assert.equal(f.commands.at(-1)?.id, '1');
+  f.sessions.dispose();
+});
+
+void test('outgoing artboards survive until presentation commits or the grace period expires', async () => {
+  const f = fixture();
+  await f.sessions.activate(page);
+  f.display(['1']);
+  await f.sessions.activate(declared);
+  assert.ok(f.parked.has('1'));
+  assert.deepEqual(f.concealed, [], 'the displayed ordinary renderer remains visible');
+  f.sessions.finish();
+  assert.deepEqual(f.concealed, [['1', true]]);
+  f.display(['2', '3']);
+  await f.sessions.activate(page);
+  assert.deepEqual(f.closed, [], 'displayed declared renderers are parked during replacement');
+  assert.ok(f.parked.has('2') && f.parked.has('3'));
+  f.sessions.finish();
+  assert.deepEqual(f.closed, ['2', '3']);
+  assert.deepEqual([...f.visible.keys()], ['1']);
+  f.sessions.dispose();
+});
+
+void test('rapid replacements discard unpublished renderers and keep the original outgoing view', async () => {
+  const f = fixture();
+  await f.sessions.activate(page);
+  f.display(['1']);
+  await f.sessions.activate(declared);
+  await f.sessions.activate(declared);
+  assert.deepEqual(f.closed, ['2', '3']);
+  assert.ok(f.parked.has('1'));
+  assert.deepEqual(f.concealed, []);
+  await f.sessions.activate(page);
+  f.sessions.finish();
+  assert.deepEqual(f.concealed, [['1', false]], 'resuming the outgoing view cancels its deferred concealment');
   f.sessions.dispose();
 });
 void test('parked sessions expire after fifteen minutes and wait while review is holding the canvas', async (t) => {

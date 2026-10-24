@@ -381,6 +381,7 @@
         loaded.inert = false;
         loaded.classList.add('is-active');
         loaded.removeAttribute('aria-hidden');
+        if (loaded.style) { loaded.style.width = ''; loaded.style.height = ''; }
         frameReady = true;
         if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'frame-promotion');
         artboardContent.classList.remove('is-loading');
@@ -398,6 +399,12 @@
   return {
     show: function (next, force) {
       var previous = view;
+      // A pending page can request another viewport size before it is ready.
+      // Keep the outgoing document at its displayed size during the grace period.
+      if (frameReady && frame.clientWidth > 0 && frame.clientHeight > 0) {
+        frame.wbFrameSize = { width: frame.clientWidth, height: frame.clientHeight };
+        freezeFrameSize(frame);
+      }
       showSeq++;
       cancelStorySwitch();
       cancelPendingFrame();

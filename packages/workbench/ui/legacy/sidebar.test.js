@@ -22,6 +22,8 @@ function loadSidebar(overrides, spaces) {
     spaceMenu: {},
   };
   var built = null;
+  var pick, current;
+  var order = [];
   var config = Object.assign({
     name: 'Acme',
     collections: [],
@@ -36,8 +38,26 @@ function loadSidebar(overrides, spaces) {
       mergeCollections: function (base, imported) { return base.concat(imported); },
     },
     wbPageList: {
-      index: function () { return {}; },
-      create: function (options) { built = options.collections; return {}; },
+      index: function (collections) {
+        var items = {};
+        collections.forEach(function (collection) {
+          collection.items.forEach(function (item) {
+            items[item.src] = Object.assign({}, item, { collection: collection.name });
+          });
+        });
+        return items;
+      },
+      create: function (options) {
+        built = options.collections;
+        pick = options.onPick;
+        return {
+          reveal: function () {},
+          setCurrent: function (src, state, collection) {
+            current = { src: src, state: state, collection: collection };
+            order.push('selected');
+          },
+        };
+      },
     },
   };
   var document = {
@@ -55,7 +75,7 @@ function loadSidebar(overrides, spaces) {
     document: document,
     console: { error: function () {} },
     acquireVsCodeApi: function () {
-      return { postMessage: function (message) { posted.push(message); } };
+      return { postMessage: function (message) { posted.push(message); order.push('sent'); } };
     },
   });
 
@@ -71,6 +91,9 @@ function loadSidebar(overrides, spaces) {
     intent: function (name, detail) { listeners[name]({ detail: detail || {} }); },
     shell: shell,
     spaces: elements.spaces,
+    pick: function (src, state) { pick(src, state); },
+    current: function () { return current; },
+    order: order,
   };
 }
 
@@ -98,6 +121,18 @@ test('the sidebar shows the space switcher from the spaces the extension lists',
   assert.equal(sidebar.shell.dimmed, true);
   sidebar.intent('wb-space-toggle', { open: false });
   assert.equal(sidebar.shell.dimmed, false);
+});
+
+test('a sidebar pick marks the destination before sending it to the editor', function () {
+  var sidebar = loadSidebar({ implementations: {}, previews: false, collections: [
+    { name: 'Pages', items: [{ label: 'Sign in', src: 'sign-in.html' }] },
+  ] });
+  sidebar.pick('sign-in.html', 'error');
+  assert.deepEqual(sidebar.current(), { src: 'sign-in.html', state: 'error', collection: 'Pages' });
+  assert.deepEqual(sidebar.order.slice(-2), ['selected', 'sent']);
+  assert.deepEqual(JSON.parse(JSON.stringify(sidebar.posted.at(-1))), {
+    type: 'canonic-pick', hash: 'sign-in.html:error',
+  });
 });
 
 test('the sidebar has no switcher without a space list', function () {

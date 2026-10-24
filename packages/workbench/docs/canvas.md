@@ -15,13 +15,16 @@ between declared artboards. Screenshots, references, and handoffs include
 every artboard. The existing sidebar, top bar, toolbar, and view controls keep
 their layout.
 
-When you switch pages, states, or lenses, the outgoing preview stays hidden
-until the requested content is ready. Its session remains attached for reuse.
-Screenshots and handoffs wait for the requested page to finish loading.
-The canvas shows **Loading preview…** if story lookup or rendering takes longer
-than 100 ms. Fast returns show the retained page without flashing a loader;
-the message's delay does not delay the page. A lookup failure replaces
-the loading message with the error.
+When you pick another page, the sidebar marks it immediately. The previous
+artboard stays visible for up to 200 ms, keeping its own label and reference.
+If the requested page becomes ready sooner, it appears immediately without a
+loader. If it takes longer, the old view is hidden and **Loading preview…**
+appears until the replacement is ready. States and lenses use the same grace
+period. The outgoing preview is not interactive during the transition;
+screenshots and handoffs wait for the requested page to finish loading.
+A failure ends the transition and shows the error. Rapid picks follow the
+latest destination. This keeps fast switches visually continuous without
+delaying ready content.
 Labels use the page's name and the selected story or state. Declared artboards
 include their own names while loading. During a Storybook lookup, the tab names
 the destination page; the story name joins it once resolved.

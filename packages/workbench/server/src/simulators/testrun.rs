@@ -124,6 +124,7 @@ impl Testrun {
         let mut command = tokio::process::Command::new(&executable);
         command
             .args(args)
+            .arg("--json")
             .args(["--target", &target])
             .current_dir(&self.root)
             .stdin(Stdio::null())
@@ -136,6 +137,14 @@ impl Testrun {
         }
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            // Failed result envelopes stay on stdout; Testrun deliberately
+            // avoids a duplicate stderr error for these results.
+            if stderr.is_empty()
+                && let Ok(value @ Value::Object(_)) = serde_json::from_slice::<Value>(&output.stdout)
+                && (value["ok"] == false || value["isError"] == true)
+            {
+                return Err(anyhow!(value.to_string()));
+            }
             return Err(anyhow!(if stderr.is_empty() {
                 format!(
                     "Command failed: {} {} --target {target}",
@@ -230,7 +239,7 @@ mod tests {
         std::fs::write(
             &binary,
             format!(
-                "#!{node}\nconst fs = require('node:fs');\nfs.writeFileSync('invocation.json', JSON.stringify(process.argv.slice(2)));\nif (process.argv.some((arg) => arg.includes('\"swipe\"'))) {{ console.error('SESSION_UNCERTAIN'); process.exit(1); }}\nconsole.log(JSON.stringify({{sourceWidth:1206,sourceHeight:2622}}));\n"
+                "#!{node}\nconst fs = require('node:fs');\nfs.writeFileSync('invocation.json', JSON.stringify(process.argv.slice(2)));\nif (!process.argv.includes('--json')) {{ console.log('Observation: ready'); process.exit(0); }}\nif (process.argv.includes('failed-result')) {{ console.log(JSON.stringify({{ok:false,error:{{code:'SESSION_UNCERTAIN',message:'Input outcome is unknown; inspect status before retrying',details:{{dispatched:true}}}}}})); process.exit(1); }}\nif (process.argv.some((arg) => arg.includes('\"swipe\"'))) {{ console.error('SESSION_UNCERTAIN'); process.exit(1); }}\nconsole.log(JSON.stringify({{sourceWidth:1206,sourceHeight:2622}}));\n"
             ),
         )
         .expect("script");
@@ -262,7 +271,7 @@ mod tests {
             .expect("args")
         };
         let target = format!("simulator:{identity}");
-        assert_eq!(read(), ["observe", "--target", &target]);
+        assert_eq!(read(), ["observe", "--json", "--target", &target]);
         assert!(!root.join("injected").exists());
 
         let tapped = testrun
@@ -277,6 +286,7 @@ mod tests {
                 "act",
                 r#"{"action":"tap","point":{"x":0.5,"y":0.2}}"#,
                 "--final-only",
+                "--json",
                 "--target",
                 &target
             ]
@@ -302,6 +312,25 @@ mod tests {
             .await
             .expect_err("no udid");
         assert_eq!(status_of(&nobody, 500), 400);
+        let _gone = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn preserves_failed_stdout_results_when_stderr_is_empty() {
+        let root = project("failed-result");
+        let testrun = Testrun::searching(&root, None, Some(root.clone()));
+        let error = testrun
+            .invoke("Acme", &["failed-result".into()])
+            .await
+            .expect_err("failed result");
+        let result: Value = serde_json::from_str(&error.to_string()).expect("complete result");
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["error"]["code"], "SESSION_UNCERTAIN");
+        assert_eq!(
+            result["error"]["message"],
+            "Input outcome is unknown; inspect status before retrying"
+        );
+        assert_eq!(result["error"]["details"]["dispatched"], true);
         let _gone = std::fs::remove_dir_all(root);
     }
 

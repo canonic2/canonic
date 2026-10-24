@@ -19,7 +19,7 @@ compiler, before any project plugin:
 | Preview runtime | `/_workbench/preview-runtime.js` is an external read from a window global set by the preview module, so every preview in a document shares one runtime |
 | TypeScript, JSX, TSX | Rspack's SWC loader, with React Refresh for project sources outside `node_modules` and generated entries |
 | Vue single-file components | Workbench's Vue loaders, with the Node evaluator compiling each component ([Vue adapter](../adapters/vue.md#build)) |
-| CSS | Rspack's native CSS, with hot updates. Files named `*.module.css` are CSS modules importable as a default object (`namedExports: false`) |
+| CSS | Rspack's native CSS, with hot updates. Files named `*.module.css` are CSS modules importable as a default object (`namedExports: false`); their custom properties keep their written names, as in Vite, so other stylesheets and SVG sprites can read them |
 | HTML previews | Workbench's HTML loader ([HTML adapter](../adapters/html.md#build)) |
 | Assets | Images, fonts and media imported by sources are emitted with content-hashed names |
 | `tsconfig.json` paths | The project's root `tsconfig.json`, with its references, resolves `paths` such as `@/*` |

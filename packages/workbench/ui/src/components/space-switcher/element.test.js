@@ -53,6 +53,45 @@ void test(
     for (const host of ['source', 'webview']) {
       const target = await browser.createTarget();
       await target.navigate(`http://127.0.0.1:${address.port}/${host}`);
+      assert.deepEqual(
+        await target.evaluate(`performance.getEntriesByType('resource').map(entry=>new URL(entry.name).pathname).filter(name=>/components\\/(?:canvas|export-dialog|size-switcher|size-dialog|sizes-editor|actions-switch)\\//.test(name))`),
+        [],
+        'the sidebar loads no unrelated component families',
+      );
+      const trace = [];
+      const stopTrace = target.on('Tracing.dataCollected', (event) => trace.push(...event.value));
+      await target.send('Tracing.start', {
+        categories: 'devtools.timeline,blink.user_timing',
+        transferMode: 'ReportEvents',
+      });
+      try {
+        await target.evaluate(`(() => {
+          performance.mark('closed-space-update-start');
+          const control = document.createElement('wb-space-switcher');
+          document.body.append(control);
+          control.spaces = [{id:'a',name:'Acme'},{id:'b',name:'Beta'}];
+          control.currentId = 'b';
+          control.allowAdd = true;
+          performance.mark('closed-space-update-end');
+          if (!control.shadowRoot.querySelector('.trigger').textContent.includes('Beta'))
+            throw new Error('Closed inputs must render synchronously');
+          control.remove();
+        })()`);
+      } finally {
+        const completed = target.waitFor('Tracing.tracingComplete');
+        await target.send('Tracing.end');
+        await completed;
+        stopTrace();
+      }
+      const start = trace.find((event) => event.name === 'closed-space-update-start');
+      const end = trace.find((event) => event.name === 'closed-space-update-end');
+      assert.ok(start && end, 'the browser recorded the closed update boundary');
+      assert.deepEqual(
+        trace.filter((event) => event.name === 'Layout' && event.pid === start.pid &&
+          event.tid === start.tid && event.ts >= start.ts && event.ts < end.ts),
+        [],
+        'closed component creation and inputs leave layout to the browser paint cycle',
+      );
       assert.equal(
         await target.evaluate(String.raw`(async () => {
       await Promise.race([customElements.whenDefined('wb-space-switcher'), new Promise((_, reject) => setTimeout(() => reject(new Error('Registration failed: ' + JSON.stringify({errors:window.errors,violations:window.violations}))), 2000))]);
@@ -62,6 +101,9 @@ void test(
       const check = (value, label) => { if (!value) throw new Error(label); results.push(label); };
       const key = (node, value) => node.dispatchEvent(new KeyboardEvent('keydown', {key:value,bubbles:true,composed:true,cancelable:true}));
       check(trigger.textContent.includes('Acme') && el.currentId === 'a' && el.allowAdd && el.allowRemove, 'pre-upgrade inputs');
+      const {registerSpaceComponents}=await import('/_workbench/ui/src/bootstrap/register-space.js');
+      registerSpaceComponents();
+      check(customElements.get('wb-space-switcher')===el.constructor, 'repeated registration keeps the active component');
       check(trigger.getAttribute('aria-haspopup') === 'menu' && menu.getAttribute('role') === 'menu', 'menu semantics');
       const events = [];
       document.addEventListener('wb-space-pick', e => events.push(['pick', e.detail.id, e.composed, e.bubbles]));
@@ -90,6 +132,17 @@ void test(
       copy.open=true;
       check(getComputedStyle(copy.shadowRoot.querySelector('.add')).display==='none', 'unavailable add action is hidden');
       copy.open=false;
+      const scroller = document.createElement('wb-space-switcher');
+      scroller.spaces = Array.from({length:30}, (_, index) => ({id:'space'+index,name:'Space '+index}));
+      document.body.append(scroller); scroller.open=true;
+      const scrollMenu = scroller.shadowRoot.querySelector('.menu');
+      const scrollFocus = scrollMenu.querySelector('[data-id="space10"]');
+      scrollFocus.focus({preventScroll:true}); scrollMenu.scrollTop=200;
+      const offset = scrollMenu.scrollTop;
+      check(offset>0, 'long space menu scrolls');
+      scroller.spaces=scroller.spaces.map(space=>({...space,name:space.name+'!'}));
+      check(scrollMenu.scrollTop===offset && scroller.shadowRoot.activeElement===scrollFocus, 'open update preserves scroll and focus');
+      scroller.remove();
       el.disabled=true; check(!el.open && trigger.disabled, 'disabled closes'); el.disabled=false;
       el.open=true; el.remove(); check(!el.open, 'disconnect closes');
       const count=events.length; trigger.click(); window.dispatchEvent(new Event('blur')); check(!el.open && events.length===count, 'disconnected handlers released');
@@ -108,7 +161,7 @@ void test(
       copy.remove(); el.remove();
       return results.length;
     })()`),
-        28,
+        31,
         host,
       );
       // Test actual Tab traversal, not just a synthetic keydown.

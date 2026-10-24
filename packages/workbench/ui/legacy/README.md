@@ -30,7 +30,8 @@ the current implementation.
 The default `/_workbench/` route continues to serve `index.html` with its
 existing controls and layout. JavaScript modules under `../src/modules/canvas/`
 own artboard state, geometry and context publication. `navigation/` owns requested
-destinations and supersession; `preview-sessions/` owns renderer transport,
+destinations, the 200 ms outgoing-view grace period and supersession;
+`preview-sessions/` owns renderer transport,
 retention and the story catalog; `review/` owns capture and delivery workflows.
 Application composition and registration live under `../src/bootstrap/`.
 `../src/bootstrap/canvas.js` composes a preview page's explicit `artboards` into independent
@@ -717,3 +718,8 @@ loads that server in its tab; in a browser, it posts the id to
 `/_workbench/spaces/open`, which starts that server if it has to and
 answers with its URL. The editor's sidebar draws the same switcher from the
 spaces the extension lists in its page.
+
+On first loading a space without an addressed page, the canvas opens its first
+page in resolved collection/group order, skipping empty collections and groups.
+Imported implementation-only pages open their first named state. Explicit page
+links and config refreshes keep their destination.

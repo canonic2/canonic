@@ -29,7 +29,7 @@ export function bindLegacyChrome(ports) {
   ports.zoom.current = {
     ...oldZoom,
     scale: () => canvas.scale,
-    fit: () => canvas.fitAll(),
+    fit: ports.fit || (() => canvas.fitAll()),
     key(event) {
       const key = oldZoom.command(event);
       if (!key) return false;

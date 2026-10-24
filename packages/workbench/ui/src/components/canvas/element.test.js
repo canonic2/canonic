@@ -50,6 +50,21 @@ void test(
     const check=(value,label)=>{if(!value)throw new Error(label);results.push(label)};
     const tick=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     const scroll=[], sizes=[], selected=[];
+    const preparing=document.createElement('wb-canvas');
+    preparing.style.cssText='width:800px;height:600px';document.body.append(preparing);
+    const pending=document.createElement('iframe');pending.slot='pending';
+    const loaded=new Promise(resolve=>pending.onload=resolve);
+    pending.srcdoc='<input value="kept">';preparing.append(pending);
+    const destination={id:'pending',x:0,y:32,size:{width:320,height:180},target:{src:'next.html',space:{id:'acme'}},view:{ready:false}};
+    preparing.staged=[destination];
+    await loaded;await tick();
+    check(pending.clientWidth===320 && pending.clientHeight===180,'pending renderer receives its logical viewport before readiness');
+    check(preparing.state.artboards.length===0 && !preparing.shadowRoot.querySelector('section'),'preparation does not publish a displayed artboard');
+    const pendingDocument=pending.contentDocument;
+    preparing.state={id:'preparing',revision:1,selected:'pending',artboards:[{...destination,view:{ready:true}}]};
+    preparing.staged=[];await tick();
+    check(pending.contentDocument===pendingDocument && pending.contentDocument.querySelector('input').value==='kept','ready promotion preserves the prepared document');
+    preparing.remove();
     canvas.addEventListener('wb-reading-scroll',e=>scroll.push(e.detail));
     canvas.addEventListener('wb-reading-resize',e=>{
       sizes.push(e.detail);
@@ -88,6 +103,6 @@ void test(
     check(canvas.state.artboards[0].size.width===600,'reconnect reacquires the viewport observer');
     return results;
   })()`);
-    assert.equal(results.length, 14);
+    assert.equal(results.length, 17);
   },
 );

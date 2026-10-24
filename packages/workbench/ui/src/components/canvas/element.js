@@ -15,6 +15,9 @@ export class WbCanvas extends HTMLElement {
   #world = document.createElement('div');
   #empty = document.createElement('p');
   #panLayer = document.createElement('div');
+  #staging = document.createElement('div');
+  #staged = new Map();
+  #stagedBoards = [];
   #nodes = new Map();
   #state = { id: '', revision: 0, selected: null, artboards: [] };
   #camera = { x: 32, y: 32, scale: 1 };
@@ -33,10 +36,13 @@ export class WbCanvas extends HTMLElement {
     this.#empty.textContent = 'Pick a page or a component to see it here.';
     this.#panLayer.className = 'pan';
     this.#panLayer.hidden = true;
-    this.#root.append(this.#empty, this.#world, this.#panLayer);
+    this.#staging.className = 'staging';
+    this.#staging.inert = true;
+    this.#staging.setAttribute('aria-hidden', 'true');
+    this.#root.append(this.#empty, this.#world, this.#staging, this.#panLayer);
   }
   connectedCallback() {
-    for (const key of ['state', 'reading']) {
+    for (const key of ['state', 'reading', 'staged']) {
       if (Object.hasOwn(this, key)) {
         const value = this[key];
         delete this[key];
@@ -284,11 +290,41 @@ export class WbCanvas extends HTMLElement {
       node.label.textContent = `${artboardLabel(board)} · ${board.size.width} × ${board.size.height}${board.view?.problem ? ' · ' + board.view.problem : !board.view?.ready ? ' · Loading…' : ''}`;
     }
     this.#empty.hidden = !!ids.size;
+    this.#prepare();
     if (this.#reading()) this.#paint();
     else if (this.#fitted) this.fitAll();
   }
   get state() {
     return this.#state;
+  }
+  set staged(boards) {
+    this.#stagedBoards = boards;
+    this.#prepare();
+  }
+  get staged() {
+    return this.#stagedBoards;
+  }
+  #prepare() {
+    const wanted = new Set();
+    for (const board of this.#stagedBoards) {
+      if (this.#nodes.has(board.id)) continue;
+      wanted.add(board.id);
+      let surface = this.#staged.get(board.id);
+      if (!surface) {
+        surface = document.createElement('div');
+        const slot = document.createElement('slot');
+        slot.name = board.id;
+        surface.append(slot);
+        this.#staging.append(surface);
+        this.#staged.set(board.id, surface);
+      }
+      surface.style.cssText = `width:${board.size.width}px;height:${board.size.height}px`;
+    }
+    for (const [id, surface] of this.#staged) {
+      if (wanted.has(id)) continue;
+      surface.remove();
+      this.#staged.delete(id);
+    }
   }
   panReady(value) {
     this.#space = value;

@@ -299,6 +299,21 @@ test('bundles React and Vue SFCs with scoped styles using project framework vers
   }
 });
 
+test('CSS modules scope class names and leave custom properties global', async t => {
+  const root = fixture(t, {
+    'button.workbench.ts': definition('react', './Button.tsx'),
+    'Button.tsx': `import styles from './button.module.css';
+export default function Button({label}:{label:string}) { return <button className={styles.tint}><svg><use href="#icon-dot"/></svg>{label}</button>; }`,
+    // An SVG sprite outside the stylesheet reads the variable by its written name.
+    'button.module.css': '.tint { --acme-tint: rebeccapurple; color: var(--acme-tint); }',
+  });
+  const built = await build(t, root, 'button.workbench.ts');
+  const css = Array.from(built.outputs).filter(([name]) => name.endsWith('.css')).map(([, body]) => body.toString()).join('\n');
+  assert.doesNotMatch(css, /(^|[\s,{])\.tint\s*\{/);
+  assert.match(css, /--acme-tint:\s*rebeccapurple/);
+  assert.match(css, /var\(--acme-tint\)/);
+});
+
 test('preview mounts fill flex-body artboards and React Native Web fills frames and docs stages', {
   timeout: 60000, skip: require('../../capture/electron-runtime').unavailable() || false,
 }, async t => {

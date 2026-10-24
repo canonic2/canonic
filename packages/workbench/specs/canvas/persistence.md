@@ -203,12 +203,15 @@ The extension saves the current space in `workspaceState` and added spaces in
 `globalState`. Viewer preferences currently use browser `localStorage`, scoped
 to the served origin. The canvas URL holds the current view; the panel keeps
 only in-memory selection and uses `retainContextWhenHidden`. These do not
-implement durable complete-selection restoration, stable preference storage
-across port changes, or the first-page startup fallback above.
+implement durable complete-selection restoration or stable preference storage
+across port changes. A canvas without an explicit destination opens the first
+page from the resolved collections, including on space switches; imported
+implementation-only pages open their first named state. Config refresh does not
+reapply this fallback.
 
 Implementation must add a scoped complete-selection record, extend the host
-relay, restore the panel through the editor lifecycle, and apply the shared
-startup precedence after listing. Browser mode must add native IndexedDB for
+relay, restore the panel through the editor lifecycle, and add saved-selection
+restoration before the first-page fallback. Browser mode must add native IndexedDB for
 selection and preference records; editor preferences must move to `workspaceState`.
 Cross-origin browser migration is excluded and arrangement persistence remains
-unresolved. This spec change implements none of those behaviors.
+unresolved.

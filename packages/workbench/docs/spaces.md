@@ -59,7 +59,8 @@ listed once, as the window's. Adding, removing, or renaming a space in a
 In VS Code, the space switcher is at the top of the Workbench view: the
 space's mark and name, then a menu of every space when you select it. The
 current space is checked. Pick another one, and the sidebar and the canvas
-tab both change to it.
+tab both change to it. The canvas opens the space's first page, skipping empty
+collections and groups. An imported page with named states opens its first state.
 
 Use Enter, Space, or an arrow key to open the switcher from the keyboard. Up and
 Down move through its actions; Home and End jump to the ends. Escape closes the
@@ -71,9 +72,8 @@ You can also run **Workbench: Switch Space…** from the Command Palette.
 When there's more than one space, the breadcrumb in the top bar starts with
 the space's mark and name, before the page. Select it to switch from there.
 
-Each window remembers the space it last showed. Each space has its own canvas
-settings, such as the last page, size, and lens, because each runs on its own
-address.
+Each window remembers the space it last showed. An addressed page link keeps
+its page, state, size, and lens when the canvas opens.
 
 ## Name, color, and icon
 

@@ -59,6 +59,20 @@ test('a collection or group without pages opens nothing', function () {
   assert.equal(picking().firstPick([]), null);
 });
 
+test('a space opens the first page in collection and group order, skipping empty collections', function () {
+  var window = {};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './page-list.js'), 'utf8'), { window: window });
+  var first = window.wbPageList.firstPage([
+    { name: 'Empty', items: [{ group: 'Empty group', items: [] }] },
+    { name: 'Components', items: [{ group: 'Buttons', items: [
+      { src: 'Components/Button', implementationOnly: 'storybook', states: [{ id: 'primary' }] },
+    ] }, { src: 'card.html' }] },
+    { name: 'Pages', items: [{ src: 'home.html' }] },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'Components/Button', state: 'primary' });
+  assert.equal(window.wbPageList.firstPage([]), null);
+});
+
 test('a group header opens its first page unless it folds', function () {
   var groupHeadAction = picking().groupHeadAction;
   var label = { closest: function () { return null; } };

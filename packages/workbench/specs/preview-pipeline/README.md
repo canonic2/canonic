@@ -56,7 +56,7 @@ the targets the whole pipeline is measured against.
 | [Plugins](plugins.md) | Workbench's format handling as Rspack loaders and plugins, and the project plugin contract in `workbench.config.ts` |
 
 Shared [performance budgets and measurement rules](../system/performance.md)
-live under system contracts. [Research](../research/README.md) owns dated
+live under system contracts. [Research](../../research/README.md) owns dated
 observations and lab/host evidence; neither is a second pipeline implementation contract.
 
 ## Decisions
@@ -85,9 +85,9 @@ observations and lab/host evidence; neither is a second pipeline implementation 
 
 | Capability | Implementation and evidence boundary |
 | --- | --- |
-| Native page listing | Implemented in `server/` ([catalog.rs](../../server/src/catalog.rs) reads its answer); [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](../research/page-listing.md#page-listing) do not establish canvas-paint acceptance |
+| Native page listing | Implemented in `server/` ([catalog.rs](../../server/src/catalog.rs) reads its answer); [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](../../research/page-listing.md#page-listing) do not establish canvas-paint acceptance |
 | Rust engineering gates | Implemented; [code quality](../system/code-quality.md) owns tools, policy, test conventions and CI enforcement |
-| Warm Docs pool | Implemented: immediate retained resume, background revision checks, parallel metadata and bounded same-lens idle reuse. [Integration evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23) separates focused tests, shipping measurements and installed Acme confirmation |
+| Warm Docs pool | Implemented: immediate retained resume, background revision checks, parallel metadata and bounded same-lens idle reuse. [Integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23) separates focused tests, shipping measurements and installed Acme confirmation |
 | Rspack compilation and pre-warming | Implemented in `workbench-server` with Rspack's Rust crates, one compiler per space and profile, pre-warming every listed preview and docs lens once the page tree configures them; project JavaScript runs in the Node evaluator over stdin and stdout ([server](../system/server.md#previews), [compiler](compiler.md)). Scoped Docs and startup measurements exist; the complete-list/first-page target campaign remains open |
 
 The implemented page index follows this [design direction](#decisions).
@@ -98,16 +98,16 @@ The Rspack preview pipeline is implemented in
 [server/src/compiler.rs](../../server/src/compiler.rs) and its modules, the
 Node evaluator, and the preview runtime, canvas and docs page. Each topic's
 status names what remains. Automated evidence belongs to each topic's verification section.
-The [Rspack pipeline lab](../../labs/rspack-pipeline/README.md)'s stage 1
+The [Rspack pipeline research](../../research/rspack-pipeline.md)'s stage 1
 checks on the formats fixture have not been run against this
 implementation. The confirmation run the
 [labs methodology](../system/labs.md#reports-and-decisions) asks for, the lab's
 full format-by-format sequences through the shipping server and the VS Code
 webview, remains open. The narrower warm Docs confirmation and installed Acme
-checks are complete, with limits recorded in [Docs navigation evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23).
+checks are complete, with limits recorded in [Docs navigation evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
 
-Design evidence and raw comparisons live in the
-[Rspack pipeline lab](../../labs/rspack-pipeline/README.md#stage-2-report).
+Design evidence and comparisons live in the
+[Rspack pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13).
 Current product measurements and acceptance limits belong to
 [performance](../system/performance.md#status).
 

@@ -43,7 +43,7 @@ server-side listing; the compiler builds what its listing found.
   Adding an entry can move shared modules into a new split chunk. A document
   that loaded the old layout then receives updates only for a chunk it never
   loaded, and silently applies nothing
-  ([stage 1, finding 4](../../labs/rspack-pipeline/README.md#findings)).
+  ([stage 1, finding 4](../../research/rspack-pipeline.md#stage-1-findings)).
 - Each entry is a generated module that imports:
   - the definition;
   - the adapter's runtime;
@@ -65,7 +65,7 @@ server-side listing; the compiler builds what its listing found.
 - Rspack's persistent cache lives in the system temporary folder, scoped to
   the project root. Rspack's default location is inside the project
   (`node_modules/.cache/rspack`), so the compiler always sets it
-  ([finding 2](../../labs/rspack-pipeline/README.md#findings)). A server
+  ([finding 2](../../research/rspack-pipeline.md#stage-1-findings)). A server
   restart with unchanged inputs restores the cache. An unreadable or stale
   cache rebuilds from source, and a cache failure never prevents compilation.
 - Rspack's cache trusts a file whose modification time matches its snapshot.
@@ -170,8 +170,8 @@ new pages, build errors, configuration replacement and already-open documents
 all meet their contracts. The implemented compiler declares and builds every
 entry; no alternative start is adopted.
 
-The [first-page lab](../../labs/first-page/README.md#report) and
-[compiler-host lab](../../labs/instant-first-page/README.md#stage-2-plan) hold
+The [first-page research](../../research/first-page.md) and
+[compiler-host research](../../research/instant-first-page.md) hold
 candidate comparisons. Packaging requirements follow the
 [extension process boundary](../integrations/vscode-extension.md#process-boundaries) and
 [code-quality gates](../system/code-quality.md).

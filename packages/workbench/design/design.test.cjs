@@ -39,17 +39,35 @@ test('the Sidebar design loads shipping styles, scripts and interactive states i
   await browser.launch();
   t.after(() => browser.close());
   const target = await browser.createTarget();
+  await target.send('Log.enable');
+  target.on('Log.entryAdded', event => {
+    if (event.entry.level === 'error') t.diagnostic(event.entry.text);
+  });
   const base = new URL(running.url).origin;
   for (const state of ['default', 'menu', 'filtered']) {
     await target.navigate(base + '/design/sidebar.html?state=' + state);
     const result = await target.evaluate(`(async () => {
-      await customElements.whenDefined('wb-space-switcher');
+      await Promise.race([
+        customElements.whenDefined('wb-space-switcher'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Space switcher did not register')), 2000)),
+      ]);
       const switcher = document.getElementById('spaces');
       const rows = document.querySelectorAll('#pageList button');
+      function iconsIn(root) {
+        const icons = [...root.querySelectorAll('svg.wb-icon')];
+        for (const element of root.querySelectorAll('*'))
+          if (element.shadowRoot) icons.push(...iconsIn(element.shadowRoot));
+        return icons;
+      }
+      const icons = iconsIn(document);
+      const iconBytes = performance.getEntriesByType('resource')
+        .filter(entry => new URL(entry.name).pathname.includes('/node_modules/lucide/'))
+        .reduce((sum, entry) => sum + entry.decodedBodySize, 0);
       return {
         background: getComputedStyle(document.body).backgroundColor,
         listReady: !!window.wbPageList && rows.length > 0,
-        iconsReady: !!window.wbIcon && !!document.querySelector('[data-icon] svg'),
+        iconsReady: icons.length > 10 && icons.every(icon => icon.childElementCount > 0),
+        lightweightIcons: iconBytes > 0 && iconBytes < 20000,
         current: switcher.currentId,
         open: switcher.open,
         search: document.getElementById('search').value,
@@ -57,7 +75,7 @@ test('the Sidebar design loads shipping styles, scripts and interactive states i
       };
     })()`);
     assert.deepEqual(result, {
-      background: 'rgb(31, 31, 31)', listReady: true, iconsReady: true,
+      background: 'rgb(31, 31, 31)', listReady: true, iconsReady: true, lightweightIcons: true,
       current: 'acme', open: state === 'menu', search: state === 'filtered' ? 'sign' : '', styles: true,
     }, state);
   }

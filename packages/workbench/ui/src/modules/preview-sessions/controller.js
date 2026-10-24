@@ -4,7 +4,18 @@ import { createStoryCatalog } from './story-catalog.js';
 export function createPreviewSessions(ports) {
   const catalog = createStoryCatalog(ports.stories);
   let parked, timer;
+  // Transient outgoing instances are released when presentation commits or
+  // reaches the loading deadline. The ordinary warm renderer keeps its pool.
+  const departing = new Map();
   let disposed = false;
+  function finish() {
+    const previous = [...departing];
+    departing.clear();
+    for (const [id, keep] of previous) {
+      if (keep) ports.conceal(id, true);
+      else ports.close(id);
+    }
+  }
   function expire() {
     if (disposed || !parked) return;
     if (ports.busy()) {
@@ -42,12 +53,17 @@ export function createPreviewSessions(ports) {
         return;
       }
       for (const board of boards) {
+        const displayed = ports.displayed?.().includes(board.id);
         if (declared && !board.target.artboard) {
           releaseParked();
-          ports.conceal(board.id, true);
+          if (displayed) departing.set(board.id, true);
+          else ports.conceal(board.id, true);
           ports.park(board.id);
           parked = board.id;
           timer = setTimeout(expire, 15 * 60 * 1000);
+        } else if (displayed) {
+          departing.set(board.id, false);
+          ports.park(board.id);
         } else ports.close(board.id);
       }
       if (declared) {
@@ -85,12 +101,14 @@ export function createPreviewSessions(ports) {
       } else if (parked) {
         const id = parked;
         parked = undefined;
+        departing.delete(id);
         clearTimeout(timer);
         ports.conceal(id, false);
         ports.resume(id);
         await ports.command(id, 'navigate', destination);
       } else ports.create(next.target, next.size);
     },
+    finish,
     refresh() {
       if (disposed) return Promise.reject(new Error('Preview sessions closed.'));
       catalog.clear();
@@ -101,6 +119,7 @@ export function createPreviewSessions(ports) {
       );
     },
     clear() {
+      finish();
       for (const board of ports.visible()) ports.close(board.id);
       releaseParked();
       catalog.clear();
@@ -108,6 +127,7 @@ export function createPreviewSessions(ports) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      finish();
       releaseParked();
       catalog.clear();
     },

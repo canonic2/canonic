@@ -38,6 +38,7 @@ export function createContentController(options) {
   function fail(error) {
     problem = error instanceof Error ? error.message : String(error);
     options.viewport.classList.add('is-pending');
+    options.viewport.classList.add('has-problem');
     changed();
   }
   function flags(src, state) {
@@ -73,6 +74,7 @@ export function createContentController(options) {
     const sequence = ++generation;
     mounted = null;
     problem = null;
+    options.viewport.classList.remove('has-problem');
     rows = [];
     options.viewport.classList.add('is-pending');
     const item = pages.get(target.src);

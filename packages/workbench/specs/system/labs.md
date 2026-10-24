@@ -25,40 +25,43 @@ they do not change them silently.
 
 ## Locations and lifecycle
 
-Labs live under `packages/workbench/labs/<slug>/`, with a short kebab-case slug
-naming the question:
+A lab lives in the package's ignored `labs/<slug>/` folder, with a short
+kebab-case slug naming the question. Nothing under `labs/` is committed:
 
 ```text
-labs/<slug>/
-  README.md          plan, then report and decision
+labs/<slug>/         ignored, local only
   run.*              runner(s) and variant implementations
-  fixtures/          deterministic fixture generators, never generated output
-  results/<date>/    reviewed evidence from one run set
+  results/<date>/    machine-readable reports and raw samples per run set
+fixtures/labs/       committed deterministic fixture generators shared by labs
+research/            committed research record for each lab
 ```
 
-A fixture generator used by more than one lab lives in `labs/fixtures/`, with
-its own README describing what it generates and the pinned dependencies.
-
-- Labs belong to the public repository with the rest of the package, so
-  everything committed under `labs/` follows the fixture and evidence rules
-  below. `extension/.vscodeignore` excludes `labs/` from the VSIX. Product code, tests,
-  packaging and scripts never import, run or name anything in `labs/`.
-- Runners may load the shipping modules read-only, such as
-  `server/node/preview/compiler.cjs` and `server/node/server.js`, and the
-  `workbench-server` binary. Variant logic
-  lives in the lab. A lab changes no product code; the winning variant is
-  re-implemented in the product with its own tests.
+- The lab's committed output is its research record at the package's top
+  level, `research/<topic>.md`, in the format the
+  [research index](../../research/README.md) defines. The plan is written into
+  its Method section before the first run; reports and the decision follow.
+  An optional `<topic>.json` beside it may hold small machine-readable
+  summaries; raw samples, logs, archives and runner code are never committed.
+- A fixture generator used by more than one lab lives in `fixtures/labs/`,
+  with its README describing what it generates and the pinned dependencies.
+  Lab-specific generators stay in the lab. Generated output is never committed.
+- VSIX staging copies only the product folders, so neither `labs/` nor
+  `fixtures/` ships. Product code, tests, packaging and scripts never import,
+  run or name anything in `labs/` or `fixtures/labs/`.
+- Runners may load the shipping modules read-only, such as the Node server and
+  the `workbench-server` binary. Variant logic lives in the lab. A lab changes
+  no product code; the winning variant is re-implemented in the product with
+  its own tests.
 - Generated projects, installed fixture dependencies, build output, compiler
   caches, browser profiles and routine reports live in an owned temporary
   directory per run. A runner points every cache it can reach at that
   directory, including the preview disk cache under the system temporary
   folder, so runs neither read nor pollute the user's caches.
-- One-off probes that are not part of a planned lab stay in temporary folders
-  and are never committed; their findings go in the owning spec.
-- When the decision is recorded and the winning change has shipped, delete the
-  runner and variant code. Keep `README.md` and the reviewed `results/` as the
-  record, with the source revision that produced them. The feature spec
-  describes the chosen behavior without depending on the lab.
+- One-off probes that are not part of a planned lab stay in temporary folders;
+  their findings go in the owning spec or research record.
+- A lab is finished when its research record is complete. The local lab folder
+  can then be deleted; the feature spec describes the chosen behavior without
+  depending on it.
 
 Every runner closes the servers, compilers, browsers and child processes
 it starts, on success, failure and cancellation, and reports cleanup failures.
@@ -80,15 +83,15 @@ it starts, on success, failure and cancellation, and reports cleanup failures.
   state and installed dependencies are never changed. Committed evidence
   describes a selected project only by its measured shape. It never contains
   the project's name, paths, source, screenshots or request data. Results that
-  cannot be reduced that way stay out of `results/`.
+  cannot be reduced that way stay out of the research record.
 - Installing fixture dependencies is the only expected network use. Install
   them into the run directory from a lab lockfile; never add lab dependencies
   to the package's `package.json` or lockfile.
 
 ## The plan
 
-Write the plan in the lab's `README.md` and agree it with the owner before the
-first run. A plan states, before any results exist:
+Write the plan in the research record's Method section and agree it with the
+owner before the first run. A plan states, before any results exist:
 
 | Section | Content |
 | --- | --- |
@@ -284,12 +287,14 @@ product code. Runner defects must not appear as product timings or verdicts.
 ## Reports and decisions
 
 Each run set writes a machine-readable `report.json` and a short summary into a
-new `results/<date>[-<label>]/` folder. A runner refuses to overwrite an existing
-folder; a rerun adds a new one. The report identifies the plan, variants,
-fixtures and seeds, commands, host conditions, raw samples and aggregates,
-correctness outcomes, failures, partial runs and cleanup failures.
+new `labs/<slug>/results/<date>[-<label>]/` folder. A runner refuses to
+overwrite an existing folder; a rerun adds a new one. The report identifies the
+plan, variants, fixtures and seeds, commands, host conditions, raw samples and
+aggregates, correctness outcomes, failures, partial runs and cleanup failures.
+These reports stay local.
 
-The README's report section, below the plan, adds:
+The research record's Results, Correctness, Threats to validity and Decision
+sections add:
 
 - one results table per metric, with p50, p95 and spread per variant and cell;
 - the correctness outcome for every variant and check;
@@ -309,16 +314,12 @@ A decision follows these steps:
 3. After the winning change is built into the product, rerun the lab's
    sequences through the shipping server and the VS Code webview. Prototype
    timings do not establish the integrated result.
-4. Record the decision and its scope in the owning feature spec, with the
-   measured conditions. Keep exact values with their evidence instead of
-   copying tables across specs. Do not relax a correctness check to fit the
+4. Record the decision in the research record and its scope in the owning
+   feature spec, linking the record. Keep exact values in the record instead
+   of copying tables across specs. Do not relax a correctness check to fit the
    fastest variant.
 
-## Lab records and active follow-up
-
-The [research index](../research/README.md#lab-records-and-active-follow-up)
-owns the lab registry, dated findings and confirmation links. Feature contracts
-own adopted behavior and accepted exceptions. Keep the plan and mechanical
-outcomes intact; update the owning contract and evidence index when a decision
-is implemented or its shipping confirmation completes. Runner retirement follows
-[the lab lifecycle](#locations-and-lifecycle).
+The [research index](../../research/README.md) lists every record with its
+status. Feature contracts own adopted behavior and accepted exceptions. Keep
+the plan and mechanical outcomes intact; update the record and the owning
+contract when a decision is implemented or its shipping confirmation completes.

@@ -71,7 +71,7 @@ preserve runtime build synchronization, fresh evaluation of project modules,
 stylesheet hot updates and cold-page startup. Focused Rust client-module tests
 cover initialized and cold runtimes and load order. The warm Docs confirmation
 checks navigation for unused-runtime-preload warnings
-([evidence](../research/docs-navigation.md#warm-docs-integration-2026-10-23)).
+([evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)).
 
 ### Routes
 
@@ -109,4 +109,4 @@ compiler replacement keep the dedicated Docs host and release its subscriptions.
 compiler output and serving through the server, and the compiler's Rust unit
 tests cover entries, the generated client and HTML modules. Shared-runtime
 isolation and stylesheet updates also have
-[pipeline lab evidence](../../labs/rspack-pipeline/README.md#stage-2-report).
+[pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13).

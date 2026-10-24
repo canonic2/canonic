@@ -22,7 +22,6 @@ link to that owner rather than creating another version of its rules.
 | [System](system/README.md) | Architecture, rendering boundaries, server/proxy ownership, performance budgets, engineering gates and lab method | Capability specs own behavior; research owns dated observations |
 | [Preview pipeline](preview-pipeline/README.md) | Discovery, compilation, serving, hot updates, warm documents and readiness | Page formats own semantics; system performance owns budgets |
 | [Adapters](adapters/README.md) | Technology-specific build, server evaluation, mount and update behavior | Shared lifecycle and resource bounds stay with the pipeline |
-| [Research](research/README.md) | Dated measurements, host checks, comparisons and links to lab records | Evidence qualifies status; it does not redefine contracts or thresholds |
 
 Keep folders one level deep. Add a topic when it has a distinct owner; split
 mixed contracts rather than splitting solely by length. Folder indexes explain
@@ -42,7 +41,7 @@ they develop, separate from current behavior and observed acceptance.
 | Change configuration writes | [Configure pages](pages/configuration-editor.md), [sizes](canvas/sizes.md) and [access boundaries](system/access-boundaries.md) |
 | Check host prerequisites or upgrades | [Hosting](integrations/hosting.md), then the owning host/capability |
 | Change processes or host messages | [Server](system/server.md), then [VS Code](integrations/vscode-extension.md) |
-| Investigate performance | [Budgets and measurement](system/performance.md), [research](research/README.md), then [lab method](system/labs.md) |
+| Investigate performance | [Budgets and measurement](system/performance.md), [research](../research/README.md), then [lab method](system/labs.md) |
 | Assess verification | The capability's status/acceptance, [quality gates](system/code-quality.md) and its linked evidence |
 
 ## Delivery boundaries
@@ -65,11 +64,13 @@ a complete user workflow or acceptance on every host.
   that owns them. Keep current implementation, agreed future work and proposals explicit.
 - Put shared architecture and engineering policy in `system/`; UI presentation
   contracts in `ui/`; technology-specific differences in `adapters/`.
-- Put dated findings in `research/`, with fixture, host, source identity and
-  limitations. Preserve raw plans/reports under `../labs/` according to the lab
-  method. Record the adopted behavior in the owning contract.
+- Put dated findings in the package's top-level [research](../research/README.md)
+  folder, with fixture, host, source identity and limitations; each lab ends as
+  a research record there, while its runners and raw reports stay in the ignored
+  `../labs/` folder. Record the adopted
+  behavior in the owning contract.
 - Update incoming links and anchors when moving or splitting a topic, including
-  package guides, local skills, source comments and lab records. Regenerate
+  package guides, local skills, source comments and research records. Regenerate
   agent instructions from `.canonic/` when their sources change.
 - Keep public guide routes stable. Reorganizing specs changes neither runtime
   behavior nor product requirements and establishes no new test results.

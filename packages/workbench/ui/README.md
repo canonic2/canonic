@@ -22,13 +22,19 @@ For example, from a static host exposing the product folder:
 <link rel="stylesheet" href="./ui/src/theme/defaults.css">
 <wb-actions-switch></wb-actions-switch>
 <script type="module">
-  import { registerActionsComponents } from './ui/src/bootstrap/register.js';
+  import { registerActionsComponents } from './ui/src/bootstrap/register-actions.js';
   registerActionsComponents();
   document.querySelector('wb-actions-switch').addEventListener('wb-actions-toggle', event => {
     console.log(event.detail);
   });
 </script>
 ```
+
+Small hosts import their registration family directly: `register-space.js`,
+`register-sizes.js`, `register-actions.js`, or `register-canvas.js` under
+`src/bootstrap/`. This keeps the sidebar and component examples from loading
+unrelated elements. The full shell uses `register.js`, which exports all four
+families. Registration is repeatable and rejects a conflicting element definition.
 
 The complete canvas uses project metadata and operations through its API adapter.
 VS Code supplies resource URLs, CSP and host capabilities; it loads the same

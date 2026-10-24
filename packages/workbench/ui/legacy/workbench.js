@@ -1976,6 +1976,13 @@
         });
       }
 
+      /* A newly opened space has no destination when switched to from the
+         sidebar or breadcrumb. Pick from the complete, merged page list;
+         explicit links and later config refreshes keep their destination. */
+      if (first && !parseHash().src) {
+        var initial = window.wbPageList.firstPage(collections);
+        if (initial) history.replaceState(null, '', '#' + window.wbAddress.write(initial));
+      }
       route();
     });
   }

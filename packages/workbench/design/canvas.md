@@ -28,6 +28,13 @@ artboard labels, selection borders, shadows or resize rails.
 `wb-canvas` takes a `state: CanvasState` property and named slots matching the
 artboard IDs. The application supplies and owns the iframe in each slot.
 Setting state preserves existing nodes and emits no selection command.
+`staged` takes an array of artboard descriptors that are preparing a replacement.
+Their named iframe slots receive the descriptors' logical width and height in
+an invisible, inert layout surface. They do not enter `state`, labels, selection,
+camera fitting or capture context. Setting `state` to the ready descriptors
+promotes their slots without reloading the iframe documents; clear `staged` when
+the transition finishes. Readiness work must retain layout even before the first
+displayed artboard exists.
 An artboard's optional `target.label` supplies its human-readable name before
 `view` is available. Rendered views supply their current `view.label`.
 Ready views with `contentSize` use a transparent shell; the application owns

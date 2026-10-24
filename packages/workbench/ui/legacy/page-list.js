@@ -67,6 +67,14 @@
     return { src: item.src, state: states ? statePick(item, states[0], 0) : null };
   }
 
+  function firstPage(collections) {
+    for (var i = 0; i < collections.length; i++) {
+      var pick = firstPick(pagesIn(collections[i].items));
+      if (pick) return pick;
+    }
+    return null;
+  }
+
   function emptyText(filter) {
     return (filter || '').trim()
       ? 'Nothing matches “' + filter + '”.'
@@ -610,6 +618,7 @@
 
   window.wbPageList = {
     index: index,
+    firstPage: firstPage,
     create: create,
     states: statesOf,
     statePick: statePick,

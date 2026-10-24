@@ -204,6 +204,48 @@ server routes, native indexing and portable output. Distribution assembly tests
 cover manifests, dependencies, binaries and exclusion boundaries. A packaged
 launch confirms the assembled paths resolve outside the source tree.
 
+### Lattice delivery slice
+
+**Status:** planned, not started. Workbench's browser UI will use the Lattice
+package (`canonic-lattice`) for application state. Before any UI code depends
+on it, one narrow change establishes that its modules reach every Workbench
+document that will import them. The slice changes module delivery only: no
+navigation, canvas or other behavior changes, and no store is used yet.
+
+**Scope:**
+
+- **Dependency.** The product root's `package.json` declares Lattice as a local
+  production dependency and keeps its own lockfile.
+- **Serving.** The server serves Lattice's runtime files unchanged under a fixed
+  path, such as `/_workbench/lattice/`, following the same rules as `ui/src/`:
+  JavaScript modules only, tests, declarations and development files refused.
+- **Imports.** Each document that will use Lattice imports the existing, empty
+  root entry point by its explicit URL. Explicit URLs need no import map, so
+  documents without one need no inline script and no CSP change for it. No
+  export is added to Lattice for the slice.
+- **Documents.** The canvas document (`ui/legacy/index.html` through
+  `bootstrap/workbench.js`) and the renderer document (`content.html` through
+  `bootstrap/renderer.js`), which are served by the Workbench server and run
+  inside the panel webview's frame. The sidebar webview, which loads modules
+  through webview resource URLs under its own nonce-based CSP, is added when
+  sidebar code adopts Lattice; it then needs a resource root and an import path
+  resolved within the staged extension.
+- **Packaging.** Distribution assembly copies Lattice's files into the staged
+  product as real files. A packaged extension must not contain a symlink or a
+  path back into the source checkout.
+
+**Evidence:**
+
+| Check | Establishes |
+| --- | --- |
+| Server route test | Lattice's runtime files are served byte for byte; tests, declarations and other paths are refused |
+| Browser test of both documents | The canvas and renderer documents import the root entry point without errors, from the server, not a development resolver |
+| Assembly test | The staged product contains Lattice's runtime files as real files and no symlink or source-checkout path |
+| Packaged launch | The installed extension, run without the source checkout, loads both documents and their Lattice import |
+
+The navigation migration in [rendering flow](rendering-flow.md#navigation-state)
+starts only after this slice is in place.
+
 ## Rust ownership
 
 The native package follows Cargo's layout, with role-specific submodules and

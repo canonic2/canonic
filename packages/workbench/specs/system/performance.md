@@ -50,11 +50,14 @@ Feature specs own the behavior that must not change while making it faster.
 
 ### Navigation keeps the canvas usable
 
-- Loading feedback has a 100 ms grace period per selection. A ready destination
-  is revealed immediately, including during that period; only the loading
-  message is deferred. Pending destinations remain busy and outgoing pixels
-  remain concealed. Completion, failure, supersession and disposal cancel the
-  feedback timer, so a retained return cannot flash a late loader.
+- Sidebar selection changes immediately when a page is picked. Canvas replacement
+  and loading feedback follow the [200 ms navigation grace period](rendering-flow.md#navigation-feedback):
+  keep the outgoing view under its actual labels and context until the destination
+  is ready or the deadline expires. A ready destination is revealed immediately;
+  there is no minimum display delay. If still pending at 200 ms, conceal the outgoing
+  view and show loading feedback. Pending navigation blocks preview interaction,
+  screenshots and handoffs. Completion, failure, supersession and disposal cancel
+  the feedback timer, so a fast return cannot flash a late loader.
 - Changing the state, size, lens or inputs of a native page does not reload
   its compiled code. A state or input change re-renders in place; a size
   change resizes the frame.
@@ -62,9 +65,10 @@ Feature specs own the behavior that must not change while making it faster.
   loading or mounting again. Docs resume immediately and check freshness in
   the background; refresh only when the revision changed, under the
   [warm Docs contract](../preview-pipeline/warm-runtime.md#resume-and-freshness).
-- Retain the previous page's live state until its replacement is ready. It may
-  stay visible only under its actual identity; conceal it before showing the next
-  destination's labels, as [rendering flow](rendering-flow.md) requires.
+- Retain the previous page's live state until its replacement is ready. During
+  the grace period its displayed labels, geometry and reference still identify
+  that outgoing page. Publish the new artboard identity with its ready content,
+  as [rendering flow](rendering-flow.md) requires.
   A new selection cancels an older one that is still loading, and the
   older one never replaces the newer.
 - Readiness waits only for what a capture needs: the render, fonts and
@@ -141,7 +145,7 @@ establish a bound for the entire pipeline.
 ## Measured interactions
 
 Each interaction is measured from the user's action to the painted result, on
-the reference fixtures defined by the [preview loading lab](../../labs/preview-loading/README.md)
+the reference fixtures defined by the [shared lab fixtures](../../fixtures/labs/README.md)
 and on Apple silicon macOS in the VS Code webview. The **large** fixture has
 40 page previews sharing about 5 MB of dependencies and application code; the
 **small** fixture has 5 component previews.
@@ -178,7 +182,7 @@ The adopted warm Docs pool has a more specific improvement goal: about 40%
 faster browser-warm selection to visible for new destinations when an initialized
 idle document can be reused, with retained returns as fast as separate-document
 retention. It is not a cold-start or universal latency target. The
-[comparison record](../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23)
+[comparison record](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23)
 defines the measured conditions and limitations; [warm runtime](../preview-pipeline/warm-runtime.md)
 owns the pool bounds and accepted memory cost.
 
@@ -239,10 +243,10 @@ avoids that work; a React/HTML adapter alone does not guarantee every definition
 or project config can be listed without JavaScript.
 
 Dated measurements, fixtures, revisions and limitations live in
-[research](../research/README.md). The [page-listing record](../research/page-listing.md)
-records the large-fixture target miss; [installed startup](../research/startup.md)
-separates runtime preparation from listing. [Docs navigation](../research/docs-navigation.md)
-and [highlighting](../research/docs-highlighting.md) distinguish prototype
+[research](../../research/README.md). The [page-listing record](../../research/page-listing.md)
+records the large-fixture target miss; [installed startup](../../research/startup.md)
+separates runtime preparation from listing. [Docs navigation](../../research/docs-navigation.md)
+and [highlighting](../../research/docs-highlighting.md) distinguish prototype
 comparisons from integrated and installed compatibility evidence.
 
 ### Pipeline acceptance
