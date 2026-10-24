@@ -99,6 +99,13 @@ pub(crate) fn render_modules(
     (text(&module), modules)
 }
 
+/// A render's module name: the slug and its source key, with an artboard or
+/// iteration key's `+` and `/` made file-name safe. IDs are kebab-case, so
+/// the replacements cannot collide with another key's name.
+pub(crate) fn render_key(slug: &str, key: &str) -> String {
+    format!("{slug}-{}", key.replace('+', "_").replace('/', "."))
+}
+
 fn dependencies(answer: &Value) -> Vec<PathBuf> {
     answer["dependencies"]
         .as_array()
@@ -131,6 +138,27 @@ fn encode(value: &str) -> String {
         .collect()
 }
 
+/// The render keys of one preview: `default`, each scenario, each declared
+/// artboard that changes the server render (`<scenario>+<artboard>/`), and
+/// each iteration that does, under its source key (`<scenario>+<iteration>`
+/// or `<scenario>+<artboard>/<iteration>`).
+fn rendered_keys(definition: &Value, answer: &Value) -> Vec<String> {
+    let mut keys = vec!["default".to_owned()];
+    if let Some(map) = definition["scenarios"].as_object() {
+        keys.extend(map.keys().cloned());
+    }
+    keys.extend(
+        answer["scenarios"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(key, _)| key)
+            .filter(|key| key.contains('+'))
+            .cloned(),
+    );
+    keys
+}
+
 pub(super) async fn preview_entry(
     previews: &Previews,
     relative: &str,
@@ -154,11 +182,7 @@ pub(super) async fn preview_entry(
     let mut sources = vec![];
     let mut modules = vec![];
     let render_url = format!("/_workbench/previews/render?file={}", encode(relative));
-    let mut scenarios = vec!["default".to_owned()];
-    if let Some(map) = definition["scenarios"].as_object() {
-        scenarios.extend(map.keys().cloned());
-    }
-    for scenario in scenarios {
+    for scenario in rendered_keys(definition, &answer) {
         let rendered = &answer["scenarios"][&scenario];
         let component = rendered["component"]
             .as_str()
@@ -166,7 +190,7 @@ pub(super) async fn preview_entry(
             .unwrap_or_default();
         let (module, written) = render_modules(
             previews.virtual_dir(),
-            &format!("{slug}-{scenario}"),
+            &render_key(&slug, &scenario),
             &component,
             rendered["html"].as_str().unwrap_or_default(),
             resources,
@@ -352,6 +376,60 @@ pub(super) async fn render_variant(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn iteration_renders_get_file_name_safe_modules() {
+        assert_eq!(render_key("card-1", "default"), "card-1-default");
+        assert_eq!(
+            render_key("card-1", "empty+illustrated"),
+            "card-1-empty_illustrated"
+        );
+        assert_eq!(
+            render_key("card-1", "default+warning/bold"),
+            "card-1-default_warning.bold"
+        );
+        assert_eq!(
+            render_key("card-1", "default+warning/"),
+            "card-1-default_warning."
+        );
+        let keys = [
+            "default",
+            "empty",
+            "empty+illustrated",
+            "default+warning/",
+            "default+warning/bold",
+            "default+info/",
+        ];
+        let names: std::collections::HashSet<String> =
+            keys.iter().map(|key| render_key("card-1", key)).collect();
+        assert_eq!(names.len(), keys.len());
+    }
+
+    #[test]
+    fn declared_artboard_and_iteration_renders_are_rendered_keys() {
+        let definition = json!({ "scenarios": { "empty": {}, "feedback": {} } });
+        let answer = json!({ "scenarios": {
+            "default": {},
+            "empty": {},
+            "feedback": {},
+            "feedback+warning/": {},
+            "feedback+warning/bold": {},
+            "empty+illustrated": {},
+        } });
+        let mut keys = rendered_keys(&definition, &answer);
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "default",
+                "empty",
+                "empty+illustrated",
+                "feedback",
+                "feedback+warning/",
+                "feedback+warning/bold",
+            ]
+        );
+    }
 
     #[test]
     fn a_render_becomes_modules_naming_its_resources_and_public_files() {

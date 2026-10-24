@@ -48,8 +48,13 @@ export function createController(ports) {
           src: info.src,
           scenario: info.scenario,
           lens: info.lens,
+          iteration: info.iteration || null,
           label: info.label,
         };
+        // The iteration's label travels with its id, for references made
+        // before the renderer reports its own.
+        if (info.iteration && info.iterationLabel) parsed.iterationLabel = info.iterationLabel;
+        else delete parsed.iterationLabel;
         /* A page that can't be shown at the artboard's size takes its first size, a filled axis at the canvas's length now. */
         const first = info.sizes?.[0];
         let dimensions =

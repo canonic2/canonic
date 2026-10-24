@@ -118,6 +118,23 @@ test('every imported story row keeps its real scenario id, including the first',
   assert.equal(pick({}, { id: 'default' }, 0), null);
 });
 
+test('with no scenario reported, the page’s first scenario row is current whatever its id', function () {
+  var rowIsCurrent = picking().rowIsCurrent;
+  var first = { src: 'pages/sign-in.html', scenario: 'signed-out', first: 'true' };
+  var error = { src: 'pages/sign-in.html', scenario: 'error' };
+  assert.equal(rowIsCurrent(first, 'pages/sign-in.html', null), true);
+  assert.equal(rowIsCurrent(error, 'pages/sign-in.html', null), false);
+  assert.equal(rowIsCurrent(first, 'pages/sign-in.html', 'error'), false);
+  assert.equal(rowIsCurrent(error, 'pages/sign-in.html', 'error'), true);
+  assert.equal(rowIsCurrent(first, 'pages/home.html', null), false);
+  // An implementation-only page's rows carry no first mark and select by id.
+  var story = { src: 'Components/Button', scenario: 'primary' };
+  assert.equal(rowIsCurrent(story, 'Components/Button', null), false);
+  assert.equal(rowIsCurrent(story, 'Components/Button', 'primary'), true);
+  // A page row without scenarios is current by its src alone.
+  assert.equal(rowIsCurrent({ src: 'pages/home.html' }, 'pages/home.html', null), true);
+});
+
 test('an empty list is distinct from a filter with no matches', function () {
   assert.equal(empty(''), 'No pages available.');
   assert.equal(empty('   '), 'No pages available.');

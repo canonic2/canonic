@@ -7,6 +7,9 @@ export function createPreviewSessions(ports) {
   // Transient outgoing instances are released when presentation commits or
   // reaches the loading deadline. The ordinary warm renderer keeps its pool.
   const departing = new Map();
+  // The iteration last asked of each artboard. Its target holds the one it
+  // last reported, which lags a request still loading.
+  const requested = new Map();
   let disposed = false;
   function finish() {
     const previous = [...departing];
@@ -38,14 +41,19 @@ export function createPreviewSessions(ports) {
     async activate(next) {
       if (disposed) throw new Error('Preview sessions closed.');
       const boards = ports.visible();
+      // Activation names every artboard's iteration afresh.
+      requested.clear();
       const declared = next.artboards?.length ? next.artboards : undefined;
       const retained =
         !declared && boards.length === 1 && !boards[0].target.artboard && boards[0].initialized;
+      // The implicit artboard's iteration is under "", a declared one's under its id.
+      const iteration = (id) => next.iterations?.[id || ''] || null;
       const destination = {
         src: next.target.src,
         scenario: next.target.scenario,
         lens: next.target.lens,
         example: next.target.example,
+        iteration: iteration(),
         ...(next.target.trace ? { trace: next.target.trace } : {}),
       };
       if (retained) {
@@ -76,6 +84,7 @@ export function createPreviewSessions(ports) {
                   ...next.target,
                   label: next.pageLabel + ' / ' + artboard.label,
                   artboard: artboard.id,
+                  iteration: iteration(artboard.id),
                 },
                 { width: artboard.width, height: artboard.height },
               ),
@@ -106,7 +115,33 @@ export function createPreviewSessions(ports) {
         ports.conceal(id, false);
         ports.resume(id);
         await ports.command(id, 'navigate', destination);
-      } else ports.create(next.target, next.size);
+      } else ports.create({ ...next.target, iteration: iteration() }, next.size);
+    },
+    // Same page and artboards, another iteration on some: navigate only those.
+    // Other lenses do not render iterations; the next activation carries them.
+    async iterate(iterations) {
+      if (disposed) throw new Error('Preview sessions closed.');
+      const wanted = (board) => iterations?.[board.target.artboard || ''] || null;
+      const last = (board) =>
+        requested.has(board.id) ? requested.get(board.id) : board.target.iteration || null;
+      const changed = ports
+        .visible()
+        .filter(
+          (board) =>
+            (!board.target.lens || board.target.lens === 'design') && last(board) !== wanted(board),
+        );
+      for (const board of changed) requested.set(board.id, wanted(board));
+      await Promise.all(
+        changed.map((board) =>
+          ports.command(board.id, 'navigate', {
+            src: board.target.src,
+            scenario: board.target.scenario,
+            lens: board.target.lens,
+            example: board.target.example,
+            iteration: wanted(board),
+          }),
+        ),
+      );
     },
     finish,
     refresh() {

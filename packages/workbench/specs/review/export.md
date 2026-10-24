@@ -124,8 +124,11 @@ disconnect/restart/cancel acceptance is not established by them.
 `POST` accepts JSON: `format` (`zip`, `pdf`, `images`, `browser`), `scope`
 (`space`, `page`, `pages`, `collection`), page IDs, collection name, `variants`
 (`all`, `current`, `custom`), optional scenario/size filters, and lens. Current-view
-requests include the selected page, scenario, lens, size and viewport dimensions.
-Unknown pages, invalid options and mismatched current selections answer `400`.
+requests include the selected page, scenario, declared artboard, iteration, lens,
+size and viewport dimensions. Under an implementation lens the request drops the
+iteration, so it does not enter the request or its job key: an implementation
+shows no iteration. Selected references are deduplicated by page, scenario,
+artboard, iteration, size and variant. Unknown pages, invalid options and mismatched current selections answer `400`.
 Empty requests and direct GET downloads default to a whole-space source ZIP.
 
 The dialog offers all declared variants or the current view. Source ZIP defaults
@@ -155,9 +158,21 @@ filters. Browser-only output fails if no compiled previews or docs are available
 
 ## Reference capture plan
 
-- The plan covers every declared scenario of every authored design page and
-  each scenario of every TypeScript preview, at the page's sizes. Pages are
-  planned once each, across collections and the iOS Simulator catalog.
+- The plan covers every declared scenario of every authored design page (one
+  implicit `default` scenario when it declares none) at the page's sizes, plus
+  each scenario iteration at every size. For a TypeScript preview, a scenario
+  without declared artboards is captured at the page's sizes, plus each of its
+  iterations at those sizes; a scenario that declares artboards captures each
+  declared artboard once at its authored width and height, plus one reference
+  per iteration of that artboard. A declared artboard's reference records the
+  artboard ID as `size` and its label as `sizeLabel`. Pages are planned once
+  each, across collections and the iOS Simulator catalog.
+- Reference labels read `<Scenario> · <Artboard> · <Iteration>` for a declared
+  artboard (`<Scenario> · <Artboard>` without an iteration) and
+  `<Scenario> · <Iteration>` for an implicit artboard or authored page
+  (`<Scenario>` without one).
+- An export with an implementation lens drops every iteration reference:
+  [iterations](../pages/iterations.md) belong to the design.
 - An export whose lens (the request's `lens`, or the current lens for
   current-view requests) is a Storybook implementation captures, for every
   page mapped to that lens, each story of its mapped title at each of the
@@ -168,13 +183,16 @@ filters. Browser-only output fails if no compiled previews or docs are available
   1440 × 900. Resizable is skipped; a page whose only size is Resizable gets
   one 1440 × 900 reference. A page without `sizes` uses its space's sizes.
   Duplicate dimensions are removed. Screenshot records carry the size key
-  as `size` and its label as `sizeLabel`; README headings read `Label · Laptop`.
+  as `size` and its label as `sizeLabel`, plus optional `artboard` and
+  `iteration` IDs; README headings read `Label · Laptop`.
   See the [sizes contract](../canvas/sizes.md#design-system-export).
 - Design pages load as designed with actions off; the first scenario loads
-  without a `scenario` parameter. Current-view or explicit lens requests use the
+  without a `scenario` parameter, and an iteration adds `iteration=<id>`. Current-view or explicit lens requests use the
   page's declared URL/workbench mapping, or a Storybook lens's mapped stories.
   Native lenses do not support visual export.
-- TypeScript preview scenarios load the preview's page with `?scenario=<id>`. A
+- TypeScript preview scenarios load the preview's page with `?scenario=<id>`,
+  adding `artboard=<id>` for a declared artboard and `iteration=<id>` for an
+  iteration. A
   capture waits up to 8 seconds for the preview to report it has rendered; a
   preview render error fails that reference instead of capturing an error
   page.
@@ -185,7 +203,7 @@ filters. Browser-only output fails if no compiled previews or docs are available
 
 The [multiple-artboard support API](../canvas/multiple-artboards.md) composes interactive
 screenshots and handoffs from every supplied instance. The existing shell
-integrates explicitly declared page artboards; free artboard management remains
+integrates a scenario's declared artboards; free artboard management remains
 future work. This does not change this
 catalog-wide design-system export into an export of the current arrangement.
 On a mixed-space canvas, the export action targets the selected artboard's
@@ -250,7 +268,7 @@ catalog, `browser/workbench.json`, with each preview compiled under its own
 directory. Served by any static HTTP server, it opens without Electron,
 Workbench, or the project's packages, and offers search, scenarios, sizes,
 resizable dimensions, shared input controls, actions, and docs. Direct preview
-pages accept `?scenario=<id>`. A preview that fails to build is listed under
+pages accept `?scenario=<id>`, `?artboard=<id>` and `?iteration=<id>`. A preview that fails to build is listed under
 `browser.warnings` while successful previews remain. `canonic-export.json`
 records the entry, catalog, and each preview's id, source, entry, and scenarios.
 The [previews spec](../pages/previews.md) owns the compiler, adapters, viewer, and the

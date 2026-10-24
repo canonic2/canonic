@@ -89,10 +89,15 @@ not a new test run or complete editing/accessibility acceptance.
 
 - There is no dedicated behavioral suite covering every drawing/editing gesture,
   text-input composition, touch/pen input and keyboard-only creation.
-- The legacy reset keys annotations by page source/scenario and does not include
-  lens identity. The user guide describes a fresh artboard on page/scenario/lens
+- The legacy reset keys annotations by page `src`, scenario and the address's
+  iterations map: a change of any of them clears the drawings, while a lens or
+  size change keeps them, so a design's notes stay over its implementation for
+  comparison. The user guide describes a fresh artboard on page/scenario/lens
   changes. Verify ordinary-renderer retention and explicit artboard replacement
   together before promising consistent cross-lens clearing or preservation.
+- A single-view screenshot's file name carries the page, scenario (or story),
+  iteration ID, lens key and size key, so iterations of one artboard do not
+  overwrite each other's images.
 - Annotation count, freehand-point and text-length bounds are unspecified.
   Establish practical limits with interaction/capture evidence rather than
   assuming the artboard count or image-size limits bound annotation work.

@@ -248,6 +248,11 @@ async fn run(
     let kind = lens
         .as_deref()
         .and_then(|lens| view["implementations"][lens]["kind"].as_str());
+    if lens.is_some() {
+        // Iterations belong to the design; an implementation lens shows the shipped code.
+        plan.captures
+            .retain(|reference| reference.iteration.is_none());
+    }
     if let Some(lens) = lens.as_deref().filter(|_| kind == Some("storybook")) {
         storybook_references(host, view, &mut plan, lens).await?;
     }

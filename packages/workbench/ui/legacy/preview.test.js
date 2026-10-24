@@ -486,3 +486,123 @@ test('renaming the authored preview lens changes its button without adding a len
   assert.deepEqual(lensSwitcher({ src: 'button.workbench.ts', workbench: true, lensLabel: 'Design' }), { hidden: true, labels: [] });
   assert.deepEqual(lensSwitcher({ src: 'button.html', lensLabel: 'Reference', implementations: { storybook: {} } }), { hidden: false, labels: ['Reference', 'Storybook'] });
 });
+
+/* The shell's address handling for iterations: its normalization against the
+   page index, its scenario menu and its lens switcher, on the real address
+   and page-list modules. */
+function shellAddress(hash) {
+  var source = fs.readFileSync(path.join(__dirname, './workbench.js'), 'utf8');
+  function between(from, to) {
+    var start = source.indexOf(from);
+    var end = source.indexOf(to, start);
+    assert.ok(start > -1 && end > start, 'workbench.js still has ' + from.trim());
+    return source.slice(start, end);
+  }
+  /* Like a browser's, an assigned hash reads back with its "#". */
+  var current = '';
+  var location = {
+    pathname: '/_workbench/', search: '',
+    get hash() { return current; },
+    set hash(value) { value = String(value || ''); current = value && value.charAt(0) !== '#' ? '#' + value : value; },
+  };
+  location.hash = hash;
+  var src = 'previews/feedback.workbench.ts';
+  var item = {
+    src: src, label: 'Feedback', workbench: true,
+    scenarios: [{ id: 'default', label: 'Default' }, { id: 'empty', label: 'Empty' }, { id: 'loading', label: 'Loading' }],
+    implementations: { storybook: { title: 'Feedback' } },
+  };
+  var buttons = [];
+  var menus = [];
+  var context = vm.createContext({
+    window: { wbManifest: require('../../contracts/manifest') },
+    location: location,
+    history: { replaceState: function (_state, _title, address) { location.hash = address.slice(address.indexOf('#')); } },
+    lensRules: require('../../contracts/src/docs/lenses.js'),
+    config: { implementations: { storybook: { key: 'storybook', kind: 'storybook', label: 'Storybook' } } },
+    index: {},
+    resolved: { pages: {} },
+    current: null, currentScenario: null, currentIterations: {}, currentExample: null, view: null, lensPref: null,
+    sizeKey: function () { return 'laptop'; },
+    scenariosOf: function (entry) { return entry && entry.scenarios && entry.scenarios.length > 1 ? entry.scenarios : null; },
+    drawScenarioMenu: function (rows) { menus.push(rows); },
+    lensesBox: { hidden: false, innerHTML: '', appendChild: function (button) { buttons.push(button); } },
+    document: {
+      createElement: function () {
+        var button = { dataset: {}, setAttribute: function () {}, addEventListener: function (type, fn) { if (type === 'click') button.click = fn; } };
+        return button;
+      },
+    },
+  });
+  context.index[src] = item;
+  context.resolved.pages[src] = { preview: { id: 'feedback', scenarios: [
+    { id: 'default', artboards: [
+      { id: 'info', iterations: [{ id: 'calm', label: 'Calm' }] },
+      { id: 'warning', iterations: [{ id: 'bold', label: 'Bold' }] },
+    ] },
+    { id: 'empty', iterations: [{ id: 'illustrated', label: 'Illustrated' }] },
+    { id: 'loading' },
+  ] } };
+  for (var file of ['address.js', 'page-list.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context);
+  }
+  vm.runInContext(between('  function writeHash(', '  window.wbTarget = parseHash;'), context);
+  vm.runInContext(between('  /* ------------------------------------------------ artboards, iterations */', '  /* ------------------------------------------------------------ lenses */'), context);
+  vm.runInContext(between('  function lensesOf(', '  /* Through a lens the page is served by somebody else'), context);
+  vm.runInContext(between('  function drawScenarios(', "  /* The story's turn of show()"), context);
+  return {
+    src: src,
+    item: item,
+    context: context,
+    location: location,
+    buttons: buttons,
+    menus: menus,
+    /* What show() does with the address before the canvas settles. */
+    route: function () {
+      var target = context.window.wbAddress.parse(location.hash);
+      context.current = target.src;
+      context.currentScenario = target.scenario;
+      context.currentIterations = context.knownIterations(target.src, target.scenario, target.iterations);
+      context.syncHash();
+    },
+  };
+}
+
+test('the shell drops unknown iteration parts and rewrites the rest in the scenario’s artboard order', function () {
+  var shell = shellAddress('#previews/feedback.workbench.ts+warning/bold+ghost/x+info/calm+info/loud@laptop');
+  shell.route();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts+info/calm+warning/bold@laptop');
+  shell.location.hash = '#previews/feedback.workbench.ts+warning/loud+illustrated@laptop';
+  shell.route();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts@laptop',
+    'an unknown iteration and an implicit part on declared artboards show the authored design');
+  shell.location.hash = '#previews/feedback.workbench.ts:empty+illustrated+warning/bold@laptop';
+  shell.route();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts:empty+illustrated@laptop');
+  shell.location.hash = '#previews/feedback.workbench.ts:loading+illustrated@laptop';
+  shell.route();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts:loading@laptop',
+    'a scenario without iterations keeps none');
+});
+
+test('another scenario starts from the authored design; a lens switch keeps the iterations', function () {
+  var shell = shellAddress('#previews/feedback.workbench.ts+warning/bold@laptop');
+  shell.route();
+  shell.context.drawScenarios(shell.item, null);
+  var rows = shell.menus.at(-1);
+  rows.filter(function (row) { return row.target === 'empty'; })[0].pick();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts:empty@laptop');
+
+  shell.location.hash = '#previews/feedback.workbench.ts+warning/bold@laptop';
+  shell.route();
+  shell.context.drawLenses(shell.item, null);
+  var storybook = shell.buttons.filter(function (button) { return button.dataset.lens === 'storybook'; })[0];
+  storybook.click();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts+warning/bold@laptop~storybook');
+  var back = shell.buttons.filter(function (button) { return button.dataset.lens === 'design'; })[0];
+  back.click();
+  assert.equal(shell.location.hash, '#previews/feedback.workbench.ts+warning/bold@laptop~design');
+  shell.route();
+  assert.deepEqual(JSON.parse(JSON.stringify(shell.context.currentIterations)), { warning: 'bold' },
+    'back on the design the iteration is checked again and kept');
+});

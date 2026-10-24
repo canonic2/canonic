@@ -27,8 +27,9 @@ function runtime(scenario = 'default', painted = true, actions = null, trace = f
     images: [], fonts: { ready: Promise.resolve() },
   };
   const source = fs.readFileSync(path.join(__dirname, "./browser.js"), 'utf8');
+  const location = { href: 'http://127.0.0.1/preview?scenario=' + scenario + (trace ? '&wbTrace=acme-selection' : ''), pathname: '/preview', origin: 'http://127.0.0.1' };
   const boot = vm.runInNewContext(source.replace(/^export /gm, '') + '\nboot;', {
-    window, parent, document, location: { href: 'http://127.0.0.1/preview?scenario=' + scenario + (trace ? '&wbTrace=acme-selection' : ''), pathname: '/preview', origin: 'http://127.0.0.1' },
+    window, parent, document, location,
     URL, AbortController, structuredClone, FormData: class { constructor(form) { return Object.entries(form.fields); } },
     CustomEvent: class { constructor(name, options) { this.type = name; this.detail = options.detail; } },
     requestAnimationFrame: painted ? queueMicrotask : () => {},
@@ -39,7 +40,7 @@ function runtime(scenario = 'default', painted = true, actions = null, trace = f
     clearInterval() {},
     setInterval() {},
   });
-  return { boot, window, document, canvas, messages, diagnostics, handlers, documentHandlers,
+  return { boot, window, document, location, canvas, messages, diagnostics, handlers, documentHandlers,
     async command(data) {
       handlers.get('message')({ source: parent, origin: 'http://127.0.0.1', data: { type: 'workbench-preview-command', ...data } });
       for (let i = 0; i < 8; i++) await new Promise(setImmediate);
@@ -58,21 +59,118 @@ test('a reusable renderer disposes its adapter, listeners and canvas exactly onc
   assert.equal(r.window.workbench, null);
 });
 
-test('artboard inputs are independent of scenarios and survive control reset', async () => {
+test('scenario artboard inputs apply over the scenario and survive control reset', async () => {
   const r = runtime('default');
   let context;
-  await r.boot({ id: 'feedback', inputs: { tone: 'info', title: 'Base' },
-    artboards: { success: { width: 560, height: 119, inputs: { tone: 'success' } } },
+  await r.boot({ id: 'feedback', inputs: { tone: 'info', title: 'Base' }, scenarios: { default: { inputs: { tone: 'neutral' },
+    artboards: { success: { width: 560, height: 119, inputs: { tone: 'success' } } } } },
   }, { default: 'component' }, { mount(_canvas, _source, value) { context = value; } }, {}, { artboard: 'success' });
   assert.equal(context.scenario, 'default');
   assert.equal(context.artboard, 'success');
+  assert.equal('iteration' in context, false);
   assert.equal(context.inputs.tone, 'success');
+  assert.equal(r.document.documentElement.dataset.wbIteration, undefined);
   await r.command({ inputs: { title: 'Edited' } });
   assert.equal(context.inputs.title, 'Edited');
   await r.command({ command: 'reset' });
   assert.equal(context.inputs.title, 'Base');
   assert.equal(context.inputs.tone, 'success');
   await r.window.__workbenchStop();
+});
+
+test('an iteration of a declared artboard merges after it and uses its own source', async () => {
+  const r = runtime('default');
+  r.location.href += '&artboard=warning&iteration=bold';
+  const order = [];
+  const activations = [];
+  r.window.__workbenchRequests = { activate: levels => activations.push(levels), deactivate() {} };
+  let mounted;
+  const preview = { id: 'feedback', inputs: { tone: 'info', title: 'Base' }, fixtures: { user: 'Ada' }, globals: { theme: 'light' },
+    requests: { '/api/items': { body: ['preview'] } },
+    setup: () => { order.push('preview setup'); },
+    scenarios: { default: { fixtures: { plan: 'free' }, requests: { '/api/items': { body: ['scenario'] } },
+      setup: () => { order.push('scenario setup'); }, play: () => { order.push('scenario play'); }, ready: () => { order.push('scenario ready'); },
+      artboards: { warning: { width: 480, height: 320, inputs: { tone: 'warning' },
+        iterations: { bold: { inputs: { title: 'Bold' }, fixtures: { plan: 'pro' }, globals: { theme: 'dark' },
+          requests: { '/api/items': { body: ['iteration'] } },
+          setup: () => { order.push('iteration setup'); }, play: () => { order.push('iteration play'); }, ready: () => { order.push('iteration ready'); } } } } } } } };
+  await r.boot(preview, { default: 'component', 'default+warning/bold': 'bold component' },
+    { mount(_canvas, source, context) { mounted = { source, context }; } }, {});
+  assert.equal(r.window.__workbenchReady, true);
+  assert.equal(mounted.source, 'bold component');
+  assert.deepEqual([mounted.context.scenario, mounted.context.artboard, mounted.context.iteration], ['default', 'warning', 'bold']);
+  assert.deepEqual(JSON.parse(JSON.stringify(mounted.context.inputs)), { tone: 'warning', title: 'Bold' });
+  assert.deepEqual(JSON.parse(JSON.stringify(mounted.context.fixtures)), { user: 'Ada', plan: 'pro' });
+  assert.deepEqual(JSON.parse(JSON.stringify(mounted.context.globals)), { theme: 'dark' });
+  assert.deepEqual(JSON.parse(JSON.stringify(activations[0])).map(level => level['/api/items'].body[0]), ['iteration', 'scenario', 'preview']);
+  assert.deepEqual(order, ['preview setup', 'scenario setup', 'iteration setup', 'scenario play', 'iteration play', 'scenario ready', 'iteration ready']);
+  assert.equal(r.document.documentElement.dataset.wbIteration, 'bold');
+  const ready = r.messages.findLast(message => message.event === 'ready');
+  assert.deepEqual([ready.scenario, ready.iteration], ['default', 'bold']);
+  mounted.context.action('clicked');
+  assert.equal(r.messages.at(-1).iteration, 'bold');
+  await r.window.__workbenchStop();
+});
+
+test('an iteration of the implicit artboard falls back to the scenario source', async () => {
+  const r = runtime('empty');
+  let mounted;
+  await r.boot({ id: 'jobs', scenarios: { default: {}, empty: { iterations: { illustrated: { inputs: { art: true } }, plain: {} } } } },
+    { default: 'component', empty: 'empty component', 'empty+illustrated': 'illustrated component' },
+    { mount(_canvas, source, context) { mounted = { source, context }; } }, {}, { iteration: 'plain' });
+  assert.equal(mounted.source, 'empty component');
+  assert.equal(mounted.context.iteration, 'plain');
+  assert.equal('artboard' in mounted.context, false);
+  const illustrated = runtime('empty');
+  await illustrated.boot({ id: 'jobs', scenarios: { empty: { iterations: { illustrated: { inputs: { art: true } } } } } },
+    { default: 'component', 'empty+illustrated': 'illustrated component' },
+    { mount(_canvas, source, context) { mounted = { source, context }; } }, {}, { iteration: 'illustrated' });
+  assert.equal(mounted.source, 'illustrated component');
+  assert.equal(mounted.context.inputs.art, true);
+});
+
+test('a declared artboard looks up its iteration, then its own source, then the scenario and default', async () => {
+  const preview = { id: 'feedback', scenarios: { cards: { artboards: { warning: { width: 480, height: 320, inputs: { tone: 'warning' },
+    iterations: { bold: { inputs: { title: 'Bold' } }, calm: {} } } } } } };
+  const mountedWith = async (sources, options) => {
+    const r = runtime('cards');
+    let mounted;
+    await r.boot(preview, sources, { mount(_canvas, source) { mounted = source; } }, {}, options);
+    await r.window.__workbenchStop();
+    return mounted;
+  };
+  const all = { default: 'default', cards: 'cards', 'cards+warning/': 'warning', 'cards+warning/bold': 'bold' };
+  assert.equal(await mountedWith(all, { artboard: 'warning', iteration: 'bold' }), 'bold');
+  assert.equal(await mountedWith(all, { artboard: 'warning', iteration: 'calm' }), 'warning');
+  assert.equal(await mountedWith(all, { artboard: 'warning' }), 'warning');
+  assert.equal(await mountedWith({ default: 'default', cards: 'cards' }, { artboard: 'warning', iteration: 'calm' }), 'cards');
+  assert.equal(await mountedWith({ default: 'default' }, { artboard: 'warning' }), 'default');
+  // The implicit artboard's iteration key is never mistaken for a declared artboard's.
+  assert.equal(await mountedWith({ default: 'default', cards: 'cards', 'cards+bold': 'implicit' }, { artboard: 'warning', iteration: 'bold' }), 'cards');
+});
+
+test('unknown artboards and iterations render errors, also after a scenario switch', async () => {
+  const unknownArtboard = runtime();
+  await unknownArtboard.boot({ id: 'feedback', scenarios: { default: {} } }, { default: 'component' }, { mount() {} }, {}, { artboard: 'missing' });
+  assert.match(unknownArtboard.window.__workbenchError, /Unknown preview artboard: missing/);
+  assert.equal(unknownArtboard.messages.at(-1).event, 'error');
+  const r = runtime('default');
+  let mounts = 0;
+  await r.boot({ id: 'feedback', scenarios: {
+    default: { artboards: { warning: { width: 480, height: 320, iterations: { bold: {} } } } },
+    empty: { iterations: { bold: {} } },
+  } }, { default: 'component' }, { mount() { mounts++; } }, {}, { artboard: 'warning', iteration: 'bold' });
+  assert.equal(r.window.__workbenchReady, true);
+  // The empty scenario has no declared artboards, so this instance's artboard is unknown there.
+  await r.command({ command: 'scenario', scenario: 'empty' });
+  assert.match(r.window.__workbenchError, /Unknown preview artboard: warning/);
+  assert.deepEqual([r.messages.at(-1).event, r.messages.at(-1).scenario, r.messages.at(-1).iteration], ['error', 'empty', 'bold']);
+  await r.command({ command: 'scenario', scenario: 'default' });
+  assert.equal(r.window.__workbenchReady, true);
+  assert.equal(mounts, 2);
+  const unknownIteration = runtime();
+  await unknownIteration.boot({ id: 'jobs', scenarios: { default: { iterations: { bold: {} } } } }, { default: 'component' }, { mount() {} }, {}, { iteration: 'calm' });
+  assert.match(unknownIteration.window.__workbenchError, /Unknown preview iteration: calm/);
 });
 
 test('disposing a renderer cancels a pending font wait instead of blocking its next mount', async () => {

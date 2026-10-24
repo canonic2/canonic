@@ -1,1 +1,1 @@
-export { createNavigation } from './controller.js';
+export { createNavigation, shownIterations } from './controller.js';

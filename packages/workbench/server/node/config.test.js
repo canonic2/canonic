@@ -70,7 +70,76 @@ test('server and browser readers retain authored lens labels', async function ()
     var browser = await new Promise((resolve, reject) => window.wbConfig.load(resolve, reject));
     assert.equal(browser.collections[0].items[0].lensLabel, 'Reference');
     assert.equal(browser.previews.lensLabel, 'Design');
-    assert.deepEqual(warnings, ['[workbench] workbench.yaml:\nPages › item 2 › Invalid: lensLabel: must be a nonempty string.']);
+    assert.deepEqual(warnings, ['[workbench] workbench.yaml:\nPages › Invalid: lensLabel: must be a nonempty string.']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('server and browser readers keep a scenario’s iterations and reject a src with “+”', async function () {
+  var body = [
+    'name: Acme',
+    'collections:',
+    '  - name: Pages',
+    '    items:',
+    '      - label: Sign in',
+    '        src: pages/sign-in.html',
+    '        scenarios:',
+    '          - id: default',
+    '            label: Default',
+    '          - id: error',
+    '            label: Wrong password',
+    '            iterations:',
+    '              - id: inline-hint',
+    '              - id: banner',
+    '                label: Top banner',
+    '              - id: Bold',
+    '              - id: banner',
+    '      - label: Jobs',
+    '        src: pages/jobs.html',
+    '        scenarios:',
+    '          - id: default',
+    '            label: Default',
+    '            iterations:',
+    '              - id: dense',
+    '      - label: Route',
+    '        src: routes/+page.html',
+    '',
+  ].join('\n');
+  var expected = [
+    { id: 'default', label: 'Default' },
+    { id: 'error', label: 'Wrong password', iterations: [{ id: 'inline-hint', label: 'Inline hint' }, { id: 'banner', label: 'Top banner' }] },
+  ];
+  var root = fs.mkdtempSync(path.join(os.tmpdir(), 'canonic-iterations-'));
+  try {
+    fs.writeFileSync(path.join(root, 'workbench.yaml'), body);
+    var read = config.read(root);
+    assert.deepEqual(read.collections[0].items.map(function (item) { return item.src; }), ['pages/sign-in.html', 'pages/jobs.html']);
+    assert.deepEqual(read.collections[0].items[0].scenarios, expected);
+    // A lone scenario stays on the page when it lists iterations.
+    assert.deepEqual(read.collections[0].items[1].scenarios, [{ id: 'default', label: 'Default', iterations: [{ id: 'dense', label: 'Dense' }] }]);
+    var problems = [
+      'Pages › Sign in › scenario error: iteration id “Bold” must be kebab-case — it travels in a URL.',
+      'Pages › Sign in › scenario error: iteration id “banner” is declared twice.',
+      'Pages › Route: src “routes/+page.html” can’t contain “+” — “:”, “+”, “!”, and “~” mark the scenario, the iteration, the example, and the lens in the address.',
+    ];
+    assert.deepEqual(read.problems, problems);
+    var warnings = [];
+    var window = { wbManifest: require('../../contracts/manifest'), wbYaml: yaml.parse };
+    function Request() {}
+    Request.prototype.open = function (_, url) { this.url = url; };
+    Request.prototype.send = function () {
+      this.status = this.url.endsWith('workbench.local.yaml') ? 404 : 200;
+      this.responseText = body;
+      this.onload();
+    };
+    require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../ui/legacy/config.js'), 'utf8'), {
+      window: window, URL: URL, URLSearchParams: URLSearchParams,
+      location: { protocol: 'http:', search: '' },
+      document: { baseURI: 'http://127.0.0.1/', querySelector: () => null },
+      XMLHttpRequest: Request, console: { warn: message => warnings.push(message) },
+    });
+    var browser = await new Promise((resolve, reject) => window.wbConfig.load(resolve, reject));
+    assert.deepEqual(JSON.parse(JSON.stringify(browser.collections[0].items[0].scenarios)), expected);
+    assert.deepEqual(warnings, ['[workbench] workbench.yaml:\n' + problems.join('\n')]);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -310,7 +379,8 @@ test('accepts an automatic Storybook and a Simulator catalog without handwritten
     var read = config.read(root);
     assert.equal(read.implementations.storybook.auto, true);
     assert.equal(read.implementations.simulator.device, 'booted');
-    assert.equal(read.implementations.simulator.catalogIcon, 'smartphone');
+    assert.equal(read.implementations.simulator.catalog, true);
+    assert.equal(read.implementations.simulator.catalogIcon, undefined, 'the built-in icon is the Simulator collection’s default');
     assert.deepEqual(read.collections, []);
     assert.deepEqual(read.problems, []);
   } finally {
@@ -523,7 +593,9 @@ test('reads Markdown pages, pages with docs, their docs lenses, and the lens a M
     assert.equal(items[2].markdown, 'docs/button.md');
     assert.deepEqual(items[2].implementations, { web: { examples: 'docs/button/' } });
     assert.deepEqual(read.implementations.web.styles, ['demo/demo.css']);
-    assert.deepEqual(read.problems, []);
+    assert.deepEqual(read.problems, [
+      'Design system › Marked: src “docs/bad!name.md” can’t contain “!” — “:”, “+”, “!”, and “~” mark the scenario, the iteration, the example, and the lens in the address.',
+    ]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

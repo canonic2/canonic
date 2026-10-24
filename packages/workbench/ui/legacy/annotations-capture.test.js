@@ -258,6 +258,57 @@ test('an external capture flushes the bridge before reading its snapshot', async
   assert.deepEqual(order, ['flush', 'read']);
 });
 
+/* The annotation layer's view boundary: the real pageOf/resetForPage on the
+   real address parser, with the clearing it triggers counted. */
+function annotationViews(hash) {
+  var source = fs.readFileSync(path.join(__dirname, './annotations.js'), 'utf8');
+  var listeners = {};
+  var state = {
+    cleared: 0,
+    location: { hash: hash },
+    window: { addEventListener: function (type, fn) { listeners[type] = fn; } },
+    clearAll: function () { state.cleared++; },
+    setTool: function () {},
+    closeMenus: function () {},
+  };
+  vm.createContext(state);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, './address.js'), 'utf8'), state);
+  var start = source.indexOf('  function pageOf(');
+  vm.runInContext(source.slice(start, source.indexOf('  /* Artboard-local review boundary', start)), state);
+  return {
+    state: state,
+    go: function (next) { state.location.hash = next; listeners.hashchange(); return state.cleared; },
+    destination: function (next) { state.location.hash = next; listeners['wb-content-destination'](); return state.cleared; },
+  };
+}
+
+test('notes drawn on an iteration clear when the iteration changes and survive a lens or size change', function () {
+  var views = annotationViews('#previews/feedback.workbench.ts+warning/bold@laptop');
+  assert.equal(views.go('#previews/feedback.workbench.ts+warning/bold@mobile'), 0, 'another size keeps them');
+  assert.equal(views.go('#previews/feedback.workbench.ts+warning/bold@mobile~storybook'), 0, 'another lens keeps them');
+  assert.equal(views.destination('#previews/feedback.workbench.ts+warning/bold@mobile'), 0, 'and so does the way back');
+  assert.equal(views.go('#previews/feedback.workbench.ts+warning/calm@mobile'), 1, 'another iteration clears them');
+  assert.equal(views.destination('#previews/feedback.workbench.ts@mobile'), 2, 'so does the authored design');
+  assert.equal(views.go('#previews/feedback.workbench.ts:empty+illustrated@mobile'), 3, 'and another scenario');
+});
+
+test('a screenshot of an iteration names it after the scenario', function () {
+  var source = fs.readFileSync(path.join(__dirname, './annotations.js'), 'utf8');
+  var view = { src: 'previews/jobs.workbench.ts', scenario: 'empty', iteration: { id: 'illustrated', label: 'Illustrated' }, lens: null, story: null };
+  var state = {
+    viewNow: function () { return view; },
+    docsShowing: function () { return false; },
+    options: { size: function () { return { key: 'laptop' }; } },
+    window: {},
+  };
+  var start = source.indexOf('  function shotName(');
+  vm.runInNewContext(source.slice(start, source.indexOf('  /* Through a lens the frame', start)) + '\nresult = [shotName()];', state);
+  assert.equal(state.result[0], 'jobs.workbench-empty-illustrated-laptop.jpg');
+  view = { src: 'previews/jobs.workbench.ts', scenario: 'empty', iteration: null, lens: null, story: null };
+  vm.runInNewContext(source.slice(start, source.indexOf('  /* Through a lens the frame', start)) + '\nresult = [shotName()];', state);
+  assert.equal(state.result[0], 'jobs.workbench-empty-laptop.jpg', 'the authored design has no iteration in its name');
+});
+
 test('Simulator screenshots use the visible canvas renderer', async function () {
   var ui = captureUI();
   ui.state.simulatorView = function () { return true; };

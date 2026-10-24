@@ -6,7 +6,7 @@ sequence. [Multiple artboards](multiple-artboards.md) owns product behavior and
 acceptance; [modules](../system/modules.md) owns shared architectural rules.
 The [product contract](multiple-artboards.md#implemented-support-system)
 records support APIs, limits, verification, and remaining work. The current
-implementation composes explicitly declared page artboards inside the existing canvas region,
+implementation composes a scenario's declared artboards inside the existing canvas region,
 preserving the shipping shell's markup, controls and layout.
 
 The [rendering-flow contract](../system/rendering-flow.md) is authoritative: one application
@@ -17,7 +17,7 @@ inside an artboard. The dedicated content entry point implements that boundary.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui/src/bootstrap/canvas.js` | Explicit page artboards, selected-instance commands, preview controls, review and publication in the existing shell; scenarios remain alternatives. |
+| `ui/src/bootstrap/canvas.js` | A scenario's declared artboards, selected-instance commands, preview controls, review and publication in the existing shell; scenarios remain alternatives. |
 | `ui/src/components/canvas/element.js` | Keyed artboard shells, labels, resizing and shared camera; no chrome or server operations. |
 | `ui/src/modules/canvas/model.js`, `geometry.js` | Serializable state and pure geometry/size policy. |
 | `ui/src/modules/canvas/controller.js` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, park/resume outside visible state, capture locks. |
@@ -46,19 +46,11 @@ one controller owner; renderer handles never enter serializable state.
 Tests live with these capabilities. `scripts/smoke-canvas.cjs` exercises real
 Chrome and the packaged capture runtime through a temporary programmatic harness,
 including full handoff persistence. `smoke-canvas-ui.cjs` exercises the production
-shell, declared page artboards, ordinary scenario switching, input/size/annotation isolation, preview
+shell, a scenario's declared artboards, ordinary scenario switching, input/size/annotation isolation, preview
 controls and composite native handoff. See the implementation record for actual native-host and
 performance verification limits.
 
 ## Standards and runtime constraints
-
-Follow the source [Workbench guide](../../../../.canonic/guides/workbench/AGENTS.md),
-[module architecture](../../../../.canonic/rules/module-architecture.md),
-[UI contracts](../../../../.canonic/rules/ui-contracts.md), and
-[behavioral testing](../../../../.canonic/rules/behavioral-testing.md).
-Use [develop-module](../../../../.codex/skills/develop-module/SKILL.md) for bounded
-implementation, review-module for boundary/lifecycle review, create-ui-component
-for presentation, and write-tests for behavioral verification.
 
 - New and substantially reworked capabilities live under
   `ui/src/modules/<capability>/` as browser-native JavaScript ES modules with
@@ -80,7 +72,7 @@ for presentation, and write-tests for behavioral verification.
 
 ## Future integration capability map
 
-The explicit page-artboard presentation and existing-shell composition are implemented.
+Presentation of a scenario's declared artboards and existing-shell composition are implemented.
 The map below also covers deeper extraction and future artboard-management UI.
 
 Suggested paths are relative to `packages/workbench/` and follow the
@@ -129,6 +121,8 @@ interface ViewTarget {
   spaceId: SpaceId;
   src: string;
   scenario: string | null;
+  artboard?: string;           // declared artboard ID; absent for an implicit artboard
+  iteration: string | null;    // selected iteration of that artboard
   lens: string | null;
 }
 
@@ -311,7 +305,7 @@ HTML, images, or full handoff prompts.
 
 | Slice | Integration work | Acceptance evidence |
 | --- | --- | --- |
-| Artboard management UI | Design adding, removing and choosing arbitrary artboards beyond declared page composition; preserve the existing shell and one-view behavior | Accessible repeated-view workflows, keyboard/focus, geometry and cleanup |
+| Artboard management UI | Design adding, removing and choosing arbitrary artboards beyond composing a scenario's declared artboards; preserve the existing shell and one-view behavior | Accessible repeated-view workflows, keyboard/focus, geometry and cleanup |
 | Space and native host acceptance | Verify the implemented owning-space routing and pooled native subscriptions on real hosts | Mixed-space and shared-root recovery, real native capture/input, independent subscriptions |
 | Review and context host acceptance | Verify the integrated camera, handoff, reference and participating-space publication paths in supported editors | Complete composite/prompt, hooks and MCP, race/failure cleanup |
 | Product completion | Resolve arrangement storage/sharing, recovery, host limits and public guides; single-view restoration follows [persistence](persistence.md) | Phase 1 acceptance in browser and VS Code |

@@ -124,6 +124,9 @@
       return config.implementations[key].catalog;
     });
     if (!imports || !host) {
+      /* Nothing to ask the server for: this reader reports the same problems
+         it would, so its own list is the space's list. */
+      showProblems(config.problems);
       build(config);
       return;
     }

@@ -118,13 +118,22 @@ function fixture(t, hash = '#page~design') {
       address: {
         parse(hash) {
           const [page, lens] = hash.replace(/^#/, '').split('~');
-          const [src, scenario] = page.split(':');
-          return { src: src, scenario: scenario || null, lens: lens || null };
+          const [head, ...parts] = page.split('+');
+          const [src, scenario] = head.split(':');
+          const parsed = { src: src, scenario: scenario || null, lens: lens || null };
+          if (parts.length)
+            parsed.iterations = Object.fromEntries(
+              parts.map((part) => (part.includes('/') ? part.split('/') : ['', part])),
+            );
+          return parsed;
         },
         write(target) {
           return (
             target.src +
             (target.scenario ? ':' + target.scenario : '') +
+            Object.entries(target.iterations || {})
+              .map(([board, id]) => '+' + (board ? board + '/' : '') + id)
+              .join('') +
             (target.lens ? '~' + target.lens : '')
           );
         },
@@ -193,6 +202,46 @@ void test('content metadata comes from the authored model, without menu DOM', as
   assert.equal(f.surface.style.width, '320px');
   assert.equal(f.surface.style.height, '180px');
   assert.throws(() => f.controller.content.navigate({}), /Invalid content target/);
+});
+
+void test('the implicit artboard renders the iteration its scenario declares, and drops an unknown one', async (t) => {
+  const f = fixture(t, '#page+illustrated~design');
+  f.config.pages.page = {
+    preview: {
+      scenarios: [
+        {
+          id: 'default',
+          label: 'Default',
+          iterations: [
+            { id: 'illustrated', label: 'Illustrated', source: 'pages/page.illustrated.tsx' },
+          ],
+        },
+        { id: 'error', label: 'Error' },
+      ],
+    },
+  };
+  f.controller.start();
+  await tick();
+  assert.equal(new URL(f.shown[0].url).searchParams.get('iteration'), 'illustrated');
+  assert.deepEqual(f.shown[0].iteration, {
+    id: 'illustrated',
+    label: 'Illustrated',
+    source: 'pages/page.illustrated.tsx',
+  });
+  assert.equal(f.shown[0].code[0], 'pages/page.illustrated.tsx');
+  assert.equal(f.controller.content.read().iteration, 'illustrated');
+  f.controller.content.navigate({ src: 'page', lens: 'design', iteration: null });
+  await tick();
+  assert.equal(f.shown.length, 2, 'another iteration renders the artboard again');
+  assert.equal(new URL(f.shown[1].url).searchParams.has('iteration'), false);
+  assert.equal(f.controller.content.read().iteration, null);
+  f.controller.content.navigate({ src: 'page', lens: 'design', iteration: 'missing' });
+  await tick();
+  assert.equal(f.controller.content.read().iteration, null);
+  assert.equal(f.location.hash, '#page~design', 'the address keeps only what is shown');
+  f.controller.content.navigate({ src: 'page', lens: 'storybook', iteration: 'illustrated' });
+  await tick();
+  assert.equal(f.controller.content.read().iteration, null, 'other lenses ignore iterations');
 });
 
 void test('a delayed catalog cannot inherit outgoing readiness or complete a superseded view', async (t) => {

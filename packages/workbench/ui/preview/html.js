@@ -32,7 +32,7 @@ export async function mount(canvas, source, context, environment) {
       if (value === null) target.removeAttribute(name); else target.setAttribute(name, value);
     });
     canvas.innerHTML = parsed.head.innerHTML + parsed.body.innerHTML;
-    window.wbPageScenarios?.apply(context.scenario);
+    window.wbPageScenarios?.apply(context.scenario, context.iteration);
     window.wbPreviewActions?.apply();
     try {
       await Promise.all(Array.from(canvas.querySelectorAll('link[rel="stylesheet"]'))

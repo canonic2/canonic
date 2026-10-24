@@ -96,6 +96,86 @@ test('Astro renders props, scenarios, slots and alternate sources, packages clie
   assert.match(changed.rendered.default.html, /<section>/);
 });
 
+test('Astro iterations that change the server render get their own, under their source keys', async t => {
+  const root = fixture(t, {
+    'iterated.workbench.ts': `import { definePreview } from '@canonic2/workbench';
+      export default definePreview({ id: 'components/iterated', adapter: 'astro', source: { entry: './Button.astro' },
+        inputs: { label: 'Continue', disabled: false },
+        scenarios: {
+          default: { iterations: {
+            wide: { inputs: { label: 'Wide' } },
+            outlined: { source: { entry: './Alternate.astro' } },
+            hooked: { setup() {} },
+          } },
+          cards: { artboards: {
+            warning: { width: 400, height: 200, inputs: { label: 'Warn' },
+              iterations: { bold: { inputs: { disabled: true } } } },
+            info: { width: 400, height: 200 },
+          } },
+        } });`,
+  });
+  const built = await build(t, root, 'iterated.workbench.ts');
+  assert.match(built.rendered['default+wide'].html, />Wide<\/button>/);
+  assert.match(built.rendered['default+outlined'].html, /<strong>Continue<\/strong>/);
+  assert.equal(built.rendered['default+hooked'], undefined, 'an iteration with only hooks uses its scenario render');
+  // A declared artboard with inputs is pre-rendered with them, under `<scenario>+<artboard>/`.
+  assert.match(built.rendered['cards+warning/'].html, />Warn<\/button>/);
+  assert.deepEqual(built.rendered['cards+warning/'].inputs, { label: 'Warn', disabled: false });
+  assert.equal(built.rendered['cards+info/'], undefined, 'an artboard that changes nothing the server renders uses its scenario render');
+  // Artboard inputs, then the iteration's: preview, scenario, artboard, iteration.
+  assert.match(built.rendered['cards+warning/bold'].html, / disabled[^>]*>Warn<\/button>/);
+});
+
+test('live Astro renders give request handlers the artboard and iteration they render', async t => {
+  const root = fixture(t, {
+    'board.workbench.ts': `import { definePreview } from '@canonic2/workbench';
+      export default definePreview({ id: 'pages/board', adapter: 'astro', source: { entry: './Board.astro' },
+        requests: { 'GET /api/where': (request, context) => ({ body: { where: [context.scenario, context.artboard || '-', context.iteration || '-'].join(' ') } }) },
+        scenarios: {
+          cards: { artboards: { warning: { width: 400, height: 200, iterations: { calm: {} } } } },
+          empty: { iterations: { hinted: {} } },
+        } });`,
+    'Board.astro': `---
+      const { where } = await (await fetch('/api/where')).json();
+      ---
+      <p>{where}</p>`,
+  });
+  // Request mocks can read `context.artboard`, so the declared artboard is pre-rendered at its position.
+  const built = await build(t, root, 'board.workbench.ts');
+  assert.match(built.rendered.cards.html, /<p>cards - -<\/p>/);
+  assert.match(built.rendered['cards+warning/'].html, /<p>cards warning -<\/p>/);
+  const running = await server.start({ root, capture: { close: async () => {} } });
+  t.after(() => running.close());
+  const render = async query => {
+    const response = await fetch('http://127.0.0.1:' + running.port + '/_workbench/previews/render?file=board.workbench.ts&' + query + '&inputs=%7B%7D');
+    return { status: response.status, answer: await response.json() };
+  };
+  // These iterations change nothing the server renders, so they use their scenario's or artboard's render, at their own position.
+  for (const [query, where] of [
+    ['scenario=cards', 'cards - -'],
+    ['scenario=cards&artboard=warning', 'cards warning -'],
+    ['scenario=cards&artboard=warning&iteration=calm', 'cards warning calm'],
+    ['scenario=empty&iteration=hinted', 'empty - hinted'],
+  ]) {
+    const { status, answer } = await render(query);
+    assert.equal(status, 200, query + ': ' + answer.error);
+    assert.match(answer.html, new RegExp('<p>' + where + '</p>'), query);
+  }
+  // An unknown artboard is named before the iteration.
+  for (const [query, error] of [
+    ['scenario=cards&artboard=missing&iteration=gone', 'Unknown preview artboard: missing'],
+    ['scenario=cards&artboard=missing', 'Unknown preview artboard: missing'],
+    ['scenario=empty&artboard=warning', 'Unknown preview artboard: warning'],
+    ['scenario=cards&artboard=warning&iteration=gone', 'Unknown preview iteration: gone'],
+    ['scenario=empty&iteration=gone', 'Unknown preview iteration: gone'],
+    ['scenario=missing&iteration=hinted', 'Unknown preview scenario: missing'],
+  ]) {
+    const { status, answer } = await render(query);
+    assert.equal(status, 500, query);
+    assert.match(answer.error, new RegExp(error), query);
+  }
+});
+
 test('Astro frontmatter fetches are answered by the scenario request mocks', async t => {
   const root = fixture(t, {
     'plans.workbench.ts': `import { definePreview } from '@canonic2/workbench';

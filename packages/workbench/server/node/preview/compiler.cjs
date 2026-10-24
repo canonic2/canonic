@@ -77,78 +77,151 @@ function discoveredFile(root, file, include) {
   });
 }
 
-function validate(raw, file, root) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(file + ': default export must be definePreview({...}).');
-  if (typeof raw.id !== 'string' || !/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(raw.id)) throw new Error(file + ': id must use kebab-case segments separated by /.');
-  if (typeof raw.adapter !== 'string' || !/^[a-z0-9-]+$/.test(raw.adapter)) throw new Error(file + ': adapter must be a registered kebab-case name.');
-  if (raw.icon !== undefined && (typeof raw.icon !== 'string' || !/^[a-z0-9-]+$/.test(raw.icon))) throw new Error(file + ': icon must be a kebab-case Lucide icon name.');
+const isMap = value => !!value && typeof value === 'object' && !Array.isArray(value);
+// Scenario, artboard and iteration IDs: a lowercase letter first, then
+// lowercase letters and digits in single-hyphen parts (`compact-table`).
+const NESTED_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+// The label a scenario, artboard or iteration shows without its own, in
+// sentence case as configuration keys get theirs: `compact-table` → `Compact table`.
+const titled = id => { const words = id.split('-').join(' '); return words.charAt(0).toUpperCase() + words.slice(1); };
+
+// The checks below throw the problem alone; `validate` names the file once.
+function checkRequests(where, requests) {
+  if (requests === undefined) return;
+  if (!isMap(requests)) throw new Error(where + 'requests must be a map.');
+  for (const [key, value] of Object.entries(requests)) {
+    if (!/^(?:[A-Z]+\s+)?(?:\/\S*|[a-z][a-z0-9+.-]*:\/\/\S+)(?:\s+[A-Za-z_]\w*)?$/.test(key.trim())) throw new Error(where + 'request ' + key + ' must be "[METHOD] /path [Operation]" or a full URL.');
+    if (typeof value !== 'function' && !isMap(value)) throw new Error(where + 'request ' + key + ' must be a response object or a function.');
+  }
+}
+
+function checkSource(file, root, source, where = '') {
+  if (!source || typeof source.entry !== 'string' || !source.entry.trim()) throw new Error(where + 'source.entry must name a local source file.');
+  const target = path.resolve(path.dirname(file), source.entry);
+  if (!inside(root, target) || !fs.existsSync(target) || !inside(fs.realpathSync(root), fs.realpathSync(target))) throw new Error(where + 'source must exist inside the project: ' + source.entry);
+}
+
+function checkSerializable(where, owner) {
+  for (const key of ['inputs', 'fixtures', 'globals']) {
+    if (owner[key] === undefined) continue;
+    try { JSON.stringify(owner[key]); } catch (error) { throw new Error(where + key + ' must be JSON-serializable: ' + error.message); }
+  }
+}
+
+// Iterations of one artboard: `where` names the scenario and, for a declared
+// artboard, the artboard, so a problem points at its location.
+function checkIterations(file, root, where, iterations) {
+  if (iterations === undefined) return;
+  if (!isMap(iterations)) throw new Error(where + ': iterations must be a map.');
+  for (const [id, iteration] of Object.entries(iterations)) {
+    if (!NESTED_ID.test(id)) throw new Error(where + ': iteration id “' + id + '” must be kebab-case.');
+    const at = where + ' › iteration ' + id + ': ';
+    if (!isMap(iteration)) throw new Error(at + 'must be an object.');
+    for (const key of ['scenarios', 'artboards', 'iterations']) if (iteration[key] !== undefined) throw new Error(at + 'cannot declare ' + key + '.');
+    if (iteration.label !== undefined && (typeof iteration.label !== 'string' || !iteration.label.trim())) throw new Error(at + 'label must be nonempty text.');
+    // Merged key by key and called at render: a wrong shape fails here, by name.
+    for (const key of ['inputs', 'fixtures', 'globals']) if (iteration[key] !== undefined && !isMap(iteration[key])) throw new Error(at + key + ' must be a map.');
+    for (const key of ['setup', 'play', 'ready']) if (iteration[key] !== undefined && typeof iteration[key] !== 'function') throw new Error(at + key + ' must be a function.');
+    if (iteration.source !== undefined) checkSource(file, root, iteration.source, at);
+    checkSerializable(at, iteration);
+    checkRequests(at, iteration.requests);
+  }
+}
+
+const ARTBOARD_KEYS = ['label', 'width', 'height', 'inputs', 'iterations'];
+
+function checkArtboards(file, root, where, artboards) {
+  if (!isMap(artboards) || !Object.keys(artboards).length || Object.keys(artboards).length > 32) throw new Error(where + ': artboards must be a map of 1–32 artboards.');
+  for (const [id, board] of Object.entries(artboards)) {
+    if (!NESTED_ID.test(id)) throw new Error(where + ': artboard id “' + id + '” must be kebab-case.');
+    const at = where + ' › artboard ' + id;
+    if (!isMap(board)) throw new Error(at + ': must be an object.');
+    // Anything else on an artboard would do nothing; an iteration carries the rest.
+    const extra = Object.keys(board).find(key => !ARTBOARD_KEYS.includes(key));
+    if (extra) throw new Error(at + ': “' + extra + '” is not an artboard field; an artboard takes label, width, height, inputs and iterations.');
+    if (![board.width, board.height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new Error(at + ': width and height must be integers from 1 to 8192.');
+    if (board.label !== undefined && (typeof board.label !== 'string' || !board.label.trim())) throw new Error(at + ': label must be nonempty text.');
+    if (board.inputs !== undefined && !isMap(board.inputs)) throw new Error(at + ': inputs must be a map.');
+    checkSerializable(at + ': ', board);
+    checkIterations(file, root, at, board.iterations);
+  }
+}
+
+// The native index reports the same text (catalog/answer.rs).
+const RESERVED_PATH = 'a preview’s path can’t contain “:”, “+”, “!”, or “~” — they mark the scenario, the iteration, the example, and the lens in the address.';
+
+// The definition's fields checked in order, each problem without the file:
+// the page index names it, by its path from the project root.
+function checkDefinition(raw, file, root) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('default export must be definePreview({...}).');
+  if (typeof raw.id !== 'string' || !/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(raw.id)) throw new Error('id must use kebab-case segments separated by /.');
+  if (typeof raw.adapter !== 'string' || !/^[a-z0-9-]+$/.test(raw.adapter)) throw new Error('adapter must be a registered kebab-case name.');
+  if (raw.icon !== undefined && (typeof raw.icon !== 'string' || !/^[a-z0-9-]+$/.test(raw.icon))) throw new Error('icon must be a kebab-case Lucide icon name.');
   const sources = [raw.source, ...Object.values(raw.scenarios || {}).map(scenario => scenario.source).filter(Boolean)];
-  for (const source of sources) {
-    if (!source || typeof source.entry !== 'string' || !source.entry.trim()) throw new Error(file + ': source.entry must name a local source file.');
-    const target = path.resolve(path.dirname(file), source.entry);
-    if (!inside(root, target) || !fs.existsSync(target) || !inside(fs.realpathSync(root), fs.realpathSync(target))) throw new Error(file + ': source must exist inside the project: ' + source.entry);
-  }
-  if (raw.scenarios !== undefined && (!raw.scenarios || typeof raw.scenarios !== 'object' || Array.isArray(raw.scenarios))) throw new Error(file + ': scenarios must be a map.');
+  for (const source of sources) checkSource(file, root, source);
+  for (const key of ['artboards', 'iterations']) if (raw[key] !== undefined) throw new Error(key + ' must be declared inside a scenario, as scenarios.<id>.' + key + '.');
+  if (raw.scenarios !== undefined && (!raw.scenarios || typeof raw.scenarios !== 'object' || Array.isArray(raw.scenarios))) throw new Error('scenarios must be a map.');
   const scenarios = raw.scenarios && Object.keys(raw.scenarios).length ? raw.scenarios : { default: {} };
-  if (raw.artboards !== undefined) {
-    if (!raw.artboards || typeof raw.artboards !== 'object' || Array.isArray(raw.artboards) || !Object.keys(raw.artboards).length || Object.keys(raw.artboards).length > 32) throw new Error(file + ': artboards must be a map of 1–32 artboards.');
-    for (const [id, board] of Object.entries(raw.artboards)) {
-      if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(id) || !board || typeof board !== 'object' || Array.isArray(board)) throw new Error(file + ': artboards need kebab-case IDs and object definitions.');
-      if (![board.width, board.height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new Error(file + ': artboard width and height must be integers from 1 to 8192.');
-      if (board.label !== undefined && (typeof board.label !== 'string' || !board.label.trim())) throw new Error(file + ': artboard labels must be nonempty text.');
-      if (board.inputs !== undefined && (!board.inputs || typeof board.inputs !== 'object' || Array.isArray(board.inputs))) throw new Error(file + ': artboard inputs must be a map.');
-    }
-  }
   for (const [id, scenario] of Object.entries(scenarios)) {
-    if (!/^[a-z0-9-]+$/.test(id) || !scenario || typeof scenario !== 'object' || Array.isArray(scenario)) throw new Error(file + ': scenarios need kebab-case IDs and object definitions.');
-    for (const key of ['inputs', 'fixtures', 'globals']) if (scenario[key] !== undefined) JSON.stringify(scenario[key]);
+    if (!NESTED_ID.test(id) || !scenario || typeof scenario !== 'object' || Array.isArray(scenario)) throw new Error('scenarios need kebab-case IDs and object definitions.');
+    checkSerializable('scenario ' + id + ' ', scenario);
+    if (scenario.artboards !== undefined && scenario.iterations !== undefined) throw new Error('scenario ' + id + ': iterations of declared artboards belong to each artboard; a scenario with artboards cannot declare iterations.');
+    if (scenario.artboards !== undefined) checkArtboards(file, root, 'scenario ' + id, scenario.artboards);
+    checkIterations(file, root, 'scenario ' + id, scenario.iterations);
   }
   /* Keys only; the server resolves them against the space it shows the preview in. */
-  if (raw.sizes !== undefined && (!Array.isArray(raw.sizes) || !raw.sizes.length || raw.sizes.some(v => typeof v !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v) || /^[0-9-]+$/.test(v)))) throw new Error(file + ': sizes must be a list of size keys, such as laptop or mobile.');
+  if (raw.sizes !== undefined && (!Array.isArray(raw.sizes) || !raw.sizes.length || raw.sizes.some(v => typeof v !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v) || /^[0-9-]+$/.test(v)))) throw new Error('sizes must be a list of size keys, such as laptop or mobile.');
   for (const [name, control] of Object.entries(raw.controls || {})) {
-    if (!control || !['text', 'number', 'boolean', 'select', 'json'].includes(control.type)) throw new Error(file + ': invalid control ' + name);
-    if (control.type === 'select' && (!Array.isArray(control.options) || !control.options.length)) throw new Error(file + ': select controls need options.');
+    if (!control || !['text', 'number', 'boolean', 'select', 'json'].includes(control.type)) throw new Error('invalid control ' + name);
+    if (control.type === 'select' && (!Array.isArray(control.options) || !control.options.length)) throw new Error('select controls need options.');
   }
-  for (const [where, requests] of [['', raw.requests], ...Object.entries(scenarios).map(([id, scenario]) => ['scenario ' + id + ' ', scenario.requests])]) {
-    if (requests === undefined) continue;
-    if (!requests || typeof requests !== 'object' || Array.isArray(requests)) throw new Error(file + ': ' + where + 'requests must be a map.');
-    for (const [key, value] of Object.entries(requests)) {
-      if (!/^(?:[A-Z]+\s+)?(?:\/\S*|[a-z][a-z0-9+.-]*:\/\/\S+)(?:\s+[A-Za-z_]\w*)?$/.test(key.trim())) throw new Error(file + ': ' + where + 'request ' + key + ' must be "[METHOD] /path [Operation]" or a full URL.');
-      if (typeof value !== 'function' && (!value || typeof value !== 'object' || Array.isArray(value))) throw new Error(file + ': ' + where + 'request ' + key + ' must be a response object or a function.');
-    }
-  }
-  if (raw.links !== undefined && (!raw.links || typeof raw.links !== 'object' || Array.isArray(raw.links))) throw new Error(file + ': links must be a map.');
+  checkRequests('', raw.requests);
+  for (const [id, scenario] of Object.entries(scenarios)) checkRequests('scenario ' + id + ' ', scenario.requests);
+  if (raw.links !== undefined && (!raw.links || typeof raw.links !== 'object' || Array.isArray(raw.links))) throw new Error('links must be a map.');
   for (const [href, to] of Object.entries(raw.links || {})) {
     const target = typeof to === 'string' ? { preview: to } : to;
     const valid = target && typeof target === 'object' && !Array.isArray(target) && (target.preview || target.scenario)
       && (target.preview === undefined || (typeof target.preview === 'string' && /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(target.preview)))
-      && (target.scenario === undefined || (typeof target.scenario === 'string' && /^[a-z0-9-]+$/.test(target.scenario)));
-    if (!valid) throw new Error(file + ': link ' + href + ' must name a preview ID, or { preview, scenario }.');
+      && (target.scenario === undefined || (typeof target.scenario === 'string' && NESTED_ID.test(target.scenario)));
+    if (!valid) throw new Error('link ' + href + ' must name a preview ID, or { preview, scenario }.');
   }
   return Object.assign({}, raw, { scenarios });
+}
+
+// A definition validated for a render or a request, its problem named by the
+// definition's path from the project root.
+function validate(raw, file, root) {
+  try { return checkDefinition(raw, file, root); } catch (error) {
+    error.message = slash(path.relative(root, file)) + ': ' + error.message;
+    throw error;
+  }
 }
 
 // Astro frontmatter runs here, in Node, so its fetch calls get the same
 // request mocks the browser does. Background builds and requested renders
 // share globalThis.fetch, so every render must wait for the previous one.
 let astroRenderQueue = Promise.resolve();
-function mockFetches(definition, scenario, inputs, render) {
-  const pending = astroRenderQueue.then(() => renderWithFetches(definition, scenario, inputs, render));
+// `position`, from iterationsOf, renders one iteration of the scenario; one
+// with `id: null` and an empty `iteration` renders a declared artboard of it.
+function mockFetches(definition, scenario, inputs, render, position = null) {
+  const pending = astroRenderQueue.then(() => renderWithFetches(definition, scenario, inputs, render, position));
   astroRenderQueue = pending.then(() => undefined, () => undefined);
   return pending;
 }
 
-async function renderWithFetches(definition, scenario, inputs, render) {
+async function renderWithFetches(definition, scenario, inputs, render, position) {
   // The pipeline also renders a base source named "default", even when
   // the preview's authored scenarios use other IDs. That base has no overrides.
   const spec = definition.scenarios[scenario] || {};
-  if (!spec.requests && !definition.requests) return render();
+  const own = position ? position.iteration : {};
+  if (!own.requests && !spec.requests && !definition.requests) return render();
   const { mockedFetch, requestMocks } = await import(require('node:url').pathToFileURL(path.join(__dirname, "../../../ui/preview/requests.js")).href);
   const original = globalThis.fetch;
-  const context = { id: definition.id, scenario, inputs, fixtures: { ...definition.fixtures, ...spec.fixtures }, globals: { ...definition.globals, ...spec.globals } };
+  const context = { id: definition.id, scenario, ...(position && position.artboard ? { artboard: position.artboard } : {}), ...(position && position.id ? { iteration: position.id } : {}),
+    inputs, fixtures: { ...definition.fixtures, ...spec.fixtures, ...own.fixtures }, globals: { ...definition.globals, ...spec.globals, ...own.globals } };
   // A server render awaits every fetch, so `pending` would hang it; give up
   // after ten seconds with a rendering error instead.
-  const active = { mocks: requestMocks([spec.requests, definition.requests]), context, base: 'http://localhost/', signal: AbortSignal.timeout(10000) };
+  const active = { mocks: requestMocks([own.requests, spec.requests, definition.requests]), context, base: 'http://localhost/', signal: AbortSignal.timeout(10000) };
   globalThis.fetch = mockedFetch(original, () => active);
   try { return await render(); } finally { globalThis.fetch = original; }
 }
@@ -252,9 +325,13 @@ class Compiler {
     const errors = [];
     const ids = new Set();
     const files = discover(this.root, this.options.include);
-    await this.load(files);
+    // An address could not name it: these marks split the address. Such a
+    // definition is a problem whatever it holds, so it is not evaluated.
+    const reserved = file => /[:+!~]/.test(slash(path.relative(this.root, file)));
+    await this.load(files.filter(file => !reserved(file)));
     for (const file of files) {
       try {
+        if (reserved(file)) throw new Error(RESERVED_PATH);
         const evaluated = await this.definition(file);
         const { entry, docs: isDocs } = projectDefinition(evaluated.value, file, this.root);
         if (ids.has(entry.id)) throw new Error('Duplicate preview id: ' + entry.id);
@@ -274,18 +351,41 @@ class Compiler {
   }
 }
 
+// Every iteration of one scenario, with its compiled source key:
+// `<scenario>+<iteration>` for the implicit artboard, `<scenario>+<artboard>/<iteration>`
+// for a declared one. The key is the same the native compiler gives a source.
+function iterationsOf(scenario, spec) {
+  const found = [];
+  for (const [id, iteration] of Object.entries((spec && spec.iterations) || {})) found.push({ key: scenario + '+' + id, artboard: null, artboardInputs: undefined, id, iteration });
+  for (const [artboard, board] of Object.entries((spec && spec.artboards) || {})) {
+    for (const [id, iteration] of Object.entries(board.iterations || {})) found.push({ key: scenario + '+' + artboard + '/' + id, artboard, artboardInputs: board.inputs, id, iteration });
+  }
+  return found;
+}
+
+// `{ [key]: [...] }` for a nonempty map of a scenario or artboard, else nothing.
+const listed = (key, map, item) => (map && Object.keys(map).length ? { [key]: Object.entries(map).map(item) } : {});
+// An iteration's own source is listed from the project root, as the entry's is.
+const listedIteration = (file, root) => ([id, spec]) => ({ id, label: spec.label || titled(id),
+  ...(spec.source && spec.source.entry ? { source: slash(path.relative(root, path.resolve(path.dirname(file), spec.source.entry))) } : {}) });
+
 // The list contract shared by the worker and the native index's evaluator.
-// Duplicate IDs belong to the caller, after discovery ordering.
+// Duplicate IDs belong to the caller, after discovery ordering. Each scenario
+// lists its declared artboards and iterations; iterations of a declared
+// artboard are listed on it, those of the implicit artboard on the scenario.
 function projectDefinition(raw, file, root) {
   if (raw && raw.kind === 'docs') return { docs: true, entry: validateDocs(raw, file, root) };
-  const definition = validate(raw, file, root);
+  const definition = checkDefinition(raw, file, root);
+  const iteration = listedIteration(file, root);
   return { docs: false, entry: {
     id: definition.id, title: definition.title || definition.id, adapter: definition.adapter,
     file: slash(path.relative(root, file)),
     source: slash(path.relative(root, path.resolve(path.dirname(file), definition.source.entry))),
-    scenarios: Object.entries(definition.scenarios).map(([id, scenario]) => ({ id, label: scenario.label || id.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) })),
+    scenarios: Object.entries(definition.scenarios).map(([id, scenario]) => ({ id, label: scenario.label || titled(id),
+      ...listed('artboards', scenario.artboards, ([board, spec]) => ({ id: board, label: spec.label || titled(board), width: spec.width, height: spec.height,
+        ...listed('iterations', spec.iterations, iteration) })),
+      ...listed('iterations', scenario.iterations, iteration) })),
     controls: definition.controls || {}, sizes: definition.sizes, docs: definition.docs || null,
-    ...(definition.artboards ? { artboards: Object.entries(definition.artboards).map(([id, board]) => ({ id, label: board.label || id, width: board.width, height: board.height })) } : {}),
     ...(definition.icon ? { icon: definition.icon } : {}),
     links: Object.fromEntries(Object.entries(definition.links || {}).map(([href, to]) => [href,
       typeof to === 'string' ? { preview: to } : { preview: to.preview || definition.id, ...(to.scenario ? { scenario: to.scenario } : {}) }])),
@@ -319,12 +419,12 @@ function validateDocs(raw, file, root) {
   if (raw.lens !== undefined && !lenses.some(lens => lens.key === raw.lens)) throw new Error('lens “' + raw.lens + '” isn’t one of its lenses.');
   if (raw.scenarios !== undefined && (!raw.scenarios || typeof raw.scenarios !== 'object' || Array.isArray(raw.scenarios))) throw new Error('scenarios must be a map.');
   const scenarios = Object.entries(raw.scenarios || {}).map(([scenario, spec]) => {
-    if (!key.test(scenario)) throw new Error('scenarios need kebab-case IDs.');
-    return { id: scenario, label: spec && typeof spec.label === 'string' && spec.label ? spec.label : scenario.replace(/(^|-)(\w)/g, (_, gap, char) => (gap ? ' ' : '') + char.toUpperCase()) };
+    if (!NESTED_ID.test(scenario)) throw new Error('scenarios need kebab-case IDs.');
+    return { id: scenario, label: spec && typeof spec.label === 'string' && spec.label ? spec.label : titled(scenario) };
   });
   if (raw.icon !== undefined && (typeof raw.icon !== 'string' || !key.test(raw.icon))) throw new Error('icon must be a kebab-case Lucide icon name.');
   return { id: raw.id, title: typeof raw.title === 'string' && raw.title ? raw.title : raw.id, ...(raw.icon ? { icon: raw.icon } : {}), file: slash(path.relative(root, file)),
     src: docs, lens: raw.lens || (lenses[0] ? lenses[0].key : null), lenses, scenarios };
 }
 
-module.exports = { Compiler, discover, validate, inside, mockFetches, projectDefinition };
+module.exports = { Compiler, discover, validate, inside, mockFetches, iterationsOf, projectDefinition };

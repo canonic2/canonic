@@ -26,6 +26,17 @@ pub(super) fn kebab(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
+/// A scenario, artboard or iteration ID: a lowercase letter first, then
+/// lowercase letters and digits in single-hyphen parts (`compact-table`).
+pub(super) fn nested_id(value: &str) -> bool {
+    value.starts_with(|first: char| first.is_ascii_lowercase())
+        && value.split('-').all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        })
+}
 pub(super) fn id(value: &str) -> bool {
     value.split('/').all(kebab)
 }
@@ -49,8 +60,18 @@ pub(super) fn fallback(value: Option<&Value>, default: Value) -> Value {
 }
 
 pub(super) fn supported(raw: &Value, file: &Path, root: &Path) -> bool {
-    // Artboard declarations use the shared evaluator's validation and projection.
-    if raw.get("kind").and_then(Value::as_str) == Some("docs") || raw.get("artboards").is_some() {
+    // Artboard and iteration declarations, and the top-level keys that are
+    // problems, use the shared evaluator's validation and projection.
+    let nested =
+        |value: &Value| value.get("artboards").is_some() || value.get("iterations").is_some();
+    if raw.get("kind").and_then(Value::as_str) == Some("docs") || nested(raw) {
+        return false;
+    }
+    if raw
+        .get("scenarios")
+        .and_then(Value::as_object)
+        .is_some_and(|scenarios| scenarios.values().any(nested))
+    {
         return false;
     }
     if !requests_valid(raw.get("requests")) {

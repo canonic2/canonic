@@ -72,6 +72,32 @@ fn title_icon(settings: &Value, title: &str, fallback: &str) -> (String, bool) {
     }
 }
 
+/// A new collection an import makes: a `previews.icons` prefix of its name
+/// ranks 6, `previews.icon` 4, and `fallback` 1 (see `merge_collection_icon`).
+fn imported_collection(settings: &Value, name: &str, fallback: &str) -> Value {
+    let (icon, mapped) = title_icon(settings, name, fallback);
+    let priority = if mapped {
+        6
+    } else if settings["icon"]
+        .as_str()
+        .is_some_and(|icon| !icon.is_empty())
+    {
+        4
+    } else {
+        1
+    };
+    json!({ "name": name, "icon": icon, "iconPriority": priority, "items": [] })
+}
+
+/// The `previews` settings, which govern discovered previews and docs.
+fn preview_settings(view: &Value) -> Value {
+    if view["previews"].is_object() {
+        view["previews"].clone()
+    } else {
+        json!({})
+    }
+}
+
 /// A title's parts: its collection (or `fallback` when it has one part),
 /// the group the middle parts make, and its label.
 fn placed(title: &str, id: &str, fallback: &str) -> (String, String, String) {
@@ -85,7 +111,25 @@ fn placed(title: &str, id: &str, fallback: &str) -> (String, String, String) {
     (collection, parts.join(" / "), label)
 }
 
-/// Adds `item` to the named collection, in its group when it has one.
+/// `manifest.mergeCollectionIcon`: the collection icon ladder, highest wins
+/// (7 authored, 6 a configured icon for the collection — a `previews.icons`
+/// prefix or a catalog's `catalogIcon` — 4 `previews.icon`, 2 an authored
+/// default, 1 an import's built-in default), equal imported ranks taking the
+/// lexically first icon. A collection without a rank is authored.
+fn merge_collection_icon(target: &mut Value, incoming: &Value) {
+    let rank = |collection: &Value| collection["iconPriority"].as_u64().unwrap_or(7);
+    let (current, next) = (rank(target), rank(incoming));
+    let icon = incoming["icon"].as_str().unwrap_or_default();
+    let first = next == current && next < 7 && icon < target["icon"].as_str().unwrap_or_default();
+    if next > current || first {
+        target["icon"] = json!(icon);
+        target["iconPriority"] = json!(next);
+    }
+}
+
+/// Adds `item` to the named collection, in its group when it has one. A
+/// collection another import made first takes `new`'s icon when it ranks
+/// higher.
 fn place(
     collections: &mut Vec<Value>,
     name: &str,
@@ -97,6 +141,7 @@ fn place(
         .iter()
         .position(|candidate| candidate["name"] == name)
     {
+        merge_collection_icon(&mut collections[at], &new());
         at
     } else {
         collections.push(new());
@@ -141,6 +186,7 @@ fn docs_pages(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembl
     let collections = view["collections"]
         .as_array()
         .map_or(&[][..], Vec::as_slice);
+    let settings = preview_settings(view);
     let authored: HashSet<&str> = page_items(collections)
         .into_iter()
         .filter_map(|item| item["markdown"].as_str().or_else(|| item["src"].as_str()))
@@ -185,13 +231,11 @@ fn docs_pages(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembl
                 .collect();
             item["implementations"] = Value::Object(mapped);
         }
-        place(
-            &mut into.collections,
-            &collection,
-            &group,
-            item,
-            || json!({ "name": collection, "icon": "book-open", "items": [] }),
-        );
+        // Docs are discovered with previews, so their collections take the
+        // same configured icons; page icons keep the docs default.
+        place(&mut into.collections, &collection, &group, item, || {
+            imported_collection(&settings, &collection, "book-open")
+        });
         let mut fields = Map::new();
         fields.insert("label".into(), json!(label));
         fields.insert("design".into(), joined(root, src));
@@ -201,11 +245,7 @@ fn docs_pages(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembl
 }
 
 fn previews(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembly) {
-    let settings = if view["previews"].is_object() {
-        view["previews"].clone()
-    } else {
-        json!({})
-    };
+    let settings = preview_settings(view);
     let space_sizes = view["sizes"].as_array().map_or(&[][..], Vec::as_slice);
     for preview in &index.previews {
         let title = preview["title"].as_str().unwrap_or_default();
@@ -234,18 +274,7 @@ fn previews(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembly)
             item["sizes"] = sizes["sizes"].clone();
         }
         place(&mut into.collections, &collection, &group, item, || {
-            let (icon, mapped) = title_icon(&settings, &collection, "component");
-            let priority = if mapped {
-                6
-            } else if settings["icon"]
-                .as_str()
-                .is_some_and(|icon| !icon.is_empty())
-            {
-                4
-            } else {
-                1
-            };
-            json!({ "name": collection, "icon": icon, "iconPriority": priority, "items": [] })
+            imported_collection(&settings, &collection, "component")
         });
         let previous = into.pages.get(file).cloned().unwrap_or(Value::Null);
         let mut fields = Map::new();
@@ -393,6 +422,59 @@ pub(crate) fn encode_component(text: &str) -> String {
     out
 }
 
+fn scenario_ids(scenarios: &Value) -> Vec<String> {
+    scenarios
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|scenario| scenario["id"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// Checks the pending lens path maps of a page that lists a preview
+/// definition against the definition's scenarios, which the page takes
+/// (`mergeCollections`), or its own when no definition matches. `where_`
+/// names its collection and group, as the config reader does.
+fn settle_entry(entry: &mut Value, where_: &str, index: &IndexAnswer, problems: &mut Vec<String>) {
+    if let Some(group) = entry["group"].as_str().map(str::to_owned) {
+        let at = format!("{where_} › {group}");
+        for item in entry
+            .get_mut("items")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            settle_entry(item, &at, index, problems);
+        }
+        return;
+    }
+    let src = entry["src"].as_str().unwrap_or_default();
+    let ids = index
+        .previews
+        .iter()
+        .find(|preview| preview["file"] == src)
+        .map_or_else(
+            || scenario_ids(&entry["scenarios"]),
+            |preview| scenario_ids(&preview["scenarios"]),
+        );
+    let at = format!("{where_} › {}", entry["label"].as_str().unwrap_or_default());
+    crate::config::settle_lenses(entry, &ids, &at, problems);
+}
+
+fn settle_lenses(index: &IndexAnswer, into: &mut Assembly) {
+    for collection in &mut into.view_collections {
+        let name = collection["name"].as_str().unwrap_or_default().to_owned();
+        for entry in collection
+            .get_mut("items")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            settle_entry(entry, &name, index, &mut into.problems);
+        }
+    }
+}
+
 /// Adds the index's docs pages and previews to `into`, which starts as the
 /// configuration's own collections, pages and implementations.
 pub(crate) fn import(view: &Value, index: &IndexAnswer, root: &Path, into: &mut Assembly) {
@@ -400,4 +482,161 @@ pub(crate) fn import(view: &Value, index: &IndexAnswer, root: &Path, into: &mut 
     previews(view, index, root, into);
     links(index, &mut into.problems);
     workbench_lenses(view, index, root, into);
+    settle_lenses(index, into);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn preview(file: &str, title: &str, scenarios: &[&str]) -> Value {
+        let scenarios: Vec<Value> = scenarios
+            .iter()
+            .map(|id| json!({ "id": id, "label": id }))
+            .collect();
+        json!({ "id": file.trim_end_matches(".workbench.ts"), "file": file, "title": title, "source": file, "scenarios": scenarios })
+    }
+
+    #[test]
+    fn a_configured_preview_icon_outranks_the_icon_of_a_collection_docs_made_first() {
+        let view = json!({ "collections": [], "previews": { "icons": { "Web App": "monitor" } } });
+        let index = IndexAnswer {
+            docs: vec![json!({ "src": "docs/guide.md", "id": "guide", "title": "Web App/Guide" })],
+            previews: vec![
+                preview("jobs.workbench.ts", "Web App/Jobs", &["default"]),
+                preview("button.workbench.ts", "Kit/Button", &["default"]),
+            ],
+            ..IndexAnswer::default()
+        };
+        let mut into = Assembly::default();
+        import(&view, &index, Path::new("/acme"), &mut into);
+        let names: Vec<_> = into
+            .collections
+            .iter()
+            .map(|collection| {
+                (
+                    collection["name"].clone(),
+                    collection["icon"].clone(),
+                    collection["iconPriority"].clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                (json!("Web App"), json!("monitor"), json!(6)),
+                (json!("Kit"), json!("component"), json!(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn docs_collections_take_the_configured_preview_icons() {
+        let docs = IndexAnswer {
+            docs: vec![
+                json!({ "src": "docs/guide.md", "id": "guide", "title": "Web App/Guide" }),
+                json!({ "src": "docs/colors.md", "id": "colors", "title": "Kit/Colors", "icon": "palette" }),
+                json!({ "src": "docs/intro.md", "id": "intro", "title": "Intro" }),
+            ],
+            ..IndexAnswer::default()
+        };
+        let icons = |view: &Value| {
+            let mut into = Assembly::default();
+            import(view, &docs, Path::new("/acme"), &mut into);
+            let collections: Vec<_> = into
+                .collections
+                .iter()
+                .map(|collection| {
+                    (
+                        collection["name"].clone(),
+                        collection["icon"].clone(),
+                        collection["iconPriority"].clone(),
+                    )
+                })
+                .collect();
+            let pages: Vec<_> = page_items(&into.collections)
+                .into_iter()
+                .map(|item| item["icon"].clone())
+                .collect();
+            (collections, pages)
+        };
+        // A prefix ranks as a configured icon, `previews.icon` below it.
+        let (collections, pages) = icons(&json!({
+            "collections": [],
+            "previews": { "icon": "boxes", "icons": { "Web App": "monitor" } },
+        }));
+        assert_eq!(
+            collections,
+            [
+                (json!("Web App"), json!("monitor"), json!(6)),
+                (json!("Kit"), json!("boxes"), json!(4)),
+                (json!("Docs"), json!("boxes"), json!(4)),
+            ]
+        );
+        // Page icons keep the docs default.
+        assert_eq!(
+            pages,
+            [json!("book-open"), json!("palette"), json!("book-open")]
+        );
+        // Without settings a docs collection ranks as a built-in default.
+        let (collections, _) = icons(&json!({ "collections": [] }));
+        assert_eq!(
+            collections,
+            [
+                (json!("Web App"), json!("book-open"), json!(1)),
+                (json!("Kit"), json!("book-open"), json!(1)),
+                (json!("Docs"), json!("book-open"), json!(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_page_listing_a_preview_checks_its_lens_paths_against_the_definitions_scenarios() {
+        let page = json!({
+            "label": "Jobs", "src": "jobs.workbench.ts",
+            "implementations": {
+                "dev": { "pending": { "default": "/jobs", "empty": "/jobs?empty", "ghost": "/ghost" } },
+                "live": { "pending": { "empty": "/x" } },
+                "sb": { "title": "Jobs" },
+            },
+        });
+        let other = json!({
+            "label": "Sign in", "src": "sign-in.html",
+            "scenarios": [{ "id": "default", "label": "Default" }, { "id": "error", "label": "Error" }],
+            "implementations": { "dev": { "pending": { "default": "/", "error": "/?error" } } },
+        });
+        let view = json!({ "collections": [{ "name": "App", "items": [{ "group": "Pages", "items": [page] }, other] }] });
+        let index = IndexAnswer {
+            previews: vec![preview(
+                "jobs.workbench.ts",
+                "App/Pages/Jobs",
+                &["default", "empty"],
+            )],
+            ..IndexAnswer::default()
+        };
+        let mut into = Assembly {
+            view_collections: view["collections"].as_array().cloned().unwrap_or_default(),
+            ..Assembly::default()
+        };
+        import(&view, &index, Path::new("/acme"), &mut into);
+        let items = &into.view_collections[0]["items"];
+        assert_eq!(
+            items[0]["items"][0]["implementations"],
+            json!({
+                "dev": { "path": "/jobs", "scenarios": { "empty": "/jobs?empty" } },
+                "sb": { "title": "Jobs" },
+            })
+        );
+        assert_eq!(
+            items[1]["implementations"],
+            json!({ "dev": { "path": "/", "scenarios": { "error": "/?error" } } })
+        );
+        assert_eq!(
+            into.problems,
+            [
+                "App › Pages › Jobs: implementation “dev” maps scenario “ghost”, which this page doesn’t declare.",
+                "App › Pages › Jobs: implementation “live” needs a path for the default scenario (“default”).",
+            ]
+        );
+    }
 }

@@ -19,7 +19,11 @@ export function createRuntime(board, callbacks) {
   url.searchParams.set('canvas-origin', location.origin);
   url.searchParams.set('canvas-host', window.parent === window ? 'browser' : 'editor');
   if (board.target.artboard) url.searchParams.set('artboard', board.target.artboard);
-  url.hash = `${board.target.src}${board.target.scenario ? ':' + board.target.scenario : ''}${board.target.example ? '!' + board.target.example : ''}~${board.target.lens || 'design'}`;
+  // The renderer's own address names its artboard's iteration as a `+` part.
+  const iteration = board.target.iteration
+    ? '+' + (board.target.artboard ? board.target.artboard + '/' : '') + board.target.iteration
+    : '';
+  url.hash = `${board.target.src}${board.target.scenario ? ':' + board.target.scenario : ''}${iteration}${board.target.example ? '!' + board.target.example : ''}~${board.target.lens || 'design'}`;
   element.src = url.href;
   let disposed = false;
   // Standalone support hosts can omit the shared canvas port.

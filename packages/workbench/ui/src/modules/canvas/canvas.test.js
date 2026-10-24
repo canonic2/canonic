@@ -82,6 +82,42 @@ void test('canvas context includes duplicate and foreign-space artboards, withou
   );
 });
 
+void test('an artboard names the iteration it shows in canvas context, and none otherwise', () => {
+  const { controller, callbacks } = setup();
+  controller.create({ ...target, artboard: 'warning', iteration: 'bold' }, dimensions);
+  callbacks[0].view({ ...ready, iteration: 'bold' });
+  let value = cleanView(report(controller.snapshot()));
+  assert.equal(value.artboards[0].artboard, 'warning');
+  assert.equal(value.artboards[0].iteration, 'bold');
+  callbacks[0].view({ ...ready, lens: 'storybook' });
+  value = cleanView(report(controller.snapshot()));
+  assert.equal('iteration' in value.artboards[0], false, 'other lenses do not render iterations');
+  controller.dispose();
+});
+
+void test('without a view reference, the canvas reference names the iteration like Copy reference', () => {
+  const { controller, callbacks } = setup();
+  controller.create({ ...target, artboard: 'warning', iteration: 'bold' }, dimensions);
+  assert.match(
+    reference(controller.snapshot()),
+    /- Scenario: default\n- Iteration: bold — `bold`\n- Lens/,
+    'before the renderer reports, the id stands in for the label',
+  );
+  callbacks[0].view({ ...ready, reference: '', iteration: 'bold', iterationLabel: 'Bold' });
+  assert.match(reference(controller.snapshot()), /- Iteration: Bold — `bold`\n/);
+  callbacks[0].view({ ...ready, reference: '', lens: 'storybook' });
+  assert.doesNotMatch(reference(controller.snapshot()), /Iteration/);
+  assert.equal('iterationLabel' in controller.snapshot().artboards[0].target, false);
+  controller.dispose();
+});
+
+void test('a single-view context keeps its iteration only when one is named', () => {
+  const view = { text: '- Page: Jobs', src: 'jobs.workbench.ts', scenario: 'empty' };
+  assert.equal(cleanView({ ...view, iteration: 'illustrated' }).iteration, 'illustrated');
+  for (const iteration of [undefined, '', 3])
+    assert.equal('iteration' in cleanView({ ...view, iteration }), false, String(iteration));
+});
+
 function setup() {
   const callbacks = [];
   const calls = [],

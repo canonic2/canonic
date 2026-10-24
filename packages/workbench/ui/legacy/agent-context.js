@@ -15,13 +15,15 @@
     var view = window.wbView ? window.wbView() : null;
     var text = window.wbReference ? window.wbReference.text(view) : null;
     if (!text) return null;
-    return {
+    var out = {
       text: text,
       src: view.src,
       scenario: view.story ? null : view.scenario,
       story: view.story ? view.story.id : null,
       lens: view.lens ? view.lens.key : null,
     };
+    if (view.iteration) out.iteration = view.iteration.id;
+    return out;
   }
 
   function post(body) {

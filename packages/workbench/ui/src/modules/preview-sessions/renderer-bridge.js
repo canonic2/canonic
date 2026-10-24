@@ -24,7 +24,7 @@ function start(ports, channel, origin) {
     const problem = ports.content.problem();
     if (!shell) {
       if (!problem) return null;
-      const src = location.hash.replace(/^#/, '').split(/[:!@~]/)[0] || 'unavailable';
+      const src = location.hash.replace(/^#/, '').split(/[:+!@~]/)[0] || 'unavailable';
       const info = {
         src,
         scenario: null,
@@ -90,19 +90,23 @@ function start(ports, channel, origin) {
     if (serial !== previous) {
       previous = serial;
       emit('view', info);
-      if (info.ready)
-        window.parent.postMessage(
-          {
-            type: 'wb-here',
-            src: info.src,
-            scenario: info.scenario,
-            lens: info.lens,
-            pending: false,
-          },
-          origin,
-        );
+      if (info.ready) window.parent.postMessage(here(info), origin);
     }
     return info;
+  }
+  // The destination this artboard shows, its iteration only when it renders one,
+  // with the declared artboard that owns it (none for a scenario's implicit artboard).
+  function here(info) {
+    const artboard = new URLSearchParams(location.search).get('artboard');
+    return {
+      type: 'wb-here',
+      src: info.src,
+      scenario: info.scenario,
+      lens: info.lens,
+      ...(info.iteration ? { iteration: info.iteration } : {}),
+      ...(info.iteration && artboard ? { artboard } : {}),
+      pending: false,
+    };
   }
   async function command(event) {
     const data = event.data;
@@ -223,16 +227,7 @@ function start(ports, channel, origin) {
       }
       const info = read();
       if (data.command === 'navigate' && info?.ready && before === previous)
-        window.parent.postMessage(
-          {
-            type: 'wb-here',
-            src: info.src,
-            scenario: info.scenario,
-            lens: info.lens,
-            pending: false,
-          },
-          origin,
-        );
+        window.parent.postMessage(here(info), origin);
       emit('response', result, data.id);
     } catch (error) {
       emit('response', null, data.id, error instanceof Error ? error.message : String(error));

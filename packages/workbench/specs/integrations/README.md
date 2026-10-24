@@ -18,5 +18,4 @@ IndexedDB remains specified with persistence, with no editor dependency.
 [Server](../system/server.md) owns stdio/HTTP and subprocess boundaries.
 [Themes](../ui/themes.md) owns theme values and snapshot semantics.
 [Review](../review/README.md) owns deliberate screenshots/handoffs, separate
-from automatic reference context. Third-party agent capability research stays
-in the shared [agent research](../../../../docs/agents/README.md).
+from automatic reference context.

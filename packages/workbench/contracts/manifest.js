@@ -52,14 +52,33 @@
   var BUNDLE = /^[A-Za-z0-9.-]+$/;
   /* Kinds shown as a live stream of a native window rather than an iframe. */
   var STREAMED = ['ios-simulator', 'window'];
-  /* Characters that mark the scenario, the example, and the lens in the address
-     (see address.js), so no src may contain them. */
-  var RESERVED = [':', '!', '~'];
+  /* Characters that mark the scenario, the iteration, the example, and the
+     lens in the address (see address.js), so no src may contain them. */
+  var RESERVED = [':', '+', '!', '~'];
+  /* A scenario, artboard or iteration id: kebab-case words, starting with a
+     letter. It travels in the address. */
+  var ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
   var DOCS = /\.md$/i;
+  /* A page whose src is a preview definition takes its scenarios from it. */
+  var PREVIEW = /\.workbench\.tsx?$/;
+  var NOTHING_TO_SHOW = 'nothing to show — a config needs at least one collection with one page in it.';
 
   function text(value) {
     if (typeof value === 'number') return String(value);
     return typeof value === 'string' ? value.trim() : '';
+  }
+
+  /* The config readers' text: a trimmed string, else empty. Numbers are not text here. */
+  function stringText(value) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  function isId(id) {
+    return ID.test(String(id));
+  }
+
+  function isPreviewSrc(src) {
+    return PREVIEW.test(text(src));
   }
 
   function isMap(value) {
@@ -84,7 +103,80 @@
     var found = RESERVED.filter(function (mark) { return src.indexOf(mark) !== -1; });
     if (!found.length) return null;
     return 'src “' + src + '” can’t contain ' + found.map(function (mark) { return '“' + mark + '”'; }).join(' or ') +
-      ' — “:”, “!”, and “~” mark the scenario, the example, and the lens in the address.';
+      ' — “:”, “+”, “!”, and “~” mark the scenario, the iteration, the example, and the lens in the address.';
+  }
+
+  /* A scenario entry's iterations in workbench.yaml: other takes on the
+     scenario's one artboard, as [{ id, label }]. Labels default from the id.
+     An invalid or repeated entry is reported and left out; null when none
+     remain. `where` names the page and `scenario` its scenario. */
+  function scenarioIterations(raw, where, scenario, problems) {
+    if (raw === undefined || raw === null) return null;
+    var at = where + ' › scenario ' + scenario;
+    if (!isList(raw)) {
+      problems.push(at + ': iterations must be a list of entries with an id and an optional label.');
+      return null;
+    }
+    var out = [];
+    var seen = {};
+    raw.forEach(function (entry, i) {
+      var id = text(entry && entry.id);
+      if (!id) {
+        problems.push(at + ': iteration ' + (i + 1) + ' needs an id.');
+        return;
+      }
+      if (!ID.test(id)) {
+        problems.push(at + ': iteration id “' + id + '” must be kebab-case — it travels in a URL.');
+        return;
+      }
+      if (seen[id]) {
+        problems.push(at + ': iteration id “' + id + '” is declared twice.');
+        return;
+      }
+      seen[id] = true;
+      out.push({ id: id, label: text(entry.label) || labelOf(id) });
+    });
+    return out.length ? out : null;
+  }
+
+  /* A page's scenarios in workbench.yaml: `ids`, every valid scenario's id
+     in order, which its lens path maps are checked against, and `scenarios`,
+     the list the page keeps — only when there are two or more to choose
+     between, or one lists iterations, which travel on its entry. Labels
+     default from the id. An invalid or repeated entry is reported and left
+     out. `where` names the page. */
+  function pageScenarios(raw, where, problems) {
+    var out = [];
+    var ids = [];
+    var iterated = false;
+    if (raw !== undefined && raw !== null && !isList(raw)) {
+      problems.push(where + ': scenarios must be a list of entries with an id and an optional label.');
+      return { ids: ids, scenarios: null };
+    }
+    (raw || []).forEach(function (scenario, i) {
+      var id = stringText(scenario && scenario.id);
+      if (!id) {
+        problems.push(where + ': scenario ' + (i + 1) + ' needs an id.');
+        return;
+      }
+      if (!ID.test(id)) {
+        problems.push(where + ': scenario id “' + id + '” must be kebab-case — it travels in a URL.');
+        return;
+      }
+      if (ids.indexOf(id) !== -1) {
+        problems.push(where + ': scenario id “' + id + '” is declared twice.');
+        return;
+      }
+      ids.push(id);
+      var entry = { id: id, label: stringText(scenario.label) || labelOf(id) };
+      var iterations = scenarioIterations(scenario.iterations, where, id, problems);
+      if (iterations) {
+        entry.iterations = iterations;
+        iterated = true;
+      }
+      out.push(entry);
+    });
+    return { ids: ids, scenarios: out.length > 1 || iterated ? out : null };
   }
 
   /* A page written in Markdown: its docs are its own view, so it has no
@@ -99,19 +191,22 @@
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
 
+  /* A catalog, as { icon }: the icon configured for its collection, or null
+     for the built-in default (`smartphone`), which ranks below an authored
+     collection's default icon. */
   function catalog(raw, where, problems) {
     if (raw === undefined || raw === null || raw === false) return null;
-    if (raw === true) return { icon: 'smartphone' };
+    if (raw === true) return { icon: null };
     if (!isMap(raw)) {
       problems.push(where + ': catalog must be true, false, or a map with an icon.');
       return null;
     }
-    var icon = text(raw.icon) || 'smartphone';
-    if (!KEY.test(icon)) {
+    var icon = text(raw.icon);
+    if (icon && !KEY.test(icon)) {
       problems.push(where + ': catalog icon “' + icon + '” must be a kebab-case Lucide icon name.');
-      icon = 'smartphone';
+      icon = '';
     }
-    return { icon: icon };
+    return { icon: icon || null };
   }
 
   /* A local command may bring an implementation up before its catalog is
@@ -374,7 +469,7 @@
         }
         else {
           impl.catalog = true;
-          impl.catalogIcon = imported.icon;
+          if (imported.icon) impl.catalogIcon = imported.icon;
         }
       }
 
@@ -422,8 +517,13 @@
     return { icon: prefix ? settings.icons[prefix] : settings.icon || fallback, mapped: !!prefix };
   }
 
+  /* The collection icon ladder, highest wins, the same for every import:
+     7 an authored collection's icon; 6 a configured import icon for the
+     collection (a `previews.icons` prefix, a catalog's `catalogIcon`); 4
+     `previews.icon`; 2 an authored collection's default (`file-text`); 1 an
+     import's built-in default (previews, docs pages, Simulator catalogs).
+     A collection without a priority is authored. */
   function mergeCollectionIcon(target, incoming) {
-    // 7 authored, 6 preview map, 4 preview fallback, 2 authored default, 1 preview default.
     var priority = target.iconPriority === undefined ? 7 : target.iconPriority;
     var next = incoming.iconPriority === undefined ? 7 : incoming.iconPriority;
     // Equal imported priorities use lexical icon order, independent of import timing.
@@ -464,6 +564,11 @@
       if (found) { mergeCollectionIcon(found, collection); mergeItems(found.items, items); }
       else out.push(Object.assign({}, collection, { items: mergeItems([], items) }));
     });
+    /* A page that lists a preview definition checks its lens path maps
+       against the scenarios it has now; the server reports what doesn't
+       match. */
+    function settle(items) { items.forEach(function (item) { if (item.group) settle(item.items); else settleLenses(item, '', []); }); }
+    out.forEach(function (collection) { settle(collection.items); });
     return out.filter(function (collection) { return collection.items.length; });
   }
 
@@ -477,10 +582,62 @@
     return null;
   }
 
+  /* A lens's path map, `paths` from scenario id to a checked path, against
+     the page's scenario ids: { path, scenarios }, or null when the first
+     scenario has no path. The first scenario is the page as authored,
+     whatever it calls itself, and "default" always means it too. */
+  function scenarioPaths(paths, key, ids, where, problems) {
+    var first = ids.length ? ids[0] : 'default';
+    var ref = { path: null, scenarios: {} };
+    Object.keys(paths).forEach(function (scenarioId) {
+      if (scenarioId === first || scenarioId === 'default') {
+        ref.path = paths[scenarioId];
+        return;
+      }
+      if (ids.indexOf(scenarioId) === -1) {
+        problems.push(
+          where + ': implementation “' + key + '” maps scenario “' + scenarioId + '”, which this page doesn’t declare.'
+        );
+        return;
+      }
+      ref.scenarios[scenarioId] = paths[scenarioId];
+    });
+    if (ref.path === null) {
+      problems.push(
+        where + ': implementation “' + key + '” needs a path for the default scenario (“' + first + '”).'
+      );
+      return null;
+    }
+    return ref;
+  }
+
+  /* A page that lists a preview definition gets its scenarios from that
+     definition, so its lens path maps wait, as { pending: paths }, until
+     the definition is merged in. This checks them against the scenarios
+     the page has now, as pageLenses does for other pages. */
+  function settleLenses(item, where, problems) {
+    var lenses = item && item.implementations;
+    if (!isMap(lenses) || !Object.keys(lenses).some(function (key) { return lenses[key] && lenses[key].pending; })) return;
+    var ids = (item.scenarios || []).map(function (scenario) { return scenario.id; });
+    var out = {};
+    var count = 0;
+    Object.keys(lenses).forEach(function (key) {
+      var ref = lenses[key] && lenses[key].pending ? scenarioPaths(lenses[key].pending, key, ids, where, problems) : lenses[key];
+      if (!ref) return;
+      out[key] = ref;
+      count += 1;
+    });
+    if (count) item.implementations = out;
+    else delete item.implementations;
+  }
+
   /* The lenses one page has, checked against what's declared and against
-     the page's own scenarios. Answers with the map, or undefined when nothing
-     survived — a page without lenses carries no key at all. */
-  function pageLenses(raw, item, impls, where, problems) {
+     the page's own scenarios: `ids`, every valid scenario id in order, or
+     null when the page's scenarios come later from its preview definition
+     (see settleLenses). Without `ids`, the item's scenarios. Answers with
+     the map, or undefined when nothing survived — a page without lenses
+     carries no key at all. */
+  function pageLenses(raw, item, impls, where, problems, ids) {
     if (raw === undefined || raw === null || raw === '') return undefined;
     if (!isMap(raw)) {
       problems.push(where + ': implementations must be a map of implementation names to paths.');
@@ -488,10 +645,11 @@
     }
     var out = {};
     var count = 0;
-    var scenarios = (item && item.scenarios ? item.scenarios : []).map(function (scenario) {
-      return scenario.id;
-    });
-    var first = scenarios.length ? scenarios[0] : 'default';
+    if (ids === undefined) {
+      ids = (item && item.scenarios ? item.scenarios : []).map(function (scenario) {
+        return scenario.id;
+      });
+    }
 
     Object.keys(raw).forEach(function (key) {
       var impl = impls[key];
@@ -574,30 +732,13 @@
         return;
       }
 
-      var ref = { path: null, scenarios: {} };
+      var paths = {};
       Object.keys(value).forEach(function (scenarioId) {
         var p = pathOf(value[scenarioId], key, impl, where, problems);
-        if (p === null) return;
-        /* The first scenario is the page as authored, whatever it calls itself,
-           and "default" always means it too. */
-        if (scenarioId === first || scenarioId === 'default') {
-          ref.path = p;
-          return;
-        }
-        if (scenarios.indexOf(scenarioId) === -1) {
-          problems.push(
-            where + ': implementation “' + key + '” maps scenario “' + scenarioId + '”, which this page doesn’t declare.'
-          );
-          return;
-        }
-        ref.scenarios[scenarioId] = p;
+        if (p !== null) paths[scenarioId] = p;
       });
-      if (ref.path === null) {
-        problems.push(
-          where + ': implementation “' + key + '” needs a path for the default scenario (“' + first + '”).'
-        );
-        return;
-      }
+      var ref = ids === null ? { pending: paths } : scenarioPaths(paths, key, ids, where, problems);
+      if (!ref) return;
       out[key] = ref;
       count += 1;
     });
@@ -783,10 +924,16 @@
     pageLensLabel: pageLensLabel,
     authoredLensLabel: authoredLensLabel,
     pageLenses: pageLenses,
+    settleLenses: settleLenses,
+    pageScenarios: pageScenarios,
+    isId: isId,
+    isPreviewSrc: isPreviewSrc,
+    NOTHING_TO_SHOW: NOTHING_TO_SHOW,
     pageMarkdown: pageMarkdown,
     docsPageEntry: docsPageEntry,
     isDocs: isDocs,
     srcProblem: srcProblem,
+    scenarioIterations: scenarioIterations,
     projectPath: projectPath,
     pageCode: pageCode,
     labelOf: labelOf,

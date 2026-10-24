@@ -77,8 +77,8 @@ need preparation once. Keep `server/target/` between iterations to retain Cargo'
 cache; dependency, toolchain and profile changes can require a longer rebuild.
 
 The source extension uses a debug server, so use a release build for performance
-measurements. `pnpm test`, the individual Rust verification scripts, release packaging and the repository's
-`scripts/install-workbench.mjs` retain their full validation/build paths.
+measurements. `pnpm test`, the individual Rust verification scripts and release
+packaging retain their full validation/build paths.
 
 ## The two halves
 
@@ -129,8 +129,7 @@ After installing, run **Developer: Reload Window** from the Command Palette
 in each open VS Code project window. Installing replaces the files on disk;
 already-running extension hosts and capture helpers keep their previous code
 until their window reloads. Reloading the preview or using **Refresh Pages**
-does not restart the extension. This also applies to `scripts/install-workbench.mjs`
-at the repository root.
+does not restart the extension.
 
 Building and running the extension/backend need Node 24 or later: their TypeScript
 loads through Node's type stripping. The browser UI uses JavaScript directly.
@@ -170,7 +169,7 @@ native validation; Linux hosts without a display have no screenshots.
 
 ## GitHub builds and releases
 
-The [extension workflow](../../.github/workflows/extension.yml) tests the extension
+The extension workflow (`.github/workflows/extension.yml` at the repository root) tests the extension
 and builds all six platform VSIX files on matching GitHub-hosted runners when a
 `workbench/v<version>` tag is pushed. Bump `version` in `package.json`,
 `extension/package.json` and `sdk/package.json`, add a `## <version>` entry to
@@ -185,9 +184,7 @@ publishes the same files to the Visual Studio Marketplace and Open VSX, publishe
 files are also available as workflow artifacts for 14 days.
 Open VSX publishing uses the `canonic` namespace and GitHub trusted publishing
 through OIDC, with `extension.yml` registered as a trusted publisher. Already-published
-platform versions are skipped when the Open VSX job is rerun. See
-[distribution setup](../../docs/distribution.md#workbench-extension) for account
-and credential requirements.
+platform versions are skipped when the Open VSX job is rerun.
 These builds are unsigned; validate and sign platform
 releases before treating them as production-ready.
 

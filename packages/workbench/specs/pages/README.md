@@ -6,6 +6,8 @@ This folder owns page authoring and page-specific user workflows. Start with
 
 | Topic | Owns |
 | --- | --- |
+| [Page tree](page-tree.md) | Spaces, collections, groups and pages: configuration, imports, ordering, merging and the page list |
+| [Scenarios](scenarios.md) | Scenarios on every page kind: declaration, ids and labels, the first scenario, addresses and fallbacks |
 | [TypeScript previews](previews.md) | Definition API, discovery semantics, scenarios, inputs/actions, request mocks, navigation and portable viewer workflows |
 | [Artboards and iterations](iterations.md) | Scenario-owned artboards, iterations of an artboard, render merge order, lens behavior, review/agent naming and promotion by handoff |
 | [Docs](docs-pages.md) | Markdown, docs lenses, example/source panels, page lifecycle, reading presentation and Docs compatibility |

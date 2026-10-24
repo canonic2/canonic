@@ -157,95 +157,94 @@
     return Object.prototype.toString.call(value) === '[object Array]' ? value : [];
   }
 
-  /* A page with fewer than two scenarios has no choice to offer, so it stays a
-     single row and its scenarios are dropped. The first scenario is the page as
-     authored, whatever it calls itself. */
-  function scenarios(raw, where, problems) {
-    var out = [];
-    list(raw).forEach(function (scenario, i) {
-      var id = text(scenario && scenario.id);
-      var label = text(scenario && scenario.label);
-      if (!id || !label) {
-        problems.push(where + ': scenario ' + (i + 1) + ' needs both an id and a label.');
-        return;
-      }
-      if (!/^[a-z0-9-]+$/.test(id)) {
-        problems.push(where + ': scenario id “' + id + '” must be kebab-case — it travels in a URL.');
-        return;
-      }
-      out.push({ id: id, label: label });
-    });
-    return out.length > 1 ? out : null;
-  }
+  /* The page tree. These rules and their problems mirror the server's
+     reader (server/node/config.js), which reports the same problems at the
+     same places: a collection, group or page by name. */
 
-  function page(raw, where, impls, problems) {
+  /* `space` is what every page is read against: the implementations, the
+     previews settings and the srcs already listed. A src is listed once. */
+  function page(raw, where, space, problems) {
     var label = text(raw && raw.label);
     var src = text(raw && raw.src);
     if (!label || !src) {
-      problems.push(where + ': every page needs a label and a src.');
+      problems.push(where + (label || src ? ' › ' + (label || src) : '') + ': every page needs a label and a src.');
       return null;
     }
+    var at = where + ' › ' + label;
     if (src.charAt(0) === '/' || src.indexOf('..') > -1) {
-      problems.push(where + ': “' + src + '” must be relative to the project root.');
+      problems.push(at + ': “' + src + '” must be relative to the project root.');
       return null;
     }
     /* They mark something in the address — see address.js. */
     var reserved = window.wbManifest.srcProblem(src);
     if (reserved) {
-      problems.push(where + ': ' + reserved);
+      problems.push(at + ': ' + reserved);
       return null;
     }
+    if (space.seen[src]) {
+      problems.push(at + ': src “' + src + '” is already in the page tree; only its first entry is kept.');
+      return null;
+    }
+    space.seen[src] = true;
     /* Sizes are resolved by the server, which sends them per page in
        /_workbench/config; see src/sizes/. */
     var item = { label: label, src: src };
-    window.wbManifest.pageLensLabel(raw.lensLabel, item, where + ' › ' + label, problems);
+    window.wbManifest.pageLensLabel(raw.lensLabel, item, at, problems);
     var icon = text(raw.icon);
     if (icon) item.icon = icon;
-    var found = scenarios(raw.scenarios, where + ' › ' + label, problems);
-    if (found) item.scenarios = found;
-    window.wbManifest.pageMarkdown(raw, item, where + ' › ' + label, problems);
-    var lenses = window.wbManifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
+    var found = window.wbManifest.pageScenarios(raw.scenarios, at, problems);
+    if (found.scenarios) item.scenarios = found.scenarios;
+    window.wbManifest.pageMarkdown(raw, item, at, problems);
+    /* A preview definition's page takes the definition's scenarios when the
+       catalog is merged in, which checks its lens path maps then. */
+    var ids = space.previews !== false && window.wbManifest.isPreviewSrc(src) ? null : found.ids;
+    var lenses = window.wbManifest.pageLenses(raw.implementations, item, space.impls, at, problems, ids);
     if (lenses) item.implementations = lenses;
-    window.wbManifest.docsPageEntry(raw, item, impls, where + ' › ' + label, problems);
-    var code = window.wbManifest.pageCode(raw.code, impls, where + ' › ' + label, problems);
+    window.wbManifest.docsPageEntry(raw, item, space.impls, at, problems);
+    var code = window.wbManifest.pageCode(raw.code, space.impls, at, problems);
     if (code) item.code = code;
     return item;
   }
 
   /* A collection holds pages, groups of pages, or both. Groups don't nest —
      one level is a flow, two is a filing cabinet. */
-  function entries(raw, where, impls, problems, inGroup) {
+  function entries(raw, where, space, problems, inGroup) {
     var out = [];
-    list(raw).forEach(function (entry, i) {
-      var at = where + ' › item ' + (i + 1);
+    list(raw).forEach(function (entry) {
       var group = text(entry && entry.group);
 
       if (group) {
         if (inGroup) {
-          problems.push(at + ': groups don’t nest.');
+          problems.push(where + ' › ' + group + ': groups don’t nest.');
           return;
         }
-        var items = entries(entry.items, where + ' › ' + group, impls, problems, true);
+        var items = entries(entry.items, where + ' › ' + group, space, problems, true);
         if (items.length) out.push({ group: group, items: items });
-        else problems.push(at + ': group “' + group + '” has nothing in it.');
+        else problems.push(where + ': group “' + group + '” has nothing in it.');
         return;
       }
 
-      var found = page(entry, at, impls, problems);
+      var found = page(entry, where, space, problems);
       if (found) out.push(found);
     });
     return out;
   }
 
-  function collections(raw, impls, problems) {
+  function collections(raw, space, problems) {
     var out = [];
+    var names = [];
     list(raw).forEach(function (collection, i) {
       var name = text(collection && collection.name);
       if (!name) {
         problems.push('collection ' + (i + 1) + ' has no name.');
         return;
       }
-      var items = entries(collection && collection.items, name, impls, problems, false);
+      if (names.indexOf(name) !== -1) {
+        problems.push('collection “' + name + '” is declared twice; only the first is kept.');
+        return;
+      }
+      names.push(name);
+      var items = entries(collection.items, name, space, problems, false);
       if (!items.length && !text(collection.icon)) {
         problems.push('collection “' + name + '” has nothing in it.');
         return;
@@ -257,17 +256,29 @@
     return out;
   }
 
+  /* The name of the folder a root URL points at, as the server names a
+     space without one; empty when the URL is a server's own root. */
+  function folderName(url) {
+    try {
+      var parts = new URL(url).pathname.split('/').filter(Boolean);
+      return parts.length ? decodeURIComponent(parts[parts.length - 1]) : '';
+    } catch (error) {
+      return '';
+    }
+  }
+
   function normalize(raw, hasLocal) {
     var problems = [];
     raw = window.wbManifest.selectSpace(raw, spaceKey, problems).raw;
     /* Pages refer to implementations by name, so those are read first. */
     var impls = window.wbManifest.implementations(raw && raw.implementations, problems);
     var previews = window.wbManifest.previews(raw && raw.previews, problems);
-    var found = collections(raw && raw.collections, impls, problems);
+    var space = { impls: impls, previews: previews, seen: Object.create(null) };
+    var found = collections(raw && raw.collections, space, problems);
     var mark = window.wbManifest.spaceMark(raw, problems);
     var importsCatalog = previews !== false || Object.keys(impls).some(function (key) { return impls[key].catalog; });
     if (!found.some(function (collection) { return collection.items.length; }) && !importsCatalog) {
-      problems.push('nothing to show — a config needs at least one collection with one page in it.');
+      problems.push(window.wbManifest.NOTHING_TO_SHOW);
       throw new Error(problems.join('\n'));
     }
     /* Everything that did parse is still worth showing; what didn't goes to
@@ -275,7 +286,11 @@
     if (problems.length) {
       console.warn('[workbench] ' + FILE + (hasLocal ? ' + ' + LOCAL : '') + ':\n' + problems.join('\n'));
     }
-    return { name: text(raw.name) || 'Workbench', mark: mark, collections: found, implementations: impls, previews: previews, root: root };
+    /* Without a name, a space is named after its folder, as the space
+       switcher names it. Served at a server's root, the folder isn't in the
+       address, and the server's /_workbench/config answer carries the name. */
+    var name = text(raw.name) || folderName(root) || 'Workbench';
+    return { name: name, mark: mark, collections: found, implementations: impls, previews: previews, root: root, problems: problems };
   }
 
   function trouble(file, error) {

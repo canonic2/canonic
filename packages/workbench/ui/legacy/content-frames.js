@@ -261,7 +261,9 @@
       frame.wbRestoring = false;
       sessions.add(key, frame);
       var host = frame.contentWindow;
-      if (showing.pathname === next.pathname && host && host.__workbenchOptions && !host.__workbenchError) {
+      // Another iteration can bring its own source, so it loads the document again.
+      var sameIteration = showing.searchParams.get('iteration') === next.searchParams.get('iteration');
+      if (showing.pathname === next.pathname && sameIteration && host && host.__workbenchOptions && !host.__workbenchError) {
         frame.wbRequestedUrl = src;
         frame.wbLoadSequence = (frame.wbLoadSequence || 0) + 1;
         host.history.replaceState(host.history.state, '', next.href);

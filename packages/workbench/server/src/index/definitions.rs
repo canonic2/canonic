@@ -101,6 +101,17 @@ impl Definitions {
 fn read_literal(root: &Path, real_root: Option<&Path>, file: &str) -> Option<Record> {
     let path = root.join(file);
     let before = stamp(&path);
+    // An address could not name a path holding one of its marks. The catalog
+    // reports that problem before reading the entry, so the definition is
+    // neither parsed nor sent to the evaluator.
+    if file.contains([':', '+', '!', '~']) {
+        return Some(Record {
+            file: file.into(),
+            watched: vec![(file.into(), before)],
+            entry: Err("the path holds an address mark".into()),
+            docs: false,
+        });
+    }
     let raw = literal::parse(
         fs::read_to_string(&path).ok()?,
         path.extension().is_some_and(|ext| ext == "tsx"),

@@ -1,4 +1,5 @@
-/* Production acceptance: pages own artboards; ordinary scenarios stay alternatives. */
+/* Production acceptance: scenarios own their artboards and each artboard its
+   iterations; ordinary scenarios stay alternatives. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -24,6 +25,10 @@ async function main() {
   fs.copyFileSync(path.join(repo, 'packages/workbench/package.json'), path.join(fixtureWorkbench, 'package.json'));
   fs.symlinkSync(path.join(repo, 'packages/workbench/node_modules'), path.join(fixtureWorkbench, 'node_modules'), 'junction');
   fs.writeFileSync(path.join(folder, 'workbench.yaml'), `name: Acme
+implementations:
+  impl:
+    kind: workbench
+    label: Implementation
 collections:
   - name: Pages
     items:
@@ -38,10 +43,12 @@ collections:
         src: other.html
       - label: Comparison
         src: comparison.workbench.ts
+        implementations:
+          impl: comparison
 `);
   fs.writeFileSync(path.join(folder, 'form.html'), '<html><body><input aria-label="Name"><p>Form</p></body></html>');
   fs.writeFileSync(path.join(folder, 'other.html'), '<html><body>Other page</body></html>');
-  fs.writeFileSync(path.join(folder, 'comparison.workbench.ts'), `import {definePreview} from '@canonic2/workbench';export default definePreview({id:'comparison',adapter:'html',source:{entry:'./component.ts'},inputs:{text:'First'},scenarios:{default:{},alternate:{inputs:{text:'Alternate'}}},artboards:{one:{label:'One',width:320,height:120},two:{label:'Two',width:480,height:160,inputs:{text:'Second'}}}});`);
+  fs.writeFileSync(path.join(folder, 'comparison.workbench.ts'), `import {definePreview} from '@canonic2/workbench';const artboards={one:{label:'One',width:320,height:120},two:{label:'Two',width:480,height:160,inputs:{text:'Second'}}};const iterated={...artboards,two:{...artboards.two,iterations:{bold:{label:'Bold',inputs:{text:'Bold'}}}}};export default definePreview({id:'comparison',adapter:'html',source:{entry:'./component.ts'},inputs:{text:'First'},scenarios:{default:{artboards:iterated},alternate:{inputs:{text:'Alternate'},artboards},single:{artboards:{solo:{label:'Solo',width:200,height:100}}},plain:{inputs:{text:'Plain'}}}});`);
   fs.writeFileSync(path.join(folder, 'component.ts'), `export default function(canvas,context){const field=document.createElement('input');field.value=context.inputs.text;canvas.append(field);}`);
   const browser = new Browser(); let running, demo, design, handoff;
   try {
@@ -95,6 +102,12 @@ collections:
     await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.scenario===null)`);
     await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value='First only'`);
     assert.equal(await target.evaluate(`${frames}[1].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value`), 'Second');
+    await target.evaluate(`location.hash=location.hash.replace('comparison.workbench.ts','comparison.workbench.ts+two/bold')`);
+    await until(`${state}.artboards.length===2 && ${state}.artboards[1].view?.ready && ${state}.artboards[1].view.iteration==='bold' && ${state}.artboards[1].target.iteration==='bold'`);
+    assert.equal(await target.evaluate(`${frames}[1].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value`), 'Bold');
+    assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value`), 'First only', 'another iteration renders only its own artboard again');
+    assert.equal(await target.evaluate(`${state}.artboards[0].target.iteration`), null);
+    assert.equal(await target.evaluate('location.hash.includes("+two/bold")'), true);
     await target.evaluate('document.getElementById("artboards").shadowRoot.querySelectorAll("section button")[1].click()');
     await target.evaluate('document.getElementById("sizeSwitcher").shadowRoot.querySelector("[data-key=laptop]").click()');
     await until(`${state}.artboards[1].size.width===1512`);
@@ -116,9 +129,32 @@ collections:
     assert.ok(handoff, 'the original handoff button captures the complete canvas');
     assert.equal(handoff.payload.artboards.length, 2);
     assert.deepEqual(handoff.payload.artboards.map(b=>b.artboard), ['one','two']);
+    assert.deepEqual(handoff.payload.artboards.map(b=>b.iteration?.id || null), [null,'bold']);
+    assert.equal(handoff.text.split('- Iteration: Bold (bold)').length, 2, 'only the iterated artboard names its iteration');
     assert.ok(fs.existsSync(path.join(folder, handoff.payload.file)));
     await target.evaluate('document.getElementById("zoomValue").click();document.getElementById("zoomMenu").querySelectorAll("button")[1].click()');
     assert.equal(await target.evaluate('document.getElementById("zoomValue").textContent'), '100%');
+    // Another lens shows the authored artboards and keeps the iteration for the
+    // way back; the design lens renders it again.
+    const input = index => `${frames}[${index}].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value`;
+    await target.evaluate('document.querySelector(".wb-lens[data-lens=impl]").click()');
+    await until(`location.hash.endsWith('~impl') && ${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.lens==='impl')`);
+    assert.equal(await target.evaluate('location.hash.includes("+two/bold")'), true, 'a lens switch keeps the iteration part');
+    assert.equal(await target.evaluate(`${state}.artboards[1].view.iteration`), null, 'an implementation lens ignores the iteration');
+    assert.equal(await target.evaluate(input(1)), 'Second');
+    await target.evaluate('document.querySelector(".wb-lens[data-lens=design]").click()');
+    await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && !b.target.lens) && ${state}.artboards[1].view.iteration==='bold'`);
+    assert.equal(await target.evaluate(input(1)), 'Bold');
+    assert.equal(await target.evaluate('location.hash.includes("+two/bold")'), true);
+    // Each scenario shows its own artboards, starting from the authored design.
+    await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[2].click()');
+    await until(`${state}.artboards.length===1 && ${state}.artboards[0].view?.ready && ${state}.artboards[0].target.scenario==='single'`);
+    assert.deepEqual(await target.evaluate(`${state}.artboards.map(b=>[b.target.artboard,b.size.width,b.size.height])`), [['solo',200,100]]);
+    assert.equal(await target.evaluate('location.hash.includes("+")'), false, 'another scenario drops the iteration');
+    await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[3].click()');
+    await until(`${state}.artboards.length===1 && ${state}.artboards[0].view?.ready && ${state}.artboards[0].target.scenario==='plain'`);
+    assert.equal(await target.evaluate(`${state}.artboards[0].target.artboard || null`), null, 'a scenario without artboards shows its implicit one');
+    assert.equal(await target.evaluate(input(0)), 'Plain');
     await target.evaluate('location.hash="#other.html@mobile"');
     await until(`${state}.artboards.length===1 && ${state}.artboards[0].target.src==='other.html' && ${state}.artboards[0].view?.ready`);
     assert.equal(await target.evaluate(`${frames}.length`), 1);
@@ -166,7 +202,7 @@ collections:
     assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="loading"] wb-canvas').shadowRoot.querySelector('section button').textContent`), 'Feedback / Info · 320 × 180 · Loading…', 'a standalone pending canvas uses the supplied name instead of its source filename');
     assert.deepEqual(nestedApplicationResources, [], 'no transition or artboard starts the Workbench application inside content');
     assert.deepEqual(errors, []);
-    console.log('Page artboards passed: ordinary HTML and Button scenarios remain single views; Feedback has five declared artboards with no variant scenarios; independent sizes, controls, annotations, handoff and design examples work.');
+    console.log('Scenario artboards passed: ordinary HTML and Button scenarios remain single views; Feedback\'s default scenario declares five artboards; an iteration renders only its own artboard; independent sizes, controls, annotations, handoff and design examples work.');
   } finally { await browser.close(); await running?.close(); await demo?.close(); await design?.close(); fs.rmSync(folder, { recursive: true, force: true }); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

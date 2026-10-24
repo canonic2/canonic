@@ -34,7 +34,7 @@ destinations, the 200 ms outgoing-view grace period and supersession;
 `preview-sessions/` owns renderer transport,
 retention and the story catalog; `review/` owns capture and delivery workflows.
 Application composition and registration live under `../src/bootstrap/`.
-`../src/bootstrap/canvas.js` composes a preview page's explicit `artboards` into independent
+`../src/bootstrap/canvas.js` composes the selected scenario's declared `artboards` into independent
 `wb-canvas` artboards inside the existing canvas region. The existing shell
 continues to own its sidebar, top bar, toolbar, source/configuration/export
 dialogs and routing. Its controls target the selected instance; camera and
@@ -65,13 +65,16 @@ HTML and examples metadata in parallel. The spec owns isolation, accepted memory
 cost and shipping-code/installed-host evidence. Served standalone and portable
 pages explicitly start the same reusable page module once.
 
-`definePreview({ artboards: { id: { label, width, height, inputs } } })` declares
-1–32 children of one page. Width and height are integers from 1 to 8192; label
-and inputs are optional. Artboards are independent of `scenarios`: scenario switching
-shows an alternative page scenario, and ordinary scenarios or stories produce no
-extra artboards. The renderer receives `context.artboard`; artboard inputs are
-merged before scenario inputs. The native index delegates these definitions to
-the shared evaluator so validation and metadata match compilation.
+`scenarios: { id: { artboards: { id: { label, width, height, inputs, iterations } } } }`
+declares 1–32 artboards shown together for that scenario. Width and height are
+integers from 1 to 8192; label, inputs and iterations are optional. Different
+scenarios can declare different artboards; a scenario without them has one
+implicit artboard, whose iterations are declared on the scenario itself
+(`scenarios: { id: { iterations } }`). An iteration is scenario-shaped (source,
+inputs, fixtures, globals, requests, hooks) and merges after its artboard. The
+renderer receives `context.artboard` and `context.iteration`. The native index
+delegates these definitions to the shared evaluator so validation and metadata
+match compilation. The spec is [artboards and iterations](../../specs/pages/iterations.md).
 
 See [the support-system record](../../specs/canvas/multiple-artboards.md) and
 [the module plan](../../specs/canvas/artboard-system.md) for APIs and limits.
@@ -172,10 +175,17 @@ controls, plugins, and portable exports. The page index discovers them, and
 `workbench-server` compiles them, running project JavaScript in its Node
 evaluator.
 
-Scenario ids are kebab-case — they travel in a URL and in a screenshot's filename.
+Scenario ids are kebab-case, starting with a letter — they travel in a URL and
+in a screenshot's filename. A scenario's `label` is optional and defaults to the
+id in sentence case; a repeated id is dropped and reported.
 Declaring one here is half of it: the page has to answer to the id, which
-`scenarios.js` explains and does. A `src` can't hold `:`, `!`, or `~`, which mark the
-scenario, an example in the docs, and the lens in the address.
+`scenarios.js` explains and does. A scenario entry may list `iterations`, each
+`{ id, label? }` with a kebab-case id unique within the scenario and a label that
+defaults from the id; the page reads the selected one from `?iteration=` and
+`data-wb-iteration`, which `scenarios.js` also sets. A page whose only scenario
+lists iterations keeps that scenario on its entry. A `src` can't hold `:`, `+`,
+`!`, or `~`, which mark the scenario, the iteration, an example in the docs, and
+the lens in the address.
 
 Docs are a lens. A page's Markdown, its `docs` file or a `.md` `src`, places
 examples with fenced `example <id>` blocks, and each `docs` implementation the
@@ -200,8 +210,10 @@ artboard and is skipped in reference exports; a page whose only size is Resizabl
 gets one 1440 × 900 reference. Duplicate dimensions are captured once. See the
 [sizes contract](../../specs/canvas/sizes.md#design-system-export).
 
-Use **Configure pages** in the top bar’s More menu to add or remove collections and
-pages, edit labels and source paths, and select supported sizes. Saving
+Use **Configure pages** in the top bar’s More menu to add or remove collections,
+groups and pages, edit labels and source paths, and select supported sizes. A
+new group starts with one untitled page, because a group needs at least one;
+groups hold pages and don't nest. Saving
 rewrites only the `collections` block in `workbench.yaml`; implementations and
 comments outside that block are preserved. Advanced scenario, implementation, and
 code mappings remain in the YAML and survive form edits.
@@ -538,7 +550,7 @@ implementation's own address; Workbench never switches to a stream.
 | `config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |
 | `server/node/yaml.js` | the part of YAML a config is written in |
 | `manifest.js` | the rules for implementations, lenses and code pointers — shared with the server |
-| `address.js` | reads and writes the hash: src, scenario, width, lens |
+| `address.js` | reads and writes the hash: src, scenario, iterations, width, lens |
 | `lenses.js` | where a lens points: a url implementation's page, a single story |
 | `describe.js` | names the element under a point — here, and inside pages the server's browser opens |
 | `workbench.js` | routing, frame loading, resizing, the lens switcher, stories, the source menu |
@@ -674,6 +686,15 @@ canvas's to keep, like the width: a pick that names none keeps the one the lens
 switcher is on, and a page without it shows its default lens. Once the canvas has settled, the
 address is rewritten to say exactly what's showing.
 
+A `+` part after the scenario names an artboard's iteration:
+`#jobs.workbench.ts:empty+illustrated@laptop` for a scenario's implicit
+artboard, `#feedback.workbench.ts+warning/bold+info/calm@laptop` for declared
+artboards, written in the scenario's artboard order. The shell keeps only
+iterations the selected scenario declares; another page, scenario or a followed
+link starts from the authored design, and a lens switch keeps them. Only the
+design lens renders them. Each renderer's frame URL carries `&iteration=` beside
+`&artboard=`, and another iteration renders only the artboard it belongs to.
+
 **Fit** alone follows the available workbench space. Device presets keep their
 declared width and height; **Resizable** likewise keeps its last manually
 chosen dimensions. The page always lays out at that real size. What changes
@@ -694,8 +715,8 @@ It is also how the workbench is driven from outside. Embedded in an editor —
 the Workbench extension puts it in a tab with the page list in the sidebar —
 a picked page arrives as a `wb-go` message carrying that same hash, from the
 host and only the host, and the workbench answers every routing with a
-`wb-here` saying which page and scenario it settled on — and which lens, which
-the editor's list reads past. An editor pick and a copied link are the same
+`wb-here` saying which page and scenario it settled on — and which lens and
+iteration, which the editor's list reads past. An editor pick and a copied link are the same
 instruction, which is why there is only one of them to maintain, and
 `wb-here` is what keeps the sidebar's selection current when the canvas moves on its own —
 a link followed in a live preview.

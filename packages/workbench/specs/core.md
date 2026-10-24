@@ -26,8 +26,10 @@ parts of the interface (sidebar, top bar, canvas, toolbar, view controls) are
 defined in [glossary](glossary.md), which code, guides, and specs follow. Pages
 nest as Space › Collection › (Group) › Page › Scenario › Artboard › Iteration,
 with an implicit scenario and artboard when none is declared
-([the page hierarchy](glossary.md#the-page-hierarchy)); [artboards and iterations](pages/iterations.md)
-owns the lower levels.
+([the page hierarchy](glossary.md#the-page-hierarchy)). The
+[page tree](pages/page-tree.md) owns spaces, collections, groups and pages;
+[scenarios](pages/scenarios.md) owns scenarios; [artboards and iterations](pages/iterations.md)
+owns the levels below.
 
 ## Configuration and serving
 
@@ -37,9 +39,10 @@ owns the lower levels.
   (`/<path>.workbench.ts`) with assets under `/_workbench/previews/`, all on
   one origin. Workbench does not copy files into the project.
 - `workbench.local.yaml` is optional. It replaces top-level values except that
+  `spaces` merge by key (each space as the whole file merges), and
   `implementations` and space `sizes` merge by key, one level deep. A nested
   `start` block supplied locally replaces the whole committed `start` block,
-  and a local `previews` value replaces the committed one.
+  and a local `previews` or `collections` value replaces the committed one.
 - The config accepts block YAML. Names and IDs used in addresses are checked;
   invalid entries are reported rather than silently converted into pages.
   The browser uses `manifest.js`; the native server implements matching
@@ -47,7 +50,8 @@ owns the lower levels.
 - `collections` contains the ordered collections. Each collection contains pages
   and optionally one level of groups (`group:`). `collections` may be omitted
   unless `previews: false` and no implementation has a catalog; then a config
-  with no usable page fails with *nothing to show*.
+  with no usable page fails with *nothing to show*. Entry rules, imports,
+  merging and order are in the [page tree](pages/page-tree.md).
 - `previews` is a map (`include`, `config`, `icon`, `icons`, `lensLabel`) or `false`. Discovery is on by
   default; `false` turns it off and no preview code runs. An invalid value is
   a problem and leaves previews off until fixed. Discovery, definitions, and
@@ -80,11 +84,13 @@ services exist in the editor, standalone browser and portable viewer.
 
 - Every configuration, catalog, preview, and implementation problem names
   where it came from, for example
-  `Pages › Auth › Sign in: scenario id “Error” must be kebab-case`.
-- Every surface shows the same shared problems list: the VS Code
-  sidebar above its page list, and the canvas wherever it runs (the editor tab,
-  **Open Canvas in Browser**, and a standalone server). `/_workbench/config`
-  lists them under `problems`.
+  `Pages › Auth › Sign in: implementation “dev” maps scenario “locked”, which this page doesn’t declare.`
+- Every sidebar shows the same shared problems list above its page list: the
+  VS Code sidebar, and the sidebar at the left edge of a browser window
+  (**Open Canvas in Browser** and a standalone server). The canvas in a VS Code
+  editor tab has no sidebar of its own; the VS Code sidebar beside it shows the
+  list. `/_workbench/config` lists them under `problems`, and a browser window
+  without a server shows its own reader's problems.
 - The list covers every entry dropped while reading the YAML (collections,
   groups, pages, scenarios, and invalid `src` values), implementation,
   size, mapping, code-pointer, `previews`, catalog, and
@@ -104,19 +110,20 @@ services exist in the editor, standalone browser and portable viewer.
 
 ## Selection and navigation
 
-- One selection is encoded as `#<src>[:<scenario>]@<size>[~<lens>]`. For example,
-  `#pages/sign-in.html:error@mobile~staging` names a page, scenario, artboard size,
-  and implementation. The default scenario and design lens are omitted; the
-  workbench writes the resolved size key for an artboard and omits it in a
-  docs lens. Docs addresses can also name `!<example>`. It normalizes the
-  address after routing to the view it actually shows. Selected iterations
-  follow the scenario as `+<iteration>` or `+<artboard>/<iteration>` parts
-  ([address](pages/iterations.md#address)); `+` is reserved like `:`, `!`,
-  `~` and `@`.
+- One selection is encoded as
+  `#<src>[:<scenario>][+<iteration> | +<artboard>/<iteration> …][!<example>][@<size>][~<lens>]`.
+  For example, `#pages/sign-in.html:error@mobile~staging` names a page,
+  scenario, artboard size, and implementation. The first scenario and the
+  design lens are omitted; the workbench writes the resolved size key for an
+  artboard and omits it in a docs lens, which can name `!<example>` instead.
+  Selected iterations follow the scenario
+  ([address](pages/iterations.md#address)). It normalizes the address after
+  routing to the view it actually shows. `:`, `+`, `!` and `~` are reserved
+  in page paths, so the parts split unambiguously.
 - The sidebar lists the collections, then the chosen collection's pages;
-  search finds pages across collections, including scenario and group labels. A
-  page with multiple scenarios expands to its scenarios. A single-scenario authored
-  page does not expand.
+  search finds pages across collections, including scenario and group labels.
+  A page lists its scenarios under it only when it has two or more
+  ([page list](pages/page-tree.md#the-page-list)).
 - A lens choice persists across page picks. A page without that lens shows
   its design. An imported implementation-only page always uses its own lens;
   a discovered TypeScript preview uses its own authored lens. Every lens has
@@ -225,16 +232,6 @@ stays unchanged by this refactor.
 
 ## Implementation gaps
 
-- **Dropped authored entries are invisible in VS Code.** Problems for dropped
-  collections, groups, pages, and scenarios go only to the canvas webview's
-  console. The native [config reader](../server/src/config/read.rs) skips them, so the sidebar's
-  problems list never shows them.
-- **No problems list in a standalone browser.** The canvas does not display
-  `problems` from `/_workbench/config`; in a browser, catalog and preview
-  failures are visible only by reading that route.
-- **No sidebar problems when nothing is imported.** With `previews: false` and
-  no catalog, the VS Code sidebar builds from the YAML without asking the
-  server, so implementation and mapping problems are not shown there.
 - **Some failures never become problems.** A stopped Storybook used only by
   mappings, a mapped Simulator whose device is not booted, and an authored
   entry with an invalid `src` or scenario id fail only on the canvas or are

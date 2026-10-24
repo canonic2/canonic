@@ -240,7 +240,7 @@ What works where:
 | Start commands | Yes | No |
 | Design-system export | Yes | Yes |
 | Switch spaces | Yes; add and remove in VS Code | Between the folders it was given |
-| Problems list | VS Code's sidebar only | No; read the [config route](troubleshooting.md#read-the-resolved-config) |
+| Problems list | Yes, in VS Code's sidebar | Yes, above the page list |
 
 ## Platform support
 

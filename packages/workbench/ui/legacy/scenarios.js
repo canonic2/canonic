@@ -42,6 +42,17 @@
 
       Semicolons between them, name=value or a bare name for a boolean.
 
+   A scenario can also list iterations in workbench.yaml: other takes on its
+   design, kept beside it. The selected one rides in the same way:
+
+     ?iteration=inline-hint   the page renders that iteration
+     no parameter             no iteration — the design as authored
+
+   It sets data-wb-iteration on <html> (absent with no iteration), and
+   data-wb-iteration-only / data-wb-iteration-not keep or remove elements
+   exactly as the scenario attributes do. An "only" element is removed when
+   no iteration is selected.
+
    Like actions.js, this is part of the compatibility bundle put into the page
    by the extension's server rather than referenced by the project.
 
@@ -49,14 +60,29 @@
    already upgraded and take the attributes normally.
 */
 (function () {
-  /* Ids are kebab-case: they go in a URL, in a filename for the screenshot,
-     and — below — straight into a selector. Anything else is somebody's
-     typo, and the default scenario is the safe thing to show. */
-  var flag = /[?&]scenario=([^&]*)/.exec(location.search);
-  var raw = flag ? decodeURIComponent(flag[1]) : '';
-  var scenario = /^[a-z0-9-]+$/.test(raw) ? raw : 'default';
+  /* Ids are kebab-case — a lowercase letter, then lowercase letters and
+     digits in single-hyphen parts, the rule every scenario, artboard and
+     iteration id follows: they go in a URL, in a filename for the
+     screenshot, and — below — straight into a selector. Anything else is
+     somebody's typo, and the default scenario (or the authored design) is
+     the safe thing to show. */
+  function param(name) {
+    var flag = new RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
+    try { return flag ? decodeURIComponent(flag[1]) : ''; } catch (_) { return ''; }
+  }
+  function valid(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(value);
+  }
+  var scenario = valid(param('scenario')) ? param('scenario') : 'default';
+  /* An invalid iteration id shows the authored design. */
+  var iteration = valid(param('iteration')) ? param('iteration') : null;
 
-  document.documentElement.setAttribute('data-wb-scenario', scenario);
+  function mark() {
+    document.documentElement.setAttribute('data-wb-scenario', scenario);
+    if (iteration) document.documentElement.setAttribute('data-wb-iteration', iteration);
+    else document.documentElement.removeAttribute('data-wb-iteration');
+  }
+  mark();
 
   function ids(value) {
     return (value || '').split(/\s+/).filter(Boolean);
@@ -66,15 +92,28 @@
     Array.prototype.forEach.call(document.querySelectorAll(selector), fn);
   }
 
-  function apply(next) {
-    if (typeof next === 'string') scenario = /^[a-z0-9-]+$/.test(next) ? next : 'default';
-    document.documentElement.setAttribute('data-wb-scenario', scenario);
+  /* apply(scenario, iteration) re-applies a render's selection; apply() with
+     no scenario keeps the one from the URL. */
+  function apply(next, nextIteration) {
+    if (typeof next === 'string') {
+      scenario = valid(next) ? next : 'default';
+      iteration = valid(nextIteration) ? nextIteration : null;
+    }
+    mark();
     each('[data-wb-scenario-only]', function (el) {
       if (ids(el.getAttribute('data-wb-scenario-only')).indexOf(scenario) === -1) el.remove();
     });
 
     each('[data-wb-scenario-not]', function (el) {
       if (ids(el.getAttribute('data-wb-scenario-not')).indexOf(scenario) > -1) el.remove();
+    });
+
+    each('[data-wb-iteration-only]', function (el) {
+      if (!iteration || ids(el.getAttribute('data-wb-iteration-only')).indexOf(iteration) === -1) el.remove();
+    });
+
+    each('[data-wb-iteration-not]', function (el) {
+      if (iteration && ids(el.getAttribute('data-wb-iteration-not')).indexOf(iteration) > -1) el.remove();
     });
 
     /* Only the active scenario's attribute is read — the others stay in the

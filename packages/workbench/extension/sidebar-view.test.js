@@ -260,8 +260,10 @@ test('a picked row reaches the canvas with its scenario', function () {
   var sidebar = resolveView(true, { open: function (target) { opened.push(JSON.parse(JSON.stringify(target))); } });
   sidebar.receive({ type: 'canonic-pick', hash: 'pages/sign-in.html:error' });
   sidebar.receive({ type: 'canonic-pick', hash: 'docs/card.md' });
+  sidebar.receive({ type: 'canonic-pick', hash: 'pages/sign-in.html:error+inline-hint' });
   assert.deepEqual(opened, [
     { src: 'pages/sign-in.html', scenario: 'error' },
     { src: 'docs/card.md', scenario: null },
+    { src: 'pages/sign-in.html', scenario: 'error', iteration: 'inline-hint' },
   ]);
 });

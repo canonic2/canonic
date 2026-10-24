@@ -91,6 +91,57 @@ test('opens a loading tab immediately and reuses it when the server becomes read
   f.dispose();
 });
 
+test('passes on the iteration the canvas reports, and none when it shows the authored design', async function () {
+  var f = fixture();
+  var seen = [];
+  f.panel.onHere(function (at) { seen.push(plain(at)); });
+  await f.panel.show(f.context, Promise.resolve('http://127.0.0.1:3579/_workbench/'), 'jobs.workbench.ts');
+  f.receive({ type: 'wb-here', src: 'jobs.workbench.ts', scenario: 'empty', iteration: 'illustrated' });
+  f.receive({ type: 'wb-here', src: 'feedback.workbench.ts', scenario: 'default', artboard: 'warning', iteration: 'bold' });
+  f.receive({ type: 'wb-here', src: 'jobs.workbench.ts', scenario: 'empty' });
+  assert.deepEqual(seen.slice(-3), [
+    { src: 'jobs.workbench.ts', scenario: 'empty', iteration: 'illustrated' },
+    { src: 'feedback.workbench.ts', scenario: 'default', iteration: 'bold', artboard: 'warning' },
+    { src: 'jobs.workbench.ts', scenario: 'empty' },
+  ]);
+  f.dispose();
+});
+
+test('picking the page and scenario showing an iteration returns to the authored design', async function () {
+  var f = fixture();
+  var url = Promise.resolve('http://127.0.0.1:3579/_workbench/');
+  await f.panel.show(f.context, url, 'jobs.workbench.ts');
+  f.receive({ type: 'wb-here', src: 'jobs.workbench.ts', scenario: 'empty', iteration: 'illustrated' });
+  await f.panel.show(f.context, url, 'jobs.workbench.ts:empty');
+  assert.deepEqual(plain(f.messages.filter(function (m) { return m.type === 'canonic-go'; })),
+    [{ type: 'canonic-go', hash: 'jobs.workbench.ts:empty' }]);
+  f.receive({ type: 'wb-here', src: 'jobs.workbench.ts', scenario: 'empty' });
+  await f.panel.show(f.context, url, 'jobs.workbench.ts:empty');
+  assert.equal(f.messages.filter(function (m) { return m.type === 'canonic-go'; }).length, 1,
+    'the same page without an iteration is still a repeat');
+  f.dispose();
+});
+
+test('a pick of the page and scenario is a real move while any artboard shows an iteration', async function () {
+  var f = fixture();
+  var url = Promise.resolve('http://127.0.0.1:3579/_workbench/');
+  var seen = [];
+  f.panel.onHere(function (at) { seen.push(plain(at)); });
+  await f.panel.show(f.context, url, 'feedback.workbench.ts');
+  /* The selected artboard (Info) shows its authored design; Warning shows Bold. */
+  f.receive({ type: 'wb-here', src: 'feedback.workbench.ts', scenario: null, iterations: { warning: 'bold' } });
+  assert.deepEqual(seen.at(-1), { src: 'feedback.workbench.ts', scenario: null },
+    'the sidebar still reads only the selected artboard');
+  await f.panel.show(f.context, url, 'feedback.workbench.ts');
+  assert.deepEqual(plain(f.messages.filter(function (m) { return m.type === 'canonic-go'; })),
+    [{ type: 'canonic-go', hash: 'feedback.workbench.ts' }]);
+  f.receive({ type: 'wb-here', src: 'feedback.workbench.ts', scenario: null });
+  await f.panel.show(f.context, url, 'feedback.workbench.ts');
+  assert.equal(f.messages.filter(function (m) { return m.type === 'canonic-go'; }).length, 1,
+    'with every artboard on its authored design the same pick is a repeat');
+  f.dispose();
+});
+
 test('closing the loading tab prevents delayed startup from reopening it', async function () {
   var f = fixture();
   var finish;

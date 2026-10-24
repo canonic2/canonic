@@ -162,7 +162,7 @@ previews:
 | `include` | list of glob patterns | no | Which files are preview definitions, relative to the project root. Replaces the default patterns. Patterns can't start with `/` or contain `..`. |
 | `config` | path | no | The preview configuration file, relative to the project root. Defaults to `workbench.config.ts`. See [Custom adapters](custom-adapters.md#configuration-file). |
 | `lensLabel` | nonempty string | no | Label of discovered previews' authored lens. Defaults to **Preview**. An explicit page's `lensLabel` takes precedence. Does not rename docs lenses or `workbench` implementations, which use implementation `label`. |
-| `icon` | Lucide icon name | no | Fallback for discovered preview pages and collections. Defaults to `component`. |
+| `icon` | Lucide icon name | no | Fallback for discovered preview pages, and for collections of discovered previews and docs pages. Defaults to `component`. |
 | `icons` | map of title prefix to Lucide icon name | no | The longest matching prefix wins; matches end at a `/` boundary or the whole title. |
 
 `previews.lensLabel` sets a display label, such as **Design**, without changing
@@ -240,8 +240,10 @@ in the configuration and is hidden from the collection list.
 
 Collection icons use the collection name as the prefix lookup target. Highest
 priority first: an explicit handwritten collection icon, a `previews.icons`
-mapping, configured `previews.icon`, then built-in defaults. A collection of
-previews defaults to `component`. Conflicting mappings or fallbacks at the
+mapping, configured `previews.icon`, then built-in defaults. This holds for
+collections of discovered previews and docs pages alike. A collection of
+previews defaults to `component`, one of docs pages to `book-open`, and a
+catalog's to its `catalogIcon` or `smartphone`. Conflicting mappings or fallbacks at the
 same priority use the alphabetically first icon name. Import order does not
 decide the icon.
 An authored collection without an explicit icon keeps `file-text` when
@@ -309,11 +311,13 @@ scenarios:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | kebab-case string | yes | Travels in the URL (`?scenario=error`), in the address, and in screenshot filenames. Lowercase letters, digits, and hyphens only. |
-| `label` | string | yes | The scenario's name in the sidebar and the handoff. |
+| `id` | kebab-case string | yes | Travels in the URL (`?scenario=error`), in the address, and in screenshot filenames. Starts with a lowercase letter, then lowercase letters and digits in parts joined by single hyphens, such as `wrong-password` or `step-2`. |
+| `label` | string | no | The scenario's name in the sidebar and the handoff. Defaults to the id in sentence case: `wrong-password` reads **Wrong password**. |
 
 - The **first** scenario is the page as authored, whatever its id. The page loads
   without a `?scenario=` parameter for it. By convention it is called `default`.
+- A scenario without an id, with an invalid id, or with an id the page already
+  declared is dropped and reported; the first of a repeated id is kept.
 - A page with fewer than two scenarios shows no scenarios in the page list.
 - Declaring a scenario only adds it to the sidebar. The page has to answer to the
   id; see [Pages and scenarios](pages-and-scenarios.md#scenarios).
@@ -680,21 +684,16 @@ nothing loads until it is fixed.
 Workbench reports what it can't use rather than guessing, and builds
 everything else:
 
-- A page, group, collection, scenario, or implementation that is invalid is
-  dropped. Its problem names where it was, such as
-  `Pages › Auth › Sign in: scenario id “Error” must be kebab-case`.
-- In the canvas, every problem found while reading the file is written to the
-  browser console.
-- `GET /_workbench/config` on the workbench server lists, under `problems`,
-  problems with implementations, previews, sizes, pages' implementation
-  mappings, and `code`, plus catalogs and previews that couldn't load, and
-  [docs problems](docs-pages.md#requirements-and-problems). It sits
-  alongside the config as your machine resolves it. A page dropped for a bad
-  `src`, label, scenario id, or group is left out of it without a problem, so
-  check the console for those. See
+- A page, group, collection, scenario, or implementation that is invalid or
+  repeated is dropped. Its problem names where it was, such as
+  `Pages › Auth › Sign in: scenario id “Error” must be kebab-case — it travels in a URL.`
+- The problems list above the page list shows every problem, in VS Code's
+  sidebar and in a browser window's sidebar.
+- `GET /_workbench/config` on the workbench server lists the same problems
+  under `problems`, with catalogs and previews that couldn't load and
+  [docs problems](docs-pages.md#requirements-and-problems), alongside the
+  config as your machine resolves it. See
   [Troubleshooting](troubleshooting.md#read-the-resolved-config).
-- When previews or a catalog are on, the problems list in VS Code's sidebar
-  shows the same problems above the page list.
 
 ## Editing with the form
 

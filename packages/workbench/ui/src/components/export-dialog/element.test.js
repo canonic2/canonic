@@ -45,7 +45,7 @@ void test(
     if(window.importRegistered || !window.registeredClass) throw new Error('Registration must be explicit and repeatable');
     const el=document.querySelector('wb-export-dialog'), events=[];
     if(el.pages[0].id!=='early') throw new Error('Input before registration was lost');
-    el.pages=[{id:'a',label:'A'},{id:'b',label:'B'}]; el.collections=['Pages']; el.current={page:'a',width:777,height:600};
+    el.pages=[{id:'a',label:'A'},{id:'b',label:'B'}]; el.collections=['Pages']; el.current={page:'a',artboard:'warning',iteration:'bold',width:777,height:600};
     el.addEventListener('wb-export-request',e=>events.push(e.detail));
     document.getElementById('opener').focus(); el.show();
     const root=el.shadowRoot, field=n=>root.querySelector('[name='+n+']');
@@ -62,6 +62,8 @@ void test(
     assert.equal(result.visualDefault, 'current');
     assert.equal(result.events[0].format, 'pdf');
     assert.equal(result.events[0].current.width, 777);
+    assert.equal(result.events[0].current.artboard, 'warning');
+    assert.equal(result.events[0].current.iteration, 'bold');
     assert.deepEqual(result.events[1].pages, ['b']);
     assert.equal(result.events.length, 2);
     assert.ok(result.closed);

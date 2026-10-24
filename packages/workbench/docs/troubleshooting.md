@@ -56,13 +56,11 @@ Use **Workbench: Copy Canvas URL** for the actual port. The answer includes:
   (`local`) were read.
 
 Read `problems` first whenever a lens, story, preview, catalog page, docs
-example, or source link is missing. A hand-written page dropped for a bad
-`src`, label, scenario id, or group isn't listed there; see
+example, or source link is missing, or a hand-written page was dropped; see
 [A page is missing from the list](#a-page-is-missing-from-the-list).
 
-In VS Code, the problems list in the sidebar shows the same problems when
-TypeScript previews or a catalog are on. A standalone browser doesn't list
-them, so read the config route there.
+The problems list above the page list shows the same problems, in VS Code's
+sidebar and in a browser window's sidebar.
 
 ### Check a Storybook title
 
@@ -122,13 +120,13 @@ See [YAML that the reader accepts](configuration.md#yaml-that-the-reader-accepts
 ## A page is missing from the list
 
 A page, group, or collection that can't be used is dropped, and the rest of
-the list still builds. These problems are written to the canvas's console,
-not to the config route: in VS Code, run
-**Developer: Open Webview Developer Tools** and read the console. The usual
-reasons:
+the list still builds. The problems list and `problems` in the config route
+name each one and why. The usual reasons:
 
 - It has no `label` or no `src`.
-- Its `src` starts with `/`, contains `..`, or contains `:`, `!`, or `~`.
+- Its `src` starts with `/`, contains `..`, or contains `:`, `+`, `!`, or `~`.
+- Another page earlier in the list has the same `src`, or another collection
+  has the same name; the first one is kept.
 - It is in a group inside another group. Groups don't nest.
 - Its collection (its `collections` entry) has no `name`.
 

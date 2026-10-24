@@ -38,6 +38,7 @@
   --wb-accent: #00a1ff; /* Canonic blue, straight from the mark */
   --wb-accent-strong: #0a7fd4; /* the same blue, dark enough for white text */
   --wb-accent-text: #4cbcff;   /* the same blue as text on the dark panel */
+  --wb-warning: #cca700;       /* problems, as VS Code's warning colour */
 
   /* The artboard's own backing, behind a page that hasn't painted yet. White
      because that is what an unstyled document is, not because any particular
@@ -49,6 +50,24 @@
 
   /* Dark scrollbars and native controls inside the chrome. */
   color-scheme: dark;
+}
+
+/* The space's problems above its page list, as the VS Code sidebar shows
+   them: what was dropped while reading the configuration, and what failed to
+   import, beside the list it affects. */
+.wb-problems {
+  margin: 0 8px 8px;
+  padding: 8px;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--wb-warning);
+  border: 1px solid var(--wb-warning);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.wb-problems[hidden] {
+  display: none;
 }
 
 .wb-export-progress {
@@ -899,7 +918,7 @@ textarea,
 
 .wb-config-nav-collection-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
   align-items: center;
   gap: 2px;
   margin-bottom: 3px;
@@ -1254,6 +1273,10 @@ textarea,
   cursor: pointer;
   font: inherit;
   font-size: 13px;
+}
+
+.wb-config-inspector-action + .wb-config-inspector-action {
+  margin-left: 8px;
 }
 
 .wb-config-danger {

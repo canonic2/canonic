@@ -131,6 +131,30 @@ fn editor_saves_keep_authored_lens_labels() {
 }
 
 #[test]
+fn a_group_added_in_the_form_is_written_as_a_group_entry() {
+    let dir = project(
+        "name: Acme # keep\ncollections:\n  - name: Pages\n    items:\n      - label: Home\n        src: index.html\n",
+    );
+    let updated = json!([{
+        "name": "Pages",
+        "items": [
+            { "label": "Home", "src": "index.html" },
+            { "group": "Authentication", "items": [
+                { "label": "Sign in", "src": "pages/sign-in.html" },
+            ] },
+        ],
+    }]);
+    update_collections(at(&dir), &updated).expect("saved");
+    assert_eq!(
+        body(&dir),
+        "name: Acme # keep\ncollections:\n  - name: Pages\n    items:\n      - label: Home\n        src: index.html\n      - group: Authentication\n        items:\n          - label: Sign in\n            src: pages/sign-in.html\n"
+    );
+    let group = &config(at(&dir))["collections"][0]["items"][1];
+    assert_eq!(group["group"], "Authentication");
+    assert_eq!(group["items"][0]["src"], "pages/sign-in.html");
+}
+
+#[test]
 fn saving_pages_replaces_only_the_collections_block() {
     let dir = project(
         "name: Acme # keep this comment\nimplementations:\n  dev:\n    kind: url\n    base: http://localhost:3000\ncollections:\n  - name: Old\n    items:\n      - label: Old page\n        src: old.html\n",

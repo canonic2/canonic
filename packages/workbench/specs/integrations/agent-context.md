@@ -4,8 +4,7 @@ This spec covers how AI chats in the editor learn which page the user has
 open in the workbench canvas. It builds on
 [Copy a reference](../../docs/canvas.md#copy-a-reference), the
 [VS Code extension contract](vscode-extension.md), and the canvas host
-messages in [workbench.js](../../ui/legacy/workbench.js). Facts about each
-agent live in the shared [AI agents research](../../../../docs/agents/README.md).
+messages in [workbench.js](../../ui/legacy/workbench.js).
 
 ## Purpose and scope
 
@@ -42,12 +41,19 @@ See the [rendering flow](../system/rendering-flow.md).
 
 - the page's label and design file (`src`);
 - its story (label and id) on a Storybook lens, otherwise its scenario (label and
-  id, with the same fallback to the first or `default` scenario);
+  id): the declared scenario matching the view, else the page's first listed
+  scenario; when the page lists none, or a lens has no scenario map,
+  `{ id: 'default', label: 'Default' }`;
+- the iteration the artboard shows, if any, as `` - Iteration: <Label> — `<id>` ``,
+  followed by `` - Iteration source: `<path>` `` when the iteration has a source.
+  The reference does not name the declared artboard;
 - the lens (label and key) with its upstream implementation address, or the
   resolved authored lens label.
 
 The composed canvas's reference additionally names every artboard's space,
 dimensions and status through [review/reference.js](../../ui/src/modules/review/reference.js).
+Each version-2 artboard record also carries `artboard` (the declared artboard
+ID) and `iteration` when they apply.
 The legacy singleton reference omits dimensions; that does not limit the
 complete canvas record.
 
@@ -55,7 +61,8 @@ complete canvas record.
 
 - [agent-context.js](../../ui/legacy/agent-context.js) builds the view with
   `wbReference.text()`, the function behind **Copy reference**, so the two
-  can't differ. It adds the ids: `src`, `scenario` or `story`, and `lens`.
+  can't differ. It adds the ids: `src`, `scenario` or `story`, `lens`, and
+  `iteration` when the view shows one. The server keeps the same fields.
 - Every canvas posts its view to `POST /_workbench/view` under a random
   client id: when it settles on a page (each `wb-here`), on `hashchange`
   and `wb-frame-change`, and every 30 seconds as a heartbeat. The VS Code tab
@@ -82,7 +89,7 @@ workbench runs its own server.
 - A killed server leaves its file behind. Readers must check that `root` in
   the response is their project, because another space's server may hold
   that port by then.
-- Projects should ignore `.canonic/.workbench/`, as this repository does.
+- Projects should ignore `.canonic/.workbench/`.
 
 ## Delivery to agents
 
@@ -124,10 +131,9 @@ definitions before they can run.
 - An Ask agent action that opens the installed agent with the reference.
 - Implicit canvas context where an editor exposes a supported provider API.
 
-These integrations require a capability review against the
-[agent research](../../../../docs/agents/README.md) before implementation.
-No proposed editor API or specific host version is assumed available by this
-contract.
+Each integration requires a review of the editor's documented capabilities
+before implementation. No proposed editor API or specific host version is
+assumed available by this contract.
 
 ## Acceptance criteria
 
@@ -158,9 +164,6 @@ contract.
   deliberate handoff action.
 - Agent configuration owns generated project integration. Editor-specific
   registration must not introduce a second context model or conflicting files.
-- Agent-specific capabilities and external API status belong in
-  [agent research](../../../../docs/agents/README.md), not duplicated
-  version claims in this product contract.
 
 ## Open questions
 

@@ -10,7 +10,7 @@ use super::client::{BASE, EntryAssets, EntryKind, Style, preview_module_source};
 use super::docs;
 use super::entries::{
     DocsEntry, DocsExamples, PreviewEntry, SourceImport, digest, docs_slug, entry_slug,
-    preview_entry_source,
+    iteration_sources, preview_entry_source,
 };
 use super::exports::Resolution;
 use super::host::{EntryRequest, Host, Module, Snapshot};
@@ -577,12 +577,15 @@ impl Previews {
             } else {
                 base
             };
-            let entry = source["entry"].as_str().context("source entry")?;
-            sources.push(SourceImport::Module {
-                scenario,
-                file: text(&crate::paths::resolve(directory, entry)),
-                export_name: source["export"].as_str().unwrap_or("default").to_owned(),
-            });
+            let iterations = iteration_sources(&scenario, &spec);
+            for (key, source) in std::iter::once((scenario, source)).chain(iterations) {
+                let entry = source["entry"].as_str().context("source entry")?;
+                sources.push(SourceImport::Module {
+                    scenario: key,
+                    file: text(&crate::paths::resolve(directory, entry)),
+                    export_name: source["export"].as_str().unwrap_or("default").to_owned(),
+                });
+            }
         }
         let adapter_import =
             project::adapter_import(config, &self.root, &self.package.preview_dir, adapter)

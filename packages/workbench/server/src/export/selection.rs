@@ -1,12 +1,18 @@
 //! Which planned references an export request captures: its scenarios, sizes
-//! and docs lens, or exactly the current view once. Pure.
+//! and docs lens with every declared iteration, or exactly the current view,
+//! with its iteration, once. Pure.
 use super::paths::query_param;
-use super::request::ExportRequest;
+use super::request::{CurrentView, ExportRequest};
 use super::types::Reference;
 use std::collections::BTreeSet;
 
 fn present(text: Option<&str>) -> Option<&str> {
     text.filter(|text| !text.is_empty())
+}
+
+/// The iteration a current view shows; implementation lenses ignore it.
+fn current_iteration(current: &CurrentView) -> Option<&str> {
+    present(current.iteration.as_deref()).filter(|_| present(current.lens.as_deref()).is_none())
 }
 
 /// The references `request` asks for, each page and variant once.
@@ -52,6 +58,9 @@ pub(crate) fn select_captures(captures: Vec<Reference>, request: &ExportRequest)
             {
                 continue;
             }
+            if reference.iteration.as_deref() != current_iteration(current) {
+                continue;
+            }
         } else {
             if !request.scenarios.is_empty() && !request.scenarios.contains(&reference.scenario) {
                 continue;
@@ -73,9 +82,22 @@ pub(crate) fn select_captures(captures: Vec<Reference>, request: &ExportRequest)
             present(current.size.as_deref())
                 .unwrap_or("current")
                 .clone_into(&mut selected.size);
-            selected.variant = format!("{}-current", selected.scenario);
+            selected.variant = match &selected.iteration {
+                Some(iteration) => format!("{}+{iteration}-current", selected.scenario),
+                None => format!("{}-current", selected.scenario),
+            };
         }
-        if seen.insert(format!("{}:{}", selected.page, selected.variant)) {
+        // Identity fields as well as the variant name: `+compact-tablet-landscape`
+        // could be either `compact` at `tablet-landscape` or `compact-tablet` at
+        // `landscape`, while docs example crops differ only by their variant.
+        if seen.insert((
+            selected.page.clone(),
+            selected.scenario.clone(),
+            selected.artboard.clone(),
+            selected.iteration.clone(),
+            selected.size.clone(),
+            selected.variant.clone(),
+        )) {
             out.push(selected);
         }
     }
@@ -153,6 +175,79 @@ mod tests {
             (Some("success"), 500)
         );
         assert!(selected[0].url.contains("artboard=success"));
+    }
+
+    #[test]
+    fn references_whose_variant_names_coincide_are_both_kept() {
+        let shot = |iteration: &str, size: &str| Reference {
+            iteration: Some(iteration.into()),
+            variant: format!("default+{iteration}-{size}"),
+            ..reference("jobs", "default", size, "http://localhost/jobs")
+        };
+        let captures = vec![
+            shot("compact", "tablet-landscape"),
+            shot("compact-tablet", "landscape"),
+        ];
+        assert_eq!(captures[0].variant, captures[1].variant);
+        let all = read_request(&json!({ "format": "images" })).expect("request");
+        assert_eq!(select_captures(captures, &all).len(), 2);
+    }
+
+    #[test]
+    fn declared_variants_include_iterations_and_the_current_view_captures_its_own_iteration() {
+        let board = |id: &str, iteration: Option<&str>| Reference {
+            page: "feedback".into(),
+            scenario: "default".into(),
+            artboard: Some(id.into()),
+            iteration: iteration.map(str::to_owned),
+            size: id.into(),
+            width: 480,
+            height: 120,
+            variant: match iteration {
+                Some(iteration) => format!("default-{id}+{iteration}"),
+                None => format!("default-{id}"),
+            },
+            url: match iteration {
+                Some(iteration) => {
+                    format!("http://localhost/feedback?artboard={id}&iteration={iteration}")
+                }
+                None => format!("http://localhost/feedback?artboard={id}"),
+            },
+            ..Reference::default()
+        };
+        let captures = vec![
+            board("warning", None),
+            board("warning", Some("bold")),
+            board("warning", Some("calm")),
+        ];
+        let all = read_request(&json!({ "format": "images" })).expect("request");
+        assert_eq!(select_captures(captures.clone(), &all).len(), 3);
+        let current = |iteration: Option<&str>, lens: Option<&str>| {
+            read_request(&json!({ "format": "images", "scope": "page",
+                "current": { "page": "feedback", "artboard": "warning", "iteration": iteration,
+                    "lens": lens, "width": 500, "height": 140 } }))
+            .expect("request")
+        };
+        let selected = select_captures(captures.clone(), &current(Some("bold"), None));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            (
+                selected[0].iteration.as_deref(),
+                selected[0].variant.as_str(),
+                selected[0].width
+            ),
+            (Some("bold"), "default+bold-current", 500)
+        );
+        assert!(selected[0].url.contains("iteration=bold"));
+        let design = select_captures(captures.clone(), &current(None, None));
+        assert_eq!(design.len(), 1);
+        assert_eq!(
+            (design[0].iteration.as_deref(), design[0].variant.as_str()),
+            (None, "default-current")
+        );
+        let shipped = select_captures(captures, &current(Some("bold"), Some("web")));
+        assert_eq!(shipped.len(), 1);
+        assert_eq!(shipped[0].iteration, None);
     }
 
     #[test]

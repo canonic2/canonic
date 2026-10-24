@@ -1,9 +1,9 @@
 # Multiple artboards per canvas
 
-Status: support APIs and explicit page-artboard composition implemented.
+Status: support APIs and composition of a scenario's declared artboards implemented.
 The existing sidebar, top bar, toolbar, view controls and default `index.html`
-entry point remain in place. A preview page's declared artboards appear together inside the canvas;
-the existing controls operate on the selected artboard. Artboard management UI
+entry point remain in place. A scenario's declared artboards appear together inside the canvas
+as artboard instances; the existing controls operate on the selected instance. Artboard management UI
 proposals elsewhere in this spec remain separate design work.
 The [module plan](artboard-system.md) records the implementation.
 
@@ -25,8 +25,14 @@ isolated runtime ownership. Explicit content/annotation ports expose metadata,
 navigation and capture without hidden application controls. Closing/replacing an instance disposes its iframe and pending
 requests. The controller suppresses old-generation view reports and
 coordinates capture locks.
-The model permits 32 instances with dimensions of 1–8192 CSS pixels, subject
-to the page's authored `sizes`. Automatic placement wraps at 1600 logical pixels
+The model permits 32 instances with dimensions of 1–8192 CSS pixels. A declared
+artboard opens at its authored width and height; an instance of an implicit
+artboard follows the page's sizes and the size switcher. Implementation gap: the
+view report for every instance, declared or implicit, carries the page's sizes
+(`ui/src/modules/preview-sessions/content.js`), and the canvas controller replaces an
+instance size that none of them accepts with the page's first size
+(`ui/src/modules/canvas/controller.js`), so a declared artboard whose authored size
+falls outside a page's `sizes` can lose that size. Automatic placement wraps at 1600 logical pixels
 with 48px gaps. Selection preserves live inputs and annotations. An origin-aligned
 `data-wb-fit-content` root opts into natural content bounds; an owned ResizeObserver
 tracks edits. Content fitting pauses during capture locks. Transparent corners
@@ -50,7 +56,7 @@ by source and codec, preserving subscribed peers; authored Simulator mappings
 resolve booted names or UDIDs without requiring a catalog.
 
 These APIs have no layout persistence or shared configuration schema. The production
-browser check drives existing controls and declared page artboards, and proves
+browser check drives existing controls and a scenario's declared artboards, and proves
 ordinary HTML and Button scenarios remain single alternative views. The support
 harness also exercises injected ports. Verification covers instance/state/size isolation, two-space
 context, combined image geometry, handoff persistence, and disposal, plus the Node
@@ -64,10 +70,10 @@ opens one scenario's explicitly declared artboards together. Scenarios and Story
 stories remain alternatives. Each scenario's `artboards` map declares stable
 IDs, labels, dimensions, input overrides and iterations
 ([artboards and iterations](../pages/iterations.md)); the renderer receives
-`context.artboard`. Artboard inputs apply after scenario inputs. There are no
-page-level artboards; the current implementation still reads them from the
-page ([gap](../pages/iterations.md#implementation-gaps)). Feedback declares
-five artboards in its default scenario. Docs show one viewport.
+`context.artboard`. Artboard inputs apply after scenario inputs. Artboards are
+declared only inside a scenario; a scenario that declares none has one implicit
+artboard. Feedback declares five artboards in its default
+scenario. Docs show one viewport.
 Ordinary single-view pages reuse one renderer across page, scenario and lens
 navigation. The required content-only renderer owns the retained preview sessions and Storybook
 channel; navigating it does not replace its iframe. Explicit artboard groups
@@ -84,8 +90,10 @@ and sharing policy remain open.
 
 Review related views together: one page at laptop and mobile sizes,
 several scenarios of a component, a design beside its implementation, or several
-pages in a flow. An artboard is an instance of a view, not a new page in
-the space's catalog. Two instances may point to the same page and scenario.
+pages in a flow. An artboard instance on the canvas shows one view: one
+declared or implicit artboard of a page and scenario. It is not a new page in
+the space's catalog, and its instance ID is separate from the declared artboard
+ID. Two instances may point to the same page and scenario.
 Developers and designers decide what belongs together; these examples do not
 restrict the tool to a particular comparison workflow.
 
@@ -119,7 +127,8 @@ restrict the tool to a particular comparison workflow.
   fresh preview instance. Runtime form edits, scroll, and application state
   are not cloned. Control overrides and annotations need a decided copy
   policy before implementation; the recommended default is a fresh instance.
-- Each artboard has its own page, scenario/story, lens, size and dimensions,
+- Each artboard instance has its own page, scenario/story, declared artboard,
+  iteration, lens, size and dimensions,
   controls, actions, loading/error state, and annotations. Its descriptor
   includes space identity and source/server resolution. Different spaces,
   content types, and repeated instances can coexist on the same canvas.
@@ -154,7 +163,8 @@ restrict the tool to a particular comparison workflow.
   of camera zoom. Suggested output: a composite image retaining their relative
   positions, plus per-artboard images in a handoff for legibility. Exact output
   format and large-canvas handling remain open.
-- Handoffs include every artboard's space, source, scenario/story, lens, size,
+- Handoffs include every artboard instance's space, source, scenario/story,
+  declared artboard, iteration, lens, size,
   code pointers, and annotations, mapped to the corresponding captured image
   region or image. Keep stable IDs so repeated views remain distinguishable.
 - Agent context reports the whole canvas through the existing agent-context

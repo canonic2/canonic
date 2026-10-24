@@ -50,6 +50,15 @@
     return item && item.implementationOnly ? scenario.id : index === 0 ? null : scenario.id;
   }
 
+  /* Whether a row (its data attributes) is the selection. The canvas reports
+     an authored page's first scenario as none, so with no scenario the row
+     marked first is current, whatever its id. */
+  function rowIsCurrent(row, current, currentScenario) {
+    var mine = row.src === current;
+    if (!row.scenario) return mine;
+    return mine && (currentScenario ? row.scenario === currentScenario : row.first === 'true');
+  }
+
   /* A group header folds from its caret, and folds when it holds the page
      showing. Elsewhere it opens the group on its first page. */
   function groupHeadAction(target, holdsCurrent) {
@@ -328,6 +337,9 @@
         row.title = scenario.label;
         row.dataset.src = item.src;
         row.dataset.scenario = scenario.id;
+        /* The canvas reports a page's first scenario as none, whatever its
+           id. An implementation-only page names each of its scenarios. */
+        if (i === 0 && !item.implementationOnly) row.dataset.first = 'true';
         row.addEventListener('click', function () {
           onPick(item.src, scenarioPick(item, scenario, i));
         });
@@ -434,11 +446,7 @@
        current page but not the selected background. */
     function markCurrent() {
       Array.prototype.forEach.call(pageList.querySelectorAll('.wb-item'), function (b) {
-        var mine = b.dataset.src === current;
-        b.setAttribute(
-          'aria-current',
-          String(b.dataset.scenario ? mine && b.dataset.scenario === (currentScenario || 'default') : mine)
-        );
+        b.setAttribute('aria-current', String(rowIsCurrent(b.dataset, current, currentScenario)));
       });
 
       Array.prototype.forEach.call(pageList.querySelectorAll('.wb-fold-group'), function (box) {

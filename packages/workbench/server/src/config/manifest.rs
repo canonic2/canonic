@@ -67,7 +67,7 @@ fn project_path(value: Option<&Value>) -> Option<String> {
 
 /// Why a src can't be used, or `None` when it can.
 pub(super) fn src_problem(src: &str) -> Option<String> {
-    let found: Vec<String> = [":", "!", "~"]
+    let found: Vec<String> = [":", "+", "!", "~"]
         .iter()
         .filter(|mark| src.contains(**mark))
         .map(|mark| format!("“{mark}”"))
@@ -76,9 +76,142 @@ pub(super) fn src_problem(src: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "src “{src}” can’t contain {} — “:”, “!”, and “~” mark the scenario, the example, and the lens in the address.",
+        "src “{src}” can’t contain {} — “:”, “+”, “!”, and “~” mark the scenario, the iteration, the example, and the lens in the address.",
         found.join(" or ")
     ))
+}
+
+/// The problem of a space with no page and nothing to import.
+pub(super) const NOTHING_TO_SHOW: &str =
+    "nothing to show — a config needs at least one collection with one page in it.";
+
+/// A page whose src is a preview definition, which gives it its scenarios.
+pub(super) fn is_preview_src(src: &str) -> bool {
+    let src = js::trim(src);
+    src.ends_with(".workbench.ts") || src.ends_with(".workbench.tsx")
+}
+
+/// A scenario, artboard or iteration id: kebab-case words, starting with a letter.
+pub(super) fn is_id(id: &str) -> bool {
+    id.split('-').enumerate().all(|(at, word)| {
+        !word.is_empty()
+            && word
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            && (at > 0 || word.starts_with(|first: char| first.is_ascii_lowercase()))
+    })
+}
+
+/// A scenario entry's iterations in workbench.yaml, as `[{ id, label }]`
+/// with labels defaulting from the id, or `None` when none are valid. Invalid
+/// and repeated entries are reported and left out, as `scenarioIterations`
+/// does. `where_` names the page and `scenario` its scenario.
+pub(super) fn scenario_iterations(
+    raw: Option<&Value>,
+    where_: &str,
+    scenario: &str,
+    problems: &mut Problems,
+) -> Option<Value> {
+    let raw = raw.filter(|raw| !raw.is_null())?;
+    let at = format!("{where_} › scenario {scenario}");
+    let Some(entries) = raw.as_array() else {
+        problems.push(format!(
+            "{at}: iterations must be a list of entries with an id and an optional label."
+        ));
+        return None;
+    };
+    let mut out: Vec<Value> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let id = text(entry.get("id"));
+        if id.is_empty() {
+            problems.push(format!("{at}: iteration {} needs an id.", index + 1));
+            continue;
+        }
+        if !is_id(&id) {
+            problems.push(format!(
+                "{at}: iteration id “{id}” must be kebab-case — it travels in a URL."
+            ));
+            continue;
+        }
+        if seen.contains(&id) {
+            problems.push(format!("{at}: iteration id “{id}” is declared twice."));
+            continue;
+        }
+        let mut label = text(entry.get("label"));
+        if label.is_empty() {
+            label = label_of(&id);
+        }
+        out.push(json!({ "id": id, "label": label }));
+        seen.push(id);
+    }
+    (!out.is_empty()).then_some(Value::Array(out))
+}
+
+/// A string, trimmed, else empty: the config readers' `text`, for which
+/// numbers are not text.
+fn string_text(value: Option<&Value>) -> String {
+    value
+        .and_then(Value::as_str)
+        .map(|text| js::trim(text).to_owned())
+        .unwrap_or_default()
+}
+
+/// A page's scenarios in workbench.yaml, as `pageScenarios` reads them:
+/// every valid scenario's id in order, which its lens path maps are checked
+/// against, and the list the page keeps — only when there are two or more,
+/// or one lists iterations. Labels default from the id; invalid and repeated
+/// entries are reported and left out. `where_` names the page.
+pub(super) fn page_scenarios(
+    raw: Option<&Value>,
+    where_: &str,
+    problems: &mut Problems,
+) -> (Vec<String>, Option<Value>) {
+    let mut ids: Vec<String> = Vec::new();
+    let mut out = Vec::new();
+    let mut iterated = false;
+    let entries = match raw {
+        None | Some(Value::Null) => &[][..],
+        Some(Value::Array(entries)) => entries.as_slice(),
+        Some(_) => {
+            problems.push(format!(
+                "{where_}: scenarios must be a list of entries with an id and an optional label."
+            ));
+            return (ids, None);
+        }
+    };
+    for (index, scenario) in entries.iter().enumerate() {
+        let id = string_text(scenario.get("id"));
+        if id.is_empty() {
+            problems.push(format!("{where_}: scenario {} needs an id.", index + 1));
+            continue;
+        }
+        if !is_id(&id) {
+            problems.push(format!(
+                "{where_}: scenario id “{id}” must be kebab-case — it travels in a URL."
+            ));
+            continue;
+        }
+        if ids.contains(&id) {
+            problems.push(format!("{where_}: scenario id “{id}” is declared twice."));
+            continue;
+        }
+        let mut label = string_text(scenario.get("label"));
+        if label.is_empty() {
+            label = label_of(&id);
+        }
+        let mut entry = json!({ "id": id, "label": label });
+        if let Some(iterations) =
+            scenario_iterations(scenario.get("iterations"), where_, &id, problems)
+        {
+            entry["iterations"] = iterations;
+            iterated = true;
+        }
+        out.push(entry);
+        ids.push(id);
+    }
+    let kept = (out.len() > 1 || iterated).then_some(Value::Array(out));
+    (ids, kept)
 }
 
 /// workbench.local.yaml over workbench.yaml: top-level keys replace, except
@@ -351,22 +484,31 @@ pub(super) fn previews(raw: Option<&Value>, problems: &mut Problems) -> Value {
     Value::Object(out)
 }
 
-fn catalog(raw: Option<&Value>, where_: &str, problems: &mut Problems) -> Option<String> {
+/// A catalog's collection icon.
+enum CatalogIcon {
+    /// The built-in default, which ranks below an authored default.
+    BuiltIn,
+    /// An icon configured for the catalog's collection.
+    Configured(String),
+}
+
+/// A catalog, when the implementation declares one, with its icon.
+fn catalog(raw: Option<&Value>, where_: &str, problems: &mut Problems) -> Option<CatalogIcon> {
     match raw {
         None | Some(Value::Null | Value::Bool(false)) => None,
-        Some(Value::Bool(true)) => Some("smartphone".to_owned()),
+        Some(Value::Bool(true)) => Some(CatalogIcon::BuiltIn),
         Some(Value::Object(settings)) => {
             let icon = text(settings.get("icon"));
             if icon.is_empty() {
-                return Some("smartphone".to_owned());
+                return Some(CatalogIcon::BuiltIn);
             }
             if !is_key(&icon) {
                 problems.push(format!(
                     "{where_}: catalog icon “{icon}” must be a kebab-case Lucide icon name."
                 ));
-                return Some("smartphone".to_owned());
+                return Some(CatalogIcon::BuiltIn);
             }
-            Some(icon)
+            Some(CatalogIcon::Configured(icon))
         }
         Some(_) => {
             problems.push(format!(
@@ -603,7 +745,9 @@ pub(super) fn implementations(raw: Option<&Value>, problems: &mut Problems) -> M
         if let Some(icon) = catalog(spec.get("catalog"), &where_, problems) {
             if kind == "ios-simulator" {
                 implementation["catalog"] = json!(true);
-                implementation["catalogIcon"] = json!(icon);
+                if let CatalogIcon::Configured(icon) = icon {
+                    implementation["catalogIcon"] = json!(icon);
+                }
             } else {
                 problems.push(format!(
                     "{where_}: catalog is only available for iOS Simulator implementations."
@@ -728,17 +872,83 @@ fn path_of(
     None
 }
 
-/// The lenses one page has, or `None` when none survived.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one rule per implementation kind, in the Node reader's order"
-)]
+/// A lens's path map, from scenario id to a checked path, against the page's
+/// scenario ids: `{ path, scenarios }`, or `None` when the first scenario
+/// has no path. The first scenario's own id and `default` both name it.
+fn scenario_paths(
+    paths: &Map<String, Value>,
+    key: &str,
+    ids: &[String],
+    where_: &str,
+    problems: &mut Problems,
+) -> Option<Value> {
+    let first = ids.first().map_or("default", String::as_str);
+    let mut path = Value::Null;
+    let mut mapped = Map::new();
+    for (scenario, found) in paths {
+        if scenario == first || scenario == "default" {
+            path = found.clone();
+        } else if ids.contains(scenario) {
+            mapped.insert(scenario.clone(), found.clone());
+        } else {
+            problems.push(format!("{where_}: implementation “{key}” maps scenario “{scenario}”, which this page doesn’t declare."));
+        }
+    }
+    if path.is_null() {
+        problems.push(format!(
+            "{where_}: implementation “{key}” needs a path for the default scenario (“{first}”)."
+        ));
+        return None;
+    }
+    Some(json!({ "path": path, "scenarios": js::ordered(mapped) }))
+}
+
+/// `settleLenses`: a page that lists a preview definition keeps its lens
+/// path maps as `{ pending }` until it has the definition's scenarios; this
+/// checks them against `ids`, the scenarios it has now, reporting at
+/// `where_`, and drops the lenses that don't survive.
+pub(crate) fn settle_lenses(
+    item: &mut Value,
+    ids: &[String],
+    where_: &str,
+    problems: &mut Vec<String>,
+) {
+    let Some(lenses) = item.get("implementations").and_then(Value::as_object) else {
+        return;
+    };
+    if !lenses.values().any(|lens| lens.get("pending").is_some()) {
+        return;
+    }
+    let mut out = Map::new();
+    for (key, lens) in lenses {
+        let settled = match lens.get("pending").and_then(Value::as_object) {
+            Some(paths) => scenario_paths(paths, key, ids, where_, problems),
+            None => Some(lens.clone()),
+        };
+        if let Some(settled) = settled {
+            out.insert(key.clone(), settled);
+        }
+    }
+    let Some(item) = item.as_object_mut() else {
+        return;
+    };
+    if out.is_empty() {
+        item.remove("implementations");
+    } else {
+        item.insert("implementations".to_owned(), Value::Object(out));
+    }
+}
+
+/// The lenses one page has, or `None` when none survived. `ids` are the
+/// page's valid scenario ids, or `None` when its scenarios come later from
+/// its preview definition, which leaves its path maps pending.
 pub(super) fn page_lenses(
     raw: Option<&Value>,
     item: &Map<String, Value>,
     implementations: &Map<String, Value>,
     where_: &str,
     problems: &mut Problems,
+    ids: Option<&[String]>,
 ) -> Option<Value> {
     let raw = raw.filter(|raw| !blank(Some(raw)))?;
     let Some(mapped) = raw.as_object() else {
@@ -747,20 +957,6 @@ pub(super) fn page_lenses(
         ));
         return None;
     };
-    let scenarios: Vec<String> = item
-        .get("scenarios")
-        .and_then(Value::as_array)
-        .map(|scenarios| {
-            scenarios
-                .iter()
-                .filter_map(|scenario| scenario["id"].as_str().map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default();
-    let first = scenarios
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "default".to_owned());
     let mut out = Map::new();
     for (key, value) in mapped {
         let Some(implementation) = implementations.get(key) else {
@@ -823,26 +1019,16 @@ pub(super) fn page_lenses(
                         .map(|path| json!({ "path": path }))
                 }
                 Value::Object(by_scenario) => {
-                    let mut path = Value::Null;
-                    let mut mapped_scenarios = Map::new();
+                    let mut paths = Map::new();
                     for (scenario, entry) in by_scenario {
-                        let Some(found) = path_of(entry, key, implementation, where_, problems)
-                        else {
-                            continue;
-                        };
-                        if *scenario == first || scenario == "default" {
-                            path = Value::String(found);
-                        } else if scenarios.contains(scenario) {
-                            mapped_scenarios.insert(scenario.clone(), Value::String(found));
-                        } else {
-                            problems.push(format!("{where_}: implementation “{key}” maps scenario “{scenario}”, which this page doesn’t declare."));
+                        if let Some(found) = path_of(entry, key, implementation, where_, problems) {
+                            paths.insert(scenario.clone(), Value::String(found));
                         }
                     }
-                    if path.is_null() {
-                        problems.push(format!("{where_}: implementation “{key}” needs a path for the default scenario (“{first}”)."));
-                        None
-                    } else {
-                        Some(json!({ "path": path, "scenarios": js::ordered(mapped_scenarios) }))
+                    let paths = js::ordered(paths);
+                    match ids {
+                        None => Some(json!({ "pending": paths })),
+                        Some(ids) => scenario_paths(&paths, key, ids, where_, problems),
                     }
                 }
                 _ => {
@@ -965,5 +1151,194 @@ pub(super) fn page_code(
         None
     } else {
         Some(Value::Array(out))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_src_may_not_contain_the_iteration_mark() {
+        assert_eq!(src_problem("pages/sign-in.html"), None);
+        assert_eq!(
+            src_problem("routes/+page.html").as_deref(),
+            Some(
+                "src “routes/+page.html” can’t contain “+” — “:”, “+”, “!”, and “~” mark the scenario, the iteration, the example, and the lens in the address."
+            )
+        );
+        assert!(
+            src_problem("a:b+c.html")
+                .is_some_and(|problem| problem.contains("can’t contain “:” or “+”"))
+        );
+    }
+
+    #[test]
+    fn scenario_iterations_are_kebab_case_unique_and_labelled_from_their_id() {
+        let mut problems = Vec::new();
+        let raw = json!([
+            { "id": "inline-hint" },
+            { "id": "compact", "label": "  Tight  " },
+            { "id": "Bold" },
+            { "id": "2-up" },
+            { "label": "No id" },
+            { "id": "compact", "label": "Again" },
+            "just-text",
+        ]);
+        let found = scenario_iterations(Some(&raw), "Pages › Sign in", "error", &mut problems);
+        assert_eq!(
+            found,
+            Some(json!([
+                { "id": "inline-hint", "label": "Inline hint" },
+                { "id": "compact", "label": "Tight" },
+            ]))
+        );
+        assert_eq!(
+            problems,
+            [
+                "Pages › Sign in › scenario error: iteration id “Bold” must be kebab-case — it travels in a URL.",
+                "Pages › Sign in › scenario error: iteration id “2-up” must be kebab-case — it travels in a URL.",
+                "Pages › Sign in › scenario error: iteration 5 needs an id.",
+                "Pages › Sign in › scenario error: iteration id “compact” is declared twice.",
+                "Pages › Sign in › scenario error: iteration 7 needs an id.",
+            ]
+        );
+    }
+
+    #[test]
+    fn page_scenarios_share_the_id_rule_default_their_labels_and_report_repeats() {
+        let mut problems = Vec::new();
+        let raw = json!([
+            { "id": "default", "label": "Default" },
+            { "id": "compact-table" },
+            { "id": "2-up", "label": "Two up" },
+            { "id": "a--b", "label": "Odd" },
+            { "label": "No id" },
+            { "id": 7, "label": "Number" },
+            { "id": "compact-table", "label": "Again" },
+        ]);
+        let (ids, kept) = page_scenarios(Some(&raw), "Pages › Sign in", &mut problems);
+        assert_eq!(ids, ["default", "compact-table"]);
+        assert_eq!(
+            kept,
+            Some(json!([
+                { "id": "default", "label": "Default" },
+                { "id": "compact-table", "label": "Compact table" },
+            ]))
+        );
+        assert_eq!(
+            problems,
+            [
+                "Pages › Sign in: scenario id “2-up” must be kebab-case — it travels in a URL.",
+                "Pages › Sign in: scenario id “a--b” must be kebab-case — it travels in a URL.",
+                "Pages › Sign in: scenario 5 needs an id.",
+                "Pages › Sign in: scenario 6 needs an id.",
+                "Pages › Sign in: scenario id “compact-table” is declared twice.",
+            ]
+        );
+        // One scenario is no choice, but its id still names the page's first.
+        let (ids, kept) = page_scenarios(
+            Some(&json!([{ "id": "filled" }])),
+            "Pages › Library",
+            &mut problems,
+        );
+        assert_eq!((ids, kept), (vec!["filled".to_owned()], None));
+    }
+
+    #[test]
+    fn a_lone_scenario_names_the_default_path_by_its_own_id_or_default() {
+        let implementations = implementations(
+            Some(&json!({ "dev": { "kind": "url", "base": "http://localhost:3000" } })),
+            &mut Vec::new(),
+        );
+        let item = Map::from_iter([("src".to_owned(), json!("library.html"))]);
+        let ids = ["filled".to_owned()];
+        for key in ["filled", "default"] {
+            let mut problems = Vec::new();
+            let raw = json!({ "dev": { key: "/library" } });
+            assert_eq!(
+                page_lenses(
+                    Some(&raw),
+                    &item,
+                    &implementations,
+                    "App › Library",
+                    &mut problems,
+                    Some(&ids[..])
+                ),
+                Some(json!({ "dev": { "path": "/library", "scenarios": {} } }))
+            );
+            assert!(problems.is_empty());
+        }
+        // A preview definition's page leaves its path maps for later.
+        let mut problems = Vec::new();
+        let raw = json!({ "dev": { "empty": "/library?empty", "bad": "relative" } });
+        assert_eq!(
+            page_lenses(
+                Some(&raw),
+                &item,
+                &implementations,
+                "App › Library",
+                &mut problems,
+                None
+            ),
+            Some(json!({ "dev": { "pending": { "empty": "/library?empty" } } }))
+        );
+        assert_eq!(problems.len(), 1);
+    }
+
+    #[test]
+    fn only_a_configured_catalog_icon_is_kept() {
+        let mut problems = Vec::new();
+        let found = implementations(
+            Some(&json!({
+                "plain": { "kind": "ios-simulator", "catalog": true },
+                "tablets": { "kind": "ios-simulator", "catalog": { "icon": "tablet" } },
+                "odd": { "kind": "ios-simulator", "catalog": { "icon": "Not Kebab" } },
+            })),
+            &mut problems,
+        );
+        assert_eq!(found["plain"].get("catalogIcon"), None);
+        assert_eq!(found["tablets"]["catalogIcon"], "tablet");
+        assert_eq!(found["odd"].get("catalogIcon"), None);
+        assert_eq!(found["odd"]["catalog"], true);
+        assert_eq!(problems.len(), 1);
+    }
+
+    #[test]
+    fn absent_or_empty_iterations_are_none_and_a_non_list_is_a_problem() {
+        let mut problems = Vec::new();
+        assert_eq!(
+            scenario_iterations(None, "Pages › Sign in", "error", &mut problems),
+            None
+        );
+        assert_eq!(
+            scenario_iterations(
+                Some(&Value::Null),
+                "Pages › Sign in",
+                "error",
+                &mut problems
+            ),
+            None
+        );
+        assert_eq!(
+            scenario_iterations(Some(&json!([])), "Pages › Sign in", "error", &mut problems),
+            None
+        );
+        assert!(problems.is_empty());
+        assert_eq!(
+            scenario_iterations(
+                Some(&json!("bold")),
+                "Pages › Sign in",
+                "error",
+                &mut problems
+            ),
+            None
+        );
+        assert_eq!(
+            problems,
+            [
+                "Pages › Sign in › scenario error: iterations must be a list of entries with an id and an optional label."
+            ]
+        );
     }
 }

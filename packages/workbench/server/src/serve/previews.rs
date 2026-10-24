@@ -71,6 +71,21 @@ fn param(query: Option<&str>, name: &str) -> Option<String> {
     })
 }
 
+/// The Astro render a `/render` request names: a selected iteration under its
+/// source key (`<scenario>+<iteration>` or `<scenario>+<artboard>/<iteration>`),
+/// and a declared artboard without one as `<scenario>+<artboard>/`, so its
+/// request handlers see the artboard.
+fn render_key(scenario: String, artboard: Option<String>, iteration: Option<String>) -> String {
+    let artboard = artboard.filter(|artboard| !artboard.is_empty());
+    let iteration = iteration.filter(|iteration| !iteration.is_empty());
+    match (artboard, iteration) {
+        (Some(artboard), Some(iteration)) => format!("{scenario}+{artboard}/{iteration}"),
+        (Some(artboard), None) => format!("{scenario}+{artboard}/"),
+        (None, Some(iteration)) => format!("{scenario}+{iteration}"),
+        (None, None) => scenario,
+    }
+}
+
 fn json_response(status: StatusCode, value: &Value) -> Response {
     let mut response = (status, value.to_string()).into_response();
     let headers = response.headers_mut();
@@ -305,7 +320,12 @@ async fn answer(previews: Arc<Previews>, request: Request) -> Response {
                 return failure(&anyhow::anyhow!("Astro inputs must be an object."));
             };
             let scenario = param(query, "scenario").unwrap_or_else(|| "default".into());
-            match previews.render(&file, &scenario, &inputs).await {
+            let key = render_key(
+                scenario,
+                param(query, "artboard"),
+                param(query, "iteration"),
+            );
+            match previews.render(&file, &key, &inputs).await {
                 Ok(answer) => json_response(StatusCode::OK, &answer),
                 Err(error) => failure(&error),
             }
@@ -341,5 +361,21 @@ mod tests {
         );
         assert_eq!(decode_path("a%20b+c.md"), "a b+c.md");
         assert_eq!(mime("chunks/app.css"), "text/css");
+    }
+
+    #[test]
+    fn a_render_request_names_its_artboard_and_iteration_in_the_key() {
+        let key = |artboard: Option<&str>, iteration: Option<&str>| {
+            render_key(
+                "default".into(),
+                artboard.map(str::to_owned),
+                iteration.map(str::to_owned),
+            )
+        };
+        assert_eq!(key(None, None), "default");
+        assert_eq!(key(None, Some("bold")), "default+bold");
+        assert_eq!(key(Some("warning"), Some("bold")), "default+warning/bold");
+        assert_eq!(key(Some("warning"), None), "default+warning/");
+        assert_eq!(key(Some(""), Some("")), "default");
     }
 }

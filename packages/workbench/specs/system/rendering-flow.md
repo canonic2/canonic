@@ -143,7 +143,7 @@ deadline loading, late readiness and failure through the actual shell and render
 ## Navigation state
 
 **Status:** agreed, not implemented. Navigation will hold its state in a store
-built on Lattice's state management (`canonic-lattice`), which defines stores,
+built on Lattice's state management (`@canonic2/lattice`), which defines stores,
 selectors, bindings, phases, transitions and asynchronous work. Today the same
 facts live in closures across the legacy shell, the navigation and
 preview-session controllers, the canvas bootstrap and the content renderer,
@@ -154,7 +154,7 @@ reconciled by explicit calls such as `present()` and per-owner sequence counters
 | Field | Meaning |
 | --- | --- |
 | `id` | Opaque identity of the current navigation |
-| `requested` | The destination being navigated to: page, scenario, lens, example and declared artboards |
+| `requested` | The destination being navigated to: page, scenario, lens, example, declared artboards and the iteration selected for each declared or implicit artboard |
 | `displayed` | The destination and navigation `id` whose content is presented, or `null` |
 | `phase` | `idle`, `pending`, `loading`, `shown` or `failed` |
 | `problem` | The failure message when `phase` is `failed` |
@@ -168,7 +168,10 @@ reconciled by explicit calls such as `present()` and per-owner sequence counters
 | `failed` | The requested destination failed | Its failure, no outgoing pixels |
 
 Requested and displayed are separate fields, as [navigation feedback](#navigation-feedback)
-requires. The canvas accepts input exactly when `phase` is `shown` or `failed`
+requires. A displayed artboard matches `requested` only when it also shows the
+iteration requested for it, or none when none is requested; under a lens other
+than design, every artboard matches with no iteration, since only the design
+lens renders [iterations](../pages/iterations.md). The canvas accepts input exactly when `phase` is `shown` or `failed`
 and no capture is running. One binding writes the canvas's `inert`,
 `aria-busy`, visibility and loading message; no other code writes them. The
 camera during pan, zoom and reading scroll stays in `<wb-canvas>`; navigation
@@ -313,7 +316,8 @@ annotation/native modularization remains separate work.
    rapid supersession, size changes and close/dispose with owned fixtures.
 4. Scenarios remain alternatives; only a scenario's explicit `artboards` create
    multiple views. Each independent view retains its own size, inputs,
-   iteration and annotations.
+   iteration and annotations, and the canvas presents a destination only once
+   each view shows the iteration requested for it.
 5. Warm Storybook picks and returns reuse the expected content document/channel;
    assert document identity and request counts, not only elapsed time. Retained and
    pending documents cannot navigate or acknowledge a different active destination.

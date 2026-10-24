@@ -399,7 +399,9 @@ function activate(context) {
     },
     open: function (target) {
       if (!target.src) return;
-      return openCanvas(null, target.src + (target.scenario ? ':' + target.scenario : '') + (target.example ? '!' + target.example : ''));
+      return openCanvas(null, target.src + (target.scenario ? ':' + target.scenario : '') +
+        (target.iteration ? '+' + (target.artboard ? target.artboard + '/' : '') + target.iteration : '') +
+        (target.example ? '!' + target.example : ''));
     },
     /* And the way back: the canvas reports every page it lands on, so the
        list marks it even when the move started over there. */

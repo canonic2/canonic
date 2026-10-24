@@ -19,9 +19,13 @@ it, and where the code falls short.
   step.
 - A scenario is declared in YAML, which adds the scenario to the page list, and in
   the page, which decides what it looks like. Declaring a scenario in YAML alone
-  does not make the page render it. Scenario IDs are kebab-case because they
-  travel in addresses and screenshot names. A page needs at least two scenarios
-  to show its scenarios in the page list.
+  does not make the page render it. Each YAML scenario entry needs an `id`;
+  its `label` is optional and defaults to the ID in sentence case. Scenario
+  IDs follow the shared ID rule because they travel in addresses and
+  screenshot names. A page keeps its
+  scenario list only when it has at least two valid scenarios or any scenario
+  lists iterations. Scenario rules shared with other page kinds are in
+  [scenarios](scenarios.md).
 - The first scenario is the page as authored. The address omits it, and the page
   sees it as `default` whatever its ID. Any other scenario travels as
   `?scenario=<id>`.
@@ -73,7 +77,10 @@ Configuration: [Implementations](../../docs/configuration.md#implementations) an
 [A page's implementations](../../docs/configuration.md#a-pages-implementations).
 
 - A page maps the implementation to one path, or to one path per declared
-  scenario. A scenario without its own path uses the first scenario's.
+  scenario. In a scenario map, the key `default` and the first scenario's own
+  ID both name the first scenario, which needs a path; a key naming no
+  declared scenario is reported. A scenario without its own path uses the
+  first scenario's.
 - With a single path, the lens shows that path for every scenario and hides the
   scenario menu. With a scenario map, the scenario menu stays and each pick loads its
   path.
@@ -136,10 +143,11 @@ Configuration: [Code pointers](../../docs/configuration.md#code-pointers).
 
 Configuration: [iOS Simulator](../../docs/ios-simulator.md#configure-it).
 
-- With `catalog: true`, each matching booted, available device becomes an
-  implementation-only page, labeled with the device name, in a collection named
-  after the implementation. When no matching booted device is found, the
-  catalog reports a problem.
+- With `catalog: true`, each booted device matching the implementation's
+  `device` (a UDID or name), or every booted device when `device` is absent,
+  becomes an implementation-only page, labeled with the device name, in a
+  collection named after the implementation's `label`. When no matching
+  booted device is found, the catalog reports a problem.
 - An authored page may map a Simulator lens to a device name or UDID instead
   of, or as well as, using a catalog. See the gap below.
 - The canvas shows the device through the native window stream described in
@@ -213,10 +221,19 @@ Repeated artboards on one device/window share that external surface.
   appears only on the canvas, contrary to the shared problems list in
   [core.md](../core.md#problem-reporting).
 - **Invalid authored entries are dropped silently.** A page whose `src`
-  starts with `/` or contains `..`, `:`, or `~`, and a scenario whose ID isn't
-  kebab-case, are left out with no problem (the native reader's
+  starts with `/` or contains `..`, `:`, `+`, `!` or `~`, and a scenario whose ID
+  isn't kebab-case or that lacks an `id` or `label`, are left out with no
+  problem (the native reader's
   [page and scenarios](../../server/src/config/read.rs)), contrary to the reporting requirement in
   [core.md](../core.md).
+- **A single YAML scenario loses its path map.** A page with exactly one YAML
+  scenario and no iterations loses its scenario list before lens validation,
+  so a path map keyed by that scenario's own ID reports the key as
+  undeclared and, without a `default` key, the missing first-scenario path;
+  the lens is dropped ([manifest.js](../../contracts/manifest.js),
+  [read.rs](../../server/src/config/read.rs)). The requirement that the first
+  scenario's own ID names it applies regardless of how many scenarios a page
+  declares.
 - **Links to unlisted project pages do nothing.** With actions on, the page
   cancels any same-origin `.html` link and hands it to the workbench, which
   ignores destinations that aren't configured pages. Such a link neither

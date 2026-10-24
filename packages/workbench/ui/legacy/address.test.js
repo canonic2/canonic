@@ -71,10 +71,45 @@ test('writes a docs page without a size, with its example', function () {
   assert.equal(address.write({ src: 'docs/card.md', scenario: null, example: null, size: null, lens: null }), 'docs/card.md');
 });
 
+test('reads each artboard’s iteration, the implicit artboard under ""', function () {
+  var address = load();
+  assert.deepEqual(plain(address.parse('#jobs.workbench.ts:empty+illustrated@laptop')), {
+    src: 'jobs.workbench.ts', scenario: 'empty', example: null, size: 'laptop', lens: null,
+    iterations: { '': 'illustrated' },
+  });
+  assert.deepEqual(plain(address.parse('#feedback.workbench.ts+warning/bold+info/calm@laptop~staging')), {
+    src: 'feedback.workbench.ts', scenario: null, example: null, size: 'laptop', lens: 'staging',
+    iterations: { warning: 'bold', info: 'calm' },
+  });
+  assert.deepEqual(
+    plain(address.parse('#feedback.workbench.ts+warning/bold+warning/calm++/x+info/@laptop').iterations),
+    { warning: 'bold' }
+  );
+  assert.equal(address.parse('#feedback.workbench.ts+@laptop').iterations, undefined);
+});
+
+test('writes iterations after the scenario, in the map’s order', function () {
+  var address = load();
+  assert.equal(
+    address.write({ src: 'feedback.workbench.ts', scenario: 'default', iterations: { info: 'calm', warning: 'bold' }, size: 'laptop', lens: null }),
+    'feedback.workbench.ts:default+info/calm+warning/bold@laptop'
+  );
+  assert.equal(
+    address.write({ src: 'jobs.workbench.ts', scenario: 'empty', iterations: { '': 'illustrated' }, size: 'laptop' }),
+    'jobs.workbench.ts:empty+illustrated@laptop'
+  );
+  assert.equal(address.write({ src: 'jobs.workbench.ts', iterations: {}, size: 'laptop' }), 'jobs.workbench.ts@laptop');
+});
+
 test('round-trips', function () {
   var address = load();
   var target = { src: 'preview/components-button.html', scenario: 'icon-only', example: null, size: 'resizable', lens: 'storybook' };
   assert.deepEqual(plain(address.parse('#' + address.write(target))), target);
   var docs = { src: 'docs/card.md', scenario: 'loading', example: 'with-custom-style', size: null, lens: 'native' };
   assert.deepEqual(plain(address.parse('#' + address.write(docs))), docs);
+  var iterated = {
+    src: 'feedback.workbench.ts', scenario: 'default', example: null, size: 'laptop', lens: null,
+    iterations: { warning: 'bold', info: 'calm' },
+  };
+  assert.deepEqual(plain(address.parse('#' + address.write(iterated))), iterated);
 });

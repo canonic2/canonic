@@ -283,7 +283,10 @@ address in `.canonic/.workbench/server.json`; add that folder to
 form:
 
 - Add, remove, and rename collections, and set their icons.
-- Rename and remove groups, and add pages to them.
+- Add a group to a collection with **Add group**, from the collection's row or
+  its details. A new group starts with one untitled page, since a group needs
+  at least one; groups don't nest. Rename and remove groups, and add pages to
+  them.
 - Add and remove pages, and edit their labels and source paths.
 - Choose each page's supported sizes.
 

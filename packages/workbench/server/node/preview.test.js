@@ -57,27 +57,195 @@ test('built-in browser adapters resolve framework imports from the previewed pro
   assert.match(script, /ACME_PROJECT_REACT_DOM/);
 });
 
-test('a preview page declares artboards independently of its scenario list', async t => {
+const FEEDBACK = `{
+  default: { artboards: {
+    info: { label: 'Info', width: 560, height: 79 },
+    warning: { width: 560, height: 119, inputs: { tone: 'warning' }, iterations: {
+      bold: { label: 'Bold', source: { entry: './alert.bold.ts' } },
+      'compact-table': { inputs: { compact: true } },
+    } },
+  } },
+  empty: { iterations: { illustrated: { source: { entry: './alert.empty.ts', export: 'Illustrated' } } } },
+  loading: {},
+}`;
+
+test('scenarios declare their own artboards and iterations in the page index', async t => {
   const root = fixture(t, {
     'alert.ts': 'export default () => {};',
-    'alert.workbench.ts': `import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'feedback',adapter:'html',source:{entry:'./alert.ts'},artboards:{info:{label:'Info',width:560,height:79},success:{label:'Success',width:560,height:119,inputs:{tone:'success'}}}});`,
+    'alert.bold.ts': 'export default () => {};',
+    'alert.empty.ts': 'export const Illustrated = () => {};',
+    'alert.workbench.ts': `import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'feedback',adapter:'html',source:{entry:'./alert.ts'},scenarios:${FEEDBACK}});`,
   });
   const index = await new Compiler(root).index();
   assert.deepEqual(index.errors, []);
-  assert.deepEqual(index.previews[0].scenarios, [{ id: 'default', label: 'Default' }]);
-  assert.deepEqual(index.previews[0].artboards, [{ id: 'info', label: 'Info', width: 560, height: 79 }, { id: 'success', label: 'Success', width: 560, height: 119 }]);
+  assert.equal(index.previews[0].artboards, undefined, 'the page has no artboards of its own');
+  assert.deepEqual(index.previews[0].scenarios, [
+    { id: 'default', label: 'Default', artboards: [
+      { id: 'info', label: 'Info', width: 560, height: 79 },
+      { id: 'warning', label: 'Warning', width: 560, height: 119, iterations: [{ id: 'bold', label: 'Bold', source: 'alert.bold.ts' }, { id: 'compact-table', label: 'Compact table' }] },
+    ] },
+    // An iteration with its own source lists it from the project root, for handoffs and references.
+    { id: 'empty', label: 'Empty', iterations: [{ id: 'illustrated', label: 'Illustrated', source: 'alert.empty.ts' }] },
+    { id: 'loading', label: 'Loading' },
+  ]);
   assert.deepEqual(compilerFixture.list(root), JSON.parse(JSON.stringify(index)));
+});
+
+test('an iteration with its own source is compiled under its iteration key', async t => {
+  const root = fixture(t, {
+    'alert.ts': 'export default canvas => { canvas.textContent = "ACME_AUTHORED"; };',
+    'alert.bold.ts': 'export default canvas => { canvas.textContent = "ACME_BOLD"; };',
+    'alert.empty.ts': 'export const Illustrated = canvas => { canvas.textContent = "ACME_ILLUSTRATED"; };',
+    'alert.workbench.ts': `import {definePreview} from '@canonic2/workbench'; export default definePreview({id:'feedback',adapter:'html',source:{entry:'./alert.ts'},scenarios:${FEEDBACK}});`,
+  });
+  const result = await build(t, root, 'alert.workbench.ts');
+  const script = result.outputs.get('preview.js').toString();
+  for (const marker of ['ACME_AUTHORED', 'ACME_BOLD', 'ACME_ILLUSTRATED', '"default+warning/bold"', '"empty+illustrated"']) assert.ok(script.includes(marker), marker);
+  assert.ok(!script.includes('"default+warning/compact-table"'), 'an iteration without a source uses its scenario’s');
+});
+
+test('artboards and iterations are validated where they are declared', async t => {
+  const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
+  const board = "info: { width: 560, height: 79 }";
+  const cases = [
+    ["artboards: { info: { width: 560, height: 79 } }", 'artboards must be declared inside a scenario'],
+    ["iterations: { bold: {} }", 'iterations must be declared inside a scenario'],
+    ["scenarios: { default: { artboards: {} } }", 'scenario default: artboards must be a map of 1–32 artboards.'],
+    ["scenarios: { default: { artboards: [] } }", 'scenario default: artboards must be a map of 1–32 artboards.'],
+    [`scenarios: { default: { artboards: Object.fromEntries(Array.from({ length: 33 }, (_, i) => ['board-' + i, { width: 1, height: 1 }])) } }`, 'scenario default: artboards must be a map of 1–32 artboards.'],
+    ["scenarios: { default: { artboards: { 'Bad Id': { width: 560, height: 79 } } } }", 'scenario default: artboard id “Bad Id” must be kebab-case.'],
+    ["scenarios: { default: { artboards: { info: { width: 0, height: 79 } } } }", 'scenario default › artboard info: width and height must be integers from 1 to 8192.'],
+    ["scenarios: { default: { artboards: { info: { width: 560, height: 8193 } } } }", 'scenario default › artboard info: width and height must be integers from 1 to 8192.'],
+    ["scenarios: { default: { artboards: { info: { width: 560, height: 79, label: ' ' } } } }", 'scenario default › artboard info: label must be nonempty text.'],
+    ["scenarios: { default: { artboards: { info: { width: 560, height: 79, inputs: [] } } } }", 'scenario default › artboard info: inputs must be a map.'],
+    [`scenarios: { default: { artboards: { ${board} }, iterations: { bold: {} } } }`, 'scenario default: iterations of declared artboards belong to each artboard'],
+    [`scenarios: { default: { artboards: { ${board.replace('}', ", iterations: { Bold: {} } }")} } } }`, 'scenario default › artboard info: iteration id “Bold” must be kebab-case.'],
+    ["scenarios: { empty: { iterations: { Bold: {} } } }", 'scenario empty: iteration id “Bold” must be kebab-case.'],
+    ["scenarios: { empty: { iterations: [] } }", 'scenario empty: iterations must be a map.'],
+    ["scenarios: { empty: { iterations: { bold: null } } }", 'scenario empty › iteration bold: must be an object.'],
+    ["scenarios: { empty: { iterations: { bold: { label: '' } } } }", 'scenario empty › iteration bold: label must be nonempty text.'],
+    ["scenarios: { empty: { iterations: { bold: { iterations: {} } } } }", 'scenario empty › iteration bold: cannot declare iterations.'],
+    ["scenarios: { empty: { iterations: { bold: { artboards: {} } } } }", 'scenario empty › iteration bold: cannot declare artboards.'],
+    ["scenarios: { empty: { iterations: { bold: { inputs: 'bold' } } } }", 'scenario empty › iteration bold: inputs must be a map.'],
+    ["scenarios: { empty: { iterations: { bold: { ready: true } } } }", 'scenario empty › iteration bold: ready must be a function.'],
+    ["scenarios: { default: { artboards: { info: { width: 560, height: 79, requests: {} } } } }", 'scenario default › artboard info: “requests” is not an artboard field; an artboard takes label, width, height, inputs and iterations.'],
+    ["scenarios: { empty: { iterations: { bold: { source: { entry: './missing.ts' } } } } }", 'scenario empty › iteration bold: source must exist inside the project: ./missing.ts'],
+    ["scenarios: { empty: { iterations: { bold: { requests: { 'bad request': {} } } } } }", 'scenario empty › iteration bold: request bad request must be'],
+    ["scenarios: { empty: { iterations: { bold: { fixtures: { size: 1n } } } } }", 'scenario empty › iteration bold: fixtures must be JSON-serializable'],
+    [`scenarios: { default: { artboards: { ${board.replace('}', ", iterations: { bold: { inputs: { size: 1n } } } }")} } } }`, 'scenario default › artboard info › iteration bold: inputs must be JSON-serializable'],
+  ];
+  for (const [fields, message] of cases) {
+    fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields));
+    const index = await new Compiler(root).index();
+    assert.deepEqual(index.previews, [], fields);
+    assert.equal(index.errors.length, 1, fields);
+    assert.ok(index.errors[0].includes(message), fields + '\n' + index.errors[0]);
+    // The file is named once, from the project root.
+    assert.ok(index.errors[0].startsWith('button.workbench.ts: ') && !index.errors[0].includes(root) && index.errors[0].indexOf('workbench.ts: ') === index.errors[0].lastIndexOf('workbench.ts: '), index.errors[0]);
+  }
 });
 
 test('native listing matches the compiler on preview fixtures and validation edge cases', async t => {
   const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
   const cases = ['', "sizes: []", "sizes: ['123']", "sizes: ['small--wide']", "scenarios: null", "scenarios: []", "scenarios: { default: null }", "scenarios: { '1': {}, '10': {}, '2': {} }", "title: 42", "controls: { tone: {type: 'select', options: []} }", "controls: { tone: null }", "links: null", "links: {'/next': {scenario: 'ready'}}", "links: {'/next': {preview: 3}}", "requests: {'bad request': {}}", "requests: {'GET /acme': {body: {ok: true}}}", "scenarios: { empty: { requests: {'GET /acme': []} } }", "scenarios: { empty: { label: 42 } }"];
-  cases.push("artboards: []", "artboards: {}", "artboards: {info:{width:0,height:79}}", "artboards: {info:{width:560,height:8193}}", "artboards: {'bad id':{width:560,height:79}}", "artboards: {info:{width:560,height:79,inputs:[]}}", "artboards: {info:{width:560,height:79,label:42}}", "artboards: {info:{width:560,height:79}}");
+  cases.push("artboards: {info:{width:560,height:79}}", "iterations: {bold:{}}", "scenarios: { default: { artboards: {} } }", "scenarios: { default: { artboards: {info:{width:0,height:79}} } }", "scenarios: { default: { artboards: {info:{width:560,height:79}}, iterations: {bold:{}} } }", "scenarios: { default: { artboards: {info:{width:560,height:79,iterations:{'Bad':{}}}} } }", "scenarios: { default: { artboards: {info:{width:560,height:79}} } }", "scenarios: { empty: { iterations: {illustrated:{label:'Illustrated'}} } }");
   for (const fields of cases) {
     fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields));
     const expected = JSON.parse(JSON.stringify(await new Compiler(root).index()));
     assert.deepEqual(compilerFixture.list(root), expected, fields);
   }
+});
+
+test('a definition whose path holds an address mark is a problem in both indexes, not a page', async t => {
+  const root = fixture(t, {
+    'routes/page.ts': 'export default () => {};',
+    'routes/+page.workbench.ts': definition('html', './page.ts'),
+  });
+  const index = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+  assert.deepEqual(index.previews, []);
+  assert.equal(index.errors.length, 1);
+  assert.match(index.errors[0], /^routes\/\+page\.workbench\.ts: a preview’s path can’t contain “:”, “\+”, “!”, or “~”/);
+  assert.deepEqual(compilerFixture.list(root), index);
+});
+
+test('a reserved path is the problem even when its definition is invalid, and it is not evaluated', async t => {
+  const root = fixture(t, {
+    'routes/page.ts': 'export default () => {};',
+    // Invalid both as a literal the native index reads and once evaluated.
+    'routes/+page.workbench.ts': definition('html', './page.ts').replace("id: 'components/button'", "id: 'Not Kebab'"),
+    'routes/~layout.workbench.ts': 'import missing from "./missing"; export default missing;',
+  });
+  const compiler = new Compiler(root);
+  const evaluated = [];
+  const original = compiler.definition.bind(compiler);
+  compiler.definition = file => { evaluated.push(file); return original(file); };
+  const index = JSON.parse(JSON.stringify(await compiler.index()));
+  assert.deepEqual(evaluated, []);
+  assert.deepEqual(index.previews, []);
+  assert.equal(index.errors.length, 2);
+  for (const problem of index.errors) assert.match(problem, /^routes\/[+~][a-z]+\.workbench\.ts: a preview’s path can’t contain “:”, “\+”, “!”, or “~”/);
+  assert.deepEqual(compilerFixture.list(root), index);
+});
+
+test('definition problems name the file once, by its path from the project root', async t => {
+  const root = fixture(t, {
+    'pages/page.ts': 'export default () => {};',
+    'pages/literal.workbench.ts': definition('html', './page.ts').replace("scenarios: { default: {}", "scenarios: { '2-up': {}"),
+    // Evaluated by Node rather than read as a literal.
+    'pages/computed.workbench.ts': definition('html', './page.ts').replace("id: 'components/button'", "id: ['pages', 'Computed'].join('/')"),
+  });
+  const index = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+  assert.deepEqual(index.errors, [
+    'pages/computed.workbench.ts: id must use kebab-case segments separated by /.',
+    'pages/literal.workbench.ts: scenarios need kebab-case IDs and object definitions.',
+  ]);
+  assert.deepEqual(compilerFixture.list(root), index);
+});
+
+test('scenario IDs follow the artboard and iteration ID rule, and default labels are sentence case', async t => {
+  const root = fixture(t, { 'button.ts': 'export default () => {};', 'button.workbench.ts': definition('html', './button.ts') });
+  for (const id of ['2-up', 'a--b', '-ready', 'ready-', 'Ready', '10']) {
+    fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', `scenarios: { '${id}': {} }`).replace('scenarios: { default: {}, disabled: { inputs: { label: \'Disabled\' } } }, ', ''));
+    const index = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+    assert.deepEqual(index.errors, ['button.workbench.ts: scenarios need kebab-case IDs and object definitions.'], id);
+    assert.deepEqual(compilerFixture.list(root), index, id);
+  }
+  // A link names a scenario by the same rule.
+  fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', "links: { '/next': { scenario: '2-up' } }"));
+  const linked = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+  assert.match(linked.errors[0], /^button\.workbench\.ts: link \/next must name a preview ID/);
+  assert.deepEqual(compilerFixture.list(root), linked);
+  // Labels: the literal the native index projects, and one with artboards and iterations, which Node lists.
+  const literal = "scenarios: { 'with-filters': {}, step2: {}, empty: { label: 'Nothing yet' } }";
+  const nested = "scenarios: { 'with-filters': { artboards: { 'side-panel': { width: 320, height: 640, iterations: { 'compact-table': {} } } } }, 'no-results': { iterations: { 'inline-hint': {} } } }";
+  const labels = [
+    [literal, [{ id: 'with-filters', label: 'With filters' }, { id: 'step2', label: 'Step2' }, { id: 'empty', label: 'Nothing yet' }]],
+    [nested, [
+      { id: 'with-filters', label: 'With filters', artboards: [{ id: 'side-panel', label: 'Side panel', width: 320, height: 640, iterations: [{ id: 'compact-table', label: 'Compact table' }] }] },
+      { id: 'no-results', label: 'No results', iterations: [{ id: 'inline-hint', label: 'Inline hint' }] },
+    ]],
+  ];
+  for (const [fields, scenarios] of labels) {
+    fs.writeFileSync(path.join(root, 'button.workbench.ts'), definition('html', './button.ts', fields).replace('scenarios: { default: {}, disabled: { inputs: { label: \'Disabled\' } } }, ', ''));
+    const index = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+    assert.deepEqual(index.errors, [], fields);
+    assert.deepEqual(index.previews[0].scenarios, scenarios, fields);
+    assert.deepEqual(compilerFixture.list(root), index, fields);
+  }
+});
+
+test('defineDocs scenarios follow the ID rule and default to sentence-case labels', async t => {
+  const docs = scenarios => `import { defineDocs } from '@canonic2/workbench';
+export default defineDocs({ id: 'guides/colors', docs: './colors.md', scenarios: ${scenarios} });`;
+  const root = fixture(t, { 'colors.md': '# Colors\n', 'colors.workbench.ts': docs("{ 'dark-mode': {}, empty: { label: 'Nothing yet' } }") });
+  let index = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+  assert.deepEqual(index.errors, []);
+  assert.deepEqual(index.docs[0].scenarios, [{ id: 'dark-mode', label: 'Dark mode' }, { id: 'empty', label: 'Nothing yet' }]);
+  assert.deepEqual(compilerFixture.list(root), index);
+  fs.writeFileSync(path.join(root, 'colors.workbench.ts'), docs("{ '2-up': {} }"));
+  index = JSON.parse(JSON.stringify(await new Compiler(root).index()));
+  assert.deepEqual(index.errors, ['colors.workbench.ts: scenarios need kebab-case IDs.']);
+  assert.deepEqual(compilerFixture.list(root), index);
 });
 
 test('the server supplies discovered lens labels while retaining per-page overrides', async t => {

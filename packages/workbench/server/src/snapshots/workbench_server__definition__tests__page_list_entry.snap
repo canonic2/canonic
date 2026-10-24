@@ -10,12 +10,12 @@ expression: entry
   "source": "page.html",
   "scenarios": [
     {
-      "id": "a--b",
-      "label": "A- B"
+      "id": "with-filters",
+      "label": "With filters"
     },
     {
-      "id": "-ready",
-      "label": " Ready"
+      "id": "step2",
+      "label": "Step2"
     },
     {
       "id": "empty",

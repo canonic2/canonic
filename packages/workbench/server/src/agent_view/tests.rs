@@ -180,9 +180,21 @@ fn canvas_report(selected: &Value) -> Value {
             { "id": "a", "space": { "id": "s", "name": "Acme", "extra": 1 }, "src": "pages/home.html",
               "size": { "width": 393, "height": 852 }, "lens": "dev", "html": "<p>dropped</p>" },
             { "id": "b", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "scenario": "error",
-              "artboard": "wide", "size": { "width": 1440, "height": 900 }, "status": "ready" },
+              "artboard": "wide", "iteration": "bold", "size": { "width": 1440, "height": 900 }, "status": "ready" },
         ],
     })
+}
+
+#[test]
+fn a_view_names_its_selected_iteration_only_when_there_is_one() {
+    let view = |iteration: Value| {
+        let report =
+            json!({ "text": "- Page: Home", "src": "pages/home.html", "iteration": iteration });
+        clean_view(&report).expect("clean").expect("a view")
+    };
+    assert_eq!(view(json!("bold"))["iteration"], json!("bold"));
+    assert_eq!(view(json!("")).get("iteration"), None);
+    assert_eq!(view(json!(3)).get("iteration"), None);
 }
 
 #[test]
@@ -198,7 +210,7 @@ fn a_canvas_report_keeps_each_artboard_without_truncating() {
                 { "id": "a", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "scenario": null,
                   "lens": "dev", "size": { "width": 393, "height": 852 }, "status": "loading" },
                 { "id": "b", "space": { "id": "s", "name": "Acme" }, "src": "pages/home.html", "scenario": "error",
-                  "artboard": "wide", "lens": null, "size": { "width": 1440, "height": 900 }, "status": "ready" },
+                  "artboard": "wide", "iteration": "bold", "lens": null, "size": { "width": 1440, "height": 900 }, "status": "ready" },
             ],
             "version": 2, "canvas": "acme", "selected": "b",
         })

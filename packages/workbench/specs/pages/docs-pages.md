@@ -136,7 +136,10 @@ export default defineDocs({
   name a Markdown file inside the project.
 - `lenses` is a map of kebab-case names to `{ label, adapter, examples,
   styles?, environment? }`. `lens` is the default lens, otherwise the first
-  in `lenses`. `scenarios` is accepted with the same shape as a preview's.
+  in `lenses`. `scenarios` is a map of IDs following the shared ID rule
+  ([scenarios](scenarios.md#declaring-scenarios)) to `{ label? }` only;
+  labels default to the ID in sentence case, and an absent or empty map
+  declares no scenarios.
 - `id` and `title` follow the preview rules, and IDs are unique across
   previews and docs pages.
 - A preview's inline `docs` text belongs to its preview controls. A full
@@ -306,7 +309,9 @@ example Ant Design's):
 - In a docs lens the page's scenarios apply to the whole page: every example
   receives the current one as `context.scenario`. The scenario switcher in the top
   bar selects it. A Markdown page declares its own (`scenarios` in YAML or in
-  `defineDocs`).
+  `defineDocs`). Examples see the first scenario as `default`, whatever its
+  ID, and any other scenario by its ID. Docs examples have no iterations.
+  Scenario rules shared with other page kinds are in [scenarios](scenarios.md).
 - The user guide recommends showing a component's variations side by side on
   the page instead of as scenarios.
 
@@ -321,8 +326,7 @@ example Ant Design's):
   ignored. The default scenario is omitted, and so is a page's default lens: its
   first docs lens (a Markdown page's `lens`), or the design of a page without
   docs. The design of a page with docs is `~design`, and `design` is reserved
-  as an implementation name. `!` joins `:`, `@`, and `~` as
-  characters a `src` cannot contain. Scrolling does not rewrite the address.
+  as an implementation name. A `src` cannot contain `:`, `+`, `!` or `~`. Scrolling does not rewrite the address.
 - The lens choice persists across pages as for every lens. A page that
   lacks the chosen lens shows its default lens: its first docs lens, or its
   design when it has no docs. A Markdown page always shows one of its lenses.
@@ -422,9 +426,8 @@ problems update when they arrive.
   to claim a file has it. Docs are served at the Markdown's path in the lens
   `?lens=` names, and the routes take the Markdown as `page`. Handoffs, the
   source menu, and export references use the owning page.
-- **Schema documentation.** The schema change updates `ui/legacy/README.md`,
-  `docs/configuration.md`, `shared/skills/canonic-workbench/SKILL.md`, and
-  `shared/rules/canonic-workbench.md`. A new user guide, `docs/docs-pages.md`,
+- **Schema documentation.** The schema change updates `ui/legacy/README.md`
+  and `docs/configuration.md`. A new user guide, `docs/docs-pages.md`,
   is added to the docs index and the website's `docGroups`.
 
 ### Reusable page lifecycle

@@ -14,6 +14,9 @@ export function createContentController(options) {
   const pages = new Map();
   let target = services.address.parse(location.hash);
   const params = new URLSearchParams(location.search);
+  // This renderer's declared artboard, or "" for a scenario's implicit one:
+  // the key of its iteration in the address's `+` parts.
+  const artboardId = params.get('artboard') || '';
   let trace = beginTrace(
     target,
     {
@@ -41,13 +44,37 @@ export function createContentController(options) {
     options.viewport.classList.add('has-problem');
     changed();
   }
-  function flags(src, scenario) {
+  function flags(src, scenario, iteration) {
     const url = new URL(src, options.root);
     url.searchParams.set('actions', actions ? 'on' : 'off');
     if (scenario) url.searchParams.set('scenario', scenario);
-    const id = new URLSearchParams(location.search).get('artboard');
-    if (id) url.searchParams.set('artboard', id);
+    if (artboardId) url.searchParams.set('artboard', artboardId);
+    if (iteration) url.searchParams.set('iteration', iteration);
     return address(url.href, trace);
+  }
+  // A scenario as the page index lists it, with its artboards and iterations:
+  // a preview's from its definition, an authored page's from its config item.
+  function scenarioEntry(item, scenario) {
+    const list = config?.pages[item.src]?.preview?.scenarios || item.scenarios || [];
+    return scenario ? list.find((s) => s.id === scenario) || null : list[0] || null;
+  }
+  // The iteration the address names for this artboard, when the scenario declares it.
+  function iterationEntry(item, scenario) {
+    const id = target.iterations?.[artboardId];
+    const entry = id ? scenarioEntry(item, scenario) : null;
+    if (!entry) return null;
+    const owner = artboardId
+      ? entry.artboards?.find((board) => board.id === artboardId)
+      : entry.artboards?.length
+        ? null
+        : entry;
+    return owner?.iterations?.find((iteration) => iteration.id === id) || null;
+  }
+  function withIteration(next, iteration) {
+    const rest = { ...next };
+    delete rest.iteration;
+    delete rest.iterations;
+    return iteration ? { ...rest, iterations: { [artboardId]: iteration } } : rest;
   }
   function write(next) {
     target = next;
@@ -94,6 +121,9 @@ export function createContentController(options) {
         : storybook
           ? target.scenario
           : item.scenarios?.slice(1).find((s) => s.id === target.scenario)?.id || null;
+    // Iterations belong to the design; other lenses show the authored artboard
+    // and keep the address's choice for the way back.
+    const iteration = lens ? null : iterationEntry(item, scenario);
     view = {
       src: item.src,
       item,
@@ -102,11 +132,15 @@ export function createContentController(options) {
       scenarioLabel: scenario
         ? item.scenarios?.find((s) => s.id === scenario)?.label || null
         : null,
+      iteration,
       story: null,
       url: null,
       code: (config.pages[item.src]?.code || []).filter((c) => c.exists).map((c) => c.path),
     };
-    write({ ...target, src: item.src, scenario, lens: lens?.key || 'design' });
+    if (iteration?.source && !view.code.includes(iteration.source))
+      view.code.unshift(iteration.source);
+    const destination = { ...target, src: item.src, scenario, lens: lens?.key || 'design' };
+    write(lens ? destination : withIteration(destination, iteration?.id));
     if (lens?.problem) {
       frames.suspend();
       services.native.hide();
@@ -164,7 +198,7 @@ export function createContentController(options) {
         const url = new URL(flags(item.markdown, scenario));
         url.searchParams.set('lens', lens.key);
         view.url = url.href;
-      } else if (!lens) view.url = flags(item.src, scenario);
+      } else if (!lens) view.url = flags(item.src, scenario, iteration?.id);
       else {
         view.url = services.lenses.url(lens, item.implementations[lens.key], scenario);
         if (lens.kind === 'workbench') view.url = flags(view.url, scenario);
@@ -186,7 +220,8 @@ export function createContentController(options) {
       next.src === target.src &&
       (next.scenario || null) === (target.scenario || null) &&
       (next.lens || 'design') === (target.lens || 'design') &&
-      (next.example || null) === (target.example || null);
+      (next.example || null) === (target.example || null) &&
+      (next.iterations?.[artboardId] || null) === (target.iterations?.[artboardId] || null);
     if (same && content.read()?.ready) return;
     write(next);
     void show().catch(fail);
@@ -195,14 +230,17 @@ export function createContentController(options) {
     problem: () => problem,
     read() {
       if (!view || !config) return null;
-      const { item, lens, scenarioLabel } = view;
-      const id = new URLSearchParams(location.search).get('artboard');
-      const declared = config.pages[item.src]?.preview?.artboards?.find((b) => b.id === id);
+      const { item, lens, scenarioLabel, iteration } = view;
+      const declared = artboardId
+        ? scenarioEntry(item, view.scenario)?.artboards?.find((b) => b.id === artboardId)
+        : null;
       const disabled = !!lens && !['workbench', 'docs'].includes(lens.kind);
       return {
         src: item.src,
         scenario: target.scenario,
         lens: lens?.key || null,
+        iteration: iteration?.id || null,
+        ...(iteration ? { iterationLabel: iteration.label || iteration.id } : {}),
         hash: location.hash,
         label: declared
           ? item.label + ' / ' + declared.label
@@ -227,7 +265,12 @@ export function createContentController(options) {
       if (!value || typeof value !== 'object' || !('src' in value) || typeof value.src !== 'string')
         throw new Error('Invalid content target.');
       const next = value;
-      navigate({ ...next, scenario: next.scenario || null, lens: next.lens || 'design' });
+      navigate(
+        withIteration(
+          { ...next, scenario: next.scenario || null, lens: next.lens || 'design' },
+          typeof next.iteration === 'string' ? next.iteration : null,
+        ),
+      );
     },
     size(w, h) {
       width = w;
@@ -252,7 +295,7 @@ export function createContentController(options) {
     },
     pickScenario(id) {
       const row = rows.find((r) => r.id === id);
-      if (row) navigate({ ...target, scenario: row.target || null });
+      if (row) navigate(withIteration({ ...target, scenario: row.target || null }, null));
     },
     lens(key) {
       navigate({ ...target, lens: key || 'design' });

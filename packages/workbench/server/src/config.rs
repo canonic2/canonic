@@ -9,6 +9,7 @@ mod read;
 mod sizes;
 mod yaml;
 
+pub(crate) use manifest::settle_lenses;
 pub(crate) use read::{identity, spaces_in};
 pub(crate) use sizes::page_sizes;
 

@@ -79,6 +79,47 @@
     else page.sizes = next;
   }
 
+  /* A group stays a group while its name is being retyped. */
+  function isGroup(entry) {
+    return entry.group !== undefined && entry.group !== null;
+  }
+
+  function newPage() {
+    return { label: 'Untitled page', src: 'pages/untitled.html' };
+  }
+
+  /* A group as the YAML needs it: a name and at least one page. Groups hold
+     pages only; they don't nest. */
+  function newGroup() {
+    return { group: 'New group', items: [newPage()] };
+  }
+
+  /* The first reason the draft can't be saved, or null. */
+  function validate(collections) {
+    var problem = null;
+    (collections || []).some(function (collection, index) {
+      if (!String(collection.name || '').trim()) { problem = 'Collection ' + (index + 1) + ' needs a name.'; return true; }
+      function visit(entries) {
+        return (entries || []).some(function (entry) {
+          if (isGroup(entry)) {
+            if (!String(entry.group || '').trim() || !(entry.items || []).length) {
+              problem = 'Every group needs a name and at least one page.';
+              return true;
+            }
+            return visit(entry.items);
+          }
+          if (!String(entry.label || '').trim() || !String(entry.src || '').trim()) {
+            problem = 'Every page needs a label and source path.';
+            return true;
+          }
+          return false;
+        });
+      }
+      return visit(collection.items);
+    });
+    return problem;
+  }
+
   function create(options) {
     var dialog = options.dialog;
     var body = options.body;
@@ -88,6 +129,7 @@
     var selection = null;
     var navPane = null;
     var inspector = null;
+    var focusName = false; /* focus the group name on the next inspector render */
 
     function setStatus(message, error) {
       status.textContent = message || '';
@@ -96,7 +138,7 @@
 
     function pageCount(entries) {
       return (entries || []).reduce(function (count, entry) {
-        return count + (entry.group ? pageCount(entry.items) : 1);
+        return count + (isGroup(entry) ? pageCount(entry.items) : 1);
       }, 0);
     }
 
@@ -115,9 +157,18 @@
     }
 
     function addPage(owner, collection) {
-      var page = { label: 'Untitled page', src: 'pages/untitled.html' };
+      var page = newPage();
       owner.push(page);
       select('page', page, owner, collection);
+    }
+
+    /* Adds a group to a collection and puts the cursor in its name. */
+    function addGroup(collection) {
+      var owner = collection.items || (collection.items = []);
+      var group = newGroup();
+      owner.push(group);
+      focusName = true;
+      select('group', group, owner, collection);
     }
 
     function removeSelected(message) {
@@ -174,9 +225,12 @@
       head.appendChild(iconButton('Add page to ' + (collection.name || 'collection'), 'plus', function () {
         addPage(collection.items || (collection.items = []), collection);
       }, 'wb-config-nav-add'));
+      head.appendChild(iconButton('Add group to ' + (collection.name || 'collection'), 'folder-plus', function () {
+        addGroup(collection);
+      }, 'wb-config-nav-add'));
       block.appendChild(head);
       (collection.items || []).forEach(function (entry) {
-        block.appendChild(entry.group
+        block.appendChild(isGroup(entry)
           ? navGroup(entry, collection.items, collection)
           : navPage(entry, collection.items, collection, false));
       });
@@ -292,6 +346,12 @@
       primary.appendChild(document.createTextNode('Add page to this collection'));
       primary.addEventListener('click', function () { addPage(collection.items || (collection.items = []), collection); });
       inspector.appendChild(primary);
+      var addGroupAction = element('button', 'wb-config-inspector-action');
+      addGroupAction.type = 'button';
+      addGroupAction.appendChild(icon('folder-plus', 15));
+      addGroupAction.appendChild(document.createTextNode('Add group to this collection'));
+      addGroupAction.addEventListener('click', function () { addGroup(collection); });
+      inspector.appendChild(addGroupAction);
       inspector.appendChild(danger('Remove collection', function () {
         removeSelected('Remove “' + (collection.name || 'this collection') + '” and all of its pages?');
       }));
@@ -300,11 +360,18 @@
     function renderGroup(group) {
       inspector.appendChild(inspectorHeader('Group', group.group || 'Untitled group', pageCount(group.items) + ' pages', 'folder'));
       var form = element('div', 'wb-config-inspector-form');
-      form.appendChild(field('Group name', group.group, function (value) {
+      var name = field('Group name', group.group, function (value) {
         group.group = value;
         renderNavigation();
-      }, { placeholder: 'Authentication' }));
+      }, { placeholder: 'Authentication' });
+      form.appendChild(name);
       inspector.appendChild(form);
+      if (focusName) {
+        focusName = false;
+        var control = name.querySelector('input');
+        control.focus();
+        control.select();
+      }
       var primary = element('button', 'wb-config-inspector-action');
       primary.type = 'button';
       primary.appendChild(icon('plus', 15));
@@ -361,27 +428,8 @@
       }).catch(function (error) { setStatus(String(error.message || error), true); });
     }
 
-    function validate() {
-      var problem = null;
-      collections.some(function (collection, index) {
-        if (!String(collection.name || '').trim()) { problem = 'Collection ' + (index + 1) + ' needs a name.'; return true; }
-        function visit(entries) {
-          return (entries || []).some(function (entry) {
-            if (entry.group) return visit(entry.items);
-            if (!String(entry.label || '').trim() || !String(entry.src || '').trim()) {
-              problem = 'Every page needs a label and source path.';
-              return true;
-            }
-            return false;
-          });
-        }
-        return visit(collection.items);
-      });
-      return problem;
-    }
-
     function save() {
-      var problem = validate();
+      var problem = validate(collections);
       if (problem) { setStatus(problem, true); return; }
       options.save.disabled = true;
       setStatus('Saving…');
@@ -416,5 +464,7 @@
     return { open: open };
   }
 
-  window.wbConfigEditor = { create: create, pageSizes: pageSizes, toggleSize: toggleSize };
+  window.wbConfigEditor = {
+    create: create, pageSizes: pageSizes, toggleSize: toggleSize, newGroup: newGroup, validate: validate,
+  };
 })();

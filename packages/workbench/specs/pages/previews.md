@@ -132,7 +132,13 @@ applies independently within each isolated artboard.
   label defaults to **Preview**; `previews.lensLabel` sets the discovery
   fallback and an explicit page's `lensLabel` overrides it under the
   [lens contract](../canvas/lenses.md). Its address is the definition path; `?scenario=<id>` selects a
-  scenario and the first scenario is the default. An unknown scenario renders an error.
+  scenario and the first scenario is the default. A direct preview URL naming
+  an unknown scenario renders an error; through the canvas, an unknown
+  scenario in the address falls back to the first scenario and the address is
+  normalized. Scenario rules shared with other page kinds are in
+  [scenarios](scenarios.md).
+- The runtime marks the rendered scenario and iteration on the document element
+  as `data-wb-scenario` and, when an iteration renders, `data-wb-iteration`.
 - Same-origin `.workbench.ts(x)` addresses load into a warm preview host
   rather than navigating the iframe. A newer load supersedes a queued one, and
   page-level listeners, timers, and animation frames remain owned by that
@@ -196,11 +202,11 @@ applies independently within each isolated artboard.
   the page's own network calls, and `aliases` for modules. Projects can run
   any code in environments and hooks; `requests` is the built-in tool for the
   common case.
-- `requests` (preview and scenario) maps keys `[METHOD] /path [Operation]` or a
+- `requests` (preview, scenario and iteration) maps keys `[METHOD] /path [Operation]` or a
   full URL to a response object or a function `(request, context)`.
   Validation checks key shape and value type. Matching
-  ([requests.js](../../ui/preview/requests.js)): the scenario's map before the
-  preview's, declaration order within each; a bare path matches any origin;
+  ([requests.js](../../ui/preview/requests.js)): the iteration's map, then the
+  scenario's, then the preview's, declaration order within each; a bare path matches any origin;
   `*` matches any characters; a key's query parameters must be present with
   those values; the operation is the body's `operationName`, or the name in
   its `query`, or the same from the query string.
@@ -216,7 +222,8 @@ applies independently within each isolated artboard.
   signal aborts; `failed` rejects with a `TypeError` (XHR: `error` event);
   `passthrough` sends the original request. The Actions switch does not
   affect requests.
-- Astro: the compiler swaps `globalThis.fetch` for the scenario's maps around
+- Astro: the compiler swaps `globalThis.fetch` for the rendered iteration's,
+  scenario's and preview's maps, in that order, around
   each server render, relative URLs resolving against `http://localhost/`,
   with a 10-second abort. Unmatched requests are not logged there.
 - `workbench.config.ts` `environment` (a path from the project root, inside
@@ -230,8 +237,10 @@ applies independently within each isolated artboard.
 
 - An implementation with `kind: workbench` has no `base` or `url`; `start`,
   `catalog`, and a `root` other than `.` are reported. A page maps it to a preview
-  ID. The lens loads the definition path, and a design scenario loads the preview
-  scenario with the same ID; other scenarios show the preview's first scenario. The
+  ID. The server maps each preview scenario ID to `/<file>?scenario=<id>`; the
+  lens loads the definition path, a design scenario loads the preview
+  scenario with the same ID, and the design's first scenario and any scenario
+  without a match show the preview's first scenario. The
   preview's source is added to the page's code pointers for **Open the
   source** and handoffs.
 - An unknown ID is reported as `<label>: unknown Workbench preview “<id>”`.
@@ -283,17 +292,26 @@ reached through `node_modules` are listed by name and version.
 ### Definition contract
 
 - `id`: kebab-case segments separated by `/`, unique per project. `adapter`:
-  a kebab-case name. `source.entry`, and any per-scenario `source.entry`, must
-  exist inside the project after resolving symbolic links.
-- `scenarios`: a map of kebab-case IDs to objects; absent or empty means one
-  `default` scenario. Labels default to title case.
-- A scenario's `artboards` and its artboards' `iterations` follow
-  [artboards and iterations](iterations.md#declaring-artboards-and-iterations).
-  A definition has no top-level `artboards` or `iterations`.
-- `inputs`, `fixtures`, `globals` merge preview, then scenario, then artboard,
-  then iteration, then (for inputs) control overrides, and are
-  structured-cloned per render. Validation only checks that scenario,
-  artboard and iteration values serialize as JSON.
+  a kebab-case name. `source.entry`, and any scenario's or iteration's
+  `source.entry`, must exist inside the project after resolving symbolic links.
+- `scenarios`: a map of IDs following the shared ID rule
+  ([scenarios](scenarios.md#declaring-scenarios)) to objects; absent or empty means one
+  `default` scenario. A scenario may contain `label`, `source`, `inputs`,
+  `fixtures`, `globals`, `requests`, `setup`, `play`, `ready`, and either
+  `artboards` or `iterations`; the SDK types make the last two exclusive and
+  validation rejects a scenario with both. Labels default to the ID in title
+  case.
+- A scenario's `artboards` and the `iterations` of its declared or implicit
+  artboard follow
+  [artboards and iterations](iterations.md#declaring-artboards-and-iterations),
+  which owns their validation (ID syntax, artboard fields and sizes, iteration
+  fields). A definition has no top-level `artboards` or `iterations`.
+- `inputs` merge preview, scenario, declared artboard, iteration, then control
+  overrides; `fixtures` and `globals` merge preview, scenario, then iteration
+  (a declared artboard supplies inputs only). All are structured-cloned per
+  render. Validation checks that scenario, artboard and iteration `inputs`,
+  `fixtures` and `globals` serialize as JSON, that `requests` keys and values
+  have the request-mock shape, and that iteration hooks are functions.
 - `sizes`: a nonempty list of kebab-case `SizeKey` values, including keys
   declared by the space. The [sizes contract](../canvas/sizes.md#typescript-previews)
   owns resolution, unknown-key reporting and authored-page precedence.
@@ -382,8 +400,8 @@ compiler, and the installed extension downloads none.
 ### Readiness and errors
 
 - A render aborts the previous signal and runs cleanups in reverse; a failed
-  cleanup does not stop the others. `setup` runs environment, preview, then
-  scenario; the source mounts; `play` and `ready` follow; then fonts, then visible
+  cleanup does not stop the others. `setup` runs environment, preview,
+  scenario, then iteration; the source mounts; `play` and `ready` follow; then fonts, then visible
   images (offscreen lazy images excluded) or 3 seconds. Each phase is logged on its own event
   ([readiness](../preview-pipeline/readiness.md)).
 - Thrown errors, unhandled rejections, adapter errors, and `context.error`

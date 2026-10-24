@@ -16,6 +16,9 @@ pub(crate) struct CurrentView {
     pub(crate) size: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) artboard: Option<String>,
+    /// The selected artboard's iteration; `None` for its authored design.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) iteration: Option<String>,
 }
 
 /// One export request. Serialized, it is the key identical requests share.
@@ -108,7 +111,7 @@ fn current_view(value: &Value) -> Result<CurrentView, String> {
         .ok_or_else(invalid)?;
     let width = view.get("width").and_then(dimension).ok_or_else(invalid)?;
     let height = view.get("height").and_then(dimension).ok_or_else(invalid)?;
-    for key in ["scenario", "lens", "size", "artboard"] {
+    for key in ["scenario", "lens", "size", "artboard", "iteration"] {
         match view.get(key) {
             None | Some(Value::Null) => {}
             Some(Value::String(text)) if length(text) <= 2000 => {}
@@ -116,12 +119,20 @@ fn current_view(value: &Value) -> Result<CurrentView, String> {
         }
     }
     let text = |key: &str| view.get(key).and_then(Value::as_str).map(str::to_owned);
+    let lens = text("lens").filter(|lens| !lens.is_empty());
     Ok(CurrentView {
         page: page.to_owned(),
         width,
         height,
         scenario: text("scenario"),
-        lens: text("lens"),
+        // An implementation lens shows no iteration, so it can't make two
+        // requests for the same export differ.
+        iteration: if lens.is_some() {
+            None
+        } else {
+            text("iteration")
+        },
+        lens,
         size: text("size"),
         artboard: text("artboard"),
     })
@@ -376,6 +387,40 @@ mod tests {
                 json!({ "scope": "page", "current": { "page": "a", "width": 1, "height": 1, "size": 4 } })
             ),
             "Invalid current export size."
+        );
+        assert_eq!(
+            refused(
+                json!({ "scope": "page", "current": { "page": "a", "width": 1, "height": 1, "iteration": [] } })
+            ),
+            "Invalid current export iteration."
+        );
+    }
+
+    #[test]
+    fn a_current_view_keeps_its_iteration_in_the_request_key() {
+        let request = read_request(&json!({ "format": "images", "scope": "page",
+            "current": { "page": "a", "artboard": "warning", "iteration": "bold", "width": 480, "height": 120 } }))
+        .expect("current");
+        let current = request.current.as_ref().expect("current view");
+        assert_eq!(
+            (current.artboard.as_deref(), current.iteration.as_deref()),
+            (Some("warning"), Some("bold"))
+        );
+        assert!(request_key(&request).contains(r#""iteration":"bold""#));
+        let design = read_request(&json!({ "format": "images", "scope": "page",
+            "current": { "page": "a", "artboard": "warning", "width": 480, "height": 120 } }))
+        .expect("current");
+        assert_ne!(request_key(&design), request_key(&request));
+        let under_lens = |iteration: Option<&str>| {
+            read_request(&json!({ "format": "images", "scope": "page",
+                "current": { "page": "a", "lens": "storybook", "iteration": iteration,
+                    "width": 480, "height": 120 } }))
+            .expect("current")
+        };
+        assert_eq!(
+            request_key(&under_lens(Some("bold"))),
+            request_key(&under_lens(None)),
+            "an implementation lens shows no iteration"
         );
     }
 

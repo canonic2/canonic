@@ -22,7 +22,9 @@
    the same page, in the same scenario, at the same width, through the same
    lens: #pages/sign-in.html:error@mobile~staging — address.js reads and writes
    it. The default scenario and the design lens are left out, so a page without
-   scenarios — or on the version you land on — reads as it always did.
+   scenarios — or on the version you land on — reads as it always did. A
+   `+` part names an artboard's iteration; the shell keeps only those the
+   selected scenario declares, and only the design lens renders them.
 
    Scenarios themselves are the page's business, not the shell's: the id
    travels in the frame's URL and scenarios.js applies it inside.
@@ -92,6 +94,7 @@
   var current = null;      /* src of the picked page */
   var currentScenario = null; /* its scenario id, or null for the default one */
   var currentExample = null; /* on a docs page, the example the address names */
+  var currentIterations = {}; /* each shown artboard's iteration: artboard id ("" for the implicit one) -> iteration id */
   var lensPref = null;     /* the lens the top bar was left on, or null for the design */
   var view = null;         /* what the canvas is showing — see wbView below */
 
@@ -167,6 +170,7 @@
     dialog.collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
     dialog.current = current ? { page: current, scenario: currentScenario, lens: view && view.lens ? view.lens.key : null,
       artboard: window.wbMultiCanvas ? window.wbMultiCanvas.selectedArtboard() : undefined,
+      iteration: (window.wbMultiCanvas ? window.wbMultiCanvas.selectedIteration() : currentIterations['']) || undefined,
       size: canvas.dataset.size, width: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().width : Math.round(frame.offsetWidth) || 1440,
       height: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().height : Math.round(frame.offsetHeight) || 900 } : undefined;
     dialog.show();
@@ -231,12 +235,14 @@
   /* The default scenario and the page's default lens are addressed by leaving
      them out, so the hash for a page with scenarios and the hash for one
      without look the same. A pick that names no lens keeps the one the top
-     bar is on. */
-  function writeHash(src, scenario, size, lens, example) {
+     bar is on. Iterations travel only when the caller keeps them — a lens
+     switch does; another page, scenario or a followed link starts from the
+     authored design. */
+  function writeHash(src, scenario, size, lens, example, iterations) {
     /* A docs lens has no size, and only a docs lens has examples. */
     var docs = lensRules.isDocsLens(lensRules.chooseLens(index[src], config.implementations, lens || lensPref));
-    location.hash = window.wbAddress.write({ src: src, scenario: scenario, size: docs ? null : size || null,
-      lens: lens || null, example: docs ? example || null : null });
+    location.hash = window.wbAddress.write({ src: src, scenario: scenario, iterations: iterations || null,
+      size: docs ? null : size || null, lens: lens || null, example: docs ? example || null : null });
   }
 
   /* Once the canvas has settled on a page, the address says exactly what's
@@ -252,8 +258,9 @@
     var size = docs ? null : sizeKey() || null;
     var example = docs ? currentExample : null;
     if (have.src === current && have.scenario === currentScenario && have.size === size && have.lens === lens &&
-        have.example === example) return;
-    var want = window.wbAddress.write({ src: current, scenario: currentScenario, size: size, lens: lens, example: example });
+        have.example === example && sameIterations(have.iterations, currentIterations)) return;
+    var want = window.wbAddress.write({ src: current, scenario: currentScenario, iterations: currentIterations,
+      size: size, lens: lens, example: example });
     history.replaceState(null, '', location.pathname + location.search + (want ? '#' + want : ''));
   }
 
@@ -281,6 +288,55 @@
       if (scenarios[i].id === (id || 'default')) return scenarios[i].label;
     }
     return null;
+  }
+
+  /* ------------------------------------------------ artboards, iterations */
+
+  /* A scenario as the page index lists it, with the artboards and iterations
+     it declares: a preview's from its definition, an authored page's from
+     workbench.yaml. No scenario id is the page's first. */
+  function scenarioEntry(src, id) {
+    var page = resolved && resolved.pages && resolved.pages[src];
+    var list = (page && page.preview && page.preview.scenarios) || (index[src] && index[src].scenarios) || [];
+    if (!id) return list[0] || null;
+    return list.filter(function (scenario) { return scenario.id === id; })[0] || null;
+  }
+
+  /* The scenario's declared artboards, or undefined for its one implicit artboard. */
+  function declaredArtboards(src, scenario) {
+    var entry = scenarioEntry(src, scenario);
+    return entry && entry.artboards && entry.artboards.length ? entry.artboards : undefined;
+  }
+
+  /* What the address asked for, kept only where the scenario declares that
+     artboard and that iteration, in the scenario's artboard order. Anything
+     else falls back to the authored design. */
+  function knownIterations(src, scenario, wanted) {
+    var out = {};
+    var entry = scenarioEntry(src, scenario);
+    if (!entry || !wanted) return out;
+    function keep(key, iterations) {
+      var id = wanted[key];
+      if (id && (iterations || []).some(function (iteration) { return iteration.id === id; })) out[key] = id;
+    }
+    if (entry.artboards && entry.artboards.length) {
+      entry.artboards.forEach(function (board) { keep(board.id, board.iterations); });
+    } else keep('', entry.iterations);
+    return out;
+  }
+
+  /* The selected iteration of one artboard, with its label and source, or null. */
+  function iterationEntry(src, scenario, artboardId, id) {
+    var entry = scenarioEntry(src, scenario);
+    if (!entry || !id) return null;
+    var owner = artboardId
+      ? (entry.artboards || []).filter(function (board) { return board.id === artboardId; })[0]
+      : entry;
+    return ((owner && owner.iterations) || []).filter(function (iteration) { return iteration.id === id; })[0] || null;
+  }
+
+  function sameIterations(a, b) {
+    return JSON.stringify(a || {}) === JSON.stringify(b || {});
   }
 
   /* ------------------------------------------------------------ lenses */
@@ -336,7 +392,7 @@
   function viewUrl(item, lens, scenario) {
     /* The server serves a page's Markdown as its docs, in the lens named. */
     if (lensRules.isDocsLens(lens)) return withFlags(item.markdown, scenario) + '&lens=' + encodeURIComponent(lens.key);
-    if (!lens) return withFlags(item.src, scenario);
+    if (!lens) return withFlags(item.src, scenario, currentIterations['']);
     if (lens.kind === 'workbench') {
       var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], scenario), config.root);
       target.searchParams.set('actions', actionsOn ? 'on' : 'off');
@@ -351,10 +407,14 @@
   function showFrame(url) {
     if (window.wbMultiCanvas) {
       var sequence = showSeq;
-      var declared = (!view.lens || view.lens.kind === 'workbench') && resolved && resolved.pages[current] && resolved.pages[current].preview ? resolved.pages[current].preview.artboards : undefined;
+      var preview = resolved && resolved.pages[current] && resolved.pages[current].preview;
+      var declared = (!view.lens || view.lens.kind === 'workbench') && preview ? declaredArtboards(current, currentScenario) : undefined;
       window.wbMultiCanvas.show({ src: current, label: titleParts(view.item, view.scenarioLabel, view.lens).join(' / '), pageLabel: view.item.label, scenario: currentScenario, lens: view.lens ? view.lens.key : null,
         example: currentExample, docs: lensRules.isDocsLens(view.lens), size: sizeByKey(canvas.dataset.size) || spaceSizes[0], actions: actionsOn,
         artboards: declared,
+        /* Each renderer keeps its iteration through every lens, so its
+           annotations stay with it; only the design lens renders it. */
+        iterations: currentIterations,
         select: function (scenario, size, actions, src, lens) {
           if (actions !== undefined) setActions(actions);
           var preset = sizesOf(view.item).find(function (entry) { return entry.kind === 'fixed' && entry.width === size.width && entry.height === size.height; });
@@ -501,7 +561,7 @@
       button.setAttribute('aria-pressed', String(showing === key));
       button.addEventListener('click', function () {
         setLensPref(key);
-        writeHash(current, currentScenario, sizeKey(), key, currentExample);
+        writeHash(current, currentScenario, sizeKey(), key, currentExample, currentIterations);
       });
       lensesBox.appendChild(button);
     });
@@ -830,7 +890,7 @@
     exampleToReveal = null;
   }
 
-  function show(src, scenario, example) {
+  function show(src, scenario, example, iterations) {
     var item = index[src];
     var nextLens = item ? effectiveLens(item) : null;
     var docsItem = lensRules.isDocsLens(nextLens);
@@ -863,6 +923,9 @@
     /* Under a Storybook lens the scenario slot carries the story; it's checked
        against the title's stories once they're in. */
     currentScenario = !item ? null : story ? scenario || null : scenarioOf(item, scenario);
+    /* A story is no scenario to check iterations against: keep them as they are
+       for the way back to the design lens, which checks them again. */
+    currentIterations = !item ? {} : story ? Object.assign({}, iterations || {}) : knownIterations(src, currentScenario, iterations);
     updateSizeAvailability(item, lens);
 
     /* The list marks the row and follows it into its collection, wherever the
@@ -907,10 +970,15 @@
       lens: lens,
       scenario: story ? null : currentScenario,
       scenarioLabel: null,
+      /* The implicit artboard's iteration, on the design only. */
+      iteration: lens ? null : iterationEntry(src, currentScenario, null, currentIterations['']),
       story: null,
       url: null,
       code: codeFor(item, null),
     };
+    if (view.iteration && view.iteration.source && view.code.indexOf(view.iteration.source) === -1) {
+      view.code.unshift(view.iteration.source);
+    }
 
     if (lens && lens.problem) {
       var lensError = new Error(lens.problem);
@@ -985,11 +1053,12 @@
      carrying both flags it needs — whether the preview is live, and which
      scenario of the page to render. Same trip, same reason — the shell can't
      reach across the origin, so it hands them over in the URL. */
-  function withFlags(src, scenario) {
+  function withFlags(src, scenario, iteration) {
     var url = root + src + (src.indexOf('?') > -1 ? '&' : '?') +
       'actions=' + (actionsOn ? 'on' : 'off');
     var artboard = new URLSearchParams(location.search).get('artboard');
     if (artboard) url += '&artboard=' + encodeURIComponent(artboard);
+    if (iteration) url += '&iteration=' + encodeURIComponent(iteration);
     return scenario ? url + '&scenario=' + encodeURIComponent(scenario) : url;
   }
 
@@ -1126,7 +1195,9 @@
       frame.wbRestoring = false;
       sessions.add(key, frame);
       var host = frame.contentWindow;
-      if (showing.pathname === next.pathname && host && host.__workbenchOptions && !host.__workbenchError) {
+      /* Another iteration can bring its own source, so it loads the document again. */
+      var sameIteration = showing.searchParams.get('iteration') === next.searchParams.get('iteration');
+      if (showing.pathname === next.pathname && sameIteration && host && host.__workbenchOptions && !host.__workbenchError) {
         frame.wbRequestedUrl = src;
         frame.wbLoadSequence = (frame.wbLoadSequence || 0) + 1;
         host.history.replaceState(host.history.state, '', next.href);
@@ -1257,8 +1328,11 @@
   function tellHost(src, scenario, lens, pending) {
     if (window.wbAgentContext) window.wbAgentContext.report();
     if (!host) return;
-    host.postMessage({ type: 'wb-here', src: src || null, scenario: scenario || null,
-      lens: lens || null, pending: !!pending }, '*');
+    var message = { type: 'wb-here', src: src || null, scenario: scenario || null,
+      lens: lens || null, pending: !!pending };
+    /* The implicit artboard's iteration, when the design shows one. */
+    if (src && src === current && !lens && currentIterations['']) message.iteration = currentIterations[''];
+    host.postMessage(message, '*');
   }
 
   function tellHostRefreshFailed() {
@@ -1802,7 +1876,7 @@
   /* Reloading is what applies it — the flag is read as the page parses. */
   actionsToggle.addEventListener('wb-actions-toggle', function (e) {
     setActions(e.detail.checked);
-    if (current) show(current, currentScenario);
+    if (current) show(current, currentScenario, undefined, currentIterations);
   });
 
   reload.addEventListener('click', function () {
@@ -1812,7 +1886,7 @@
       return;
     }
     if (!frame.getAttribute('src')) {
-      show(current, currentScenario);
+      show(current, currentScenario, undefined, currentIterations);
       return;
     }
     loadPreview(view && view.url ? view.url : frame.src, true);
@@ -1849,7 +1923,7 @@
     var item = index[target.src];
     var known = config.implementations[target.lens] || lensRules.hasLens(item, config.implementations, target.lens);
     if (target.lens !== null) setLensPref(known ? target.lens : null);
-    show(target.src, target.scenario, target.example);
+    show(target.src, target.scenario, target.example, target.iterations);
   }
 
   window.addEventListener('hashchange', route);
@@ -1942,7 +2016,12 @@
     loadResolved(function () {
       blank.classList.remove('is-loading');
       config = loaded;
+      /* The server names an unnamed space after its root folder, as the space
+         switcher does; the browser can't always see that folder. */
+      if (resolved && resolved.name) config.name = resolved.name;
       if (resolved && resolved.implementations) config.implementations = resolved.implementations;
+      if (resolved) resolveWorkbenchLenses(config.collections, resolved.collections, config.implementations);
+      showProblems(resolved ? resolved.problems : config.problems);
       loadSpaceSizes();
       /* Custom size… and Edit sizes… write through the server. */
       sizeSwitcher.allowEdit = !!resolved;
@@ -1984,6 +2063,45 @@
         if (initial) history.replaceState(null, '', '#' + window.wbAddress.write(initial));
       }
       route();
+    });
+  }
+
+  /* The space's problems above the page list in a browser window, as the VS
+     Code sidebar shows them: the server's list, which every reader agrees on,
+     or this reader's own when there is no server. The editor tab has no
+     sidebar here; the VS Code sidebar beside it shows the same list. */
+  function showProblems(problems) {
+    var block = document.getElementById('problems');
+    if (!block) return;
+    problems = (problems || []).filter(Boolean);
+    block.hidden = !problems.length;
+    block.textContent = problems.join('\n');
+  }
+
+  function eachPage(list, visit) {
+    (list || []).forEach(function (collection) {
+      (collection.items || []).forEach(function (entry) {
+        ('group' in entry ? entry.items || [] : [entry]).forEach(visit);
+      });
+    });
+  }
+
+  /* A page's Workbench lens names a preview by ID; the server resolves it to
+     the preview's definition path and its scenarios' paths (`{ path,
+     scenarios }`) in its own copy of the collections. The page takes that
+     resolved reference, so its lens URL, scenario menu and references read
+     the same address the renderer loads. */
+  function resolveWorkbenchLenses(list, served, impls) {
+    var refs = {};
+    eachPage(served, function (page) { if (page.src && page.implementations) refs[page.src] = page.implementations; });
+    eachPage(list, function (page) {
+      Object.keys(page.implementations || {}).forEach(function (key) {
+        var ref = page.implementations[key];
+        var answer = refs[page.src] && refs[page.src][key];
+        if (impls && impls[key] && impls[key].kind === 'workbench' && ref && !ref.path && answer && answer.path) {
+          page.implementations[key] = answer;
+        }
+      });
     });
   }
 

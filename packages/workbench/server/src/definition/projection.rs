@@ -57,24 +57,13 @@ fn links(object: &Map<String, Value>, preview_id: &Value) -> Map<String, Value> 
     links
 }
 
+/// The label a scenario shows without its own: its ID in sentence case
+/// (`with-filters` → "With filters"), as the compiler's `titled` writes it.
 fn label(id: &str) -> String {
-    let mut label = String::new();
-    let mut characters = id.chars().enumerate().peekable();
-    while let Some((at, character)) = characters.next() {
-        if at == 0 && character.is_ascii_alphanumeric() {
-            label.push(character.to_ascii_uppercase());
-        } else if character == '-'
-            && characters
-                .peek()
-                .is_some_and(|(_, next)| next.is_ascii_alphanumeric())
-        {
-            label.push(' ');
-            if let Some((_, next)) = characters.next() {
-                label.push(next.to_ascii_uppercase());
-            }
-        } else {
-            label.push(character);
-        }
+    let words = id.replace('-', " ");
+    let mut characters = words.chars();
+    match characters.next() {
+        Some(first) => first.to_uppercase().chain(characters).collect(),
+        None => String::new(),
     }
-    label
 }

@@ -223,7 +223,8 @@ fn page_readme(page: &PageReport) -> String {
                     .size_label
                     .clone()
                     .unwrap_or_else(|| capitalized(&shot.size));
-                let label = if size_label.is_empty() {
+                // An artboard's size is the artboard, which its label already names.
+                let label = if size_label.is_empty() || shot.artboard.is_some() {
                     shot.label.clone()
                 } else {
                     format!("{} · {size_label}", shot.label)
@@ -1127,6 +1128,8 @@ fn place_screenshots(
         };
         let screenshot = PageScreenshot {
             scenario: Some(shot.scenario.clone()).filter(|scenario| !scenario.is_empty()),
+            artboard: shot.artboard.clone(),
+            iteration: shot.iteration.clone(),
             label: or(&shot.label, "Default"),
             size: or(&shot.size, "fit"),
             path: posix_join(&[&folders[&page.id], &name]),
@@ -1421,11 +1424,24 @@ pub(super) mod tests {
             body: b"reference jpeg".to_vec(),
             ..Screenshot::default()
         };
+        let iteration = Screenshot {
+            page: "button".into(),
+            scenario: "default".into(),
+            artboard: Some("warning".into()),
+            iteration: Some("bold".into()),
+            variant: "default-warning+bold".into(),
+            label: "Default · Warning · Bold".into(),
+            size: "warning".into(),
+            size_label: "Warning".into(),
+            width: 480,
+            height: 120,
+            body: b"iteration jpeg".to_vec(),
+        };
         let result = create(
             root,
             &view,
             &ExportOptions {
-                screenshots: vec![shot],
+                screenshots: vec![shot, iteration],
                 ..ExportOptions::default()
             },
         )
@@ -1494,11 +1510,21 @@ pub(super) mod tests {
             contents["acme-ui-design-system/src/button/screenshots/default-laptop.jpg"],
             "reference jpeg"
         );
+        // The artboard is its size, so the heading doesn't repeat it.
+        assert!(guide.contains("### Default · Warning · Bold\n"));
+        assert_eq!(
+            contents["acme-ui-design-system/src/button/screenshots/default-warning-bold.jpg"],
+            "iteration jpeg"
+        );
         assert_eq!(
             serde_json::to_value(&button.screenshots).expect("json"),
             json!([{
                 "scenario": "default", "label": "Default", "size": "laptop",
                 "path": "src/button/screenshots/default-laptop.jpg", "width": 1512, "height": 982,
+            }, {
+                "scenario": "default", "artboard": "warning", "iteration": "bold",
+                "label": "Default · Warning · Bold", "size": "warning", "sizeLabel": "Warning",
+                "path": "src/button/screenshots/default-warning-bold.jpg", "width": 480, "height": 120,
             }])
         );
 

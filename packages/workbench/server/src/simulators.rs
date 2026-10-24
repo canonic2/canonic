@@ -108,11 +108,13 @@ pub(crate) fn catalog(devices: &[Device], key: &str, implementation: &Value) -> 
         .and_then(Value::as_str)
         .filter(|device| !device.is_empty())
         .unwrap_or("booted");
-    let icon = implementation
+    // A configured `catalogIcon` ranks with `previews.icons`; the built-in
+    // default below an authored collection's (`manifest.mergeCollectionIcon`).
+    let configured = implementation
         .get("catalogIcon")
         .and_then(Value::as_str)
-        .filter(|icon| !icon.is_empty())
-        .unwrap_or("smartphone");
+        .filter(|icon| !icon.is_empty());
+    let icon = configured.unwrap_or("smartphone");
     let selected: Vec<_> = devices
         .iter()
         .filter(|device| wanted == "booted" || device.udid == wanted || device.name == wanted)
@@ -138,6 +140,10 @@ pub(crate) fn catalog(devices: &[Device], key: &str, implementation: &Value) -> 
         collection.insert("name".into(), label.clone());
     }
     collection.insert("icon".into(), json!(icon));
+    collection.insert(
+        "iconPriority".into(),
+        json!(if configured.is_some() { 6 } else { 1 }),
+    );
     collection.insert("items".into(), Value::Array(items));
     Catalog {
         collections: if selected.is_empty() {
@@ -171,7 +177,7 @@ mod tests {
         assert_eq!(
             imported.collections,
             [
-                json!({ "name": "Simulator", "icon": "smartphone", "items": [{
+                json!({ "name": "Simulator", "icon": "smartphone", "iconPriority": 6, "items": [{
                 "label": "iPhone 17", "src": "__ios-simulator/ios/SIM-1.html", "icon": "smartphone",
                 "implementations": { "ios": { "device": "SIM-1" } }, "implementationOnly": "ios",
             }] })
@@ -192,6 +198,9 @@ mod tests {
         let devices = [device("iPhone 17", "SIM-1"), device("iPad Pro", "SIM-2")];
         let every = catalog(&devices, "ios", &json!({ "label": "Simulator" }));
         assert_eq!(every.pages.len(), 2);
+        // Without a configured catalogIcon, the built-in default ranks lowest.
+        assert_eq!(every.collections[0]["icon"], "smartphone");
+        assert_eq!(every.collections[0]["iconPriority"], 1);
         assert_eq!(
             every.collections[0]["items"][1]["src"],
             "__ios-simulator/ios/SIM-2.html"

@@ -74,6 +74,10 @@ fn valid(entry: &Value, file: &str, docs: bool) -> bool {
         }
 }
 
+/// The problem for a definition whose path holds an address mark; the Node
+/// index reports the same text.
+const RESERVED_PATH: &str = "a preview’s path can’t contain “:”, “+”, “!”, or “~” — they mark the scenario, the iteration, the example, and the lens in the address.";
+
 /// The answer the records make.
 ///
 /// # Errors
@@ -82,6 +86,14 @@ pub(crate) fn read(records: Vec<Record<'_>>) -> Result<IndexAnswer> {
     let mut answer = IndexAnswer::default();
     let mut ids = HashSet::new();
     for record in ordered(records)? {
+        // An address could not name it: these marks split the address. The
+        // path is the problem whatever the definition holds or fails with.
+        if record.file.contains([':', '+', '!', '~']) {
+            answer
+                .errors
+                .push(format!("{}: {RESERVED_PATH}", record.file));
+            continue;
+        }
         let text = match record.entry {
             Err(error) => {
                 answer.errors.push(format!("{}: {error}", record.file));
@@ -166,6 +178,37 @@ mod tests {
                 "src/broken.workbench.tsx: Unexpected token",
                 "src/c.workbench.tsx: Duplicate preview id: button",
             ]
+        );
+    }
+
+    #[test]
+    fn a_path_holding_an_address_mark_is_a_problem_and_not_listed() {
+        let routed = preview("routes-page", "src/routes/+page.workbench.ts");
+        let answer = read(vec![Record {
+            file: "src/routes/+page.workbench.ts",
+            docs: false,
+            entry: Ok(&routed),
+        }])
+        .unwrap();
+        assert!(answer.previews.is_empty());
+        assert_eq!(
+            answer.errors,
+            [format!("src/routes/+page.workbench.ts: {RESERVED_PATH}")]
+        );
+    }
+
+    #[test]
+    fn a_reserved_path_is_the_problem_even_when_its_definition_fails() {
+        let answer = read(vec![Record {
+            file: "src/routes/+page.workbench.ts",
+            docs: false,
+            entry: Err("id must use kebab-case segments separated by /."),
+        }])
+        .unwrap();
+        assert!(answer.previews.is_empty());
+        assert_eq!(
+            answer.errors,
+            [format!("src/routes/+page.workbench.ts: {RESERVED_PATH}")]
         );
     }
 

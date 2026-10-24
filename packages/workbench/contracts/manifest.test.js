@@ -258,11 +258,17 @@ test('accepts automatic Storybook and catalogued iOS Simulator implementations',
   assert.deepEqual(implementations.stories, {
     key: 'stories', label: 'Stories', kind: 'storybook', root: null, url: 'auto', auto: true,
   });
+  // Only a configured catalog icon is kept; the built-in smartphone ranks lowest.
   assert.deepEqual(implementations.simulator, {
     key: 'simulator', label: 'Simulator', kind: 'ios-simulator', root: null,
-    device: 'booted', catalog: true, catalogIcon: 'smartphone',
+    device: 'booted', catalog: true,
   });
   assert.equal(implementations.tablets.catalogIcon, 'tablet');
+  var invalid = [];
+  var odd = manifest.implementations({ odd: { kind: 'ios-simulator', catalog: { icon: 'Not Kebab' } } }, invalid);
+  assert.equal(odd.odd.catalog, true);
+  assert.equal(odd.odd.catalogIcon, undefined);
+  assert.deepEqual(invalid, ['implementations › odd: catalog icon “Not Kebab” must be a kebab-case Lucide icon name.']);
 });
 
 test('accepts a window implementation by application, and pages map it to a window title', function () {
@@ -672,9 +678,132 @@ test('docs lenses need Markdown, and lens belongs to Markdown pages only', funct
 test('a src may not contain the address marks', function () {
   assert.equal(manifest.srcProblem('docs/card.md'), null);
   assert.equal(manifest.srcProblem('docs/card!.md'),
-    'src “docs/card!.md” can’t contain “!” — “:”, “!”, and “~” mark the scenario, the example, and the lens in the address.');
+    'src “docs/card!.md” can’t contain “!” — “:”, “+”, “!”, and “~” mark the scenario, the iteration, the example, and the lens in the address.');
   assert.match(manifest.srcProblem('a:b~c.html'), /can’t contain “:” or “~”/);
+  assert.match(manifest.srcProblem('routes/+page.svelte'), /^src “routes\/\+page\.svelte” can’t contain “\+” — /);
   assert.equal(manifest.projectPath('src/card/'), 'src/card/');
   assert.equal(manifest.projectPath('src/../../etc'), null);
   assert.equal(manifest.projectPath('C:\\acme\\card.ts'), null);
+});
+
+test('a scenario’s iterations are kebab-case, unique, and labelled from their id by default', function () {
+  var problems = [];
+  var where = 'Pages › Sign in';
+  assert.deepEqual(manifest.scenarioIterations([
+    { id: 'inline-hint' },
+    { id: 'compact', label: '  Tight  ' },
+    { id: 'Bold' },
+    { id: '2-up' },
+    { label: 'No id' },
+    { id: 'compact', label: 'Again' },
+  ], where, 'error', problems), [
+    { id: 'inline-hint', label: 'Inline hint' },
+    { id: 'compact', label: 'Tight' },
+  ]);
+  assert.deepEqual(problems, [
+    'Pages › Sign in › scenario error: iteration id “Bold” must be kebab-case — it travels in a URL.',
+    'Pages › Sign in › scenario error: iteration id “2-up” must be kebab-case — it travels in a URL.',
+    'Pages › Sign in › scenario error: iteration 5 needs an id.',
+    'Pages › Sign in › scenario error: iteration id “compact” is declared twice.',
+  ]);
+  problems = [];
+  assert.equal(manifest.scenarioIterations(undefined, where, 'error', problems), null);
+  assert.equal(manifest.scenarioIterations([], where, 'error', problems), null);
+  assert.deepEqual(problems, []);
+  assert.equal(manifest.scenarioIterations({ id: 'bold' }, where, 'error', problems), null);
+  assert.deepEqual(problems, ['Pages › Sign in › scenario error: iterations must be a list of entries with an id and an optional label.']);
+});
+
+test('a page’s scenarios share the id rule, default their labels to sentence case, and keep the first of a repeated id', function () {
+  var problems = [];
+  var found = manifest.pageScenarios([
+    { id: 'default', label: 'Default' },
+    { id: 'compact-table' },
+    { id: '2-up', label: 'Two up' },
+    { id: 'a--b', label: 'Odd' },
+    { label: 'No id' },
+    { id: 7, label: 'Number' },
+    { id: 'compact-table', label: 'Again' },
+  ], 'Pages › Sign in', problems);
+  assert.deepEqual(found, {
+    ids: ['default', 'compact-table'],
+    scenarios: [{ id: 'default', label: 'Default' }, { id: 'compact-table', label: 'Compact table' }],
+  });
+  assert.deepEqual(problems, [
+    'Pages › Sign in: scenario id “2-up” must be kebab-case — it travels in a URL.',
+    'Pages › Sign in: scenario id “a--b” must be kebab-case — it travels in a URL.',
+    'Pages › Sign in: scenario 5 needs an id.',
+    'Pages › Sign in: scenario 6 needs an id.',
+    'Pages › Sign in: scenario id “compact-table” is declared twice.',
+  ]);
+  assert.equal(manifest.isId('with-filters'), true);
+  assert.equal(manifest.isId('1-up'), false);
+  // One scenario offers no choice, yet its id still names the page's first.
+  assert.deepEqual(manifest.pageScenarios([{ id: 'filled' }], 'App › Library', problems), { ids: ['filled'], scenarios: null });
+  problems = [];
+  assert.deepEqual(manifest.pageScenarios({ id: 'filled' }, 'App › Library', problems), { ids: [], scenarios: null });
+  assert.deepEqual(problems, ['App › Library: scenarios must be a list of entries with an id and an optional label.']);
+});
+
+test('a lone scenario’s path map names the first scenario by its own id or by default', function () {
+  var item = { label: 'Library', src: 'library.html' };
+  ['filled', 'default'].forEach(function (key) {
+    var problems = [];
+    var map = {};
+    map[key] = '/library';
+    assert.deepEqual(manifest.pageLenses({ dev: map }, item, impls(), 'App › Library', problems, ['filled']), {
+      dev: { path: '/library', scenarios: {} },
+    });
+    assert.deepEqual(problems, []);
+  });
+});
+
+test('a page that lists a preview definition checks its lens path maps against the definition’s scenarios', function () {
+  var problems = [];
+  var authored = { label: 'Jobs', src: 'jobs.workbench.ts' };
+  authored.implementations = manifest.pageLenses(
+    { dev: { default: '/jobs', empty: '/jobs?empty', ghost: '/ghost' }, storybook: 'Pages/Jobs' },
+    authored, impls(), 'App › Jobs', problems, null
+  );
+  assert.deepEqual(problems, [], 'the definition’s scenarios are not known yet');
+  assert.deepEqual(authored.implementations.dev, { pending: { default: '/jobs', empty: '/jobs?empty', ghost: '/ghost' } });
+  var imported = [{ name: 'App', iconPriority: 1, icon: 'component', items: [{
+    label: 'Jobs', src: 'jobs.workbench.ts', workbench: true,
+    scenarios: [{ id: 'default', label: 'Default' }, { id: 'empty', label: 'Empty' }],
+  }] }];
+  var merged = manifest.mergeCollections([{ name: 'App', icon: 'file-text', iconPriority: 2, items: [authored] }], imported);
+  assert.deepEqual(merged[0].items[0].implementations, {
+    dev: { path: '/jobs', scenarios: { empty: '/jobs?empty' } },
+    storybook: { title: 'Pages/Jobs' },
+  });
+  assert.equal(authored.implementations.dev.pending.empty, '/jobs?empty', 'the authored tree is not changed');
+  // Without its definition, a page checks the maps against its own scenarios.
+  var alone = manifest.mergeCollections([{ name: 'App', items: [authored] }], []);
+  assert.deepEqual(alone[0].items[0].implementations, { dev: { path: '/jobs', scenarios: {} }, storybook: { title: 'Pages/Jobs' } });
+  // The same rule reports what doesn't match.
+  var settled = { scenarios: [{ id: 'default' }, { id: 'empty' }], implementations: authored.implementations };
+  manifest.settleLenses(settled, 'App › Jobs', problems);
+  assert.deepEqual(problems, ['App › Jobs: implementation “dev” maps scenario “ghost”, which this page doesn’t declare.']);
+  assert.equal(manifest.isPreviewSrc('jobs.workbench.tsx'), true);
+  assert.equal(manifest.isPreviewSrc('jobs.html'), false);
+});
+
+test('every import follows the collection icon ladder, whichever collection came first', function () {
+  var collection = function (icon, priority, src) {
+    var out = { name: 'Web App', icon: icon, items: [{ src: src }] };
+    if (priority !== undefined) out.iconPriority = priority;
+    return out;
+  };
+  var docs = collection('book-open', 1, 'guide.md');
+  var simulator = collection('smartphone', 1, '__ios-simulator/ios/SIM-1.html');
+  var catalogIcon = collection('tablet', 6, '__ios-simulator/ipad/SIM-2.html');
+  var mapped = collection('monitor', 6, 'jobs.workbench.ts');
+  var authoredDefault = collection('file-text', 2, 'home.html');
+  // An authored default outranks the built-in docs and Simulator icons.
+  assert.equal(manifest.mergeCollections([authoredDefault], [docs, simulator])[0].icon, 'file-text');
+  // A configured icon outranks a docs collection that came first.
+  assert.equal(manifest.mergeCollections([], [docs, mapped])[0].icon, 'monitor');
+  assert.equal(manifest.mergeCollections([authoredDefault], [simulator, catalogIcon])[0].icon, 'tablet');
+  // An authored icon outranks every import.
+  assert.equal(manifest.mergeCollections([collection('star', undefined, 'home.html')], [catalogIcon, mapped])[0].icon, 'star');
 });

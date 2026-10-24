@@ -5,7 +5,7 @@ export function cleanView(value         )                                 {
   if (typeof v.text !== 'string' || !v.text.trim()) return null;
   if (v.text.length > 100000) throw new Error('Canvas context exceeds 100000 characters; no artboards were truncated.');
   const out                          = { text: v.text };
-  for (const key of ['src','scenario','story','lens']) if (typeof v[key] === 'string' && v[key]) out[key] = v[key];
+  for (const key of ['src','scenario','iteration','story','lens']) if (typeof v[key] === 'string' && v[key]) out[key] = v[key];
   if (v.version === 2) {
     if (typeof v.canvas !== 'string' || !Array.isArray(v.artboards) || v.artboards.length > 32) throw new Error('Invalid canvas context.');
     const ids = new Set        ();
@@ -15,7 +15,8 @@ export function cleanView(value         )                                 {
       if (typeof b.id !== 'string' || ids.has(b.id) || typeof b.src !== 'string' || !space || typeof space.id !== 'string' || typeof space.name !== 'string' || !size || typeof size.width !== 'number' || typeof size.height !== 'number' || ![size.width,size.height].every(Number.isFinite)) throw new Error('Invalid artboard context.');
       ids.add(b.id);
       return { id: b.id, space: { id: space.id, name: space.name }, src: b.src, scenario: typeof b.scenario === 'string' ? b.scenario : null,
-        ...(typeof b.artboard === 'string' ? { artboard: b.artboard } : {}),
+        ...(typeof b.artboard === 'string' && b.artboard ? { artboard: b.artboard } : {}),
+        ...(typeof b.iteration === 'string' && b.iteration ? { iteration: b.iteration } : {}),
         lens: typeof b.lens === 'string' ? b.lens : null, size: { width: size.width, height: size.height }, status: typeof b.status === 'string' ? b.status : 'loading' };
     });
     if (v.selected !== null && (typeof v.selected !== 'string' || !ids.has(v.selected))) throw new Error('Invalid selected artboard.');

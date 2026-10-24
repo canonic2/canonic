@@ -174,7 +174,10 @@ function register(context, options) {
   var where = { src: null, scenario: null };
 
   function post(at) {
-    if (view) view.webview.postMessage({ type: 'canonic-here', src: at.src, scenario: at.scenario });
+    if (!view) return;
+    var message = { type: 'canonic-here', src: at.src, scenario: at.scenario };
+    if (at.iteration) message.iteration = at.iteration;
+    view.webview.postMessage(message);
   }
 
   /* Counted so every build is a different string — see page(). */
@@ -231,11 +234,17 @@ function register(context, options) {
            canvas takes, so a pick here and a copied link are one instruction. */
         if (type === 'canonic-pick') {
           var hash = String(message.hash || '');
+          /* `+<iteration>` names the implicit artboard's iteration. */
+          var plus = hash.indexOf('+');
+          var part = plus === -1 ? '' : hash.slice(plus + 1).split('+')[0];
+          if (plus !== -1) hash = hash.slice(0, plus);
           var colon = hash.indexOf(':');
-          open({
+          var target = {
             src: colon === -1 ? hash : hash.slice(0, colon),
             scenario: colon === -1 ? null : hash.slice(colon + 1),
-          });
+          };
+          if (part && part.indexOf('/') === -1) target.iteration = part;
+          open(target);
           return;
         }
 

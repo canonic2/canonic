@@ -164,8 +164,8 @@ See [Customize lens labels](lenses.md#customize-lens-labels).
 
 Each scenario can set:
 
-- `label`, the name in the sidebar. It defaults to the ID in title case, so
-  `is-busy` reads **Is Busy**.
+- `label`, the name in the sidebar. It defaults to the ID in sentence case, so
+  `is-busy` reads **Is busy**.
 - `inputs`, `fixtures`, and `globals`, which override the preview's values
   key by key; see [What you can set, and where](preview-data.md#what-you-can-set-and-where).
 - `source`, to render a different entry or export in this scenario.

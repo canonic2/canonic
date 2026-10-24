@@ -1,43 +1,50 @@
 # Artboards and iterations
 
-Status: agreed 2026-10-24, not implemented. This topic owns where artboards are
-declared, what an iteration is, how it changes a render, and how it is named in
-addresses, review output and agent context. How the canvas presents and picks
-iterations is open ([open questions](#open-questions)). The
-[glossary](../glossary.md#the-page-hierarchy) defines the terms;
-[multiple artboards](../canvas/multiple-artboards.md) owns instance isolation,
-geometry and review composition.
+Status: agreed 2026-10-24. The model, render, address, review output and export
+are implemented; canvas presentation is not ([gaps](#implementation-gaps)).
+
+This topic owns the two levels below a scenario: where artboards are declared,
+what an iteration is, how both change a render, and how they are named in
+addresses, review output and agent context. The
+[glossary](../glossary.md#the-page-hierarchy) defines the terms,
+[scenarios](scenarios.md) owns the level above, and
+[multiple artboards](../canvas/multiple-artboards.md) owns artboard instances on
+the canvas: their isolation, geometry and review composition.
 
 ## Purpose
 
 People design inside the codebase and need to try ideas: another table layout,
-a different empty state, a bolder warning. Today the only way is a new page or
-a new scenario, which mixes "what situation is the page in" with "which design
-are we trying" and fills the sidebar with experiments. An iteration is another
-take on one artboard, kept beside it until someone picks it, so ideas can be
-compared without new pages, scenarios or artboards.
+a different empty state, a bolder warning. A new page or scenario for each idea
+would mix "what situation is the page in" with "which design are we trying" and
+fill the sidebar with experiments. An iteration is another take on one
+artboard, kept beside it until someone picks it, so ideas can be compared
+without new pages, scenarios or artboards.
 
-## The hierarchy
+## The levels
 
 ```text
-Space › Collection › (Group) › Page › Scenario › Artboard › Iteration
+Page › Scenario › Artboard › Iteration
 ```
 
-- A **page** has one or more **scenarios**. A page that declares none has one
-  implicit default scenario.
-- A **scenario** has one or more **artboards**. A scenario that declares none
-  has one implicit artboard: the page at the selected size. A page with one
-  scenario and one artboard is the same as a page that declares neither.
-- An **artboard** has zero or more **iterations**. With no iteration selected,
-  the artboard shows its design as authored.
-- An iteration belongs to exactly one artboard of one scenario. Scenarios do
-  not share iterations, and artboards do not share them either: each
-  `(scenario, artboard)` pair declares its own.
-- Size and lens are not levels. They are how the selected artboard is viewed
-  (see [lenses](#lenses)).
-
-There are no page-level artboards. Artboards are declared inside a scenario,
-so different scenarios can show different artboards.
+- A **scenario** has either **declared artboards** or one **implicit
+  artboard**:
+  - A declared artboard is an entry in the scenario's `artboards`: an ID,
+    label, fixed width and height, inputs and iterations. A scenario's declared
+    artboards are shown together, each at its own size; the size switcher does
+    not resize them.
+  - A scenario that declares no artboards has one implicit artboard, which
+    shows the page at the size picked in the size switcher.
+- An **artboard** has zero or more **iterations**. With none selected, it
+  shows its design as authored.
+- An iteration belongs to exactly one artboard of one scenario: each
+  `(scenario, artboard)` pair declares its own. Different scenarios can declare
+  different artboards.
+- Only the implicit artboard makes "one scenario, one artboard" the same as a
+  page that declares neither. A single declared artboard is different: it has a
+  fixed size, gives the preview `context.artboard`, is addressed as
+  `+<artboard>/<iteration>`, and exports once at its own size.
+- Size and lens are not levels; they are how an artboard is viewed
+  ([lenses](#lenses)).
 
 ## Declaring artboards and iterations
 
@@ -62,7 +69,7 @@ definePreview({
     },
     empty: {
       requests: { 'GET /api/items': { body: [] } },
-      // No artboards: these are the iterations of the scenario's one artboard.
+      // No artboards: these are the iterations of the scenario's implicit artboard.
       iterations: {
         illustrated: { label: 'Illustrated', source: { entry: './feedback.empty-illustrated.tsx' } },
       },
@@ -71,127 +78,164 @@ definePreview({
 });
 ```
 
-- `scenarios.<id>.artboards` is a map of kebab-case artboard IDs to
-  `{ label?, width, height, inputs?, iterations? }`. Labels default to title
-  case. Width and height follow the existing artboard dimension rules
-  ([sizes](../canvas/sizes.md#multiple-artboards)).
-- `iterations` on an artboard is a map of kebab-case iteration IDs to
-  iteration objects. Labels default to title case.
-- `iterations` directly on a scenario declares the iterations of its implicit
-  artboard. A scenario that declares `artboards` cannot also declare
-  scenario-level `iterations`; that is a problem naming the scenario.
-- IDs are unique within their parent: artboard IDs within a scenario,
-  iteration IDs within an artboard. The same ID may appear under different
-  parents and names different things.
-- A top-level `artboards` or `iterations` key on a definition is a problem;
-  artboards and iterations are always declared inside a scenario.
-- Problems name their location, for example
-  `components/feedback › default › warning: iteration id “Bold” must be kebab-case`.
-  One invalid iteration does not hide the scenario, its other artboards or
-  other previews.
+- `scenarios.<id>.artboards` maps 1–32 artboard IDs to
+  `{ label?, width, height, inputs?, iterations? }`. Width and height are
+  integers from 1 to 8192 CSS pixels, independent of the space's sizes. Any
+  other artboard field is a problem.
+- `iterations` on a declared artboard maps iteration IDs to iteration objects.
+  `iterations` directly on a scenario declares the iterations of its implicit
+  artboard. A scenario with `artboards` cannot also have scenario-level
+  `iterations`; the SDK types make the two exclusive.
+- Artboard and iteration IDs follow the shared ID rule
+  ([scenarios](scenarios.md#declaring-scenarios)): a lowercase letter, then
+  lowercase letters and digits in single-hyphen parts (`compact-table`). They
+  are unique within their parent; the same ID under another parent names
+  something else. Labels default to the ID in sentence case
+  (`compact-table` → *Compact table*).
+- A top-level `artboards` or `iterations` key on a definition is a problem.
+- An iteration's `inputs`, `fixtures` and `globals` must be maps, `setup`,
+  `play` and `ready` functions, its `source.entry` a file inside the project,
+  and its `requests` valid request keys; it cannot declare `scenarios`,
+  `artboards` or `iterations`.
+- Problems name the file and the location, for example
+  `previews/feedback.workbench.ts: scenario default › artboard warning: iteration id “Bold” must be kebab-case.`
+  **Requirement:** one invalid artboard or iteration does not hide its
+  scenario or its siblings ([gap](#implementation-gaps)); other previews still
+  load.
 
 ### What an iteration changes
 
-An iteration has the same shape as a scenario: it can set `source`, `inputs`,
-`fixtures`, `globals`, `requests`, `setup`, `play` and `ready`. It cannot
-declare scenarios, artboards or iterations of its own.
+An iteration has a scenario's shape without nesting: it can set `label`,
+`source`, `inputs`, `fixtures`, `globals`, `requests`, `setup`, `play` and
+`ready`.
 
-A render merges, in order: the preview, its scenario, the artboard, the
-iteration, then control overrides from **Preview controls**. `source`
-replaces the one before it. `inputs`, `fixtures` and `globals` merge key by
-key. An iteration's `requests` are matched before its scenario's, which are
-matched before the preview's ([request mocks](previews.md#data-request-mocks-and-the-project-environment)).
-`setup`, `play` and `ready` of the iteration run after the scenario's.
+| Value | Merged in order |
+| --- | --- |
+| `source` | Iteration, else scenario, else preview: the last one set wins |
+| `inputs` | Preview, scenario, declared artboard, iteration, then **Preview controls** overrides, key by key |
+| `fixtures`, `globals` | Preview, scenario, iteration, key by key (an artboard has none) |
+| `requests` | Matched iteration first, then scenario, then preview ([request mocks](previews.md#data-request-mocks-and-the-project-environment)) |
+| `setup`, `play`, `ready` | Run in order: environment, preview, scenario, iteration |
 
-The preview context carries the whole position: `context.scenario`,
-`context.artboard` (the declared artboard's ID, or absent for the implicit
-one) and `context.iteration` (absent when none is selected). A preview's
-address loads a render with `?scenario=`, `?artboard=` and `?iteration=`;
-unknown IDs render an error naming them, as an unknown scenario does.
+The preview context carries the position: `context.scenario`,
+`context.artboard` (a declared artboard's ID; absent for the implicit one) and
+`context.iteration` (absent when none is selected). A TypeScript preview also
+sets `data-wb-scenario` and, when an iteration is selected, `data-wb-iteration`
+on `<html>`. Reported actions carry the iteration.
+
+An iteration with its own `source` is compiled into the preview's entry under
+its own key, `<scenario>+<iteration>` or `<scenario>+<artboard>/<iteration>`;
+the runtime looks up that key, then a declared artboard's
+`<scenario>+<artboard>/`, then the scenario's, then `default`. An Astro
+preview pre-renders a declared artboard under `<scenario>+<artboard>/` when it
+changes the server render (it has inputs, or request mocks exist, which read
+`context.artboard`), and an iteration only when it changes the server render:
+its own source, inputs or requests, or fixtures and globals that request mocks
+read. An iteration without its own render uses its artboard's.
 
 ### Authored HTML pages
 
 Authored HTML pages declare scenarios in `workbench.yaml` and have one implicit
-artboard per scenario. A scenario entry can list iterations:
+artboard per scenario; they cannot declare artboards. A scenario entry can list
+iterations:
 
 ```yaml
 - label: Sign in
   src: pages/sign-in.html
   scenarios:
     - id: default
+      label: Default
     - id: error
+      label: Wrong password
       iterations:
         - id: inline-hint
           label: Inline hint
 ```
 
-The page reads the selected iteration the way it reads its scenario
-([pages and scenarios](../../docs/pages-and-scenarios.md)): the page loads with
-`?iteration=<id>`, the compatibility script sets `data-wb-iteration` on
-`<html>`, and `data-wb-iteration-only` and `data-wb-iteration-not` keep or
-remove elements. With no iteration selected the attribute is absent.
-Declaring artboards for authored pages is not part of this contract.
+- Iteration IDs follow the artboard and iteration ID rule above and are unique
+  within the scenario. A label is optional and defaults to the ID in sentence
+  case (`inline-hint` → *Inline hint*). An invalid or repeated entry is dropped
+  on its own; the page and its other iterations stay.
+- The page reads the iteration the way it reads its scenario
+  ([pages and scenarios](../../docs/pages-and-scenarios.md)): it loads with
+  `?iteration=<id>`, the compatibility script sets `data-wb-iteration` on
+  `<html>`, and `data-wb-iteration-only` and `data-wb-iteration-not` keep or
+  remove elements. With no iteration selected the attribute is absent and
+  `-only` elements are removed.
 
 ### Other page kinds
 
 Storybook stories, Markdown pages, docs examples and catalog pages have no
-iterations. Under a Storybook lens the scenario switcher lists stories, and
-iterations of the design lens do not apply.
+iterations.
 
 ## Lenses
 
 Iterations belong to the design lens: they change what the page's own source
 renders. Implementation lenses (`url`, `storybook`, `ios-simulator`, `window`)
-show the shipped implementation and ignore the selected iteration. A docs lens
-renders examples without iterations. Switching lenses keeps the selected
-iteration so returning to the design lens shows it again.
+show the shipped implementation and ignore the selected iteration; a docs lens
+renders its examples without iterations. Switching lenses keeps the selected
+iterations, so returning to the design lens shows them again.
 
 ## Address
 
 The canvas address ([core](../core.md#selection-and-navigation)) names each
-shown artboard's selected iteration with `+`, after the scenario and before
-the size:
+shown artboard's selected iteration with a `+` part after the scenario:
 
 ```text
-#<src>[:<scenario>][+<iteration> | +<artboard>/<iteration> …]@<size>[~<lens>]
+#<src>[:<scenario>][+<iteration> | +<artboard>/<iteration> …][!<example>][@<size>][~<lens>]
 ```
 
 | Address | Shows |
 | --- | --- |
-| `#jobs.workbench.ts:empty+illustrated@laptop` | The Empty scenario's implicit artboard with its *Illustrated* iteration |
-| `#feedback.workbench.ts+warning/bold@laptop` | The default scenario's artboards, *Warning* with its *Bold* iteration |
+| `#jobs.workbench.ts:empty+illustrated@laptop` | The *Empty* scenario's implicit artboard with its *Illustrated* iteration |
+| `#feedback.workbench.ts+warning/bold@laptop` | The first scenario's declared artboards, *Warning* with its *Bold* iteration |
 | `#feedback.workbench.ts+warning/bold+info/calm@laptop` | Two declared artboards, each with an iteration |
 
-- `+<iteration>` is used only for a scenario's implicit artboard;
-  `+<artboard>/<iteration>` only for declared artboards. The other form is an
-  unknown iteration.
-- An artboard with no `+` part shows its authored design. An artboard appears
-  at most once; the workbench writes parts in the scenario's artboard order.
-- `+` is reserved in page paths and addresses, as `:`, `!`, `~` and `@` are.
-  A `src` containing `+` is a configuration problem.
-- An unknown artboard or iteration falls back to the authored design and the
-  address is normalized to what is shown, as an unknown scenario is.
-- Links between previews (`links`, `context.navigate`) do not name
-  iterations: following a link opens the target's authored design.
+- `+<iteration>` names the implicit artboard's iteration and
+  `+<artboard>/<iteration>` a declared artboard's. An artboard appears at most
+  once; the workbench writes the parts in the scenario's artboard order. An
+  artboard with no part shows its authored design.
+- `:`, `+`, `!` and `~` are reserved in page paths, so the parts split
+  unambiguously. A `src` containing one is a configuration problem, and a
+  discovered definition whose path contains one is a problem naming the file
+  and is not listed.
+- **Unknown IDs.** On the canvas, a part naming an unknown artboard or
+  iteration is dropped: the artboard shows its authored design and the address
+  is rewritten to what is shown. Loaded directly, a preview URL with an unknown
+  `?artboard=` or `?iteration=` renders an error naming it. An authored HTML
+  page ignores an iteration ID that breaks the ID rule.
+- **Navigation.** Picking another page or scenario, or following a link,
+  starts from the authored design; switching lens keeps the iterations. Under a
+  Storybook lens they are kept as given and checked again on the way back to
+  the design lens. Links between previews (`links`, `context.navigate`) never
+  name iterations.
+- **Portable viewer.** The viewer reads `?iteration=` for the implicit
+  artboard of the selected scenario and drops it when the scenario changes.
 
 ## Identity, review and agents
 
-- An artboard's view is page, scenario, artboard, iteration, size and lens.
-  Two artboards that differ only by iteration are different views.
-- **Copy reference**, handoffs, captures and agent context name the
-  iteration when one is selected, by ID and label, and the iteration's source
-  file among the code pointers. Without one, they say nothing about
-  iterations.
-- Annotations belong to the view they were drawn on, including its iteration.
-  Switching iteration follows the same rule as switching scenario.
-- The [design-system export](../review/export.md) captures every declared
-  iteration as its own reference, beside its artboard's authored design, and
-  "all declared variants" includes them. Each reference names its scenario,
-  artboard and iteration.
-- **Choosing an iteration** happens through a handoff: the handoff names the
-  iteration and its source so a person or agent can make it the artboard's
-  design. Workbench never rewrites definitions or sources to promote an
-  iteration.
+- An artboard's view is its page, scenario, declared artboard (if any),
+  iteration, size and lens. Two views that differ only by iteration are
+  different views. A declared artboard's instance is labelled with the page
+  and artboard labels (*Feedback / Warning*).
+- **Copy reference** adds `- Iteration: <Label> — \`<id>\`` after its Scenario
+  line, and `- Iteration source: \`<path>\`` when the iteration has its own
+  source. The **handoff** prompt adds `- Iteration: <Label> (<id>)` after the
+  Scenario line and lists the source among the code pointers. Agent context
+  carries `iteration` on the single view and `artboard` and `iteration` on
+  each artboard of a canvas report. Nothing about iterations appears when none
+  is selected, or under an implementation lens.
+- Annotations belong to the view they were drawn on. Another iteration clears
+  them, as another scenario does; a lens or size change keeps them. Screenshot
+  names include the iteration.
+- The [design-system export](../review/export.md) captures each iteration as
+  its own reference beside its artboard's authored design, and "all declared
+  variants" includes them. Labels read *Scenario · Artboard · Iteration* for a
+  declared artboard and *Scenario · Iteration* otherwise. Under an
+  implementation lens the export captures no iterations.
+- **Choosing an iteration** happens through a handoff: it names the iteration
+  and its source so a person or agent can make it the artboard's design.
+  Workbench never rewrites definitions or sources to promote an iteration.
 
 ## Decisions
 
@@ -200,13 +244,12 @@ the size:
   because Figma uses it for property combinations, "option" because `options`
   is pervasive in code, "draft" and "version" because they imply unfinished
   work or releases.
-- **2026-10-24, hierarchy.** Page › Scenario › Artboard › Iteration, with
-  implicit scenario and artboard. Iterations were first considered per page
-  and then per scenario; both were rejected because not every scenario, and
-  not every artboard, has the same iterations.
-- **2026-10-24, artboards move under scenarios.** Page-level `artboards` in
-  `definePreview` was the wrong level and is removed without a fallback;
-  Workbench has no users to migrate.
+- **2026-10-24, hierarchy.** Page › Scenario › Artboard › Iteration, with an
+  implicit scenario and artboard. Iterations per page and then per scenario
+  were rejected because not every scenario, and not every artboard, has the
+  same iterations. Artboards belong to a scenario because different scenarios
+  need different artboards; Workbench has no users to migrate from the earlier
+  page-level form.
 - **2026-10-24, promotion by handoff.** Rewriting sources is project-specific
   and risky; the handoff names the iteration instead.
 
@@ -214,16 +257,16 @@ the size:
 
 1. A definition with scenario-level `artboards` and per-artboard `iterations`
    lists its scenarios in the sidebar and no iterations there.
-2. A render with an iteration selected uses the iteration's `source` and
-   merged inputs, fixtures, globals and requests in the order above; with none
-   selected the artboard renders exactly as before.
+2. A render with an iteration selected uses the iteration's `source` and the
+   merge order above; with none selected the artboard renders as authored.
 3. `context.scenario`, `context.artboard` and `context.iteration` match the
-   requested view; unknown artboard or iteration IDs render a named error.
+   requested view; a direct URL with an unknown artboard or iteration renders
+   a named error.
 4. Two scenarios of one page declare different artboards; switching scenario
    shows each scenario's own set.
 5. Top-level `artboards` or `iterations`, scenario-level `iterations` beside
-   `artboards`, duplicate or non-kebab-case IDs are problems naming their
-   location; other previews still load.
+   `artboards`, unknown artboard fields, invalid iteration fields and invalid
+   IDs are problems naming their location; other previews still load.
 6. An authored HTML page with a scenario iteration receives
    `data-wb-iteration`, and `-only`/`-not` elements follow it.
 7. Implementation lenses ignore the iteration; returning to the design lens
@@ -232,23 +275,32 @@ the size:
    source; annotations stay with the iteration they were drawn on.
 9. A space export with all declared variants has one reference per iteration,
    in addition to each artboard's authored design.
-10. Addresses with `+` parts round-trip through links, restoration and the
-    portable viewer; unknown parts normalize to the authored design; a `src`
-    containing `+` is a problem.
-11. The Rust and Node definition readers agree on every rule above.
+10. Addresses with `+` parts round-trip through links and restoration; unknown
+    parts normalize to the authored design; reserved marks in a `src` or a
+    discovered definition's path are problems.
+11. The browser, Node and native `workbench.yaml` readers agree on scenario
+    iterations, and the Node and native page indexes report the same problem
+    for a definition path with a reserved mark, even when the definition
+    also fails to evaluate.
 
 ## Implementation gaps
 
-Nothing in this topic is implemented. In particular:
-
-- `definePreview` declares `artboards` at the page level
-  ([api.d.ts](../../sdk/api.d.ts)), and definition validation, the page index,
-  the canvas and capture read them there
-  ([artboard system](../canvas/artboard-system.md)).
-- The Acme demo's and website's Feedback pages declare page-level artboards and
-  must move them under a scenario.
-- No reader, address, context field, compatibility attribute, handoff or
-  agent-context text knows iterations.
+- **No canvas presentation.** An iteration is selected only through the
+  address; nothing on the canvas shows or picks one
+  ([open question 1](#open-questions)).
+- **An invalid artboard or iteration fails its whole definition.** Definition
+  validation is all-or-nothing, so the scenario and its siblings are hidden
+  too. Isolating it needs per-definition problems in the page index.
+- **The portable viewer shows no declared artboards.** A scenario with
+  declared artboards renders there as one view without `?artboard=`, so no
+  artboard inputs apply, and the viewer cannot select a declared artboard's
+  iteration.
+- **Copy reference doesn't name the declared artboard** a selection shows;
+  only the canvas report's JSON carries it.
+- **A warm preview document reloads on another iteration.** The in-place
+  scenario command does not change the iteration, so the frame reloads.
+- **Public guides** (configuration, pages and scenarios, previews) and the
+  shared Workbench skill and rule do not describe iterations yet.
 
 ## Open questions
 

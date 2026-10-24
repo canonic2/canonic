@@ -123,8 +123,6 @@ themes are `ui/src/theme/`, and browser controllers are in `ui/src/`.
 Application entry points compose owners. Existing direct capability directories
 migrate in bounded steps; a move does not require splitting every function or
 introducing speculative shared packages. Rust follows Cargo's standard layout.
-The [shared architecture rule](../../../../.canonic/rules/module-architecture.md)
-and [product guide](../../../../.canonic/guides/workbench/AGENTS.md) define the contracts.
 
 Docs illustrate the cross-part boundary: the browser's lens rules are in
 `contracts/src/docs/lenses.js`, browser canvas/page modules in
@@ -207,7 +205,7 @@ launch confirms the assembled paths resolve outside the source tree.
 ### Lattice delivery slice
 
 **Status:** planned, not started. Workbench's browser UI will use the Lattice
-package (`canonic-lattice`) for application state. Before any UI code depends
+package (`@canonic2/lattice`) for application state. Before any UI code depends
 on it, one narrow change establishes that its modules reach every Workbench
 document that will import them. The slice changes module delivery only: no
 navigation, canvas or other behavior changes, and no store is used yet.

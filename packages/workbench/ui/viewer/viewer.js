@@ -8,6 +8,13 @@
   var status = document.getElementById('status');
   var selected = null;
   var catalog = null;
+  /* The implicit artboard's iteration, from the viewer's own address; there is
+     no control for it, and another scenario starts from the authored design. */
+  var iteration = null;
+  function iterationOf(preview, scenarioId, id) {
+    var entry = (preview.scenarios || []).find(function (item) { return item.id === scenarioId; });
+    return id && entry && (entry.iterations || []).some(function (item) { return item.id === id; }) ? id : null;
+  }
   /* Sizes come with each preview, resolved by the space it was exported from
      (see src/sizes/). A filled axis, and Fit, take the room there is. */
   var FIT = { key: 'fit', label: 'Fit', kind: 'fit', width: null, height: null };
@@ -25,6 +32,7 @@
     url.searchParams.set('preview', selected.id);
     url.searchParams.set(selected.docs ? 'lens' : 'scenario', scenario.value);
     url.searchParams.delete(selected.docs ? 'scenario' : 'lens');
+    if (iteration && !selected.docs) url.searchParams.set('iteration', iteration); else url.searchParams.delete('iteration');
     if (selected.docs) url.searchParams.delete('size'); else url.searchParams.set('size', size.value);
     if (sizeOf(size.value).kind === 'resizable') {
       url.searchParams.set('width', document.getElementById('width').value);
@@ -58,7 +66,9 @@
       return new URL('./' + lens.directory.replace(/^browser\//, '') + '/index.html', location.href);
     }
     var url = new URL('./' + selected.directory.replace(/^browser\//, '') + '/index.html', location.href);
-    url.searchParams.set('scenario', scenario.value); return url;
+    url.searchParams.set('scenario', scenario.value);
+    if (iteration) url.searchParams.set('iteration', iteration);
+    return url;
   }
   function load() {
     if (!selected) return;
@@ -87,6 +97,7 @@
   }
   function choose(preview, query) {
     selected = preview;
+    iteration = null;
     document.getElementById('previewTitle').textContent = preview.title;
     document.title = preview.title + ' — ' + catalog.name;
     [scenario, size, document.getElementById('reload')].forEach(function (control) { control.disabled = false; });
@@ -98,12 +109,13 @@
       return;
     }
     options(scenario, preview.scenarios, query && query.get('scenario'));
+    iteration = iterationOf(preview, scenario.value, query && query.get('iteration'));
     options(size, sizesOf(preview).map(function (entry) { return { id: entry.key, label: entry.label }; }), query && query.get('size') || size.value);
     if (query) ['width', 'height'].forEach(function (key) { if (query.has(key)) document.getElementById(key).value = query.get(key); });
     draw(); load();
   }
   search.addEventListener('input', draw);
-  scenario.addEventListener('change', load);
+  scenario.addEventListener('change', function () { iteration = null; load(); });
   size.addEventListener('change', resize);
   ['width', 'height'].forEach(function (key) { document.getElementById(key).addEventListener('change', resize); });
   document.getElementById('reload').addEventListener('click', load);

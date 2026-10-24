@@ -96,27 +96,26 @@ trust gate, and no log sink. Both show the same problems list as the sidebar
 
 ## Spaces
 
-A future [multiple-artboard canvas](../canvas/multiple-artboards.md#spaces-and-host-transport)
-retains views from multiple servers while its host address stays fixed.
-Its space picker browses without closing instances. The extension's space
-switcher below still changes the editor's host space. Sidebar picks edit the
-selected instance; canvas context and handoffs cover every instance.
-
 Implemented in [spaces.rs](../../server/src/spaces.rs), which lists and describes
 spaces for `workbench-server spaces <folder>…`, [spaces.js](../../server/node/spaces.js),
 which keeps the list and the running servers, [extension.js](../../extension/extension.js),
 and the [space switcher element](../../ui/src/components/space-switcher/element.js).
 Component and theme contracts: [Web Components](../ui/web-components.md) and
 [themes](../ui/themes.md). User guide:
-[Several spaces](../../docs/spaces.md).
+[Several spaces](../../docs/spaces.md). Space fields and how pages are
+arranged within a space are in the [page tree](../pages/page-tree.md). The
+[multiple-artboard canvas](../canvas/multiple-artboards.md#spaces-and-host-transport)
+specifies how one canvas keeps artboard instances from several spaces; the
+space switcher here changes the editor's host space.
 
 - Spaces come from `workbench.yaml` files. A file without `spaces` is one
   space served from its folder; a file with `spaces` is one space per
   valid entry, each served from its `root` (relative to the file's folder,
   default that folder, so several may share one). Shared top-level keys are
-  inherited, `implementations` merged by name; `name`, `color`, `icon`, and
-  `root` are not (`selectSpace` in [manifest.js](../../contracts/manifest.js),
-  which the server's reader matches). Folders are the window's that have a file, in folder
+  inherited, `implementations` merged by name; a space's own keys `name`,
+  `color`, `icon`, `root` and `sizes` are not (`selectSpace` in
+  [manifest.js](../../contracts/manifest.js), which the server's reader
+  matches). A top-level `sizes` beside `spaces` is reported as a problem. Folders are the window's that have a file, in folder
   order, then the folders the user added (stored in `globalState`, shared by
   every window). A folder in both is listed once, as the window's, and is not
   removable. An added folder whose `workbench.yaml` is missing is hidden but

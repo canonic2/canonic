@@ -8,6 +8,8 @@ export async function mount(canvas, source, context, environment) {
     if (!source.renderUrl) throw new Error('Astro input edits require the live Workbench server. Portable previews contain the authored scenarios.');
     const url = new URL(source.renderUrl, location.href);
     url.searchParams.set('scenario', context.scenario);
+    if (context.artboard) url.searchParams.set('artboard', context.artboard);
+    if (context.iteration) url.searchParams.set('iteration', context.iteration);
     url.searchParams.set('inputs', JSON.stringify(context.inputs));
     const response = await fetch(url, { signal: context.signal });
     const answer = await response.json();

@@ -10,15 +10,23 @@
      #docs/card.md!with-custom-style~native
         └ src      └ example         └ lens
 
+     #previews/feedback.workbench.ts:default+warning/bold+info/calm@laptop
+        └ src                       └ scenario └ artboard/iteration …
+
+   A `+` part names one artboard's selected iteration: `+<iteration>` for a
+   scenario's implicit artboard, `+<artboard>/<iteration>` for a declared one.
+   The parsed view keeps them as `iterations`, artboard id → iteration id, with
+   the implicit artboard under "", and leaves the key out when there are none.
+
    Every part after the src is optional. The default scenario and the design lens
    are both addressed by leaving them out, so the hash for a plain page reads
    as it always did: `#pages/sign-in.html@fit`. A docs page fills the canvas,
    so it has no size; it may name one of its examples instead.
 
    Parsed from the right: the lens is after the last `~`, the size after the
-   last `@`, the example after the last `!`, the scenario after the first `:`. No
-   src holds `:`, `!`, or `~` — config.js refuses one that does — so the split
-   is unambiguous. Nothing here is validated: the shell checks the size
+   last `@`, the example after the last `!`, the iterations after the first
+   `+`, the scenario after the first `:`. No src holds `:`, `+`, `!`, or `~` —
+   the manifest rules refuse one that does — so the split is unambiguous. Nothing here is validated: the shell checks the size
    against the page’s sizes, the scenario against the page, the lens against the
    config. */
 (function () {
@@ -51,22 +59,60 @@
       example = raw.slice(bang + 1) || null;
       raw = raw.slice(0, bang);
     }
+    var iterations = null;
+    var plus = raw.indexOf('+');
+    if (plus > -1) {
+      iterations = parseIterations(raw.slice(plus + 1));
+      raw = raw.slice(0, plus);
+    }
     var colon = raw.indexOf(':');
     if (colon > -1) {
       scenario = raw.slice(colon + 1) || null;
       raw = raw.slice(0, colon);
     }
 
-    return { src: raw, scenario: scenario, example: example, size: size, lens: lens };
+    var view = { src: raw, scenario: scenario, example: example, size: size, lens: lens };
+    if (iterations) view.iterations = iterations;
+    return view;
+  }
+
+  /* `+bold` is the implicit artboard's iteration, kept under the key "";
+     `+warning/bold` is the declared artboard `warning`'s. The first part
+     naming an artboard wins; empty parts are skipped. */
+  function parseIterations(text) {
+    var iterations = {};
+    var any = false;
+    text.split('+').forEach(function (part) {
+      var slash = part.indexOf('/');
+      var artboard = slash > -1 ? part.slice(0, slash) : '';
+      var iteration = slash > -1 ? part.slice(slash + 1) : part;
+      if (!iteration || (slash > -1 && !artboard)) return;
+      if (Object.prototype.hasOwnProperty.call(iterations, artboard)) return;
+      iterations[artboard] = iteration;
+      any = true;
+    });
+    return any ? iterations : null;
+  }
+
+  /* Parts follow the map's own key order, which the shell builds in the
+     scenario's artboard order. */
+  function writeIterations(iterations) {
+    if (!iterations || typeof iterations !== 'object') return '';
+    return Object.keys(iterations).map(function (artboard) {
+      var iteration = iterations[artboard];
+      if (!iteration) return '';
+      return '+' + (artboard ? artboard + '/' : '') + iteration;
+    }).join('');
   }
 
   /* An artboard page always writes its size; a docs page, which has none,
-     leaves it out. The scenario, example, and lens appear only when they say
-     something. No src, no address. */
+     leaves it out. The scenario, iterations, example, and lens appear only
+     when they say something. No src, no address. */
   function write(target) {
     if (!target || !target.src) return '';
     return target.src +
       (target.scenario ? ':' + target.scenario : '') +
+      writeIterations(target.iterations) +
       (target.example ? '!' + target.example : '') +
       (target.size ? '@' + target.size : '') +
       (target.lens ? '~' + target.lens : '');

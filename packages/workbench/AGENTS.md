@@ -75,9 +75,7 @@ owns the process model and protocol.
   capabilities. It loads the authored sidebar module directly. Components use adopted stylesheets;
   validated theme forwarding remains host-owned and project previews stay independent.
 - `contracts/manifest.js` supplies browser/server manifest rules. Schema changes
-  update `ui/legacy/README.md`, `docs/configuration.md`,
-  `shared/skills/canonic-workbench/SKILL.md` and
-  `shared/rules/canonic-workbench.md` together.
+  update `ui/legacy/README.md` and `docs/configuration.md` together.
 - Every shared component has `design/<name>.md`, `<name>.examples.ts` and a
   `<name>.workbench.ts` definition under Components/<Area>/<Label>. Examples use
   the shipping public API and meaningful states; docs end with Public API.

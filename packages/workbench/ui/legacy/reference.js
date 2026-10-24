@@ -21,6 +21,11 @@
       var scenario = scenarios.find(function (entry) { return entry.id === view.scenario; });
       if (!scenario) scenario = scenarios[0] || { id: 'default', label: 'Default' };
       lines.push('- Scenario: ' + named(scenario.label, scenario.id));
+      /* Only when the artboard shows one; its source is a code pointer. */
+      if (view.iteration) {
+        lines.push('- Iteration: ' + named(view.iteration.label || view.iteration.id, view.iteration.id));
+        if (view.iteration.source) lines.push('- Iteration source: `' + view.iteration.source + '`');
+      }
     }
     var address = lens && window.wbLenses ? window.wbLenses.upstream(lens, view.url) : view.url;
     lines.push('- Lens: ' + (lens ? named(lens.label, lens.key) + ' — `' + address + '`' : window.wbManifest.authoredLensLabel(item)));

@@ -356,6 +356,11 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 
 ## Multiple artboards
 
+- A scenario's declared artboards use their authored `width` and `height`
+  (integers from 1 to 8192), independent of the space's and the page's sizes;
+  the size switcher does not resize them. A scenario's implicit artboard follows
+  the size switcher like any single view. See
+  [artboards and iterations](../pages/iterations.md).
 - A size resolves to numeric CSS pixels when an artboard takes it: a fixed
   axis exactly, and a filled axis at the canvas's length at that moment.
   After that the artboard is an ordinary numeric size; it doesn't follow the
@@ -364,7 +369,11 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
   exactly; a filled axis accepts any length. Artboard dimensions range from
   1 to 8192 pixels.
 - The fallback for an unsupported size is the page's first listed size,
-  instead of Laptop or Mobile.
+  instead of Laptop or Mobile. Implementation gap: the canvas controller applies
+  this fallback to declared artboards too, because their view report carries the
+  page's sizes, so a declared artboard whose authored size the page's `sizes`
+  do not accept can lose it
+  ([multiple artboards](multiple-artboards.md#implemented-support-system)).
 - Artboards size themselves directly, whatever sizes the space lists. A space
   that leaves out `resizable` still gets working artboards; their child
   runtimes don't depend on the space having a Resizable size.
@@ -470,5 +479,5 @@ Configure pages), [Pages and scenarios](../../docs/pages-and-scenarios.md),
 [TypeScript previews](../../docs/workbench-previews.md), [Design-system
 export](../../docs/design-system-export.md), the iOS Simulator and window guides,
 which recommend a mobile size for streamed lenses, the [workbench
-README](../../ui/legacy/README.md), the shared Workbench skill and rule, the
+README](../../ui/legacy/README.md), the
 website overview's size switcher and address text, and the changelog.

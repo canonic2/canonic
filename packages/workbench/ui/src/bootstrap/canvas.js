@@ -7,7 +7,7 @@ import {
   fetchStoryCatalog,
 } from '../modules/preview-sessions/index.js';
 import { capture, reference, createReview, createBrowserReview } from '../modules/review/index.js';
-import { createNavigation } from '../modules/navigation/index.js';
+import { createNavigation, shownIterations } from '../modules/navigation/index.js';
 import { requestJson as json } from '../host/http.js';
 import { dimensions } from '../../../contracts/src/sizes/browser/geometry.js';
 
@@ -68,6 +68,13 @@ function mount() {
   const selected = () =>
     controller.snapshot().artboards.find((b) => b.id === controller.snapshot().selected);
   const available = () => ({ width: $('canvas').clientWidth, height: $('canvas').clientHeight });
+  // The selected renderer reports only its own iteration. The editor also
+  // needs to know whether any artboard shows one: then a pick of the same
+  // page and scenario returns the canvas to the authored design.
+  function withShownIterations(message, selection) {
+    const iterations = shownIterations(selection, controller.snapshot().artboards);
+    return Object.keys(iterations).length ? { ...message, iterations } : message;
+  }
   function syncSize(state = controller.snapshot()) {
     if (review.busy()) return;
     const board = state.artboards.find((b) => b.id === state.selected);
@@ -216,7 +223,7 @@ function mount() {
           (message.lens || null) === selection?.lens &&
           window.parent !== window
         )
-          window.parent.postMessage(message, '*');
+          window.parent.postMessage(withShownIterations(message, selection), '*');
         return;
       }
       if (message.type === 'wb-frame-change') return;
@@ -306,7 +313,13 @@ function mount() {
   // A click inside a preview also selects its owning artboard.
   let lastSelected = '';
   const identity = (board) =>
-    JSON.stringify([board.id, board.target.src, board.target.scenario, board.target.lens]);
+    JSON.stringify([
+      board.id,
+      board.target.src,
+      board.target.scenario,
+      board.target.lens,
+      board.target.iteration || null,
+    ]);
   const focusSelection = () => {
     const { navigating, expanding } = navigation.snapshot();
     const board = selected();
@@ -400,8 +413,11 @@ function mount() {
           : dimensions(next.size, available(), { width: 1024, height: 768 }),
         pageLabel: next.pageLabel,
         artboards: !next.docs ? next.artboards : undefined,
+        iterations: !next.docs ? next.iterations : undefined,
       });
     },
+    // Another iteration re-renders only the artboards whose iteration changed.
+    iterate: (next) => sessions.iterate(!next.docs ? next.iterations : undefined),
     fit: requestFit,
     async settle(next) {
       syncSize();
@@ -479,6 +495,7 @@ function mount() {
     },
     selectedSize: () => selected()?.size,
     selectedArtboard: () => selected()?.target.artboard,
+    selectedIteration: () => selected()?.target.iteration || undefined,
     stories: sessions.stories,
 
     refresh: sessions.refresh,

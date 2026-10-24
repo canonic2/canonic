@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createNavigation } from './controller.js';
+import { createNavigation, shownIterations } from './controller.js';
 
 const selection = (src) => ({
   src,
@@ -304,4 +304,53 @@ void test('presentation accepts only the requested preview or the complete decla
   );
   navigation.dispose();
   assert.equal(navigation.presentation([board]).visible, false);
+});
+
+void test('another iteration keeps the artboard group and waits for that artboard to show it', async () => {
+  const activations = [],
+    iterated = [];
+  const navigation = createNavigation({
+    ready: Promise.resolve(),
+    busy: () => false,
+    present() {},
+    fit() {},
+    async activate(next) {
+      activations.push(next.iterations);
+    },
+    async iterate(next) {
+      iterated.push(next.iterations);
+    },
+    async settle() {},
+  });
+  const artboards = [
+    { id: 'info', label: 'Info', width: 320, height: 120 },
+    { id: 'warning', label: 'Warning', width: 320, height: 120 },
+  ];
+  const view = { src: 'one', scenario: null, lens: 'design', ready: true, problem: null };
+  const boards = (warning) => [
+    { target: { ...view, artboard: 'info' }, view },
+    { target: { ...view, artboard: 'warning' }, view: { ...view, iteration: warning } },
+  ];
+  await navigation.show({ ...selection('one'), artboards, iterations: {} });
+  await navigation.show({ ...selection('one'), artboards, iterations: { warning: 'bold' } });
+  assert.deepEqual(activations, [{}], 'the declared group is created once');
+  assert.deepEqual(iterated, [{ warning: 'bold' }]);
+  assert.equal(navigation.presentation(boards(null)).visible, false);
+  assert.equal(navigation.presentation(boards('bold')).visible, true);
+  navigation.dispose();
+});
+
+void test('the canvas reports every artboard’s iteration under the design lens, whichever is selected', () => {
+  const boards = [{ target: { artboard: 'info' } }, { target: { artboard: 'warning' } }];
+  const declared = { ...selection('one'), iterations: { warning: 'bold', stale: 'calm' } };
+  assert.deepEqual(shownIterations(declared, boards), { warning: 'bold' });
+  assert.deepEqual(shownIterations({ ...declared, lens: null }, boards), { warning: 'bold' });
+  assert.deepEqual(
+    shownIterations({ ...selection('one'), iterations: { '': 'illustrated' } }, [{ target: {} }]),
+    { '': 'illustrated' },
+  );
+  assert.deepEqual(shownIterations({ ...declared, lens: 'storybook' }, boards), {});
+  assert.deepEqual(shownIterations({ ...declared, docs: true }, boards), {});
+  assert.deepEqual(shownIterations({ ...selection('one'), iterations: {} }, boards), {});
+  assert.deepEqual(shownIterations(null, boards), {});
 });

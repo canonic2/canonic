@@ -34,7 +34,7 @@ it does not reapply startup restoration over the user's navigation.
 | State | Scope and lifetime |
 | --- | --- |
 | Current space | Local to the VS Code workspace/window context; restore it if still available, otherwise use the first listed space |
-| Last selection | One record per workspace and stable space identity: page source, scenario/story, lens key, size and explicit Docs example anchor where applicable |
+| Last selection | One record per workspace and stable space identity: page source, scenario/story, selected iterations (the address's `+` parts, per declared or implicit artboard), lens key, size and explicit Docs example anchor where applicable |
 | Viewer preferences | Actions mode, sidebar width, preferred lens/size keys and custom resizable dimensions; local to the viewer, reused across its spaces and validated against the current configuration |
 | Added spaces | Existing editor-wide local list; separate from each workspace's current space and page selections |
 
@@ -175,7 +175,8 @@ within an active comparison session.
 - A fresh workspace opens its first page after listing; no empty-canvas click
   is required. Empty spaces and failed catalogs retain their normal errors.
 - Reloading/restarting VS Code or closing/reopening Workbench restores the
-  last page, scenario/story, lens, size/custom dimensions and example anchor.
+  last page, scenario/story, selected iterations, lens, size/custom dimensions
+  and example anchor.
   Page runtime state mounts fresh; a hidden live tab keeps its existing state.
 - Switching A → B → A restores each space independently. Two workspace/remote
   contexts do not overwrite one another. Restarting on a different server port

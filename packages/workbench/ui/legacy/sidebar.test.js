@@ -173,6 +173,13 @@ test('the sidebar hides catalog diagnostics when every catalog loads', function 
   assert.equal(sidebar.diagnostics.textContent, '');
 });
 
+test('with nothing to import, the sidebar shows its own reader’s problems', function () {
+  var sidebar = loadSidebar({ implementations: {}, previews: false, problems: ['Pages › Unlinked: every page needs a label and a src.'] });
+  assert.equal(sidebar.posted.some(function (m) { return m.type === 'canonic-catalog-request'; }), false);
+  assert.equal(sidebar.diagnostics.hidden, false);
+  assert.equal(sidebar.diagnostics.textContent, 'Pages › Unlinked: every page needs a label and a src.');
+});
+
 test('the sidebar requests discovered previews without an implementation catalog', function () {
   var sidebar = loadSidebar({ implementations: {} });
   assert.equal(sidebar.posted[0].type, 'canonic-catalog-request');

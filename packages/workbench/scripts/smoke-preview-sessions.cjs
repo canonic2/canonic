@@ -87,7 +87,7 @@ collections:
 `);
   fs.writeFileSync(path.join(root, 'other.md'), '# Other documentation');
   fs.writeFileSync(path.join(root, 'broken.html'), '<!doctype html><body>Broken authored page');
-  fs.writeFileSync(path.join(root, 'feedback.workbench.ts'), `import {definePreview} from '@canonic2/workbench';export default definePreview({id:'feedback',adapter:'html',source:{entry:'./feedback.ts'},artboards:${JSON.stringify(Object.fromEntries(['info','success','warning','danger','autopilot'].map(id => [id,{label:id,width:320,height:120}])))} });`);
+  fs.writeFileSync(path.join(root, 'feedback.workbench.ts'), `import {definePreview} from '@canonic2/workbench';export default definePreview({id:'feedback',adapter:'html',source:{entry:'./feedback.ts'},scenarios:{default:{artboards:${JSON.stringify(Object.fromEntries(['info','success','warning','danger','autopilot'].map(id => [id,{label:id,width:320,height:120}])))}}} });`);
   fs.writeFileSync(path.join(root, 'feedback.ts'), `export default function(canvas,context){canvas.textContent=context.artboard;}`);
   fs.writeFileSync(path.join(root, 'page.md'), '# Acme documentation\n\n' + 'Page documentation.\n\n'.repeat(150));
   try {

@@ -111,6 +111,9 @@ pub(crate) struct Reference {
     pub(crate) scenario: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) artboard: Option<String>,
+    /// The iteration this reference renders; `None` for the authored design.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) iteration: Option<String>,
     pub(crate) variant: String,
     pub(crate) label: String,
     pub(crate) size: String,
@@ -130,6 +133,8 @@ pub(crate) struct Reference {
 pub(crate) struct Screenshot {
     pub(crate) page: String,
     pub(crate) scenario: String,
+    pub(crate) artboard: Option<String>,
+    pub(crate) iteration: Option<String>,
     pub(crate) variant: String,
     pub(crate) label: String,
     pub(crate) size: String,
@@ -144,6 +149,8 @@ impl Screenshot {
         Self {
             page: reference.page.clone(),
             scenario: reference.scenario.clone(),
+            artboard: reference.artboard.clone(),
+            iteration: reference.iteration.clone(),
             variant: reference.variant.clone(),
             label: reference.label.clone(),
             size: reference.size.clone(),
@@ -222,6 +229,10 @@ pub(crate) struct PageEntry {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PageScreenshot {
     pub(crate) scenario: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) artboard: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) iteration: Option<String>,
     pub(crate) label: String,
     pub(crate) size: String,
     pub(crate) path: String,

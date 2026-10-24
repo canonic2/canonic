@@ -109,6 +109,57 @@ void test('ordinary stories reuse one renderer; only authored artboards create m
   f.sessions.dispose();
 });
 
+void test('each artboard carries its own iteration, and another iteration navigates only that artboard', async () => {
+  const f = fixture();
+  const design = { ...declared, target: { ...declared.target, lens: null } };
+  await f.sessions.activate({ ...design, iterations: { warning: 'bold' } });
+  assert.deepEqual(
+    [...f.visible.values()].map((b) => [b.target.artboard, b.target.iteration]),
+    [
+      ['info', null],
+      ['warning', 'bold'],
+    ],
+  );
+  await f.sessions.iterate({ info: 'calm', warning: 'bold' });
+  assert.deepEqual(
+    f.commands.map((c) => [c.id, c.command, c.value.iteration]),
+    [['1', 'navigate', 'calm']],
+  );
+  f.commands.length = 0;
+  for (const board of f.visible.values()) board.target.lens = 'storybook';
+  await f.sessions.iterate({});
+  assert.deepEqual(f.commands, [], 'other lenses do not render iterations');
+  f.sessions.dispose();
+
+  const ordinary = fixture();
+  await ordinary.sessions.activate({ ...page, iterations: { '': 'illustrated' } });
+  assert.equal(ordinary.visible.get('1').target.iteration, 'illustrated');
+  await ordinary.sessions.activate({ ...page, target: { ...page.target, scenario: 'empty' } });
+  assert.equal(
+    ordinary.commands[0].value.iteration,
+    null,
+    'another scenario starts from the authored design',
+  );
+  ordinary.sessions.dispose();
+});
+
+void test('returning to an iteration before the artboard reports the last one still navigates back', async () => {
+  const f = fixture();
+  const design = { ...declared, target: { ...declared.target, lens: null } };
+  await f.sessions.activate(design);
+  // No view report arrives between the two changes: the target still says null.
+  await f.sessions.iterate({ warning: 'bold' });
+  await f.sessions.iterate({});
+  assert.deepEqual(
+    f.commands.map((c) => [c.id, c.value.iteration]),
+    [
+      ['2', 'bold'],
+      ['2', null],
+    ],
+  );
+  f.sessions.dispose();
+});
+
 void test('outgoing artboards survive until presentation commits or the grace period expires', async () => {
   const f = fixture();
   await f.sessions.activate(page);

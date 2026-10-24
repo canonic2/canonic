@@ -333,6 +333,15 @@
     return annotation.geom.box;
   }
 
+  /* The first note belongs to the view as the address names it now: the shell
+     rewrites an address it can't fully show without a hashchange, so the key
+     read at load could still be the raw one, and a later size change would
+     look like another page. */
+  function keep(annotation) {
+    if (!annotations.length) loaded = pageOf(location.hash);
+    annotations.push(annotation);
+  }
+
   function addAnnotation(type, geom) {
     var group = make('g', { class: 'wb-annotation' });
     var hit = make(TAGS[type], { class: 'wb-hit' });
@@ -348,7 +357,7 @@
     svg.insertBefore(group, sel);
 
     var annotation = { type: type, el: group, nodes: [hit, shown], geom: geom };
-    annotations.push(annotation);
+    keep(annotation);
     render(annotation);
     countAnnotations();
     return annotation;
@@ -362,7 +371,7 @@
     layer.appendChild(el);
 
     var annotation = { type: 'text', el: el, nodes: [], geom: { x: p.x, y: p.y - 12 } };
-    annotations.push(annotation);
+    keep(annotation);
     render(annotation);
     countAnnotations();
 
@@ -408,7 +417,7 @@
     layer.appendChild(el);
 
     var annotation = { type: 'comment', el: el, nodes: [], geom: { x: p.x, y: p.y } };
-    annotations.push(annotation);
+    keep(annotation);
     render(annotation);
     countAnnotations();
 
@@ -907,6 +916,7 @@
     var base = String(view.src || '').split('/').pop().replace(/\.[^.]+$/, '');
     var scenario = view.story ? view.story.scenario : view.scenario;
     if (scenario) base += '-' + scenario;
+    if (view.iteration) base += '-' + view.iteration.id;
     if (view.lens) base += '-' + view.lens.key;
     var size = docsShowing() ? null : (options.size ? options.size() : window.wbSize && window.wbSize());
     if (size) base += '-' + size.key;
@@ -1423,6 +1433,9 @@
     }
     if (!view.lens && item) out.lensLabel = window.wbManifest.authoredLensLabel(item);
     if (view.story) out.story = { id: view.story.id, name: view.story.name };
+    /* The artboard's iteration, when the design shows one; its source is
+       among the code pointers. */
+    if (view.iteration) out.iteration = { id: view.iteration.id, label: view.iteration.label || view.iteration.id };
     if (view.code && view.code.length) out.code = view.code.slice();
     /* A docs lens says which of its examples the shot shows; the server adds
        where each one's code is. */
@@ -1597,10 +1610,10 @@
      under them. Width changes keep them: the artboard resizes, the annotations
      stay where they were drawn on it. So does a change of lens: they were
      drawn on the design, and seeing the implementation under them is the
-     comparison. */
+     comparison. Another iteration is another view, as another scenario is. */
   function pageOf(hash) {
     var target = window.wbAddress.parse(hash);
-    return target.src + ':' + (target.scenario || '');
+    return target.src + ':' + (target.scenario || '') + '+' + JSON.stringify(target.iterations || {});
   }
 
   var loaded = pageOf(location.hash);

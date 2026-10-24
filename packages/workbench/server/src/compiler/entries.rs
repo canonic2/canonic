@@ -34,6 +34,8 @@ pub(crate) struct AdapterImport {
     pub(crate) native_styles: Option<String>,
 }
 
+/// One source of a preview entry's `sources()` map. `scenario` is its key: a
+/// scenario ID, or an iteration's key from [`iteration_sources`].
 #[derive(Clone, Debug)]
 pub(crate) enum SourceImport {
     Module {
@@ -70,6 +72,26 @@ pub(crate) struct PreviewEntry<'a> {
 }
 
 const LIVE_RUNTIME: &str = "/_workbench/preview-runtime.js";
+
+/// Each iteration of a validated scenario that declares its own `source`,
+/// keyed `<scenario>+<iteration>` for the scenario's implicit artboard and
+/// `<scenario>+<artboard>/<iteration>` for a declared artboard. The runtime
+/// looks an iteration's key up before its scenario's.
+pub(crate) fn iteration_sources<'a>(scenario: &str, spec: &'a Value) -> Vec<(String, &'a Value)> {
+    let mut found = vec![];
+    let mut add = |prefix: String, iterations: &'a Value| {
+        for (id, iteration) in iterations.as_object().into_iter().flatten() {
+            if iteration["source"].is_object() {
+                found.push((format!("{prefix}{id}"), &iteration["source"]));
+            }
+        }
+    };
+    add(format!("{scenario}+"), &spec["iterations"]);
+    for (artboard, board) in spec["artboards"].as_object().into_iter().flatten() {
+        add(format!("{scenario}+{artboard}/"), &board["iterations"]);
+    }
+    found
+}
 
 /// JSON text as JavaScript's `JSON.stringify` writes it.
 pub(crate) fn js_json(value: &Value) -> String {
@@ -317,6 +339,45 @@ mod tests {
             docs_slug(&serde_json::json!({"adapter": "react"})),
             format!("docs-{}", digest(r#"{"adapter":"react"}"#))
         );
+    }
+
+    #[test]
+    fn iterations_with_their_own_source_get_their_own_keys() {
+        let spec = serde_json::json!({
+            "iterations": { "illustrated": { "source": { "entry": "./empty.tsx" } }, "plain": {} },
+            "artboards": {
+                "info": { "width": 480, "height": 320 },
+                "warning": { "width": 480, "height": 320, "iterations": {
+                    "bold": { "source": { "entry": "./bold.tsx", "export": "Bold" } },
+                    "calm": { "inputs": { "tone": "calm" } }
+                } }
+            }
+        });
+        let found = iteration_sources("default", &spec);
+        let keys: Vec<&str> = found.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(keys, ["default+illustrated", "default+warning/bold"]);
+        assert_eq!(found[1].1["export"], "Bold");
+        let adapter = react();
+        let sources: Vec<SourceImport> = found
+            .iter()
+            .map(|(key, source)| SourceImport::Module {
+                scenario: key.clone(),
+                file: format!("/acme/{}", source["entry"].as_str().unwrap()),
+                export_name: source["export"].as_str().unwrap_or("default").to_owned(),
+            })
+            .collect();
+        let entry = preview_entry_source(&PreviewEntry {
+            slug: "feedback-1",
+            definition: "/acme/feedback.workbench.ts",
+            adapter: &adapter,
+            sources: &sources,
+            project_environment: None,
+            own_environment: None,
+            styles: &[],
+            portable: None,
+        });
+        assert!(entry.contains("\"default+illustrated\": source0[\"default\"]"));
+        assert!(entry.contains("\"default+warning/bold\": source1[\"Bold\"]"));
     }
 
     #[test]

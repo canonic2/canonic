@@ -10,12 +10,17 @@ topic owns editing authored page declarations through **More → Configure pages
 - Open the modal from a server-backed canvas and read that server's selected
   space from `GET /_workbench/config-file`. Show loading/read failures in the
   form; do not treat an unreadable manifest as an empty collection list.
-- Add/remove/rename collections and set their icons; edit/remove groups and
-  add pages within them; add/remove pages and edit label/source/size choices.
-  Removing a collection or group confirms removal of its contained pages.
+- Add/remove/rename collections and set their icons. Add groups to a
+  collection, from its row or its inspector: a new group is named *New group*,
+  starts with one untitled page (a group needs one) and opens with its name
+  field focused; groups don't nest, so groups and pages offer no **Add group**.
+  Rename/remove groups and add pages within them; add/remove pages and edit
+  label/source/size choices. Removing a collection or group confirms removal
+  of its contained pages.
 - Edits remain a draft until Save. Closing the form discards its draft; it
   does not write YAML. New page declarations do not create source files.
-- Save validates required collection names and page labels/source paths, then
+- Save validates required collection names, a name and at least one page for
+  every group, and page labels/source paths, then
   posts `{ collections }`. Disable duplicate Save while the request is pending.
   On success close and refresh the resolved page model/sidebar. A save failure
   stays visible in the form and leaves the draft available to retry.

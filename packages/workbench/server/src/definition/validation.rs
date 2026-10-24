@@ -1,5 +1,5 @@
 //! Ordered definition validation; no filesystem, process or response I/O.
-use super::compatibility::{id, kebab, string, truthy};
+use super::compatibility::{id, kebab, nested_id, string, truthy};
 use crate::paths::resolve;
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
@@ -42,7 +42,7 @@ pub(super) fn check<'a>(
     if let Some(scenarios) = object.get("scenarios").and_then(Value::as_object)
         && scenarios
             .iter()
-            .any(|(name, scenario)| !kebab(name) || !scenario.is_object())
+            .any(|(name, scenario)| !nested_id(name) || !scenario.is_object())
     {
         return Err(failure(
             "scenarios need kebab-case IDs and object definitions.",
@@ -148,7 +148,7 @@ fn links(object: &Map<String, Value>) -> Result<(), String> {
             let valid = (target.is_object() || target.is_string())
                 && (preview.is_some_and(truthy) || scenario.is_some_and(truthy))
                 && preview.is_none_or(|value| string(Some(value), id))
-                && scenario.is_none_or(|value| string(Some(value), kebab));
+                && scenario.is_none_or(|value| string(Some(value), nested_id));
             if !valid {
                 return Err(failure(&format!(
                     "link {href} must name a preview ID, or {{ preview, scenario }}."

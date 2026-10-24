@@ -94,6 +94,23 @@ test('uses the declared default and selected scenario names and ids', function (
   assert.match(format(view), /Scenario: Wrong password — `error`/);
 });
 
+test('names a selected iteration and its source right after the scenario, and nothing without one', function () {
+  var view = design();
+  view.item.scenarios = [{ id: 'default', label: 'Default' }, { id: 'empty', label: 'Empty' }];
+  view.scenario = 'empty';
+  view.iteration = { id: 'illustrated', label: 'Illustrated', source: 'pages/sign-in.illustrated.tsx' };
+  var format = load().text;
+  assert.equal(format(view), [
+    '- Page: Sign in — `pages/sign-in.html`',
+    '- Scenario: Empty — `empty`',
+    '- Iteration: Illustrated — `illustrated`',
+    '- Iteration source: `pages/sign-in.illustrated.tsx`',
+    '- Lens: Design',
+  ].join('\n'));
+  view.iteration = null;
+  assert.doesNotMatch(format(view), /Iteration/);
+});
+
 test('names the resolved story and lens instead of a design scenario', function () {
   var view = design();
   view.lens = { key: 'storybook', label: 'Storybook', kind: 'storybook' };

@@ -62,6 +62,21 @@ function moved(at) {
   });
 }
 
+/* The address's `+` parts for what the canvas shows: every artboard's
+   iteration when the canvas reports them (`iterations`, keyed "" for a
+   scenario's implicit artboard), else the selected artboard's own. */
+function iterationParts(message, at) {
+  var shown = message.iterations && typeof message.iterations === 'object' ? message.iterations : null;
+  var parts = '';
+  if (shown) {
+    Object.keys(shown).forEach(function (key) {
+      if (typeof shown[key] === 'string' && shown[key]) parts += '+' + (key ? key + '/' : '') + shown[key];
+    });
+  }
+  if (!parts && at.iteration) parts = '+' + (at.artboard ? at.artboard + '/' : '') + at.iteration;
+  return parts;
+}
+
 function nonce() {
   var out = '';
   var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -282,8 +297,19 @@ function show(context, url, hash, options) {
         return;
       }
       if (!message || message.type !== 'wb-here') return;
-      current = message.src ? message.src + (message.scenario ? ':' + message.scenario : '') : null;
-      moved({ src: message.src || null, scenario: message.scenario || null });
+      var at = { src: message.src || null, scenario: message.scenario || null };
+      /* The selected artboard's iteration, only when it shows one. */
+      if (typeof message.iteration === 'string' && message.iteration) {
+        at.iteration = message.iteration;
+        /* A declared artboard's iteration names its artboard; the implicit one's doesn't. */
+        if (typeof message.artboard === 'string' && message.artboard) at.artboard = message.artboard;
+      }
+      /* An iteration showing on any artboard, selected or not, makes a pick
+         of the same page and scenario a real move: it returns to the
+         authored design, as it does in a browser. */
+      current = message.src ? message.src + (message.scenario ? ':' + message.scenario : '') +
+        iterationParts(message, at) : null;
+      moved(at);
     });
 
     panel.onDidDispose(function () {

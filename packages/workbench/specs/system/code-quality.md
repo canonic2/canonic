@@ -12,7 +12,7 @@ Feature acceptance belongs to the relevant spec, including
 [page-index acceptance](../preview-pipeline/page-index.md#acceptance-and-evidence).
 Commands and pinned tool-installation instructions live in the
 [native README](../../server/README.md#checks-and-packaging) and the
-[package guide](../../AGENTS.md#commands-and-distribution).
+[development guide](../../DEVELOPMENT.md).
 
 The baseline follows the repository's Rust packages, including TUI and
 Registry. Workbench keeps its own configuration and lockfile; it does not

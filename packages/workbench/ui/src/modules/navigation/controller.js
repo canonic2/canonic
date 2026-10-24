@@ -1,5 +1,21 @@
 /** The requested destination and supersession belong here, not in DOM handlers. */
 import { begin as beginTrace, phase } from '../trace/browser.js';
+/**
+ * The iterations the canvas shows, keyed like the address's `+` parts ("" for
+ * a scenario's implicit artboard): the selection's, for the artboards on the
+ * canvas, under the design lens only. Empty when every artboard shows its
+ * authored design.
+ */
+export function shownIterations(selection, boards) {
+  const shown = {};
+  if (!selection || selection.docs || (selection.lens && selection.lens !== 'design')) return shown;
+  for (const board of boards) {
+    const key = board.target?.artboard || '';
+    const id = selection.iterations?.[key];
+    if (typeof id === 'string' && id) shown[key] = id;
+  }
+  return shown;
+}
 export function createNavigation(ports) {
   let trace, clicked;
   let loadingTimer,
@@ -63,6 +79,12 @@ export function createNavigation(ports) {
     presentation(boards) {
       const declared =
         !selection?.docs && selection?.artboards?.length ? selection.artboards : undefined;
+      // Each artboard shows the iteration the selection names for it, or none.
+      // Only the design lens renders iterations.
+      const design = !selection?.lens || selection.lens === 'design';
+      const iterated = (board) =>
+        (board.view?.iteration || null) ===
+        ((design && selection?.iterations?.[board.target.artboard || '']) || null);
       const matches = (view) =>
         !!view &&
         view.src === selection?.src &&
@@ -79,11 +101,13 @@ export function createNavigation(ports) {
               (board) =>
                 matches(board.target) &&
                 matches(board.view) &&
+                (iterated(board) || !!board.view?.problem) &&
                 !!(board.view?.ready || board.view?.problem) &&
                 declared.some((child) => child.id === board.target.artboard),
             )
           : boards.length === 1 &&
             matches(boards[0].view) &&
+            (iterated(boards[0]) || !!boards[0].view?.problem) &&
             !!(boards[0].view?.ready || boards[0].view?.problem));
       const pending = !visible && (navigating || !!selection);
       return { visible, pending, loading: pending && loading };
@@ -160,6 +184,10 @@ export function createNavigation(ports) {
         }
         if (disposed || request !== sequence) return;
         ports.fit();
+      } else {
+        // The same artboards: only those whose iteration changed render again.
+        await ports.iterate?.(next);
+        if (disposed || request !== sequence) return;
       }
       await ports.settle(next);
       if (!disposed && request === sequence) ports.present();

@@ -4,15 +4,12 @@
    server reads it here, in node, for what only this side can answer: where
    an implementation's code is on this disk, which origins the pages'
    implementations live at, which Storybook to ask for stories. The rules
-   are the same — workbench/manifest.js holds the ones about implementations,
-   and the shape checks below mirror workbench/config.js.
-
-   What this deliberately does not do is complain about the handwritten tree. The
-   workbench reports every problem in it with the collection and page it came
-   from — having the editor say the same thing again in a different voice
-   helps nobody. Here, anything malformed is skipped and the rest is shown.
-   Problems with implementations are kept, though: `/_workbench/config`
-   answers with them, which is how `curl` can check a machine's setup.
+   are the same — contracts/manifest.js holds the ones about implementations,
+   scenarios and lenses, and the shape checks below mirror ui/legacy/config.js,
+   with the same problems at the same places: a collection, group or page by
+   name. Anything malformed is reported and left out, and the rest is shown;
+   `/_workbench/config` answers with the problems, which is how the editor
+   lists them and `curl` can check a machine's setup.
 
    No vscode import: this is file reading and shape checking, and keeping it
    that way means `node config.js <folder>` prints what this machine holds.
@@ -36,28 +33,36 @@ function list(value) {
   return Array.isArray(value) ? value : [];
 }
 
-/* Fewer than two scenarios is no choice to make, so the page stays one row. */
-function scenarios(raw) {
-  var out = list(raw)
-    .map(function (scenario) {
-      var id = text(scenario && scenario.id);
-      var label = text(scenario && scenario.label);
-      return id && label && /^[a-z0-9-]+$/.test(id) ? { id: id, label: label } : null;
-    })
-    .filter(Boolean);
-  return out.length > 1 ? out : null;
-}
-
-function page(raw, where, impls, sizes, problems) {
+/* `space` is what every page is read against: the implementations, the
+   space's sizes, the previews settings and the srcs already listed. A src
+   is listed once. */
+function page(raw, where, space, problems) {
   var label = text(raw && raw.label);
   var src = text(raw && raw.src);
-  if (!label || !src || src.charAt(0) === '/' || src.indexOf('..') > -1) return null;
-  if (manifest.srcProblem(src)) return null;
+  if (!label || !src) {
+    problems.push(where + (label || src ? ' › ' + (label || src) : '') + ': every page needs a label and a src.');
+    return null;
+  }
+  var at = where + ' › ' + label;
+  if (src.charAt(0) === '/' || src.indexOf('..') > -1) {
+    problems.push(at + ': “' + src + '” must be relative to the project root.');
+    return null;
+  }
+  var reserved = manifest.srcProblem(src);
+  if (reserved) {
+    problems.push(at + ': ' + reserved);
+    return null;
+  }
+  if (space.seen[src]) {
+    problems.push(at + ': src “' + src + '” is already in the page tree; only its first entry is kept.');
+    return null;
+  }
+  space.seen[src] = true;
   var item = { label: label, src: src };
-  manifest.pageLensLabel(raw.lensLabel, item, where + ' › ' + label, problems);
+  manifest.pageLensLabel(raw.lensLabel, item, at, problems);
   /* A Markdown page has no artboard size; docsPageEntry reports sizes on one. */
   if (!manifest.isDocs(src)) {
-    var sized = sizeSchema.readPageSizes(raw.sizes, sizes, where + ' › ' + label, problems);
+    var sized = sizeSchema.readPageSizes(raw.sizes, space.sizes, at, problems);
     if (sized) {
       item.sizes = sized.sizes;
       if (sized.ownSizes) item.ownSizes = sized.ownSizes;
@@ -65,38 +70,62 @@ function page(raw, where, impls, sizes, problems) {
   }
   var icon = text(raw.icon);
   if (icon) item.icon = icon;
-  var found = scenarios(raw.scenarios);
-  if (found) item.scenarios = found;
-  manifest.pageMarkdown(raw, item, where + ' › ' + label, problems);
-  var lenses = manifest.pageLenses(raw.implementations, item, impls, where + ' › ' + label, problems);
+  var found = manifest.pageScenarios(raw.scenarios, at, problems);
+  if (found.scenarios) item.scenarios = found.scenarios;
+  manifest.pageMarkdown(raw, item, at, problems);
+  /* A preview definition's page takes the definition's scenarios when the
+     catalog is assembled, which checks its lens path maps then. */
+  var ids = space.previews !== false && manifest.isPreviewSrc(src) ? null : found.ids;
+  var lenses = manifest.pageLenses(raw.implementations, item, space.impls, at, problems, ids);
   if (lenses) item.implementations = lenses;
-  manifest.docsPageEntry(raw, item, impls, where + ' › ' + label, problems);
-  var code = manifest.pageCode(raw.code, impls, where + ' › ' + label, problems);
+  manifest.docsPageEntry(raw, item, space.impls, at, problems);
+  var code = manifest.pageCode(raw.code, space.impls, at, problems);
   if (code) item.code = code;
   return item;
 }
 
-function entries(raw, where, impls, sizes, problems, inGroup) {
-  return list(raw)
-    .map(function (entry) {
-      var group = text(entry && entry.group);
-      if (!group) return page(entry, where, impls, sizes, problems);
-      if (inGroup) return null;
-      var items = entries(entry.items, where + ' › ' + group, impls, sizes, problems, true);
-      return items.length ? { group: group, items: items } : null;
-    })
-    .filter(Boolean);
+function entries(raw, where, space, problems, inGroup) {
+  var out = [];
+  list(raw).forEach(function (entry) {
+    var group = text(entry && entry.group);
+    if (group) {
+      if (inGroup) {
+        problems.push(where + ' › ' + group + ': groups don’t nest.');
+        return;
+      }
+      var items = entries(entry.items, where + ' › ' + group, space, problems, true);
+      if (items.length) out.push({ group: group, items: items });
+      else problems.push(where + ': group “' + group + '” has nothing in it.');
+      return;
+    }
+    var found = page(entry, where, space, problems);
+    if (found) out.push(found);
+  });
+  return out;
 }
 
-function collections(raw, impls, sizes, problems) {
-  return list(raw)
-    .map(function (collection) {
-      var name = text(collection && collection.name);
-      if (!name) return null;
-      var items = entries(collection && collection.items, name, impls, sizes, problems, false);
-      return items.length || text(collection.icon) ? { name: name, icon: text(collection.icon), items: items } : null;
-    })
-    .filter(Boolean);
+function collections(raw, space, problems) {
+  var out = [];
+  var names = [];
+  list(raw).forEach(function (collection, i) {
+    var name = text(collection && collection.name);
+    if (!name) {
+      problems.push('collection ' + (i + 1) + ' has no name.');
+      return;
+    }
+    if (names.indexOf(name) !== -1) {
+      problems.push('collection “' + name + '” is declared twice; only the first is kept.');
+      return;
+    }
+    names.push(name);
+    var items = entries(collection.items, name, space, problems, false);
+    if (!items.length && !text(collection.icon)) {
+      problems.push('collection “' + name + '” has nothing in it.');
+      return;
+    }
+    out.push({ name: name, icon: text(collection.icon), items: items });
+  });
+  return out;
 }
 
 /* The file's text, or null when it isn't there. Anything else wrong with it
@@ -197,6 +226,12 @@ function read(where) {
   var sizes = sizesFor(found, picked, problems);
 
   var mark = manifest.spaceMark(raw, problems);
+  var previews = manifest.previews(raw && raw.previews, problems);
+  var authored = collections(raw && raw.collections, { impls: impls, sizes: sizes, previews: previews, seen: Object.create(null) }, problems);
+  var imports = previews !== false || Object.keys(impls).some(function (key) { return impls[key].catalog; });
+  if (!imports && !authored.some(function (collection) { return collection.items.length; })) {
+    problems.push(manifest.NOTHING_TO_SHOW);
+  }
 
   return {
     name: text(raw && raw.name) || path.basename(root),
@@ -204,9 +239,9 @@ function read(where) {
     root: root,
     mark: mark,
     sizes: sizes,
-    collections: collections(raw && raw.collections, impls, sizes, problems),
+    collections: authored,
     implementations: impls,
-    previews: manifest.previews(raw && raw.previews, problems),
+    previews: previews,
     problems: problems,
     files: { main: true, local: found.local },
   };

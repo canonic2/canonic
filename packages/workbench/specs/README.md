@@ -2,7 +2,7 @@
 
 Internal product contracts, system boundaries and acceptance evidence live here.
 [User guides](../docs/README.md) describe supported behavior; the
-[package guide](../AGENTS.md) owns development commands and source locations.
+[development guide](../DEVELOPMENT.md) owns development commands and source locations.
 A specification can define agreed future behavior without claiming it is shipped.
 
 Start with [core](core.md) and [glossary](glossary.md), then the folder that owns
@@ -50,8 +50,8 @@ they develop, separate from current behavior and observed acceptance.
 | --- | --- |
 | Shell/content boundary | One shell and dedicated content renderers are implemented; independent UI/backend acceptance remains open |
 | Preview pipeline | Native listing, watching and compilation are implemented. Docs navigation and installed startup have scoped measurements; the full first-page/list target campaign remains open |
-| Artboards | Explicit composition, isolated instances, review and context are implemented, with artboards still declared per page. Moving them under scenarios, free artboard management, phase 2 arrangement and saved/shared layouts remain open |
-| Iterations | Agreed model in [artboards and iterations](pages/iterations.md); not implemented, and canvas presentation is undecided |
+| Artboards | Scenario-owned composition, isolated instances, review and context are implemented. Free artboard management, phase 2 arrangement and saved/shared layouts remain open |
+| Iterations | [Artboards and iterations](pages/iterations.md): model, render, address, review and export are implemented; canvas presentation is undecided |
 | UI and sizes | Components and configurable sizes are implemented. Configure pages size cards, public-guide alignment and the canvas theme bridge remain gaps |
 | Persistence | Current-space choice and origin-bound preferences exist. Complete selection/preference restoration and first-page fallback are agreed implementation work: IndexedDB in browsers, workspaceState in VS Code |
 
@@ -71,7 +71,6 @@ a complete user workflow or acceptance on every host.
   `../labs/` folder. Record the adopted
   behavior in the owning contract.
 - Update incoming links and anchors when moving or splitting a topic, including
-  package guides, local skills, source comments and research records. Regenerate
-  agent instructions from `.canonic/` when their sources change.
+  user guides, source comments and research records.
 - Keep public guide routes stable. Reorganizing specs changes neither runtime
   behavior nor product requirements and establishes no new test results.

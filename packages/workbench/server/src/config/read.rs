@@ -1,11 +1,12 @@
 //! Reading a space's workbench.yaml and workbench.local.yaml, and resolving
 //! its paths for this machine, as `server/node/config.js` does with `read`
-//! and `resolve`. The handwritten page tree keeps its malformed entries out
-//! without reporting them; implementation, size, lens and code problems are
-//! kept.
+//! and `resolve`. Malformed entries of the handwritten page tree are left
+//! out and reported where the browser's reader reports them: a collection,
+//! group or page by name.
 use super::{js, manifest, sizes, yaml};
 use crate::paths;
 use serde_json::{Map, Value, json};
+use std::collections::HashSet;
 use std::path::Path;
 
 const FILE: &str = "workbench.yaml";
@@ -25,37 +26,50 @@ fn list(value: Option<&Value>) -> &[Value] {
     value.and_then(Value::as_array).map_or(&[], Vec::as_slice)
 }
 
-/// A page's scenarios, when there are at least two to choose between.
-fn scenarios(raw: Option<&Value>) -> Option<Value> {
-    let out: Vec<Value> = list(raw)
-        .iter()
-        .filter_map(|scenario| {
-            let id = text(scenario.get("id"));
-            let label = text(scenario.get("label"));
-            let valid = !id.is_empty() && !label.is_empty() && manifest::is_key(&id);
-            valid.then(|| json!({ "id": id, "label": label }))
-        })
-        .collect();
-    (out.len() > 1).then_some(Value::Array(out))
-}
-
+/// What every page is read against: the implementations, the space's sizes,
+/// whether previews are on, and the srcs already listed. A src is listed once.
 struct Space<'a> {
     implementations: &'a Map<String, Value>,
     sizes: &'a [Value],
+    previews: bool,
+    seen: HashSet<String>,
 }
 
-fn page(raw: &Value, where_: &str, space: &Space<'_>, problems: &mut Problems) -> Option<Value> {
+fn page(
+    raw: &Value,
+    where_: &str,
+    space: &mut Space<'_>,
+    problems: &mut Problems,
+) -> Option<Value> {
     let label = text(raw.get("label"));
     let src = text(raw.get("src"));
-    if label.is_empty()
-        || src.is_empty()
-        || src.starts_with('/')
-        || src.contains("..")
-        || manifest::src_problem(&src).is_some()
-    {
+    if label.is_empty() || src.is_empty() {
+        let named = if label.is_empty() { &src } else { &label };
+        let at = if named.is_empty() {
+            where_.to_owned()
+        } else {
+            format!("{where_} › {named}")
+        };
+        problems.push(format!("{at}: every page needs a label and a src."));
         return None;
     }
     let at = format!("{where_} › {label}");
+    if src.starts_with('/') || src.contains("..") {
+        problems.push(format!(
+            "{at}: “{src}” must be relative to the project root."
+        ));
+        return None;
+    }
+    if let Some(reserved) = manifest::src_problem(&src) {
+        problems.push(format!("{at}: {reserved}"));
+        return None;
+    }
+    if !space.seen.insert(src.clone()) {
+        problems.push(format!(
+            "{at}: src “{src}” is already in the page tree; only its first entry is kept."
+        ));
+        return None;
+    }
     let mut item = Map::new();
     item.insert("label".to_owned(), json!(label));
     item.insert("src".to_owned(), json!(src));
@@ -73,16 +87,21 @@ fn page(raw: &Value, where_: &str, space: &Space<'_>, problems: &mut Problems) -
     if !icon.is_empty() {
         item.insert("icon".to_owned(), json!(icon));
     }
-    if let Some(found) = scenarios(raw.get("scenarios")) {
-        item.insert("scenarios".to_owned(), found);
+    let (ids, kept) = manifest::page_scenarios(raw.get("scenarios"), &at, problems);
+    if let Some(kept) = kept {
+        item.insert("scenarios".to_owned(), kept);
     }
     manifest::page_markdown(raw, &mut item, &at, problems);
+    // A preview definition's page takes the definition's scenarios when the
+    // catalog is assembled, which checks its lens path maps then.
+    let ids = (!(space.previews && manifest::is_preview_src(&src))).then_some(ids.as_slice());
     if let Some(lenses) = manifest::page_lenses(
         raw.get("implementations"),
         &item,
         space.implementations,
         &at,
         problems,
+        ids,
     ) {
         item.insert("implementations".to_owned(), lenses);
     }
@@ -96,46 +115,62 @@ fn page(raw: &Value, where_: &str, space: &Space<'_>, problems: &mut Problems) -
 fn entries(
     raw: Option<&Value>,
     where_: &str,
-    space: &Space<'_>,
+    space: &mut Space<'_>,
     problems: &mut Problems,
     in_group: bool,
 ) -> Vec<Value> {
-    list(raw)
-        .iter()
-        .filter_map(|entry| {
-            let group = text(entry.get("group"));
-            if group.is_empty() {
-                return page(entry, where_, space, problems);
-            }
-            if in_group {
-                return None;
-            }
-            let items = entries(
-                entry.get("items"),
-                &format!("{where_} › {group}"),
-                space,
-                problems,
-                true,
-            );
-            (!items.is_empty()).then(|| json!({ "group": group, "items": items }))
-        })
-        .collect()
+    let mut out = Vec::new();
+    for entry in list(raw) {
+        let group = text(entry.get("group"));
+        if group.is_empty() {
+            out.extend(page(entry, where_, space, problems));
+            continue;
+        }
+        if in_group {
+            problems.push(format!("{where_} › {group}: groups don’t nest."));
+            continue;
+        }
+        let items = entries(
+            entry.get("items"),
+            &format!("{where_} › {group}"),
+            space,
+            problems,
+            true,
+        );
+        if items.is_empty() {
+            problems.push(format!("{where_}: group “{group}” has nothing in it."));
+        } else {
+            out.push(json!({ "group": group, "items": items }));
+        }
+    }
+    out
 }
 
-fn collections(raw: Option<&Value>, space: &Space<'_>, problems: &mut Problems) -> Vec<Value> {
-    list(raw)
-        .iter()
-        .filter_map(|collection| {
-            let name = text(collection.get("name"));
-            if name.is_empty() {
-                return None;
-            }
-            let items = entries(collection.get("items"), &name, space, problems, false);
-            let icon = text(collection.get("icon"));
-            (!items.is_empty() || !icon.is_empty())
-                .then(|| json!({ "name": name, "icon": icon, "items": items }))
-        })
-        .collect()
+fn collections(raw: Option<&Value>, space: &mut Space<'_>, problems: &mut Problems) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut names: Vec<String> = Vec::new();
+    for (index, collection) in list(raw).iter().enumerate() {
+        let name = text(collection.get("name"));
+        if name.is_empty() {
+            problems.push(format!("collection {} has no name.", index + 1));
+            continue;
+        }
+        if names.contains(&name) {
+            problems.push(format!(
+                "collection “{name}” is declared twice; only the first is kept."
+            ));
+            continue;
+        }
+        names.push(name.clone());
+        let items = entries(collection.get("items"), &name, space, problems, false);
+        let icon = text(collection.get("icon"));
+        if items.is_empty() && icon.is_empty() {
+            problems.push(format!("collection “{name}” has nothing in it."));
+            continue;
+        }
+        out.push(json!({ "name": name, "icon": icon, "items": items }));
+    }
+    out
 }
 
 /// The file's text, or `None` when it isn't there.
@@ -254,12 +289,24 @@ pub(crate) fn resolved(dir: &Path, key: Option<&str>) -> Result<Option<Value>, S
     let local_keys = local_size_keys(found.local_raw.as_ref(), picked_key.as_deref());
     let space_sizes = sizes::space_sizes(raw.get("sizes"), &mut problems, &local_keys);
     let mark = manifest::space_mark(&raw, &mut problems);
-    let space = Space {
+    let previews = manifest::previews(raw.get("previews"), &mut problems);
+    let mut space = Space {
         implementations: &implementations,
         sizes: &space_sizes,
+        previews: previews != Value::Bool(false),
+        seen: HashSet::new(),
     };
-    let collections = collections(raw.get("collections"), &space, &mut problems);
-    let previews = manifest::previews(raw.get("previews"), &mut problems);
+    let collections = collections(raw.get("collections"), &mut space, &mut problems);
+    let imports = previews != Value::Bool(false)
+        || implementations
+            .values()
+            .any(|implementation| implementation["catalog"] == true);
+    let shown = collections
+        .iter()
+        .any(|collection| !list(collection.get("items")).is_empty());
+    if !imports && !shown {
+        problems.push(manifest::NOTHING_TO_SHOW.to_owned());
+    }
     let mut name = text(raw.get("name"));
     if name.is_empty() {
         name = root

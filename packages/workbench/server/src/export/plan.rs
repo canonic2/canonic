@@ -1,6 +1,7 @@
 //! The reference screenshots an export plans: every declared scenario of every
-//! page at each size it supports, a preview's scenarios or artboards, and for a
-//! docs page the whole page and each example a lens renders. The capture
+//! page at each size it supports, a preview's scenarios or their artboards,
+//! each declared iteration beside its artboard, and for a docs page the whole
+//! page and each example a lens renders. The capture
 //! helper loads these addresses itself, so exporting never drives the
 //! visible canvas. Pure, except that a missing design file is checked.
 use super::paths::page_url;
@@ -131,26 +132,62 @@ pub(crate) fn capture_plan(view: &Value, base_url: &str) -> Plan {
                 params.push(("scenario", id));
             }
             let url = page_url(src, base_url, &params);
-            for size in &sizes {
-                plan.captures.push(Reference {
-                    page: src.to_owned(),
-                    scenario: id.to_owned(),
-                    variant: format!("{id}-{}", size.key),
-                    label: text(&scenario["label"]).to_owned(),
-                    size: size.key.clone(),
-                    size_label: size.label.clone(),
-                    url: url.clone(),
-                    external: false,
-                    width: size.width,
-                    height: size.height,
-                    ..Reference::default()
-                });
+            plan_sizes(&mut plan, src, scenario, None, &url, &sizes);
+            for iteration in list(&scenario["iterations"]) {
+                // Like the canvas, the first scenario loads without naming itself,
+                // so the page marks it `default`.
+                let mut iteration_params = params.clone();
+                iteration_params.push(("iteration", text(&iteration["id"])));
+                let url = page_url(src, base_url, &iteration_params);
+                plan_sizes(&mut plan, src, scenario, Some(iteration), &url, &sizes);
             }
         }
     }
     plan
 }
 
+/// One reference per size for a scenario's implicit artboard, or one of its
+/// iterations, loaded from `url`.
+fn plan_sizes(
+    plan: &mut Plan,
+    src: &str,
+    scenario: &Value,
+    iteration: Option<&Value>,
+    url: &str,
+    sizes: &[super::sizes::ExportSize],
+) {
+    let id = text(&scenario["id"]);
+    let (variant, label) = match iteration {
+        Some(iteration) => (
+            format!("{id}+{}", text(&iteration["id"])),
+            format!(
+                "{} · {}",
+                text(&scenario["label"]),
+                text(&iteration["label"])
+            ),
+        ),
+        None => (id.to_owned(), text(&scenario["label"]).to_owned()),
+    };
+    for size in sizes {
+        plan.captures.push(Reference {
+            page: src.to_owned(),
+            scenario: id.to_owned(),
+            iteration: iteration.map(|iteration| text(&iteration["id"]).to_owned()),
+            variant: format!("{variant}-{}", size.key),
+            label: label.clone(),
+            size: size.key.clone(),
+            size_label: size.label.clone(),
+            url: url.to_owned(),
+            external: false,
+            width: size.width,
+            height: size.height,
+            ..Reference::default()
+        });
+    }
+}
+
+/// Per scenario: each declared artboard at its authored size, or the implicit
+/// artboard at every size; then each of their iterations the same way.
 fn plan_preview(
     plan: &mut Plan,
     src: &str,
@@ -159,45 +196,63 @@ fn plan_preview(
     base_url: &str,
 ) {
     let file = text(&preview["file"]);
-    let artboards = list(&preview["artboards"]);
     for scenario in list(&preview["scenarios"]) {
         let id = text(&scenario["id"]);
+        let artboards = list(&scenario["artboards"]);
         if artboards.is_empty() {
             let url = page_url(file, base_url, &[("scenario", id)]);
-            for size in sizes {
-                plan.captures.push(Reference {
-                    page: src.to_owned(),
-                    scenario: id.to_owned(),
-                    variant: format!("{id}-{}", size.key),
-                    label: text(&scenario["label"]).to_owned(),
-                    size: size.key.clone(),
-                    size_label: size.label.clone(),
-                    url: url.clone(),
-                    external: false,
-                    width: size.width,
-                    height: size.height,
-                    ..Reference::default()
-                });
+            plan_sizes(plan, src, scenario, None, &url, sizes);
+            for iteration in list(&scenario["iterations"]) {
+                let url = page_url(
+                    file,
+                    base_url,
+                    &[("scenario", id), ("iteration", text(&iteration["id"]))],
+                );
+                plan_sizes(plan, src, scenario, Some(iteration), &url, sizes);
             }
             continue;
         }
         for board in artboards {
             let board_id = text(&board["id"]);
-            let label = text(&board["label"]);
-            plan.captures.push(Reference {
+            let board_label = text(&board["label"]);
+            // Different scenarios can declare the same artboard, so labels name both.
+            let scenario_label = text(&scenario["label"]);
+            let base = Reference {
                 page: src.to_owned(),
                 scenario: id.to_owned(),
                 artboard: Some(board_id.to_owned()),
                 variant: format!("{id}-{board_id}"),
-                label: label.to_owned(),
+                label: format!("{scenario_label} · {board_label}"),
                 size: board_id.to_owned(),
-                size_label: label.to_owned(),
+                size_label: board_label.to_owned(),
                 url: page_url(file, base_url, &[("scenario", id), ("artboard", board_id)]),
                 external: false,
                 width: dimension(&board["width"]),
                 height: dimension(&board["height"]),
                 ..Reference::default()
-            });
+            };
+            plan.captures.push(base.clone());
+            for iteration in list(&board["iterations"]) {
+                let iteration_id = text(&iteration["id"]);
+                plan.captures.push(Reference {
+                    iteration: Some(iteration_id.to_owned()),
+                    variant: format!("{id}-{board_id}+{iteration_id}"),
+                    label: format!(
+                        "{scenario_label} · {board_label} · {}",
+                        text(&iteration["label"])
+                    ),
+                    url: page_url(
+                        file,
+                        base_url,
+                        &[
+                            ("scenario", id),
+                            ("artboard", board_id),
+                            ("iteration", iteration_id),
+                        ],
+                    ),
+                    ..base.clone()
+                });
+            }
         }
     }
 }
@@ -295,6 +350,9 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Variant, artboard, iteration, label and URL of one capture.
+    type Row<'a> = (&'a str, Option<&'a str>, Option<&'a str>, &'a str, &'a str);
+
     #[test]
     fn plans_every_local_scenario_for_export_capture_and_warns_for_a_catalogued_simulator_page() {
         let view = json!({
@@ -345,7 +403,68 @@ mod tests {
     }
 
     #[test]
-    fn previews_plan_their_scenarios_or_their_artboards_and_markdown_pages_none() {
+    fn an_authored_page_plans_each_scenario_iteration_at_every_size() {
+        let view = json!({
+            "sizes": [{ "key": "mobile", "label": "Mobile", "kind": "fixed", "width": 393, "height": 852 }],
+            "collections": [{ "items": [{
+                "label": "Jobs", "src": "pages/jobs.html",
+                "scenarios": [
+                    { "id": "list", "label": "List",
+                      "iterations": [{ "id": "compact", "label": "Compact" }] },
+                    { "id": "empty", "label": "Empty",
+                      "iterations": [{ "id": "illustrated", "label": "Illustrated" }] },
+                ],
+            }] }],
+            "pages": {},
+        });
+        let plan = capture_plan(&view, "http://127.0.0.1:3579/");
+        let shown: Vec<(&str, Option<&str>, &str, &str)> = plan
+            .captures
+            .iter()
+            .map(|capture| {
+                (
+                    capture.variant.as_str(),
+                    capture.iteration.as_deref(),
+                    capture.label.as_str(),
+                    capture.url.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                (
+                    "list-mobile",
+                    None,
+                    "List",
+                    "http://127.0.0.1:3579/pages/jobs.html?actions=off"
+                ),
+                // The first scenario loads unnamed, as on the canvas.
+                (
+                    "list+compact-mobile",
+                    Some("compact"),
+                    "List · Compact",
+                    "http://127.0.0.1:3579/pages/jobs.html?actions=off&iteration=compact"
+                ),
+                (
+                    "empty-mobile",
+                    None,
+                    "Empty",
+                    "http://127.0.0.1:3579/pages/jobs.html?actions=off&scenario=empty"
+                ),
+                (
+                    "empty+illustrated-mobile",
+                    Some("illustrated"),
+                    "Empty · Illustrated",
+                    "http://127.0.0.1:3579/pages/jobs.html?actions=off&scenario=empty&iteration=illustrated"
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn previews_plan_their_scenarios_or_their_artboards_with_each_iteration_and_markdown_pages_none()
+     {
         let view = json!({
             "sizes": [{ "key": "mobile", "label": "Mobile", "kind": "fixed", "width": 393, "height": 852 }],
             "collections": [{ "items": [
@@ -355,32 +474,86 @@ mod tests {
                 { "label": "Missing", "src": "missing.html" },
             ] }],
             "pages": {
-                "button.workbench.ts": { "preview": { "file": "button.workbench.ts", "scenarios": [{ "id": "primary", "label": "Primary" }] } },
-                "toast.workbench.ts": { "preview": { "file": "toast.workbench.ts", "scenarios": [{ "id": "default", "label": "Default" }],
-                    "artboards": [{ "id": "info", "label": "Info", "width": 560, "height": 79 }] } },
+                "button.workbench.ts": { "preview": { "file": "button.workbench.ts", "scenarios": [{ "id": "primary", "label": "Primary",
+                    "iterations": [{ "id": "outlined", "label": "Outlined" }] }] } },
+                "toast.workbench.ts": { "preview": { "file": "toast.workbench.ts", "scenarios": [
+                    { "id": "default", "label": "Default", "artboards": [
+                        { "id": "info", "label": "Info", "width": 560, "height": 79 },
+                        { "id": "warning", "label": "Warning", "width": 480, "height": 120,
+                          "iterations": [{ "id": "bold", "label": "Bold" }] },
+                    ] },
+                    { "id": "empty", "label": "Empty" },
+                ] } },
                 "missing.html": { "design": "/nonexistent/acme/missing.html" },
             },
         });
         let plan = capture_plan(&view, "http://127.0.0.1:3579/");
-        let variants: Vec<(&str, &str)> = plan
+        let variants: Vec<Row<'_>> = plan
             .captures
             .iter()
-            .map(|capture| (capture.variant.as_str(), capture.url.as_str()))
+            .map(|capture| {
+                (
+                    capture.variant.as_str(),
+                    capture.artboard.as_deref(),
+                    capture.iteration.as_deref(),
+                    capture.label.as_str(),
+                    capture.url.as_str(),
+                )
+            })
             .collect();
         assert_eq!(
             variants,
             [
                 (
                     "primary-mobile",
+                    None,
+                    None,
+                    "Primary",
                     "http://127.0.0.1:3579/button.workbench.ts?scenario=primary"
                 ),
                 (
+                    "primary+outlined-mobile",
+                    None,
+                    Some("outlined"),
+                    "Primary · Outlined",
+                    "http://127.0.0.1:3579/button.workbench.ts?scenario=primary&iteration=outlined"
+                ),
+                (
                     "default-info",
+                    Some("info"),
+                    None,
+                    "Default · Info",
                     "http://127.0.0.1:3579/toast.workbench.ts?scenario=default&artboard=info"
+                ),
+                (
+                    "default-warning",
+                    Some("warning"),
+                    None,
+                    "Default · Warning",
+                    "http://127.0.0.1:3579/toast.workbench.ts?scenario=default&artboard=warning"
+                ),
+                (
+                    "default-warning+bold",
+                    Some("warning"),
+                    Some("bold"),
+                    "Default · Warning · Bold",
+                    "http://127.0.0.1:3579/toast.workbench.ts?scenario=default&artboard=warning&iteration=bold"
+                ),
+                (
+                    "empty-mobile",
+                    None,
+                    None,
+                    "Empty",
+                    "http://127.0.0.1:3579/toast.workbench.ts?scenario=empty"
                 ),
             ]
         );
-        assert_eq!((plan.captures[1].width, plan.captures[1].height), (560, 79));
+        assert_eq!((plan.captures[2].width, plan.captures[2].height), (560, 79));
+        assert_eq!(
+            (plan.captures[4].width, plan.captures[4].height),
+            (480, 120)
+        );
+        assert_eq!(plan.captures[4].size, "warning");
         assert_eq!(
             plan.warnings,
             ["Missing: the design file is missing, so no reference screenshot was captured."]

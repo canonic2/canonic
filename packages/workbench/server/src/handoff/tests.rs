@@ -147,6 +147,42 @@ fn names_the_source_on_a_design_that_has_one_and_nothing_else_new() {
 }
 
 #[test]
+fn names_a_selected_iteration_after_its_scenario_with_its_source() {
+    let text = text_of(&json!({
+        "label": "Feedback", "src": "previews/feedback.workbench.ts", "scenario": "Empty",
+        "iteration": { "id": "illustrated", "label": "Illustrated" },
+        "code": ["previews/feedback.empty-illustrated.tsx"],
+        "size": "Fit", "frame": { "w": 800, "h": 600 }, "file": ".canonic/.handoffs/feedback.png", "annotations": [],
+    }));
+    let lines: Vec<&str> = text.lines().collect();
+    let scenario = lines
+        .iter()
+        .position(|line| *line == "- Scenario: Empty")
+        .expect("a scenario line");
+    assert_eq!(
+        lines[scenario + 1],
+        "- Iteration: Illustrated (illustrated)"
+    );
+    assert!(has_line(
+        &text,
+        "- Source: `previews/feedback.empty-illustrated.tsx`"
+    ));
+    let authored = text_of(&json!({
+        "label": "Feedback", "src": "previews/feedback.workbench.ts", "iteration": {},
+        "size": "Fit", "frame": { "w": 800, "h": 600 }, "file": ".canonic/.handoffs/feedback.png", "annotations": [],
+    }));
+    assert!(!authored.contains("Iteration"));
+}
+
+#[test]
+fn a_canvas_review_names_each_artboards_own_iteration() {
+    let mut value = review(&json!(null));
+    value["artboards"][1]["iteration"] = json!({ "id": "bold", "label": "Bold" });
+    let text = prompt(&value).expect("a review");
+    assert_eq!(text.matches("- Iteration: Bold (bold)").count(), 1);
+}
+
+#[test]
 fn an_unannotated_lens_shot_is_the_implementation_as_it_stands() {
     let text = text_of(&json!({
         "label": "Sign in", "src": "pages/sign-in.html",

@@ -142,6 +142,14 @@ fn facts(payload: &Value, docs: Option<&Value>, lens: Option<&Value>) -> Vec<Str
     if js::truthy(payload.get("scenario")) {
         out.push(format!("- Scenario: {}", field("scenario")));
     }
+    // Only when the artboard shows one; its source is among the code pointers.
+    let iteration = payload.get("iteration");
+    if let Some(id) = present(iteration.and_then(|iteration| iteration.get("id"))) {
+        let id = js::text(Some(id));
+        let label = present(iteration.and_then(|iteration| iteration.get("label")))
+            .map_or_else(|| id.clone(), |label| js::text(Some(label)));
+        out.push(format!("- Iteration: {label} ({id})"));
+    }
     if let Some(story) = present(payload.get("story")) {
         out.push(format!(
             "- Story: {} — `{}`",

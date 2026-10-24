@@ -181,7 +181,7 @@ pub(crate) fn revision(outputs: &BTreeMap<String, Vec<u8>>) -> String {
 use super::docs;
 use super::entries::{
     DocsEntry, DocsExamples, PortableEntry, PreviewEntry, SourceImport, docs_slug, entry_slug,
-    preview_entry_source,
+    iteration_sources, preview_entry_source,
 };
 use super::options::{self, Build, Purpose};
 use super::previews::Previews;
@@ -412,6 +412,18 @@ impl Previews {
         } else {
             None
         };
+        // Astro renders declared artboards (`<scenario>+<artboard>/`) and
+        // iterations that change the server render under their keys.
+        let iteration_renders = renders.iter().flat_map(|answer| {
+            answer["scenarios"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| key.contains('+'))
+                .map(|(key, _)| (key.clone(), json!({})))
+        });
+        let scenarios: Vec<(String, Value)> =
+            scenarios.into_iter().chain(iteration_renders).collect();
         for (scenario, spec) in scenarios {
             let source = if spec["source"].is_object() {
                 &spec["source"]
@@ -427,7 +439,7 @@ impl Previews {
                     .unwrap_or_default();
                 let (module, written) = super::astro::render_modules(
                     &self.virtual_portable(),
-                    &format!("{slug}-{scenario}"),
+                    &super::astro::render_key(&slug, &scenario),
                     &component,
                     render["html"].as_str().unwrap_or_default(),
                     answer["resources"].as_object().unwrap_or(&empty),
@@ -454,12 +466,15 @@ impl Previews {
                     render_url: None,
                 });
             } else {
-                let entry = source["entry"].as_str().context("source entry")?;
-                sources.push(SourceImport::Module {
-                    scenario,
-                    file: text(&crate::paths::resolve(directory, entry)),
-                    export_name: source["export"].as_str().unwrap_or("default").to_owned(),
-                });
+                let iterations = iteration_sources(&scenario, &spec);
+                for (key, source) in std::iter::once((scenario, source)).chain(iterations) {
+                    let entry = source["entry"].as_str().context("source entry")?;
+                    sources.push(SourceImport::Module {
+                        scenario: key,
+                        file: text(&crate::paths::resolve(directory, entry)),
+                        export_name: source["export"].as_str().unwrap_or("default").to_owned(),
+                    });
+                }
             }
         }
         let note = astro.then(|| ASTRO_NOTE.to_owned());
