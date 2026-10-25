@@ -80,8 +80,8 @@ CSS values do not inherit across iframe documents. The embedding webview owns a
 theme adapter that reads the relevant resolved variables and sends a complete,
 versioned theme snapshot to Workbench through the host message bridge. The
 snapshot includes theme kind and the allowlisted color/font values needed by the
-shell. Open question: the exact message names and snapshot schema are not yet
-decided.
+shell. Open question: the exact message names and snapshot schema are
+undecided.
 
 - Send the latest snapshot after the Workbench receiver is ready, including after
   iframe reloads and space switches; do not lose the initial theme to load timing.

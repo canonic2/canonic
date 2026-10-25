@@ -18,9 +18,8 @@ Commands and pinned tool-installation instructions live in the
 [native README](../../server/README.md#checks-and-packaging) and the
 [development guide](../../DEVELOPMENT.md).
 
-The baseline follows the repository's Rust packages, including TUI and
-Registry. Workbench keeps its own configuration and lockfile; it does not
-introduce a root Cargo workspace or couple product releases.
+Workbench keeps its own Rust configuration and lockfile; it does not belong to
+a shared Cargo workspace, and its releases are not coupled to other packages.
 
 ## Development iteration
 
@@ -39,8 +38,8 @@ are documented in the [development guide](../../DEVELOPMENT.md#fast-development-
 
 ### Browser UI
 
-Run `pnpm --dir packages/workbench run check:ui` from the repository root.
-The gate runs these commands in order and stops at the first failure:
+The `check:ui` gate ([development guide](../../DEVELOPMENT.md)) runs these
+package scripts in order and stops at the first failure:
 
 | Command | Scope |
 | --- | --- |
@@ -51,8 +50,8 @@ The gate runs these commands in order and stops at the first failure:
 Chrome or Chromium must be installed; `CHROME_PATH` can select its executable.
 The UI gate fails before running tests when no browser is available. It does
 not treat skipped browser tests as acceptance. Browser tests use owned temporary
-profiles and loopback fixtures. Run this gate with host access in an agent sandbox.
-The existing Node test runner and Chrome harness remain the test infrastructure;
+profiles and loopback fixtures, so the gate needs an environment that permits
+launching a browser and binding loopback listeners. The existing Node test runner and Chrome harness remain the test infrastructure;
 there is no DOM emulator or separate framework-specific component runner.
 
 The UI requires no TypeScript compiler or typed parser. The separate `check` and
@@ -81,12 +80,11 @@ owns its scope.
 
 ### Structure review and remaining gaps
 
-The October 2026 comparison with the reference React UI library examined its
-component directories, typed inputs, local styles, helper modules, colocated
-behavior tests, examples, and separate quality commands. Workbench's migrated
-elements use equivalent boundaries through properties, composed intent events,
-owned Shadow DOM and connection-scoped lifecycle; framework-specific React
-hooks, JSX lint rules and native-platform runners do not apply.
+Migrated elements keep one directory per component with its local styles,
+helper modules, colocated behavior tests and examples, and separate quality
+commands. Their boundaries are properties for inputs, composed intent events,
+owned Shadow DOM and connection-scoped lifecycle; framework-specific hooks,
+JSX lint rules and native-platform runners do not apply.
 
 | Area | Current evidence and limitation |
 | --- | --- |
@@ -108,7 +106,7 @@ behavior. The detailed contracts remain in [modules](modules.md),
 
 | Area | Contract |
 | --- | --- |
-| Toolchain | Pin Rspack's own toolchain for the pinned crates, `nightly-2026-04-16`, with rustfmt, Clippy, LLVM tools and the standard library's source; commit `Cargo.lock`, whose Rspack entries follow Rspack's own lockfile at the pinned release |
+| Toolchain | Pin Rspack's own toolchain for the pinned crates in [rust-toolchain.toml](../../server/rust-toolchain.toml), with rustfmt, Clippy, LLVM tools and the standard library's source; commit `Cargo.lock`, whose Rspack entries follow Rspack's own lockfile at the pinned release |
 | Formatting | Use rustfmt defaults |
 | Lint | Check every target and feature with Clippy and `-D warnings` |
 | Rust policy | Forbid unsafe code; warn on unreachable public items, Clippy pedantic, production unwraps and `mod_module_files`; deny broken and private rustdoc links |
@@ -119,11 +117,11 @@ behavior. The detailed contracts remain in [modules](modules.md),
 | Shipping | Build the target's native release executable with locked dependencies before packaging |
 | Host integration | Run the Workbench Node suite and TypeScript check alongside the native gates |
 
-Rust verification runs through independent server Make targets: `format-check`,
-`lint`, `types`, `test`, `doctest`, `docs` and `deps`. Workbench exposes matching
-`:server` scripts (format verification is `format:check:server`). The extension
-release workflow names each enabled category in its own step before packaging, with the
-dependency audit first. Local runs select categories explicitly; API reference
+Each Rust verification category is an independent command, listed in the
+[development guide](../../DEVELOPMENT.md#individual-rust-verification) and the
+[native README](../../server/README.md#individual-rust-verification); there is
+no aggregate target. The extension release workflow names each enabled category
+in its own step before packaging, with the dependency audit first. API reference
 generation is separate from tests and documentation examples. Coverage is also
 separate. CI installs the same pinned nextest and cargo-deny tools documented for
 local development.
@@ -149,10 +147,10 @@ specific rationale.
   exercise trust and disabled-preview boundaries.
 - Nextest reports every failure rather than stopping at the first. Flag a
   slow test after 30 seconds and terminate it after two minutes.
-- Run process-heavy suites separately. Sandbox access must support child
-  processes and signals, Node loopback fixtures, and cargo-deny's advisory
-  cache; a sandbox refusal is an unavailable prerequisite, not a product
-  failure or a reason to weaken the check.
+- Process-heavy suites run separately. They need child processes and signals,
+  Node loopback fixtures and cargo-deny's advisory cache; an environment that
+  refuses them lacks a prerequisite, which is not a product failure or a
+  reason to weaken the check.
 
 Source-level tests, a passing host run, all-platform installation, webview
 acceptance and performance measurements are separate evidence. Record missing
@@ -190,33 +188,15 @@ project-dependency prerequisites.
 
 ### Rust dependencies and artifacts
 
-Allow Apache-2.0, MIT and Unicode-3.0 licenses. Ignore the unpublished package's
-own license, warn on duplicate versions, deny wildcard versions and unknown
-Git/registry sources, and check advisories. Package-specific license
-exceptions permit `Apache-2.0 WITH LLVM-exception` for `ar_archive_writer`, used
-by SWC's stacker/psm build dependencies; `CC0-1.0` for `notify` and `ISC` for
-`inotify` and `inotify-sys`, the file watcher and its Linux backend;
-`BSD-3-Clause` for `matchit`, the HTTP router's path matcher; and, one crate
-each, the licenses of Rspack's compiler dependencies, the same crates Rspack's
-published native binding is built from: `MPL-2.0` for Lightning
-CSS and its parsers (`lightningcss`, `lightningcss-derive`, `cssparser`,
-`cssparser-color`, `cssparser-macros`, `dtoa-short`, `parcel_selectors`,
-`static-self`, `static-self-derive`, `smartstring`), `Zlib` (`foldhash`,
-`foldhash-portable`, `libz-rs-sys`, `zlib-rs`, `slotmap`), `ISC` (`hmac-sha256`,
-`is_ci`, `libloading`), `BSD-2-Clause` (`Inflector`, `pnp`), `BSD-3-Clause`
-(`swc_sourcemap`), `BSD-2-Clause-Patent` (`ustr-fxhash`), `BSL-1.0`
-(`xxhash-rust`) and `Apache-2.0 WITH LLVM-exception` (`dragonbox_ecma`); and
-`ISC` for `ring`, `rustls-webpki` and `untrusted` and `BSD-3-Clause` for
-`subtle`, the TLS the implementation proxies use; and `BSD-3-Clause` for
-`encoding_rs`, which the design export's PDF library reads text encodings with. The
-advisory RUSTSEC-2026-0235 is ignored for `rkyv` 0.7, which only Lightning
-CSS's source-map crate uses, on archives it wrote itself; 0.7 has no fixed
-release.
+cargo-deny's [configuration](../../server/deny.toml) defines the license
+allowlist, per-crate license exceptions, advisory ignores, duplicate-version
+warnings and the denial of wildcard versions and unknown Git/registry sources.
+A license exception names the crates that need it, and each exception group
+and advisory ignore states which dependency requires it and why.
 
 Runtime dependencies retain exact manifest pins for reproducible compiler and
-parser inputs. Test dependencies use the same tools
-and feature settings as the peer Rust packages. Changing a dependency or adding
-an exception requires reviewing the resulting lockfile and dependency checks.
+parser inputs. Changing a dependency or adding an exception requires reviewing
+the resulting lockfile and dependency checks.
 
 Builds, coverage reports and staged platform binaries remain under ignored
 `server/target/` and `server/bin/`. Only the selected platform executable enters

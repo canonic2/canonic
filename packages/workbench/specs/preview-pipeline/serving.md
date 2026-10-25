@@ -71,16 +71,17 @@ Before inserting script preloads, the generated page module checks both the
 document's loaded-script set and the initialized runtime for the requested
 profile. A runtime chunk already supplied by that profile is neither preloaded
 nor executed again, even if its current URL is absent from the loaded-script
-set. Runtime scripts still load on a cold document. Missing shared and entry
-chunks continue to preload concurrently with styles and execute in dependency
-order after styles settle.
+set. Runtime scripts load on a cold document. Missing shared and entry
+chunks preload concurrently with styles and execute in dependency order after
+styles settle.
 
 This applies to preview and Docs entries, including both warm hosts. It must
 preserve runtime build synchronization, fresh evaluation of project modules,
 stylesheet hot updates and cold-page startup. Focused Rust client-module tests
-cover initialized and cold runtimes and load order. The warm Docs confirmation
-checks navigation for unused-runtime-preload warnings
-([evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)).
+cover initialized and cold runtimes and load order. No automated test checks
+warm Docs navigation for unused-runtime-preload warnings; the
+[warm Docs research](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
+records that observation.
 
 ### Routes
 

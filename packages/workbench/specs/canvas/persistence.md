@@ -50,7 +50,7 @@ part of the selected size. Resolve defaults and normalize the restored address
 against current configuration, using the same rules as ordinary navigation.
 The sidebar's selected collection/group/page follows the restored page; a stale
 search filter must not prevent the restored selection or first-page fallback.
-Persisting filters and expanded groups is outside this change.
+Persisting filters and expanded groups is outside this contract.
 
 Save the latest accepted destination after routing has resolved its page and
 view parameters. Content need not render successfully: a selected Dev lens whose
@@ -62,8 +62,8 @@ Pending navigation must not overwrite a later accepted selection.
 ## VS Code ownership and lifecycle
 
 - The extension owns durable state through `ExtensionContext.workspaceState`
-  for the current space and per-space selections. `globalState` continues to
-  own the added-space list. Keep this local; do not opt selection records into
+  for the current space and per-space selections. `globalState` owns the
+  added-space list. Keep this local; do not opt selection records into
   Settings Sync or write them to project files.
 - Editor viewer preferences also use workspace-owned host storage, shared by
   its spaces. Restore them before applying the selected view; explicit view
@@ -110,7 +110,7 @@ IndexedDB is origin-bound: a change of scheme, hostname or port accesses a
 different database, even when the records use a stable space key. Browser
 restoration is guaranteed only while the serving origin is unchanged and the
 browser retains its data. A new origin starts with the explicit destination
-or first-page fallback. Cross-origin migration is outside this change; stable
+or first-page fallback. Cross-origin migration is outside this contract; stable
 keys prevent spaces on the same origin from colliding, not origins from
 isolating their storage. An explicit URL works without any stored state.
 
@@ -202,7 +202,7 @@ within an active comparison session.
 
 Add focused navigation/storage and panel lifecycle tests, then verify normal
 close/reopen, **Developer: Reload Window**, full editor restart and port changes
-in installed VS Code. Existing navigation tests do not establish these new
+in installed VS Code. Existing navigation tests do not establish these
 restart guarantees. Browser persistence needs separate host evidence.
 
 ## Implementation gaps

@@ -80,11 +80,7 @@ Decided by the owner on 2026-10-18:
 
 - **The server runs Storybook on a local socket, never a TCP port,** and
   reaches it only through itself. The same holds for any child process an
-  adapter needs, such as the Node evaluator for Astro renders.
-
-Verified on 2026-10-18 with Storybook 10.6.2, `@storybook/html-vite` and
-Vite 8: ready in about 1.7 to 2 seconds with `--preview-only`; the index,
-`iframe.html`, Vite's modules and its live-update WebSocket all answered
-through the socket; editing a stories file updated the framed story in
-place; nothing listened on 6006. Vite writes the port it is given into its
-live-update client, which is why Storybook is told the proxy's port.
+  adapter needs, such as the Node evaluator for Astro renders. The index,
+  `iframe.html`, Vite's modules and its live-update WebSocket all work
+  through the socket. Vite writes the port it is given into its live-update
+  client, which is why Storybook is told the proxy's port.

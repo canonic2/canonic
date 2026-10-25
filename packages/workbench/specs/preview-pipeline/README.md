@@ -3,9 +3,8 @@
 The preview pipeline is how Workbench turns a project's native pages
 (TypeScript previews and docs) into something the canvas shows. It compiles
 them, serves the output, loads it into a frame, mounts it, waits for it to be
-ready, and applies edits. These specs define the target pipeline and how
-Workbench gets there. [TypeScript previews](../pages/previews.md) and
-[docs](../pages/docs-pages.md) still own what a preview or docs page is and does.
+ready, and applies edits. [TypeScript previews](../pages/previews.md) and
+[docs](../pages/docs-pages.md) own what a preview or docs page is and does.
 This folder owns how they are built, delivered and kept current.
 
 ## The pipeline

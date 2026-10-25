@@ -13,7 +13,7 @@ artboard instances the record describes.
 reference, publication with precedence and heartbeats, server discovery, the
 prompt hook and the `workbench` MCP server are implemented. The editor
 integrations under [proposals](#proposals) are not agreed. Context for a
-`workbench.yaml` below the Canonic root and acceptance inside each editor are
+`workbench.yaml` below the project root and acceptance inside each editor are
 open; see [open questions](#open-questions).
 
 ## Purpose and scope
@@ -128,26 +128,30 @@ workbench runs its own server.
 | Surface | Agents | What the user does | What the agent gets |
 | --- | --- | --- | --- |
 | Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a page is showing |
-| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor the agent configuration covers | Asks about "this page", or attaches the resource | The current view on request |
+| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor registered with the MCP server | Asks about "this page", or attaches the resource | The current view on request |
 
-### The agent configuration sets it up
+### The hook and MCP integration
 
-The project's agent configuration writes the hook
-and MCP configuration when Workbench agent context is enabled for the project.
-Agent configuration owns generated project integration. Editor-specific
-registration must not introduce a second context model or conflicting files.
+One context reader serves both surfaces: in its `hook` role it prints the
+current view (or nothing), and in its `mcp` role it serves the `current_view`
+tool and the `workbench://view/current` resource over stdio. Both roles share
+one context model and one discovery contract; editor-specific registration must
+not introduce a second model or conflicting files.
 
-One context reader does the work in both roles: `hook` prints the view (or
-nothing), and `mcp` serves the tool and resource over stdio. The
-configuration adds the MCP server to every enabled editor's configuration and
-the hook to Claude Code's `.claude/settings.json` and Codex's
-`.codex/hooks.json`. Codex requires review and trust of new or changed hook
-definitions before they can run.
-
-- Editors start MCP servers and Codex hooks in the session's directory, which
-  may be below the project root or inside a nested Git repository. The
-  commands walk up from there to the script. Claude hooks use
-  `$CLAUDE_PROJECT_DIR`.
+- **Registration.** The hook is registered as a `UserPromptSubmit` hook for
+  Claude Code (`.claude/settings.json`) and Codex (`.codex/hooks.json`); the MCP
+  server is registered as `workbench` in each editor that uses it. Where a host
+  requires review and trust of new or changed hook definitions, the hook runs
+  only after the user allows it.
+- **Finding the project.** Editors start MCP servers and Codex hooks in the
+  session's directory, which may be below the project root or inside a nested
+  Git repository. The commands walk up from there to the project root that
+  holds the reader. Claude hooks start from `$CLAUDE_PROJECT_DIR`.
+- **Input.** The reader reads `.canonic/.workbench/server.json` at the project
+  root, requests `GET /_workbench/view` from its `url`, and accepts the answer
+  only when its `root` is that project ([finding the server](#finding-the-server)).
+- **Output.** The reader delivers the record's `text`, which equals Copy
+  reference, and how long ago the view changed.
 - The hook prints nothing and exits 0 when Workbench isn't running, no canvas
   is open, or the page isn't ready.
 - The hook adds the view while the canvas is open even if its tab isn't
@@ -166,7 +170,7 @@ These integrations are proposals.
 
 - A Copilot page-reference tool, callable explicitly or by the agent.
 - Extension-owned MCP registration for hosts that support it, without requiring
-  generated project configuration. Keep the same reference and discovery rules.
+  project-level registration files. Keep the same reference and discovery rules.
 - An Ask agent action that opens the installed agent with the reference.
 - Implicit canvas context where an editor exposes a supported provider API.
 
@@ -208,22 +212,21 @@ complete canvas record.
   space; shared-root spaces and simultaneous editor/browser canvases do not
   overwrite one another's identities. Heartbeats and background readiness do
   not change which canvas the user last used.
-- The generated hook and MCP commands find the script from the project root
+- The registered hook and MCP commands find the reader from the project root
   and from nested folders, including a nested Git repository.
 - Automated: [agent_view tests](../../server/src/agent_view/tests.rs) (latest canvas,
-  heartbeats, closing, staleness, field filtering, the announcement file),
-  [server.test.js](../../server/node/server.test.js) (the route and the file's lifecycle),
-  and the context reader's, output's and loader's own tests in the package
-  that generates the agent configuration.
-- Manual (no evidence yet): the hook and tool inside the Claude Code and Codex
-  extensions, with their versions recorded.
+  heartbeats, closing, staleness, field filtering, the announcement file) and
+  [server.test.js](../../server/node/server.test.js) (the route and the file's lifecycle).
+- Gaps: this package has no tests of the context reader, its hook and MCP
+  output, or its registration. The hook and tool inside the Claude Code and
+  Codex extensions have no acceptance evidence; a research record of that
+  acceptance names the host versions it used.
 
 ## Open questions
 
-- **Workbench root below the Canonic root.** The server announces itself in
-  the folder holding `workbench.yaml`; the script looks in the folder holding
-  `.canonic/canonic.yml`. They are the same folder here, but a project with
-  `workbench.yaml` in a package gets no context.
+- **Workbench root below the project root.** The server announces itself in
+  the folder holding `workbench.yaml`; the reader looks at the project root it
+  walks up to. A project with `workbench.yaml` in a subfolder gets no context.
 - **Host acceptance.** Confirm hook invocation, tool/resource access and
-  script discovery inside each supported editor, with host versions recorded
-  in the verification evidence.
+  reader discovery inside each supported editor, recording host versions in
+  the research record.

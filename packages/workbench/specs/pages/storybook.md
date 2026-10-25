@@ -186,5 +186,5 @@ mechanism.
   and rendering, failure/retry and
   empty selection, editor acknowledgements, superseded picks, hidden cold
   startup and Reload.
-- No check yet verifies that the Storybook renderer never starts Workbench's
+- No check verifies that the Storybook renderer never starts Workbench's
   application; add one before claiming the content-only boundary.

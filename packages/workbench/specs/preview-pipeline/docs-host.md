@@ -61,7 +61,7 @@ implementation gap; the Docs example hot-update limit is in
 ### Syntax highlighting
 
 - One lazy, document-owned module worker uses pinned local highlight.js
-  11.11.1 with explicitly registered languages for fences and Show code. It
+  (version and hashes in `ui/src/vendor/highlight.js/manifest.json`) with explicitly registered languages for fences and Show code. It
   starts after document load and two animation frames, outside page
   readiness. Tokenization runs off the browser's main thread; CSS Custom
   Highlight ranges colour the original text nodes without syntax spans.
@@ -100,7 +100,7 @@ annotations.
   Reusing a candidate can differ from global oldest-first eviction when the
   oldest session belongs to another lens or content kind.
 - Reassignment removes the old destination's retention key and binds the same
-  iframe to the new destination. The old page is no longer a retained return.
+  iframe to the new destination. The old page stops being a retained return.
   Protect the replacement until it is promoted or cancelled, as for other
   content frames. The session owner supplies retention/order; the content-frame
   factory selects the host kind and owns its loading and disposal.
@@ -215,9 +215,9 @@ or disposed request cannot navigate a newer destination or reopen a removed fram
   those sessions; protected replacements follow the existing loading
   lifecycle.
 - The accepted Docs cost is about 13 MB more JS heap with four documents
-  (one active and three idle), based on the heavy-fixture long walk. This
-  replaces the lab's requirement that the pool stay within control's heap;
-  it does not authorize more retained frames or unbounded growth. See
+  (one active and three idle), based on the heavy-fixture long walk
+  (decided 2026-10-23). It does not authorize more retained frames or
+  unbounded growth. See
   [measured conditions](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
 
 ## Design constraints

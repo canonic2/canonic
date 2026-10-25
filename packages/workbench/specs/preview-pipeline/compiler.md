@@ -62,7 +62,7 @@ entries added while pages are open and compiler bounds are not implemented
   Adding an entry can move shared modules into a new split chunk. A document
   that loaded the old layout then receives updates only for a chunk it never
   loaded, and silently applies nothing
-  ([stage 1, finding 4](../../research/rspack-pipeline.md#stage-1-findings)).
+  ([pipeline research, finding 4](../../research/rspack-pipeline.md#stage-1-findings)).
 - Each entry is a generated module that imports:
   - the definition;
   - the adapter's runtime;
@@ -161,8 +161,8 @@ compiler with the same format handling and project plugins
 
 ## Gaps
 
-- Live builds have no source maps. The lab measured builds without them, and
-  turning them on is not yet measured.
+- Live builds have no source maps. The lab measured builds without them;
+  their cost is unmeasured.
 - An entry added while pages are open changes the entry set
   ([open questions](#open-questions)).
 - The compiler's memory, and the persistent cache's growth over long
@@ -179,7 +179,8 @@ compiler with the same format handling and project plugins
 - **Changing the entry set.** A preview or docs lens added or removed while
   pages are open changes the entry set. The proposed rule treats this like a
   configuration change: a new generation, with open documents reloading into
-  a fresh warm host. Stage 1 did not cover it.
+  a fresh warm host. The [pipeline research](../../research/rspack-pipeline.md)
+  does not cover it.
 - **Bounds.** Compiler memory and persistent-cache storage need explicit
   limits and eviction rules. Measure long sessions and large projects before
   choosing them; page-index bounds do not bound compilation.

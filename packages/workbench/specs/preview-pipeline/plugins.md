@@ -90,6 +90,11 @@ export default defineConfig({
 - A plugin or rule that fails shows as a build error in the previews whose
   graph it affects ([compiler](compiler.md#build-errors)). An invalid plugin
   or rule option is a configuration problem for that plugin or rule.
+- Each capability records the files and folders it reads, so adding, editing
+  or deleting an icon or a glob-matched file rebuilds, and hot updates and the
+  persistent cache invalidate correctly. `importGlob` parses source
+  expressions, so comments and string literals are not rewritten, and several
+  calls in one module do not collide in generated names.
 
 Common extension points:
 
@@ -107,7 +112,7 @@ The portable build and the export's docs examples build with a production
 compiler that uses the same format handling and project plugins, so
 projects write one plugin form.
 
-## Target
+### Where each part runs
 
 In the Rust Workbench server ([processes and connections](../system/server.md#processes-and-connections)),
 the compiler is Rspack's Rust crates, and only project JavaScript leaves the
@@ -117,9 +122,9 @@ server, for the Node evaluator:
   CSS, assets, `tsconfig.json` paths, aliases, `dedupe`, `define`, the
   `@canonic2/workbench` and preview runtime resolution, and the React Native
   Web profile are options of Rspack's Rust crates. The HTML loader and part
-  loader are Rust loaders ([HTML adapter](../adapters/html.md#target)). Vue
-  and Astro follow their adapters' targets ([Vue](../adapters/vue.md#target),
-  [Astro](../adapters/astro.md#target)).
+  loader are Rust loaders ([HTML adapter](../adapters/html.md#build)). Vue
+  and Astro split their work as their adapters decide
+  ([Vue](../adapters/vue.md#decisions), [Astro](../adapters/astro.md#decisions)).
 - **`workbench.config.ts` is evaluated in the Node evaluator.** Its
   declarative settings (`aliases`, `dedupe`, `resolveExtensions`, `define`,
   plugins, and each rule's conditions) become compiler options in the server.
@@ -136,35 +141,20 @@ server, for the Node evaluator:
 - **Portable output** uses the same native compiler in production mode, with
   the same rules and the same answer for plugins.
 
-### Plugin migration decision
+## Decisions
 
-Decided by the owner on 2026-10-19: migrate plugin implementations to Rust as
-part of the server migration. Preserve the capabilities used by consuming
-projects rather than maintaining a JavaScript compiler to execute their hooks.
-The registration interface is the `plugins` list of capability descriptions
-above.
+Decided by the owner on 2026-10-19: plugin implementations are native Rust
+capabilities, preserving the capabilities consuming projects use, rather than
+a JavaScript compiler that executes their hooks. The registration interface is
+the `plugins` list of capability descriptions above.
 
-The concrete production use cases inspected for this decision are SVG sprite
-virtual modules, eager `import.meta.glob` expansion, and import resolution based
-on the importing source. They require project-agnostic implementations with
-configured directories, identifiers and mappings. The formats lab additionally
-exercises a virtual build-info module, source transformation and platform-specific
-resolution. Its JavaScript plugins are fixtures, not an additional production
+The production use cases inspected for this decision are SVG sprite virtual
+modules, eager `import.meta.glob` expansion, and import resolution based on the
+importing source. They need project-agnostic implementations with configured
+directories, identifiers and mappings. The formats lab also exercises a
+virtual build-info module, source transformation and platform-specific
+resolution; its JavaScript plugins are fixtures, not a production
 compatibility requirement.
-
-Migration acceptance must cover:
-
-- SVG symbol IDs, view boxes and references, registration and names modules,
-  and rebuilding after an icon is added, edited or deleted.
-- Glob match ordering and import keys, default exports, multiple expressions
-  without generated-name collisions, and rebuilding after matching files change.
-  Parse source expressions so comments and string literals are not rewritten.
-- Exact import matching and importer conditions: native sources resolve to the
-  configured native entry while other sources keep their normal resolution.
-- Equivalent live preview, docs-example and portable-build output, with invalid
-  configuration reported for the affected capability and no Node compiler
-  fallback. Native capabilities track their file and directory dependencies so
-  hot updates and the persisted build cache invalidate correctly.
 
 ## Gaps
 
@@ -175,13 +165,12 @@ Migration acceptance must cover:
 
 [Preview integration tests](../../server/node/preview.test.js) cover plugin
 capabilities, module rules, format handling and portable builds; the
-compiler's Rust unit tests cover each capability's transformation. Against the
-migration acceptance list they cover SVG symbol IDs, view boxes, ID and
-reference prefixing, registration and names modules; glob ordering and keys,
-default and named imports, several calls without name collisions, comments and
-strings left as written; importer-dependent resolution beside the default; a
-loader rule run in Node with options; and JavaScript plugins reported as
-problems. Test gaps:
+compiler's Rust unit tests cover each capability's transformation. Together
+they cover SVG symbol IDs, view boxes, ID and reference prefixing,
+registration and names modules; glob ordering and keys, default and named
+imports, several calls without name collisions, comments and strings left as
+written; importer-dependent resolution beside the default; a loader rule run
+in Node with options; and JavaScript plugins reported as problems. Test gaps:
 
 - Rebuilding after an icon or a glob-matched file is added, edited or deleted
   relies on the modules' recorded folder and file dependencies; no test

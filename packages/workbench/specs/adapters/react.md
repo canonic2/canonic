@@ -43,12 +43,13 @@ use ordinary `createRoot()` initialization.
 React Refresh updates a component in place with its state kept
 ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 
-## Target
+## Decisions
 
-Everything React needs is in Rspack's Rust crates: the SWC loader, React
-Refresh and native CSS. The lab's Rust host builds React pages natively and
-passes the stage 2 correctness checks
-([report](../../research/instant-first-page.md#stage-2-2026-10-16)).
+- **React compiles natively** ([server decisions](README.md#decisions),
+  2026-10-16): everything it needs is in Rspack's Rust crates, the SWC
+  loader, React Refresh and native CSS. A lab Rust host built React pages
+  natively with correct output before the decision
+  ([research](../../research/instant-first-page.md#stage-2-2026-10-16)).
 
 ## Verification
 

@@ -127,8 +127,8 @@ or actual interaction. Do not maintain a parallel mock component.
 
 Every element under `ui/src/components/<name>/`, and under
 `ui/src/views/<view>/components/<name>/` once the
-[target layout](../system/ui-port.md) is ported, has a docs page in this
-repository's **Workbench** space, under **Components**. The page ships in the
+[target layout](../system/ui-port.md) is ported, has a docs page in the
+Workbench design space (`packages/workbench/design/`), under **Components**. The page ships in the
 same change as the element, and changes with it: a new or changed property,
 attribute, event, part, keyboard behavior, or visible state updates the page in
 that change. A component is not done without it.
@@ -185,7 +185,7 @@ element, not in the page.
 - **Unmigrated surfaces.** Interface surfaces other than the components below
   use HTML, JavaScript and shared CSS.
 - **Target layout.** Every shipping element is in `ui/src/components/<name>/`;
-  no `ui/src/views/` folder or Lattice binding exists yet.
+  no `ui/src/views/` folder or Lattice binding exists.
 - [Size switcher](../../ui/src/components/size-switcher/element.js),
   [Custom size](../../ui/src/components/size-dialog/element.js),
   [Edit sizes](../../ui/src/components/sizes-editor/element.js), and the

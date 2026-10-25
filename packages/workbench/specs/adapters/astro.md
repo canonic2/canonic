@@ -2,13 +2,14 @@
 
 Part of the [adapters](README.md). User guide: [Astro](../../docs/astro.md).
 
-**Status:** Implemented as the [target](#target) describes: the server side
+**Status:** Implemented ([decisions](#decisions)): the server side
 runs in the Node evaluator ([astro.ts](../../server/node/src/modules/evaluator/astro.ts),
 [astro.cjs](../../server/node/preview/astro.cjs)), with frontmatter bundled by
 esbuild, and the client side builds natively in `workbench-server` through the
 HTML loader ([astro.rs](../../server/src/compiler/astro.rs)). Saved renders are
-proposed, not agreed or implemented: every warm start renders each scenario in
-the evaluator again. Project plugins and rules do not apply to the server side
+a [proposal](#proposal-saved-renders), not agreed or implemented: every warm
+start renders each scenario in the evaluator again. Project plugins and rules
+do not apply to the server side
 ([plugins gaps](../preview-pipeline/plugins.md#gaps)).
 
 ## Source
@@ -67,10 +68,10 @@ re-renders in place without a document reload
 Every authored scenario is pre-rendered. Controls are removed and the docs get a
 note, since input edits need a live render.
 
-## Target
+## Decisions
 
-Required for the Rust server ([decisions](README.md#decisions)). Decided by
-the owner on 2026-10-16:
+Decided by the owner on 2026-10-16, with the Rust server's support for Astro
+([server decisions](README.md#decisions)):
 
 - **The server side runs in the Node evaluator:** compiling with the
   project's own Astro compiler, bundling the frontmatter, and rendering
@@ -83,19 +84,22 @@ the owner on 2026-10-16:
   goes to the server's render route, never to the evaluator itself
   ([processes and connections](../system/server.md#processes-and-connections)).
 - **The client side builds in the Rust server:** the rendered HTML and its
-  resources go through the [HTML adapter's](html.md#target) Rust loaders,
+  resources go through the [HTML adapter's](html.md#build) Rust loaders,
   with shared chunks and hot updates.
-- **Saved renders (proposed).** Each scenario's rendered HTML is saved beside
-  the compiler cache, keyed by the files its render read. On a warm start
-  the server serves it without the Node evaluator, which starts only to
-  render again: on an edit to one of those files or an input change. When an
-  Astro page opens, the server starts the evaluator in the background, so
-  the first edit does not wait for it.
 - **Not chosen:** linking Astro's Rust compiler into the server. Its crate
   (`astro_codegen` in `withastro/compiler-rs`) is unpublished
   (`publish = false` as of 2026-10-16) and built on Oxc with its own
   `lightningcss`, and a compiler bundled with the server serves one Astro
   runtime, so it drifts from the project's Astro as either upgrades.
+
+## Proposal: saved renders
+
+Proposed, not agreed or implemented. Each scenario's rendered HTML is saved
+beside the compiler cache, keyed by the files its render read. On a warm
+start the server serves it without the Node evaluator, which starts only to
+render again: on an edit to one of those files or an input change. When an
+Astro page opens, the server starts the evaluator in the background, so the
+first edit does not wait for it.
 
 ## Verification
 

@@ -158,8 +158,6 @@ acceptance.
 results and target gaps; [comparison evidence](../../research/instant-first-page.md#stage-1-2026-10-15)
 supports the architecture without defining the shipping interface.
 
-- Studio has no native-library integration contract. The presence of a Rust
-  library does not establish an embeddable indexing API.
 - Metadata stamps do not establish content identity when both modification
   time and size are preserved. Stronger invalidation would need a separate
   design and measurement.

@@ -159,8 +159,8 @@ The other axis keeps its exact length.
 - The artboard label shows the resolved size, such as `340 × 812`.
 - Content sized with `vh` or `vw` resolves against the artboard, as on any
   page; the filled axis is a real length, not a scrolling page. This differs
-  from the full-height artboard that [docs pages](../pages/docs-pages.md) rejected,
-  which made `vh` resolve against the whole document.
+  from a full-height artboard, which [docs pages](../pages/docs-pages.md) do not
+  use because it makes `vh` resolve against the whole document.
 
 ## Resolved sizes
 
@@ -329,7 +329,7 @@ The size part of an address is the size's key:
 - Handoff screenshot names include the size key, such as
   `sign-in-error-mobile.jpg`, so shots of one page at two sizes don't
   overwrite each other.
-- **Copy reference** and the `/_workbench/view` payload still carry no size
+- **Copy reference** and the `/_workbench/view` payload carry no size
   ([agent context](../integrations/agent-context.md)).
 - The multiple-artboard report keeps its numeric `size` per artboard.
 
@@ -388,8 +388,7 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 - `supportsSize` accepts a size the page supports when the fixed axes match
   exactly; a filled axis accepts any length. Artboard dimensions range from
   1 to 8192 pixels.
-- The fallback for an unsupported size is the page's first listed size,
-  instead of Laptop or Mobile. It applies to the implicit artboard, not to
+- The fallback for an unsupported size is the page's first listed size. It applies to the implicit artboard, not to
   declared artboards ([gap](#implementation-gaps)).
 - Artboards size themselves directly, whatever sizes the space lists. A space
   that leaves out `resizable` still gets working artboards; their child
@@ -438,7 +437,7 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 Tests: `manifest.test.js` for the schema, defaults, page limits and own
 sizes, the local merge, and problems; `address.test.js` for size keys;
 `server/node/preview.test.js` for the switcher, fill sizing, and fallbacks;
-`server/node/config.test.js` and `server/node/server.test.js` for both readers agreeing, writes
+`server/node/config.test.js` and `server/node/server.test.js` for both readers resolving the same sizes and problems, writes
 (including comments kept outside replaced blocks), and export plans;
 `server/src/handoff/tests.rs` for size lines;
 `ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes;
@@ -447,9 +446,8 @@ a real-Chrome test, for the components' inputs, events, keyboard use, focus,
 the dialogs and reconnection, with
 [`size-dialog/form.test.js`](../../ui/src/components/size-dialog/form.test.js) and
 [`sizes-editor/rows.test.js`](../../ui/src/components/sizes-editor/rows.test.js)
-for the dialog and editor rules. Host acceptance: picking, adding a Sidebar
-size from a page and reordering in Edit sizes were checked end to end in
-Chrome on a copy of the Acme demo; the VS Code host has no evidence.
+for the dialog and editor rules. Not covered: host acceptance of picking,
+adding and reordering sizes, in particular in the VS Code host.
 
 ## Implementation gaps
 

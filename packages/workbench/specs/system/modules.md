@@ -81,9 +81,8 @@ DOM initialization, filesystem I/O or process lifecycle.
 - Pinned third-party browser assets live under `ui/src/vendor/` with upstream
   licenses and a hash manifest. Hosts serve those files unchanged; authored UI
   source has no build step. Integrity and the native module graph are checked
-  separately from source lint and formatting. Lattice, a local package of the
-  same repository, is a production dependency served and packaged from its own
-  files rather than vendored ([delivery slice](ui-port.md#lattice-delivery-slice)).
+  separately from source lint and formatting. Lattice is a production
+  dependency served and packaged from its own files rather than vendored ([delivery slice](ui-port.md#lattice-delivery-slice)).
 - Compilation, serving and proxying of the project's previews remain backend
   capabilities. The previewed project is content consumed by the Workbench UI;
   its compiler pipeline must not become the Workbench interface's build pipeline.

@@ -2,8 +2,8 @@
 
 Part of the [adapters](README.md). User guide: [HTML](../../docs/html.md).
 
-**Status:** Implemented as Rust loaders in `workbench-server`'s compiler, as
-the [target](#target) describes. This topic records no implementation gap.
+**Status:** Implemented as Rust loaders in `workbench-server`'s compiler
+([decisions](#decisions)). This topic records no implementation gap.
 
 ## Source
 
@@ -57,10 +57,11 @@ environment's `mount` runs last.
 Markup re-renders in place from the new module; stylesheets are replaced in
 place ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 
-## Target
+## Decisions
 
-The HTML loader and part loader are Workbench's own code, without project
-JavaScript, so they are Rust loaders in the Workbench server.
+- **The HTML loader and part loader are Rust loaders** in the Workbench
+  server, because they are Workbench's own code and run no project
+  JavaScript ([server decisions](README.md#decisions), 2026-10-16).
 
 ## Verification
 

@@ -2,13 +2,14 @@
 
 Part of the [adapters](README.md). User guide: [Vue](../../docs/vue.md).
 
-**Status:** Implemented through the Node evaluator path of the
-[target](#target): native loaders in [vue.rs](../../server/src/compiler/vue.rs)
-and [loaders.rs](../../server/src/compiler/loaders.rs), with
-`@vue/compiler-sfc` in the evaluator
+**Status:** Implemented ([decisions](#decisions)): native loaders in
+[vue.rs](../../server/src/compiler/vue.rs) and
+[loaders.rs](../../server/src/compiler/loaders.rs), with `@vue/compiler-sfc`
+in the Node evaluator
 ([vue.ts](../../server/node/src/modules/evaluator/vue.ts)), shared by live and
-portable builds. A native compiler is conditional on a lab that has not been
-run; Vize is not adopted ([open questions](#open-questions)).
+portable builds. A native single-file-component compiler is a
+[proposal](#proposal-a-native-single-file-component-compiler), not agreed or
+implemented; Vize is not adopted.
 
 ## Source
 
@@ -56,26 +57,30 @@ script edit re-creates the component, resetting its state as Vue defines;
 a style block is replaced in place
 ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 
-## Target
+## Decisions
 
-Vue moves to the [serving model](README.md#how-pages-are-served): native
+Vue follows the [serving model](README.md#how-pages-are-served), decided by
+the owner on 2026-10-16 ([server decisions](README.md#decisions)): native
 where it can be, the Node evaluator where it must.
 
-- **Native, if a Rust compiler passes.** SWC alone is not enough: a
-  single-file component's template becomes a render function, `<script
-  setup>`'s macros and bindings are Vue's own transform, scoped styles add
-  `data-v-*` attributes to selectors and markup, and hot reload needs
-  per-component IDs. Vize's SFC compiler (`vize_atelier_sfc`) is a candidate
-  for investigation, not an adopted or verified dependency. A replacement
-  would replace Workbench's bundled `@vue/compiler-sfc` one for one: the
-  compiler is Workbench's, not the project's, and compiled Vue 3 output uses
-  Vue's stable runtime helpers. It is adopted only if a lab shows render
-  parity and hot-update behavior matching `@vue/compiler-sfc`.
-- **Otherwise, the Node evaluator:** a loader hands each `.vue` file to it,
+- **Single-file components compile in the Node evaluator.** SWC alone is not
+  enough: a single-file component's template becomes a render function,
+  `<script setup>`'s macros and bindings are Vue's own transform, scoped
+  styles add `data-v-*` attributes to selectors and markup, and hot reload
+  needs per-component IDs. A loader hands each `.vue` file to the evaluator,
   where `@vue/compiler-sfc` returns the script, template and style modules.
+- **The rest of the build is native:** SWC, CSS, chunks and hot updates.
+  Vue's hot-reload runtime is browser code.
 
-Either way, the rest of the build (SWC, CSS, chunks, hot updates) is native,
-and Vue's hot-reload runtime is browser code and is unaffected.
+## Proposal: a native single-file-component compiler
+
+Proposed, not agreed or implemented. A Rust compiler would replace
+Workbench's bundled `@vue/compiler-sfc` one for one: the compiler is
+Workbench's, not the project's, and compiled Vue 3 output uses Vue's stable
+runtime helpers. Vize's SFC compiler (`vize_atelier_sfc`) is a candidate for
+investigation, not an adopted or verified dependency. A compiler is adopted
+only if a lab shows render parity and hot-update behavior matching
+`@vue/compiler-sfc` ([open questions](#open-questions)).
 
 ## Verification
 

@@ -156,9 +156,9 @@ deadline loading, late readiness and failure through the actual shell and render
   change gated on the very state it was meant to resolve. Invariants 3 and 5 and
   the `navigated` event of the [navigation store](navigation-store.md) cover it.
 - **Blank Docs page after rapid collection switches (2026-10-23).** In the
-  Workbench space, switching from the Actions switch Docs page to Interface ›
-  Sidebar and back within about a second left a blank Docs viewport that stayed
-  blank. Observed in a screen recording; not yet reproduced or traced.
+  space of component Docs pages, switching from one Docs page to a Docs page in
+  another collection and back within about a second left a blank Docs viewport
+  that stayed blank. Observed in a screen recording; not yet reproduced or traced.
   Hypothesis: a late report from the superseded visit or the retained Docs
   session was accepted as readiness for the returning navigation. Invariants 1
   and 2 of the [navigation store](navigation-store.md#invariants) cover that

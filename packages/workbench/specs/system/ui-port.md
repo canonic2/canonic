@@ -165,7 +165,8 @@ Other existing files move as follows:
 
 ## Port order
 
-The port starts after Lattice finishes its guides and collection lab, and after
+The port starts after Lattice's framework guides and its keyed-collection
+evaluation are complete, and after
 the [Lattice delivery slice](#lattice-delivery-slice). Then:
 
 1. **Skeleton.** Create `app/` from `bootstrap/`, move the HTML documents
@@ -177,8 +178,8 @@ the [Lattice delivery slice](#lattice-delivery-slice). Then:
    element.
    No behavior changes; imports, serving, path consumers, webview resources,
    packaging and design pages follow the moved paths. Before the first move,
-   the package guide and the Workbench UI agent rule name these locations, and
-   the design-page check also covers `views/<view>/components/`.
+   the package's developer documentation names these locations, and the
+   design-page check also covers `views/<view>/components/`.
 2. **Navigation store.** Navigation becomes the first Lattice capability, as
    the [navigation store](../canvas/navigation-store.md) specifies; its
    [adoption](#navigation-store-adoption) lists what that step changes.
@@ -190,8 +191,8 @@ the [Lattice delivery slice](#lattice-delivery-slice). Then:
    `docs` and `viewer`.
 4. **Legacy removal.** `ui/legacy/` is deleted once no consumer below uses any
    of its files, by import or by path; the UI README, the legacy README's
-   schema and file sections and the package guide then describe the new
-   layout.
+   schema and file sections and the package's developer documentation then
+   describe the new layout.
 
 Each step ships on its own and:
 

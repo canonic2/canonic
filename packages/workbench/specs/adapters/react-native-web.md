@@ -3,8 +3,8 @@
 Part of the [adapters](README.md). User guide:
 [React Native Web](../../docs/react-native-web.md).
 
-**Status:** Implemented natively in `workbench-server`'s compiler, as the
-[target](#target) describes: the profile's resolution in
+**Status:** Implemented natively in `workbench-server`'s compiler
+([decisions](#decisions)): the profile's resolution in
 [options.rs](../../server/src/compiler/options.rs) and its entry styles in
 [project.rs](../../server/src/compiler/project.rs). This topic records no
 implementation gap; compiling untranspiled packages is an
@@ -47,12 +47,13 @@ class it added.
 
 As the React adapter.
 
-## Target
+## Decisions
 
-Required for the Rust server ([decisions](README.md#decisions)). Every part
-of the profile is an Rspack resolve or rule option in its Rust crates (an
-alias, extensions, a side-effect rule), with the React adapter's SWC
-loader. No JavaScript loader is involved.
+- **The Rust server supports React Native Web** ([server decisions](README.md#decisions),
+  2026-10-16). It compiles natively because every part of the profile is an
+  Rspack resolve or rule option in its Rust crates (an alias, extensions, a
+  side-effect rule), with the React adapter's SWC loader. No JavaScript
+  loader is involved.
 
 ## Verification
 
@@ -65,5 +66,5 @@ stages filled by a root view, alongside the compiler's unit tests in
 
 - **Untranspiled packages.** Some React Native libraries publish Flow or
   untranspiled JSX in `node_modules`, which Metro compiles with Babel. The
-  current profile does not compile `node_modules` either; whether the Rust
+  profile does not compile `node_modules`; whether the Rust
   server should, and with what, is open.

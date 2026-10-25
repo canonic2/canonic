@@ -9,8 +9,8 @@ requirements and acceptance of what is built; where a proposal below restates
 behavior already built for declared groups, that page is the owner. The
 [artboard system](artboard-system.md) owns the architecture the proposals extend.
 
-**Status:** proposal, not implemented. Only phase 2 arrangement tools are
-agreed; every interaction, edge-case contract and acceptance criterion below
+**Status:** proposal, not implemented. Only the arrangement tools, free
+movement and **Arrange** actions for a later delivery, are agreed; every interaction, edge-case contract and acceptance criterion below
 awaits a decision, and persistence and sharing are open. See
 [agreed and open](#agreed-and-open) and the [delivery plan](#delivery-plan).
 
@@ -18,9 +18,10 @@ awaits a decision, and persistence and sharing are open. See
 
 Agreed:
 
-- **Phase 2: arrangement tools.** Support free positioning and row/grid
-  arrangement. Phase 1 can use deterministic automatic placement; adding and
-  reviewing multiple artboards must not depend on manual arrangement tools.
+- **Arrangement tools, after the first delivery.** Support free positioning
+  and row/grid arrangement. The first delivery can use deterministic automatic
+  placement; adding and reviewing multiple artboards must not depend on manual
+  arrangement tools.
 
 Open:
 
@@ -28,7 +29,7 @@ Open:
   named arrangement in a shared project file are distinct options. Neither
   storage policy has been agreed; see [questions](#questions-for-product-decisions).
 
-## Suggested phase 1 interactions
+## Suggested first-delivery interactions
 
 - Start with the existing single-artboard experience. **Add artboard** opens
   a page/scenario choice; a sidebar action can add a page directly.
@@ -49,9 +50,9 @@ Open:
   canvas and identify the selected artboard. Provide a keyboard-accessible
   artboard list so selection and closing do not require a pointer. An empty
   canvas has no selection and disables view-dependent actions.
-- Place added artboards in a tidy row automatically in phase 1. Avoid
-  rearrangement during preview edits. Phase 2 adds free movement by label and
-  explicit row/grid **Arrange** actions; dragging inside the preview keeps
+- Place added artboards in a tidy row automatically in the first delivery.
+  Avoid rearrangement during preview edits. The arrangement tools add free
+  movement by label and explicit row/grid **Arrange** actions; dragging inside the preview keeps
   interacting with its content.
 - Zoom and pan apply to the whole arrangement, under the
   [camera contract](interaction.md#camera-and-scrolling). Provide **Fit all** and
@@ -127,8 +128,9 @@ These proposals do not reopen the limits established by the
 - Fit all includes every artboard; Fit selected centers the selected one.
 - If layout restoration is included, one missing space or source does not
   discard all valid artboards.
-- Phase 1 adds artboards with predictable automatic placement. Phase 2 allows
-  free positioning and row/grid arrangement without remounting previews.
+- The first delivery adds artboards with predictable automatic placement. The
+  arrangement tools allow free positioning and row/grid arrangement without
+  remounting previews.
 - Rendered interaction remains usable at the agreed artboard limit, and
   memory and interaction-latency targets are established before user-facing delivery.
 
@@ -156,8 +158,8 @@ These proposals do not reopen the limits established by the
 | Artboard management UI | Agree the user-facing add/duplicate/select/close interactions, keyboard access, camera Fit operations and empty/error behavior, using a rendered Acme prototype without presenting proposed controls as shipped behavior. Then extend the implemented keyed presentation and owning-space routing with those interactions, preserving declared composition, the existing shell and the shipping one-view path during bounded migration | Accessible repeated-view workflows, keyboard/focus, geometry and cleanup |
 | Space and native host acceptance | Verify the implemented owning-space routing and pooled native subscriptions on real hosts | Mixed-space and shared-root recovery, real native capture/input, independent subscriptions |
 | Review and context host acceptance | Verify the integrated camera, full-canvas capture, handoff, reference and participating-space publication on supported hosts: participating renderers and spaces, capture races, cleanup and agent readers. Resolve arrangement storage and optional per-artboard image policy before delivery | Complete composite/prompt, hooks and MCP, race/failure cleanup |
-| Product completion | Measure memory and interaction latency at the artboard limit in browser and VS Code; resolve arrangement storage/sharing, recovery and host limits; complete the acceptance criteria and public guides. Single-view restoration follows [persistence](persistence.md) | Phase 1 acceptance in browser and VS Code |
-| Phase 2 arrangement | Extend geometry and interactions for free positioning and row/grid placement while preserving runtime identity and review output | Stable renderer state, capture mapping and accessible movement |
+| Product completion | Measure memory and interaction latency at the artboard limit in browser and VS Code; resolve arrangement storage/sharing, recovery and host limits; complete the acceptance criteria and public guides. Single-view restoration follows [persistence](persistence.md) | First-delivery acceptance in browser and VS Code |
+| Arrangement tools | Extend geometry and interactions for free positioning and row/grid placement while preserving runtime identity and review output | Stable renderer state, capture mapping and accessible movement |
 
 ### Documentation delivery
 
@@ -168,7 +170,7 @@ YAML keys, shared-layout behavior, or capture formats as available features.
 | Source | Verified release behavior to document |
 | --- | --- |
 | `docs/README.md`, package README, website overview | Flexible multi-artboard canvas across supported content/spaces; full-canvas review output |
-| `docs/canvas.md` | Add/duplicate/close/select, automatic placement, per-artboard editing, Fit all/selected, navigation and empty/error states; phase 2 arrangement only when shipped |
+| `docs/canvas.md` | Add/duplicate/close/select, automatic placement, per-artboard editing, Fit all/selected, navigation and empty/error states; free arrangement only when shipped |
 | `docs/annotations-and-handoff.md` | Artboard-owned annotations; all-artboard captures including off-camera content; image labels/dimensions, failures, bundle location, space-qualified paths, clearing annotations and concurrency |
 | `docs/spaces.md`, `docs/extension.md` | Browsing versus canvas ownership, space-qualified source/config actions, unavailable-space recovery, context from all participants and shared-root handling |
 | `docs/workbench-previews.md`, `docs/preview-data.md`, `docs/storybook.md` | Instance-scoped controls/actions/navigation and independent stories/previews; external storage/backend sharing |
@@ -177,6 +179,6 @@ YAML keys, shared-layout behavior, or capture formats as available features.
 | `docs/design-system-export.md` | Explicit space target; catalog reference export remains distinct from canvas review |
 
 The public terminology and single-artboard scope can be clarified before the
-feature ships. Maintain existing routes and update website navigation/search
-when adding a guide. Run website tests/build, inspect rendered guide content,
-and refresh overview screenshots only when shipped visible behavior changes.
+feature ships. Existing guide routes stay stable, and a new guide joins the
+site's navigation and search. Overview screenshots change only when shipped
+visible behavior changes.

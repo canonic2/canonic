@@ -249,8 +249,7 @@ full grammar and the marks reserved in page paths.
   implicit scenario and artboard. Iterations per page and then per scenario
   were rejected because not every scenario, and not every artboard, has the
   same iterations. Artboards belong to a scenario because different scenarios
-  need different artboards; Workbench has no users to migrate from the earlier
-  page-level form.
+  need different artboards.
 - **2026-10-24, promotion by handoff.** Rewriting sources is project-specific
   and risky; the handoff names the iteration instead.
 
@@ -300,8 +299,8 @@ full grammar and the marks reserved in page paths.
   only the canvas report's JSON carries it.
 - **A warm preview document reloads on another iteration.** The in-place
   scenario command does not change the iteration, so the frame reloads.
-- **Public guides** (configuration, pages and scenarios, previews) and the
-  shared Workbench skill and rule do not describe iterations yet.
+- **Public guides** (configuration, pages and scenarios, previews) do not
+  describe iterations.
 
 ## Open questions
 

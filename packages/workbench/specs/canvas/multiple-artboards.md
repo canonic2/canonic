@@ -96,20 +96,20 @@ ID. Two instances may point to the same page and scenario.
 Developers and designers decide what belongs together; these examples do not
 restrict the tool to a particular comparison workflow.
 
-## Agreed requirements and phases
+## Agreed requirements
 
-- **Phase 1: flexible content.** An artboard can contain any supported content
+- **Flexible content, in the first delivery.** An artboard can contain any supported content
   type: authored pages, Workbench previews, URL lenses, Storybook stories,
   Simulator streams, and window streams. A canvas may combine content from
   different spaces. The model must not privilege a particular use case or
   renderer. Docs lenses are included: beside other artboards a page's docs are
   an artboard, as [docs](../pages/docs-pages.md#in-a-multiple-artboard-canvas)
   specifies, so one page's design and docs can sit side by side.
-- **Phase 1: complete review output.** When a canvas has multiple artboards,
+- **Complete review output, in the first delivery.** When a canvas has multiple artboards,
   screenshots, handoffs, and agent context include all of them. Selection
   identifies the user's current focus within the canvas; it must not hide
   neighboring artboards from review output or context.
-- Arrangement tools (phase 2) and arrangement persistence and sharing are in
+- Arrangement tools, agreed for a later delivery, and arrangement persistence and sharing are in
   [artboard management](artboard-management.md#agreed-and-open).
 
 ## System and edge-case contracts
@@ -231,7 +231,7 @@ canvas is current.
   ID through both hooks and MCP. A loading or failed artboard is represented
   without hiding usable neighbors.
 - Authored pages, Workbench previews, URL lenses, Storybook, Simulator, and
-  window content coexist in phase 1, including content from different spaces.
+  window content coexist in the first delivery, including content from different spaces.
   Source opening, navigation, reload, capture, and handoff resolve to each
   artboard's owning space. Simulator input reaches the intended device;
   window lenses remain view-only. Two artboards on one native source share its

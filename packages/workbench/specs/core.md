@@ -97,18 +97,18 @@ services exist in the editor, standalone browser and portable viewer.
   groups, pages, scenarios, and invalid `src` values), implementation,
   size, mapping, code-pointer, `previews`, catalog, and
   preview-compilation problems, and implementations that are not running
-  (except lens-scoped Gate availability below),
+  (except lens-scoped service-endpoint availability below),
   including a stopped Storybook used only by mappings and a mapped Simulator
   device that is not booted. See
   [the extension contract](integrations/vscode-extension.md#sidebar-and-problems).
 - Missing previews, invalid configuration, stopped implementations, and
   capture errors give a named problem. A failure in one imported catalog must
   not remove valid authored pages.
-- Gate service availability belongs to the affected lens. A stopped,
-  starting, failed or unavailable Gate service does not add a global sidebar
-  warning or delay unrelated page listing. Opening its lens shows the named
-  error on the canvas. Invalid Gate configuration remains a shared
-  configuration problem; see [implementations](pages/implementations.md#url-implementations).
+- The availability of a `gate://` service endpoint belongs to the affected
+  lens. A stopped, starting, failed or unavailable service does not add a
+  global sidebar warning or delay unrelated page listing. Opening its lens
+  shows the named error on the canvas. An invalid service reference remains a
+  shared configuration problem; see [service endpoints](pages/implementations.md#service-endpoints).
 
 ## Selection and navigation
 
@@ -156,8 +156,8 @@ data and compiled/rendered/proxied content, not Workbench application markup.
 The [multiple-artboard system](canvas/multiple-artboards.md) owns instance state,
 geometry and review/context. Scenarios remain alternatives; a scenario's declared
 artboards are shown together as a group, each with at most one selected
-iteration ([artboards and iterations](pages/iterations.md)). Outer control layout
-stays unchanged by this refactor.
+iteration ([artboards and iterations](pages/iterations.md)). Artboard
+composition does not change the outer control layout.
 
 - Config and catalog discovery show **Loading pages…**. Sidebar selection updates
   immediately; preview navigation, its 200 ms grace period and loading feedback

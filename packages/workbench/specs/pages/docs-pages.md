@@ -237,8 +237,8 @@ Every `div` prop passes through, so `style` or `className` adjusts the surface.
 ````
 
 - `caption` is a short, monospaced line under the panel, such as the props
-  the example exercises. No other keys are defined yet; an unknown key is a
-  problem.
+  the example exercises. `caption` is the only defined key; an unknown key is
+  a problem.
 - The prose after the block is ordinary Markdown. Notes are written there.
 - An ID is kebab-case. Placing the same ID twice is a problem; the second
   placement shows an error panel.
@@ -416,42 +416,37 @@ problems update when they arrive.
 - **Export planning.** The export plans docs references separately
   ([plan.rs](../../server/src/export/plan.rs)) through the capture helper's
   `fullPage` and `selector` options.
-- **Schema documentation.** The schema change updates `ui/legacy/README.md`
-  and `docs/configuration.md`. A new user guide, `docs/docs-pages.md`,
-  is added to the docs index and the website's `docGroups`.
 
-## Pilot
+## Acceptance fixture
 
-The implementation is exercised in this repository's Acme demo (`demo/`),
-with one `html` docs lens. Button and Card are the **Components**
-collection; Colors is in **Design system**:
+Acceptance uses a fixture space with a docs lens and three docs pages:
 
-- **Button**: the Interactive button TypeScript preview, placed in
+- **A page with a design and docs**: a TypeScript preview placed in
   `workbench.yaml` with `docs` and a directory of examples (one file per
   example), so its design and its docs are two lenses of one page.
-- **Card**: a Markdown page declared in `workbench.yaml`, named exports in one
+- **A Markdown page** declared in `workbench.yaml`, with named exports in one
   file.
-- **Colors**: discovered from `defineDocs`, a foundation page whose live
-  swatch example reads the stylesheet's custom properties.
+- **A foundation page** discovered from `defineDocs`, whose live example reads
+  the stylesheet's custom properties.
 
-Client-project rollout is separate from this product contract.
+The space also has a page with a design and no docs.
 
 ## Acceptance criteria
 
-- The Acme demo's docs open on a white canvas, centered at a
+- The fixture's docs open on a white canvas, centered at a
   960-pixel maximum, scrolled to the top at 100%, and scroll to their end.
-- Button opens on its docs with Docs before Preview in the lens switcher and
-  the size switcher disabled; Preview brings its artboard and size back, and
-  its address carries `~design`. With Docs on, Card shows its docs and Sign
-  in, which has no docs, its design.
+- The page with a design and docs opens on its docs with Docs before Preview
+  in the lens switcher and the size switcher disabled; Preview brings its
+  artboard and size back, and its address carries `~design`. With Docs on, the
+  Markdown page shows its docs and the page without docs its design.
 - Zooming out shows more of the page without reflowing it; annotations drawn
   on an example stay on it while scrolling and zooming.
 - Switching lenses re-renders the examples without moving the text; an
   example the current lens lacks shows the placeholder.
 - An address that names an example opens the page scrolled to it and
   round-trips through a copied link.
-- **Show code** shows Button's whole example file and Card's export
-  declaration; **Copy code** copies the same text.
+- **Show code** shows a directory example's whole file and a named-export
+  example's declaration; **Copy code** copies the same text.
 - A screenshot and a handoff name the visible examples; the export contains
   per-example and whole-page references for each lens.
 - Each listed problem appears in the problems list with its page named.
@@ -462,13 +457,12 @@ Client-project rollout is separate from this product contract.
   example after reuse, refresh and a docs/design round trip.
 - The pool meets [Docs host acceptance](../preview-pipeline/docs-host.md#verification)
   without changing annotations, zoom, readiness, screenshots, handoffs, error
-  containment, trust rules or standalone/portable behavior. Shipping-code lab
-  sequences and installed Acme confirmation are required separately from unit
-  coverage.
+  containment, trust rules or standalone/portable behavior, in the installed
+  extension as well as in unit coverage.
 - Automated coverage: manifest rules and address parsing (`manifest.test.js`,
   `address.test.js`), Markdown rendering and example placement, discovery of
   `defineDocs`, per-example mounting and readiness, and source-text extraction.
-  Canvas behavior is checked in headless Chrome against the demo.
+  Canvas behavior is checked in headless Chrome against a docs fixture.
 
 ## Design constraints
 

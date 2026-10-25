@@ -69,8 +69,8 @@ shell rendering.
   scroll and annotations. Compiled assets and catalog data can be shared; two
   independent artboards cannot share one mutable preview document.
 - Returning to an ordinary page or Storybook lens preserves its retained content
-  session within the documented resource bounds. Removing the nested shell must
-  not reintroduce full Storybook startup or iframe reloads on every selection.
+  session within the documented resource bounds. Content-only rendering does not
+  restart Storybook or reload the iframe on every selection.
 - Navigation revokes interaction with the outgoing destination before accepting
   new work; its outgoing pixels follow [navigation](../canvas/navigation.md).
   The shell owns transition status;
@@ -136,7 +136,7 @@ Existing [canvas acceptance](../../scripts/smoke-canvas-ui.cjs),
 [retained-session acceptance](../../scripts/smoke-preview-sessions.cjs) and controller
 tests remain regression coverage. Canvas acceptance additionally observes requests
 from initial navigation, rejects application documents/modules inside content,
-and inspects child markup. That assertion failed against the shell-backed renderer.
+and inspects child markup.
 Controller unit tests cover metadata precedence, delayed and superseded catalogs,
 failure and disposal. Session acceptance asserts one Storybook document across lens
 switches, title/story changes and parked-artboard returns, including editor acknowledgements.

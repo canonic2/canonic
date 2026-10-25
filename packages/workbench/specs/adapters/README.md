@@ -80,8 +80,8 @@ evaluator only for the parts that have to run JavaScript:
 | Adapter | Served by the Rust server | Node evaluator |
 | --- | --- | --- |
 | React, React Native Web, HTML | Native compilation and serving | No adapter-specific evaluation; definitions/configuration can still need JavaScript |
-| Vue | Everything but compiling single-file components; a Rust compiler takes that over only if one passes conformance ([target](vue.md#target)) | Workbench's bundled `@vue/compiler-sfc`, for each `.vue` file |
-| Astro | Rendered HTML, client scripts and styles | Renders: startup, edits, input changes ([target](astro.md#target)) |
+| Vue | Everything but compiling single-file components; a Rust compiler for them is a [proposal](vue.md#proposal-a-native-single-file-component-compiler) | Workbench's bundled `@vue/compiler-sfc`, for each `.vue` file |
+| Astro | Rendered HTML, client scripts and styles | Renders: startup, edits, input changes ([decisions](astro.md#decisions)) |
 | Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server on a local socket ([how](storybook.md#a-storybook-the-server-runs)) |
 | Custom adapters | The browser mount, native plugin capabilities and Rust-native rules | The project's JavaScript loaders |
 
@@ -105,29 +105,28 @@ and the bundled runtime is the Electron build Workbench ships
 ## Decisions
 
 Decided by the owner on 2026-10-16, after the
-[instant first page comparison's stage 2](../../research/instant-first-page.md#stage-2-2026-10-16):
+[instant first page comparison](../../research/instant-first-page.md#stage-2-2026-10-16):
 
 - **The Workbench server is one Rust runtime:** HTTP, the page index and
   the compiler (Rspack's Rust crates) in one binary. Node runs only as the
   Node evaluator, for code that has to be JavaScript: computed definitions,
   `workbench.config.ts`, Vue's compiler, Astro rendering and project JavaScript
-  loaders. Project plugin capabilities migrate to Rust
-  ([decision](../preview-pipeline/plugins.md#plugin-migration-decision)).
+  loaders. Project plugin capabilities run in Rust
+  ([decision](../preview-pipeline/plugins.md#decisions)).
   A project that needs none of the JavaScript steps starts no Node process.
   The server's [processes and connections](../system/server.md#processes-and-connections)
   list the Node processes beside the evaluator.
 - **Each adapter is a separate unit** that owns its build settings,
   project-code step, browser mount and documentation, instead of having its
   format handling spread through the pipeline.
-- **Astro and React Native Web must be supported by the Rust server,** or the
-  move does not go ahead. React Native Web compiles natively with SWC. Astro
+- **The Rust server supports Astro and React Native Web.** React Native Web
+  compiles natively with SWC. Astro
   compiles and renders in the Node evaluator with the project's own Astro
   compiler, Rust from Astro 7, and the server builds its client side
   natively. HTML and React compile natively.
 - **Everything goes through the Workbench server and an adapter;** Rust
   serves directly where it can, and a Node child process runs where an
-  adapter needs one ([how pages are served](#how-pages-are-served)). Astro,
-  Vue and Storybook move to this model.
+  adapter needs one ([how pages are served](#how-pages-are-served)).
 - **The adapter format stays open** to kinds of page Workbench does not
   render yet ([what every adapter supplies](#what-every-adapter-supplies)).
 - **Storybook is an adapter;** its pages are declared in `workbench.yaml`,
@@ -148,7 +147,9 @@ Decided by the owner on 2026-10-16, after the
 ## Open questions
 
 - **The cost of the Node evaluator's loader step,** per transformed module,
-  for Vue and project loaders. It is measured before Vue's target is fixed.
+  for Vue and project loaders. It is measured before the
+  [native Vue compiler proposal](vue.md#proposal-a-native-single-file-component-compiler)
+  is decided.
 - **Where each adapter lives in the code:** a module per adapter, spanning
   the Rust server, the Node evaluator and `ui/preview/`, under the
   [module layout](../system/modules.md).

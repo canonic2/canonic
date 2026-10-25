@@ -252,7 +252,8 @@ The manifest rules live in [manifest.js](../../contracts/manifest.js), shared by
 the browser; [config-parity.test.js](../../server/node/config-parity.test.js)
 runs the Rust reader and the Node reader built on them
 ([config.js](../../server/node/config.js), which only tests run) over a corpus that reaches every rule
-and problem and over seeded random configs, and they agree on all of them.
+and problem and over seeded random configs, and checks that both readers return
+the same resolved configuration and problems for each input.
 
 ### The resident index and watcher
 
@@ -275,7 +276,7 @@ lens, and reports request timings as diagnostics. Live builds use the
 persistent cache in the system temporary folder, keyed by the binary and the
 configuration. Project plugin capabilities are Rust descriptors, with no Node
 compiler fallback
-([plugin decision](../preview-pipeline/plugins.md#plugin-migration-decision)).
+([plugin decision](../preview-pipeline/plugins.md#decisions)).
 
 ## Route inventory
 
@@ -308,24 +309,21 @@ with the statuses and messages the canvas expects.
 - The Rust suite covers the modules above with their own tests, the server's
   routes and a host question through the built binary, the resident index
   and change reports, and exit on closed input.
-- On this repository's Acme demo through the standalone command
-  (2026-10-19, debug build): the canvas, config, spaces, handoff and agent
-  view answer, the config lists no problems, and a docs page renders.
-- The browser smokes in `scripts/` pass against the debug build: retained
-  preview sessions, the canvas and its UI, the live mirror, capture, and
-  lenses, including a sign-in through an implementation proxy that
-  survives switching lenses and sizes.
-- The macOS x86_64 release was packaged and installed. The 2026-10-23 isolated
-  installed Acme run verifies Docs pool compatibility; the installed startup
-  probe separates runtime extraction from warm config responses. Conditions
-  and limits are in [Docs integration](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
+- The browser smoke scripts in `scripts/` cover retained preview sessions,
+  the canvas and its UI, the live mirror, capture, and lenses, including a
+  sign-in through an implementation proxy that survives switching lenses and
+  sizes.
+- Installed-extension evidence for Docs pool compatibility and for runtime
+  extraction versus warm config responses is in the research records on
+  [Docs integration](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
   and [runtime preparation](../../research/startup.md#installed-runtime-preparation-2026-10-23).
-  These probes do not establish general installed-webview navigation latency.
+  It does not establish general installed-webview navigation latency.
 
 ## Implementation gaps
 
-- How Studio starts and talks to the server is open: the same stdio messages
-  as the extension, or a library interface.
+- How a host other than the extension and the standalone command starts and
+  talks to the server is open: the same stdio messages as the extension, or a
+  library interface.
 - Definition indexing starts a short-lived evaluator beside the long-lived one.
 - First-page, complete-list and edit target acceptance:
   [performance gaps](performance.md#implementation-gaps).
@@ -340,8 +338,8 @@ with the statuses and messages the canvas expects.
    runtime.
 2. **Toolchain:** the package builds with `nightly-2026-04-16`, Rspack's own
    toolchain at the pinned crates.
-3. **One server per space.** One process for every space is a Studio question
-   for later.
+3. **One server per space.** Whether one process should serve several spaces
+   is undecided.
 4. **The resident index and watcher live in the server,** so the warm page
    list needs no process per request.
 5. **Rust is the direction for suitable host capabilities in the extension.**

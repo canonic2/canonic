@@ -24,8 +24,9 @@ the canvas element used without the legacy chrome adapter; see
 The view controls offer the same zoom operations and fixed 50%/200% choices.
 The shipping canvas geometry clamps ordinary artboard zoom to 0.01–800%; Docs
 reading additionally enforces a minimum of 10% and enough scale to keep the
-viewport height within 8192 logical pixels. The older singleton zoom helper
-clamps at 10–800%; that helper's tests do not establish the new canvas bounds.
+viewport height within 8192 logical pixels. The singleton zoom helper in
+`ui/legacy/zoom.js` clamps at 10–800%; its tests do not establish the canvas
+geometry's bounds.
 Fitting does not magnify above 100%; automatic fitting follows viewport/size changes until the user
 manually changes the camera. Zoom changes presentation, not the content's
 layout dimensions or capture resolution.

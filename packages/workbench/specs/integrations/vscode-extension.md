@@ -276,7 +276,7 @@ or handoff prompts.
 
 - **Restart restoration is incomplete.** Complete per-space selection and
   preference restoration (preferences live in browser `localStorage`) and
-  restored editor tabs do not yet follow the
+  restored editor tabs do not follow the
   [persistence contract](../canvas/persistence.md#implementation-gaps); current-space
   storage, hidden-tab retention and first-page fallback do.
 - **Copy Canvas URL in remote workspaces (unverified).** The command copies

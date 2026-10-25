@@ -102,8 +102,8 @@ moves them. Ownership and dependency constraints are the contract.
 Persistence is a conditional capability under `ui/src/modules/canvas-storage/`, created
 only after its product policy is agreed. It receives descriptors through an
 explicit port; it never serializes renderer handles or observes DOM to infer
-state. Phase 2 extends geometry/interactions for free placement and Arrange;
-it does not introduce a second artboard model.
+state. The arrangement tools extend geometry/interactions for free placement
+and Arrange; they do not introduce a second artboard model.
 
 Dependency direction: presentation calls controller commands; the controller
 uses the pure model and public runtime/space APIs. Review reads one snapshot
@@ -326,11 +326,9 @@ the content-only rendering boundary.
   responsive sizing, simultaneous native streams and source sharing, mixed
   spaces, composition fidelity, process/subscription cleanup, and packaging.
   Unit stubs cannot establish those host/resource contracts.
-- Package checks: `pnpm --dir packages/workbench test` and
-  `pnpm --dir packages/workbench run check`. Context reader changes also run
-  that reader's tests. Website guide/UI changes use its test/build and
-  screenshot workflow. Finish with `git diff --check` and relevant untracked
-  file review. Record platform/prerequisite limits separately from passing
+- Package checks: the Workbench behavior suite and TypeScript check in the
+  [development guide](../../DEVELOPMENT.md); context reader changes also cover
+  that reader's tests. Record platform/prerequisite limits separately from passing
   coverage; measure memory, input responsiveness, and capture size/time before
   adopting limits. Never invent performance pass thresholds from source review.
 

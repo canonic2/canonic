@@ -37,18 +37,18 @@ time; `builtin:` loaders and plugin capabilities run natively. JavaScript
 plugin objects are configuration problems and do not run. The browser mount
 runs only in the frame.
 
-## Target
+## Decisions
 
-- The browser mount needs nothing from the server beyond compiling it, so
-  it works unchanged with the Rust server.
-- `rules` whose loaders are JavaScript run through the Node evaluator, one
-  module at a time, as Vue's single-file components do
-  ([Vue build](vue.md#build)).
-- Plugin implementations migrate to Rust, preserving their virtual modules,
-  transforms and resolver behavior. Their adapter-specific scope is preserved;
-  they do not require a Node compiler fallback. See the
-  [plugin migration decision](../preview-pipeline/plugins.md#plugin-migration-decision)
-  for required capabilities and verification.
+- **The browser mount needs nothing from the server beyond compiling it,**
+  so a custom adapter's mount runs the same under the Rust server as a
+  built-in one.
+- **JavaScript loaders run in the Node evaluator,** one module at a time, as
+  Vue's single-file components do ([Vue build](vue.md#build)), because they
+  are project JavaScript ([server decisions](README.md#decisions), 2026-10-16).
+- **Plugin capabilities are native Rust,** with their virtual modules,
+  transforms and resolver behavior, scoped to the adapter that registers
+  them, and with no Node compiler fallback
+  ([plugin decision](../preview-pipeline/plugins.md#decisions), 2026-10-19).
 
 ## Verification
 

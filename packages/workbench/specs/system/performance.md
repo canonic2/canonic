@@ -176,8 +176,8 @@ preparation states separately; one warm cache does not imply the others.
 | Open the first page after the server starts, build cache cold | Selection to visible | p50 ≤ 5 s |
 | List pages, saved index warm | Canvas opening to the complete page list | **Agreed:** ≤ 200 ms |
 
-On the small fixture, no interaction may be slower than the shipping behavior
-it replaces by more than 10%.
+On the small fixture, a performance change may not slow any interaction by
+more than 10%.
 
 The adopted warm Docs pool has a more specific improvement goal: about 40%
 faster browser-warm selection to visible for new destinations when an initialized

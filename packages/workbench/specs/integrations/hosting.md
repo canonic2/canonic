@@ -19,7 +19,6 @@ macOS is limited; see [acceptance and gaps](#acceptance-and-gaps).
 | Standalone Node host | Same native page/server/capture services, with no editor source actions, clipboard handoff or configured start-command runner; switch among supplied roots |
 | Portable viewer | Static compiled output and declared data, including local state/input controls; no authored-file editing, live catalog discovery or host-owned capture service. Astro input changes requiring server rendering are unavailable |
 | Browser-only VS Code | Cannot spawn the native server/helper; no local extension runtime contract |
-| Studio | Future integration; no server startup/protocol or library embedding acceptance established |
 
 Feature availability follows the actual host/service capability. Do not infer
 editor authority merely from running in a browser, or show a successful source
@@ -82,5 +81,5 @@ Packaging and process tests are linked by [modules](../system/modules.md#asset-a
 and [server](../system/server.md#verification). The
 [installed evidence](../../research/README.md) records fixture/build/host limits.
 Host evidence is strongest on desktop macOS; Linux, Windows and remote host
-acceptance remain limited. No complete cross-platform/browser matrix, browser-only editor implementation
-or Studio integration is established by those checks.
+acceptance remain limited. No complete cross-platform/browser matrix or browser-only editor implementation
+is established by those checks.

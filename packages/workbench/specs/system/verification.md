@@ -68,7 +68,7 @@ no recorded host acceptance beyond its automated tests.
 | Docs highlighting readiness | Gap | [Installed asynchronous path](../../research/docs-highlighting.md#installed-asynchronous-path-2026-10-20) | Gap | As above |
 | Startup and runtime preparation | Not applicable | [Installed runtime preparation](../../research/startup.md#installed-runtime-preparation-2026-10-23) (platform not recorded) | Gap | Not applicable |
 | Page index listing | Server-only probes: [page listing](../../research/page-listing.md#page-listing) | Gap | Gap | Not applicable |
-| Compiler, hot updates, readiness | Pre-native prototype only: [Rspack pipeline](../../research/rspack-pipeline.md#confirmation-run-2026-10-13) | Gap | Gap | Gap |
+| Compiler, hot updates, readiness | Prototype pipeline only, not the native compiler: [Rspack pipeline](../../research/rspack-pipeline.md#confirmation-run-2026-10-13) | Gap | Gap | Gap |
 
 Smoke scripts exist for the canvas (`../../scripts/smoke-canvas.cjs`,
 `../../scripts/smoke-canvas-ui.cjs`), retained sessions and Storybook
@@ -81,7 +81,7 @@ result is recorded in [research](../../research/README.md).
 
 - Every capability lacks recorded acceptance on macOS arm64, Windows and Linux.
 - The full format-by-format confirmation through the native server and the
-  VS Code webview has not been recorded; the Rspack pipeline record predates
-  the native compiler.
+  VS Code webview has not been recorded; the Rspack pipeline record covers a
+  prototype pipeline, not the native compiler.
 - No capability records acceptance in a VS Code development host; the
   VS Code evidence above comes from the packaged extension.

@@ -12,7 +12,7 @@ repeat them. It records the behavior those keys produce, the decisions behind
 it, and where the code falls short.
 
 **Status:** authored HTML pages with the compatibility script, URL
-implementations (including Gate service endpoints), code pointers, iOS
+implementations (including `gate://` service endpoints), code pointers, iOS
 Simulator and window implementations, and the native window stream are
 implemented. Problems for unbooted mapped Simulator devices and handling of
 links to unlisted project pages are not; see [current gaps](#current-gaps).
@@ -103,35 +103,44 @@ Configuration: [Implementations](../../docs/configuration.md#implementations) an
 - Projects install nothing for capture. The
   [implementation proxy](../system/implementation-proxy.md) adds the preview bridge to
   every page the lens loads, so [screenshot capture](../review/capture.md) shows the
-  live page. Lenses must not go back to framing the implementation's own
+  live page. Lenses frame the proxied address, not the implementation's own
   address; that spec explains why.
 
-### Gate service endpoints
+### Service endpoints
 
-- The integration is optional and documented for users with existing access to
-  the private, unpublished Gate CLI. Gate has no public distribution channel;
-  Workbench's public guides and release notes state that availability limit.
-- `base: gate://SERVICE/PATH` binds a URL lens to the service's route in the
-  Gate task containing the space root. It never selects a last-used task or
-  reads Gate's private profile files. A single bounded `gate urls --json`
-  invocation per configuration request supplies every Gate lens in that space;
-  other routes use the cached result without spawning discovery. Refresh rereads
-  current readiness and ports, replacing the cached outcome even on failure. The
-  reader accepts public envelope versions 1 and 2 with the same validated route
-  shape. Gate's runtime commands emit envelope version 2. Discovery
-  never starts an absent manager.
-- Only published loopback HTTP direct endpoints are accepted. Gate discovery
-  requires workspace trust, has a five-second deadline and a 256 KiB response
-  bound. The CLI is located on PATH, then in `~/.local/bin` for editor hosts.
-- Gate owns startup; `start` is reported and omitted on a Gate URL lens.
-  Failed discovery, missing routes and unready services keep an actionable
-  problem on the lens. It appears on the canvas only when that lens is opened;
-  it does not join the sidebar's shared configuration problems. The content
-  renderer refuses to mount it, preserving other lenses and spaces. Invalid
-  configuration, such as a Workbench `start` on a Gate lens, still joins the
-  shared problems list.
-- `server/node/gate.test.js` covers isolated checkouts, proxy delivery,
-  readiness failure, refreshed ports and trust without a real Gate profile.
+- `base: gate://<service>/<route>` binds a URL lens to a named service of the
+  space instead of a fixed address. `<service>` is required and starts with a
+  lowercase letter or digit, followed by lowercase letters, digits and `-`.
+  `/<route>` is optional and becomes the path appended to the service's
+  endpoint. The reference carries no credentials, port, query (`?`), fragment
+  (`#`) or whitespace; such a base is not a service reference.
+- Workbench resolves service references by running `gate urls --json` from the
+  space root, with the command located on PATH (and a per-user local binary
+  directory as fallback for editor hosts whose PATH omits it). The command must
+  print a JSON envelope `{"version": 1 | 2, "ok": true, "data": {"routes": {...}}}`;
+  both envelope versions share one route shape, and any other version, a
+  missing `ok: true` or a non-object `data` is an invalid response. A route
+  `routes.<service>` is usable only with `"state": "published"` and a
+  `direct_url` of the form `http://127.0.0.1:<port>/` (no credentials, path,
+  query or fragment). The lens base becomes that endpoint with `/<route>`
+  appended.
+- Discovery runs once per page-tree (configuration) refresh and only when the
+  space has a service reference. One invocation supplies every such lens in the
+  space; other requests use the cached result and never spawn discovery. A
+  refresh replaces the cached outcome, even on failure, so readiness and ports
+  follow the service. Discovery requires workspace trust, has a five-second
+  deadline and a 256 KiB response bound.
+- Workbench never starts the service and has no fixed-port fallback. `start`
+  on a service-reference lens is invalid configuration and joins the shared
+  problems list. A missing command, failed or invalid discovery, a missing route
+  or an unready service keeps an actionable problem on that lens. It appears on
+  the canvas only when that lens is opened; it does not join the sidebar's
+  shared configuration problems. The content renderer refuses to mount it,
+  preserving other lenses and spaces.
+- `server/node/gate.test.js` covers resolution per checkout, proxy delivery,
+  readiness failure, refreshed ports and workspace trust with a stand-in
+  command; `server/src/gate.rs` unit tests cover the reference syntax, both
+  envelope versions and endpoint validation.
 
 ### Implementation roots and code pointers
 
