@@ -54,7 +54,7 @@ they develop, separate from current behavior and observed acceptance.
 | Iterations | [Artboards and iterations](pages/iterations.md): model, render, address, review and export are implemented; iteration UI waits for the UI port |
 | UI port | [Target layout and port order](system/modules.md#browser-source-ownership) are agreed: the whole browser UI moves to Lattice and an `app/`, `views/`, `components/`, `modules/` layout. Not started; it follows Lattice's guides, its collection lab and the delivery slice |
 | UI and sizes | Components and configurable sizes are implemented. Configure pages size cards, public-guide alignment and the canvas theme bridge remain gaps |
-| Persistence | Current-space choice and origin-bound preferences exist. Complete selection/preference restoration and first-page fallback are agreed implementation work: IndexedDB in browsers, workspaceState in VS Code |
+| Persistence | Current-space choice, origin-bound preferences in `localStorage` and first-page fallback exist. Complete selection/preference restoration is agreed implementation work: IndexedDB in browsers, workspaceState in VS Code |
 
 Detailed status and acceptance stay in their owning topic. An implemented
 support API, passing unit check or prototype comparison does not establish

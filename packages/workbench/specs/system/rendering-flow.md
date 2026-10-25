@@ -248,8 +248,10 @@ Browser regressions through the shell and renderer cover the discoveries below.
 - Workbench first adds Lattice as a dependency through the
   [delivery slice](modules.md#lattice-delivery-slice): the server serves its
   modules unchanged beside the UI, the canvas, renderer and sidebar entry
-  points resolve its import, the webview CSP admits it, and VSIX packaging
-  includes it.
+  points resolve its import, and VSIX packaging includes it. The server-served
+  canvas and renderer documents need no CSP change for explicit-URL imports;
+  the sidebar webview gains a resource root for Lattice's files, which its
+  CSP's webview source then admits.
 - Navigation state, transitions and the grace timer move into a navigation store
   under `ui/src/modules/navigation/`. The binding that writes the canvas's
   `inert`, `aria-busy`, visibility and loading message lives in
@@ -308,20 +310,20 @@ The source-language or hosting arrangement is not the cause of nested shell rend
 
 ## Implementation ownership
 
-[`runtime.ts`](../../ui/src/modules/preview-sessions/runtime.js) mounts
+[`runtime.js`](../../ui/src/modules/preview-sessions/runtime.js) mounts
 [`content.html`](../../ui/legacy/content.html). Its dedicated
 [`bootstrap`](../../ui/src/bootstrap/renderer.js) composes the content controller,
 retained frame sessions, native surface, annotation overlay and authenticated
 canvas protocol. It imports no application bootstrap and mounts no shell controls.
 
-[`content.ts`](../../ui/src/modules/preview-sessions/content.js) derives destinations,
+[`content.js`](../../ui/src/modules/preview-sessions/content.js) derives destinations,
 scenarios, lenses and labels from project data through an injected loader/catalog.
 Readiness belongs to the view submitted to the frame runtime, so a delayed lookup
 cannot inherit the outgoing document's readiness. Shared manifest rules preserve
 authored labels/mappings while merging discovered preview scenarios. External interaction preferences do
 not restart a pending or retained Storybook document.
 
-[`renderer-bridge.ts`](../../ui/src/modules/preview-sessions/renderer-bridge.js) owns
+[`renderer-bridge.js`](../../ui/src/modules/preview-sessions/renderer-bridge.js) owns
 canvas commands, metadata, capture locking, focus and keyboard forwarding through
 explicit content/annotation ports. The existing frame lifecycle and annotations
 remain JavaScript under `ui/legacy/`, with explicit factory initialization. Further

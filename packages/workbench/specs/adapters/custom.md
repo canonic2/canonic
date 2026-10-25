@@ -35,7 +35,8 @@ runs only in the frame.
 - The browser mount needs nothing from the server beyond compiling it, so
   it works unchanged with the Rust server.
 - `rules` whose loaders are JavaScript run through the Node evaluator, one
-  module at a time, as the [Vue adapter](vue.md#target) proposes.
+  module at a time, as Vue's single-file components do
+  ([Vue build](vue.md#build)).
 - Plugin implementations migrate to Rust, preserving their virtual modules,
   transforms and resolver behavior. Their adapter-specific scope is preserved;
   they do not require a Node compiler fallback. See the

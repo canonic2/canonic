@@ -36,7 +36,8 @@ Space › Collection › (Group) › Page
   or another ID is dropped with a problem. Each entry may set `name`, `color`,
   `icon`, `root` and `sizes`, which belong to that space only; every other
   key falls back to the file's top level, so top-level `collections` are
-  shared by spaces that declare none. A top-level `sizes` beside `spaces` is
+  shared by spaces that declare none, except `implementations`, which merge
+  with the space's own by name. A top-level `sizes` beside `spaces` is
   a problem. A space's name defaults to its ID in sentence case
   (`design-system` → *Design system*). An unknown space asked for at startup
   falls back to the first, with a problem.
@@ -146,8 +147,11 @@ server's imported collections into it with the shared `mergeCollections` rule
 - A page with two or more scenarios lists them under it, expanded while it is
   showing ([scenarios](scenarios.md#in-the-page-list)). Iterations are not
   listed.
-- A page without its own `icon` shows its collection's icon; groups show
-  `folder` and scenarios `circle-dot`.
+- A page written in `workbench.yaml` without its own `icon` shows its
+  collection's icon. Imported pages always carry one: a preview's resolves as
+  in [preview placement](previews.md#sidebar-placement), a docs page's
+  defaults to `book-open`, and a catalog page takes its catalog's icon.
+  Groups show `folder` and scenarios `circle-dot`.
 - Search matches page labels, `src` and scenario labels across collections,
   and keeps a group whole when its name matches; collection names are not
   searched. Results are grouped by collection only when several match.

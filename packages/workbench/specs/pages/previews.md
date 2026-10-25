@@ -31,7 +31,7 @@ project-registered adapters. They do not run a project's application server,
   Actions switch governs both. Nothing in a preview navigates the frame or
   starts a download. See [links and navigation](#links-and-navigation).
 - Previews are discovered by default and open in their own authored lens,
-  labelled **Workbench** by default and customizable under the
+  labelled **Preview** by default and customizable under the
   [lens contract](../canvas/lenses.md).
 - Source compiles in the Workbench server's compiler, with project code in
   the Node evaluator ([server processes](#server-processes-lifecycle-and-trust)).
@@ -299,7 +299,7 @@ reached through `node_modules` are listed by name and version.
   `default` scenario. A scenario may contain `label`, `source`, `inputs`,
   `fixtures`, `globals`, `requests`, `setup`, `play`, `ready`, and either
   `artboards` or `iterations`; the SDK types make the last two exclusive and
-  validation rejects a scenario with both. Labels default to the ID in title
+  validation rejects a scenario with both. Labels default to the ID in sentence
   case.
 - A scenario's `artboards` and the `iterations` of its declared or implicit
   artboard follow
@@ -319,7 +319,7 @@ reached through `node_modules` are listed by name and version.
 - `styles`, `assets`, and `environment` resolve from the definition. Declared
   assets must stay inside the project.
 - [api.d.ts](../../sdk/api.d.ts) types scenario inputs against preview inputs.
-- `preview/` is published to npm as `@canonic2/workbench` (`api.js`,
+- `sdk/` is published to npm as `@canonic2/workbench` (`api.js`,
   `api.d.ts`) at the extension's version by each `workbench/v*` release, so
   `tsc` and editors resolve the import from an ordinary dev dependency. It
   must type-check with `Bundler` and `NodeNext` resolution, from ESM and
@@ -421,29 +421,29 @@ compiler, and the installed extension downloads none.
   placement (via `mergeCollections`); `workbench` lens scenario mapping; source
   closure hashing; authoring type checks; portable viewer and partial
   success; CLI `build` refusing nonempty output.
-- [preview-runtime.test.js](../../ui/preview/preview-runtime.test.cjs): renderer disposal,
+- [preview-runtime.test.cjs](../../ui/preview/preview-runtime.test.cjs): renderer disposal,
   font and image readiness, hidden-frame readiness, lifecycle merging and
   cleanup, failed cleanups, concurrent host commands, async adapter errors.
 - [preview-astro.test.js](../../server/node/preview-astro.test.js): props, scenarios, slots,
   assets, Node-only frontmatter, live input renders, portable scenarios, missing
   dependencies and unsupported integrations, aliases and defines.
-- [workbench/preview-host.test.js](../../ui/legacy/preview-host.test.js): warm
+- [legacy/preview-host.test.js](../../ui/legacy/preview-host.test.js): warm
   host reuse, superseded loads, style and import-time body node retention,
   module isolation, recovery after failed mounts, listener and timer release,
-  refusal of external pages. [workbench/preview.test.js](../../ui/legacy/preview.test.js)
+  refusal of external pages. [legacy/preview.test.js](../../ui/legacy/preview.test.js)
   checks mounting into the warm spare frame.
 - [files.rs](../../server/src/serve/files.rs) tests check the shared
   compatibility injection.
-- [preview-runtime.test.js](../../ui/preview/preview-runtime.test.cjs) "links open mapped
+- [preview-runtime.test.cjs](../../ui/preview/preview-runtime.test.cjs) "links open mapped
   previews…" and "without the actions switch…" cover matching, scenario-only
   targets, logged links and forms, `navigate` with actions off, release of
   `follow` on dispose, and the portable fallback. [preview.test.js](../../server/node/preview.test.js)
   "preview links are validated…" covers validation, normalization, and the
   unknown-target problems.
-- [requests.test.js](../../ui/preview/requests.test.cjs) covers key matching, precedence,
+- [requests.test.cjs](../../ui/preview/requests.test.cjs) covers key matching, precedence,
   handler functions, GraphQL operations, logging, 404s for unmatched
   requests, Workbench bypass, and `pending`/`failed`/`delay`/`passthrough`.
-  [preview-runtime.test.js](../../ui/preview/preview-runtime.test.cjs) covers activation per
+  [preview-runtime.test.cjs](../../ui/preview/preview-runtime.test.cjs) covers activation per
   render and `combine`; [preview-astro.test.js](../../server/node/preview-astro.test.js)
   covers frontmatter fetches per scenario. [preview.test.js](../../server/node/preview.test.js) "the project environment
   applies…" covers the single and per-adapter forms and a missing file.

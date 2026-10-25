@@ -201,7 +201,9 @@ name. A menu button follows them and opens the **size menu**:
   the matching destination arrives. Docs viewport dimensions do not become the
   next preview's dimensions. A size pick replaces that pending choice. Each
   choice is applied once so later content-fit measurements can settle normally;
-  explicitly declared artboards retain their authored sizes during navigation.
+  explicitly declared artboards retain their authored sizes during navigation
+  (required; a declared artboard can lose its size under the implementation gap
+  in [Multiple artboards](#multiple-artboards)).
 - The size switcher never folds into **More**. The top bar's compact
   measurement includes however many buttons the space has.
 - The menu is a menu of radio items: arrow keys move between enabled entries,
@@ -326,8 +328,9 @@ Each page is captured once per size it supports, except Resizable:
   Resizable is captured at 1440 × 900.
 - Sizes that resolve to the same dimensions are captured once, under the first
   of them in the page's order.
-- File names use the size's key and the README uses its label, such as
-  `default-sidebar.jpg` under *Sidebar · `340 × 900`*.
+- File names use the size's key and the README heading uses the reference's
+  label and the size's label, with the dimensions on the line below: such as
+  `default-sidebar.jpg` under `### Default · Sidebar`, then `340 × 900`.
 
 A page without `sizes` is captured at every size of the space. A space
 chooses its sizes deliberately, so the export shows its pages at those sizes;
@@ -423,7 +426,7 @@ sizes, the local merge, and problems; `address.test.js` for size keys;
 `server/node/preview.test.js` for the switcher, fill sizing, and fallbacks;
 `server/node/config.test.js` and `server/node/server.test.js` for both readers agreeing, writes
 (including comments kept outside replaced blocks), and export plans;
-`server/node/handoff.test.js` for size lines and screenshot names;
+`server/src/handoff/tests.rs` for size lines;
 `ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes. The size switcher,
 menu, and dialogs need a browser check of keyboard use and focus with the
 [browser harness](../../scripts/chrome.cjs).

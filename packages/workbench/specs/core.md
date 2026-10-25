@@ -125,7 +125,7 @@ services exist in the editor, standalone browser and portable viewer.
   A page lists its scenarios under it only when it has two or more
   ([page list](pages/page-tree.md#the-page-list)).
 - A lens choice persists across page picks. A page without that lens shows
-  its design. An imported implementation-only page always uses its own lens;
+  its default lens: its first docs lens, else its design. An imported implementation-only page always uses its own lens;
   a discovered TypeScript preview uses its own authored lens. Every lens has
   a customizable display label independent of its identity and rendering
   kind; defaults and configuration are in the [lens contract](canvas/lenses.md).
@@ -233,10 +233,9 @@ stays unchanged by this refactor.
 
 ## Implementation gaps
 
-- **Some failures never become problems.** A stopped Storybook used only by
-  mappings, a mapped Simulator whose device is not booted, and an authored
-  entry with an invalid `src` or scenario id fail only on the canvas or are
-  dropped silently; see [implementations](pages/implementations.md#current-gaps) and
+- **Some failures never become problems.** A stopped Storybook at a configured
+  `url` used only by mappings, and a mapped Simulator whose device is not
+  booted (without `catalog: true`), fail only on the canvas; see [implementations](pages/implementations.md#current-gaps) and
   [Storybook](pages/storybook.md#current-gaps).
 
 ## Verification points

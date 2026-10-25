@@ -8,9 +8,11 @@ In a standalone browser it remains usable without any VS Code variables or API.
 The same [Web Components](web-components.md) serve both environments.
 
 **Status:** shared tokens and migrated controls implemented.
-`ui/src/theme/defaults.css` supplies the space switcher's and size controls' tokens,
-including the selected segment, error text and primary button roles, and direct
-webview host mappings. The sidebar maps host roles for this control; the canvas continues
+`ui/src/theme/defaults.css` supplies the tokens of every migrated control: the
+space switcher and space mark, the size switcher with Custom size and Edit sizes,
+the Actions switch, the canvas presentation and the export dialog, including the
+selected segment, error text and primary button roles, and direct
+webview host mappings. The sidebar maps host roles for its controls; the canvas continues
 to use its existing palette. The canvas theme bridge and full-shell migration
 remain implementation gaps.
 
@@ -79,7 +81,8 @@ CSS values do not inherit across iframe documents. The embedding webview owns a
 theme adapter that reads the relevant resolved variables and sends a complete,
 versioned theme snapshot to Workbench through the host message bridge. The
 snapshot includes theme kind and the allowlisted color/font values needed by the
-shell. Exact message names and schema are established with the implementation.
+shell. Open question: the exact message names and snapshot schema are not yet
+decided.
 
 - Send the latest snapshot after the Workbench receiver is ready, including after
   iframe reloads and space switches; do not lose the initial theme to load timing.

@@ -16,7 +16,8 @@ decision already made, or in place of behavioral tests for product code.
 
 This spec owns experiment design, execution, evidence and confirmation. Feature
 specs own product behavior and any agreed budgets: [TypeScript previews](../pages/previews.md)
-for previews and the Node evaluator, the [preview pipeline](../preview-pipeline/README.md)
+for previews, the [server](server.md#processes-and-connections) for the Node
+evaluator and the process model, the [preview pipeline](../preview-pipeline/README.md)
 for compilation, delivery, hot updates and readiness, [performance](performance.md)
 for targets and timed boundaries,
 [core](../core.md) for the canvas, frames and selection, [Storybook](../pages/storybook.md)
@@ -48,8 +49,8 @@ research/            committed research record for each lab
 - VSIX staging copies only the product folders, so neither `labs/` nor
   `fixtures/` ships. Product code, tests, packaging and scripts never import,
   run or name anything in `labs/` or `fixtures/labs/`.
-- Runners may load the shipping modules read-only, such as the Node server and
-  the `workbench-server` binary. Variant logic lives in the lab. A lab changes
+- Runners may load the shipping modules read-only, such as the standalone
+  Node command and the `workbench-server` binary. Variant logic lives in the lab. A lab changes
   no product code; the winning variant is re-implemented in the product with
   its own tests.
 - Generated projects, installed fixture dependencies, build output, compiler
@@ -203,8 +204,9 @@ checks, on every run:
   silently choosing a quieter sample.
 
 Record the host and conditions with every run: macOS version, architecture,
-CPU and memory, power source, Node, Electron, Chrome and esbuild versions,
-other compiler versions used by variants, and background load. Record the
+CPU and memory, power source, Node, Electron and Chrome versions, the
+`workbench-server` build and its Rspack crates, the definition evaluator's
+esbuild, other compiler versions used by variants, and background load. Record the
 Workbench commit that was measured, plus hashes of any uncommitted measured
 files, since a commit ID alone does not identify uncommitted code.
 

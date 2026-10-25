@@ -57,14 +57,11 @@ place ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 ## Target
 
 The HTML loader and part loader are Workbench's own code, without project
-JavaScript, so they become Rust loaders in the Workbench server. Their
-output must match the Node loaders' for every HTML fixture before they
-replace them.
+JavaScript, so they are Rust loaders in the Workbench server.
 
 ## Status
 
 Implemented as Rust loaders in `workbench-server`'s compiler, as the target
 describes, covered by [preview.test.js](../../server/node/preview.test.js)
 (scripts, inline modules, CSS, `srcset`, assets) and the unit tests in
-[html.rs](../../server/src/compiler/html.rs). No fixture-by-fixture comparison
-with the Node loaders' output is recorded.
+[html.rs](../../server/src/compiler/html.rs).

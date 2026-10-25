@@ -64,8 +64,10 @@ performance verification limits.
   previews, portable viewers, and file-based use until their separate delivery
   paths support any migration.
 - Use the existing Node runner, pnpm scripts, DOM/CSS vocabulary, and manifest
-  rules. This capability does not require a framework, new root package,
-  dependency-injection container, event bus, or repository-wide migration.
+  rules. Application state moves to Lattice (`@canonic2/lattice`) under the
+  agreed [browser UI port](../system/modules.md#browser-source-ownership); this
+  capability adds no other framework, new root package, dependency-injection
+  container, event bus, or repository-wide migration.
 - Organize by capability. A directory owns coherent behavior, types, tests,
   and lifecycle; create separate files only when responsibilities justify them.
   The boundaries below are substantive, not a target file count.
@@ -75,26 +77,25 @@ performance verification limits.
 Presentation of a scenario's declared artboards and existing-shell composition are implemented.
 The map below also covers deeper extraction and future artboard-management UI.
 
-Suggested paths are relative to `packages/workbench/` and follow the
-[module layout contract](../system/modules.md). These are target paths; the actual module
-boundaries above retain current paths until a bounded migration moves them.
-Names may be adjusted to fit concurrent work; ownership and dependency
-constraints are the contract.
+Locations are relative to `packages/workbench/` and come from the agreed
+[target layout](../system/modules.md#browser-source-ownership), which owns
+them; the actual module boundaries above retain current paths until the port
+moves them. Ownership and dependency constraints are the contract.
 
-| Capability | Proposed files | Responsibility and public API |
+| Capability | Target location | Responsibility and public API |
 | --- | --- | --- |
-| Canvas model | `ui/src/modules/canvas/model.js` | View descriptors, IDs, canvas snapshot, validated pure command transitions; `createCanvasState`, `applyCanvasCommand`, `validateCanvasDescriptor` |
-| Canvas geometry | `ui/src/modules/canvas/geometry.js` | Bounds, automatic placement, CSS-pixel camera math and Fit operations; pure functions, no DOM |
-| Canvas workflows | `ui/src/modules/canvas/controller.js` | Sole owner of mutable canvas state; add/select/replace/close/reload/refresh; coordinates runtimes and emits snapshots |
-| Content-only renderer | `ui/src/modules/preview-sessions/`, `ui/legacy/content.html` | Dedicated viewport, model metadata, frame sessions and annotation/capture ports; no application embedding |
-| Canvas presentation | `ui/src/components/canvas/` | Keyed artboard shells, labels/status, selected outline, focus, pan/zoom and resize input; emits commands, never performs space I/O |
+| Canvas model | `ui/src/modules/canvas/` | View descriptors, IDs, canvas snapshot, validated pure command transitions; `createCanvasState`, `applyCanvasCommand`, `validateCanvasDescriptor` |
+| Canvas geometry | `ui/src/modules/canvas/` | Bounds, automatic placement, CSS-pixel camera math and Fit operations; pure functions, no DOM |
+| Canvas workflows | `ui/src/modules/canvas/` | Sole owner of mutable canvas state; add/select/replace/close/reload/refresh; coordinates runtimes and emits snapshots |
+| Content-only renderer | `ui/src/modules/content/`, `ui/src/modules/native-surfaces/`, `ui/src/app/renderer/` | Dedicated viewport, model metadata, frame sessions, native streams and annotation/capture ports; no application embedding |
+| Canvas presentation | `ui/src/views/canvas/` | Keyed artboard shells, labels/status, selected outline, focus, pan/zoom and resize input; emits commands, never performs space I/O |
 | Content runtimes | `ui/src/modules/preview-sessions/` | Renderer contracts and owned instances; mount/update/readiness, source verification, capture acquisition, disposal |
-| Space access | `ui/src/modules/spaces/access.js`, `ui/src/modules/spaces/host.js` | Public space-scoped request contract, registry lookup and host/server dispatch; uses existing space services rather than a second registry |
-| Annotation state/UI | `ui/src/modules/annotations/model.js`, `ui/src/components/annotations/` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
+| Space access | `ui/src/modules/project/`, `ui/src/host/` | Public space-scoped request contract, registry lookup and host/server dispatch; uses existing space services rather than a second registry |
+| Annotation state/UI | `ui/src/modules/annotations/` | Per-artboard annotations, pure annotation edits and drawing interactions; capture/prompt logic moves out of annotation presentation |
 | Canvas review | `ui/src/modules/review/` | Immutable capture manifest, full-canvas reference/context derivation, acquisition workflow, review result and errors |
-| Capture composition | `ui/src/modules/capture/composition.js`, `ui/src/modules/capture/service.js` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
-| Agent publication | `ui/src/modules/agent-context/report.js`, `ui/src/modules/agent-context/publisher.js` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and agent context reader |
-| Browser/host entry points | Browser bootstrap and existing server/extension entry points outside `ui/src/modules/` | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
+| Capture composition | `ui/src/modules/review/` | Pure output geometry and helper/renderer orchestration; uses existing capture engine and native pixel acquisition |
+| Agent publication | `ui/src/modules/review/` | Versioned report validation/formatting and participating-space publication; adapts existing server view service and agent context reader |
+| Browser/host entry points | `ui/src/app/<document>/` and existing server/extension entry points | Compose concrete dependencies and dispose the application; transport registration remains with its owning host |
 
 Persistence is a conditional capability under `ui/src/modules/canvas-storage/`, created
 only after its product policy is agreed. It receives descriptors through an
@@ -207,8 +208,9 @@ mount/reset and bridge APIs behind explicit adapters; do not rewrite compiler
 or framework mounts for this feature.
 
 Native runtime owns decoder/client subscriptions, not the device/window itself.
-Move the substantially changed stream manager into JavaScript under a coherent
-`ui/src/modules/native-streams/` capability. Its server-side producer pool is keyed by
+The renderer's stream client (`ui/legacy/simulator.js`) moves to the
+`native-surfaces` capability of the [target layout](../system/modules.md#capabilities).
+The producer pool, `capture/src/native-streams/pool.ts`, is keyed by
 validated source and codec, with reference-counted subscriptions. Closing the
 last subscriber stops owned capture resources; other devices/codecs/subscribers
 continue. Simulator input is space/device-qualified. Window runtime exposes

@@ -36,8 +36,11 @@ server-side listing; the compiler builds what its listing found.
 ### Entries
 
 - Every discovered preview, and every docs page in each of its docs lenses,
-  is an entry. All of them are declared before the first build, and all are
-  built.
+  is an entry. Today all of them are declared before the first build, and all
+  are built. That eager start is current behavior, not a requirement:
+  [performance](../system/performance.md#first-open-and-edits) requires the
+  first page not to wait for other pages' builds, and the eager start misses
+  that ([status](#status)).
 - The entry set stays fixed while documents that loaded its output are open.
   Rspack's hot updates do not follow a module that moves to another chunk.
   Adding an entry can move shared modules into a new split chunk. A document
@@ -105,7 +108,7 @@ server-side listing; the compiler builds what its listing found.
 ### Runtime and packaging
 
 - The compiler is Rspack's Rust crates inside `workbench-server`, built with
-  Rspack's nightly toolchain ([phase 4](../system/server.md#previews)).
+  Rspack's nightly toolchain ([server previews](../system/server.md#previews)).
   Server-side project evaluation runs in the Node evaluator, outside the native
   server and extension host. Project browser code runs in preview documents,
   including those opened by the capture helper
@@ -125,14 +128,13 @@ development defaults.
 ### What runs in the Node evaluator
 
 Evaluating project code is the Node evaluator's job, not the compiler's.
-The evaluator is one long-lived Node process per space
+The page index currently uses a separate short-lived definition evaluator for
+listing and selection; [server process ownership](../system/server.md#processes-and-connections)
+records that deviation from the shared-evaluator target. The evaluator the
+compiler uses is one long-lived Node process per space
 ([node.rs](../../server/src/node.rs),
 [evaluator/](../../server/node/src/modules/evaluator/index.ts)), started on
 first need and reached over stdin and stdout with one JSON request per line:
-
-This describes compiler evaluation. The page index currently uses a separate
-short-lived evaluation/selection process; [server process ownership](../system/server.md#processes-and-connections)
-records that deviation from the shared-evaluator target.
 
 | Job | How |
 | --- | --- |

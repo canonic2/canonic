@@ -336,8 +336,8 @@ example Ant Design's):
 ## Top bar
 
 The top bar shows the breadcrumb with its scenario switcher, the lens switcher
-when there are two or more lenses (a page's design first, or a Markdown
-page's docs lenses first), reload, source files, the copyable reference,
+when there are two or more lenses (docs lenses first, then the page's design,
+then its other implementations), reload, source files, the copyable reference,
 **Open on its own**, and **More**. A page with a design lists its design file,
 then **Docs** (its Markdown), then its implementations' code and each docs
 lens's example source; a Markdown page lists its Markdown first, as **Docs**.
@@ -378,7 +378,9 @@ problems update when they arrive.
 ## System behavior
 
 - **Manifest.** `manifest.js` accepts `.md` sources, `lens`, and the `docs`
-  kind, and rejects `!` in `src`, for the browser and the server alike.
+  kind, and rejects a `src` that contains `:`, `+`, `!` or `~`, for the
+  browser and the server alike; every config reader also rejects a `src` that
+  starts with `/` or contains `..`.
 - **Serving.** The server serves a docs page at its Markdown path and renders
   the Markdown to HTML with example placeholders. Markdown parsing and syntax
   highlighting use pinned dependencies shipped in the extension, like Lucide;
@@ -418,7 +420,7 @@ problems update when they arrive.
   decides a page's lenses, the lens it shows, its default lens, the lens a
   docs link opens, the lens the address names, and the canvas mode. It is
   pure; the canvas loads it through
-  [bootstrap.js](../../ui/src/bootstrap/docs.js) and waits for it
+  [bootstrap/docs.js](../../ui/src/bootstrap/docs.js) and waits for it
   before applying the config, and Node tests check it. Off a server
   (`file://`) the module can't load and the canvas shows no docs lenses.
 - **Docs entries.** The server keeps one entry per Markdown file, naming the
@@ -558,7 +560,7 @@ renderer combination or source-extraction edge case. See
 ### Built
 
 - **Schema.** `manifest.js` reads the `docs` kind, the page's `docs` key, `.md`
-  pages, `lens`, and `!` in `src` for both config readers; `address.js` reads
+  pages, `lens`, and the reserved marks in `src` for both config readers; `address.js` reads
   and writes `!example`; the canvas leaves the width out of a docs lens's
   address and a Markdown page's own docs lens out of its address.
 - **Lenses.** [lenses.js](../../contracts/src/docs/lenses.js) and its tests;
@@ -629,7 +631,7 @@ renderer combination or source-extraction edge case. See
   examples in view with their files; the export plans docs references
   separately ([plan.rs](../../server/src/export/plan.rs)) through the helper's
   `fullPage` and `selector` options
-  ([capture-helper/main.cjs](../../capture/app/main.cjs)).
+  ([capture/app/main.cjs](../../capture/app/main.cjs)).
 - **Problems.** Missing Markdown, placement problems with their line,
   unplaced examples, rejected example files, duplicate export IDs, build
   failures, and blocked examples join `/_workbench/config`'s problems.
@@ -644,7 +646,7 @@ renderer combination or source-extraction edge case. See
   the example source: the statement lives in the re-exported module, which the
   listing doesn't record.
 - **Multiple-artboard management.** Isolated docs renderers participate in
-  declared page-artboard composition. Arbitrary artboard management and its
+  declared-artboard composition. Arbitrary artboard management and its
   editor-host acceptance remain [canvas integration work](../canvas/multiple-artboards.md#remaining-integration-plan).
 
 - **An address naming a page's Markdown** opens nothing when the Markdown

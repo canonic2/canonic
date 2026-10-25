@@ -220,20 +220,6 @@ Repeated artboards on one device/window share that external surface.
   whose device isn't booted produces no entry in `problems`; the failure
   appears only on the canvas, contrary to the shared problems list in
   [core.md](../core.md#problem-reporting).
-- **Invalid authored entries are dropped silently.** A page whose `src`
-  starts with `/` or contains `..`, `:`, `+`, `!` or `~`, and a scenario whose ID
-  isn't kebab-case or that lacks an `id` or `label`, are left out with no
-  problem (the native reader's
-  [page and scenarios](../../server/src/config/read.rs)), contrary to the reporting requirement in
-  [core.md](../core.md).
-- **A single YAML scenario loses its path map.** A page with exactly one YAML
-  scenario and no iterations loses its scenario list before lens validation,
-  so a path map keyed by that scenario's own ID reports the key as
-  undeclared and, without a `default` key, the missing first-scenario path;
-  the lens is dropped ([manifest.js](../../contracts/manifest.js),
-  [read.rs](../../server/src/config/read.rs)). The requirement that the first
-  scenario's own ID names it applies regardless of how many scenarios a page
-  declares.
 - **Links to unlisted project pages do nothing.** With actions on, the page
   cancels any same-origin `.html` link and hands it to the workbench, which
   ignores destinations that aren't configured pages. Such a link neither

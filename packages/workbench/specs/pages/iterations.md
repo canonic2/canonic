@@ -2,6 +2,8 @@
 
 Status: agreed 2026-10-24. The model, render, address, review output and export
 are implemented; canvas presentation is not ([gaps](#implementation-gaps)).
+Iteration UI starts after the whole browser UI is ported to Lattice
+([browser source ownership](../system/modules.md#browser-source-ownership)).
 
 This topic owns the two levels below a scenario: where artboards are declared,
 what an iteration is, how both change a render, and how they are named in
@@ -303,8 +305,6 @@ shown artboard's selected iteration with a `+` part after the scenario:
   shared Workbench skill and rule do not describe iterations yet.
 
 ## Open questions
-
-Deferred until the technical implementation is done:
 
 1. **Canvas presentation.** How a person sees and picks an artboard's
    iterations, compares an iteration beside its artboard, and sees that an

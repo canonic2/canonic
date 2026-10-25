@@ -162,10 +162,13 @@ mechanism. Add checks for absence of application startup before claiming this bo
 
 ## Current gaps
 
-- **Storybooks are not checked up front.** Only `url: auto` detection adds
-  to `problems`. When a Storybook is stopped, the failure appears on the
-  canvas when a mapped page is opened, not in `problems`, short of the shared
-  problems list in [core.md](../core.md#problem-reporting).
+- **Storybooks are not checked up front.** Only failed `url: auto` detection,
+  and a Storybook the server runs in an untrusted workspace or without a
+  usable root or Node runtime, add to `problems`. When a Storybook at an
+  explicit `url` is stopped, or one the server runs fails to start, the
+  failure appears on the canvas when a mapped page is opened, not in
+  `problems`, short of the shared problems list in
+  [core.md](../core.md#problem-reporting).
 
 ## Open questions
 

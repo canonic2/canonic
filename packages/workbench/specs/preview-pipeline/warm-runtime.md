@@ -24,8 +24,10 @@ hidden application controls or another canvas.
 ### Pre-warming on project start
 
 - When a trusted space with native pages starts, the Workbench server's
-  compiler starts without waiting for a request. It indexes the project, declares every entry
-  ([compiler](compiler.md#entries)), restores the persistent cache and builds.
+  compiler starts without waiting for a request. It indexes the project,
+  declares its entries ([compiler](compiler.md#entries)), restores the
+  persistent cache and builds. Today this happens only when the host passes
+  `--eager-previews` ([status](#status)).
 - A request during pre-warming waits for that build, which contains its
   entry, and never for a later one.
 - The canvas prepares its warm runtime as soon as the build reports, before a
@@ -202,14 +204,26 @@ or disposed request cannot navigate a newer destination or reopen a removed fram
 
 ## Status
 
-Implemented in `workbench-server`'s preview compiler: pre-warming every
-listed preview and docs lens once the page tree configures them
-([compiler](compiler.md)), and the warm
-preview document. A new scenario, input or size of the preview a warm document shows
-re-renders through the preview runtime without reloading its modules. Gaps:
+Pre-warming is implemented in `workbench-server`'s preview compiler: once the
+page tree configures the compilers, they build every listed preview and docs
+lens ([compiler](compiler.md)). The warm preview document is the preview-host
+document in `ui/legacy/` ([preview-host.js](../../ui/legacy/preview-host.js)),
+served by the server as `/_workbench/preview-host.html`. A new scenario, input
+or size of the preview a warm document shows re-renders through the preview
+runtime without reloading its modules.
 
-- Compilation starts when the page tree configures the compiler; the target
-  of preparing a shared browser runtime before any native selection is not
+What starts pre-warming today: the server configures its compilers when it
+first assembles the page tree. Started with `--eager-previews`, which the
+extension and the standalone command both pass, it does that at startup
+without waiting for a request: `Space::warm_docs` assembles the page tree,
+which indexes the project and configures the compilers (so every listed
+preview and docs lens starts building), then requests each docs lens's bundle
+in turn ([server](../system/server.md#request-tracing)). Without the flag,
+the first page-tree request starts it. Gaps:
+
+- Pre-warming on space start depends on the host passing `--eager-previews`;
+  the server alone waits for the first page-tree request. The target of
+  preparing a shared browser runtime before any native selection is not
   established by server-side pre-warming alone.
 - Returning to a page the warm document showed earlier loads its modules
   again rather than guaranteeing per-page runtime-state retention. The
@@ -224,7 +238,7 @@ selection in `content-frames.js`/`preview-sessions.js`. The server preload
 correction is implemented independently in the generated client
 ([serving](serving.md#preload-selection)). The selected design is the lab's
 `pool-rp`; no compiler warm-up redesign is part of this change. Shipping-code
-confirmation is tracked in [performance](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
+confirmation is tracked in the [Docs navigation research](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
 
 ## Verification
 

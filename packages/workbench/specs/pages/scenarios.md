@@ -67,7 +67,7 @@ kind:
   document without reloading, unless the iteration changes too
   ([previews](previews.md#open-scenarios-controls-and-actions)); other pages
   load again with the new scenario.
-- A catalog page with scenarios opens its first named scenario.
+- Catalog pages, one per Simulator device, have no scenarios.
 
 ## Addresses and unknown scenarios
 

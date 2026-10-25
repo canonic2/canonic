@@ -36,6 +36,8 @@ Feature specs own the behavior that must not change while making it faster.
 - A space root has one compiler per profile in the server, and at most
   one Node evaluator, shared by every native page in it. Opening another
   page, scenario, size or lens in the same space never starts another compiler.
+  Today definition indexing can start a second, short-lived evaluator; see
+  [Status](#status).
 - Code shared by a project's native pages is compiled once per project and
   adapter. Each compatible warm document retains its initialized shared runtime
   across pages; independently retained documents own separate mutable runtimes.
@@ -238,7 +240,9 @@ startup checks do not establish the full format or platform matrix.
 
 The shared-evaluator requirement is also incomplete: definition indexing can
 start a short-lived evaluator in addition to the compiler's persistent one
-([process model](server.md#processes-and-connections)). Literal-only listing
+([process model](server.md#processes-and-connections)). A Storybook the server
+runs is a further Node process, the project's own `storybook dev`, not an
+evaluator. Literal-only listing
 avoids that work; a React/HTML adapter alone does not guarantee every definition
 or project config can be listed without JavaScript.
 

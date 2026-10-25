@@ -72,8 +72,10 @@ IDs, labels, dimensions, input overrides and iterations
 ([artboards and iterations](../pages/iterations.md)); the renderer receives
 `context.artboard`. Artboard inputs apply after scenario inputs. Artboards are
 declared only inside a scenario; a scenario that declares none has one implicit
-artboard. Feedback declares five artboards in its default
-scenario. Docs show one viewport.
+artboard. The Acme demo's Alert component declares five artboards in its
+default scenario. A page selected in a docs lens shows one reading viewport, not its
+declared artboards; docs placed beside other artboards are an artboard, as
+[docs](../pages/docs-pages.md#in-a-multiple-artboard-canvas) specifies as target behavior.
 Ordinary single-view pages reuse one renderer across page, scenario and lens
 navigation. The required content-only renderer owns the retained preview sessions and Storybook
 channel; navigating it does not replace its iframe. Explicit artboard groups
@@ -156,7 +158,7 @@ restrict the tool to a particular comparison workflow.
   and selects a predictable neighbor; closing the last returns to an empty
   canvas.
 - Keep annotations local to each artboard. Selection changes preserve them;
-  replacing its page/scenario clears them, while lens and size changes follow
+  replacing its page, scenario or selected iteration clears them, while lens and size changes follow
   the existing comparison behavior. Undo targets the selected artboard.
 - Screenshots capture all artboards, including ones outside the current camera
   viewport, with their labels and annotations. Capture geometry is independent
@@ -226,9 +228,9 @@ those proposals do not reopen established support-API limits.
   canvas coordinates. Resizing can move following artboards to avoid overlap,
   but does not remount them or reset the camera. Fit all operates on bounds;
   Fit selected is unavailable when empty. Exact spacing is a UI design detail.
-- Suggested size policy: retain existing Fit behavior for one artboard;
-  on adding a second, resolve Fit into its current explicit CSS dimensions.
-  Multi-artboard sizes remain independent of canvas-window resizing. Returning
+- Size policy, implemented under [sizes](sizes.md#multiple-artboards): an
+  artboard resolves the size it takes, Fit and filled axes included, into
+  explicit CSS dimensions at that moment. Multi-artboard sizes remain independent of canvas-window resizing. Returning
   to one artboard does not implicitly change its dimensions. Native content
   retains its renderer's aspect ratio and coordinate mapping.
 

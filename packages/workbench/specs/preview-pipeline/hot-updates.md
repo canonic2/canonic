@@ -25,14 +25,16 @@ pipeline meets them.
   | `reload-all` | The compilers were replaced; documents from older generations reload |
 
 - The stream sends a heartbeat every 15 seconds, so a broken connection is
-  noticed and reopened. A reopened stream starts with the current state, so a
-  frame that missed a build catches up.
+  noticed and reopened. A reopened stream must start with the current state,
+  so a frame that missed a build catches up; this is not implemented yet
+  ([status](#status)).
 
 ### Frames that apply updates
 
 - Every open frame whose document runs a profile's runtime applies that
-  profile's hot updates as they arrive: the visible frame, the spare and
-  hidden retained frames. Push keeps retained frames current during normal
+  profile's hot updates as they arrive: the visible frame, the spare (the
+  content iframe preparing a replacement, [core](../core.md#canvas-and-artboard))
+  and hidden retained frames. Push keeps retained frames current during normal
   operation; return-time revision checks cover updates missed while retained.
 - A frame applies updates until its document runs the build hash the `built`
   event named. An update that Rspack aborts or fails, or a document left on an

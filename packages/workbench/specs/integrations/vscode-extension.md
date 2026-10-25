@@ -53,7 +53,9 @@ execution trust from origin checks, renderer isolation and filesystem access.
 
 Open Canvas in Browser and Copy Canvas URL act on the current space.
 
-The extension contributes no settings.
+The extension contributes one setting, `workbench.trace` (off by default), which
+passes `--trace` to each space's server on startup; see
+[request tracing](../system/server.md#request-tracing).
 
 **Open Canvas in Browser** and `node server/node/server.js <project>` serve the same
 canvas but differ in host. The browser command uses the extension's server, so
@@ -123,7 +125,7 @@ space switcher here changes the editor's host space.
   removed, or re-rooted in the file show up without a reload; a running
   server whose space left the file, or whose root changed, stops.
 - A space's id is the first 10 hex digits of the SHA-1 of its file's
-  resolved folder, with `#<key>` appended for a space under `spaces`. Its
+  resolved folder, or of `<folder>#<key>` for a space under `spaces`. Its
   name is the manifest `name`, else the folder name (single space) or a
   label from its key, and the folder name when the manifest does not parse.
 - A server for a space that isn't its file's whole config, or whose root
@@ -192,8 +194,9 @@ owns what is saved and the explicit-destination → saved-selection → first-pa
 precedence. The extension stores versioned logical selections per stable space
 in `workspaceState`, alongside the existing current-space choice. Browser local
 storage and the panel's in-memory `current` value are not durable editor state.
-Viewer preferences also use `workspaceState`; native IndexedDB is the standalone
-browser's persistence mechanism and is not needed by the embedded editor canvas.
+Viewer preferences are intended to use `workspaceState` too; native IndexedDB is
+the standalone browser's persistence mechanism and is not needed by the embedded
+editor canvas.
 
 Restore against the newly started server's address and current page model on
 panel reopening, window reload and editor restart. The webview lifecycle must
@@ -202,9 +205,11 @@ panels retain their live context; restarted panels remount content. Host message
 carry the complete normalized view and are checked against their owning space
 and panel generation. Storage writes do not delay page rendering.
 
-Current implementation saves the space choice but lacks complete-selection
-storage and editor-tab restoration wiring. First-page fallback and the new
-restoration acceptance remain implementation work; see
+Current implementation saves the space choice and opens the first page when a
+canvas has no explicit destination, but lacks complete-selection storage and
+editor-tab restoration wiring. Viewer preferences currently use browser
+`localStorage`, scoped to the served origin. The new restoration acceptance
+remains implementation work; see
 [current status](../canvas/persistence.md#current-status).
 
 ## Sidebar and problems
@@ -260,6 +265,8 @@ VS Code extension host
   │    ├─ workbench-server ── the public loopback port: project, workbench, preview and docs pages,
   │    │    │                 the page tree and routes; resident page index and watcher
   │    │    ├─ Node evaluator ── project JavaScript, on stdin/stdout, when needed (bundled runtime or Node)
+  │    │    ├─ definition-index evaluator ── short-lived, one JSON request over pipes, when indexing
+  │    │    │                               needs evaluation or custom selection (same runtime)
   │    │    └─ Storybook ── one the server runs, on a local socket, when a story is asked for
   │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS,
   │                                on a local socket the server forwards to
@@ -270,9 +277,11 @@ VS Code extension host
 The screenshot helper renders pages for [interactive capture](../review/capture.md) and
 [export](../review/export.md). The window helper streams native windows for the
 [Simulator and window lenses](../pages/implementations.md#native-window-stream); it is a separate process and
-Screen Recording permission path. The Node evaluator and screenshot helper
+Screen Recording permission path. Both evaluators and the screenshot helper
 share the bundled Electron runtime, unpacked once into the extension's global
-storage. Browser-only VS Code cannot spawn any of these local processes.
+storage; the evaluators run it with `ELECTRON_RUN_AS_NODE`, and fall back to
+the host process's own executable where no bundled runtime is available. See
+[processes and connections](../system/server.md#processes-and-connections). Browser-only VS Code cannot spawn any of these local processes.
 Concurrent capture/evaluator requests in the same extension host share one
 runtime preparation; a cached executable needs no archive read. First use of
 a changed runtime can still require extraction before project definitions
@@ -281,8 +290,10 @@ that need evaluation can be listed.
 ### Preview compiler and Node evaluator
 
 The server compiles previews itself; project JavaScript runs only in the
-Node evaluator, a separate process from the extension host and the server,
-killed with the server. Their lifecycle, timeouts,
+Node evaluator and the definition-index evaluator, separate processes from the
+extension host and the server. The Node evaluator is killed with the server;
+the definition-index evaluator exits after each request and is killed on
+failure or deadline. Their lifecycle, timeouts,
 and logging are specified in
 [TypeScript previews](../pages/previews.md#server-processes-lifecycle-and-trust).
 
@@ -305,8 +316,9 @@ or handoff prompts.
 ## Implementation gaps
 
 - **Restart restoration is incomplete.** Current-space storage and hidden-tab
-  retention exist; complete per-space selection and preference restoration,
-  restored editor tabs and first-page fallback follow the agreed
+  retention and first-page fallback exist; complete per-space selection and
+  preference restoration (preferences currently live in browser
+  `localStorage`) and restored editor tabs follow the agreed
   [persistence contract](../canvas/persistence.md#current-status).
 - **Copy Canvas URL in remote workspaces (unverified).** The command copies
   the server's `127.0.0.1` address without `asExternalUri`; in a remote
@@ -357,8 +369,9 @@ or handoff prompts.
   through, and closes previews, stops serving after `previews: false`, and
   never runs definitions when untrusted or disabled.
 - Manual, not automated: Node evaluator restart after it is killed, compiler
-  replacement on a `previews` change, the YAML watcher, **Refresh Pages** after adding a
-  definition (until definition watching is implemented and tested), activity-bar visibility without `workbench.yaml`, handoff
+  replacement on a `previews` change, the YAML watcher, the sidebar and canvas updating after
+  a definition is added (the server watcher's scope rules have unit tests in
+  `server/src/serve/resident.rs`; the editor rebuild has none), activity-bar visibility without `workbench.yaml`, handoff
   from **Open Canvas in Browser**, and in VS Code: adding, switching, and
   removing spaces, the window-focus reread, and extension.js wiring. The
   canvas and sidebar switchers also have browser fixture coverage; that does

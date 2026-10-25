@@ -18,6 +18,8 @@ reference parsing in `references.rs`, and ZIP assembly and partitioning in
 `archive.rs`. `build.rs` coordinates the optional portable build and source
 archive, preserving a portable failure as a warning. `request.rs` validates
 options and filters page scope; `selection.rs` filters reference variants;
+`sizes.rs` decides the sizes a page is captured at; `paths.rs` holds the pure
+path, URL, name and clock helpers;
 `plan.rs` plans the references, `capture.rs` captures them through up to
 four renderers, `output.rs` assembles PDFs and image/browser archives,
 `jobs.rs` owns job lifecycle and retention, and `pipeline.rs` runs one
@@ -184,7 +186,9 @@ filters. Browser-only output fails if no compiled previews or docs are available
   one 1440 × 900 reference. A page without `sizes` uses its space's sizes.
   Duplicate dimensions are removed. Screenshot records carry the size key
   as `size` and its label as `sizeLabel`, plus optional `artboard` and
-  `iteration` IDs; README headings read `Label · Laptop`.
+  `iteration` IDs. README headings read `<reference label> · <size label>`
+  (*Default · Laptop*), with the dimensions on the line below the image; a
+  declared artboard's heading is its reference label alone.
   See the [sizes contract](../canvas/sizes.md#design-system-export).
 - Design pages load as designed with actions off; the first scenario loads
   without a `scenario` parameter, and an iteration adds `iteration=<id>`. Current-view or explicit lens requests use the

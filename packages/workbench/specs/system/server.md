@@ -1,6 +1,7 @@
 # Workbench server
 
-The Workbench server is what the extension or Studio starts for a space: it
+The Workbench server is what the extension or the standalone command starts
+for a space: it
 answers the canvas, serves the [page tree](../glossary.md#what-a-space-holds) and
 serves pages through their [adapters](../adapters/README.md). This spec owns its
 process model, its routes and its protocol with the process that starts it.

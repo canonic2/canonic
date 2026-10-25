@@ -64,12 +64,15 @@ observations and lab/host evidence; neither is a second pipeline implementation 
 - Rspack is the development compiler, with hot updates for every native
   format, shared chunks, pushed build results and a warm document. Portable
   output uses an Rspack production build with the same project plugin form.
-- The compiler declares and builds every entry before serving its first
-  completed generation. A replacement start must preserve chunk stability,
+- Today the compiler declares and builds every entry before serving its first
+  completed generation. That eager start is current behavior, not a
+  requirement: [performance](../system/performance.md#first-open-and-edits)
+  requires the first page not to wait for other pages' builds, and the eager
+  start misses it. A replacement start must preserve chunk stability,
   freshness, errors and hot updates while meeting the first-page target.
 - The native page index lists independently of compilation. It combines
-  directory/file-stamp reuse, conservative literal parsing and compiler
-  evaluation of other definitions.
+  directory/file-stamp reuse, conservative literal parsing and the Node
+  definition evaluator for other definitions.
 - Warm first-page rendering and complete listing must meet the agreed
   [performance targets](../system/performance.md#measured-interactions) at any page
   count. Proposed optimizations are evaluated against correctness and the
@@ -88,7 +91,7 @@ observations and lab/host evidence; neither is a second pipeline implementation 
 | Native page listing | Implemented in `server/` ([catalog.rs](../../server/src/catalog.rs) reads its answer); [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](../../research/page-listing.md#page-listing) do not establish canvas-paint acceptance |
 | Rust engineering gates | Implemented; [code quality](../system/code-quality.md) owns tools, policy, test conventions and CI enforcement |
 | Warm Docs pool | Implemented: immediate retained resume, background revision checks, parallel metadata and bounded same-lens idle reuse. [Integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23) separates focused tests, shipping measurements and installed Acme confirmation |
-| Rspack compilation and pre-warming | Implemented in `workbench-server` with Rspack's Rust crates, one compiler per space and profile, pre-warming every listed preview and docs lens once the page tree configures them; project JavaScript runs in the Node evaluator over stdin and stdout ([server](../system/server.md#previews), [compiler](compiler.md)). Scoped Docs and startup measurements exist; the complete-list/first-page target campaign remains open |
+| Rspack compilation and pre-warming | Implemented in `workbench-server` with Rspack's Rust crates, one compiler per space and profile, pre-warming every listed preview and docs lens once the page tree configures them (at startup when the host passes `--eager-previews`, [warm runtime](warm-runtime.md#status)); project JavaScript runs in the Node evaluator over stdin and stdout ([server](../system/server.md#previews), [compiler](compiler.md)). Scoped Docs and startup measurements exist; the complete-list/first-page target campaign remains open |
 
 The implemented page index follows this [design direction](#decisions).
 It lists pages independently of the compilers and the Node evaluator; it

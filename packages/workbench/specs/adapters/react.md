@@ -52,4 +52,4 @@ Implemented natively in `workbench-server`'s compiler with Rspack's Rust
 crates ([options.rs](../../server/src/compiler/options.rs)), covered by
 [preview.test.js](../../server/node/preview.test.js) with project React
 versions. The retained-session browser smoke on a React preview passed on a
-debug build ([phase 4](../system/server.md#previews)).
+debug build ([server verification](../system/server.md#verification)).

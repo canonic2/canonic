@@ -87,9 +87,10 @@ that implementation gap against the one-evaluator direction.
 
 - **One Node evaluator per space,** not one per adapter. The server starts
   it on first need, with the space's trust and configuration; it loads only
-  what the adapters in use need, restarts when `workbench.config.ts`
-  changes, and exits with the server. A space that needs no JavaScript on
-  the server never starts it.
+  what the adapters in use need and exits with the server. A change to
+  `workbench.config.ts` or a file it imports stops it, and the next need,
+  such as the rebuild that change triggers, starts a new one. A space that
+  needs no JavaScript on the server never starts it.
 - **An adapter declares which parts are Rust and which are Node,** so adding
   an adapter does not change the server's core.
 - A child process of any kind, the Node evaluator or Storybook's dev server,
@@ -120,6 +121,11 @@ Decided by the owner on 2026-10-16, after the
   loaders. Project plugin capabilities migrate to Rust
   ([decision](../preview-pipeline/plugins.md#plugin-migration-decision)).
   A project that needs none of the JavaScript steps starts no Node process.
+  Today two more Node processes exist beside the evaluator: definition
+  indexing starts its own short-lived evaluator when a listing needs
+  JavaScript, and a Storybook the server runs is the project's own dev server
+  ([how pages are served](#how-pages-are-served)). The editor host and the
+  standalone command are Node processes too, outside the server.
 - **Each adapter is a separate unit** that owns its build settings,
   project-code step, browser mount and documentation, instead of having its
   format handling spread through the pipeline.

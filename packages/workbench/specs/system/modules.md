@@ -30,11 +30,12 @@ the sessions it starts. Capture owns rendering resources. Browser controllers
 request operations through host contracts; elements render and emit events.
 Clients must not acquire server internals through incidental filesystem paths.
 
-The Rust server package is the destination for page indexing, HTTP serving and
-Rspack compilation. Its shipping Rust capability is the page index. HTTP and
-compilation currently run under `server/node/`; moving source files does not
-establish Rust serving/compiler acceptance. The [preview pipeline](../preview-pipeline/README.md)
-owns those integration and performance requirements.
+The Rust server package owns page indexing, HTTP serving and Rspack
+compilation: `workbench-server serve` is a space's whole HTTP server and
+compiles previews with Rspack's Rust crates ([server](server.md)).
+`server/node/` holds its host, the standalone command and the Node evaluator
+for project code. The [preview pipeline](../preview-pipeline/README.md)
+owns the integration and performance requirements.
 
 ## Dependencies and capability layout
 
@@ -261,6 +262,35 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | `docs` | A docs lens's reading page | `modules/docs/page/`, `modules/docs/host/` |
 | `viewer` | The portable viewer's interface | `ui/viewer/` |
 
+Other existing files move as follows:
+
+- **Sizes.** Size rules and the selected size join `canvas` (the artboard
+  widths it lays out), with `bootstrap/sizes.js`'s wiring moving to the canvas
+  document's entry and bindings; saving sizes to `workbench.yaml` is a
+  `project` action. `size-switcher` and the `size-dialog` and `sizes-editor`
+  dialogs it opens are `top-bar` elements; each moves to `components/` if a
+  second view uses it. `bootstrap/register-sizes.js` becomes
+  element definitions in the entries that use them.
+- **Spaces.** The space list belongs to `project`. `space-switcher` and
+  `space-mark` stay shared components, used by the page list in the sidebar
+  and by the top bar; `bootstrap/register-space.js` becomes element definitions
+  in those entries.
+- **Docs on the canvas.** `bootstrap/docs.js` and `modules/docs/canvas/` join
+  the `docs` capability, with the canvas wiring in the `canvas` view's bindings.
+- **Icons.** `legacy/icons.js` becomes a shared module under `components/`
+  used by every view that draws icons; `legacy/canonic.svg` moves to `theme/`.
+- **Styles.** Legacy CSS moves with the view or document that owns it:
+  `page-list.css` and `sidebar.css` to `page-list` and the sidebar document,
+  `content.css` and `annotations.css` to the renderer document,
+  `capture.css` to the capture document, `preview-controls.css` beside the
+  preview controls' elements, and `workbench.css` to the canvas document, its
+  theme tokens to `theme/`. Path consumers of a moved stylesheet follow it.
+- **Injected script.** `legacy/preview-bridge.js` is not part of any Workbench
+  document: it stays a standalone script served at
+  `/_workbench/preview-bridge.js` and injected into proxied pages.
+- **Project preview adapters.** `ui/preview/` stays outside `ui/src/`: it is
+  runtime for project content, loaded by compiled previews, not Workbench UI.
+
 #### Port order
 
 The port starts after Lattice finishes its guides and collection lab, and after
@@ -269,7 +299,10 @@ the [Lattice delivery slice](#lattice-delivery-slice). Then:
 1. **Skeleton.** Create `app/` from `bootstrap/`, move the HTML documents
    beside their entries (`legacy/preview-host.js` becomes the preview-host
    entry, `legacy/capture-page.js` the capture entry) and move existing
-   modules and components into place.
+   modules and components into place. `bootstrap/canvas.js`, which connects
+   capabilities to the existing shell, becomes `views/canvas/bindings.js`, so
+   step 2 has a canvas binding to extend; the `canvas` step adds the view's
+   element.
    No behavior changes; imports, serving, path consumers, webview resources,
    packaging and design pages follow the moved paths. Before the first move,
    the package guide and the Workbench UI agent rule name these locations, and
@@ -344,7 +377,9 @@ ui/src/
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
     review/                 Capture, reference projection, review workflow and browser delivery
     docs/                   Reading layout and embedded examples
+    trace/                  Browser timing traces
   theme/                    Standalone tokens and host theme assets
+  vendor/                   Pinned third-party browser assets
 ```
 
 Canvas, navigation, preview-session and review `index.js` files expose their application contracts. Canvas also has
@@ -416,8 +451,9 @@ navigation, canvas or other behavior changes, and no store is used yet.
 - **Imports.** Each document in scope imports Lattice's root entry point (the
   store core: `createStore`, `shallow`) and its `elements` subpath by explicit
   URL, without calling them. Explicit URLs need no import map, so documents
-  without one need no inline script and no CSP change for it. No export is
-  added to Lattice for the slice.
+  without one need no inline script and no CSP change for it; the sidebar
+  webview still needs a resource root for Lattice's files, which its CSP's
+  webview source then admits. No export is added to Lattice for the slice.
 - **Documents.** The three documents navigation's migration needs: the canvas
   document (`ui/legacy/index.html` through `bootstrap/workbench.js`) and the
   renderer document (`content.html` through `bootstrap/renderer.js`), served by
@@ -448,6 +484,8 @@ starts only after this slice is in place.
 
 The native package follows Cargo's layout, with role-specific submodules and
 one public CLI-oriented `run` entry point. Capabilities live directly under `server/src/`.
+The table below covers the page index's roles only; serving, the compiler and
+the other server capabilities are described in [server](server.md).
 
 | Role | Owner and dependency boundary |
 | --- | --- |
@@ -466,8 +504,10 @@ record types rather than importing each other's implementation. Generic shared
 operations belong in named crate-level helpers; capability-specific helpers
 remain private to their owner. No catch-all utilities module is required.
 
-The evaluator adapter owns and reaps its direct child on normal completion and
-early failures. The TypeScript host owns the enclosing process group, timeout
-and descendant cleanup. Record serialization and the CLI protocol remain
+The evaluator adapter owns its direct child and its deadline: it reaps the child
+on normal completion and kills and reaps it on early failures, the deadline
+included. The TypeScript host starts the server in its own process group and
+kills that group when the server exits, which cleans up the evaluator's
+descendants. Record serialization and the CLI protocol remain
 independent of internal module paths. See [page-index acceptance](../preview-pipeline/page-index.md#acceptance-and-evidence)
 and [code quality](code-quality.md) for the behavioral and engineering checks.

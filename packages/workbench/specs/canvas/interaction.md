@@ -28,8 +28,8 @@ layout dimensions or capture resolution.
 
 Docs shown alone scroll as a document rather than panning an artboard; zoom
 keeps the Docs layout width. Explicitly composed artboards share one outer
-camera. [Artboard geometry](multiple-artboards.md) owns placement and content
-fitting; this spec does not introduce a second camera inside a renderer.
+camera. [Multiple artboards](multiple-artboards.md#implemented-support-system)
+owns placement and content fitting; this spec does not introduce a second camera inside a renderer.
 
 ## Focus and command ownership
 
@@ -90,8 +90,10 @@ keyboard-layout, composition and assistive-technology matrix remains unverified.
 Camera restoration is excluded from [durable persistence](persistence.md).
 
 The legacy chrome adapter supplies power-of-two zoom steps to the shipping
-shell. The standalone canvas element's own key handler instead multiplies by
-1.25/0.8. Keep that component-level discrepancy separate from the required shell
-behavior; [element tests](../../ui/src/components/canvas/element.test.js) and
+shell: its document-level capture handler takes the zoom chords before the
+canvas element sees them. The canvas element's own key handler, which runs only
+where the element is used without that adapter, instead multiplies by
+1.25/0.8. That component-level discrepancy is a gap against the power-of-two
+steps above; [element tests](../../ui/src/components/canvas/element.test.js) and
 [geometry](../../ui/src/modules/canvas/geometry.js) are the owning evidence
 for the composed canvas, not only the singleton zoom tests.

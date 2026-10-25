@@ -22,8 +22,8 @@ first page meets its render target.
 
 ### Discovery and compatibility
 
-- Listing returns the same `{ previews, docs, errors }` answer as the
-  compiler's index. Preview and docs IDs share one namespace. The first
+- Listing returns the same `{ previews, docs, errors }` answer as the Node
+  definition evaluator's index ([compiler.cjs](../../server/node/preview/compiler.cjs)). Preview and docs IDs share one namespace. The first
   definition in discovery order wins; later duplicates produce a
   file-prefixed `Duplicate preview id` problem.
 - Default patterns are `**/*.workbench.ts` and `**/*.workbench.tsx`.
@@ -33,7 +33,7 @@ first page meets its render target.
   folder, the deepest one with a matching rule decides, and a negation cannot
   bring back a path inside an ignored folder, as in Git. Global and
   `.git/info/exclude` files do not apply, so the list does not depend on the
-  machine. Both the native index and the compiler apply the rules, and the
+  machine. Both the native index and the definition evaluator apply the rules, and the
   saved index records the `.gitignore` files it applied, so an edit to one
   invalidates the saved answer. With natively matched
   patterns, the walk starts at each pattern's literal leading folders
@@ -43,10 +43,11 @@ first page meets its render target.
   JavaScript `localeCompare`. It includes mixed case, punctuation, digits and
   non-ASCII names; sorting complete paths by Rust byte order is insufficient.
 - Plain path/globstar patterns use native matching. Patterns outside that
-  subset use the compiler's picomatch selection through the evaluator, so
+  subset use the definition evaluator's picomatch selection, so
   braces, negation and other supported patterns retain their meaning.
 - Loading or validating one definition can fail without hiding valid pages.
-  Error messages and their order follow the compiler's listing contract.
+  Error messages and their order follow the definition evaluator's listing
+  contract.
 
 ### Parsing and evaluation
 
@@ -58,10 +59,10 @@ first page meets its render target.
   statements, computed properties, spreads, getters, functions and values
   whose JavaScript semantics cannot be preserved require evaluation.
 - Computed definitions and all `defineDocs` definitions are evaluated in one
-  batch with the compiler's loader, validation and projection. Project
+  batch with the definition evaluator's loader, validation and projection. Project
   configuration and the files read by evaluation participate in invalidation.
-- Rust validates and projects parsed literals; the compiler owns evaluated
-  definitions. Behavioral parity tests hold the two implementations to the
+- Rust validates and projects parsed literals; the definition evaluator owns
+  evaluated definitions. Behavioral parity tests hold the two implementations to the
   same answer. A parse failure requests evaluation rather than becoming a
   Rust-only syntax error.
 - Untrusted workspaces list no definitions. The server checks trust before
@@ -78,7 +79,8 @@ first page meets its render target.
   read again, so additions, removals and renames appear on the next listing.
   With no valid saved index, discovery walks the project. A full-walk override
   is available for diagnostics.
-- Binary, evaluator, compiler, authoring API and index options form the cache
+- The binary, the definition evaluator's scripts (`evaluate-definitions.cjs`
+  and `compiler.cjs`), the authoring API and the index options form the cache
   identity. A changed identity or saved format rebuilds the index. A failed
   evaluation retries because its dependency graph may be incomplete.
 - The server keeps the last ordered answer with its generation; the index
@@ -140,7 +142,7 @@ acceptance.
 
 | ID | Acceptance criterion | Existing evidence |
 | --- | --- | --- |
-| PI-01 | Native and compiler answers agree for literal/computed previews, docs, invalid definitions, duplicate IDs, custom globs and discovery order | Parity tests in [preview.test.js](../../server/node/preview.test.js) against `workbench-server list`, and [answer tests](../../server/src/catalog/answer.rs) |
+| PI-01 | Native and definition-evaluator answers agree for literal/computed previews, docs, invalid definitions, duplicate IDs, custom globs and discovery order | Parity tests in [preview.test.js](../../server/node/preview.test.js) against `workbench-server list`, and [answer tests](../../server/src/catalog/answer.rs) |
 | PI-02 | Literal listing requires no JavaScript executable; executable definitions use evaluation | [Server integration tests](../../server/node/server.test.js); [literal unit and property tests](../../server/src/literal.rs) |
 | PI-03 | Refresh observes additions, removals, renames, retitles and changed imported list fields | [Native CLI integration](../../server/tests/integration/main.rs) and [server.test.js](../../server/node/server.test.js)'s added-definition test |
 | PI-04 | Invalid saves rebuild, only matching generations reuse the complete answer, and failed saves preserve successful listing | [Saved-index unit test](../../server/src/saved.rs), native CLI generation/handoff/save-failure tests |
@@ -152,14 +154,10 @@ acceptance.
 ## Remaining work
 
 The implemented design uses directory-stamp reuse, literal parsing and the
-compiler evaluator. [Listing research](../../research/page-listing.md) records measured
+definition evaluator, a resident index and a definition watcher. [Listing research](../../research/page-listing.md) records measured
 results and target gaps; [comparison evidence](../../research/instant-first-page.md#stage-1-2026-10-15)
 supports the architecture without defining the shipping interface.
 
-- The [server](../system/server.md#the-resident-index-and-watcher) keeps the index
-  resident with a watcher and reports changed listings to the extension,
-  which refreshes the sidebar and canvas for the current space. Component-only
-  edits stay on the compiler's update path.
 - Studio has no native-library integration contract. The presence of a Rust
   library does not establish an embeddable indexing API.
 - Metadata stamps do not establish content identity when both modification

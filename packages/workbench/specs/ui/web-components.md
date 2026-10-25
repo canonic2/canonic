@@ -3,8 +3,10 @@
 ## Purpose and status
 
 Workbench's own browser interface uses Web Components as its target component
-architecture. Components live under `packages/workbench/ui/src/components/`, or
-under a view's `components/` when only that view uses them, and work
+architecture. Components ship under `packages/workbench/ui/src/components/<name>/`;
+the agreed [target layout](../system/modules.md#browser-source-ownership), not
+yet ported, also places elements only one view uses under that view's
+`components/`. They work
 in the VS Code sidebar, the embedded canvas, and the standalone browser canvas.
 This contract concerns the tool's interface, not the framework used by pages it
 previews. It does not change the preview adapters or require projects to adopt
@@ -29,10 +31,12 @@ application backend or project compiler to initialize. Generic host asset delive
 is permitted. Artboards must follow the [content-only rendering flow](../system/rendering-flow.md),
 not initialize another copy of the application.
 
-The [module layout contract](../system/modules.md#browser-source-ownership) keeps
+The agreed [target layout](../system/modules.md#browser-source-ownership) keeps
 shared components under `ui/src/components/`, elements used by one area of the
 interface under its `ui/src/views/<view>/components/`, and capability state and
-operations under `ui/src/modules/<capability>/`. Components receive inputs and emit events across
+operations under `ui/src/modules/<capability>/`. The port to that layout has not
+started: every shipping element is in `ui/src/components/<name>/`, and no
+`ui/src/views/` folder exists. Components receive inputs and emit events across
 that boundary; they do not own capability I/O or application state.
 
 - Use autonomous custom elements extending `HTMLElement`, with `wb-` tag names
@@ -40,9 +44,10 @@ that boundary; they do not own capability I/O or application state.
   Author browser-native JavaScript and CSS. Hosts serve/copy these modules unchanged;
   no TypeScript, transpilation, bundling or generated implementation is required.
 - Give each component a named folder, with its element implementation, owned
-  styles, and meaningful behavioral tests: `ui/src/views/<view>/components/<name>/`
-  when one view uses it, `ui/src/components/<name>/` once a second view or
-  document does. Put component helpers beside their owner; extract shared
+  styles, and meaningful behavioral tests: `ui/src/components/<name>/` today;
+  in the target layout, `ui/src/views/<view>/components/<name>/` when one view
+  uses it and `ui/src/components/<name>/` once a second view or document does.
+  Put component helpers beside their owner; extract shared
   behavior only when it has consumers.
 - Use open Shadow DOM for owned markup and styles. Slots expose intentionally
   supplied content; documented `::part` names expose only deliberate styling
@@ -72,8 +77,10 @@ Inputs may arrive before connection or custom-element upgrade. Preserve those
 values, handle later updates, and do not mutate caller-owned data. Application
 selection and pending/error state belong to the controller; focus, hover, and
 temporary interaction state belong to the component. Avoid mirrored application
-state that can drift away from its owner. Components do not subscribe to stores;
-a capability's binding supplies their inputs, following Lattice's state management.
+state that can drift away from its owner. Components do not subscribe to stores.
+In the [target layout](../system/modules.md#browser-source-ownership), a
+capability's binding supplies their inputs, following Lattice's state management;
+until that port, their controller sets them.
 
 Emit named, typed custom events from the host for user intent. Events intended
 for ancestor controllers bubble and are composed; document their detail payload
@@ -121,16 +128,17 @@ or actual interaction. Do not maintain a parallel mock component.
 
 ## Design pages
 
-Every element under `ui/src/components/<name>/` or
-`ui/src/views/<view>/components/<name>/` has a docs page in this
+Every element under `ui/src/components/<name>/`, and under
+`ui/src/views/<view>/components/<name>/` once the
+[target layout](../system/modules.md#browser-source-ownership) is ported, has a docs page in this
 repository's **Workbench** space, under **Components**. The page ships in the
 same change as the element, and changes with it: a new or changed property,
 attribute, event, part, keyboard behavior, or visible state updates the page in
 that change. A component is not done without it.
 
 Pages are grouped by the area of the interface the component appears in, the
-title's middle segment: **Sidebar**, **Top bar**, and as components arrive
-there, **Canvas**, **Toolbar**, and **View controls**, the regions
+title's middle segment: **Sidebar**, **Top bar**, **Canvas**, and as components
+arrive there, **Toolbar** and **View controls**, the regions
 [core](../core.md) names. A component used in more than one area goes where it
 mainly lives; its page says where else it appears.
 
@@ -186,8 +194,9 @@ element, not in the page.
   logic is tested in Node beside each element.
 - Each element requires its [design page](#design-pages), a `defineDocs`
   definition in [design/](../../design/size-switcher.workbench.ts);
-  [design-pages.test.js](../../ui/src/components/design-pages.test.js) fails a
-  shared element folder without the three files, the `components/<name>` ID, or a
+  [design-pages.test.js](../../ui/src/components/design-pages.test.js) fails an
+  element folder under `ui/src/components/` (it reads no other folder) without
+  the three files, the `components/<name>` ID, or a
   Public API section. It checks the page exists, not that it is current: a
   changed API without an updated page is a review finding.
 - [Space switcher](../../ui/src/components/space-switcher/element.js) and

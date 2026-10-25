@@ -3,14 +3,15 @@
 This spec covers the camera download and the screenshot-backed handoff from
 the current canvas, and the bundled Electron runtime that renders them. The
 [design-system export](export.md) uses the same capture service on its own
-schedule. [TypeScript previews](../pages/previews.md) run their compiler and server
-from the same runtime. See [annotations.js](../../ui/legacy/annotations.js),
+schedule. The server's Node evaluators, which run project JavaScript for
+[TypeScript previews](../pages/previews.md) and the page index, use the same
+runtime; previews themselves compile in `workbench-server`. See [annotations.js](../../ui/legacy/annotations.js),
 [dom-mirror.js](../../ui/legacy/dom-mirror.js),
 [capture-sync.js](../../ui/legacy/capture-sync.js),
 [capture-page.js](../../ui/legacy/capture-page.js),
 [electron-capture.js](../../capture/electron-capture.js),
 [electron-runtime.js](../../capture/electron-runtime.js),
-[capture-helper/main.cjs](../../capture/app/main.cjs), and the page scripts
+[capture/app/main.cjs](../../capture/app/main.cjs), and the page scripts
 in [capture-scripts.js](../../capture/capture-scripts.js). The user-facing description is
 [Annotations and handoff](../../docs/annotations-and-handoff.md#screenshots).
 
@@ -57,9 +58,11 @@ web-page capture, not an operating-system screenshot of VS Code.
   preparation can retry and a removed cache is checked again. Different storage
   roots remain independent; separate host processes still publish atomically.
 - The runtime is one shared install. The screenshot helper runs it as an
-  Electron app. The [TypeScript preview](../pages/previews.md) worker runs the same
-  executable as Node (`ELECTRON_RUN_AS_NODE`), so previews compile without a
-  separate Node installation. The capture helper's environment explicitly
+  Electron app. The server's Node evaluator and definition-index evaluator run
+  the same executable as Node (`ELECTRON_RUN_AS_NODE`), so project JavaScript
+  runs without a separate Node installation; previews compile in
+  `workbench-server` with Rspack's Rust crates and need no Node runtime of
+  their own. The capture helper's environment explicitly
   removes `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS`.
 - The runtime is used only when its `runtime.json` target matches the host,
   the archive is present, the host is not macOS earlier than 13 (Darwin 22),
@@ -157,10 +160,10 @@ local routes accept only the workbench origin. Capture dimensions match the
 preview's CSS pixels, including on Retina displays. The UI requests JPEG at
 quality 90. API callers may request PNG; without a format, PNG is the
 endpoint default. JPEG is lossy and has no transparency. Filenames follow the
-page's file, scenario or story, size key and lens, and repeated handoffs of one view get
-numbered suffixes.
+page's file, scenario or story, selected iteration, lens and size key, and
+repeated handoffs of one view get numbered suffixes.
 
-A handoff prompt names the page, scenario, resolved size and dimensions, saved screenshot, each
+A handoff prompt names the page, scenario, selected iteration, resolved size and dimensions, saved screenshot, each
 annotation with its position and the element under it, the lens's
 implementation and URL, and any code pointers or TypeScript preview source.
 The element under an annotation comes from the visible document for local
@@ -178,7 +181,9 @@ See [handoff.rs](../../server/src/handoff.rs).
   `object`, or `embed`, or a canvas or video whose pixels are origin-tainted
   (no CORS), must still be captured. Each such element keeps
   its layout box and renders blank; the rest of the page is captured as
-  usual, and the export reference or handoff is produced.
+  usual, and the export reference or handoff is produced. This is not yet
+  implemented: such a capture currently fails (see
+  [known capture limits](#known-capture-limits)).
 - The mirror cannot read closed shadow roots or browser-owned UI, such as
   native select menus. Linked stylesheets load from their URLs; runtime CSSOM
   edits to those sheets are not copied. The bridge transfers document state,
@@ -223,9 +228,9 @@ cases, and embedded documents or tainted pixels.
 - **Embedded documents and tainted pixels fail the capture.** The mirror
   throws `Live capture cannot yet mirror nested frames or embedded documents`
   for an `iframe`, `object`, or `embed`, and fails on an origin-tainted canvas
-  or video ([dom-mirror.js](../../ui/legacy/dom-mirror.js)). This is the
-  documented current refusal, not an implemented partial capture with blank
-  regions. Partial capture would need its own explicit output/failure contract.
+  or video ([dom-mirror.js](../../ui/legacy/dom-mirror.js)). This is a gap
+  against the [failure behavior](#failure-behavior) requirement that such
+  elements render blank and the rest of the page is captured.
 
 ## Verification points
 

@@ -175,7 +175,15 @@ download. Highlighting assets retain their license/manifest and integrity tests;
 icons remain included in the extension. New third-party browser dependencies
 need a concrete capability/size/lifecycle rationale and local distribution
 ownership. This policy does not claim that the native compiler, evaluator or
-development toolchain has only those two dependencies.
+development toolchain has only those dependencies.
+
+Lattice (`@canonic2/lattice`) is the agreed dependency for application state
+([browser source ownership](modules.md#browser-source-ownership)). Its
+rationale: it is a local, zero-dependency package of native ES modules that
+hosts serve and package unchanged, with no build step, and it supplies the
+store, capability and element contracts the port uses. Its delivery follows
+the [Lattice delivery slice](modules.md#lattice-delivery-slice); it is not
+yet shipped.
 
 Keep project framework packages separate from Workbench UI dependencies:
 adapters resolve the project's React/Vue/Astro packages under their contracts.
