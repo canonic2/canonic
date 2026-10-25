@@ -11,9 +11,10 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Running, 2026-10-25: the owner accepts the duplicate-reconciliation guard as
-an application pattern and authorizes bounded end-jump and native-mount
-diagnostics. Large-list readiness stays open. W1 profiling, targeted comparison
+Reported, 2026-10-25: the owner accepts the duplicate-reconciliation guard as
+an application pattern. Bounded end-jump and native-mount diagnostics are
+complete with measurement limitations; large-list readiness stays open.
+W1 profiling, targeted comparison
 and confirmation are complete. The owner agreed the original plan
 with the four requested
 amendments on 2026-10-25, before the first run. Dated execution changes are
@@ -496,6 +497,41 @@ variants retain the existing focus, anchoring, selection, incarnation and
 teardown checks. N1 receives only its explicitly scoped DOM equivalence checks.
 No core redesign, windowing API, variable heights or larger item count is in scope.
 
+### Bounded smoke repairs (2026-10-25)
+
+The first six smoke cells have matching mount DOM snapshots and pass their
+model/interaction checks, but ownership comparison uses an uncollected
+navigation document and precedes automation initialization. Classify those
+six teardown assertions as runner defects. Collect before the ownership
+baseline and prime actionability without mounting row components. The next
+six smoke cells return DOM/listener counts to that baseline.
+
+That second smoke exposes another runner defect: delayed automation probe
+click entries are mistaken for the mount click in two cells. Retain all raw
+entries and correlate both API and trace Event Timing to the explicit mount
+handler mark, rather than taking the first click. Only the event containing
+the target handler is a mount sample. Repeat the six cells before diagnostics;
+no candidate, target or correctness requirement changes.
+
+### Bounded findings and native stacks (2026-10-25, before stack capture)
+
+All 18 diagnostic pages pass their listed checks and all nine mount snapshots
+are equivalent. At this small sample size, C1's severe 20-task end-jump page
+does not recur. There is one traced C1 long task and one untraced guard-only
+long task. The host is heavily loaded (one-minute load 27.79 at start on
+16 logical CPUs), so isolated stalls cannot be assigned to C1 by incidence.
+
+The identical callback timer is about twice as expensive with tracing:
+W1 medians 4.470/2.215 ms and C1 4.225/1.960 ms, traced/plain. Keep these
+paired callback measures distinct from the full frame-script budget; they
+demonstrate observer perturbation, not that the 4 ms target has been met.
+Native-wiring mount p95 is 128 ms, with about 102 ms median residual and
+85 ms median off CPU inside browser frame tasks. This identifies a shared
+presentation/environment limitation beyond state bindings. Use the already
+planned one-second native stack capture on one fresh page per mount variant,
+separate from latency evidence, to investigate the off-CPU wait. Do not start
+a large timing comparison or change the 4 ms/100 ms targets.
+
 ## Conditions
 
 ### Stage A (2026-10-25)
@@ -615,6 +651,39 @@ source revision was `a2257a5615d2`. One-minute load was 6.84 at start and
 9.29 at finish. A short local trace-summary pass overlapped the opening pages;
 those samples remain included. Heap and allocation sampling were not repeated.
 Source hashes were checked again after confirmation and still matched.
+
+### Bounded investigation (2026-10-25)
+
+The bounded run used the same Intel Xeon host, 16 logical CPUs, 64 GiB,
+macOS kernel 24.6.0, Node 24.12.0 and headless Chromium 156.0.8078.4.
+Its public source revision was `999e76929e03`. W1, C1, shipping collection,
+store, reporter, example row and reconciler hashes match the targeted
+comparison. New SHA-256 values are:
+
+| Input | SHA-256 |
+| --- | --- |
+| Guard-only G1 | `471ca1479aa6dee9afef01519566589a221d97c113ee729b5cb4f388fbed7c05` |
+| Native wiring N1 | `6a80260ded2e7eed41ea626fe6054af872be892ed5cbadb224abefb914172923` |
+| Bounded runner | `f27be8aad02e4d928e0f9995336d158a933f271715422d69a157c383042171d9` |
+| Trace summarizer | `d13d510e6cfd8e7566907be143b3c3e9b689ee21746803e773fa02adb5a67b6a` |
+| Native-stack runner | `e0d0efec9e8c1feff846dd8ef9487018fc0006815872e281b03f6609099cffae` |
+
+Eighteen diagnostic pages followed the repaired six-cell smoke. End jumps
+used three pages each for W1, G1 and C1, with 120 steps per traced/plain
+pass after ten warmups. Mount used three pages each for W1, C1 and N1.
+Automation was primed before the collected ownership baseline; no row was
+constructed before the mount click. All measured mount snapshots had the
+same hash, including host/shadow markup, styles, input values, positions,
+geometry and summary. CPU/heap sampling was disabled during latency runs.
+
+Host work was uncontrolled. One-minute load was 27.79 at diagnostic start
+and 18.43 at finish; this is unsuitable for assigning rare scheduling tails
+to a variant. Three separate one-second native-stack captures, one per mount
+variant, ran at load 9.38 to 8.55. Their latency values are not deciding
+samples. Native samples were aggregated over a second and lacked resolved
+Chromium internal callsites and event-window stack timing. They cannot name
+the blocking or descheduling cause of a particular frame. Power state was
+not recorded. No broad comparison followed these diagnostics.
 
 ## Results
 
@@ -1125,6 +1194,113 @@ not a presented-frame metric. Median major collections are four for W1 and
 three for C1. The GC-time direction repeats, with a smaller 14.1% reduction.
 Heap, allocation and the full set's end-jump regression are not reconfirmed.
 
+### Bounded end-jump investigation (2026-10-25)
+
+The original 1,200-frame-per-variant comparison remains intact. C1's pooled
+end-jump p95 was 11.849 ms against W1's 5.021 ms, 2.36 times as large;
+maximum script time was 177.466 versus 7.355 ms. C1 had long tasks on two
+of ten pages, W1 on none. Twenty of C1's 21 long tasks occurred on one page:
+that page's script median/p95/max was 11.660/103.987/177.466 ms. The other
+affected page had one 54 ms long task and a script median of 4.421 ms.
+The other nine C1 page medians ranged from 4.096 to 4.421 ms. This is a large,
+concentrated tail regression, not a uniform end-jump slowdown.
+
+The original trace correlation identifies an off-CPU stall class: 54.3–288.9 ms
+wall time versus 7.38–46.43 ms thread CPU in those long tasks, with only one
+overlapping 8.60 ms of main-thread GC. That does not establish C1 as their
+cause. A slow operation's elapsed trace span includes time its thread did
+not run; a long paint or script span is not all paint or script CPU work.
+
+Bounded repeat, three pages and 360 frames per traced cell, p50 / p95 /
+maximum (IQR), in milliseconds:
+
+| Variant | Traced frame script | Traced page-median script | Long tasks, traced / plain |
+| --- | ---: | ---: | ---: |
+| W1 | 4.810 / 5.446 / 6.326 (0.310) | 4.830 / 4.832 / 4.832 (0.046) | 0 / 0 |
+| Guard-only G1 | 4.777 / 5.538 / 5.964 (0.385) | 4.915 / 4.968 / 4.968 (0.381) | 0 / 1 |
+| Combined C1 | 4.482 / 5.345 / 9.666 (0.484) | 4.477 / 4.842 / 4.842 (0.518) | 1 / 0 |
+
+The severe C1 page does not recur in this small repeat. Its one traced long
+task lasts 101.816 ms, uses 8.765 ms thread CPU, and overlaps no main-thread
+MinorGC/MajorGC. It is mostly off CPU outside the measured script spans.
+G1's untraced pass has one 83 ms long task and a 74.630 ms callback maximum;
+that pass has no trace to attribute its CPU/GC. Neither is discarded.
+The three-page result does not bound the probability of rare stalls or prove
+them absent. G1 does not reproduce the original concentrated regression,
+and the data do not establish a guard-specific or C1-specific cause.
+
+The paired callback timer exposes substantial tracing perturbation:
+
+| Variant | Traced callback, ms | Plain callback, ms |
+| --- | ---: | ---: |
+| W1 | 4.470 / 5.055 / 5.930 (0.290) | 2.215 / 2.525 / 3.010 (0.125) |
+| G1 | 4.525 / 5.255 / 5.640 (0.370) | 2.300 / 3.175 / 74.630 (0.250) |
+| C1 | 4.225 / 5.060 / 9.360 (0.480) | 1.960 / 2.260 / 2.980 (0.090) |
+
+These use the same callback boundary within a page; tracing approximately
+doubles its median. The plain timer omits native-scroll and other callbacks,
+so it is not a substitute for the full frame-script metric and does not
+establish a 4 ms pass. Pass ordering was seeded and warmups preceded both.
+An accurate low-overhead frame-work method needs validation before another
+large readiness run. The recorded 4.079 ms remains a miss.
+
+The observed cause class is off-CPU delay plus material measurement overhead;
+the exact blocking/descheduling cause remains unidentified. The loaded shared
+host, limited native symbols and aggregate stack windows prevent a causal
+assignment to the candidate. General C1 recommendation therefore remains open.
+
+### Bounded native-mount comparison (2026-10-25)
+
+Three mount events per variant, p50 / p95 / maximum (IQR), in milliseconds.
+Small-sample p95 equals the maximum and is exploratory. These are API Event
+Timing phases correlated to the actual mount handler, not the automation
+probe or an animation-frame callback:
+
+| Variant | Input delay | Event processing | Residual to presentation | Total |
+| --- | ---: | ---: | ---: | ---: |
+| W1 | 1.31 / 1.40 / 1.40 (0.22) | 21.695 / 21.925 / 21.925 (0.460) | 97.36 / 128.90 / 128.90 (32.14) | 120 / 152 / 152 (32) |
+| C1 | 1.26 / 1.27 / 1.27 (0.25) | 20.800 / 21.965 / 21.965 (1.680) | 98.46 / 104.76 / 104.76 (14.59) | 120 / 128 / 128 (16) |
+| Native wiring N1 | 1.26 / 2.31 / 2.31 (1.06) | 8.765 / 8.850 / 8.850 (0.495) | 102.39 / 117.89 / 117.89 (24.97) | 112 / 128 / 128 (24) |
+
+State construction, subscription setup and pattern work add roughly 12–13 ms
+of median handler time over native wiring in this fixture. That difference
+clears both IQRs and 5%; it is not an allocation to an individual framework
+function. N1 shares the row component and its small element helpers, so
+their cost is not subtracted. Total presentation differences do not clear
+both IQRs. Native wiring itself exceeds the unchanged 100 ms target.
+
+Trace medians, with full per-page ranges in parentheses, in milliseconds:
+
+| Variant | Main-thread rendering CPU | Raster wall-time union | Frame-task wall / CPU | Off CPU inside frame tasks |
+| --- | ---: | ---: | ---: | ---: |
+| W1 | 6.56 (6.45–6.65) | 5.26 (4.99–5.70) | 81.84 / 4.72 | 77.33 (74.42–101.59) |
+| C1 | 6.42 (6.28–6.44) | 5.33 (5.25–5.37) | 84.52 / 4.33 | 80.34 (75.78–83.37) |
+| N1 | 6.67 (6.42–6.71) | 5.34 (5.27–5.44) | 89.99 / 4.72 | 85.34 (71.43–101.47) |
+
+Rendering here unions nested style/layout/pre-paint/paint/layer spans on the
+renderer main thread; raster is on other threads and may overlap. Main frame
+tasks do not contain every rendering event, so their CPU column is not the
+same scope as the rendering column. The handler-to-first-frame interval is
+about 5.0–5.3 ms across these pages and includes rendering work before that
+frame task; it is not pure queueing delay. After the last frame task,
+presentation takes another 1.69–14.61 ms. Trace presentation endpoints are
+unquantized; API durations above are quantized. These intervals are not
+summed into a fabricated rendering/scheduling split.
+
+The dominant residual persists with native wiring and equivalent DOM, while
+named rendering CPU and raster work stay similar. It belongs to shared
+DOM/component/browser/environment behavior rather than collection subscriptions
+alone. Time off CPU separates running work from non-running time but does not
+distinguish a browser wait from OS descheduling. Native sampling completes
+for all three variants but gives largely unresolved Chromium frames and
+aggregate message-loop waits across idle and active time. It cannot identify
+the critical frame's wait or justify a font, compositor or scheduler diagnosis.
+
+This establishes a concrete measurement limitation, not general list readiness.
+No core redesign or broad candidate recommendation follows. The next diagnostic
+needs low-overhead, coverage-equivalent script accounting and a time-correlated,
+symbolized scheduling capture on a controlled host. No large run was started.
+
 ## Correctness
 
 ### Smoke (2026-10-25)
@@ -1205,6 +1381,23 @@ listener counts to baseline and leave zero live subscriptions. No runtime
 source or public API was changed. No lint, typecheck, formatting check or
 package test suite was run; verification was the authorized lab coverage.
 
+### Bounded investigation (2026-10-25)
+
+The first six smoke cells fail only the invalid ownership-baseline comparison;
+the next six fix ownership but two fail stale mount-event matching. Both are
+runner defects, with raw records retained. The repaired six-cell smoke passes.
+All 18 diagnostic and three native-stack pages pass their scoped checks.
+All nine diagnostic mount snapshots match exactly across W1, C1 and N1.
+
+W1, G1 and C1 retain the existing model, no-op, offscreen selection, focused
+row pinning, keyboard destination, deterministic focus fallback, insertion/
+removal anchoring and key-incarnation checks. Teardown returns nodes and
+listeners to each page's collected automation-primed baseline. N1 is checked
+only for its declared initial DOM, inputs, geometry, summary and teardown;
+it is not a complete list candidate. Original samples and traces are unchanged.
+No core source, public API or windowing helper changed. Lint, typecheck,
+formatting and package tests were not run.
+
 ## Threats to validity
 
 - Fixed-height example rows at 1,000 and 10,000 items, one engine and one
@@ -1258,6 +1451,20 @@ browser surface, not a physical-display measurement.
 The fixture remains fixed-height at 1,000 and 10,000 items. Its interaction
 checks do not establish every page layout, asynchronous failure workflow or
 accessibility behavior. Background host work and power state are uncontrolled.
+
+### Bounded investigation limits (2026-10-25)
+
+Three pages per cell cannot establish rare-stall probability. The repeat was
+on a heavily loaded shared host and did not replay the original machine
+scheduler state. The traced/plain comparison demonstrates instrumentation
+overhead within identical callback boundaries; the plain callback omits some
+frame scripting and cannot establish readiness against the 4 ms metric.
+Native wiring shares the real row component, including lifecycle and element
+helpers. It isolates state/binding work without isolating every Lattice module
+or every browser/OS contributor. One-second native stack aggregates lack the
+symbol resolution and event-window timing needed to name a frame's wait.
+These limitations apply to interpretation, not to the unchanged targets or
+the requirement to preserve adverse samples.
 
 ## Decision and follow-ups
 
@@ -1348,3 +1555,24 @@ remains a miss against 4 ms; the 100 ms mount presentation target is unchanged.
 End-jump repeatability/cause and native mount comparison remain open. Delivery
 and navigation work are independent of these investigations; a large-list
 migration remains gated on its own readiness evidence.
+
+### Bounded investigation outcome (2026-10-25)
+
+The completed-reconciliation guard remains the owner's accepted application
+pattern. The combined C1 candidate is not generally recommended: the original
+large end-jump tail is concentrated, is not reproduced at that magnitude in
+the bounded repeat, and lacks a candidate-specific causal explanation. The
+observed stalls are mostly off CPU; GC does not explain most of them.
+
+The native comparison establishes that collection/store binding overhead is
+not the dominant mount presentation residual for this DOM. It adds measurable
+handler work, while a comparable residual and target miss remain in the native
+control. Tracing materially perturbs scrolling work, and the shared host does
+not permit reliable attribution of rare scheduling stalls. Stop at these
+measurement limitations rather than launch another large comparison or infer
+a core fix. Validate low-overhead measurement and obtain event-correlated
+scheduling evidence before general C1 adoption or a readiness claim.
+
+The 4 ms and 100 ms targets remain unchanged; 4.079 ms remains a miss. Large-list
+readiness and migration stay gated. Delivery and navigation remain independent
+and unblocked. No collection-core redesign or windowing helper is adopted.
