@@ -205,7 +205,7 @@ composition does not change the outer control layout.
 - [preview.test.js](../ui/legacy/preview.test.js) checks spare-iframe
   replacement, superseded loads, warm managed-preview swaps, width modes, and
   story switching.
-- [preview-host.test.js](../ui/legacy/preview-host.test.js) and
+- [preview-host.test.cjs](../ui/src/app/preview-host/preview-host.test.cjs) and
   [preview-runtime.test.cjs](../ui/preview/preview-runtime.test.cjs) check host reuse,
   disposal, hidden-iframe readiness, and lazy images.
 - [preview.test.js](../server/node/preview.test.js) checks preview serving at definition

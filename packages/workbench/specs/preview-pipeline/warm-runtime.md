@@ -9,7 +9,7 @@ The [Docs host](docs-host.md) owns the Docs pool built on that budget.
 
 **Status:** Implemented: pre-warming in the server's preview compiler once the
 page tree configures it, at startup when the host passes `--eager-previews`;
-the warm preview document ([preview-host.js](../../ui/legacy/preview-host.js),
+the warm preview document ([preview-host.js](../../ui/src/app/preview-host/preview-host.js),
 served as `/_workbench/preview-host.html`), which re-renders scenario, input
 and size changes without reloading modules and isolates successive previews;
 and the shared retained-session budget. Not implemented: foreground priority
@@ -144,7 +144,7 @@ previews, Docs and Storybook.
 ## Verification
 
 Isolation and warm-host lifecycle are covered by
-[preview-host tests](../../ui/legacy/preview-host.test.js) and
+[preview-host tests](../../ui/src/app/preview-host/preview-host.test.cjs) and
 [preview-runtime tests](../../ui/preview/preview-runtime.test.cjs). The
 [pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13) holds design
 comparisons. Long-session heap bounds and real-host confirmation remain

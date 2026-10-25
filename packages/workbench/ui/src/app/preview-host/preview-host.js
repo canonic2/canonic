@@ -1,7 +1,7 @@
 /* An adapter-neutral renderer. Its document, compatibility bridge and shared
    runtime stay alive while preview modules mount and dispose their content. */
 import '/_workbench/preview-runtime.js';
-import { begin as beginTrace, phase, address as tracedAddress } from '/_workbench/ui/src/modules/trace/browser.js';
+import { begin as beginTrace, phase, address as tracedAddress } from '../../modules/trace/browser.js';
 
 let generation = 0;
 let pending = Promise.resolve();

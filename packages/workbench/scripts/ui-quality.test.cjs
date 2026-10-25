@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 
+const SHARED_PREVIEW_RUNTIME = '/_workbench/preview-runtime.js';
+
 test('the UI ships native JavaScript with a complete browser-ready module graph', async () => {
   const root = path.resolve(__dirname, '..');
   const ui = path.join(root, 'ui');
@@ -49,6 +51,9 @@ test('the UI ships native JavaScript with a complete browser-ready module graph'
     });
     assert.deepEqual(messages, [], file + ' parses as native JavaScript');
     for (const specifier of imports) {
+      // The preview runtime is served at one address so the preview host and
+      // every compiled preview share a single instance of it.
+      if (specifier === SHARED_PREVIEW_RUNTIME) continue;
       assert.ok(
         specifier.startsWith('.'),
         file + ' has no runtime package/host dependency: ' + specifier,

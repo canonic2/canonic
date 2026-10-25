@@ -15,8 +15,13 @@ const COMPAT_TAG: &str = "<script src=\"/_workbench/preview-compat.js\"></script
 const LUCIDE_URL: &str = "/node_modules/lucide/dist/umd/lucide.min.js";
 /// Workbench documents that moved into the UI's `app/` folder, by the address
 /// they keep: callers such as the capture helper still ask for the old one.
-const APP_DOCUMENTS: &[(&str, &str)] =
-    &[("/_workbench/capture.html", "ui/src/app/capture/capture.html")];
+const APP_DOCUMENTS: &[(&str, &str)] = &[
+    ("/_workbench/capture.html", "ui/src/app/capture/capture.html"),
+    (
+        "/_workbench/preview-host.html",
+        "ui/src/app/preview-host/preview-host.html",
+    ),
+];
 
 /// Where the space's files and Workbench's own come from.
 pub(crate) struct Files {
@@ -426,6 +431,10 @@ mod tests {
                 "<html><head><title>Capture</title></head></html>",
             ),
             (
+                "workbench/ui/src/app/preview-host/preview-host.html",
+                "<html><head><title>Preview</title></head></html>",
+            ),
+            (
                 "acme/pages/landing.html",
                 "<!doctype html><html><head><title>Acme</title></head><body></body></html>",
             ),
@@ -477,6 +486,10 @@ mod tests {
             text(get("/_workbench/capture.html").unwrap()).await.1,
             "<html><head><title>Capture</title></head></html>",
             "a document moved into the app folder keeps its address"
+        );
+        assert_eq!(
+            text(get("/_workbench/preview-host.html").unwrap()).await.1,
+            "<html><head><title>Preview</title></head></html>"
         );
         assert_eq!(
             text(get("/_workbench/ui/src/shell.js").unwrap()).await.0,

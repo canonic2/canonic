@@ -58,7 +58,7 @@ function host(options = {}) {
     },
   };
   var source = fs.readFileSync(path.join(__dirname, "./preview-host.js"), 'utf8');
-  var trace = fs.readFileSync(path.join(__dirname, '../src/modules/trace/browser.js'), 'utf8').replace(/^export /gm, '');
+  var trace = fs.readFileSync(path.join(__dirname, '../../modules/trace/browser.js'), 'utf8').replace(/^export /gm, '');
   vm.runInNewContext(trace + '\nconst beginTrace = begin, tracedAddress = address;\n' + source.replace(/^import .*;$/gm, '').replace('import(content.module)', 'importModule(content.module)'), context);
   return { renderer: window.wbPreviewHost, window: window, mounted: mounted, cleaned: cleaned, fetched: fetched,
     styles: styles, document: document, imported: imported, listeners: function () { return rootListeners; }, cancelledTimers: cancelledTimers };

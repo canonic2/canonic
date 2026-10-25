@@ -218,6 +218,27 @@ Each step ships on its own and:
   plus the acceptance of every path consumer below that the step touches;
 - updates this page's tables and the affected specs' paths.
 
+Structural moves follow these conventions, each with a reason:
+
+- **Served addresses stay.** A moved document keeps its `/_workbench/` address;
+  the server's table of app documents maps it to the new file, so callers such
+  as the capture helper, renderers and compiled previews change nothing.
+- **Moves are reviewable as renames.** A file is first committed moved, with
+  only the edits its new path requires; formatting it to the UI's formatter
+  and fixing its lint findings follow in a separate commit.
+- **Tests that load a file by path keep CommonJS.** Tests of classic scripts,
+  and tests that load a module's source into a VM, move as `*.test.cjs` beside
+  their file. The package's Node test run (`pnpm test`) discovers them; the
+  browser UI runner collects only `*.test.js`.
+- **One shared preview runtime.** The preview host imports
+  `/_workbench/preview-runtime.js` by its served address, as compiled
+  previews do, so they share one instance; the UI module-graph check allows
+  that one absolute specifier.
+- **Shared legacy files stay until their capability moves.** Files a moved
+  document shares with other documents or reads by path, such as
+  `legacy/annotations.css`, `legacy/dom-mirror.js` and `legacy/describe.js`,
+  stay at their `/_workbench/` addresses until the step that ports them.
+
 ### Navigation store adoption
 
 - Workbench first adds Lattice as a dependency through the
@@ -253,6 +274,7 @@ and passes its acceptance:
 | Server preview injection (`serve/files.rs`) | `legacy/keys.js`, `legacy/actions.js`, `legacy/scenarios.js`, read as text and injected into design pages | A served design page answers shortcuts, Actions and `?scenario=` as before |
 | Preview proxy (`proxies.rs`) | `/_workbench/preview-bridge.js`, injected into proxied URL and Storybook pages | A proxied page reports readiness and takes live screenshots |
 | Portable export (`portable.rs`) | `ui/viewer/` files, `legacy/preview-controls.js` and `.css`, `modules/docs/page/` | An exported archive opens from a static server and its viewer, controls and docs work |
+| Compiled previews and renderers | `/_workbench/preview-host.html`, which the server maps to `app/preview-host/preview-host.html`, and `/_workbench/preview-runtime.js` | A TypeScript preview renders, re-renders a scenario in place and reloads after an edit |
 | Screenshot helper (`capture/app/main.cjs`) and its Node host (`server/node/src/modules/host/`) | `/_workbench/capture.html`, which the server maps to `app/capture/capture.html`; `legacy/describe.js` read as text and run in every captured page | An Electron capture and a handoff screenshot succeed |
 | Space styles (`space.rs`) | `legacy/annotations.css` read as text | Annotations render in the renderer document |
 | VS Code sidebar webview | The sidebar entry through webview resource URLs | The sidebar loads under its CSP in VS Code and in the packaged extension |
@@ -315,8 +337,8 @@ The navigation store's adoption starts only after this slice is in place.
 
 - The Lattice delivery slice: Workbench does not depend on, serve or package
   Lattice, and none of the evidence above exists.
-- Structural moves: only the capture document is in `app/`; the canvas,
-  sidebar, renderer, preview-host, docs and viewer documents ship in the
+- Structural moves: the capture and preview-host documents are in `app/`; the
+  canvas, sidebar, renderer, docs and viewer documents ship in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
 - Every Lattice adoption step.

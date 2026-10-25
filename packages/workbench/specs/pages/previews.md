@@ -385,7 +385,7 @@ timing.
 - [preview-astro.test.js](../../server/node/preview-astro.test.js): props, scenarios, slots,
   assets, Node-only frontmatter, live input renders, portable scenarios, missing
   dependencies and unsupported integrations, aliases and defines.
-- [legacy/preview-host.test.js](../../ui/legacy/preview-host.test.js): warm
+- [app/preview-host/preview-host.test.cjs](../../ui/src/app/preview-host/preview-host.test.cjs): warm
   host reuse, superseded loads, style and import-time body node retention,
   module isolation, recovery after failed mounts, listener and timer release,
   refusal of external pages. [legacy/preview.test.js](../../ui/legacy/preview.test.js)
