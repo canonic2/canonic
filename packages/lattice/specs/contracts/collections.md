@@ -12,9 +12,10 @@ not change.
 exported from `@canonic2/lattice/collection`. It was accepted on 2026-10-25 for
 implementation within the scope the [collection record](../../research/collection.md)
 measured: a lab prototype met every agreed threshold against the shared map and
-against one store per item, at 10, 100 and 1,000 items. Those figures are
-prototype evidence, not established product performance; the shipping
-implementation is measured again as the record's next stage.
+against one store per item, at 10, 100 and 1,000 items. The shipping
+implementation was then measured through its entry point, with a confirmation
+run, and met every threshold again (record, stage 5). That evidence covers
+headless Chromium on one host at up to 1,000 items.
 
 This contract settles the primitive. It does not establish that any
 application's large lists are ready: selection over much larger collections,
@@ -209,16 +210,17 @@ the same [delivery error](state-management.md#errors-during-delivery) policy.
 | Reorder | One keys array; membership and collection-wide subscriptions |
 | Collection-wide value | Its `read` may scan every item each time it is evaluated |
 
-**Accepted costs** (2026-10-25), from the prototype:
+**Accepted costs** (2026-10-25), as measured on the shipping implementation:
 
-- **Bulk allocation.** A bulk update allocated about 170 bytes per changed item,
+- **Bulk allocation.** A bulk update allocates about 170 bytes per changed item,
   nearly four times the shared map's single map copy: the new record, its undo
   entry and its records before and after for delivery. No threshold covers
-  allocation; it is accepted for this design and measured again, with its
-  garbage-collection effects, through the shipping implementation.
+  allocation; it is accepted for this design. In the traced runs, about 3.4 MB
+  of bulk updates cost at most one minor garbage collection of about 0.4 ms and
+  no major collection.
 - **Linear aggregates.** A collection-wide value stays linear in the
-  collection when evaluated: a done toggle at 1,000 items cost 45.9 µs in the
-  prototype against 4.9 µs for a label update, which evaluates none.
+  collection when evaluated: a done toggle at 1,000 items cost 45.9 µs against
+  5.0 µs for a label update, which evaluates none.
 
 Incremental aggregates and windowing are not part of this contract.
 
@@ -236,7 +238,7 @@ Incremental aggregates and windowing are not part of this contract.
 | Key reuse in a batch, during delivery and across commits | `collection.test.js`, key reuse |
 | Pure entry point in Node | `tests/import.test.js` |
 | Packed entry point and consumer types | `tests/package.test.js` with `tests/types/valid-collection.ts` and `invalid-collection-field.ts` |
-| Performance within the agreed thresholds on the shipping path | The [collection record](../../research/collection.md); prototype evidence until the shipping-path stage is reported |
+| Performance within the agreed thresholds on the shipping path | The [collection record](../../research/collection.md), stage 5, with its confirmation run |
 
 ## Decisions
 

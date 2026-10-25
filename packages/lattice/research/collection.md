@@ -20,7 +20,8 @@ size but cost more memory and teardown than the thresholds allow. The state
 shape for collections stays open until the owner decides. Stage 4 evaluated
 a keyed collection prototype against agreed thresholds and is reported as
 supported: every threshold holds. Decided 2026-10-25: the keyed collection is
-accepted for implementation; stage 5 measures the shipping implementation.
+accepted for implementation. Stage 5 measured the shipping implementation and
+confirmed every threshold, with a confirmation run.
 
 ## Hypothesis
 
@@ -404,6 +405,16 @@ with each set.
 | Samples | Timing: 15 pages per variant and size; memory and allocations: 10; counted: 3. No page errored |
 | Measured source | Lattice as committed, unchanged; the lab's collection prototype after the pre-run amendment, its tasks capability and bindings, the stage 3 variants, reconciler and runner, hashed in each report |
 
+### Stage 5 (2026-10-25)
+
+| Item | Value |
+| --- | --- |
+| Dates | Timing 02:50–03:06 UTC, confirmation 03:06–03:16, counted 03:16–03:17, memory 03:17–03:27, garbage collection 03:27–03:35 |
+| Host and tools | As stage 1; Chromium's trace categories `devtools.timeline`, `v8` and `disabled-by-default-v8.gc` for the collection events |
+| Background load | 1-minute load average 6 to 9 during the timing set; 9 rising to 67 by the end of the confirmation; 70 to 88 at the start of counted and memory, falling to 13; 12 to 13 during garbage collection |
+| Samples | Timing and confirmation: 15 pages per variant and size; memory and garbage collection: 10; counted: 3. No page errored |
+| Measured source | The shipping collection as implemented, served unchanged from the package source (`collection.js` SHA-256 `a597d35a…`, `report.js` `e4ad2ac9…`, `store.js` `9bf3b436…`), with the lab's variants, reconciler and runner, hashed in each report |
+
 ## Results
 
 Medians across pages of each page's median, with the full-flow lab's
@@ -641,6 +652,59 @@ at every step and size.
 - **Membership changes** are cheaper than the shared map's, which copies the
   map of items on every insertion and removal.
 
+### Stage 5: shipping path (2026-10-25)
+
+Variant 5, the shipping collection imported from `@canonic2/lattice/collection`,
+against variant 1, the shared map, with variant 3, store per item, and variant
+4, the prototype, as references. Medians across pages of each page's median;
+"meaningful" uses the stage 1 rule against the shared map.
+
+| Measure | Items | Shared map | Store per item | Prototype | Shipping | Shipping vs shared map | Confirmation: shared map, shipping |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Label update, µs | 10, 100, 1,000 | 3.84, 21.3, 341 | 2.79, 3.22, 5.35 | 2.89, 3.19, 5.06 | 2.83, 3.19, 4.96 | −26%, −85%, −99% | 3.87, 21.8, 342; 3.00, 3.09, 4.89 |
+| Done toggle, µs | 10, 100, 1,000 | 3.69, 21.7, 343 | 2.87, 4.87, 32.1 | 3.13, 6.13, 45.1 | 3.11, 6.22, 45.9 | −16%, −71%, −87% | 3.74, 22.1, 343; 3.25, 6.13, 46.8 |
+| Bulk label update of 10 items, µs | 10, 100, 1,000 | 20.1, 39.5, 360 | 20.0, 21.6, 21.8 | 21.9, 22.5, 23.1 | 21.6, 22.5, 23.0 | +8%, −43%, −94% | 20.0, 39.7, 362; 22.7, 22.0, 23.5 |
+| Bulk label update of every item, µs | 10, 100, 1,000 | 19.8, 226, 3,670 | 19.6, 205, 3,920 | 21.2, 213, 3,555 | 21.0, 216, 3,470 | +6%, −4%, −5% | 19.9, 219, 3,615; 22.2, 214, 3,330 |
+| Bulk done update of 10 items, µs | 10, 100, 1,000 | 20.5, 40.0, 358 | 27.7, 43.1, 281 | 22.6, 26.2, 64.4 | 22.5, 26.4, 63.9 | +10%, −34%, −82% | 20.7, 40.2, 357; 23.2, 26.3, 64.9 |
+| Bulk done update of every item, µs | 10, 100, 1,000 | 20.4, 235, 3,915 | 27.4, 456, 25,075 | 22.1, 230, 3,670 | 22.4, 237, 3,470 | +10%, +1%, −11% | 20.3, 236, 3,945; 23.0, 232, 3,590 |
+| Insertion, µs | 10, 100, 1,000 | 34.0, 89.2, 860 | 29.1, 55.7, 332 | 27.0, 49.0, 255 | 25.1, 50.1, 253 | −26%, −44%, −71% | 34.2, 90.1, 892; 29.1, 49.0, 260 |
+| Removal, µs | 10, 100, 1,000 | 33.2, 127, 2,472 | 35.2, 67.9, 385 | 27.6, 58.3, 344 | 26.5, 58.8, 345 | −20%, −54%, −86% | 33.4, 127, 2,532; 29.0, 58.0, 353 |
+| Reorder, µs per item | 10, 100, 1,000 | 2.67, 3.76, 12.7 | 2.61, 3.93, 12.7 | 2.48, 3.52, 12.5 | 2.45, 3.60, 12.4 | −8%, −4%, −2% | 2.63, 3.78, 12.8; 2.54, 3.57, 12.7 |
+| Mount, µs per item | 10, 100, 1,000 | 20.3, 20.4, 23.4 | 22.4, 22.3, 26.3 | 21.5, 18.9, 22.9 | 21.5, 19.1, 22.7 | +6%, −7%, −3% | 20.9, 22.3, 23.3; 22.4, 18.8, 23.1 |
+| Teardown, µs per item | 10, 100, 1,000 | 11.6, 11.6, 13.1 | 15.2, 16.4, 17.1 | 11.8, 11.5, 13.0 | 11.7, 11.5, 13.1 | +1%, −1%, +1% | 11.7, 13.3, 12.9; 12.1, 11.4, 13.1 |
+| JavaScript heap per item, bytes | 10, 100, 1,000 | 3,184, 922, 809 | | 3,761, 1,012, 897 | 3,845, 1,085, 898 | +21%, +18%, +11% | |
+| Bare container per item, bytes | 10, 100, 1,000 | 271, 70, 55 | | 604, 151, 119 | 614, 152, 119 | +127%, +117%, +119% | |
+| Bytes allocated per label update | 10, 100, 1,000 | 268, 652, 4,253 | | 57, 57, 57 | 57, 57, 57 | −79% to −99% | |
+| Bytes allocated per done toggle | 10, 100, 1,000 | 247, 632, 4,232 | | 86, 110, 110 | 85, 110, 110 | −65% to −97% | |
+| Bytes allocated per bulk label update of every item | 10, 100, 1,000 | 700, 4,762, 44,987 | | 1,718, 16,568, 171,318 | 1,721, 16,558, 171,273 | +146% to +281% | |
+| Bytes allocated per bulk done update of every item | 10, 100, 1,000 | 678, 4,716, 44,940 | | 1,507, 16,568, 171,270 | 1,433, 16,581, 171,329 | +111% to +281% | |
+
+The shipping collection matches the prototype within run-to-run variation in
+every timing cell, and to the byte in allocations. Heap per item at 100 items
+is 73 bytes above the prototype, about the 61-byte interquartile range of that
+cell; at 1,000 items they are equal.
+
+**Garbage collection**, from the traced runs: medians across 10 pages, per run
+of 20,000 label updates, 20,000 done toggles, or a bulk done update of every
+item repeated 20,000 ÷ N times (2,000, 200 and 20 calls at 10, 100 and 1,000
+items, each about 3.4 MB of allocation with the shipping collection).
+
+| Workload | Items | Shared map: collections, ms | Shipping: collections, ms |
+| --- | --- | --- | --- |
+| Label updates | 10, 100, 1,000 | 1, 1.3; 3, 2.1; 21, 9.0 | 1, 1.3; 1, 1.2; 0, 0 |
+| Done toggles | 10, 100, 1,000 | 1, 0.5; 3, 1.1; 10, 4.2 | 0, 0; 0, 0; 0, 0 |
+| Bulk done update of every item | 10, 100, 1,000 | 1, 0.4; 0, 0; 0, 0 | 1, 0.4; 1, 0.4; 0, 0 |
+
+Every collection was a minor one; no run in either variant had a major
+collection. The shipping collection's bulk updates triggered at most one minor
+collection of about 0.4 ms per 3.4 MB run; single-item updates, which allocate
+57 to 110 bytes, triggered none at 1,000 items, where the shared map's copy of
+the map triggered one collection every 1,000 to 2,000 updates.
+
+Counted pages: row DOM effects of the shipping collection were identical to
+the shared map's at every step and size, and every count, including `read`s,
+open-count derivations and summary writes, was identical to the prototype's.
+
 ## Correctness
 
 | Variant | Counted pages | Failed checks |
@@ -710,6 +774,22 @@ rolled-back batch staying ended; key reuse inside a batch, across commits and
 during delivery, with queued notifications for the old incarnation dropped;
 and delivery errors passed to `report`. All pass.
 
+### Stage 5
+
+| Variant | Counted pages | Failed checks |
+| --- | --- | --- |
+| 1. Shared map | 9 | None |
+| 4. Prototype | 9 | None |
+| 5. Shipping collection | 9 | None |
+
+The shipping collection passed every stage 4 check at every size, including
+the summary limits and key reuse. Before the runs, the package's own tests of
+the shipping implementation passed: the collection's unit tests, which cover
+the contract's acceptance areas, the store's unit tests after the shared
+reporter moved, the Node import test of the new entry point, and the
+packed-archive test with the collection's consumer type fixtures in both
+environments.
+
 ## Threats to validity
 
 - The rows reuse an element with three inputs; heavier rows dilute the
@@ -738,6 +818,14 @@ and delivery errors passed to `report`. All pass.
   keyed collection. No threshold covers allocations; their garbage-collection
   cost is inside the measured times only as far as collections happened
   during the timed calls.
+- Stage 5's load rose to a load average of 67 late in the confirmation set and
+  stayed between 70 and 88 at the start of the counted and memory sets. The
+  confirmation agrees with the first timing set, which ran at 6 to 9, in every
+  threshold; work counts and heap measures do not depend on load.
+- Garbage collections are sparse events: at most a few per traced run, so the
+  collection figures show their scale, not a precise rate. Young-generation
+  sizing in other hosts and with other application heaps changes when they
+  happen.
 
 ## Decision and follow-ups
 
@@ -839,3 +927,23 @@ resolves the trade-off between shared-map updates and per-item stores.
 
 The [collections contract](../specs/contracts/collections.md) records the
 accepted design, and `src/modules/collection/` implements it.
+
+**Stage 5 against the thresholds**, for the shipping collection:
+
+| Condition | First timing set | Confirmation |
+| --- | --- | --- |
+| 1. Label update at 1,000 items meaningfully faster than the shared map, within 2× of store per item | Holds: 4.96 µs against 341; 0.93× store per item | Holds: 4.89 µs against 342 |
+| 2. Bulk update of every item within +25%, at most one derivation and summary write | Holds: label +6%, −4%, −5%; done +10%, +1%, −11%; one each | Holds: label +12%, −2%, −8%; done +13%, −1%, −9% |
+| 3. Mount, insertion, removal, reorder and teardown within +25% | Holds: at most +6% | Holds: at most +7% |
+| 4. Heap per item within +25% at 100 and 1,000 items | Holds: +18% and +11% | |
+| 5. Every correctness check | Holds, with the package tests | |
+
+**Outcome: confirmed.** The shipping collection meets every threshold in both
+timing sets and in the memory and counted sets, and matches the prototype
+within run-to-run variation. Bulk allocation, accepted as a cost of this
+design, is unchanged from the prototype at about 170 bytes per changed item; in
+the traced runs it cost at most one minor collection of about 0.4 ms per
+3.4 MB of bulk updates, with no major collections, while single-item updates
+triggered fewer collections than the shared map's. These are measurements of
+the shipping implementation in headless Chromium on one host, at up to 1,000
+items; they do not establish behavior at larger sizes or in other hosts.

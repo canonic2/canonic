@@ -111,8 +111,8 @@ the scan is short.
 
 ## Open questions
 
-- **Bulk allocation.** The prototype allocated about 170 bytes per changed item
-  in a bulk update: the new record, its undo entry and the before and after
-  arrays. Whether the shipping implementation can drop any of them, such as
+- **Bulk allocation.** A bulk update allocates about 170 bytes per changed item,
+  in the prototype and the shipping implementation alike: the new record, its
+  undo entry and the before and after arrays. Whether the shipping implementation can drop any of them, such as
   the after array, which equals the current record when no later commit is
   queued, is measured before any change.
