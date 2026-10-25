@@ -85,6 +85,13 @@
   var sizeSwitcher = document.getElementById('sizeSwitcher');
 
   var BLANK_TEXT = 'Pick a page or a component to see it here.';
+  var topBar = window.wbTopBarPresentation({ lensesBox: lensesBox, scenarioMenu: scenarioMenu,
+    scenarioButton: scenarioButton, scenarioControl: scenarioControl, scenarioName: scenarioName,
+    sourceMenu: sourceMenu, sourceButton: sourceButton });
+  var openScenarios = topBar.openScenarios;
+  var drawScenarioMenu = topBar.drawScenarioMenu;
+  var openSources = topBar.openSources;
+  var sourceRow = topBar.sourceRow;
 
   var current = null;      /* src of the picked page */
   var currentScenario = null; /* its scenario id, or null for the default one */
@@ -459,29 +466,18 @@
      implementation, with no design, has one too. Neither shows the control.
      A Markdown page has no design: its docs lenses come first. */
   function drawLenses(item, lens) {
-    lensesBox.innerHTML = '';
     /* Docs first, then the page's own design, then its implementations. */
     var lenses = lensesOf(item);
     var docs = lenses.filter(lensRules.isDocsLens);
     var others = lenses.filter(function (impl) { return !lensRules.isDocsLens(impl); });
     var choices = lensRules.hasDesignLens(item) ? docs.concat([null], others) : lenses;
-    lensesBox.hidden = choices.length < 2;
-    if (lensesBox.hidden) return;
-    var showing = lens ? lens.key : lensRules.DESIGN_KEY;
-    choices.forEach(function (impl) {
-      var key = impl ? impl.key : lensRules.DESIGN_KEY;
-      var button = document.createElement('button');
-      button.className = 'wb-lens';
-      button.type = 'button';
-      button.dataset.lens = key;
-      button.textContent = impl ? impl.label : window.wbManifest.authoredLensLabel(item);
-      button.title = impl ? 'This page as ' + impl.label + ' has it' : 'This page as designed';
-      button.setAttribute('aria-pressed', String(showing === key));
-      button.addEventListener('click', function () {
-        setLensPref(key);
-        writeHash(current, currentScenario, sizeKey(), key, currentExample, currentIterations);
-      });
-      lensesBox.appendChild(button);
+    topBar.drawLenses(choices.map(function (impl) {
+      return { key: impl ? impl.key : lensRules.DESIGN_KEY,
+        label: impl ? impl.label : window.wbManifest.authoredLensLabel(item),
+        title: impl ? 'This page as ' + impl.label + ' has it' : 'This page as designed' };
+    }), lens ? lens.key : lensRules.DESIGN_KEY, function (key) {
+      setLensPref(key);
+      writeHash(current, currentScenario, sizeKey(), key, currentExample, currentIterations);
     });
   }
 
@@ -537,39 +533,11 @@
     return request;
   }
 
-  function openScenarios(open) {
-    scenarioMenu.hidden = !open;
-    scenarioButton.setAttribute('aria-expanded', String(open));
-  }
 
   /* The breadcrumb's second half: which version of the page is showing,
      and the others to pick from — the page's scenarios on the design, the
      title's stories under a Storybook lens. rows: [{ label, current, pick }],
      or null when there is nothing to choose between. */
-  function drawScenarioMenu(rows, kind) {
-    scenarioMenu.innerHTML = '';
-    openScenarios(false);
-    scenarioControl.hidden = !rows;
-    if (!rows) { scenarioName.textContent = ''; scenarioButton.removeAttribute('title'); return; }
-    var picked = rows.filter(function (row) { return row.current; })[0] || rows[0];
-    scenarioName.textContent = picked.label;
-    scenarioButton.title = (kind === 'story' ? 'Story: ' : 'Scenario: ') + picked.label + ' — pick another';
-    scenarioMenu.setAttribute('aria-label', kind === 'story' ? 'Story' : 'Scenario');
-    rows.forEach(function (entry) {
-      var row = document.createElement('button');
-      row.className = 'wb-menu-row';
-      row.type = 'button';
-      row.setAttribute('role', 'menuitem');
-      row.setAttribute('aria-current', String(entry === picked));
-      row.textContent = entry.label;
-      row.dataset.scenario = entry.target || '';
-      row.addEventListener('click', function () {
-        openScenarios(false);
-        entry.pick();
-      });
-      scenarioMenu.appendChild(row);
-    });
-  }
 
   function drawStories(list, picked, lens) {
     drawScenarioMenu(list && list.map(function (story) {
@@ -654,31 +622,7 @@
      design file, then wherever each implementation keeps the code. A path
      that isn't there is listed but can't be opened, so the config's intent
      still shows. Nothing serving that answer, no control. */
-  function openSources(open) {
-    sourceMenu.hidden = !open;
-    sourceButton.setAttribute('aria-expanded', String(open));
-  }
 
-  function sourceRow(label, sub, enabled, title, onPick) {
-    var row = document.createElement('button');
-    row.className = 'wb-menu-row';
-    row.type = 'button';
-    row.setAttribute('role', 'menuitem');
-    row.disabled = !enabled;
-    row.title = title;
-    row.appendChild(document.createTextNode(label));
-    var line = document.createElement('span');
-    line.className = 'wb-menu-sub';
-    line.textContent = sub;
-    row.appendChild(line);
-    if (enabled) {
-      row.addEventListener('click', function () {
-        openSources(false);
-        onPick();
-      });
-    }
-    sourceMenu.appendChild(row);
-  }
 
   function drawSources(item) {
     var info = item && resolved && resolved.pages && resolved.pages[item.src];

@@ -415,6 +415,8 @@ function lensSwitcher(item) {
       },
     },
   };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/views/top-bar/presentation.js'), 'utf8'), context);
+  context.topBar = context.window.wbTopBarPresentation({ lensesBox: box });
   vm.runInNewContext(source.slice(start, end) + '\ndrawLenses(item, null);', Object.assign(context, { item: item }));
   return { hidden: box.hidden, labels: box.children.map(function (b) { return b.textContent; }) };
 }
@@ -535,6 +537,8 @@ function shellAddress(hash) {
     },
   });
   context.index[src] = item;
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/views/top-bar/presentation.js'), 'utf8'), context);
+  context.topBar = context.window.wbTopBarPresentation({ lensesBox: context.lensesBox });
   context.resolved.pages[src] = { preview: { id: 'feedback', scenarios: [
     { id: 'default', artboards: [
       { id: 'info', iterations: [{ id: 'calm', label: 'Calm' }] },

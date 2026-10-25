@@ -297,7 +297,7 @@ and passes its acceptance:
 | Classic `wbExportBindings` with `modules/review/browser-export.js` | `review` / `export` | The Export adoption step; the shell supplies its current destination and the existing request/progress lifecycle stays intact |
 | Classic `wbConfigEditor` in `views/configure-pages/config-editor.js`, with rules and HTTP in `modules/project/configuration.js` | `project` / `configure-pages` | The Configure pages adoption step; draft/selection state remains in the existing dialog closure |
 | Classic `wbPageList` API shared by `modules/project/pages.js` and `views/page-list/page-list.js`; sidebar startup through `wbProjectSidebar` | `project` / `page-list` | The `project`/`page-list` adoption step; existing closure state remains until then |
-| Classic `wbTopBar` measurement/menu presentation in `views/top-bar/top-bar.js` | `top-bar` | The `top-bar` adoption step; shell-owned scenario/lens state stays in `legacy/workbench.js` until then |
+| Classic `wbTopBar` measurement/menu presentation and `wbTopBarPresentation` lens/scenario/source rows | `top-bar` | The `top-bar` adoption step; shell-owned scenario/lens state stays in `legacy/workbench.js` until then |
 | Classic top-bar control and size-dialog bindings, and `wbPageList.bindBrowser` | `top-bar` / `page-list` | Their adoption steps; callbacks read the shell's existing state, and size writes go through `project/configuration.js` |
 
 Later steps add a row before introducing an adapter.
