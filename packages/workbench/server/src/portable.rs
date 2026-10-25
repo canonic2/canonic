@@ -190,9 +190,9 @@ fn docs_entries(
 /// The viewer, the shared preview controls and the licence.
 fn viewer_files(product: &Path, add: &mut impl FnMut(String, Vec<u8>)) -> Result<()> {
     for (folder, name) in [
-        ("ui/viewer", "index.html"),
-        ("ui/viewer", "viewer.js"),
-        ("ui/viewer", "viewer.css"),
+        ("ui/src/app/viewer", "index.html"),
+        ("ui/src/app/viewer", "viewer.js"),
+        ("ui/src/app/viewer", "viewer.css"),
         ("ui/legacy", "preview-controls.js"),
         ("ui/legacy", "preview-controls.css"),
     ] {

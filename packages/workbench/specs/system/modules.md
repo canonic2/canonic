@@ -152,6 +152,7 @@ ui/src/
   app/renderer/              Content-only renderer, served as /_workbench/content.html
   app/sidebar/               VS Code sidebar webview document, styles and module entry
   app/workbench/             Canvas shell document, styles and module entry, served as /_workbench/
+  app/viewer/                Portable export viewer, copied into each portable export
   bootstrap/                 Canvas composition and element registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles

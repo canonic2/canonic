@@ -276,7 +276,7 @@ and passes its acceptance:
 | --- | --- | --- |
 | Server preview injection (`serve/files.rs`) | `legacy/keys.js`, `legacy/actions.js`, `legacy/scenarios.js`, read as text and injected into design pages | A served design page answers shortcuts, Actions and `?scenario=` as before |
 | Preview proxy (`proxies.rs`) | `/_workbench/preview-bridge.js`, injected into proxied URL and Storybook pages | A proxied page reports readiness and takes live screenshots |
-| Portable export (`portable.rs`) | `ui/viewer/` files, `legacy/preview-controls.js` and `.css`, `modules/docs/page/` | An exported archive opens from a static server and its viewer, controls and docs work |
+| Portable export (`portable.rs`) | `app/viewer/` files, `legacy/preview-controls.js` and `.css`, `modules/docs/page/` | An exported archive opens from a static server and its viewer, controls and docs work |
 | Compiled previews and renderers | `/_workbench/preview-host.html`, which the server maps to `app/preview-host/preview-host.html`, and `/_workbench/preview-runtime.js` | A TypeScript preview renders, re-renders a scenario in place and reloads after an edit |
 | Screenshot helper (`capture/app/main.cjs`) and its Node host (`server/node/src/modules/host/`) | `/_workbench/capture.html`, which the server maps to `app/capture/capture.html`; `legacy/describe.js` read as text and run in every captured page | An Electron capture and a handoff screenshot succeed |
 | Space styles (`space.rs`) | `legacy/annotations.css` read as text | Annotations render in the renderer document |
@@ -340,8 +340,8 @@ The navigation store's adoption starts only after this slice is in place.
 
 - The Lattice delivery slice: Workbench does not depend on, serve or package
   Lattice, and none of the evidence above exists.
-- Structural moves: every document but the portable viewer is in `app/`; the
-  viewer, and the code the documents load, ship in the
+- Structural moves: every document is in `app/`; the code the documents load
+  ships in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
 - Every Lattice adoption step.
