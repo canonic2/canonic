@@ -71,9 +71,9 @@ collections:
     }
     const state = 'document.getElementById("artboards")?.state';
     const frames = 'document.querySelectorAll("wb-canvas > iframe:not([inert])")';
+    // With no address, the canvas opens the space's first page.
     await target.navigate(running.url);
-    await until(`${state}?.artboards.length===0 && !document.getElementById('blank').hidden && document.getElementById('blank').textContent==='Pick a page or a component to see it here.'`);
-    assert.equal(await target.evaluate("getComputedStyle(document.getElementById('artboards')).display"), 'none', 'the shell alone renders the empty message');
+    await until(`${state}?.artboards.length===1 && ${state}.artboards[0].view?.ready && ${state}.artboards[0].view.src==='form.html' && document.getElementById('blank').hidden`);
     await target.evaluate('location.hash="#form.html@mobile"');
     await until(`${state}?.artboards.length===1 && ${state}.artboards[0].view?.ready`);
     assert.equal(applicationDocuments.length, 1, 'artboards never request another Workbench application document');
@@ -97,7 +97,8 @@ collections:
     assert.deepEqual(await target.evaluate(`${state}.artboards.map(b=>[b.target.artboard,b.target.scenario,b.size.width,b.size.height])`), [['one',null,320,120],['two',null,480,160]]);
     await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[1].click()');
     await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.scenario==='alternate')`);
-    assert.equal(await target.evaluate(`[...${frames}].every(f=>f.contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value==='Alternate')`), true);
+    // Artboard inputs apply after scenario inputs: Two keeps its own text.
+    assert.deepEqual(await target.evaluate(`[...${frames}].map(f=>f.contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value)`), ['Alternate', 'Second']);
     await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[0].click()');
     await until(`${state}.artboards.length===2 && ${state}.artboards.every(b=>b.view?.ready && b.target.scenario===null)`);
     await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('input').value='First only'`);
