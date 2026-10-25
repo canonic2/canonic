@@ -158,26 +158,6 @@ not introduce a second model or conflicting files.
   visible, with how long ago it changed. People often ask about the page
   from a chat beside it.
 
-## Proposals
-
-These integrations are proposals.
-
-| Surface | Agents | What the user does | What the agent gets |
-| --- | --- | --- | --- |
-| Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request |
-| **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled |
-| Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file; host capability review required |
-
-- A Copilot page-reference tool, callable explicitly or by the agent.
-- Extension-owned MCP registration for hosts that support it, without requiring
-  project-level registration files. Keep the same reference and discovery rules.
-- An Ask agent action that opens the installed agent with the reference.
-- Implicit canvas context where an editor exposes a supported provider API.
-
-Each integration requires a review of the editor's documented capabilities
-before implementation. No proposed editor API or specific host version is
-assumed available by this contract.
-
 ## Implementation note: the legacy single-reference publisher
 
 The legacy singleton publisher remains for legacy hosts and is disabled for an
@@ -230,3 +210,23 @@ complete canvas record.
 - **Host acceptance.** Confirm hook invocation, tool/resource access and
   reader discovery inside each supported editor, recording host versions in
   the research record.
+
+## Proposals
+
+These integrations are proposals.
+
+| Surface | Agents | What the user does | What the agent gets |
+| --- | --- | --- | --- |
+| Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request |
+| **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled |
+| Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file; host capability review required |
+
+- A Copilot page-reference tool, callable explicitly or by the agent.
+- Extension-owned MCP registration for hosts that support it, without requiring
+  project-level registration files. Keep the same reference and discovery rules.
+- An Ask agent action that opens the installed agent with the reference.
+- Implicit canvas context where an editor exposes a supported provider API.
+
+Each integration requires a review of the editor's documented capabilities
+before implementation. No proposed editor API or specific host version is
+assumed available by this contract.

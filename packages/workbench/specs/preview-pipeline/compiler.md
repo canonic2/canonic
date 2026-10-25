@@ -16,7 +16,7 @@ entry before serving the first; that first-page gap is owned by
 [performance](../system/performance.md#implementation-gaps), with a proposed replacement
 start in [first page](first-page.md). Live source maps, a rule for
 entries added while pages are open and compiler bounds are not implemented
-([gaps](#gaps)).
+([implementation gaps](#implementation-gaps)).
 
 ## Requirements
 
@@ -159,7 +159,7 @@ The portable build and the export's docs examples use a production
 compiler with the same format handling and project plugins
 ([plugins](plugins.md#portable-output)).
 
-## Gaps
+## Implementation gaps
 
 - Live builds have no source maps. The lab measured builds without them;
   their cost is unmeasured.

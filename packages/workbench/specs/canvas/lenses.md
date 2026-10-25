@@ -50,20 +50,7 @@ implementation gaps are recorded.
   lens: its design, its catalog implementation, or a Markdown page's own docs
   lens. [lenses.js](../../contracts/src/docs/lenses.js) decides it.
 
-## Acceptance criteria
-
-- A project can name two URL implementations **Dev** and **Live**, mapping
-  them to a local app and the production website, and see those labels in the
-  switcher.
-- A Storybook implementation and a `workbench` implementation each honor a
-  custom label without changing which story or preview they load.
-- A page whose own source is `.workbench.ts(x)` can label that lens **Design**
-  through project configuration. With a **Live** mapping, the switcher shows
-  exactly **Design** and **Live**, with no extra **Workbench** button.
-- Renaming a lens leaves existing links and the current selection pointing
-  at the same view. Omitting labels retains the defaults above.
-
-## Configuration and verification
+## Configuration
 
 Implementations use `label`. Authored pages use `lensLabel` in their YAML page
 entry. Discovery supplies `previews.lensLabel` for TypeScript previews; an
@@ -78,6 +65,21 @@ collection merging retains page overrides without duplicating the preview.
 The switcher, source menu, copied references, and authored handoffs use the
 resolved label. Addresses, saved preferences, and screenshot filenames retain
 their stable identities rather than incorporating renamed display labels.
+
+## Acceptance criteria
+
+- A project can name two URL implementations **Dev** and **Live**, mapping
+  them to a local app and the production website, and see those labels in the
+  switcher.
+- A Storybook implementation and a `workbench` implementation each honor a
+  custom label without changing which story or preview they load.
+- A page whose own source is `.workbench.ts(x)` can label that lens **Design**
+  through project configuration. With a **Live** mapping, the switcher shows
+  exactly **Design** and **Live**, with no extra **Workbench** button.
+- Renaming a lens leaves existing links and the current selection pointing
+  at the same view. Omitting labels retains the defaults above.
+
+## Verification
 
 Behavioral coverage is in [manifest tests](../../contracts/manifest.test.js),
 [configuration tests](../../server/node/config.test.js), [preview integration tests](../../server/node/preview.test.js),

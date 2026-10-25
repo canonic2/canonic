@@ -4,7 +4,7 @@
 integration tests and the workflows that run them. Outside the UI lint/format
 baseline: legacy shell JavaScript, preview adapters and the portable viewer;
 remaining structure and lifecycle debt is in
-[structure review and remaining gaps](#structure-review-and-remaining-gaps).
+[implementation gaps](#implementation-gaps).
 Passing these checks is distinct from meeting the
 [performance targets](performance.md#measured-interactions) or establishing
 installed-host acceptance.
@@ -75,32 +75,8 @@ Component fixtures serve authored JavaScript/CSS directly without backend/compil
 imports, which establishes standalone component hosting, not
 [UI/backend independence](modules.md#implementation-gaps). Browser canvas
 acceptance rejects application document/module requests inside content and
-inspects child markup; [rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps)
+inspects child markup; [rendering-flow acceptance](rendering-flow.md#acceptance-and-verification)
 owns its scope.
-
-### Structure review and remaining gaps
-
-Migrated elements keep one directory per component with its local styles,
-helper modules, colocated behavior tests and examples, and separate quality
-commands. Their boundaries are properties for inputs, composed intent events,
-owned Shadow DOM and connection-scoped lifecycle; framework-specific hooks,
-JSX lint rules and native-platform runners do not apply.
-
-| Area | Current evidence and limitation |
-| --- | --- |
-| Component organization | Element folders own presentation, styles and helpers; design pages load shipping implementations. Shared modal styles live under `components/shared/`; startup and registration live under `bootstrap/` |
-| Behavior testing | Existing browser tests cover upgrade-time inputs, independent instances, reconnects, events, keyboard/focus and CSP for migrated controls. Canvas interaction also has a separate browser smoke script; this is not complete keyboard/accessibility coverage for every element |
-| Registration | Elements register through explicit bootstrap functions, including the export dialog. Browser tests verify importing its class is silent and registration is repeatable |
-| Application state | Navigation owns requested destinations and supersession. The content controller derives renderer routes, scenarios, lenses and labels from project data; the outer shell owns its visible controls |
-| Renderer isolation | Artboards load `content.html` with a dedicated bootstrap, viewport and annotation/capture ports. Browser assertions reject nested application startup |
-| Lifecycle and dependencies | Controllers expose runtime/disposal ports, and migrated elements release connection resources. Global shell APIs, event interception and renderer polling remain integration debt |
-
-Preserve the existing visible controls and warm preview sessions during migration.
-Further separation of the frame lifecycle, native surfaces and annotation
-internals must preserve destination sizing, docs presentation and capture
-behavior. The detailed contracts remain in [modules](modules.md),
-[Web Components](../ui/web-components.md), [docs](../pages/docs-pages.md) and
-[warm runtime](../preview-pipeline/warm-runtime.md).
 
 ### Native server
 
@@ -201,3 +177,27 @@ the resulting lockfile and dependency checks.
 Builds, coverage reports and staged platform binaries remain under ignored
 `server/target/` and `server/bin/`. Only the selected platform executable enters
 the VSIX. Development tooling, source and reports do not ship in it.
+
+## Implementation gaps
+
+Migrated elements keep one directory per component with its local styles,
+helper modules, colocated behavior tests and examples, and separate quality
+commands. Their boundaries are properties for inputs, composed intent events,
+owned Shadow DOM and connection-scoped lifecycle; framework-specific hooks,
+JSX lint rules and native-platform runners do not apply.
+
+| Area | Current evidence and limitation |
+| --- | --- |
+| Component organization | Element folders own presentation, styles and helpers; design pages load shipping implementations. Shared modal styles live under `components/shared/`; startup and registration live under `bootstrap/` |
+| Behavior testing | Existing browser tests cover upgrade-time inputs, independent instances, reconnects, events, keyboard/focus and CSP for migrated controls. Canvas interaction also has a separate browser smoke script; this is not complete keyboard/accessibility coverage for every element |
+| Registration | Elements register through explicit bootstrap functions, including the export dialog. Browser tests verify importing its class is silent and registration is repeatable |
+| Application state | Navigation owns requested destinations and supersession. The content controller derives renderer routes, scenarios, lenses and labels from project data; the outer shell owns its visible controls |
+| Renderer isolation | Artboards load `content.html` with a dedicated bootstrap, viewport and annotation/capture ports. Browser assertions reject nested application startup |
+| Lifecycle and dependencies | Controllers expose runtime/disposal ports, and migrated elements release connection resources. Global shell APIs, event interception and renderer polling remain integration debt |
+
+Preserve the existing visible controls and warm preview sessions during migration.
+Further separation of the frame lifecycle, native surfaces and annotation
+internals must preserve destination sizing, docs presentation and capture
+behavior. The detailed contracts remain in [modules](modules.md),
+[Web Components](../ui/web-components.md), [docs](../pages/docs-pages.md) and
+[warm runtime](../preview-pipeline/warm-runtime.md).

@@ -15,7 +15,7 @@ it, and where the code falls short.
 implementations (including `gate://` service endpoints), code pointers, iOS
 Simulator and window implementations, and the native window stream are
 implemented. Problems for unbooted mapped Simulator devices and handling of
-links to unlisted project pages are not; see [current gaps](#current-gaps).
+links to unlisted project pages are not; see [implementation gaps](#implementation-gaps).
 
 ## Authored HTML pages
 
@@ -229,22 +229,6 @@ Repeated artboards on one device/window share that external surface.
   names that app. There is no fallback to browser screen sharing; when the
   helper can't capture, the canvas says why.
 
-## Current gaps
-
-- **Mapped devices are not checked.** Without `catalog: true`, a Simulator
-  whose device isn't booted produces no entry in `problems`; the failure
-  appears only on the canvas, contrary to the shared problems list in
-  [core.md](../core.md#problem-reporting).
-- **Links to unlisted project pages do nothing.** With actions on, the page
-  cancels any same-origin `.html` link and hands it to the workbench, which
-  ignores destinations that aren't configured pages. Such a link neither
-  navigates nor switches pages.
-
-## Open questions
-
-- Should a link to a project page that isn't a configured page navigate the
-  iframe normally, as the user guide implies, or stay blocked?
-
 ## Verification points
 
 - [config.test.js](../../server/node/config.test.js) and
@@ -270,3 +254,19 @@ Repeated artboards on one device/window share that external surface.
 - Manual: frame rates, Screen Recording prompts, Simulator input, and macOS
   version support are checked on a Mac with a booted Simulator and a visible
   app window. No automated test covers them.
+
+## Implementation gaps
+
+- **Mapped devices are not checked.** Without `catalog: true`, a Simulator
+  whose device isn't booted produces no entry in `problems`; the failure
+  appears only on the canvas, contrary to the shared problems list in
+  [core.md](../core.md#problem-reporting).
+- **Links to unlisted project pages do nothing.** With actions on, the page
+  cancels any same-origin `.html` link and hands it to the workbench, which
+  ignores destinations that aren't configured pages. Such a link neither
+  navigates nor switches pages.
+
+## Open questions
+
+- Should a link to a project page that isn't a configured page navigate the
+  iframe normally, as the user guide implies, or stay blocked?

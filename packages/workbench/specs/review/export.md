@@ -63,16 +63,6 @@ compiler keep their own owners.
   Export jobs, progress, retained archives, and the active-job limit belong
   to the target server; another space's job is not joined.
 
-### Acceptance criteria
-
-- With spaces A and B in one configuration, exporting A includes all A's
-  pages and reference variants and excludes B-only page records and references.
-- A page or collection export excludes unrelated page records, references,
-  and portable previews; shared source dependencies remain included.
-- Exporting B separately produces B's page records and reference plan.
-- An included multi-space manifest retains its declarations without causing
-  B's pages to enter A's export. Shared dependencies needed by A remain included.
-
 ## Source closure
 
 Portable browser viewers include `browser/CANONIC-LICENSE.txt` for Canonic-owned
@@ -91,43 +81,7 @@ components retain their own licensing.
   and no `workbench-env.d.ts`, it adds one with the `@canonic2/workbench`
   types.
 
-## Job lifecycle
-
-- `POST /_workbench/export` starts a background job and answers `202` with
-  its status. `GET /_workbench/export?job=<id>` reports progress, warnings,
-  and, once complete, the download and its parts.
-  `&download=1` downloads the completed bundle and `&part=<n>` one numbered
-  part; an incomplete job answers `409`, and an expired one `404`. A `GET`
-  without a job, for scripted callers, starts or joins a job, waits, and
-  downloads.
-- Only one export runs at a time per space server. Identical normalized requests
-  join it; a different request answers `409`. A settled job is kept for 15 minutes, and starting a new export keeps
-  only the most recent settled job.
-- Visual and source exports wait for the capture service's start-up warm-up, capture the
-  references, then produce their output. Source ZIP adds the portable viewer;
-  browser-only ZIP skips capture. PDF merges renderer PDFs in capture-plan order.
-
 ## Export request and output
-
-### Connection loss and cancellation
-
-Jobs are owned by the running space server, not by the initiating HTTP connection.
-The registry starts background work; closing a progress surface or disconnecting
-does not cancel it. A client can query a known job ID while that server retains
-it. Settled retention starts after completion, including for a slow job.
-
-There is no public cancel operation or durable job-resume protocol. Server
-restart loses the in-memory job registry; a former job ID cannot resume the
-operation on the replacement server. Worker cleanup remains owned by the export
-pipeline and host capture pool. Do not describe connection loss as successful
-cancellation or automatic retry of an interrupted export.
-
-Overall job deadlines and user-requested cancellation remain unspecified;
-per-reference capture timeouts do not establish a maximum total export duration.
-Their design must cover joined callers, worker disposal, partial artifacts and
-retry identity before a cancel/recovery guarantee is added. The
-[job tests](../../server/src/export/jobs.rs) cover settlement and retention;
-disconnect/restart/cancel acceptance is not established by them.
 
 ### Options and output formats
 
@@ -286,6 +240,52 @@ records the entry, catalog, and each preview's id, source, entry, and scenarios.
 The [previews spec](../pages/previews.md) owns the compiler, adapters, viewer, and the
 CLI `build` command that produces the same viewer without a server.
 
+## Job lifecycle
+
+- `POST /_workbench/export` starts a background job and answers `202` with
+  its status. `GET /_workbench/export?job=<id>` reports progress, warnings,
+  and, once complete, the download and its parts.
+  `&download=1` downloads the completed bundle and `&part=<n>` one numbered
+  part; an incomplete job answers `409`, and an expired one `404`. A `GET`
+  without a job, for scripted callers, starts or joins a job, waits, and
+  downloads.
+- Only one export runs at a time per space server. Identical normalized requests
+  join it; a different request answers `409`. A settled job is kept for 15 minutes, and starting a new export keeps
+  only the most recent settled job.
+- Visual and source exports wait for the capture service's start-up warm-up, capture the
+  references, then produce their output. Source ZIP adds the portable viewer;
+  browser-only ZIP skips capture. PDF merges renderer PDFs in capture-plan order.
+
+### Connection loss and cancellation
+
+Jobs are owned by the running space server, not by the initiating HTTP connection.
+The registry starts background work; closing a progress surface or disconnecting
+does not cancel it. A client can query a known job ID while that server retains
+it. Settled retention starts after completion, including for a slow job.
+
+There is no public cancel operation or durable job-resume protocol. Server
+restart loses the in-memory job registry; a former job ID cannot resume the
+operation on the replacement server. Worker cleanup remains owned by the export
+pipeline and host capture pool. Do not describe connection loss as successful
+cancellation or automatic retry of an interrupted export.
+
+Overall job deadlines and user-requested cancellation remain unspecified;
+per-reference capture timeouts do not establish a maximum total export duration.
+Their design must cover joined callers, worker disposal, partial artifacts and
+retry identity before a cancel/recovery guarantee is added. The
+[job tests](../../server/src/export/jobs.rs) cover settlement and retention;
+disconnect/restart/cancel acceptance is not established by them.
+
+## Acceptance criteria
+
+- With spaces A and B in one configuration, exporting A includes all A's
+  pages and reference variants and excludes B-only page records and references.
+- A page or collection export excludes unrelated page records, references,
+  and portable previews; shared source dependencies remain included.
+- Exporting B separately produces B's page records and reference plan.
+- An included multi-space manifest retains its declarations without causing
+  B's pages to enter A's export. Shared dependencies needed by A remain included.
+
 ## Verification points
 
 - [server.test.js](../../server/node/server.test.js) checks, through the server
@@ -319,5 +319,5 @@ CLI `build` command that produces the same viewer without a server.
   Storybook switching, and settling.
 - Not covered by automated tests: the `409` answer for an incomplete job,
   the missing-design and Simulator warnings, the exclusion of `browser/`
-  output from page hashes, and the multi-space acceptance criteria under
-  [space scope](#space-scope) end to end.
+  output from page hashes, and the multi-space
+  [acceptance criteria](#acceptance-criteria) end to end.

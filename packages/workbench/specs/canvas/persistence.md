@@ -121,25 +121,6 @@ storage limits follow the best-effort fallback below. A failed open or upgrade
 must settle without leaving startup waiting indefinitely. Do not require
 durable-storage permission or automatic destructive database resets.
 
-## Validation, failure and bounds
-
-- Use a versioned, validated record. Ignore corrupt, unsupported or invalid
-  records and use the first-page fallback without blocking the canvas.
-- A deleted saved page falls back to the first page. A removed scenario, lens,
-  size or example on an existing page follows current routing defaults; keep
-  that page and persist the normalized result. An unavailable but still
-  configured lens remains selected and shows its failure on the canvas.
-- Storage reads/writes are best-effort. Failure must not prevent navigation,
-  readiness or first-page selection. Coalesce writes while preserving the
-  latest accepted destination; observe errors without unhandled rejections.
-  Normal close/reload must flush queued writes as the host lifecycle permits;
-  after abrupt process termination the last completed write is the guarantee.
-- Keep one selection per known space, not a navigation history. Remove its
-  record when an added space is explicitly removed. Validate records when
-  workspace configuration changes and discard records for spaces no longer
-  present. Read/write only the owning viewer's state; concurrent workspace
-  contexts do not follow one another's live navigation.
-
 ## Concurrent viewers
 
 Native storage does not automatically isolate windows. Tabs on one origin can
@@ -176,6 +157,25 @@ cross-device synchronization remain outside this contract; see
 [artboard management](artboard-management.md#agreed-and-open).
 Startup fallback must not undo a deliberate clear/close-last-artboard action
 within an active comparison session.
+
+## Validation, failure and bounds
+
+- Use a versioned, validated record. Ignore corrupt, unsupported or invalid
+  records and use the first-page fallback without blocking the canvas.
+- A deleted saved page falls back to the first page. A removed scenario, lens,
+  size or example on an existing page follows current routing defaults; keep
+  that page and persist the normalized result. An unavailable but still
+  configured lens remains selected and shows its failure on the canvas.
+- Storage reads/writes are best-effort. Failure must not prevent navigation,
+  readiness or first-page selection. Coalesce writes while preserving the
+  latest accepted destination; observe errors without unhandled rejections.
+  Normal close/reload must flush queued writes as the host lifecycle permits;
+  after abrupt process termination the last completed write is the guarantee.
+- Keep one selection per known space, not a navigation history. Remove its
+  record when an added space is explicitly removed. Validate records when
+  workspace configuration changes and discard records for spaces no longer
+  present. Read/write only the owning viewer's state; concurrent workspace
+  contexts do not follow one another's live navigation.
 
 ## Acceptance
 

@@ -10,7 +10,7 @@ HTML loader ([astro.rs](../../server/src/compiler/astro.rs)). Saved renders are
 a [proposal](#proposal-saved-renders), not agreed or implemented: every warm
 start renders each scenario in the evaluator again. Project plugins and rules
 do not apply to the server side
-([plugins gaps](../preview-pipeline/plugins.md#gaps)).
+([plugins gaps](../preview-pipeline/plugins.md#implementation-gaps)).
 
 ## Source
 
@@ -68,6 +68,13 @@ re-renders in place without a document reload
 Every authored scenario is pre-rendered. Controls are removed and the docs get a
 note, since input edits need a live render.
 
+## Verification
+
+[preview-astro.test.js](../../server/node/preview-astro.test.js) covers
+server renders with props, scenarios and request mocks, packaged client assets,
+input renders, aliases, docs examples, portable exports and rebuilding a render
+edited while the server was stopped.
+
 ## Decisions
 
 Decided by the owner on 2026-10-16, with the Rust server's support for Astro
@@ -101,18 +108,11 @@ render again: on an edit to one of those files or an input change. When an
 Astro page opens, the server starts the evaluator in the background, so the
 first edit does not wait for it.
 
-## Verification
-
-[preview-astro.test.js](../../server/node/preview-astro.test.js) covers
-server renders with props, scenarios and request mocks, packaged client assets,
-input renders, aliases, docs examples, portable exports and rebuilding a render
-edited while the server was stopped.
-
 ## Open questions
 
 - **Project rules on frontmatter.** The server side bundles with esbuild,
   without project Rspack rules and plugins
-  ([plugins](../preview-pipeline/plugins.md#gaps)). Whether the Node
+  ([plugins](../preview-pipeline/plugins.md#implementation-gaps)). Whether the Node
   evaluator should apply project loaders there is open.
 - **The container's stability.** `experimental_AstroContainer` is
   experimental in Astro; a change in it breaks rendering whatever compiles

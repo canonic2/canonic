@@ -57,6 +57,12 @@ script edit re-creates the component, resetting its state as Vue defines;
 a style block is replaced in place
 ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 
+## Verification
+
+[preview.test.js](../../server/node/preview.test.js) covers project Vue
+versions and scoped styles; the Rust unit tests in
+[vue.rs](../../server/src/compiler/vue.rs) cover the loader.
+
 ## Decisions
 
 Vue follows the [serving model](README.md#how-pages-are-served), decided by
@@ -81,12 +87,6 @@ runtime helpers. Vize's SFC compiler (`vize_atelier_sfc`) is a candidate for
 investigation, not an adopted or verified dependency. A compiler is adopted
 only if a lab shows render parity and hot-update behavior matching
 `@vue/compiler-sfc` ([open questions](#open-questions)).
-
-## Verification
-
-[preview.test.js](../../server/node/preview.test.js) covers project Vue
-versions and scoped styles; the Rust unit tests in
-[vue.rs](../../server/src/compiler/vue.rs) cover the loader.
 
 ## Open questions
 

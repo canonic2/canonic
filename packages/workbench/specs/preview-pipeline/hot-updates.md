@@ -10,7 +10,7 @@ pipeline meets them.
 every native format, the reload rule, per-entry build errors and in-place Docs
 Markdown updates. Not implemented: a reopened stream starting with the current
 state, the source-accept callback for Docs examples, and keeping open pages
-current when the entry set changes ([gaps](#gaps)).
+current when the entry set changes ([implementation gaps](#implementation-gaps)).
 
 ## Requirements
 
@@ -132,7 +132,18 @@ mounts its preview there. Any other document reloads.
 - When saves follow each other quickly, the page ends with the last save's
   output.
 
-## Gaps
+## Verification
+
+The compiler's Rust unit tests (in [compiler.rs](../../server/src/compiler.rs)'s
+modules, such as the hot client in [client.rs](../../server/src/compiler/client.rs)),
+[preview integration tests](../../server/node/preview.test.js) and
+[docs integration tests](../../server/node/preview-docs.test.js) exercise the implemented
+build, serving and docs paths. The [pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13)
+holds format-by-format edit and isolation evidence. Event-stream reconnects
+must still be tested against missed builds, and entry-set replacement must
+preserve hot updates in already-open documents.
+
+## Implementation gaps
 
 - Docs entries register their example modules but do not add the preview
   entry's source-accept callback ([entries.rs](../../server/src/compiler/entries.rs)).
@@ -144,14 +155,3 @@ mounts its preview there. Any other document reloads.
   updates until they reload ([compiler](compiler.md#open-questions)).
 - A reopened event stream does not start with the current state; a frame that
   missed a build catches up at the next one.
-
-## Verification
-
-The compiler's Rust unit tests (in [compiler.rs](../../server/src/compiler.rs)'s
-modules, such as the hot client in [client.rs](../../server/src/compiler/client.rs)),
-[preview integration tests](../../server/node/preview.test.js) and
-[docs integration tests](../../server/node/preview-docs.test.js) exercise the implemented
-build, serving and docs paths. The [pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13)
-holds format-by-format edit and isolation evidence. Event-stream reconnects
-must still be tested against missed builds, and entry-set replacement must
-preserve hot updates in already-open documents.

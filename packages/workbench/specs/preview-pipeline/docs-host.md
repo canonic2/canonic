@@ -15,7 +15,7 @@ background return check, document isolation and the reusable page lifecycle in
 `ui/src/modules/docs/`, with host-kind routing and idle selection in
 `content-frames.js`/`preview-sessions.js`. This topic records no
 implementation gap; the Docs example hot-update limit is in
-[hot updates](hot-updates.md#gaps) and Show code's extraction limits are in
+[hot updates](hot-updates.md#implementation-gaps) and Show code's extraction limits are in
 [design constraints](#design-constraints).
 
 ## Requirements

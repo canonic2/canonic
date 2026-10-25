@@ -1,13 +1,5 @@
 # Artboard sizes
 
-**Status:** implemented: the size schema and defaults, server-resolved sizes,
-fill axes, keyed addresses, the size switcher and menu, Custom size… and Edit
-sizes…, handoff size lines, export sizes, preview keys and the portable viewer,
-and multiple-artboard sizes. Agreed but not implemented: Configure pages cards
-for every size of the space, keeping declared artboard sizes that a page's
-`sizes` don't accept, and public guides for the size controls; see
-[implementation gaps](#implementation-gaps).
-
 ## Purpose and scope
 
 A space defines its artboard sizes: dimensions, labels, icons, order and which
@@ -22,6 +14,14 @@ Configure pages, TypeScript definitions, the portable viewer and the
 multiple-artboard model. Docs lenses use their own canvas layout. Simulator
 and window content keeps its native dimensions, letterboxed inside the chosen
 artboard. Resizable dimensions are viewer-local and shared across pages.
+
+**Status:** implemented: the size schema and defaults, server-resolved sizes,
+fill axes, keyed addresses, the size switcher and menu, Custom size… and Edit
+sizes…, handoff size lines, export sizes, preview keys and the portable viewer,
+and multiple-artboard sizes. Agreed but not implemented: Configure pages cards
+for every size of the space, keeping declared artboard sizes that a page's
+`sizes` don't accept, and public guides for the size controls; see
+[implementation gaps](#implementation-gaps).
 
 ## Default sizes
 

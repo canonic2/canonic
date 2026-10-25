@@ -17,7 +17,7 @@ configured previews ([server](../system/server.md#previews)): generation URL
 prefixes and caching, the preview module, preload selection for preview and
 Docs entries in the generated client, and concurrent routes with no serial
 queue. The one gap, descriptors waiting for pre-warming, is listed in
-[gaps](#gaps).
+[implementation gaps](#implementation-gaps).
 
 ## Requirements
 
@@ -93,11 +93,6 @@ records that observation.
 - Preview and docs descriptors wait for the build that contains their entry
   ([compiler](compiler.md#entries)), and for nothing else.
 
-## Gaps
-
-- Preview and docs descriptors wait for pre-warming to finish
-  ([first-page gap](../system/performance.md#implementation-gaps)).
-
 ## Verification
 
 [preview.test.js](../../server/node/preview.test.js) and
@@ -106,3 +101,8 @@ compiler output and serving through the server, and the compiler's Rust unit
 tests cover entries, the generated client and HTML modules. Shared-runtime
 isolation and stylesheet updates also have
 [pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13).
+
+## Implementation gaps
+
+- Preview and docs descriptors wait for pre-warming to finish
+  ([first-page gap](../system/performance.md#implementation-gaps)).

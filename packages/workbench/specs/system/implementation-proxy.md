@@ -109,25 +109,6 @@ implementation lenses are unavailable. Acceptance on a real implementation
 includes an interaction-only state, such as an opened modal, appearing in the
 captured image without project changes.
 
-## Implementation gaps
-
-- **Identity-provider sign-in.** An OAuth or SSO callback returns to the
-  address registered with the provider, the implementation's own origin, so
-  the session isn't set on the proxy and the lens doesn't keep it.
-- **Absolute links.** Links and scripts that spell out the implementation's
-  full origin leave the proxy. Relative ones stay on it. Response bodies are
-  not rewritten.
-- **Before the bridge connects**, a lens screenshot falls back to the helper
-  loading the URL in its own session ([capture.md](../review/capture.md)).
-- **HTTPS implementations** are proxied over plain `http` on loopback, with
-  upstream certificate checks off. Cookie attributes and origin identity change.
-  Loopback HTTP can still be potentially trustworthy under the
-  [Secure Contexts standard](https://www.w3.org/TR/secure-contexts/#is-origin-trustworthy);
-  API availability also depends on ancestor contexts, browser permissions and
-  embedding policy. Do not infer that every secure-context API is unavailable
-  merely because the proxy uses HTTP, or that it behaves exactly like the
-  upstream HTTPS origin.
-
 ## Verification points
 
 - [proxy.test.js](../../server/node/proxy.test.js), through a URL lens of a
@@ -149,3 +130,22 @@ captured image without project changes.
 - Manual: [smoke-lenses.cjs](../../scripts/smoke-lenses.cjs) for lens iframes,
   sessions and sign-in through the proxy, and a running Storybook for an interaction-only
   state (such as an opened modal) appearing in a screenshot.
+
+## Implementation gaps
+
+- **Identity-provider sign-in.** An OAuth or SSO callback returns to the
+  address registered with the provider, the implementation's own origin, so
+  the session isn't set on the proxy and the lens doesn't keep it.
+- **Absolute links.** Links and scripts that spell out the implementation's
+  full origin leave the proxy. Relative ones stay on it. Response bodies are
+  not rewritten.
+- **Before the bridge connects**, a lens screenshot falls back to the helper
+  loading the URL in its own session ([capture.md](../review/capture.md)).
+- **HTTPS implementations** are proxied over plain `http` on loopback, with
+  upstream certificate checks off. Cookie attributes and origin identity change.
+  Loopback HTTP can still be potentially trustworthy under the
+  [Secure Contexts standard](https://www.w3.org/TR/secure-contexts/#is-origin-trustworthy);
+  API availability also depends on ancestor contexts, browser permissions and
+  embedding policy. Do not infer that every secure-context API is unavailable
+  merely because the proxy uses HTTP, or that it behaves exactly like the
+  upstream HTTPS origin.

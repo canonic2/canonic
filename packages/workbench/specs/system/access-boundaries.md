@@ -8,7 +8,7 @@ It is not an authentication scheme or a claim that project code is sandboxed.
 **Status:** implemented: the boundaries below as described. Undecided policy:
 uniform origin/Host validation of mutation routes, symlinks and dotfiles in
 static serving, and authentication for a remote or shared server; see
-[verification and unresolved policy](#verification-and-unresolved-policy).
+[open questions](#open-questions).
 
 ## Execution and origins
 
@@ -96,7 +96,7 @@ question deadlines are owned by the server message transport; evaluator and
 capture deadlines remain in their respective topics. Rejected work reports an
 error rather than returning a truncated success.
 
-## Verification and unresolved policy
+## Verification
 
 Existing evidence is in [server tests](../../server/node/server.test.js)
 (cross-origin space operations, capture origins and payload validation),
@@ -104,6 +104,8 @@ Existing evidence is in [server tests](../../server/node/server.test.js)
 [canvas route validation](../../server/src/serve/routes/canvas.rs) and
 [renderer runtime tests](../../ui/src/modules/preview-sessions/controller.test.js).
 Presence of checks is not a penetration test or full hostile-project assessment.
+
+## Open questions
 
 Missing policy decisions include uniform mutation-route origin/Host validation,
 the treatment of symlinks and dotfiles in static project serving, and whether a

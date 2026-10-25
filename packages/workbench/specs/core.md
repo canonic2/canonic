@@ -192,13 +192,6 @@ composition does not change the outer control layout.
 - Managed-document readiness polling and its limits are verified under
   [readiness](preview-pipeline/readiness.md).
 
-## Implementation gaps
-
-- **Some failures never become problems.** A stopped Storybook at a configured
-  `url` used only by mappings, and a mapped Simulator whose device is not
-  booted (without `catalog: true`), fail only on the canvas; see [implementations](pages/implementations.md#current-gaps) and
-  [Storybook](pages/storybook.md#current-gaps).
-
 ## Verification points
 
 - [address.test.js](../ui/legacy/address.test.js) checks address parsing,
@@ -222,3 +215,10 @@ composition does not change the outer control layout.
   `preview-compat.js` into served HTML.
 - Not covered: no test checks that the sidebar and canvas show the same
   problems list.
+
+## Implementation gaps
+
+- **Some failures never become problems.** A stopped Storybook at a configured
+  `url` used only by mappings, and a mapped Simulator whose device is not
+  booted (without `catalog: true`), fail only on the canvas; see [implementations](pages/implementations.md#implementation-gaps) and
+  [Storybook](pages/storybook.md#implementation-gaps).

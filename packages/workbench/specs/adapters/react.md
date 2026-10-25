@@ -43,14 +43,6 @@ use ordinary `createRoot()` initialization.
 React Refresh updates a component in place with its state kept
 ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 
-## Decisions
-
-- **React compiles natively** ([server decisions](README.md#decisions),
-  2026-10-16): everything it needs is in Rspack's Rust crates, the SWC
-  loader, React Refresh and native CSS. A lab Rust host built React pages
-  natively with correct output before the decision
-  ([research](../../research/instant-first-page.md#stage-2-2026-10-16)).
-
 ## Verification
 
 [preview.test.js](../../server/node/preview.test.js) covers project React
@@ -58,3 +50,11 @@ versions. The retained-session browser smoke
 ([smoke-preview-sessions.cjs](../../scripts/smoke-preview-sessions.cjs))
 exercises a React preview in headless Chrome
 ([server verification](../system/server.md#verification)).
+
+## Decisions
+
+- **React compiles natively** ([server decisions](README.md#decisions),
+  2026-10-16): everything it needs is in Rspack's Rust crates, the SWC
+  loader, React Refresh and native CSS. A lab Rust host built React pages
+  natively with correct output before the decision
+  ([research](../../research/instant-first-page.md#stage-2-2026-10-16)).

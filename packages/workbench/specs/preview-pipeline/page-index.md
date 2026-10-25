@@ -4,7 +4,7 @@
 literal parsing, batched evaluation, saved-index reuse, the resident index and
 its definition watcher. The complete-list target is not met on large projects
 ([performance](../system/performance.md#implementation-gaps)). Remaining implementation
-gaps are in [gaps](#gaps); test gaps are in
+gaps are in [implementation gaps](#implementation-gaps); test gaps are in
 [acceptance and evidence](#acceptance-and-evidence).
 
 ## Purpose and ownership
@@ -152,7 +152,7 @@ acceptance.
 | PI-07 | Cache eviction, byte bounds and process cleanup follow the resource table | Implemented bounds; dedicated boundary/eviction and descendant-cleanup assertions remain verification gaps |
 | PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [listing evidence](../../research/page-listing.md); acceptance on all six targets is not established by that probe |
 
-## Gaps
+## Implementation gaps
 
 [Listing research](../../research/page-listing.md) records measured
 results and target gaps; [comparison evidence](../../research/instant-first-page.md#stage-1-2026-10-15)

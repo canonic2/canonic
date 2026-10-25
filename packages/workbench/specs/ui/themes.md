@@ -1,7 +1,5 @@
 # Workbench themes
 
-## Purpose
-
 Workbench's interface has a complete default theme and can inherit its host's
 theme. In VS Code it follows the active theme, including user color overrides.
 In a standalone browser it remains usable without any VS Code variables or API.
@@ -13,7 +11,7 @@ control: the space switcher and space mark, the size switcher with Custom size
 and Edit sizes, the Actions switch, the canvas presentation and the export
 dialog. The sidebar maps host roles for its controls. The canvas theme snapshot
 bridge and theming of the rest of the canvas shell are agreed but not
-implemented; see [evidence and implementation gaps](#evidence-and-implementation-gaps).
+implemented; see [implementation gaps](#implementation-gaps).
 
 ## Tokens and default behavior
 
@@ -134,18 +132,7 @@ accent colors; interactive control states use the host's semantic roles.
   visible focus/selection and forced colors. Packaged assets work under webview CSP.
 - Preview styling and project screenshots remain independent of shell theme.
 
-## Evidence and implementation gaps
-
-Implementation gaps:
-
-- [sidebar.css](../../ui/legacy/sidebar.css) maps panel/text variables but
-  uses fixed blue accents and derived shades instead of semantic host roles.
-- [workbench.css](../../ui/legacy/workbench.css) gives the canvas shell a fixed
-  palette and forces `color-scheme: dark`.
-- [panel.js](../../extension/panel.js) embeds the server canvas as a separate-origin iframe;
-  its message bridge does not forward theme snapshots.
-
-Platform references:
+## Platform references
 
 - [VS Code webview theming](https://code.visualstudio.com/api/extension-guides/webview#theming-webview-content)
   defines injected variables, theme categories, and font variables.
@@ -154,3 +141,12 @@ Platform references:
 - [MDN CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascading_variables/Using_CSS_custom_properties)
   and [Shadow DOM](https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM)
   describe inherited values and style encapsulation.
+
+## Implementation gaps
+
+- [sidebar.css](../../ui/legacy/sidebar.css) maps panel/text variables but
+  uses fixed blue accents and derived shades instead of semantic host roles.
+- [workbench.css](../../ui/legacy/workbench.css) gives the canvas shell a fixed
+  palette and forces `color-scheme: dark`.
+- [panel.js](../../extension/panel.js) embeds the server canvas as a separate-origin iframe;
+  its message bridge does not forward theme snapshots.

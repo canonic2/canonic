@@ -417,6 +417,21 @@ problems update when they arrive.
   ([plan.rs](../../server/src/export/plan.rs)) through the capture helper's
   `fullPage` and `selector` options.
 
+## Design constraints
+
+- Docs shown alone use the canvas viewport so fixed-position content and `vh`
+  resolve against the reader's visible area. Beside other artboards they use
+  an ordinary sized viewport; full-page document height is reserved for export.
+- Implementation constraints (shared light DOM, source-text extraction,
+  content-only rendering, shared compiler profiles) are in the
+  [Docs host](../preview-pipeline/docs-host.md#design-constraints).
+- A declared YAML page wins when a discovered docs definition claims the same
+  Markdown file. One Markdown file has one owning page.
+- The page list represents pages and scenarios, not docs examples. Examples are
+  addressed within their page and navigated in the docs content.
+- Whole-page references use document height up to the capture limit;
+  per-example references crop to the rendered example stage.
+
 ## Acceptance fixture
 
 Acceptance uses a fixture space with a docs lens and three docs pages:
@@ -464,37 +479,6 @@ The space also has a page with a design and no docs.
   `defineDocs`, per-example mounting and readiness, and source-text extraction.
   Canvas behavior is checked in headless Chrome against a docs fixture.
 
-## Design constraints
-
-- Docs shown alone use the canvas viewport so fixed-position content and `vh`
-  resolve against the reader's visible area. Beside other artboards they use
-  an ordinary sized viewport; full-page document height is reserved for export.
-- Implementation constraints (shared light DOM, source-text extraction,
-  content-only rendering, shared compiler profiles) are in the
-  [Docs host](../preview-pipeline/docs-host.md#design-constraints).
-- A declared YAML page wins when a discovered docs definition claims the same
-  Markdown file. One Markdown file has one owning page.
-- The page list represents pages and scenarios, not docs examples. Examples are
-  addressed within their page and navigated in the docs content.
-- Whole-page references use document height up to the capture limit;
-  per-example references crop to the rendered example stage.
-
-## Implementation gaps
-
-- **VS Code acceptance.** Check docs routing, focus, examples, capture and
-  handoff in the real editor host. Packaged TypeScript loading and standalone
-  browser checks alone do not establish those interactions.
-- **Show code for an `export *` example** answers that the export isn't in
-  the example source: the statement lives in the re-exported module, which the
-  listing doesn't record.
-- **Multiple-artboard management.** Isolated docs renderers participate in
-  declared-artboard composition. Arbitrary artboard management and its
-  editor-host acceptance remain [canvas integration work](../canvas/artboard-management.md#delivery-plan).
-- **An address naming a page's Markdown** opens nothing when the Markdown
-  belongs to a page with a design: the address names the page's own `src`.
-- **The portable viewer** lists each page's docs as an entry of its own with a
-  Lens menu, apart from the page's preview.
-
 ## Verification points
 
 - The server's `docs` module tests: Markdown reading, rendering,
@@ -520,3 +504,19 @@ The space also has a page with a design and no docs.
   [address.test.js](../../ui/legacy/address.test.js),
   and [config.test.js](../../server/node/config.test.js): the schema and the address.
 - [handoff tests](../../server/src/handoff/tests.rs): the handoff prompt through a docs lens.
+
+## Implementation gaps
+
+- **VS Code acceptance.** Check docs routing, focus, examples, capture and
+  handoff in the real editor host. Packaged TypeScript loading and standalone
+  browser checks alone do not establish those interactions.
+- **Show code for an `export *` example** answers that the export isn't in
+  the example source: the statement lives in the re-exported module, which the
+  listing doesn't record.
+- **Multiple-artboard management.** Isolated docs renderers participate in
+  declared-artboard composition. Arbitrary artboard management and its
+  editor-host acceptance remain [canvas integration work](../canvas/artboard-management.md#delivery-plan).
+- **An address naming a page's Markdown** opens nothing when the Markdown
+  belongs to a page with a design: the address names the page's own `src`.
+- **The portable viewer** lists each page's docs as an entry of its own with a
+  Lens menu, apart from the page's preview.

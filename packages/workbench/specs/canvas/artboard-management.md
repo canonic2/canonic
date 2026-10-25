@@ -27,7 +27,7 @@ Open:
 
 - **Persistence and sharing.** Remembering an arrangement locally and storing a
   named arrangement in a shared project file are distinct options. Neither
-  storage policy has been agreed; see [questions](#questions-for-product-decisions).
+  storage policy has been agreed; see [open questions](#open-questions).
 
 ## Suggested first-delivery interactions
 
@@ -134,23 +134,6 @@ These proposals do not reopen the limits established by the
 - Rendered interaction remains usable at the agreed artboard limit, and
   memory and interaction-latency targets are established before user-facing delivery.
 
-## Questions for product decisions
-
-1. **Saving and sharing:** Should Workbench remember an arrangement only on
-   the user's machine, or also save named arrangements in a project file that
-   teammates can commit and reopen? For example, a shared "Checkout review"
-   could name its artboards and views. The destination and portable references
-   for a canvas spanning several spaces need decisions if sharing is wanted.
-2. **Capture format:** Is one composite canvas image sufficient, or should
-   handoffs also include a full-resolution image of each artboard? All artboards
-   are included either way. Large arrangements need a defined resolution and
-   image-size policy.
-3. **Canvas ownership:** Where should a mixed-space handoff be saved, and
-   which space owns canvas-level actions such as export and configuration?
-   Recommendation: a host space owns the handoff bundle; editing and export
-   explicitly identify the space they target. Participant sources retain
-   their own space identities regardless of the selected artboard.
-
 ## Delivery plan
 
 | Slice | Integration work | Acceptance evidence |
@@ -182,3 +165,20 @@ The public terminology and single-artboard scope can be clarified before the
 feature ships. Existing guide routes stay stable, and a new guide joins the
 site's navigation and search. Overview screenshots change only when shipped
 visible behavior changes.
+
+## Open questions
+
+1. **Saving and sharing:** Should Workbench remember an arrangement only on
+   the user's machine, or also save named arrangements in a project file that
+   teammates can commit and reopen? For example, a shared "Checkout review"
+   could name its artboards and views. The destination and portable references
+   for a canvas spanning several spaces need decisions if sharing is wanted.
+2. **Capture format:** Is one composite canvas image sufficient, or should
+   handoffs also include a full-resolution image of each artboard? All artboards
+   are included either way. Large arrangements need a defined resolution and
+   image-size policy.
+3. **Canvas ownership:** Where should a mixed-space handoff be saved, and
+   which space owns canvas-level actions such as export and configuration?
+   Recommendation: a host space owns the handoff bundle; editing and export
+   explicitly identify the space they target. Participant sources retain
+   their own space identities regardless of the selected artboard.

@@ -19,6 +19,33 @@ Required architecture: [one shell with content-only renderers](../system/renderi
 The outer application entry point remains unchanged; it must never become an
 artboard's content entry point. Instances use the dedicated `content.html` viewport.
 
+## Purpose
+
+Review related views together: one page at laptop and mobile sizes,
+several scenarios of a component, a design beside its implementation, or several
+pages in a flow. An artboard instance on the canvas shows one view: one
+declared or implicit artboard of a page and scenario. It is not a new page in
+the space's catalog, and its instance ID is separate from the declared artboard
+ID. Two instances may point to the same page and scenario.
+Developers and designers decide what belongs together; these examples do not
+restrict the tool to a particular comparison workflow.
+
+## Agreed requirements
+
+- **Flexible content, in the first delivery.** An artboard can contain any supported content
+  type: authored pages, Workbench previews, URL lenses, Storybook stories,
+  Simulator streams, and window streams. A canvas may combine content from
+  different spaces. The model must not privilege a particular use case or
+  renderer. Docs lenses are included: beside other artboards a page's docs are
+  an artboard, as [docs](../pages/docs-pages.md#in-a-multiple-artboard-canvas)
+  specifies, so one page's design and docs can sit side by side.
+- **Complete review output, in the first delivery.** When a canvas has multiple artboards,
+  screenshots, handoffs, and agent context include all of them. Selection
+  identifies the user's current focus within the canvas; it must not hide
+  neighboring artboards from review output or context.
+- Arrangement tools, agreed for a later delivery, and arrangement persistence and sharing are in
+  [artboard management](artboard-management.md#agreed-and-open).
+
 ## Instance model and review limits
 
 `ui/src/bootstrap/canvas.js` composes the artboard modules under
@@ -84,33 +111,6 @@ restores that renderer and its retained sessions; clearing the canvas or closing
 the host disposes it. Expiry waits for any capture to finish before disposing it.
 Management workflows, free positioning, row/grid arrangement, persistence and
 sharing are [proposals](artboard-management.md).
-
-## Purpose
-
-Review related views together: one page at laptop and mobile sizes,
-several scenarios of a component, a design beside its implementation, or several
-pages in a flow. An artboard instance on the canvas shows one view: one
-declared or implicit artboard of a page and scenario. It is not a new page in
-the space's catalog, and its instance ID is separate from the declared artboard
-ID. Two instances may point to the same page and scenario.
-Developers and designers decide what belongs together; these examples do not
-restrict the tool to a particular comparison workflow.
-
-## Agreed requirements
-
-- **Flexible content, in the first delivery.** An artboard can contain any supported content
-  type: authored pages, Workbench previews, URL lenses, Storybook stories,
-  Simulator streams, and window streams. A canvas may combine content from
-  different spaces. The model must not privilege a particular use case or
-  renderer. Docs lenses are included: beside other artboards a page's docs are
-  an artboard, as [docs](../pages/docs-pages.md#in-a-multiple-artboard-canvas)
-  specifies, so one page's design and docs can sit side by side.
-- **Complete review output, in the first delivery.** When a canvas has multiple artboards,
-  screenshots, handoffs, and agent context include all of them. Selection
-  identifies the user's current focus within the canvas; it must not hide
-  neighboring artboards from review output or context.
-- Arrangement tools, agreed for a later delivery, and arrangement persistence and sharing are in
-  [artboard management](artboard-management.md#agreed-and-open).
 
 ## System and edge-case contracts
 
@@ -197,7 +197,7 @@ they do not reopen these limits.
   identified as such. Persist one bundle in a defined host space/location;
   multi-space relative paths alone are ambiguous. Its destination and optional
   per-artboard images are unresolved
-  [product choices](artboard-management.md#questions-for-product-decisions). Catalog-wide
+  [product choices](artboard-management.md#open-questions). Catalog-wide
   [design-system export](../review/export.md) keeps its own capture plan.
 
 ### Agent context and compatibility

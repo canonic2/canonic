@@ -82,7 +82,7 @@ Each decision lives with the topic that owns it:
 
 Each topic owns its unresolved decisions:
 
-- [Page index](page-index.md#gaps)
+- [Page index](page-index.md#implementation-gaps)
 - [Compiler](compiler.md#open-questions)
 - [First page](first-page.md#open-questions)
 - [Readiness](readiness.md#open-questions)

@@ -238,21 +238,6 @@ full grammar and the marks reserved in page paths.
   and its source so a person or agent can make it the artboard's design.
   Workbench never rewrites definitions or sources to promote an iteration.
 
-## Decisions
-
-- **2026-10-24, names.** The alternative condition of a page is a *scenario*;
-  a take on an artboard's design is an *iteration*. "Variant" was rejected
-  because Figma uses it for property combinations, "option" because `options`
-  is pervasive in code, "draft" and "version" because they imply unfinished
-  work or releases.
-- **2026-10-24, hierarchy.** Page › Scenario › Artboard › Iteration, with an
-  implicit scenario and artboard. Iterations per page and then per scenario
-  were rejected because not every scenario, and not every artboard, has the
-  same iterations. Artboards belong to a scenario because different scenarios
-  need different artboards.
-- **2026-10-24, promotion by handoff.** Rewriting sources is project-specific
-  and risky; the handoff names the iteration instead.
-
 ## Acceptance criteria
 
 1. A definition with scenario-level `artboards` and per-artboard `iterations`
@@ -301,6 +286,21 @@ full grammar and the marks reserved in page paths.
   scenario command does not change the iteration, so the frame reloads.
 - **Public guides** (configuration, pages and scenarios, previews) do not
   describe iterations.
+
+## Decisions
+
+- **2026-10-24, names.** The alternative condition of a page is a *scenario*;
+  a take on an artboard's design is an *iteration*. "Variant" was rejected
+  because Figma uses it for property combinations, "option" because `options`
+  is pervasive in code, "draft" and "version" because they imply unfinished
+  work or releases.
+- **2026-10-24, hierarchy.** Page › Scenario › Artboard › Iteration, with an
+  implicit scenario and artboard. Iterations per page and then per scenario
+  were rejected because not every scenario, and not every artboard, has the
+  same iterations. Artboards belong to a scenario because different scenarios
+  need different artboards.
+- **2026-10-24, promotion by handoff.** Rewriting sources is project-specific
+  and risky; the handoff names the iteration instead.
 
 ## Open questions
 

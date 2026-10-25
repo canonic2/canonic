@@ -8,7 +8,8 @@ This topic owns editing authored page declarations through **More → Configure 
 `workbench.yaml` writes are implemented. Fencing stale reads and save
 completions by form and space, and resolved size cards in the form, are agreed
 but not implemented; a conflict policy and draft warnings are open decisions.
-See [gaps and open decisions](#gaps-and-open-decisions).
+See [implementation gaps](#implementation-gaps) and
+[open questions](#open-questions).
 
 ## Editing workflow
 
@@ -89,11 +90,14 @@ write/preservation code is in [edit.rs](../../server/src/config/edit.rs) and
 and YAML-value round-trip tests. That evidence does not establish the full
 browser form workflow, concurrent editing or injected filesystem failure matrix.
 
-## Gaps and open decisions
+## Implementation gaps
 
 - Resolved custom/page-owned size cards remain [size-editor delivery work](../canvas/sizes.md#implementation-gaps).
 - The legacy form does not fence asynchronous requests by opening/space
   generation; stale completion acceptance above remains implementation work.
+
+## Open questions
+
 - Choose a conflict policy for external YAML edits and two open forms. A
   revision check/refusal is a candidate, not an agreed API or implemented merge.
 - The form has no unsaved-draft warning or draft persistence. Whether to add

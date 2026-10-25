@@ -57,14 +57,14 @@ environment's `mount` runs last.
 Markup re-renders in place from the new module; stylesheets are replaced in
 place ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 
-## Decisions
-
-- **The HTML loader and part loader are Rust loaders** in the Workbench
-  server, because they are Workbench's own code and run no project
-  JavaScript ([server decisions](README.md#decisions), 2026-10-16).
-
 ## Verification
 
 [preview.test.js](../../server/node/preview.test.js) covers scripts, inline
 modules, CSS, `srcset` and assets; the unit tests in
 [html.rs](../../server/src/compiler/html.rs) cover the loaders.
+
+## Decisions
+
+- **The HTML loader and part loader are Rust loaders** in the Workbench
+  server, because they are Workbench's own code and run no project
+  JavaScript ([server decisions](README.md#decisions), 2026-10-16).

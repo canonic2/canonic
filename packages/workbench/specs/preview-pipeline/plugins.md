@@ -13,7 +13,7 @@ JavaScript loaders run in the Node evaluator
 ([node_loader.rs](../../server/src/compiler/node_loader.rs)), problems for
 JavaScript plugin objects and invalid options, and portable output from a
 production build. Not implemented: project plugins and rules for Astro's
-server-side bundling ([gaps](#gaps)).
+server-side bundling ([implementation gaps](#implementation-gaps)).
 
 ## Requirements
 
@@ -141,26 +141,6 @@ server, for the Node evaluator:
 - **Portable output** uses the same native compiler in production mode, with
   the same rules and the same answer for plugins.
 
-## Decisions
-
-Decided by the owner on 2026-10-19: plugin implementations are native Rust
-capabilities, preserving the capabilities consuming projects use, rather than
-a JavaScript compiler that executes their hooks. The registration interface is
-the `plugins` list of capability descriptions above.
-
-The production use cases inspected for this decision are SVG sprite virtual
-modules, eager `import.meta.glob` expansion, and import resolution based on the
-importing source. They need project-agnostic implementations with configured
-directories, identifiers and mappings. The formats lab also exercises a
-virtual build-info module, source transformation and platform-specific
-resolution; its JavaScript plugins are fixtures, not a production
-compatibility requirement.
-
-## Gaps
-
-- Astro frontmatter and Astro input edits bundle with esbuild in the Node
-  evaluator, without project plugins or rules.
-
 ## Verification
 
 [Preview integration tests](../../server/node/preview.test.js) cover plugin
@@ -181,6 +161,26 @@ in Node with options; and JavaScript plugins reported as problems. Test gaps:
 Plugin behavior in server-side definition and Astro evaluation must be assessed
 separately from browser compilation; successful browser output does not
 establish that path.
+
+## Implementation gaps
+
+- Astro frontmatter and Astro input edits bundle with esbuild in the Node
+  evaluator, without project plugins or rules.
+
+## Decisions
+
+Decided by the owner on 2026-10-19: plugin implementations are native Rust
+capabilities, preserving the capabilities consuming projects use, rather than
+a JavaScript compiler that executes their hooks. The registration interface is
+the `plugins` list of capability descriptions above.
+
+The production use cases inspected for this decision are SVG sprite virtual
+modules, eager `import.meta.glob` expansion, and import resolution based on the
+importing source. They need project-agnostic implementations with configured
+directories, identifiers and mappings. The formats lab also exercises a
+virtual build-info module, source transformation and platform-specific
+resolution; its JavaScript plugins are fixtures, not a production
+compatibility requirement.
 
 ## Open questions
 

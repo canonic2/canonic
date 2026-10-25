@@ -47,6 +47,13 @@ class it added.
 
 As the React adapter.
 
+## Verification
+
+[preview.test.js](../../server/node/preview.test.js) covers frames and docs
+stages filled by a root view, alongside the compiler's unit tests in
+[project.rs](../../server/src/compiler/project.rs) and
+[entries.rs](../../server/src/compiler/entries.rs).
+
 ## Decisions
 
 - **The Rust server supports React Native Web** ([server decisions](README.md#decisions),
@@ -54,13 +61,6 @@ As the React adapter.
   Rspack resolve or rule option in its Rust crates (an alias, extensions, a
   side-effect rule), with the React adapter's SWC loader. No JavaScript
   loader is involved.
-
-## Verification
-
-[preview.test.js](../../server/node/preview.test.js) covers frames and docs
-stages filled by a root view, alongside the compiler's unit tests in
-[project.rs](../../server/src/compiler/project.rs) and
-[entries.rs](../../server/src/compiler/entries.rs).
 
 ## Open questions
 

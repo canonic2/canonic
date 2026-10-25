@@ -37,6 +37,12 @@ time; `builtin:` loaders and plugin capabilities run natively. JavaScript
 plugin objects are configuration problems and do not run. The browser mount
 runs only in the frame.
 
+## Verification
+
+[preview.test.js](../../server/node/preview.test.js) covers custom
+adapters on the shared path, plugin capabilities and loader rules, and
+JavaScript plugins reported as problems.
+
 ## Decisions
 
 - **The browser mount needs nothing from the server beyond compiling it,**
@@ -49,9 +55,3 @@ runs only in the frame.
   transforms and resolver behavior, scoped to the adapter that registers
   them, and with no Node compiler fallback
   ([plugin decision](../preview-pipeline/plugins.md#decisions), 2026-10-19).
-
-## Verification
-
-[preview.test.js](../../server/node/preview.test.js) covers custom
-adapters on the shared path, plugin capabilities and loader rules, and
-JavaScript plugins reported as problems.

@@ -11,7 +11,7 @@ implementations, code pointers, and the page compatibility script are in
 **Status:** title mapping, story lookup, channel switching with its navigation
 fallback, retained Storybook sessions, capture and export are implemented. A
 stopped or failed Storybook is not reported in `problems` up front; see
-[current gaps](#current-gaps).
+[implementation gaps](#implementation-gaps).
 
 ## Configuration
 
@@ -137,31 +137,6 @@ mechanism.
   [Export capture](../review/export.md#reference-capture-plan) schedules background
   workers and does not drive the visible workbench preview.
 
-## Decisions
-
-- **Exact titles.** A mapping names the title Storybook shows. Matching a
-  final segment under another prefix could pick the wrong component, so the
-  lookup suggests it instead of substituting it.
-- **Channel switching with navigation fallback.** Reusing the loaded preview
-  makes switching fast, but the channel does not confirm delivery, so
-  Workbench navigates when acknowledgement or rendering doesn't arrive.
-
-## Current gaps
-
-- **Storybooks are not checked up front.** Only failed `url: auto` detection,
-  and a Storybook the server runs in an untrusted workspace or without a
-  usable root or Node runtime, add to `problems`. When a Storybook at an
-  explicit `url` is stopped, or one the server runs fails to start, the
-  failure appears on the canvas when a mapped page is opened, not in
-  `problems`, short of the shared problems list in
-  [core.md](../core.md#problem-reporting).
-
-## Open questions
-
-- The detected `url: auto` address and the canvas's story lists are kept until
-  the server or canvas reloads. Should a Storybook that moves ports, or a
-  title that gains stories, be picked up without a reload?
-
 ## Verification points
 
 - [server.test.js](../../server/node/server.test.js) checks port discovery
@@ -188,3 +163,28 @@ mechanism.
   startup and Reload.
 - No check verifies that the Storybook renderer never starts Workbench's
   application; add one before claiming the content-only boundary.
+
+## Implementation gaps
+
+- **Storybooks are not checked up front.** Only failed `url: auto` detection,
+  and a Storybook the server runs in an untrusted workspace or without a
+  usable root or Node runtime, add to `problems`. When a Storybook at an
+  explicit `url` is stopped, or one the server runs fails to start, the
+  failure appears on the canvas when a mapped page is opened, not in
+  `problems`, short of the shared problems list in
+  [core.md](../core.md#problem-reporting).
+
+## Decisions
+
+- **Exact titles.** A mapping names the title Storybook shows. Matching a
+  final segment under another prefix could pick the wrong component, so the
+  lookup suggests it instead of substituting it.
+- **Channel switching with navigation fallback.** Reusing the loaded preview
+  makes switching fast, but the channel does not confirm delivery, so
+  Workbench navigates when acknowledgement or rendering doesn't arrive.
+
+## Open questions
+
+- The detected `url: auto` address and the canvas's story lists are kept until
+  the server or canvas reloads. Should a Storybook that moves ports, or a
+  title that gains stories, be picked up without a reload?

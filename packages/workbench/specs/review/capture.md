@@ -23,7 +23,7 @@ owns capability differences and upgrade/shutdown semantics.
 local pages and previews, bridged URL and Storybook capture, streamed-lens DOM
 rendering, full-canvas composition, the camera and handoff are implemented.
 Capturing pages with embedded documents or origin-tainted pixels is agreed but
-not implemented; see [known capture limits](#known-capture-limits).
+not implemented; see [implementation gaps](#implementation-gaps).
 
 ## Why a helper exists
 
@@ -200,32 +200,6 @@ syntax spans. Colour-only changes advance the mirror revision, and cleared
 highlights are removed on the receiver. Docs capture waits for the worker's
 completion or bounded plain fallback before reading that snapshot.
 
-## Decisions
-
-- **Mirror the live document instead of re-running the page.** The helper
-  shows exactly what the reviewer sees, including typed input, scroll, and
-  hover, without running application code twice or replaying interactions.
-- **Fail rather than fall back to DOM rendering when hosted.** DOM rendering
-  takes seconds on real pages and renders some fonts and effects differently;
-  a visible error is preferable to a slow, divergent image.
-- **Keep the OS motion preference in the helper.** Mirrors carry animation
-  phases, and forcing reduced motion would select different CSS from the
-  visible preview.
-- **One screenshot engine.** The bundled helper is the only
-  engine. Hosts that can't run it, such as Linux without a display (most
-  remote workspaces) and macOS 12 and earlier, have no screenshots rather
-  than a second engine that renders differently and needs its own
-  hardening.
-
-## Known capture limits
-
-- **Embedded documents and tainted pixels fail the capture.** The mirror
-  throws `Live capture cannot yet mirror nested frames or embedded documents`
-  for an `iframe`, `object`, or `embed`, and fails on an origin-tainted canvas
-  or video ([dom-mirror.js](../../ui/legacy/dom-mirror.js)). This is a gap
-  against the [failure behavior](#failure-behavior) requirement that such
-  elements render blank and the rest of the page is captured.
-
 ## Verification points
 
 - [electron-runtime.test.js](../../capture/electron-runtime.test.js) covers extraction,
@@ -267,3 +241,29 @@ completion or bounded plain fallback before reading that snapshot.
 - Full-canvas composition and handoffs have browser-harness evidence.
 - Not covered by automated tests: the macOS earlier than 13 and display-less
   Linux cases, and embedded documents or tainted pixels.
+
+## Implementation gaps
+
+- **Embedded documents and tainted pixels fail the capture.** The mirror
+  throws `Live capture cannot yet mirror nested frames or embedded documents`
+  for an `iframe`, `object`, or `embed`, and fails on an origin-tainted canvas
+  or video ([dom-mirror.js](../../ui/legacy/dom-mirror.js)). This is a gap
+  against the [failure behavior](#failure-behavior) requirement that such
+  elements render blank and the rest of the page is captured.
+
+## Decisions
+
+- **Mirror the live document instead of re-running the page.** The helper
+  shows exactly what the reviewer sees, including typed input, scroll, and
+  hover, without running application code twice or replaying interactions.
+- **Fail rather than fall back to DOM rendering when hosted.** DOM rendering
+  takes seconds on real pages and renders some fonts and effects differently;
+  a visible error is preferable to a slow, divergent image.
+- **Keep the OS motion preference in the helper.** Mirrors carry animation
+  phases, and forcing reduced motion would select different CSS from the
+  visible preview.
+- **One screenshot engine.** The bundled helper is the only
+  engine. Hosts that can't run it, such as Linux without a display (most
+  remote workspaces) and macOS 12 and earlier, have no screenshots rather
+  than a second engine that renders differently and needs its own
+  hardening.

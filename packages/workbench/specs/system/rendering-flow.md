@@ -10,7 +10,7 @@ independence and asset delivery; [core](../core.md) owns selection,
 content-only renderer. Not established: independent UI/backend hosting
 (owned by [modules](modules.md#implementation-gaps)) and live device checks of
 every native adapter; see
-[acceptance and verification gaps](#acceptance-and-verification-gaps).
+[acceptance and verification](#acceptance-and-verification).
 
 ## Required flow
 
@@ -106,7 +106,7 @@ composition. Renderer-specific responsibilities:
   canvas commands, metadata, capture locking, focus and keyboard forwarding through
   explicit content/annotation ports.
 
-## Acceptance and verification gaps
+## Acceptance and verification
 
 1. A minimal project fixture opens one application shell. Initial load, slow
    compilation, transitions and failures never request the Workbench application

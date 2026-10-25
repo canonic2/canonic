@@ -18,7 +18,7 @@ differs for its technology, and links to those topics for the rest.
 `workbench-server`'s preview compiler ([compiler.rs](../../server/src/compiler.rs))
 and the Node evaluator; each adapter spec states its own status at its top.
 Adapters as separate units, an agreed [decision](#decisions), are not
-implemented ([gaps](#gaps)).
+implemented ([implementation gaps](#implementation-gaps)).
 
 ## Adapters
 
@@ -102,6 +102,17 @@ is the browser module every frame shares ([browser.js](../../ui/preview/browser.
 and the bundled runtime is the Electron build Workbench ships
 ([capture](../review/capture.md#bundled-electron-runtime)).
 
+## Implementation gaps
+
+- **Adapters are not separate units.** Format handling is shared code: the
+  profiles and Workbench's rules are in [options.rs](../../server/src/compiler/options.rs),
+  the adapter-to-module map in [project.rs](../../server/src/compiler/project.rs),
+  Vue in [vue.rs](../../server/src/compiler/vue.rs), Astro in
+  [astro.rs](../../server/src/compiler/astro.rs) and the evaluator's
+  [astro.ts](../../server/node/src/modules/evaluator/astro.ts), and project
+  plugin capabilities in [plugins.rs](../../server/src/compiler/plugins.rs).
+  Where each adapter should live is an [open question](#open-questions).
+
 ## Decisions
 
 Decided by the owner on 2026-10-16, after the
@@ -132,17 +143,6 @@ Decided by the owner on 2026-10-16, after the
 - **Storybook is an adapter;** its pages are declared in `workbench.yaml`,
   with no catalog import ([Storybook adapter](storybook.md#decisions)).
 - The name stays **adapter**, as in the `adapter` key and the user guides.
-
-## Gaps
-
-- **Adapters are not separate units.** Format handling is shared code: the
-  profiles and Workbench's rules are in [options.rs](../../server/src/compiler/options.rs),
-  the adapter-to-module map in [project.rs](../../server/src/compiler/project.rs),
-  Vue in [vue.rs](../../server/src/compiler/vue.rs), Astro in
-  [astro.rs](../../server/src/compiler/astro.rs) and the evaluator's
-  [astro.ts](../../server/node/src/modules/evaluator/astro.ts), and project
-  plugin capabilities in [plugins.rs](../../server/src/compiler/plugins.rs).
-  Where each adapter should live is an [open question](#open-questions).
 
 ## Open questions
 

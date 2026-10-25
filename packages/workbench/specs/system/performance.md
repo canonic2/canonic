@@ -231,6 +231,23 @@ Tracing itself adds diagnostic requests and output work. Use it to locate
 waits; controlled lab comparisons must declare its state and independently
 observe the requested content becoming visible.
 
+## Verification
+
+- Compare candidate approaches under the [lab methodology](labs.md).
+- Confirm selected changes on reference fixtures through the shipping server
+  and VS Code webview. Record measured values, cache states, host, fixture and
+  source revision in the owning research record; link its result from the
+  capability's status.
+- Keep test coverage, observed correctness, latency and platform acceptance
+  distinct. Research records do not redefine budgets or correctness tolerances.
+  Lab comparisons establish only their recorded builds and conditions.
+
+Dated measurements, fixtures, revisions and limitations live in
+[research](../../research/README.md). [Installed startup](../../research/startup.md)
+separates runtime preparation from listing. [Docs navigation](../../research/docs-navigation.md)
+and [highlighting](../../research/docs-highlighting.md) distinguish prototype
+comparisons from integrated and installed compatibility evidence.
+
 ## Implementation gaps
 
 - **First page.** The shipping eager compiler does not meet the
@@ -251,23 +268,6 @@ observe the requested content becoming visible.
 - **Pipeline acceptance.** Format-by-format navigation and edit confirmation
   through the shipping server and VS Code webview is open. Scoped shipping Docs navigation and
   installed startup checks do not establish the full format or platform matrix.
-
-## Verification
-
-- Compare candidate approaches under the [lab methodology](labs.md).
-- Confirm selected changes on reference fixtures through the shipping server
-  and VS Code webview. Record measured values, cache states, host, fixture and
-  source revision in the owning research record; link its result from the
-  capability's status.
-- Keep test coverage, observed correctness, latency and platform acceptance
-  distinct. Research records do not redefine budgets or correctness tolerances.
-  Lab comparisons establish only their recorded builds and conditions.
-
-Dated measurements, fixtures, revisions and limitations live in
-[research](../../research/README.md). [Installed startup](../../research/startup.md)
-separates runtime preparation from listing. [Docs navigation](../../research/docs-navigation.md)
-and [highlighting](../../research/docs-highlighting.md) distinguish prototype
-comparisons from integrated and installed compatibility evidence.
 
 ## Open questions
 

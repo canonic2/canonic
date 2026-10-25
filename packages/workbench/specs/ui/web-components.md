@@ -1,7 +1,5 @@
 # Workbench Web Components
 
-## Purpose
-
 Workbench's own browser interface uses Web Components as its target component
 architecture. Components ship under `packages/workbench/ui/src/components/<name>/`;
 the agreed [target layout](../system/ui-port.md) also places elements only one
@@ -11,16 +9,16 @@ This contract concerns the tool's interface, not the framework used by pages it
 previews. It does not change the preview adapters or require projects to adopt
 Web Components.
 
+Related contracts: [themes](themes.md),
+[core behavior](../core.md), and [extension hosting](../integrations/vscode-extension.md).
+
 **Status:** the space switcher and space mark (sidebar, breadcrumb), the size
 switcher with its Custom size and Edit sizes dialogs, the Actions switch, the
 canvas presentation and the export dialog are implemented under this contract,
 each with its design page; the existing shell composes them. Migrating the
 remaining interface surfaces, which use HTML, JavaScript and shared CSS, and the
 port to the target layout (`ui/src/views/`, Lattice bindings) are agreed but not
-started. See [evidence and implementation gaps](#evidence-and-implementation-gaps).
-
-Related contracts: [themes](themes.md),
-[core behavior](../core.md), and [extension hosting](../integrations/vscode-extension.md).
+started. See [implementation gaps](#implementation-gaps).
 
 ## Component structure
 
@@ -180,12 +178,8 @@ element, not in the page.
   Workbench space, shows each meaningful state with the shipping element, and
   documents its current public API.
 
-## Evidence and implementation gaps
+## Verification points
 
-- **Unmigrated surfaces.** Interface surfaces other than the components below
-  use HTML, JavaScript and shared CSS.
-- **Target layout.** Every shipping element is in `ui/src/components/<name>/`;
-  no `ui/src/views/` folder or Lattice binding exists.
 - [Size switcher](../../ui/src/components/size-switcher/element.js),
   [Custom size](../../ui/src/components/size-dialog/element.js),
   [Edit sizes](../../ui/src/components/sizes-editor/element.js), and the
@@ -226,3 +220,11 @@ element, not in the page.
   describe the platform APIs. VS Code webviews run browser content under their
   own resource and security policies; see the
   [webview guide](https://code.visualstudio.com/api/extension-guides/webview).
+
+## Implementation gaps
+
+- **Unmigrated surfaces.** Interface surfaces other than the components
+  listed under [verification points](#verification-points) use HTML,
+  JavaScript and shared CSS.
+- **Target layout.** Every shipping element is in `ui/src/components/<name>/`;
+  no `ui/src/views/` folder or Lattice binding exists.

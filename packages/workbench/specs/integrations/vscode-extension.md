@@ -272,31 +272,6 @@ or handoff prompts.
   selection is per window.
 - Discovery and refresh must preserve the latest selection and named problems.
 
-## Implementation gaps
-
-- **Restart restoration is incomplete.** Complete per-space selection and
-  preference restoration (preferences live in browser `localStorage`) and
-  restored editor tabs do not follow the
-  [persistence contract](../canvas/persistence.md#implementation-gaps); current-space
-  storage, hidden-tab retention and first-page fallback do.
-- **Copy Canvas URL in remote workspaces (unverified).** The command copies
-  the server's `127.0.0.1` address without `asExternalUri`; in a remote
-  workspace that names the remote machine. The tab uses `asExternalUri`, and
-  **Open Canvas in Browser** relies on `openExternal`.
-- **Added spaces and workspace trust.** VS Code trust covers the open
-  workspace only. An added space outside it runs start commands and
-  previews under the window's trust flag; the guide tells users to add only
-  folders they trust.
-
-## Open questions
-
-- **Restricted Mode and live trust.** Decide whether Workbench should expose
-  non-executing inspection in untrusted workspaces. The extension
-  declares no Restricted Mode support, and its server trust flag is fixed at
-  creation. Supporting that workflow requires a live trust contract for both
-  workspace and added-space roots; start commands and evaluation must remain
-  gated throughout transitions.
-
 ## Verification points
 
 - [panel.test.js](../../extension/panel.test.js) checks the immediate loading tab, a closed
@@ -334,3 +309,28 @@ or handoff prompts.
   removing spaces, the window-focus reread, and extension.js wiring. The
   canvas and sidebar switchers also have browser fixture coverage; that does
   not establish editor-window or remote-host acceptance.
+
+## Implementation gaps
+
+- **Restart restoration is incomplete.** Complete per-space selection and
+  preference restoration (preferences live in browser `localStorage`) and
+  restored editor tabs do not follow the
+  [persistence contract](../canvas/persistence.md#implementation-gaps); current-space
+  storage, hidden-tab retention and first-page fallback do.
+- **Copy Canvas URL in remote workspaces (unverified).** The command copies
+  the server's `127.0.0.1` address without `asExternalUri`; in a remote
+  workspace that names the remote machine. The tab uses `asExternalUri`, and
+  **Open Canvas in Browser** relies on `openExternal`.
+- **Added spaces and workspace trust.** VS Code trust covers the open
+  workspace only. An added space outside it runs start commands and
+  previews under the window's trust flag; the guide tells users to add only
+  folders they trust.
+
+## Open questions
+
+- **Restricted Mode and live trust.** Decide whether Workbench should expose
+  non-executing inspection in untrusted workspaces. The extension
+  declares no Restricted Mode support, and its server trust flag is fixed at
+  creation. Supporting that workflow requires a live trust contract for both
+  workspace and added-space roots; start commands and evaluation must remain
+  gated throughout transitions.

@@ -123,7 +123,7 @@ compiler-wrapper dependency is needed by these delivery paths.
 Artboards use a dedicated content-only document with explicit metadata,
 navigation and annotation/capture ports. Startup request and child-markup checks
 cover absence of application initialization; see
-[rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps).
+[rendering-flow acceptance](rendering-flow.md#acceptance-and-verification).
 Component fixtures load unchanged modules without the backend or compiler.
 Combined-host checks do not establish acceptance items 1 and 2.
 
@@ -236,4 +236,4 @@ and [code quality](code-quality.md) for the behavioral and engineering checks.
   acceptance without UI files, are unverified.
 - Renderer polling and deeper annotation separation remain bounded legacy debt
   in `ui/legacy/`, along with the docs and sizing acceptance gaps of the
-  [rendering flow](rendering-flow.md#acceptance-and-verification-gaps).
+  [rendering flow](rendering-flow.md#acceptance-and-verification).

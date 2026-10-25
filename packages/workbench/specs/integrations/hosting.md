@@ -8,7 +8,7 @@ introducing a new host or distribution channel.
 **Status:** desktop VS Code, a browser opened by the extension, the standalone
 Node host and the portable viewer are implemented with the capabilities in the
 table below. Browser-only VS Code is unsupported. Host acceptance beyond desktop
-macOS is limited; see [acceptance and gaps](#acceptance-and-gaps).
+macOS is limited; see [implementation gaps](#implementation-gaps).
 
 ## Host capability model
 
@@ -64,7 +64,7 @@ uninstall is not a project cleanup operation. Runtime cache cleanup and editor
 storage retention belong to their owners. Do not promise that uninstall erases
 every local preference or captured artifact.
 
-## Acceptance and gaps
+## Acceptance criteria
 
 - Verify each command against the actual host: source opening, handoff,
   start commands, browser downloads and multi-root switching.
@@ -80,6 +80,9 @@ every local preference or captured artifact.
 Packaging and process tests are linked by [modules](../system/modules.md#asset-and-packaging-checks)
 and [server](../system/server.md#verification). The
 [installed evidence](../../research/README.md) records fixture/build/host limits.
+
+## Implementation gaps
+
 Host evidence is strongest on desktop macOS; Linux, Windows and remote host
 acceptance remain limited. No complete cross-platform/browser matrix or browser-only editor implementation
 is established by those checks.

@@ -15,7 +15,7 @@ and size changes without reloading modules and isolates successive previews;
 and the shared retained-session budget. Not implemented: pre-warming without
 the host flag, a browser runtime prepared before any native selection,
 per-page runtime-state retention on return, and a measured bound that replaces
-the warm document ([gaps](#gaps)). The Docs pool's status is in the
+the warm document ([implementation gaps](#implementation-gaps)). The Docs pool's status is in the
 [Docs host](docs-host.md).
 
 ## Purpose
@@ -136,7 +136,20 @@ previews, Docs and Storybook.
   document whose retained resources exceed its bound is replaced without
   losing the requested view.
 
-## Gaps
+## Verification
+
+Isolation and warm-host lifecycle are covered by
+[preview-host tests](../../ui/legacy/preview-host.test.js) and
+[preview-runtime tests](../../ui/preview/preview-runtime.test.cjs). The
+[pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13) holds design
+comparisons. Long-session heap bounds and real-host confirmation remain
+acceptance work, not properties established by those prototype runs.
+[Content-frame tests](../../ui/legacy/content-frames.test.cjs) and
+[session tests](../../ui/legacy/preview-sessions.test.js) cover retained
+resume, the shared budget, expiry, Reload and disposal. Docs pool coverage is
+in the [Docs host](docs-host.md#verification).
+
+## Implementation gaps
 
 - Pre-warming on space start depends on the host passing `--eager-previews`,
   which the extension and the standalone command both pass. With it,
@@ -152,19 +165,6 @@ previews, Docs and Storybook.
   and resource budget must be met together.
 - The warm document is not replaced after a bound; its heap after long walks
   is not limited, and no threshold or safe replacement behavior is chosen.
-
-## Verification
-
-Isolation and warm-host lifecycle are covered by
-[preview-host tests](../../ui/legacy/preview-host.test.js) and
-[preview-runtime tests](../../ui/preview/preview-runtime.test.cjs). The
-[pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13) holds design
-comparisons. Long-session heap bounds and real-host confirmation remain
-acceptance work, not properties established by those prototype runs.
-[Content-frame tests](../../ui/legacy/content-frames.test.cjs) and
-[session tests](../../ui/legacy/preview-sessions.test.js) cover retained
-resume, the shared budget, expiry, Reload and disposal. Docs pool coverage is
-in the [Docs host](docs-host.md#verification).
 
 ## Open questions
 

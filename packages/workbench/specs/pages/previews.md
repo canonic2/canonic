@@ -130,7 +130,7 @@ applies independently within each isolated artboard.
   session until it is evicted or reset. Retention, its budget and the
   return revision check are [retained sessions](../preview-pipeline/warm-runtime.md#retained-sessions).
   The warm-document path can reuse one session across pages; its per-page
-  return-state limitation is recorded in [warm runtime](../preview-pipeline/warm-runtime.md#gaps).
+  return-state limitation is recorded in [warm runtime](../preview-pipeline/warm-runtime.md#implementation-gaps).
 - Body nodes created during a preview module's import, such as SVG symbol
   sprites, are retained by compiled module URL and restored before its next
   mount. They are detached while another module is active or the host is reset.
@@ -353,6 +353,21 @@ timing.
 - Problems from discovery, validation, compiler configuration, and lens mapping join
   the config's `problems`; see [core](../core.md#problem-reporting).
 
+## Design constraints
+
+- Project code runs only in the server's
+  [evaluators](../system/server.md#processes-and-connections). Astro frontmatter
+  runs on the server side; only rendered HTML and client assets reach browsers.
+- The [readiness contract](../preview-pipeline/readiness.md) owns rendering,
+  font and image waits, including progress in hidden frames.
+- Asset requests recheck configuration and trust without rebuilding the catalog.
+- Fragment navigation is handled inside the preview because the warm host's
+  `<base>` points at compiler output. A fragment must scroll its source page
+  rather than resolve against that output directory.
+- Request mocks provide data-fetching states; environments provide application
+  context; aliases provide platform substitutions. None requires running a
+  project's application server.
+
 ## Acceptance criteria and verification points
 
 - [preview.test.js](../../server/node/preview.test.js): discovery, ID and scenario validation, and
@@ -398,21 +413,6 @@ timing.
   type generation, and installed cross-platform CLI use need dedicated
   acceptance coverage. See the [page-index evidence](../preview-pipeline/page-index.md#acceptance-and-evidence)
   for native listing and packaging evidence.
-
-## Design constraints
-
-- Project code runs only in the server's
-  [evaluators](../system/server.md#processes-and-connections). Astro frontmatter
-  runs on the server side; only rendered HTML and client assets reach browsers.
-- The [readiness contract](../preview-pipeline/readiness.md) owns rendering,
-  font and image waits, including progress in hidden frames.
-- Asset requests recheck configuration and trust without rebuilding the catalog.
-- Fragment navigation is handled inside the preview because the warm host's
-  `<base>` points at compiler output. A fragment must scroll its source page
-  rather than resolve against that output directory.
-- Request mocks provide data-fetching states; environments provide application
-  context; aliases provide platform substitutions. None requires running a
-  project's application server.
 
 ## Implementation gaps
 

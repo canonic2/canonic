@@ -303,7 +303,7 @@ HTML, images, or full handoff prompts.
    page/lens changes within their bounds; separate artboards keep separate documents.
 5. Child documents contain no shell startup/markup, duplicate canvas/controls or
    CSS chrome suppression. Verify every adapter, transition, size, failure, capture and editor
-   relay against [rendering-flow acceptance](../system/rendering-flow.md#acceptance-and-verification-gaps).
+   relay against [rendering-flow acceptance](../system/rendering-flow.md#acceptance-and-verification).
    Preserve the outer UI layout. Do not substitute a UI language/build rewrite.
 
 UI asset delivery follows [modules](../system/modules.md#delivery-paths); preserve
