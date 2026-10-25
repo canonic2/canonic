@@ -51,8 +51,10 @@ collections:
   fs.writeFileSync(path.join(folder, 'comparison.workbench.ts'), `import {definePreview} from '@canonic2/workbench';const artboards={one:{label:'One',width:320,height:120},two:{label:'Two',width:480,height:160,inputs:{text:'Second'}}};const iterated={...artboards,two:{...artboards.two,iterations:{bold:{label:'Bold',inputs:{text:'Bold'}}}}};export default definePreview({id:'comparison',adapter:'html',source:{entry:'./component.ts'},inputs:{text:'First'},scenarios:{default:{artboards:iterated},alternate:{inputs:{text:'Alternate'},artboards},single:{artboards:{solo:{label:'Solo',width:200,height:100}}},plain:{inputs:{text:'Plain'}}}});`);
   fs.writeFileSync(path.join(folder, 'component.ts'), `export default function(canvas,context){const field=document.createElement('input');field.value=context.inputs.text;canvas.append(field);}`);
   const browser = new Browser(); let running, demo, design, handoff;
+  const logs = [];
+  const onLog = record => { logs.push(record); if (logs.length > 50) logs.shift(); };
   try {
-    running = await server.start({ root: folder, onHandoff(text, payload) { handoff = { text, payload }; } });
+    running = await server.start({ root: folder, onLog, onHandoff(text, payload) { handoff = { text, payload }; } });
     await browser.launch(); const target = await browser.createTarget(); await target.enable();
     // Observe document requests from startup, before any renderer can hide chrome.
     const applicationDocuments = [];
@@ -159,7 +161,7 @@ collections:
     await target.evaluate('location.hash="#other.html@mobile"');
     await until(`${state}.artboards.length===1 && ${state}.artboards[0].target.src==='other.html' && ${state}.artboards[0].view?.ready`);
     assert.equal(await target.evaluate(`${frames}.length`), 1);
-    demo = await server.start({ root: fixtureDemo, config: { dir: fixtureRepo, key: 'acme' } });
+    demo = await server.start({ root: fixtureDemo, config: { dir: fixtureRepo, key: 'acme' }, onLog });
     await target.navigate(demo.url + '#previews/alert.workbench.ts~design');
     await until(`${state}?.artboards.length===5 && ${state}.artboards.every(b=>b.view?.ready && b.size.width===560 && b.size.height<150)`);
     assert.deepEqual(await target.evaluate(`${state}.artboards.map(b=>b.target.artboard)`), ['info','success','warning','danger','autopilot']);
@@ -192,7 +194,7 @@ collections:
     assert.equal(await target.evaluate('document.getElementById("scenarioControl").hidden'), false);
     await target.evaluate('document.getElementById("scenarioMenu").querySelectorAll("button")[2].click()');
     await until(`${state}.artboards.length===1 && ${state}.artboards[0].target.scenario==='gradient' && ${state}.artboards[0].view?.ready`);
-    design = await server.start({ root: fixtureWorkbench, config: { dir: fixtureRepo, key: 'workbench' } });
+    design = await server.start({ root: fixtureWorkbench, config: { dir: fixtureRepo, key: 'workbench' }, onLog });
     const config = await (await fetch(new URL('config', design.url))).json();
     const canvasPage = Object.keys(config.pages).find(src => src === 'design/canvas.md' || src === 'design/canvas.workbench.ts');
     assert.ok(canvasPage, 'the component design page is discovered');
@@ -204,6 +206,7 @@ collections:
     assert.deepEqual(nestedApplicationResources, [], 'no transition or artboard starts the Workbench application inside content');
     assert.deepEqual(errors, []);
     console.log('Scenario artboards passed: ordinary HTML and Button scenarios remain single views; Feedback\'s default scenario declares five artboards; an iteration renders only its own artboard; independent sizes, controls, annotations, handoff and design examples work.');
-  } finally { await browser.close(); await running?.close(); await demo?.close(); await design?.close(); fs.rmSync(folder, { recursive: true, force: true }); }
+  } catch (error) { error.message += '\nRecent server diagnostics: ' + JSON.stringify(logs); throw error; }
+  finally { await browser.close(); await running?.close(); await demo?.close(); await design?.close(); fs.rmSync(folder, { recursive: true, force: true }); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
