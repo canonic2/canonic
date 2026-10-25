@@ -309,7 +309,7 @@ disconnect/restart/cancel acceptance is not established by them.
   build keeps successful previews beside a failed one.
   [preview-astro.test.js](../../server/node/preview-astro.test.js) checks Astro reference
   scenarios in portable output.
-- [capture-page.test.js](../../ui/legacy/capture-page.test.js) checks that
+- [capture.test.cjs](../../ui/src/app/capture/capture.test.cjs) checks that
   reference capture waits for a TypeScript preview to render and fails on a
   render error. [preview-runtime.test.cjs](../../ui/preview/preview-runtime.test.cjs) checks
   that missing scenarios and render failures block readiness.

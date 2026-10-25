@@ -13,6 +13,10 @@ use std::path::{Component, Path, PathBuf};
 const PREFIX: &str = "/_workbench/";
 const COMPAT_TAG: &str = "<script src=\"/_workbench/preview-compat.js\"></script>";
 const LUCIDE_URL: &str = "/node_modules/lucide/dist/umd/lucide.min.js";
+/// Workbench documents that moved into the UI's `app/` folder, by the address
+/// they keep: callers such as the capture helper still ask for the old one.
+const APP_DOCUMENTS: &[(&str, &str)] =
+    &[("/_workbench/capture.html", "ui/src/app/capture/capture.html")];
 
 /// Where the space's files and Workbench's own come from.
 pub(crate) struct Files {
@@ -185,6 +189,10 @@ impl Files {
                 self.product.join("contracts").join(&path[PREFIX.len()..]),
                 None,
             ));
+        }
+        if let Some((_, file)) = APP_DOCUMENTS.iter().find(|(served, _)| *served == path) {
+            let file = self.product.join(file);
+            return file.is_file().then_some((file, Some("ui")));
         }
         let relative = decode(path)?;
         if let Some(rest) = relative.strip_prefix(PREFIX) {
@@ -414,6 +422,10 @@ mod tests {
                 "<!doctype html><title>Docs</title>",
             ),
             (
+                "workbench/ui/src/app/capture/capture.html",
+                "<html><head><title>Capture</title></head></html>",
+            ),
+            (
                 "acme/pages/landing.html",
                 "<!doctype html><html><head><title>Acme</title></head><body></body></html>",
             ),
@@ -460,6 +472,11 @@ mod tests {
         assert_eq!(
             text(get("/_workbench/").unwrap()).await.1,
             "<html><head><title>Workbench</title></head></html>"
+        );
+        assert_eq!(
+            text(get("/_workbench/capture.html").unwrap()).await.1,
+            "<html><head><title>Capture</title></head></html>",
+            "a document moved into the app folder keeps its address"
         );
         assert_eq!(
             text(get("/_workbench/ui/src/shell.js").unwrap()).await.0,

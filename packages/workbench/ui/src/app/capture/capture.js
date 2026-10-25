@@ -14,7 +14,9 @@
 
   function mirrorLoaded(snapshot, documentKey) {
     if (!mirrorLoading || mirrorDocument !== documentKey) {
-      current = null; revision = null; mirrorRevision = null;
+      current = null;
+      revision = null;
+      mirrorRevision = null;
       mirrorDocument = documentKey;
       mirrorLoading = new Promise(function (resolve) {
         frame.addEventListener('load', resolve, { once: true });
@@ -24,12 +26,15 @@
     }
     return mirrorLoading.then(function () {
       if (mirrorRevision === snapshot.revision) return;
-      return window.wbDOMMirror.apply(frame.contentDocument, snapshot).then(function () {
-        mirrorRevision = snapshot.revision;
-      }).catch(function (error) {
-        mirrorRevision = null;
-        throw error;
-      });
+      return window.wbDOMMirror
+        .apply(frame.contentDocument, snapshot)
+        .then(function () {
+          mirrorRevision = snapshot.revision;
+        })
+        .catch(function (error) {
+          mirrorRevision = null;
+          throw error;
+        });
     });
   }
 
@@ -38,10 +43,18 @@
      afresh so the shot shows what the page serves now. */
   function frameLoaded(url, nextRevision) {
     if (mirrorLoading) {
-      mirrorLoading = null; mirrorRevision = null;
-      frame.removeAttribute('sandbox'); frame.removeAttribute('srcdoc');
+      mirrorLoading = null;
+      mirrorRevision = null;
+      frame.removeAttribute('sandbox');
+      frame.removeAttribute('srcdoc');
     }
-    if (nextRevision && current === url && revision === nextRevision && frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+    if (
+      nextRevision &&
+      current === url &&
+      revision === nextRevision &&
+      frame.contentDocument &&
+      frame.contentDocument.readyState === 'complete'
+    ) {
       try {
         if (frame.contentWindow.location.href === url) return Promise.resolve();
       } catch (error) {}
@@ -72,7 +85,9 @@
     var win = doc.defaultView;
     var images = Array.prototype.slice.call(doc.images || []).filter(function (image) {
       var box = image.getBoundingClientRect();
-      return box.right > 0 && box.bottom > 0 && box.left < win.innerWidth && box.top < win.innerHeight;
+      return (
+        box.right > 0 && box.bottom > 0 && box.left < win.innerWidth && box.top < win.innerHeight
+      );
     });
     return Promise.all(
       images.map(function (image) {
@@ -82,7 +97,7 @@
           image.addEventListener('load', resolve, { once: true });
           image.addEventListener('error', resolve, { once: true });
         });
-      })
+      }),
     );
   }
 
@@ -110,8 +125,12 @@
     var scroll = payload.scroll || { x: 0, y: 0 };
     scrollImmediately(win, Number(scroll.x) || 0, Number(scroll.y) || 0);
 
-    var fonts = doc.fonts && doc.fonts.ready ? doc.fonts.ready.catch(function () {}) : Promise.resolve();
-    return previewReady(win).then(function () { return Promise.all([fonts, mediaReady(doc)]); })
+    var fonts =
+      doc.fonts && doc.fonts.ready ? doc.fonts.ready.catch(function () {}) : Promise.resolve();
+    return previewReady(win)
+      .then(function () {
+        return Promise.all([fonts, mediaReady(doc)]);
+      })
       .then(function () {
         scrollImmediately(win, Number(scroll.x) || 0, Number(scroll.y) || 0);
         return paint(win);
@@ -126,9 +145,18 @@
     var deadline = Date.now() + 8000;
     return new Promise(function (resolve, reject) {
       function check() {
-        if (win.__workbenchError) { reject(new Error(win.__workbenchError)); return; }
-        if (win.__workbenchReady) { resolve(); return; }
-        if (Date.now() >= deadline) { reject(new Error('Workbench preview did not finish rendering before capture')); return; }
+        if (win.__workbenchError) {
+          reject(new Error(win.__workbenchError));
+          return;
+        }
+        if (win.__workbenchReady) {
+          resolve();
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error('Workbench preview did not finish rendering before capture'));
+          return;
+        }
         window.setTimeout(check, 50);
       }
       check();
@@ -141,8 +169,11 @@
     if (!Array.isArray(anchors) || !anchors.length || !window.wbDescribe) return undefined;
     return anchors.map(function (point) {
       if (!point) return null;
-      try { return window.wbDescribe.at(frame.contentDocument, Number(point.x), Number(point.y)); }
-      catch (_) { return null; }
+      try {
+        return window.wbDescribe.at(frame.contentDocument, Number(point.x), Number(point.y));
+      } catch (_) {
+        return null;
+      }
     });
   }
 
@@ -164,32 +195,56 @@
   window.wbCapture = {
     prepare: function (payload) {
       if (!payload || !payload.url) return Promise.reject(new Error('Capture has no preview URL'));
-      var key = JSON.stringify([payload.url, payload.revision, payload.width, payload.height, payload.scroll, payload.annotations, payload.mirror && payload.mirror.revision]);
+      var key = JSON.stringify([
+        payload.url,
+        payload.revision,
+        payload.width,
+        payload.height,
+        payload.scroll,
+        payload.annotations,
+        payload.mirror && payload.mirror.revision,
+      ]);
       try {
-        if (payload.revision && prepared === key &&
-            (payload.mirror ? mirrorRevision === payload.mirror.revision : frame.contentWindow.location.href === payload.url) &&
-            frame.contentDocument.readyState === 'complete') {
+        if (
+          payload.revision &&
+          prepared === key &&
+          (payload.mirror
+            ? mirrorRevision === payload.mirror.revision
+            : frame.contentWindow.location.href === payload.url) &&
+          frame.contentDocument.readyState === 'complete'
+        ) {
           return Promise.resolve(result(payload));
         }
       } catch (_) {}
       prepared = null;
-      return (payload.mirror ? mirrorLoaded(payload.mirror, JSON.stringify([payload.url, payload.revision])) : frameLoaded(payload.url, payload.revision)).then(function () {
-        // Content-fitted components have no page surface. Flatten their
-        // transparent corners against the complete canvas's review surface.
-        var fitted = false;
-        try {
-          var root = frame.contentDocument.querySelector('[data-wb-fit-content]');
-          var bounds = root && root.getBoundingClientRect();
-          fitted = !!bounds && Math.abs(bounds.x) < 1 && Math.abs(bounds.y) < 1 && bounds.width <= 8192 && bounds.height <= 8192;
-        } catch (_) {}
-        if (document.body) document.body.style.background = fitted ? '#242424' : '';
-        if (frame.style) frame.style.background = fitted ? '#242424' : '';
-        annotations.innerHTML = payload.annotations || '';
-        return settle(payload);
-      }).then(function () {
-        prepared = key;
-        return result(payload);
-      });
+      return (
+        payload.mirror
+          ? mirrorLoaded(payload.mirror, JSON.stringify([payload.url, payload.revision]))
+          : frameLoaded(payload.url, payload.revision)
+      )
+        .then(function () {
+          // Content-fitted components have no page surface. Flatten their
+          // transparent corners against the complete canvas's review surface.
+          var fitted = false;
+          try {
+            var root = frame.contentDocument.querySelector('[data-wb-fit-content]');
+            var bounds = root && root.getBoundingClientRect();
+            fitted =
+              !!bounds &&
+              Math.abs(bounds.x) < 1 &&
+              Math.abs(bounds.y) < 1 &&
+              bounds.width <= 8192 &&
+              bounds.height <= 8192;
+          } catch (_) {}
+          if (document.body) document.body.style.background = fitted ? '#242424' : '';
+          if (frame.style) frame.style.background = fitted ? '#242424' : '';
+          annotations.innerHTML = payload.annotations || '';
+          return settle(payload);
+        })
+        .then(function () {
+          prepared = key;
+          return result(payload);
+        });
     },
   };
 })();

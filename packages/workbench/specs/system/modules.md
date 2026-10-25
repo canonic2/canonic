@@ -146,6 +146,7 @@ component folders; most of the interface still runs in `ui/legacy/`. The
 
 ```text
 ui/src/
+  app/capture/               Capture document, served as /_workbench/capture.html
   bootstrap/                 Browser, sidebar and renderer composition/registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles

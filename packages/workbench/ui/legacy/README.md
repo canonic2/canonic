@@ -564,7 +564,7 @@ implementation's own address; Workbench never switches to a stream.
 | `../src/components/space-switcher/` + `../src/components/space-mark/` | Web Components for the space switcher and its mark, with owned Shadow DOM styles |
 | `../src/theme/defaults.css` | shared shell theme defaults and direct webview host mappings for migrated controls |
 | `annotations.js` + `annotations.css` | the draw layer, screenshots, and clipboard handoff |
-| `capture.html` + `capture.css` + `capture-page.js` | the minimal surface kept warm for compositor screenshots |
+| `../src/app/capture/` | the capture document: the minimal surface kept warm for compositor screenshots, still served as `/_workbench/capture.html` |
 | `capture-sync.js` | coalesces preparation, checks readiness and retries failures |
 | `dom-mirror.js` | caches node records, sends revisioned patches and CSS Highlight ranges, and applies them to the inert capture document |
 | `preview-bridge.js` | external-preview sender for live DOM and scroll state, added to lens pages by the implementation proxy |

@@ -8,7 +8,7 @@ schedule. The server's Node evaluators also run on this runtime
 See [annotations.js](../../ui/legacy/annotations.js),
 [dom-mirror.js](../../ui/legacy/dom-mirror.js),
 [capture-sync.js](../../ui/legacy/capture-sync.js),
-[capture-page.js](../../ui/legacy/capture-page.js),
+[capture.js](../../ui/src/app/capture/capture.js),
 [electron-capture.js](../../capture/electron-capture.js),
 [electron-runtime.js](../../capture/electron-runtime.js),
 [capture/app/main.cjs](../../capture/app/main.cjs), and the page scripts
@@ -172,7 +172,7 @@ annotation with its position and the element under it, the lens's
 implementation and URL, and any code pointers or TypeScript preview source.
 The element under an annotation comes from the visible document for local
 pages, from the mirrored copy on the capture surface for bridged lenses
-([capture-page.js](../../ui/legacy/capture-page.js)), and from the helper's page
+([capture.js](../../ui/src/app/capture/capture.js)), and from the helper's page
 for the URL fallback. The prompt says when elements could not be read.
 See [handoff.rs](../../server/src/handoff.rs).
 
@@ -217,7 +217,7 @@ completion or bounded plain fallback before reading that snapshot.
   scrolling, export settling, and the Storybook switch script.
 - [annotations-capture.test.js](../../ui/legacy/annotations-capture.test.js),
   [capture-sync.test.js](../../ui/legacy/capture-sync.test.js),
-  [capture-page.test.js](../../ui/legacy/capture-page.test.js), and
+  [capture.test.cjs](../../ui/src/app/capture/capture.test.cjs), and
   [dom-mirror.test.js](../../ui/legacy/dom-mirror.test.js) cover the browser
   request, flush, resync retry, no-DOM-fallback rule, Simulator rendering,
   preparation scheduling, the inert surface, and pointer revisions.

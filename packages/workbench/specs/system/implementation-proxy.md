@@ -125,7 +125,7 @@ captured image without project changes.
   `upstream`, including auto-detected Storybooks.
 - [lenses.test.js](../../ui/legacy/lenses.test.js): mapping proxy addresses back
   to `upstream`.
-- [capture-page.test.js](../../ui/legacy/capture-page.test.js): element names from
+- [capture.test.cjs](../../ui/src/app/capture/capture.test.cjs): element names from
   the mirrored copy.
 - Manual: [smoke-lenses.cjs](../../scripts/smoke-lenses.cjs) for lens iframes,
   sessions and sign-in through the proxy, and a running Storybook for an interaction-only
