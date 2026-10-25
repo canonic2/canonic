@@ -441,13 +441,16 @@ sizes, the local merge, and problems; `address.test.js` for size keys;
 (including comments kept outside replaced blocks), and export plans;
 `server/src/handoff/tests.rs` for size lines;
 `ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes;
+`ui/src/modules/navigation/controller.test.js` for which applied size a
+filled axis is resolved again from when the canvas's room changes;
 [`size-switcher/element.test.js`](../../ui/src/components/size-switcher/element.test.js),
 a real-Chrome test, for the components' inputs, events, keyboard use, focus,
 the dialogs and reconnection, with
 [`size-dialog/form.test.js`](../../ui/src/components/size-dialog/form.test.js) and
 [`sizes-editor/rows.test.js`](../../ui/src/components/sizes-editor/rows.test.js)
 for the dialog and editor rules. Not covered: host acceptance of picking,
-adding and reordering sizes, in particular in the VS Code host.
+adding and reordering sizes, in particular in the VS Code host, and an
+automated browser test of filled axes following a window resize.
 
 ## Implementation gaps
 

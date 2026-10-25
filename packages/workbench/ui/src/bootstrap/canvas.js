@@ -84,6 +84,18 @@ function mount() {
     if (size.width !== board.size.width || size.height !== board.size.height)
       act(() => controller.command(board.id, 'size', size));
   }
+  // A filled axis takes the room the canvas has, so when that room changes the
+  // size already applied is resolved again. Fixed axes keep their length and
+  // Resizable keeps what it was dragged to; the frame resizes without reloading.
+  function refill() {
+    if (disposed || review.busy()) return;
+    const board = selected();
+    const preset = navigation.appliedSize(board?.view);
+    if (!preset) return;
+    const size = dimensions(preset, available(), board.size);
+    if (size.width !== board.size.width || size.height !== board.size.height)
+      act(() => controller.command(board.id, 'size', size));
+  }
   function present() {
     const state = controller.snapshot();
     const { visible, pending, loading } = navigation.presentation(state.artboards);
@@ -385,6 +397,7 @@ function mount() {
         // its immutable dimensions. Reconcile it after the review releases.
         queueMicrotask(() => {
           if (!disposed && canvas.reading) canvas.state = controller.snapshot();
+          refill();
         });
       };
     },
@@ -454,6 +467,9 @@ function mount() {
     },
     { signal },
   );
+  const room = new ResizeObserver(refill);
+  room.observe($('canvas'));
+  signal.addEventListener('abort', () => room.disconnect(), { once: true });
   $('shoot').addEventListener('click', () => act(() => review.run(false)), { signal });
   $('handoff').addEventListener('click', () => act(() => review.run(true)), { signal });
   void json('/_workbench/handoff')

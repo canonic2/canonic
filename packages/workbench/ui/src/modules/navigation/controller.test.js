@@ -145,6 +145,34 @@ void test('retained destinations consume the requested size once, after matching
   navigation.dispose();
   assert.equal(navigation.takeSize(story), null);
 });
+void test('the applied size stays available for refilling until a new size is requested', async () => {
+  const navigation = createNavigation({
+    ready: Promise.resolve(),
+    busy: () => false,
+    present() {},
+    fit() {},
+    async activate() {},
+    async settle() {},
+  });
+  const page = { ...selection('page'), scenario: 'default', lens: 'design' };
+  await navigation.show(page);
+  assert.equal(navigation.appliedSize(page), null, 'nothing is applied before the size is taken');
+  navigation.takeSize(page);
+  assert.equal(navigation.appliedSize(page), page.size);
+  assert.equal(navigation.appliedSize(page), page.size, 'reading it does not consume it');
+  assert.equal(navigation.appliedSize({ ...page, scenario: 'other' }), null, 'only the shown destination');
+  const fit = { ...page.size, key: 'fit', kind: 'fit' };
+  navigation.resize(fit);
+  assert.equal(navigation.appliedSize(page), null, 'a new pick waits to be taken first');
+  navigation.takeSize(page);
+  assert.equal(navigation.appliedSize(page), fit);
+  await navigation.show({ ...page, size: fit, artboards: [{ id: 'one', width: 320, height: 120 }] });
+  navigation.takeSize(page);
+  assert.equal(navigation.appliedSize(page), null, 'declared artboards keep their authored sizes');
+  const docs = { ...selection('page'), lens: 'docs', docs: true };
+  await navigation.show(docs);
+  assert.equal(navigation.appliedSize(docs), null, 'Docs read at the canvas width');
+});
 void test('navigation tracks requested destinations separately and reuses repeated routes', async () => {
   const activations = [],
     settled = [];

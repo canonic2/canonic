@@ -53,25 +53,35 @@ export function createNavigation(ports) {
     navigating = false;
     expanding = false;
   }
+  // Whether the selection's size rules apply to the view a renderer reports:
+  // a page's single artboard showing the selected destination. Docs read at
+  // the canvas's width and declared artboards keep their authored sizes.
+  function sizes(view) {
+    return (
+      !!selection &&
+      !selection.docs &&
+      !selection.artboards?.length &&
+      !!view &&
+      !view.problem &&
+      view.src === selection.src &&
+      view.scenario === selection.scenario &&
+      view.lens === selection.lens
+    );
+  }
   return {
     snapshot: () => ({ selection, awaitingSelection, navigating, expanding, disposed }),
     // A retained renderer reports the destination independently of the route.
     // Consume its requested preset only when that destination's size rules apply.
     takeSize(view) {
-      if (
-        !selection ||
-        selection === sizedSelection ||
-        selection.docs ||
-        selection.artboards?.length ||
-        !view ||
-        view.problem ||
-        view.src !== selection.src ||
-        view.scenario !== selection.scenario ||
-        view.lens !== selection.lens
-      )
-        return null;
+      if (selection === sizedSelection || !sizes(view)) return null;
       sizedSelection = selection;
       return selection.size;
+    },
+    // The preset already applied to the shown destination, so the canvas can
+    // resolve its filled axes again when its room changes. Null while a new
+    // preset waits to be taken.
+    appliedSize(view) {
+      return selection === sizedSelection && sizes(view) ? selection.size : null;
     },
     resize(size) {
       if (selection && !disposed) selection = { ...selection, size };
