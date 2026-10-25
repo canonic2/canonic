@@ -119,6 +119,11 @@ test(
     search.value='';search.dispatchEvent(new Event('input'));
     document.querySelector('#collections [data-collection="Components"]').click();
   })()`);
+    const lattice = await target.evaluate(
+      `performance.getEntriesByType('resource').map(entry=>new URL(entry.name).pathname).filter(path=>path.includes('/node_modules/@canonic2/lattice/'))`,
+    );
+    assert.ok(lattice.some((path) => path.endsWith('/src/index.js')));
+    assert.ok(lattice.some((path) => path.endsWith('/src/modules/elements/elements.js')));
     const result =
       await target.evaluate(`({errors,violations,picks:posted.filter(m=>m.type==='canonic-pick').map(m=>m.hash),
     sheet:[...document.styleSheets].some(s=>s.href?.endsWith('/views/page-list/page-list.css')&&s.cssRules.length>0),

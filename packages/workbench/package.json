@@ -30,6 +30,7 @@
     "check:ui": "pnpm run lint && pnpm run format:check && pnpm run test:ui"
   },
   "dependencies": {
+    "@canonic2/lattice": "file:../lattice",
     "@rspack/plugin-react-refresh": "2.0.2",
     "@vue/compiler-sfc": "3.5.43",
     "esbuild": "0.28.2",

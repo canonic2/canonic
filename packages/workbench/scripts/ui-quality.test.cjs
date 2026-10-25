@@ -8,6 +8,7 @@ const SHARED_PREVIEW_RUNTIME = '/_workbench/preview-runtime.js';
 test('the UI ships native JavaScript with a complete browser-ready module graph', async () => {
   const root = path.resolve(__dirname, '..');
   const ui = path.join(root, 'ui');
+  const lattice = path.join(root, 'node_modules/@canonic2/lattice');
   const files = fs.readdirSync(ui, { recursive: true });
   assert.deepEqual(
     files.filter((file) => /\.(?:[cm]?ts|tsx)$/.test(file)),
@@ -64,9 +65,18 @@ test('the UI ships native JavaScript with a complete browser-ready module graph'
       );
       const dependency = path.resolve(path.dirname(file), specifier);
       assert.ok(fs.existsSync(dependency), file + ' resolves ' + specifier);
+      if (dependency.startsWith(lattice + path.sep) && !file.startsWith(lattice + path.sep)) {
+        assert.ok(
+          ['src/index.js', 'src/modules/elements/elements.js'].some(
+            (entry) => dependency === path.join(lattice, entry),
+          ),
+          'UI imports only Lattice public entry files: ' + specifier,
+        );
+      }
       assert.ok(
         dependency.startsWith(ui + path.sep) ||
-          dependency.startsWith(path.join(root, 'contracts') + path.sep),
+          dependency.startsWith(path.join(root, 'contracts') + path.sep) ||
+          dependency.startsWith(lattice + path.sep),
         dependency,
       );
       queue.push(dependency);

@@ -8,8 +8,8 @@ owns the target layout, the order of the port and its delivery. The
 store the port introduces; each capability's own spec keeps its behavior.
 [Modules](modules.md#browser-source-layout) describes the shipping layout.
 
-**Status:** structural moves complete. Lattice adoption waits for its
-[readiness point](#port-order). See
+**Status:** structural moves and Lattice delivery complete. The bounded
+navigation store is authorized under the [accepted scope](#port-order). See
 [implementation gaps](#implementation-gaps).
 
 ## Target layout
@@ -173,10 +173,13 @@ The port has two parts with different starting points:
 - **Structural moves** (step 1) start now. They relocate existing code into
   the target layout and keep every existing state mechanism; they introduce no
   Lattice dependency, no store, no collection API and no navigation redesign.
-- **Lattice adoption** (steps 2 and 3, and the
-  [delivery slice](#lattice-delivery-slice) before them) starts after Lattice's
-  framework guides and its keyed-collection evaluation are complete and its
-  collection scope is settled.
+- **Accepted Lattice scope.** The store, element helpers and keyed collection
+  are accepted. S2 is accepted for selective selection updates. The
+  [delivery slice](#lattice-delivery-slice) and the bounded navigation store
+  may proceed now. Remaining windowing budgets gate the large page-list
+  migration only; that investigation stays with Lattice's owner. Delivery
+  introduces no stores or behavior changes, and navigation does not migrate
+  large lists or introduce windowing.
 
 1. **Structural moves,** one document at a time, each move reviewable on its
    own: the document's HTML and entry move to `app/<document>/`
@@ -316,7 +319,7 @@ canvas or other behavior changes, and no store is used yet.
 - **Dependency.** The product root's `package.json` declares Lattice as a local
   production dependency and keeps its own lockfile.
 - **Serving.** The server serves Lattice's runtime files unchanged under a fixed
-  path, such as `/_workbench/lattice/`, following the same rules as `ui/src/`:
+  path `/_workbench/node_modules/@canonic2/lattice/`, following the same rules as `ui/src/`:
   JavaScript modules only, tests, declarations and development files refused.
 - **Imports.** Each document in scope imports Lattice's root entry point (the
   store core: `createStore`, `shallow`) and its `elements` subpath by explicit
@@ -347,12 +350,18 @@ canvas or other behavior changes, and no store is used yet.
 | Assembly test | The staged product contains Lattice's runtime files as real files and no symlink or source-checkout path |
 | Packaged launch | The installed extension, run without the source checkout, loads all three documents and their Lattice imports |
 
-The navigation store's adoption starts only after this slice is in place.
+The product uses `file:../lattice`; distribution assembly dereferences that
+dependency into the staged product. Explicit relative imports address Lattice's
+public root and elements entry files, resolving through the server or the
+sidebar's webview resource URL without rewriting the modules.
+
+The delivery checks cover byte-preserving serving and refusal of development
+paths, a staged product outside the checkout loading canvas and renderer,
+sidebar CSP loading, the browser module graph and extension resource roots.
+The staged-extension VS Code acceptance checks all three document imports.
 
 ## Implementation gaps
 
-- The Lattice delivery slice: Workbench does not depend on, serve or package
-  Lattice, and none of the evidence above exists.
 - Legacy interface: every document is in `app/`; the code the documents load ships in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.

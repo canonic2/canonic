@@ -126,6 +126,33 @@ async function main() {
       await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))', editor);
     };
     const results = await verifyResize(evaluateCanvas, resize);
+    const latticeImports = `(()=>{
+      const resources=win=>{
+        let entries=[];
+        try { entries=win.performance.getEntriesByType('resource');
+          for(const frame of win.document.querySelectorAll('iframe')) entries.push(...resources(frame.contentWindow));
+        } catch {}
+        return entries;
+      };
+      const paths=resources(window).map(entry=>decodeURIComponent(new URL(entry.name).pathname));
+      return ['/src/index.js','/src/modules/elements/elements.js'].every(file=>paths.some(path=>path.endsWith('/node_modules/@canonic2/lattice'+file)));
+    })()`;
+    if (!await evaluateCanvas(latticeImports)) throw Error('Canvas Lattice imports missing');
+    if (!await evaluateCanvas(`document.querySelector('wb-canvas > iframe').contentWindow.eval(${JSON.stringify(latticeImports)})`)) throw Error('Renderer Lattice imports missing');
+    await key('F1', 'F1', 112);
+    await until(() => evaluate(`!!document.querySelector('.quick-input-widget input')?.getClientRects().length`, editor), 'command palette');
+    await c.send('Input.insertText', { text: 'View: Show Workbench' }, editor);
+    await until(() => evaluate(`document.querySelector('.quick-input-widget')?.innerText.includes('Show Workbench')`, editor), 'Workbench sidebar command');
+    await key('Enter', 'Enter', 13);
+    let webviewResources;
+    await until(async () => {
+      for (const target of (await c.send('Target.getTargets')).targetInfos) {
+        if (!['page', 'iframe'].includes(target.type) || !target.url.includes('webview')) continue;
+        webviewResources = await evaluate(`performance.getEntriesByType('resource').map(entry=>entry.name)`, await session(target));
+        if (await evaluate(latticeImports, await session(target))) return true;
+      }
+      return false;
+    }, 'sidebar Lattice imports under webview CSP').catch(error => { console.error(webviewResources); throw error; });
     console.log(JSON.stringify({ host: 'VS Code on macOS', version: await evaluate('navigator.userAgent', editor), results }));
   } catch (error) {
     if (fs.existsSync(path.join(root, 'code.log'))) console.error(fs.readFileSync(path.join(root, 'code.log'), 'utf8'));

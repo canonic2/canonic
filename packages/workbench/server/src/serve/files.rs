@@ -16,12 +16,18 @@ const LUCIDE_URL: &str = "/node_modules/lucide/dist/umd/lucide.min.js";
 /// Workbench documents that moved into the UI's `app/` folder, by the address
 /// they keep: callers such as the capture helper still ask for the old one.
 const APP_DOCUMENTS: &[(&str, &str)] = &[
-    ("/_workbench/capture.html", "ui/src/app/capture/capture.html"),
+    (
+        "/_workbench/capture.html",
+        "ui/src/app/capture/capture.html",
+    ),
     (
         "/_workbench/preview-host.html",
         "ui/src/app/preview-host/preview-host.html",
     ),
-    ("/_workbench/content.html", "ui/src/app/renderer/content.html"),
+    (
+        "/_workbench/content.html",
+        "ui/src/app/renderer/content.html",
+    ),
     ("/_workbench/", "ui/src/app/workbench/index.html"),
     ("/_workbench/index.html", "ui/src/app/workbench/index.html"),
 ];
@@ -242,7 +248,9 @@ impl Files {
                 head,
             ));
         }
-        if path.starts_with("/_workbench/ui/src/") || path.starts_with("/_workbench/contracts/src/")
+        if path.starts_with("/_workbench/ui/src/")
+            || path.starts_with("/_workbench/contracts/src/")
+            || path.starts_with("/_workbench/node_modules/@canonic2/lattice/")
         {
             return Some(self.browser_module(path, head));
         }
@@ -358,6 +366,16 @@ impl Files {
         let Some(relative) = decode(&path[PREFIX.len()..]) else {
             return missing();
         };
+        if let Some(source) = relative.strip_prefix("node_modules/@canonic2/lattice/") {
+            if !(source == "src/index.js"
+                || source == "src/report.js"
+                || source.starts_with("src/modules/"))
+                || !source.ends_with(".js")
+                || source.ends_with(".bench.js")
+            {
+                return missing();
+            }
+        }
         if relative.contains('\\') || relative.split('/').any(|part| part == "." || part == "..") {
             return missing();
         }
@@ -368,9 +386,7 @@ impl Files {
         let kind = match extension.as_str() {
             "js" => "text/javascript; charset=utf-8",
             "css" => "text/css; charset=utf-8",
-            "html" if relative == "ui/src/app/docs/docs-host.html" => {
-                "text/html; charset=utf-8"
-            }
+            "html" if relative == "ui/src/app/docs/docs-host.html" => "text/html; charset=utf-8",
             _ => return missing(),
         };
         if relative.ends_with(".test.js") {
@@ -425,6 +441,30 @@ mod tests {
             ("workbench/ui/src/shell.js", "export {};"),
             ("workbench/ui/src/shell.test.js", "test();"),
             ("workbench/ui/src/shell.ts", "export {};"),
+            (
+                "workbench/node_modules/@canonic2/lattice/src/index.js",
+                "export { createStore } from './modules/store/store.js';\n",
+            ),
+            (
+                "workbench/node_modules/@canonic2/lattice/src/modules/store/store.js",
+                "export function createStore() {}\n",
+            ),
+            (
+                "workbench/node_modules/@canonic2/lattice/src/modules/store/store.test.js",
+                "test();",
+            ),
+            (
+                "workbench/node_modules/@canonic2/lattice/src/modules/store/store.bench.js",
+                "bench();",
+            ),
+            (
+                "workbench/node_modules/@canonic2/lattice/src/testing/index.js",
+                "export {};",
+            ),
+            (
+                "workbench/node_modules/@canonic2/lattice/package.json",
+                "{}",
+            ),
             (
                 "workbench/ui/src/app/docs/docs-host.html",
                 "<!doctype html><title>Docs</title>",
@@ -506,6 +546,34 @@ mod tests {
             text(get("/_workbench/ui/src/shell.js").unwrap()).await.0,
             StatusCode::OK
         );
+        let lattice = "/_workbench/node_modules/@canonic2/lattice/";
+        for file in ["src/index.js", "src/modules/store/store.js"] {
+            let response = get(&format!("{lattice}{file}")).unwrap();
+            assert_eq!(
+                response.headers()[header::CONTENT_TYPE],
+                "text/javascript; charset=utf-8"
+            );
+            assert_eq!(
+                text(response).await.1.as_bytes(),
+                std::fs::read(product.join("node_modules/@canonic2/lattice").join(file)).unwrap()
+            );
+        }
+        for file in [
+            "package.json",
+            "src/testing/index.js",
+            "src/modules/store/store.test.js",
+            "src/modules/store/store.bench.js",
+            "src/index.d.ts",
+            "src/../package.json",
+            "src/%2e%2e/package.json",
+            "src/modules/store/missing.js",
+        ] {
+            assert_eq!(
+                text(get(&format!("{lattice}{file}")).unwrap()).await.0,
+                StatusCode::NOT_FOUND,
+                "{file}"
+            );
+        }
         let docs = get("/_workbench/ui/src/app/docs/docs-host.html").unwrap();
         assert_eq!(
             docs.headers()[header::CONTENT_TYPE],

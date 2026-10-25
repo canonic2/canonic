@@ -198,7 +198,8 @@ function register(context, options) {
      and the folder of its workbench.yaml — which change with the space, so
      they are set on every build. */
   function resources() {
-    var roots = [dir, lucideDir, vscode.Uri.file(path.resolve(__dirname, '../ui/src')), vscode.Uri.file(path.resolve(__dirname, '../contracts'))];
+    var roots = [dir, lucideDir, vscode.Uri.file(path.resolve(__dirname, '../ui/src')), vscode.Uri.file(path.resolve(__dirname, '../contracts')),
+      vscode.Uri.file(path.resolve(__dirname, '../node_modules/@canonic2/lattice'))];
     if (space) {
       roots.push(vscode.Uri.file(space.root));
       if (space.dir && space.dir !== space.root) roots.push(vscode.Uri.file(space.dir));
