@@ -11,7 +11,8 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Reported, 2026-10-25. The owner agreed the plan with the four requested
+Running, 2026-10-25: the owner authorized the W1 profiling follow-up. The
+owner agreed the original plan with the four requested
 amendments on 2026-10-25, before the first run. Dated execution changes are
 recorded below. Both stages, confirmation and secondary timing coverage are
 complete. This compares application patterns using existing APIs; the owner's
@@ -298,6 +299,53 @@ also informs the choice. The 1,000-item context, row-step and end-jump cells
 remain in the first set and are not deciding confirmation cells. Allocation
 sampling and heap are not repeated; confirmation scrolling uses tracing
 only, matching the first set's timing pass.
+
+### W1 profiling follow-up (2026-10-25, before profiling)
+
+The owner authorizes profiling W1's missed budgets, proposing targeted changes
+from that evidence and comparing them with unchanged W1. Stages A and B remain
+reported. This follow-up is running; no public API or helper is authorized.
+
+Freeze the current W1 application source as the control. Use the same S2 input,
+24 px rows, 960 px viewport, overscan, seeds and 1,000/10,000-item fixtures.
+The hypothesis is that repeated reconciliation for an unchanged range adds
+avoidable work, while entering-row binding and DOM lifecycle still dominate
+large window steps. This is a hypothesis, not an attribution of prior tails.
+
+First profile unchanged W1. Diagnostic instrumentation is separate from
+comparison timings. Record mount click Event Timing input delay
+(`processingStart - startTime`), event-handler interval
+(`processingEnd - processingStart`), and the residual to its presentation
+endpoint (`startTime + duration - processingEnd`). The residual includes
+scheduling and presentation wait; it is not a rendering CPU measurement.
+Correlate trace style, layout, paint and GC work with those boundaries. An
+animation-frame callback remains a callback-cadence proxy only.
+
+For scrolling, retain the row, viewport and end-jump inputs. Instrument render
+entries by caller, unchanged ranges, reconciliation, row construction, binding
+setup/disposal and DOM mutation. Attribute sampled JavaScript allocations by
+stack, with native DOM memory outside that sampling measure. Keep GC trace
+time separate, avoid summing overlapping parent/child intervals, and report
+unattributed work. CPU profiles and diagnostic spans explain costs; they do
+not replace the uninstrumented frame-script metric.
+
+Smoke each diagnostic cell once, then take three fresh diagnostic pages per
+size. Record the evidence and candidate changes before candidate runs. Compare
+unchanged W1 and each targeted candidate in seeded order: 15 timing pages,
+10 presentation pages, 10 scrolling pages and 10 heap pages per size, with
+the existing warmups and 120-frame sequences. Retain W0 timing/heap reference
+cells for the relative budgets. Confirm the leading candidate against W1 at
+10,000 items with 15 timing, 10 presentation and 10 scrolling pages. Smoke
+every comparison group with one page per cell first.
+
+Budgets 5–9 and the meaningful-difference rule are unchanged. Same-selection
+no-ops, offscreen selection, focused-row pinning (one extra row), keyboard
+destinations, deterministic removal fallback, insertion/removal anchoring,
+new incarnations on key reuse, model output and teardown remain required.
+Measure total and presentation-only heap separately. A candidate that misses
+a budget remains a miss even if it improves. Report all variants and failed
+or partial runs. Existing local Chromium tooling and read-only shipping
+modules are used; no external data or network transmission is needed.
 
 ## Conditions
 
