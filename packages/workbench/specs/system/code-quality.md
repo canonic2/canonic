@@ -2,7 +2,7 @@
 
 **Status:** implemented: the browser UI gate, the native Rust gates, Node
 integration tests and the workflows that run them. Outside the UI lint/format
-baseline: legacy shell JavaScript, preview adapters and the portable viewer;
+baseline: legacy shell JavaScript under `ui/legacy/` and preview adapters;
 remaining structure and lifecycle debt is in
 [implementation gaps](#implementation-gaps).
 Passing these checks is distinct from meeting the
@@ -68,8 +68,9 @@ direct global network calls; they cannot prove that every dependency is pure.
 
 The `Workbench UI quality` workflow runs the gate on matching pull requests and
 pushes to `main`; extension releases also run it before packaging. Legacy shell
-JavaScript, preview adapters and the portable viewer remain outside this UI
-lint/format baseline. Their existing product tests still run through `pnpm test`.
+JavaScript under `ui/legacy/` and preview adapters remain outside this UI
+lint/format baseline; every document under `ui/src/app/`, the portable viewer
+included, is inside it. Their existing product tests still run through `pnpm test`.
 Passing the UI gate does not establish architectural conformance of those surfaces.
 Component fixtures serve authored JavaScript/CSS directly without backend/compiler
 imports, which establishes standalone component hosting, not
