@@ -11,8 +11,10 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Reported, 2026-10-25: W1 profiling, targeted comparison and confirmation are
-complete. The owner authorized this follow-up and agreed the original plan
+Running, 2026-10-25: the owner accepts the duplicate-reconciliation guard as
+an application pattern and authorizes bounded end-jump and native-mount
+diagnostics. Large-list readiness stays open. W1 profiling, targeted comparison
+and confirmation are complete. The owner agreed the original plan
 with the four requested
 amendments on 2026-10-25, before the first run. Dated execution changes are
 recorded below. Both stages, confirmation and secondary timing coverage are
@@ -440,6 +442,59 @@ misses and confirm unchanged W1 against unchanged C1 at 10,000 items using
 the planned 15 timing, ten presentation and ten viewport-scrolling pages per
 variant. No candidate, threshold or exclusion changes. Heap and allocation
 remain first-set measurements.
+
+### Bounded end-jump and native-mount investigation (2026-10-25, before runs)
+
+The owner authorizes resolving the end-jump regression and separating mount
+presentation costs, without another large run. Preserve every original sample
+and trace. Analyze the original end-jump distribution by page, including the
+concentration of long tasks, wall time, thread CPU and overlapping GC before
+running anything new. The hypotheses are that redundant-work removal is not
+itself the source of the tail, and that shared DOM/browser work explains much
+of mount's residual. These remain hypotheses.
+
+Use three unchanged 10,000-item application variants: W1, guard-only G1 and
+the combined C1. G1 changes only the completed-range guard and its membership/
+focus invalidation, isolating the accepted pattern from C1's controller and
+disposal-reason changes. Reuse 24 px rows, the 960 px viewport, overscan and
+seed. Compare 120 end jumps per fresh page, after ten warmup jumps. Take traced
+and untraced passes in seeded order, with a reset/warmup before each. Report
+per-page and pooled script p50/p95/max/IQR, long-task incidence, wall/thread
+CPU and GC overlap. Untraced callback timers remain handler proxies.
+
+For mount, compare unchanged W1, C1 and a minimal native-wiring control N1.
+N1 constructs the same 50 initial row elements, shadow DOM, styles, input values,
+attributes, positions, viewport, spacer and summary for the same 10,000-item
+data. It uses native data and direct property assignments without collection/
+store subscriptions. It shares the example row component and its connection
+lifecycle, so this isolates state/binding/pattern cost; it does not claim to
+isolate the small element helpers shared by that component. Verify equivalent
+DOM shape, row inputs, geometry and summary independently after the timer.
+N1 is a diagnostic control, not a candidate or a complete collection replacement.
+
+Use real mount clicks and Event Timing for input delay, event processing and
+the residual to presentation. Use a lean trace without CPU/heap sampling to
+correlate handler marks, rendering, frame-task wall/thread CPU and presentation.
+Keep overlapping render/raster/composite intervals separate from scheduling
+wait; do not call the entire residual rendering CPU. If traces cannot identify
+the off-CPU cause, use at most one sampled native-stack page per mount variant,
+separate from latency measurements, or state the measurement limitation.
+
+Smoke each of the six cells once, classify failures, then take three fresh
+pages per cell: nine end-jump and nine mount pages. These small p95 values are
+exploratory. Do not escalate sample counts or start a broad optimization run
+without a concrete candidate or an identified measurement limitation. Keep
+4 ms scrolling and 100 ms presentation targets and the existing meaningful-
+difference rule. Repeatability means reporting page-level incidence, not
+discarding a bad page. A broad C1 recommendation requires an explained or
+bounded tail; otherwise leave it open. The guard's scoped adoption does not
+depend on the combined candidate meeting every budget.
+
+Use the existing host and local Chromium tooling, read-only shipping modules
+and neutral data, with no external transmission or dependencies. All application
+variants retain the existing focus, anchoring, selection, incarnation and
+teardown checks. N1 receives only its explicitly scoped DOM equivalence checks.
+No core redesign, windowing API, variable heights or larger item count is in scope.
 
 ## Conditions
 
@@ -1282,3 +1337,14 @@ a cause or proposing a specific fix for them. Neither API changes nor a
 windowing helper follow from this application-pattern comparison. The owner
 decides adoption; no product implementation or scope expansion is authorized
 by these results.
+
+### Scoped owner adoption (2026-10-25)
+
+The owner adopts only C1's duplicate-reconciliation guard as a documented
+[application pattern](../specs/framework/collections.md). It removes demonstrated
+redundant work. This does not adopt the combined candidate generally, its
+controller/disposal changes, or large-list readiness. The 4.079 ms result
+remains a miss against 4 ms; the 100 ms mount presentation target is unchanged.
+End-jump repeatability/cause and native mount comparison remain open. Delivery
+and navigation work are independent of these investigations; a large-list
+migration remains gated on its own readiness evidence.

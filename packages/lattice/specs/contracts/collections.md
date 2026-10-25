@@ -21,6 +21,11 @@ This contract settles the primitive. It does not establish that any
 application's large lists are ready: selection over much larger collections,
 such as 10,000 items, and mounting only visible rows are separate work.
 
+The [completed-reconciliation guard](../framework/collections.md) is an accepted
+application presentation pattern. It preserves membership incarnations and
+interaction while avoiding duplicate work for an unchanged retained range.
+Large-list readiness remains open; this does not add collection or windowing APIs.
+
 ## Requirements
 
 1. **Item updates are local.** Updating one item copies only that item's
