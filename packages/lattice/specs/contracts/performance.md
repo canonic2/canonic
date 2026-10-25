@@ -10,8 +10,9 @@ results are recorded. The cost sections of [state management](state-management.m
 describe the expected cost of each layer; this topic defines how those
 expectations are established and kept.
 
-**Status:** agreed contract. No capability is implemented, so no measurements
-exist yet.
+**Status:** agreed contract. Implemented primitives and application patterns
+have scoped measurements in [research](../../research/README.md). Those records
+state what was measured and which budgets remain unmet.
 
 ## Principles
 
@@ -32,6 +33,38 @@ exist yet.
 - **Claims need evidence.** A statement that something is faster, smaller or
   cheaper names its measure, workload and environment. Tool speed, bundle size
   of an empty package or reasoning alone are not evidence.
+
+## Guidance for choosing approaches
+
+Lattice supports multiple approaches through its existing primitives and
+application patterns. The [framework guide](../framework/choosing-an-approach.md)
+explains when they fit; it must not present one approach as universally optimal
+or every measured candidate as equally recommended.
+
+For each approach, guidance states the workload and ownership it serves, its
+available API or application convention, atomicity and lifetime guarantees,
+and the costs that can change the choice. Relevant costs include initial and
+steady-state work, bulk actions, allocations, retained memory, teardown and
+presented latency. Numerical claims link to the owning research record with
+its environment, measured sizes and limits rather than copying result tables.
+
+Guidance distinguishes implemented primitives, accepted application patterns,
+experimental alternatives and unresolved budgets. A correct alternative with
+unfavorable measured costs can remain expressible through existing APIs
+without becoming the default. Unmet thresholds stay unmet; a recommendation
+for a narrower property does not establish readiness of a complete workflow.
+
+State organization and presentation are separate decisions. Examples can
+combine an ordinary store or keyed collection with an appropriate presentation
+pattern while preserving the owning lifecycle, binding and DOM contracts.
+Complete authoring recipes use runnable examples against shipping public APIs;
+untested recipes and ignored lab prototypes are not described as shipped
+examples. Supporting a pattern alone does not authorize a helper or new API.
+
+These obligations are assessed in review: each recommendation has an explicit
+scope and evidence link, each executable recipe has behavioral coverage, and
+experimental or incomplete approaches retain visible limitations. This adds
+no documentation-text tests or automatic benchmark runs.
 
 ## Measures
 
@@ -172,8 +205,10 @@ applications are preferred over extremes; an extreme size is reported as such.
     stated rule does not settle. The simpler implementation is kept.
 - Results where the simpler path wins are recorded as well. They define where an
   optimization should not be applied, such as a field index on a small store.
-- Variants exist only in benchmark code. The shipped runtime contains one
-  implementation; there are no runtime switches between strategies.
+- Competing implementations of the same primitive exist only in benchmark
+  code until one is adopted. The shipped primitive has one implementation,
+  with no runtime switch between benchmark strategies. Applications may
+  explicitly choose among documented state and presentation approaches.
 - The baselines that matter today:
 
   | Mechanism | Baseline it must beat |
@@ -225,8 +260,10 @@ are enough. A recorded result is superseded by a newer one rather than edited.
   variance can be handled.
 - **No runtime instrumentation.** Counting in tests keeps production paths free
   of hooks and conditionals that would themselves cost work.
-- **One shipped strategy.** Alternatives are compared in benchmarks, not kept
-  behind flags, so the runtime stays small and each path is fully tested.
+- **One implementation per primitive; explicit application choices.** Internal
+  alternatives are compared in benchmarks, not kept behind runtime flags.
+  Documented application approaches compose existing APIs for different
+  workloads; they do not require duplicate framework backends.
 - **Rules before results.** Naming the primary metric, accepted regressions and
   threshold before measuring keeps a comparison from being decided by whichever
   number looks best afterwards. When results are inconclusive, simplicity wins.

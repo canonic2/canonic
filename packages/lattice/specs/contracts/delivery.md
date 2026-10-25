@@ -6,9 +6,8 @@ This contract defines what Lattice offers to the applications that use it: its
 entry points, what counts as public, the rules every export follows, the
 platforms it supports, how applications load it with and without a bundler,
 how TypeScript consumers get its types, and how its versions change. This topic
-owns runtime delivery, compatibility and public promises.
-Contributor language, JSDoc and tooling instructions live in the package's
-agent rules and [README](../../README.md).
+owns runtime delivery, compatibility and public promises. The
+[README](../../README.md) owns setup and commands.
 
 **Status:** agreed contract. The package is unpublished at version `0.0.0`. The
 root entry point exports the store core, `@canonic2/lattice/collection` the

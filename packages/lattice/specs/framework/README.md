@@ -6,6 +6,7 @@ looks like and how its parts are composed. Guarantees stay in the
 
 | Page | Covers | Status |
 | --- | --- | --- |
+| [Choosing an approach](choosing-an-approach.md) | State and list presentation choices, tradeoffs and evidence limits | Agreed guidance; windowing readiness open |
 | [Elements](elements.md) | How an element is written: a native class with narrow helpers | Agreed shape; helpers implemented |
 | [Capabilities](capabilities.md) | State ownership, selections, named actions and failures | Agreed shape, from the filters example |
 | [Bindings](bindings.md) | Inputs, events, reporting failures and setup rollback | Agreed shape, from the filters example |

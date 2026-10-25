@@ -5,9 +5,12 @@
 are owned by [state management](../contracts/state-management.md); this page
 shows how a capability meets them.
 
-A capability is a factory. It creates one store, keeps it private, and returns
-a read-only view of its state, its selections and its named actions. It
-receives its I/O as injected functions and touches no DOM.
+A capability is a factory. In the filters example it creates one store, keeps
+it private, and returns a read-only view of its state, its selections and its
+named actions. It receives its I/O as injected functions and touches no DOM.
+[Choosing an approach](choosing-an-approach.md#state-ownership) explains when
+local state, a keyed collection or independently owned item stores fit instead;
+the example does not prescribe one store for every capability.
 
 ## A complete capability
 

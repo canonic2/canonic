@@ -3,6 +3,9 @@
 Lattice is an unpublished native JavaScript package for state and Web Component
 bindings. It has no runtime dependencies.
 
+The [developer guides](docs/README.md) explain state models, keyed collections,
+list selection and presentation techniques, including when to choose each.
+
 | Entry point | Exports |
 | --- | --- |
 | `@canonic2/lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |

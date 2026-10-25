@@ -19,6 +19,5 @@ the [architecture](../architecture/README.md) folder how Lattice implements them
 | [DOM updates](dom-updates.md) | Retained nodes, writes, keyed collections, interaction preservation and layout |
 | [Scheduling](scheduling.md) | Synchronous defaults, justified deferral, frame coalescing, background work and cancellation |
 
-Each guarantee has one owner. Instructions for contributors live in the
-package's agent rules and README. Verification runs only when requested;
+Each guarantee has one owner. Verification runs only when requested;
 acceptance criteria do not claim an implementation or authorize running checks.

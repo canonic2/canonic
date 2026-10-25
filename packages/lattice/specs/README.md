@@ -4,7 +4,7 @@ The specifications are separated by purpose. Read only the area needed for the t
 
 | Area | Question | Contents |
 | --- | --- | --- |
-| [Framework](framework/README.md) | What does application code look like? | The element authoring shape; capabilities, bindings and composition reserved |
+| [Framework](framework/README.md) | What does application code look like, and which approach fits? | State and presentation choices; elements, capabilities, bindings, composition and collection presentation |
 | [Architecture](architecture/README.md) | How is Lattice organized internally? | Store and package implementation design, as drafts for review |
 | [Contracts](contracts/README.md) | What must an implementation guarantee? | Detailed behavior, edge cases, performance, delivery and acceptance evidence |
 
@@ -16,6 +16,5 @@ in the package's
 [research](../research/README.md); the architecture pages describe the
 implemented code.
 
-Each detailed requirement has one owning contract. Contributor instructions
-live in the package's agent rules; the
+Each detailed requirement has one owning contract. The
 [package README](../README.md) owns setup and commands.
