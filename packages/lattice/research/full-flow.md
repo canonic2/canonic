@@ -16,9 +16,10 @@ where they would help.
 
 Decided, 2026-10-24. The owner agreed to the plan on 2026-10-24 and asked for
 it to run at once rather than wait for a quieter machine. Decision: keep the
-current design. The lab supports negligible visible interaction overhead for
-these workloads, with measurable setup, teardown and memory costs; it does not
-show that Lattice is free or faster than hand-written wiring.
+current design. The lab supports negligible interaction CPU overhead for these
+workloads, with measurable setup, teardown and memory costs; it does not
+measure presented latency, and does not show that Lattice is free or faster
+than hand-written wiring.
 
 ## Hypothesis
 
@@ -196,6 +197,23 @@ difference is larger than 5% and than both interquartile ranges, as in
 stage 1. Adoption then means implementing the change in the store with its
 unit tests passing; the lab result alone changes no product code.
 
+### Stage 2 confirmation plan (2026-10-24, before the confirmation run)
+
+Stage 2 ran once, under heavy background load, and against a lab copy rather
+than the shipping code. The confirmation repeats it on the shipping path:
+
+- **Variants.** The shipping store, `src/modules/store/store.js` as committed,
+  against the previous store, restored from the commit before the change and
+  checked byte for byte against it, served in its place. Both run the filters
+  example unchanged.
+- **Measures and pages.** The stage 2 allocation set and timing set, with the
+  same workloads, sizes and page counts, and the counted correctness set.
+- **Reading.** The allocation result is confirmed when the shipping store again
+  allocates meaningfully less per unrelated and changing write. The timing
+  result is confirmed when unrelated writes are again meaningfully faster and
+  no timing measure is meaningfully slower; a difference within run-to-run
+  variation leaves it inconclusive. Background load is recorded with each set.
+
 ### Host and tools
 
 The same machine and tools as the component authoring lab: Node 24, Chromium
@@ -316,7 +334,7 @@ the same host and tools; background load stayed high. The lab copy passed all
 | µs per unrelated write, 10 fields | 0.53 (IQR 0.015) | 0.42 (IQR 0.010) | −22% | Yes |
 | µs per unrelated write, 100 fields | 2.68 (IQR 0.18) | 2.29 (IQR 0.12) | −15% | Yes |
 | µs per unchanged write | 0.075 | 0.075 | 0% | No |
-| Interaction task time, ms, 10 and 100 fields | 2.52, 7.45 | 2.51, 7.18 | −0.4%, −3.6% | No |
+| Interaction task time (CPU work, not presented latency), ms, 10 and 100 fields | 2.52, 7.45 | 2.51, 7.18 | −0.4%, −3.6% | No |
 | Interaction script time, ms, 10 and 100 fields | 0.123, 0.388 | 0.120, 0.376 | −3% | No |
 | Setup and teardown, µs per field | 41–60, 15–16 | 19–21, 9–10 | Lower | No: interquartile ranges up to 50 µs |
 
@@ -325,6 +343,30 @@ variant and size; timings from 20 pages at 10 fields and 10 at 100. Setup and
 teardown varied far more than in stage 1, which is attributed to background
 load; they are not read. Both variants passed every counted check at 10 and
 100 fields.
+
+### Stage 2 confirmation on the shipping path (2026-10-24)
+
+The shipping store, served unchanged from `src/`, against the previous store,
+restored from the commit before the change and identical to it byte for byte.
+Allocation pages ran 20:19–20:23 UTC, timing 20:23–20:28 and counted at 20:28.
+Background load rose from 34 to 105 during the allocation set and from 97 to
+148 during the timing set, on 16 threads; the heaviest of the whole lab.
+
+| Measure | Previous store | Shipping store | Reading |
+| --- | --- | --- | --- |
+| Bytes per unrelated write, 10 and 100 fields | 352, 351 | 98, 97 | Confirmed: −72%, the same as stage 2 |
+| Bytes per changing write, 10 and 100 fields | 364, 364 | 110, 110 | Confirmed: −70% |
+| Bytes per unchanged write | 17 | 17 | No difference |
+| µs per unrelated write, 10 fields | 0.535 (IQR 0.015) | 0.425 (IQR 0.030) | Confirmed: −21%, meaningful |
+| µs per unrelated write, 100 fields | 2.73 (IQR 0.53) | 2.31 (IQR 0.06) | Inconclusive: −16%, smaller than the previous store's spread |
+| Interaction script time, 10 and 100 fields | 0.127, 0.445 ms | 0.124, 0.403 ms | No meaningful difference |
+| Interaction task time, 100 fields | 10.7 ms (IQR 2.9) | 7.3 ms (IQR 3.1) | Flagged meaningful by the rule, but not claimed: the spreads near 3 ms and the load make a store change worth 3 ms implausible |
+| Any measure slower | — | — | None |
+
+Both stores passed every counted check at 10 and 100 fields. The allocation
+result holds on the shipping path. The timing result holds for unrelated writes
+at 10 fields; at 100 fields it is inconclusive, and the interaction-level
+differences at 100 fields are attributed to load rather than the change.
 
 ### Retained memory explained (2026-10-24)
 
@@ -340,14 +382,16 @@ with 20 and 60 cycles:
 | Blink hash table and vector backings | grown capacity, no added entries | grown capacity, no added entries |
 | Stores, subscriptions, signals, controllers, elements, observers, listeners | none | none |
 
-Lattice's extra retention after churn is one-time engine state, not objects it
-keeps: more of its functions are compiled and optimized during churn, and they
-add hidden classes and some grown Blink table capacity, such as the
-context-lifecycle observer list that `AbortSignal.any` uses. Application-level
-retention is identical after 20 and 60 cycles, so nothing grows with
-mounting. The only per-cycle growth, paint timing entries, comes from the
-browser's performance timeline and is the same in both variants. No change is
-needed.
+Lattice's extra retention after churn is attributed to engine state rather
+than objects it keeps: more of its functions are compiled and optimized during
+churn, and they add hidden classes and some grown Blink table capacity, such as
+the context-lifecycle observer list that `AbortSignal.any` uses. No
+application-object growth was observed across 20 and 60 cycles: application-
+level retention was identical. Compiled code for Lattice did grow, from about
+34 to about 39 KB, which is consistent with further optimization during the
+longer run but was not tracked beyond 60 cycles. The other per-cycle growth,
+paint timing entries, comes from the browser's performance timeline and is the
+same in both variants. No change is made on this evidence.
 
 ## Correctness
 
@@ -380,8 +424,11 @@ found no runner defect.
 
 ## Decision and follow-ups
 
-**Outcome against the plan's reading.** Interaction cost shows no measurable
-overhead: +3 to +4%, within run-to-run variation at every size. Lattice's own
+**Outcome against the plan's reading.** Interaction cost, main-thread CPU work
+per interaction, shows no measurable overhead: +3 to +4%, within run-to-run
+variation at every size. It is not visible latency: these measures establish
+work done, not when the updated frame reaches the screen, which this lab did
+not measure. Lattice's own
 script work per interaction is material but small, about 21 µs at 1 and 10
 fields and 53 µs at 100. Rendering work is identical. Setup, teardown,
 unchanged and unrelated updates, and memory per field carry material relative
@@ -420,9 +467,10 @@ Where the overhead is, in order of size relative to the work it serves:
   weakened to save a controller.
 - **Retained memory, explained.** Lattice retained 10 to 27 KB more than the
   control after churn, constant in the number of fields. Heap snapshots
-  attribute it to one-time engine state, compiled code and hidden classes for
-  its functions, with no store, subscription, signal or element retained and
-  no growth from 20 to 60 cycles; see
+  attribute it to engine state, compiled code and hidden classes for its
+  functions, with no store, subscription, signal or element retained and no
+  application-object growth observed across 20 and 60 cycles; compiled code
+  rose from about 34 to 39 KB over the same range. See
   [retained memory explained](#retained-memory-explained-2026-10-24).
 - No binding helper is proposed from this result: the overhead is in what each
   binding allocates, not in how it is written.
@@ -430,7 +478,11 @@ Where the overhead is, in order of size relative to the work it serves:
 **Stage 2 outcome (2026-10-24).** Under the stage's rule, variant 2 is adopted:
 allocations of a changing write fell by about 254 bytes, 70 to 72%, the time
 of an unrelated write fell by 15 to 22%, and no time measure got meaningfully
-slower. The change is implemented in `src/modules/store/store.js`, where the
+slower. The confirmation on the shipping path reproduced the allocation result
+exactly and the unrelated-write speedup at 10 fields; at 100 fields the
+speedup was inconclusive under the heaviest load of the lab. The allocation
+reduction is the established result; the timing gain is supported at 10 fields
+only. The owner kept the change and deferred the field index. The change is implemented in `src/modules/store/store.js`, where the
 store's unit tests, the root import test and the filters example's browser
 tests pass, and
 [store architecture](../specs/architecture/store.md#measured-choices) records

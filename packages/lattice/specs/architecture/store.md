@@ -249,8 +249,9 @@ Work counts use wrappers around `read`, `equals` and `run`, as
   `length = 0`, which also released its backing store. In steady state those
   were about 250 of 352 bytes per unrelated write. Building the snapshot at the
   first change and queuing into parallel arrays that keep their capacity cut
-  that to about 98 bytes and an unrelated write's time by 15 to 22%, with no
-  time measure slower. See the
+  that to about 98 bytes, confirmed on the shipping path, with no time measure
+  slower. An unrelated write was also about 21% faster at 10 fields; at 100
+  fields the gain was inconclusive under heavy machine load. See the
   [full-flow record](../../research/full-flow.md), stage 2. The remaining
   bytes are the snapshot itself and the changed-key array.
 
