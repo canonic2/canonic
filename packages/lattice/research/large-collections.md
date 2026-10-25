@@ -584,6 +584,17 @@ item counts are authorized. Calibration and comparison are small investigations,
 not a broad readiness rerun. Native presentation cost does not cancel the
 additional framework handler work measured above.
 
+### Calibration outcome and comparison boundary (2026-10-25)
+
+The two-page smoke and six-page calibration pass callback-coverage and existing
+interaction checks. Neither trace mode qualifies for subsequent timing
+comparison: minimal tracing changes median callback time by 40–48%, full
+tracing by 88–111%, beyond the existing meaningful-difference rule in every
+cell. Use untraced synchronous setup, reconciliation and teardown boundaries
+plus work counts for the mechanics comparison. These omit asynchronous
+rendering and some callbacks; do not use them to claim a frame/presentation
+budget pass, and do not rescale prior results.
+
 ## Conditions
 
 ### Stage A (2026-10-25)
@@ -736,6 +747,24 @@ samples. Native samples were aggregated over a second and lacked resolved
 Chromium internal callsites and event-window stack timing. They cannot name
 the blocking or descheduling cause of a particular frame. Power state was
 not recorded. No broad comparison followed these diagnostics.
+
+### Small calibration (2026-10-25)
+
+Calibration used the same host and shipping source hashes as the bounded
+investigation, Node 24.12.0 and Chromium 156.0.8078.4. One-minute load was
+17.85 at start and 12.07 at finish; host work was uncontrolled. Two smoke
+pages preceded six fresh measured pages, three each for W1 and C1. Each page
+ran viewport and end-jump passes with no trace, minimal trace and full trace,
+120 frames after ten warmups per pass. Pass/page order was seeded.
+
+The runner SHA-256 is
+`338b1f92b4c0206c598a758e01da0365eda0fd88046daaef1986e123e45db780`,
+the metric implementation
+`dc146dddd014096ae6cdd84a6a2ae5ee13ce4196b1f29fc0a43a94258f08139a`,
+and independent callback hooks
+`7963680b172173bf32852cd1972d03209e57d2ac82e4b4ccb2439ec62d173e75`.
+W1/C1 and runtime modules match the earlier comparison. No CPU or allocation
+sampling ran during calibration.
 
 ## Results
 
@@ -1353,6 +1382,33 @@ No core redesign or broad candidate recommendation follows. The next diagnostic
 needs low-overhead, coverage-equivalent script accounting and a time-correlated,
 symbolized scheduling capture on a controlled host. No large run was started.
 
+### Small calibration (2026-10-25)
+
+Page-median callback time, three pages per cell, p50 / p95 / maximum (IQR),
+in milliseconds. This is the same synchronous callback boundary in all modes:
+
+| Variant / input | No trace | Minimal trace | Full trace |
+| --- | ---: | ---: | ---: |
+| W1 / viewport | 1.970 / 2.040 / 2.040 (0.150) | 2.760 / 2.795 / 2.795 (0.145) | 3.705 / 3.715 / 3.715 (0.030) |
+| W1 / end jump | 2.240 / 2.240 / 2.240 (0.065) | 3.215 / 3.315 / 3.315 (0.190) | 4.440 / 4.605 / 4.605 (0.230) |
+| C1 / viewport | 1.700 / 1.810 / 1.810 (0.125) | 2.520 / 2.585 / 2.585 (0.085) | 3.445 / 3.570 / 3.570 (0.155) |
+| C1 / end jump | 1.950 / 1.985 / 1.985 (0.045) | 2.875 / 2.895 / 2.895 (0.040) | 4.105 / 4.185 / 4.185 (0.155) |
+
+Minimal tracing adds 40.1%, 43.5%, 48.2% and 47.4%, respectively; full
+tracing adds 88.1%, 98.2%, 102.6% and 110.5%. Each exceeds 5% and both
+IQRs. Both traces cover all independently counted callbacks: 120 driver
+frames, 119 native-scroll callbacks and 4,760 ResizeObserver callbacks per
+viewport pass, or 5,950 ResizeObserver callbacks per end-jump pass. The last
+native scroll/observer delivery is outside the original stop mark, and is
+excluded by both the trace and independent counters. No coverage mismatch
+or smoke failure occurs.
+
+The minimal trace improves perturbation but does not eliminate it. Neither
+method is eligible under the predeclared rule. No factor is subtracted from
+an existing result, and plain callback time is not full frame-script time.
+Keep the 4.079 ms miss and 4 ms/100 ms targets unchanged. Subsequent mechanics
+timing compares matching untraced synchronous calls and reports that scope.
+
 ## Correctness
 
 ### Smoke (2026-10-25)
@@ -1449,6 +1505,16 @@ only for its declared initial DOM, inputs, geometry, summary and teardown;
 it is not a complete list candidate. Original samples and traces are unchanged.
 No core source, public API or windowing helper changed. Lint, typecheck,
 formatting and package tests were not run.
+
+### Calibration and example verification (2026-10-25)
+
+All eight calibration pages pass callback coverage and the inherited focus,
+anchoring, incarnation, selection and teardown checks. The runnable example's
+focused capability and Chromium tests exercise its application actions and
+interaction ownership. Its actual HTTP entry is exercised with 10,000 items,
+bounded initial mounting, a native edit, selected-key replacement and teardown.
+These checks establish the example's listed behavior, not large-list budgets.
+No lint, typecheck, formatting or full test suite ran.
 
 ## Threats to validity
 
