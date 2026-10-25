@@ -11,8 +11,9 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Running, 2026-10-25: the owner authorized the W1 profiling follow-up. The
-owner agreed the original plan with the four requested
+Reported, 2026-10-25: W1 profiling, targeted comparison and confirmation are
+complete. The owner authorized this follow-up and agreed the original plan
+with the four requested
 amendments on 2026-10-25, before the first run. Dated execution changes are
 recorded below. Both stages, confirmation and secondary timing coverage are
 complete. This compares application patterns using existing APIs; the owner's
@@ -304,7 +305,7 @@ only, matching the first set's timing pass.
 
 The owner authorizes profiling W1's missed budgets, proposing targeted changes
 from that evidence and comparing them with unchanged W1. Stages A and B remain
-reported. This follow-up is running; no public API or helper is authorized.
+reported. The follow-up uses the plan below; no public API or helper is authorized.
 
 Freeze the current W1 application source as the control. Use the same S2 input,
 24 px rows, 960 px viewport, overscan, seeds and 1,000/10,000-item fixtures.
@@ -418,6 +419,28 @@ counted pages only, reset before the scroll sequence and read after its final
 native-scroll opportunity. Repeat only the four affected smoke cells. No
 measurement-page source or candidate behavior changes.
 
+### Allocation attribution clarification (2026-10-25, during comparison)
+
+Uninstrumented sampled stacks can fold optimized callees into the reconciler's
+frame. Report that raw bucket as reconciler/callees, not as allocations made
+by the reconciliation algorithm alone. The diagnostic wrappers retain clearer
+ownership boundaries but perturb stack depth and allocation. Use those passes
+to identify lifecycle owners and the uninstrumented passes for total sampled
+bytes. Keep unresolved attribution explicit; no timing, allocation total,
+candidate or threshold is changed by this clarification.
+
+### W1 follow-up confirmation (2026-10-25, before confirmation)
+
+All 242 full comparison pages pass their listed correctness checks. C1 is
+the sole targeted candidate. Its viewport page-median script time is 3.671 ms
+against W1's 4.022 ms, a meaningful reduction, and sampled bytes fall from
+228.9 to 153.8 kB per step. It still misses the 4 ms frame-script p95 budget
+(4.715 ms) and the 100 ms mount presentation budget (168 ms p95). Retain those
+misses and confirm unchanged W1 against unchanged C1 at 10,000 items using
+the planned 15 timing, ten presentation and ten viewport-scrolling pages per
+variant. No candidate, threshold or exclusion changes. Heap and allocation
+remain first-set measurements.
+
 ## Conditions
 
 ### Stage A (2026-10-25)
@@ -508,6 +531,35 @@ timing, CPU sampling and allocation sampling were separate scroll passes.
 Mount tracing and CPU sampling overlapped, so those click durations explain
 phases rather than decide budgets. Comparison pages use the frozen source
 without these diagnostic wrappers.
+
+### W1 targeted comparison (2026-10-25)
+
+The full comparison used the same host, runtimes, shipping source hashes and
+frozen W1 as the diagnostic set. Its public source revision was
+`c1aaa4f58105`. The candidate SHA-256 is
+`a760d55d3955854b7b55da67b4c68c0e5e5f8b90d0cdfcfae70a9f08d214b569`;
+the comparison runner hash is
+`8e04d135c68bd4a70dcfb605fb1b67b504ab784447e7f942f0ef741555a55187`.
+One-minute load was 11.40 at start and 9.03 at finish; five/fifteen-minute
+load at finish was 12.76/15.03. Background work was uncontrolled.
+
+There were 242 fresh pages: 96 each for W1 and C1, plus 50 W0 timing/heap
+reference pages. Each size/variant used 15 timing, ten presentation, ten
+scrolling, ten heap and three counted pages, excluding W0's unneeded
+presentation/scroll/count cells. Timing pages kept ten rounds after five
+warmups. Scroll timing used tracing without sampling; allocation was a
+separate 120-step pass at a 32,768-byte requested sampling interval, including
+collected objects. One browser process served fresh contexts in seeded order.
+
+### W1 follow-up confirmation (2026-10-25)
+
+Confirmation used 70 fresh pages at 10,000 items: 15 timing, ten presentation
+and ten viewport-scroll pages for each of unchanged W1 and unchanged C1.
+The host and all measured source hashes match the full comparison. The public
+source revision was `a2257a5615d2`. One-minute load was 6.84 at start and
+9.29 at finish. A short local trace-summary pass overlapped the opening pages;
+those samples remain included. Heap and allocation sampling were not repeated.
+Source hashes were checked again after confirmation and still matched.
 
 ## Results
 
@@ -843,6 +895,181 @@ viewport and end-jump spans; range bookkeeping matters relatively more for
 one-row steps. GC is observed separately and overlaps those spans. It is
 not counted as an additional application layer.
 
+For the 10,000-item viewport diagnostic, the median exclusive span time per
+step and sampled allocation ownership are below (three pages, 120 steps per
+page). Times are elapsed diagnostic spans, including any GC inside them;
+allocation ownership comes from the separate sampling pass. Values are
+rounded. Wrapper overhead makes these unsuitable for the 4 ms budget or
+for comparing allocation totals with the uninstrumented pass.
+
+| Diagnostic owner | Exclusive ms per step | Sampled kB per step |
+| --- | ---: | ---: |
+| Range and position bookkeeping | 0.200 | 13.6 |
+| Reconciliation excluding timed callees | 0.157 | 22.8 |
+| Binding setup and disposal | 1.25 | 124 |
+| DOM construction, inputs, insertion and removal, including component lifecycle | 2.76 | 102 |
+| Remaining row setup | 0.313 | 26.4 |
+| Driver/other allocation | Outside these spans | 2.34 |
+| GC trace time, overlapping the spans above | 0.449 | Not an application allocation owner |
+
+The binding allocation bucket is dominated by normal release; the DOM bucket
+by component disconnection. The comparison retains the latter behavior.
+
+### W1 targeted comparison (2026-10-25, full set)
+
+All 242 pages pass their listed correctness checks. Unless stated otherwise,
+entries below are p50 / p95 / maximum (IQR), using nearest ranks. Timing
+summaries use page medians; scrolling budget values pool 1,200 traced frames
+from ten pages per cell. C1 is the combined application candidate described
+in Method, with the shipping modules and example field unchanged.
+
+At 10,000 items, 15 timing pages per variant:
+
+| Variant | Synchronous mount, ms | Teardown, ms | Visible label update, µs |
+| --- | ---: | ---: | ---: |
+| W0 reference | 922 / 1,026 / 1,026 (56.4) | 173 / 201 / 201 (15.1) | 2.91 / 3.17 / 3.17 (0.055) |
+| Unchanged W1 | 7.365 / 9.870 / 9.870 (1.240) | 0.870 / 1.190 / 1.190 (0.105) | 2.92 / 3.94 / 3.94 (0.125) |
+| C1 | 7.255 / 8.180 / 8.180 (0.635) | 0.645 / 0.710 / 0.710 (0.050) | 2.96 / 3.13 / 3.13 (0.120) |
+
+Mount's median difference is not meaningful. Teardown is 25.9% cheaper,
+clearing both IQRs. C1's mount is 0.787% of W0 and its visible update is
+1.72% above W0, within their relative limits. Unmounted label updates assign
+no row input. Their CPU medians are 0.325 µs for both windows, versus
+2.90 µs for W0's mounted row. Bulk update medians are 3.465 ms for W1,
+3.480 ms for C1 and 41.695 ms for W0; both windows still derive/write the
+summary once per commit.
+
+Heap at 10,000 items, ten pages per variant, in decimal MB:
+
+| Variant | Total heap | Presentation-only heap | DOM nodes, constant |
+| --- | ---: | ---: | ---: |
+| W0 reference | 9.1133 / 9.1157 / 9.1157 (0.0023) | 7.6460 / 7.6484 / 7.6484 (0.0023) | 100,005 |
+| Unchanged W1 | 1.5105 / 1.5168 / 1.5168 (0.0061) | 0.04390 / 0.04999 / 0.04999 (0.00609) | 505 |
+| C1 | 1.5102 / 1.5163 / 1.5163 (0.0002) | 0.04362 / 0.04971 / 0.04971 (0) | 505 |
+
+C1 retains 16.6% of W0's total heap and 0.505% of its DOM nodes. Its heap
+difference from W1 is not meaningful. Total heap, rather than just the much
+smaller presentation increment, decides the heap threshold.
+
+Mount click Event Timing at 10,000 items, ten events per variant, ms:
+
+| Variant | Input delay | Event processing | Residual to presentation | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Unchanged W1 | 1.58 / 1.88 / 1.88 (0.18) | 19.07 / 22.51 / 22.51 (1.36) | 83.87 / 103.60 / 103.60 (15.38) | 104 / 128 / 128 (16) |
+| C1 | 1.59 / 1.78 / 1.78 (0.12) | 19.17 / 20.29 / 20.29 (1.42) | 91.86 / 145.93 / 145.93 (38.93) | 112 / 168 / 168 (40) |
+
+The mount presentation budget fails again. The median difference is smaller
+than both IQRs; there is no supported mount latency improvement. Presented
+selection p95 is 16 ms for both windows, with observed maxima 24 ms. Event
+Timing emitted 199 of 200 W1 selection clicks and 197 of 200 C1 clicks;
+all clicked selections were checked, and missing entries are not imputed.
+
+Viewport scrolling at 10,000 items:
+
+| Variant | Frame script, ms | Page-median script, ms | Sampled kB/step, ten pages | GC trace ms/sequence, ten pages | Long tasks |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Unchanged W1 | 4.061 / 5.545 / 139.289 (0.265) | 4.022 / 5.545 / 5.545 (0.187) | 228.9 / 242.5 / 242.5 (11.6) | 23.58 / 53.68 / 53.68 (2.26) | 7, 57–149 ms |
+| C1 | 3.700 / 4.715 / 26.422 (0.295) | 3.671 / 4.155 / 4.155 (0.122) | 153.8 / 159.8 / 159.8 (7.1) | 16.43 / 46.11 / 46.11 (5.88) | 0 |
+
+C1's typical viewport script reduction is 8.73%, exceeding 5% of control
+and both page-median IQRs. Allocations fall 32.8%, also clearing that rule.
+The 4 ms p95 limit still fails. The observed GC time reduction is 30.3%;
+GC intervals overlap application work and are not added to it. Median major
+collection counts are six for W1 and five for C1 per 120-step trace.
+All three counted pages at each size observe 240 reconciler calls for W1
+and 120 for C1. The counted middle-viewport step still creates/removes 40
+rows for both variants; the candidate skips duplicate reconciliation, not
+necessary row lifetimes.
+
+Uninstrumented viewport allocation stacks, median kB per step with IQR:
+
+| Stack owner | Unchanged W1 | C1 |
+| --- | ---: | ---: |
+| Range/position | 15.1 (2.18) | 6.57 (2.74) |
+| Reconciler/callees, including optimized lifecycle callees | 77.6 (8.28) | 12.1 (2.23) |
+| Visible binding lifecycle frames | 24.3 (4.10) | 25.1 (3.28) |
+| DOM/component | 82.6 (6.91) | 80.1 (5.57) |
+| Remaining row setup | 28.2 (2.20) | 23.3 (3.81) |
+| Driver/other | 2.46 (1.36) | 2.19 (0.84) |
+
+Bucket medians need not sum to the median total. The large ancestor-frame
+reduction is consistent with the lifecycle changes identified by diagnostic
+wrappers; it is not evidence that a reconciler's set construction alone
+allocated 77.6 kB. Component disconnection remains a large allocation site.
+
+Other scrolling inputs at 10,000 items, ten pages and 1,200 frames per cell:
+
+| Input / variant | Frame script, ms | Page-median script, ms | Sampled kB/step | Long tasks |
+| --- | ---: | ---: | ---: | ---: |
+| Row / W1 | 0.739 / 0.827 / 1.019 (0.067) | 0.726 / 0.784 / 0.784 (0.033) | 36.4 / 40.3 / 40.3 (3.86) | 0 |
+| Row / C1 | 0.640 / 0.715 / 0.851 (0.058) | 0.637 / 0.673 / 0.673 (0.039) | 17.8 / 23.5 / 23.5 (2.45) | 0 |
+| End / W1 | 4.576 / 5.021 / 7.355 (0.211) | 4.557 / 4.743 / 4.743 (0.215) | 259.8 / 271.1 / 271.1 (11.7) | 0 |
+| End / C1 | 4.217 / 11.849 / 177.466 (0.270) | 4.189 / 11.660 / 11.660 (0.127) | 173.0 / 182.2 / 182.2 (12.6) | 21, 54–288 ms |
+
+The row and end typical reductions clear the meaningful-difference rule,
+but C1 has a worse end-jump tail. Those samples are retained. Trace correlation
+finds W1's seven viewport long tasks at 57.8–149.2 ms wall time with only
+11.4–33.2 ms thread CPU and no overlapping main-thread MinorGC/MajorGC.
+C1's 21 end-jump long tasks span 54.3–288.9 ms wall and 7.38–46.43 ms
+thread CPU; one overlaps 8.60 ms of main-thread GC, the others none. Much
+of these stalls is off CPU, including intervals inside scripting, paint or
+layout spans. The trace does not identify the blocking/descheduling cause.
+They cannot all be attributed to allocation or GC. End-jump tails are not
+repeated by the planned viewport-only confirmation.
+
+At 1,000 items, the same sample counts give W1/C1 mount medians of
+2.530/2.430 ms, teardown 0.870/0.610 ms, total heap 0.1808/0.1805 MB and
+presentation heap 0.04378/0.04351 MB, with 505 nodes each. Mount presentation
+is 96/144/144 (24) ms for W1 and 96/160/160 (24) ms for C1. Viewport
+script is 4.122/9.112/138.188 (0.571) ms for W1 and
+3.593/4.710/36.454 (0.280) ms for C1. Page-median script is
+4.047/8.505/8.505 (0.304) versus 3.550/4.411/4.411 (0.129) ms, a
+meaningful 12.3% typical reduction. Sampled viewport bytes fall from
+224.8 to 155.4 kB/step; viewport long tasks fall from 16 to zero. Row
+script p95 is 1.445/0.761 ms and end-jump p95 5.297/4.505 ms, W1/C1,
+with no row or end-jump long tasks at this size. The agreed budgets decide
+at 10,000 items; the smaller fixture does not rescue a missed budget.
+
+### W1 follow-up confirmation (2026-10-25)
+
+All 70 pages pass their listed correctness checks. Entries are p50 / p95 /
+maximum (IQR), with the same timing boundaries and nearest-rank summaries as
+the full set. Fifteen timing pages per variant:
+
+| Variant | Synchronous mount, ms | Teardown, ms | Visible label update, µs |
+| --- | ---: | ---: | ---: |
+| Unchanged W1 | 7.190 / 7.405 / 7.405 (0.120) | 0.865 / 0.885 / 0.885 (0.020) | 2.895 / 2.975 / 2.975 (0.075) |
+| C1 | 7.030 / 7.835 / 7.835 (0.275) | 0.620 / 0.670 / 0.670 (0.040) | 2.885 / 3.075 / 3.075 (0.105) |
+
+Mount's median difference remains below 5%. Teardown is meaningfully lower,
+by 28.3%. Visible update medians are effectively unchanged.
+
+Mount Event Timing, ten events per variant, in milliseconds:
+
+| Variant | Input delay | Event processing | Residual to presentation | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Unchanged W1 | 1.54 / 1.68 / 1.68 (0.075) | 18.585 / 20.100 / 20.100 (0.290) | 83.16 / 90.25 / 90.25 (7.98) | 104 / 112 / 112 (8) |
+| C1 | 1.51 / 1.60 / 1.60 (0.085) | 18.585 / 19.155 / 19.155 (0.370) | 83.41 / 91.32 / 91.32 (7.62) | 104 / 112 / 112 (8) |
+
+Both mount p95 values still exceed 100 ms. Selection clicks have complete
+coverage of 200 events per variant, all reported at 16 ms. The candidate
+does not reduce the dominant mount presentation residual.
+
+Viewport scrolling, 1,200 frames from ten pages per variant:
+
+| Variant | Frame script, ms | Page-median script, ms | GC trace ms/sequence | Long tasks |
+| --- | ---: | ---: | ---: | ---: |
+| Unchanged W1 | 4.100 / 4.561 / 5.818 (0.381) | 4.072 / 4.220 / 4.220 (0.083) | 20.11 / 23.81 / 23.81 (1.05) | 0 |
+| C1 | 3.701 / 4.079 / 4.437 (0.323) | 3.700 / 3.741 / 3.741 (0.033) | 17.29 / 21.05 / 21.05 (0.92) | 0 |
+
+The typical reduction is 9.14%, clearing 5% and both IQRs again. The p95
+limit still fails at 4.079 ms; it is not rounded down to accept the candidate.
+Neither variant has a long task in this confirmation. Callback cadence is
+16.665 ms median and 16.670 ms p95/max for both; it remains a callback proxy,
+not a presented-frame metric. Median major collections are four for W1 and
+three for C1. The GC-time direction repeats, with a smaller 14.1% reduction.
+Heap, allocation and the full set's end-jump regression are not reconfirmed.
+
 ## Correctness
 
 ### Smoke (2026-10-25)
@@ -903,6 +1130,26 @@ page. Counted teardown and allocation were not repeated in confirmation.
 The secondary timing smoke passed all six cells, and all 90 measured pages
 passed their post-measurement model and focus checks with no page error.
 
+### W1 follow-up (2026-10-25)
+
+The two diagnostic smoke pages and six diagnostic pages pass the existing
+model and interaction checks. The 24 comparison smoke pages also pass. All
+four coverage-counter smoke pages fail only the added counter assertion:
+they report nine calls for W1 and five for C1, stale/incomplete counts.
+These are runner defects, not candidate findings. The four repaired smoke
+pages pass with direct counts of 240 and 120 respectively.
+
+All 242 comparison and 70 confirmation pages pass the listed checks without
+a page error. These include same-selection no-ops, offscreen selection,
+retained row/control identity and draft input, one additional pinned focused
+row, mounting a keyboard destination before focus, deterministic middle/end/
+empty removal fallback, insertion/removal scroll anchoring, independent and
+batched key reuse with a new incarnation, focused key-reuse fallback, model
+output and summary updates. Counted teardown pages return DOM nodes and
+listener counts to baseline and leave zero live subscriptions. No runtime
+source or public API was changed. No lint, typecheck, formatting check or
+package test suite was run; verification was the authorized lab coverage.
+
 ## Threats to validity
 
 - Fixed-height example rows at 1,000 and 10,000 items, one engine and one
@@ -936,6 +1183,26 @@ passed their post-measurement model and focus checks with no page error.
   Long-task observer counts are primary; nested task records in traces are
   corroboration. GC figures are trace-event totals during the sequence,
   not allocator-specific attribution. Large outliers are not assigned a cause.
+
+### W1 follow-up limits (2026-10-25)
+
+Diagnostic hooks add calls and stack depth, including to default abort error
+stacks. Their span and allocation values explain ownership but do not decide
+budgets. Uninstrumented V8 allocation stacks can omit optimized callees;
+reconciler/callee bytes are not all reconciliation bookkeeping. Native DOM
+allocation is not measured by the JavaScript sampler.
+
+The candidate combines a range guard, simpler binding ownership and a reused
+disposal reason. Its overall comparison does not establish the independent
+benefit of each change. The example component's connection/disconnection
+behavior remains a measured cost. Browser thread-time evidence identifies
+large off-CPU mount intervals but does not identify their blocking or
+scheduling cause. Headless Event Timing is presentation evidence for this
+browser surface, not a physical-display measurement.
+
+The fixture remains fixed-height at 1,000 and 10,000 items. Its interaction
+checks do not establish every page layout, asynchronous failure workflow or
+accessibility behavior. Background host work and power state are uncontrolled.
 
 ## Decision and follow-ups
 
@@ -987,3 +1254,31 @@ or all windowing budgets. No threshold is moved to accept a candidate. The
 owner's adoption decision is pending; no windowing helper or new public API
 is authorized or implemented. Any further scope remains fixed-height rows
 at the measured sizes unless the owner agrees another plan.
+
+### W1 targeted follow-up against its budgets (2026-10-25)
+
+| Existing threshold at 10,000 items | C1 full comparison | C1 confirmation |
+| --- | --- | --- |
+| 5. Mount CPU at most 10% of W0, presented at most 100 ms | CPU holds at 0.787%; presented fails at 168 ms p95 | Presented fails at 112 ms p95; no new W0 reference |
+| 6. Total heap and nodes at most 25% of W0 | Holds: 16.6% total heap, 0.505% nodes | Not repeated |
+| 7. Viewport script p95 at most 4 ms, no task over 50 ms | Fails at 4.715 ms; zero long tasks | Fails at 4.079 ms; zero long tasks |
+| 8. Unmounted update has no DOM write; visible CPU within +25% of W0 | Holds: zero row assignments, visible +1.72% | Visible cost unchanged against W1; no new W0 reference |
+| 9. Correctness | Holds for the listed checks | Holds for the listed checks |
+
+The evidence supports the targeted application's lower work: reconciling a
+completed range is unnecessary, one row controller owns normal and failure
+cleanup, and a reusable normal-disposal reason reduces transient allocation.
+The combined candidate reduces typical viewport script time by 8.73% in the
+full set and 9.14% in confirmation, with both differences clearing the agreed
+rule. Sampled allocations fall 32.8% in the full set, and teardown is cheaper
+in both sets. Heap differs negligibly from W1.
+
+This does not support C1 as a pattern meeting all agreed budgets. Mount
+presentation remains over 100 ms and viewport script p95 remains over 4 ms.
+The full set's end-jump tail regresses and is not reconfirmed. The largest
+remaining measured application cost is the native row/component lifecycle;
+the large off-CPU browser intervals need further attribution before assigning
+a cause or proposing a specific fix for them. Neither API changes nor a
+windowing helper follow from this application-pattern comparison. The owner
+decides adoption; no product implementation or scope expansion is authorized
+by these results.
