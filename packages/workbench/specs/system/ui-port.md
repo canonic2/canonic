@@ -130,8 +130,8 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `views/top-bar/` presentation in place; state bindings remain in `legacy/workbench.js` |
 | `canvas` | The canvas element, artboard labels and loading feedback | `views/canvas/bindings.js` (in place), `modules/canvas/legacy-chrome.js` |
 | `toolbar` | Annotation tools and review actions | `views/toolbar/` bindings and floating-bar styles in place; renderer annotations remain in `legacy/annotations.js` |
-| `configure-pages` | The Configure pages dialog | `legacy/config-editor.js` |
-| `export` | The export dialog | `components/export-dialog/` |
+| `configure-pages` | The Configure pages dialog | `views/configure-pages/` (in place) |
+| `export` | The export dialog | `views/export/components/export-dialog/` (in place) |
 | `docs` | A docs lens's reading page | `views/docs/` (in place) |
 | `viewer` | The portable viewer's interface | `app/viewer/` |
 
@@ -294,6 +294,7 @@ and passes its acceptance:
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
 | Existing DOM controls in `views/toolbar/bindings.js`, connected by canvas bindings | `annotations` / `review` | The `annotations` / `review` adoption step; commands retain their existing state owners |
+| Classic `wbConfigEditor` in `views/configure-pages/config-editor.js` | `project` / `configure-pages` | The Configure pages adoption step; draft and request lifecycle remain in the existing closure |
 | Classic `wbPageList` API shared by `modules/project/pages.js` and `views/page-list/page-list.js`; sidebar startup through `wbProjectSidebar` | `project` / `page-list` | The `project`/`page-list` adoption step; existing closure state remains until then |
 | Classic `wbTopBar` measurement/menu presentation in `views/top-bar/top-bar.js` | `top-bar` | The `top-bar` adoption step; shell-owned scenario/lens state stays in `legacy/workbench.js` until then |
 

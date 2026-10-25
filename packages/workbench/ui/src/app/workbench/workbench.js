@@ -5,10 +5,12 @@ import { registerSpaceComponents } from '../../components/register-space.js';
 import { registerSizeComponents } from '../../views/top-bar/register-sizes.js';
 import { registerActionsComponents } from '../../views/top-bar/register-actions.js';
 import { registerCanvasComponents } from '../../views/canvas/register-canvas.js';
+import { registerExportComponents } from '../../views/export/register-export.js';
 import { initialize } from '../../views/canvas/bindings.js';
 
 registerSpaceComponents();
 registerSizeComponents();
 registerActionsComponents();
 registerCanvasComponents();
+registerExportComponents();
 initialize();

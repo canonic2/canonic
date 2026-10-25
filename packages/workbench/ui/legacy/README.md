@@ -546,7 +546,7 @@ implementation's own address; Workbench never switches to a stream.
 | `content-frames.js` | retained content frames, warm preview/Docs hosts and Storybook channel switching |
 | `../src/modules/preview-sessions/content.js` + `renderer-bridge.ts` | model-derived content navigation/metadata and authenticated canvas commands, capture locks and input forwarding |
 | `server/node/config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |
-| `config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |
+| `../src/views/configure-pages/config-editor.js` | edits collections, pages, paths, and supported sizes through the local server |
 | `server/node/yaml.js` | the part of YAML a config is written in |
 | `manifest.js` | the rules for implementations, lenses and code pointers — shared with the server |
 | `address.js` | reads and writes the hash: src, scenario, iterations, width, lens |

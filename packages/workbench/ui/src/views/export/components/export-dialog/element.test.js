@@ -4,9 +4,9 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createUiAssets } from '../../../../scripts/ui-browser-fixture.cjs';
+import { createUiAssets } from '../../../../../../scripts/ui-browser-fixture.cjs';
 const require = createRequire(import.meta.url);
-const chrome = require('../../../../scripts/chrome.cjs');
+const chrome = require('../../../../../../scripts/chrome.cjs');
 void test(
   'export dialog selects scope and defaults visual pages to the current view',
   { skip: !chrome.findChrome() },
@@ -15,7 +15,7 @@ void test(
     t.after(() => browser.close());
     await browser.launch();
     const serve = createUiAssets(
-      path.resolve(fileURLToPath(new URL('../../../..', import.meta.url))),
+      path.resolve(fileURLToPath(new URL('../../../../../..', import.meta.url))),
     );
     const server = createServer((req, res) => {
       void (async () => {
@@ -27,7 +27,7 @@ void test(
         }
         res.setHeader('Content-Type', 'text/html');
         res.end(
-          '<!doctype html><button id="opener">Export</button><wb-export-dialog></wb-export-dialog><script>document.querySelector("wb-export-dialog").pages=[{id:"early",label:"Early"}]</script><script type="module">import {WbExportDialog} from "/_workbench/ui/src/components/export-dialog/element.js"; import {registerCanvasComponents} from "/_workbench/ui/src/views/canvas/register-canvas.js"; window.importRegistered=!!customElements.get("wb-export-dialog"); registerCanvasComponents(); registerCanvasComponents(); window.registeredClass=customElements.get("wb-export-dialog")===WbExportDialog;</script>',
+          '<!doctype html><button id="opener">Export</button><wb-export-dialog></wb-export-dialog><script>document.querySelector("wb-export-dialog").pages=[{id:"early",label:"Early"}]</script><script type="module">import {WbExportDialog} from "/_workbench/ui/src/views/export/components/export-dialog/element.js"; import {registerExportComponents} from "/_workbench/ui/src/views/export/register-export.js"; window.importRegistered=!!customElements.get("wb-export-dialog"); registerExportComponents(); registerExportComponents(); window.registeredClass=customElements.get("wb-export-dialog")===WbExportDialog;</script>',
         );
       })().catch((error) => {
         res.statusCode = 500;

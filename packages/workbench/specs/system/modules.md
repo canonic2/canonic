@@ -157,6 +157,8 @@ ui/src/
   views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation and styles
   views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size and Actions elements and registration
   views/toolbar/             Annotation/review control bindings and floating toolbar/view-control styles
+  views/configure-pages/     Configure pages editor and modal styles
+  views/export/              Export dialog element and its registration
   views/docs/                A docs lens's reading page, its embedded examples and highlighting
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles

@@ -200,7 +200,7 @@ element, not in the page.
   events, parts and keyboard behavior. Application operations remain in the
   existing sidebar and canvas controllers.
 - [Canvas](../../ui/src/views/canvas/components/canvas/element.js) owns keyed artboard shells,
-  labels and camera presentation; [export dialog](../../ui/src/components/export-dialog/element.js)
+  labels and camera presentation; [export dialog](../../ui/src/views/export/components/export-dialog/element.js)
   owns export form presentation. Capability controllers retain application
   state, rendering and I/O. Their colocated browser tests cover the component
   contracts; importing the classes does not register them.
