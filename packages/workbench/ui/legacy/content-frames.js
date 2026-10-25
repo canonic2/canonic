@@ -359,6 +359,7 @@
         frameBuffer = previous;
         pendingFrame = null;
         frameReady = true;
+        loaded.wbReadySequence = sequence;
         if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'frame-promotion');
         // A resize can start the spare frame before the initial frame has
         // loaded. Whichever wins must reveal the preview and enable prepare.
@@ -385,6 +386,7 @@
         loaded.removeAttribute('aria-hidden');
         if (loaded.style) { loaded.style.width = ''; loaded.style.height = ''; }
         frameReady = true;
+        loaded.wbReadySequence = sequence;
         if (measuredView && measuredView.trace) measuredView.phase(measuredView.trace, 'frame-promotion');
         artboardContent.classList.remove('is-loading');
         artboard.hidden = false;
@@ -419,7 +421,7 @@
     },
     suspend: function () { showSeq++; cancelStorySwitch(); parkPreview(); view = null; },
     ready: function () {
-      if (!view || !frameReady || pendingFrame || pendingStorySwitch || frame.wbRequestedUrl !== view.url) return false;
+      if (!view || !frameReady || pendingFrame || pendingStorySwitch || frame.wbRequestedUrl !== view.url || frame.wbReadySequence !== frame.wbLoadSequence) return false;
       return !(view.lens && view.lens.kind === 'storybook') || !!(renderedStory && renderedStory.frame === frame && renderedStory.seq === showSeq && view.story && renderedStory.id === view.story.id);
     },
     frame: function () { return frame; },

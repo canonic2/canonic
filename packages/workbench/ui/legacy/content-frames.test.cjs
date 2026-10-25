@@ -162,6 +162,40 @@ test('Storybook loading and acknowledgements cannot replace a matching render ev
   } finally { h.runtime.close(); }
 });
 
+test('a warm iteration cannot inherit readiness from the previous mount or a superseded load', async () => {
+  const h = harness(false);
+  const loads = [];
+  const content = h.initial.contentWindow;
+  content.wbPreviewHost = {
+    load: () => new Promise(resolve => loads.push(resolve)),
+    reset: async () => {},
+  };
+  content.__workbenchOptions = {};
+  content.__workbenchReady = true;
+  try {
+    h.show('/component.workbench.ts?iteration=first');
+    h.initial.dispatchEvent(new Event('load'));
+    loads.shift()();
+    await new Promise(resolve => setImmediate(resolve));
+    h.paint();
+    assert.equal(h.runtime.ready(), true);
+    h.show('/component.workbench.ts?iteration=second');
+    assert.equal(h.runtime.ready(), false, 'a requested URL is not evidence of a completed warm mount');
+    const second = loads.shift();
+    h.show('/component.workbench.ts?iteration=latest');
+    second();
+    await new Promise(resolve => setImmediate(resolve));
+    h.paint();
+    assert.equal(h.runtime.ready(), false, 'a superseded load cannot complete the latest mount');
+    loads.shift()();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.runtime.ready(), false, 'promotion still waits for the owning paint');
+    h.paint();
+    assert.equal(h.runtime.ready(), true);
+    assert.equal(h.runtime.frame(), h.initial);
+  } finally { h.runtime.close(); }
+});
+
 async function docs(h, name, lens = 'web', force = false) {
   const url = '/' + name + '.md?lens=' + lens;
   h.show(url, { kind: 'docs', key: lens }, force);
