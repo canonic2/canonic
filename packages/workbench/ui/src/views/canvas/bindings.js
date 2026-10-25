@@ -36,11 +36,7 @@ function mount() {
   const connection = new AbortController(),
     signal = connection.signal;
   let disposed = false;
-  // Runtime metadata may advance while the previous canvas is still displayed.
-  // Keep its immutable model until ready commit or the grace deadline.
-  let displayedState = null,
-    paintedState = null,
-    fitPending = false;
+  let fitPending = false;
   let space,
     registry = [],
     activity = Date.now();
@@ -105,36 +101,41 @@ function mount() {
   }
   function present() {
     const state = controller.snapshot();
-    const { visible, pending, loading } = navigation.presentation(state.artboards);
+    navigation.observe(state);
+    const { visible, pending, loading, inert, displayed, problem } =
+      navigation.select.feedback.read(navigation.state.get());
+    const displayedState = displayed?.model;
     // Readiness needs real iframe geometry, including before the first paint.
     // Unpublished renderers get invisible slots without replacing the old view.
     canvas.style.display = state.artboards.length || displayedState?.artboards.length ? '' : 'none';
     if (visible || !pending) {
       if (visible) canvas.reading = !!navigation.snapshot().selection?.docs;
-      if (paintedState !== state) {
+      if (canvas.state !== state) {
         canvas.state = state;
-        paintedState = state;
       }
       canvas.style.display = state.artboards.length ? '' : 'none';
-      displayedState = visible ? state : null;
-    } else if (loading) displayedState = null;
+    }
     canvas.staged = pending ? state.artboards : [];
     const retaining = pending && !loading && !!displayedState?.artboards.length;
     canvas.style.visibility = visible || retaining ? '' : 'hidden';
-    canvas.inert = review.busy() || pending || !visible;
+    canvas.inert = inert;
     $('canvas').setAttribute('aria-busy', String(pending));
     publisher.schedule();
     if (pending) {
       $('blank').textContent = 'Loading preview…';
       $('blank').classList.toggle('is-loading', loading);
       $('blank').hidden = !loading;
+    } else if (problem) {
+      $('blank').textContent = problem;
+      $('blank').hidden = false;
+      $('blank').classList.remove('is-loading');
     } else if (visible) {
       navigation.complete(
         controller.snapshot().artboards.some((board) => board.view?.problem) ? 'failed' : 'visible',
       );
       $('blank').hidden = true;
       $('blank').classList.remove('is-loading');
-    }
+    } else $('blank').classList.remove('is-loading');
     if (visible || loading || !pending) sessions.finish();
     if (visible && fitPending) {
       fitPending = false;
@@ -143,19 +144,16 @@ function mount() {
   }
   function presented() {
     const state = controller.snapshot();
-    return displayedState || { ...state, selected: null, artboards: [] };
+    return navigation.state.get().displayed?.model || { ...state, selected: null, artboards: [] };
   }
   function requestFit() {
     fitPending = true;
-    if (!navigation.presentation(controller.snapshot().artboards).pending) present();
+    if (!navigation.presentation().pending) present();
   }
   function fail(error) {
     if (disposed) return;
     fitPending = false;
-    navigation.fail();
-    $('blank').textContent = error instanceof Error ? error.message : String(error);
-    $('blank').classList.remove('is-loading');
-    $('blank').hidden = false;
+    navigation.fail(error);
     present();
   }
   function command(name, value) {
@@ -169,7 +167,33 @@ function mount() {
   }
   const controller = createController({
     mount(board, callbacks) {
-      const runtime = createRuntime(board, { ...callbacks, stories: sessions.stories });
+      const runtime = createRuntime(board, {
+        ...callbacks,
+        stories: sessions.stories,
+        navigated(from, id, destination) {
+          const previous = navigation.state.get().requested;
+          if (!navigation.adopt(from, id, destination)) return false;
+          if (
+            destination.src !== previous.src ||
+            destination.scenario !== previous.scenario ||
+            destination.lens !== previous.lens
+          ) {
+            // Navigation owns this classic route adapter until project/top-bar adoption.
+            queueMicrotask(() => {
+              if (!disposed && navigation.state.get().id === id)
+                previous.select(
+                  destination.scenario,
+                  selected()?.size,
+                  destination.actions,
+                  destination.src,
+                  destination.lens,
+                );
+            });
+          } else act(() => sessions.identify(id, board.id));
+          return true;
+        },
+        accepts: (id) => id === navigation.state.get().id,
+      });
       runtime.element.slot = board.id;
       canvas.append(runtime.element);
       return runtime;
@@ -177,10 +201,9 @@ function mount() {
     render(state) {
       syncSize(state);
       present();
-      // A link followed inside a preview leaves the route on the old page, so the
-      // canvas is pending until focusSelection adopts the artboard's destination.
+      // Reflect the selected ready renderer into classic controls after identity adoption.
       queueMicrotask(focusSelection);
-      if (navigation.presentation(controller.snapshot().artboards).pending) return;
+      if (navigation.presentation().pending) return;
       const board = state.artboards.find((b) => b.id === state.selected);
       if (!board) return;
       const count = state.artboards.reduce(
@@ -253,7 +276,8 @@ function mount() {
     available,
   });
   const sessions = createPreviewSessions({
-    displayed: () => displayedState?.artboards.map((board) => board.id) || [],
+    displayed: () =>
+      navigation.state.get().displayed?.model?.artboards.map((board) => board.id) || [],
     visible: () =>
       controller.snapshot().artboards.map((board) => ({
         id: board.id,
@@ -391,14 +415,16 @@ function mount() {
     available: () => !canvas.inert,
     hold() {
       chrome.wbArtboardHeld = true;
+      navigation.captureStarted();
       const locked = Array.from(
-        document.querySelectorAll('.wb-topbar,.wb-sidebar,#toolbar,#viewControls,#artboards'),
+        document.querySelectorAll('.wb-topbar,.wb-sidebar,#toolbar,#viewControls'),
       ).map((node) => ({ node, inert: node.inert }));
       locked.forEach(({ node }) => {
         node.inert = true;
       });
       return () => {
         chrome.wbArtboardHeld = false;
+        navigation.captureEnded();
         locked.forEach(({ node, inert }) => {
           node.inert = inert;
         });
@@ -429,6 +455,7 @@ function mount() {
           example: next.example,
           label: next.label,
           trace: next.trace,
+          navigation: next.navigation,
         },
         size: next.docs
           ? available()
@@ -439,7 +466,7 @@ function mount() {
       });
     },
     // Another iteration re-renders only the artboards whose iteration changed.
-    iterate: (next) => sessions.iterate(!next.docs ? next.iterations : undefined),
+    iterate: (next) => sessions.iterate(!next.docs ? next.iterations : undefined, next.navigation),
     fit: requestFit,
     async settle(next) {
       syncSize();
@@ -451,6 +478,7 @@ function mount() {
       activityChanged();
     },
   });
+  navigation.state.watch(navigation.select.feedback, present, { signal });
   canvas.addEventListener(
     'wb-reading-resize',
     (event) => {
@@ -493,8 +521,8 @@ function mount() {
     'pagehide',
     () => {
       disposed = true;
-      navigation.dispose();
       connection.abort();
+      navigation.dispose();
       clearTimeout(toastTimer);
       sessions.dispose();
       delivery.dispose();
@@ -527,8 +555,6 @@ function mount() {
     clear() {
       fitPending = false;
       navigation.clear();
-      $('blank').classList.remove('is-loading');
-      $('canvas').setAttribute('aria-busy', 'false');
       sessions.clear();
     },
   };

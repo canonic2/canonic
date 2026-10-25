@@ -204,6 +204,33 @@ void test('content metadata comes from the authored model, without menu DOM', as
   assert.throws(() => f.controller.content.navigate({}), /Invalid content target/);
 });
 
+void test('renderer reports follow request identity and self-navigation has a separate document namespace', async (t) => {
+  const f = fixture(t);
+  f.controller.start();
+  await tick();
+  f.controller.content.navigate({ src: 'page', lens: 'design', navigation: 'canvas:one' });
+  let info = f.controller.content.read();
+  assert.equal(info.navigation, 'canvas:one');
+  assert.equal(info.from, null);
+  const mounts = f.shown.length;
+  f.controller.content.identify('canvas:two');
+  assert.equal(f.controller.content.read().navigation, 'canvas:two');
+  assert.equal(f.shown.length, mounts, 'new identity alone keeps warm content');
+  f.controller.content.pickScenario('1');
+  info = f.controller.content.read();
+  assert.match(info.navigation, /^renderer:/);
+  assert.equal(info.from, 'canvas:two');
+  f.controller.content.navigate({ src: 'other', lens: 'storybook', navigation: 'canvas:three' });
+  const pending = f.controller.content.read();
+  assert.equal(pending.navigation, 'canvas:three');
+  assert.equal(pending.ready, false);
+  assert.equal(pending.from, null);
+  f.catalogs.get('Other').resolve([{ id: 'other--default', scenario: 'default', name: 'Current' }]);
+  await tick();
+  assert.equal(f.controller.content.read().navigation, 'canvas:three');
+  assert.equal(f.controller.content.read().ready, true);
+});
+
 void test('the implicit artboard renders the iteration its scenario declares, and drops an unknown one', async (t) => {
   const f = fixture(t, '#page+illustrated~design');
   f.config.pages.page = {

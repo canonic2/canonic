@@ -77,6 +77,8 @@ collections:
         implementations:
           storybook: Components/Page
           app: /page
+  - name: More
+    items:
       - label: Other
         src: other.md
         implementations:
@@ -203,6 +205,15 @@ collections:
     await until(`${renderer}.innerHeight===${docsViewport.height}`);
     await readingSurface();
     await pick('storybook');
+    await target.evaluate(`(()=>{
+      const frame=${renderer}, info=${canvas}.artboards[0].view;
+      window.currentNavigation=info.navigation;
+      frame.eval('parent.postMessage('+JSON.stringify({type:'wb-artboard',channel:new URL(frame.location.href).searchParams.get('artboard-runtime'),
+        event:'view',value:{...info,navigation:'canvas:stale',label:'Stale readiness'}})+',location.origin)');
+    })()`);
+    await target.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+    assert.notEqual(await target.evaluate(`${canvas}.artboards[0].view.label`), 'Stale readiness', 'a matching warm destination cannot publish readiness from an old navigation');
+    assert.equal(await target.evaluate(`${canvas}.artboards[0].view.navigation`), await target.evaluate('currentNavigation'));
     assert.match(await target.evaluate("getComputedStyle(document.getElementById('canvas')).backgroundImage"), /radial-gradient/, 'the outer canvas keeps its grid');
     assert.equal(await target.evaluate(`!!${renderer}.document.querySelector('.wb,.wb-canvas,#canvas,#pageList,#toolbar')`), false, 'the artboard renderer contains no application shell or second canvas');
     assert.deepEqual(await target.evaluate(`({width:${renderer}.document.getElementById('artboardContent').clientWidth,height:${renderer}.document.getElementById('artboardContent').clientHeight})`), await target.evaluate(`({width:${renderer}.innerWidth,height:${renderer}.innerHeight})`), 'the preview fills the complete outer artboard after leaving docs');
@@ -294,6 +305,10 @@ collections:
     await target.evaluate('location.hash="#other.md~docs"');
     await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].target.lens==='docs'`);
     assert.equal(await target.evaluate(`${mobile}.disabled`), true, 'the same Markdown page disables sizes in its Docs lens');
+    for (const hash of ['#page.workbench.ts~docs', '#other.md~docs', '#page.workbench.ts~docs', '#other.md~docs'])
+      await target.evaluate('location.hash=' + JSON.stringify(hash));
+    await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].view.src==='other.md' && !document.getElementById('artboards').inert`);
+    assert.equal(await target.evaluate(`getComputedStyle(document.getElementById('artboards')).visibility`), 'visible', 'rapid Docs picks across collections settle on the current visit');
     await target.evaluate('location.hash="#other.md:default@mobile~storybook"');
     await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].target.lens==='storybook'`);
     assert.equal(await target.evaluate(`${mobile}.disabled`), false, 'returning from Docs restores Storybook size controls');

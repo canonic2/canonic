@@ -136,12 +136,10 @@ deadline loading, late readiness and failure through the actual shell and render
 
 ## Implementation gaps
 
-- Navigation state is not held in the [navigation store](navigation-store.md);
-  its rules are spread across the shell, controllers and renderer.
-- The [discoveries](#discoveries) have no browser regression. The link-freeze
-  is fixed in the canvas bootstrap, which adopts the artboard's destination
-  after a link inside a preview; the blank Docs viewport after rapid collection
-  switches has not been reproduced or traced.
+- The blank Docs viewport in the [discoveries](#discoveries) has not been
+  reproduced or traced. Browser regressions now cover rapid Docs picks across
+  collections and rejection of superseded readiness; these cover the suspected
+  class of failure without establishing that recording's cause.
 
 ## Discoveries
 

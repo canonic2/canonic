@@ -29,6 +29,16 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+function report(navigation, boards) {
+  navigation.observe({
+    artboards: boards.map((board) => ({
+      ...board,
+      target: board.target || {},
+      view: board.view && { ...board.view, navigation: navigation.state.get().id },
+    })),
+  });
+  return navigation.presentation();
+}
 void test('fast retained returns stay busy without showing loading feedback or delaying visibility', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let paints = 0;
@@ -46,7 +56,7 @@ void test('fast retained returns stay busy without showing loading feedback or d
   navigation.begin();
   await navigation.show(selection('returned'));
   const board = { view: { ...selection('returned'), ready: false } };
-  assert.deepEqual(navigation.presentation([board]), {
+  assert.deepEqual(report(navigation, [board]), {
     visible: false,
     pending: true,
     loading: false,
@@ -54,12 +64,12 @@ void test('fast retained returns stay busy without showing loading feedback or d
   t.mock.timers.tick(22);
   t.mock.timers.tick(128);
   assert.equal(
-    navigation.presentation([board]).loading,
+    report(navigation, [board]).loading,
     false,
     'a page ready at 150 ms still avoids the loader',
   );
   board.view.ready = true;
-  assert.deepEqual(navigation.presentation([board]), {
+  assert.deepEqual(report(navigation, [board]), {
     visible: true,
     pending: false,
     loading: false,
@@ -103,6 +113,28 @@ void test('slow selections show loading feedback and replacement, failure and di
   before = paints;
   t.mock.timers.tick(200);
   assert.equal(paints, before);
+});
+void test('resolving a destination after the grace deadline keeps loading until its renderer settles', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const navigation = createNavigation({
+    ready: Promise.resolve(),
+    busy: () => false,
+    present() {},
+    fit() {},
+    async activate() {},
+    async settle() {},
+  });
+  t.after(() => navigation.dispose());
+  navigation.begin();
+  const id = navigation.state.get().id;
+  t.mock.timers.tick(200);
+  await navigation.show(selection('one'));
+  assert.equal(navigation.state.get().id, id);
+  assert.equal(navigation.presentation().loading, true);
+  assert.equal(
+    report(navigation, [{ target: {}, view: { ...selection('one'), ready: true } }]).visible,
+    true,
+  );
 });
 void test('retained destinations consume the requested size once, after matching metadata arrives', async () => {
   const navigation = createNavigation({
@@ -207,6 +239,14 @@ void test('navigation tracks requested destinations separately and reuses repeat
   assert.equal(navigation.snapshot().awaitingSelection, true);
   await navigation.show(selection('one'));
   assert.equal(navigation.snapshot().selection?.src, 'one');
+  navigation.observe({
+    artboards: [
+      {
+        target: {},
+        view: { ...selection('one'), navigation: navigation.state.get().id, ready: true },
+      },
+    ],
+  });
   navigation.complete();
   assert.equal(navigation.snapshot().navigating, false);
   await navigation.show(selection('one'));
@@ -290,6 +330,56 @@ void test('capture prevents navigation without accepting another destination', a
   assert.equal(navigation.snapshot().selection, undefined);
 });
 
+void test('repeated readiness is a no-op, stale reports cannot settle, and feedback subscriptions end with their owner', async () => {
+  const navigation = createNavigation({
+    ready: Promise.resolve(),
+    busy: () => false,
+    present() {},
+    fit() {},
+    async activate() {},
+    async settle() {},
+  });
+  const lifetime = new AbortController();
+  let deliveries = 0;
+  navigation.state.watch(navigation.select.feedback, () => deliveries++, {
+    signal: lifetime.signal,
+  });
+  await navigation.show(selection('one'));
+  const previous = navigation.state.get().id;
+  const model = {
+    artboards: [{ target: {}, view: { ...selection('one'), navigation: previous, ready: true } }],
+  };
+  navigation.observe(model);
+  const committed = navigation.state.get();
+  navigation.observe(model);
+  assert.equal(
+    navigation.state.get(),
+    committed,
+    'a renderer can repeat its current report without publishing again',
+  );
+  await navigation.show(selection('one'));
+  navigation.observe(model);
+  assert.equal(
+    navigation.state.get().phase,
+    'pending',
+    'matching destination with an old identity cannot settle',
+  );
+  const current = navigation.state.get().id;
+  assert.notEqual(current, previous);
+  assert.equal(navigation.adopt(current, undefined, selection('other')), false);
+  navigation.captureStarted();
+  await assert.rejects(navigation.show(selection('other')), /capture/);
+  navigation.captureEnded();
+  assert.equal(navigation.adopt(previous, 'renderer:late', selection('other')), false);
+  assert.equal(navigation.adopt(current, 'renderer:new', selection('other')), true);
+  assert.equal(navigation.state.get().requested.src, 'other');
+  lifetime.abort();
+  const before = deliveries;
+  navigation.clear();
+  assert.equal(deliveries, before);
+  navigation.dispose();
+});
+
 void test('presentation accepts only the requested preview or the complete declared artboard group', async () => {
   const navigation = createNavigation({
     ready: Promise.resolve(),
@@ -301,45 +391,49 @@ void test('presentation accepts only the requested preview or the complete decla
   });
   const next = selection('one');
   const board = {
-    target: { src: 'one', scenario: null, lens: 'design', artboard: 'info' },
+    target: { src: 'one', scenario: null, lens: 'design' },
     view: { src: 'one', scenario: null, lens: 'design', ready: true, problem: null },
   };
   navigation.begin();
-  assert.deepEqual(navigation.presentation([board]), {
+  assert.deepEqual(report(navigation, [board]), {
     visible: false,
     pending: true,
     loading: false,
   });
   await navigation.show(next);
-  assert.equal(navigation.presentation([board]).visible, true);
+  assert.equal(report(navigation, [board]).visible, true);
+  await navigation.show(next);
   assert.equal(
-    navigation.presentation([{ ...board, view: { ...board.view, src: 'old' } }]).visible,
+    report(navigation, [{ ...board, view: { ...board.view, src: 'old' } }]).visible,
     false,
   );
   assert.equal(
-    navigation.presentation([{ ...board, view: { ...board.view, ready: false } }]).visible,
+    report(navigation, [{ ...board, view: { ...board.view, ready: false } }]).visible,
     false,
   );
-  await navigation.show({
+  const declared = {
     ...next,
     artboards: [{ id: 'info', label: 'Info', width: 320, height: 120 }],
-  });
-  assert.equal(navigation.presentation([board]).visible, true);
+  };
+  board.target.artboard = 'info';
+  await navigation.show(declared);
+  assert.equal(report(navigation, [board]).visible, true);
+  await navigation.show(declared);
   assert.equal(
-    navigation.presentation([{ ...board, view: { ...board.view, ready: false } }]).visible,
+    report(navigation, [{ ...board, view: { ...board.view, ready: false } }]).visible,
     false,
     'a declared group waits for its content rather than only its instance metadata',
   );
   assert.equal(
-    navigation.presentation([{ ...board, target: { ...board.target, artboard: 'wrong' } }]).visible,
+    report(navigation, [{ ...board, target: { ...board.target, artboard: 'wrong' } }]).visible,
     false,
   );
   assert.equal(
-    navigation.presentation([{ ...board, target: { ...board.target, scenario: 'old' } }]).visible,
+    report(navigation, [{ ...board, view: { ...board.view, scenario: 'old' } }]).visible,
     false,
   );
   navigation.dispose();
-  assert.equal(navigation.presentation([board]).visible, false);
+  assert.equal(report(navigation, [board]).visible, false);
 });
 
 void test('another iteration keeps the artboard group and waits for that artboard to show it', async () => {
@@ -371,8 +465,8 @@ void test('another iteration keeps the artboard group and waits for that artboar
   await navigation.show({ ...selection('one'), artboards, iterations: { warning: 'bold' } });
   assert.deepEqual(activations, [{}], 'the declared group is created once');
   assert.deepEqual(iterated, [{ warning: 'bold' }]);
-  assert.equal(navigation.presentation(boards(null)).visible, false);
-  assert.equal(navigation.presentation(boards('bold')).visible, true);
+  assert.equal(report(navigation, boards(null)).visible, false);
+  assert.equal(report(navigation, boards('bold')).visible, true);
   navigation.dispose();
 });
 

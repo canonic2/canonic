@@ -18,7 +18,18 @@ function start(ports, channel, origin) {
   const contentObserver = new ResizeObserver(() => read());
   let previous = '';
   const emit = (event, value, id, error) =>
-    window.parent.postMessage({ type: 'wb-artboard', channel, event, value, id, error }, origin);
+    window.parent.postMessage(
+      {
+        type: 'wb-artboard',
+        channel,
+        event,
+        value,
+        id,
+        error,
+        navigation: ports.content.identity?.().navigation,
+      },
+      origin,
+    );
   function read() {
     const shell = ports.content.read();
     const problem = ports.content.problem();
@@ -26,6 +37,7 @@ function start(ports, channel, origin) {
       if (!problem) return null;
       const src = location.hash.replace(/^#/, '').split(/[:+!@~]/)[0] || 'unavailable';
       const info = {
+        ...ports.content.identity?.(),
         src,
         scenario: null,
         lens: null,
@@ -100,6 +112,7 @@ function start(ports, channel, origin) {
     const artboard = new URLSearchParams(location.search).get('artboard');
     return {
       type: 'wb-here',
+      navigation: info.navigation,
       src: info.src,
       scenario: info.scenario,
       lens: info.lens,
@@ -139,6 +152,9 @@ function start(ports, channel, origin) {
           break;
         case 'navigate':
           ports.content.navigate(data.value);
+          break;
+        case 'identify':
+          ports.content.identify(data.value);
           break;
         case 'size': {
           if (!validDimensions(data.value)) throw new Error('Invalid artboard size.');

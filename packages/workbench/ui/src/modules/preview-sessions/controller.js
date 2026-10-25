@@ -54,6 +54,7 @@ export function createPreviewSessions(ports) {
         lens: next.target.lens,
         example: next.target.example,
         iteration: iteration(),
+        ...(next.target.navigation ? { navigation: next.target.navigation } : {}),
         ...(next.target.trace ? { trace: next.target.trace } : {}),
       };
       if (retained) {
@@ -119,7 +120,7 @@ export function createPreviewSessions(ports) {
     },
     // Same page and artboards, another iteration on some: navigate only those.
     // Other lenses do not render iterations; the next activation carries them.
-    async iterate(iterations) {
+    async iterate(iterations, navigation) {
       if (disposed) throw new Error('Preview sessions closed.');
       const wanted = (board) => iterations?.[board.target.artboard || ''] || null;
       const last = (board) =>
@@ -139,11 +140,27 @@ export function createPreviewSessions(ports) {
             lens: board.target.lens,
             example: board.target.example,
             iteration: wanted(board),
+            ...(navigation ? { navigation } : {}),
           }),
         ),
       );
+      if (navigation)
+        await Promise.all(
+          ports
+            .visible()
+            .filter((board) => !changed.includes(board))
+            .map((board) => ports.command(board.id, 'identify', navigation)),
+        );
     },
     finish,
+    identify(navigation, except) {
+      return Promise.all(
+        ports
+          .visible()
+          .filter((board) => board.id !== except)
+          .map((board) => ports.command(board.id, 'identify', navigation)),
+      );
+    },
     refresh() {
       if (disposed) return Promise.reject(new Error('Preview sessions closed.'));
       catalog.clear();

@@ -8,6 +8,8 @@ export function createRuntime(board, callbacks) {
   element.style.visibility = 'hidden';
   const channel = crypto.randomUUID();
   const url = new URL('content.html', board.target.space.url);
+  let navigation = board.target.navigation || null;
+  if (navigation) url.searchParams.set('navigation', navigation);
   url.searchParams.set('artboard-runtime', channel);
   if (board.target.trace) {
     url.searchParams.set('wbTrace', board.target.trace.selection);
@@ -61,14 +63,44 @@ export function createRuntime(board, callbacks) {
       return;
     }
     if (!data || data.channel !== channel || data.type !== 'wb-artboard') {
+      if (
+        data?.type === 'wb-here' &&
+        navigation &&
+        (data.navigation !== navigation || (callbacks.accepts && !callbacks.accepts(navigation)))
+      )
+        return;
       if (data?.type?.startsWith('wb-')) callbacks.host(data);
       return;
     }
     if (data.event === 'view' && validInfo(data.value)) {
+      const info = data.value;
+      if (!navigation && !callbacks.accepts) navigation = info.navigation;
+      if (info.navigation !== navigation) {
+        if (
+          !info.from ||
+          info.from !== navigation ||
+          !callbacks.navigated?.(info.from, info.navigation, {
+            src: info.src,
+            scenario: info.scenario,
+            lens: info.lens,
+            actions: info.actions?.checked,
+            iterations: { [board.target.artboard || '']: info.iteration || null },
+          })
+        )
+          return;
+        navigation = info.navigation;
+      }
+      if (navigation && callbacks.accepts && !callbacks.accepts(navigation)) return;
       element.title = data.value.label;
       if (data.value.ready) element.style.visibility = '';
       callbacks.view(data.value);
     }
+    if (
+      !['view', 'response'].includes(data.event) &&
+      navigation &&
+      (data.navigation !== navigation || (callbacks.accepts && !callbacks.accepts(navigation)))
+    )
+      return;
     if (data.event === 'focus') callbacks.focus();
     if (data.event === 'preview') callbacks.host({ type: 'wb-runtime-preview', value: data.value });
     if (data.event === 'camera') callbacks.host({ type: 'wb-runtime-camera', value: data.value });
@@ -84,6 +116,8 @@ export function createRuntime(board, callbacks) {
   window.addEventListener('message', onMessage);
   function request(command, value) {
     if (disposed) return Promise.reject(new Error('Artboard closed.'));
+    if (command === 'navigate' && value?.navigation) navigation = value.navigation;
+    if (command === 'identify') navigation = value;
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -132,6 +166,8 @@ function validInfo(value) {
   if (!value || typeof value !== 'object') return false;
   const v = value;
   return (
+    typeof v.navigation === 'string' &&
+    !!v.navigation &&
     typeof v.src === 'string' &&
     typeof v.label === 'string' &&
     typeof v.hash === 'string' &&

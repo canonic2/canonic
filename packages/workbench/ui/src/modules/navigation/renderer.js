@@ -1,0 +1,44 @@
+import { createStore } from '../../../../node_modules/@canonic2/lattice/src/index.js';
+import { initial, transition } from './state.js';
+
+/** The renderer's request identity belongs to its own document lifetime. */
+export function createRendererNavigation(id, destination, slot = '') {
+  const store = createStore({ ...initial(), from: null });
+  const namespace = 'renderer:' + crypto.randomUUID() + ':';
+  let serial = 0;
+  function picked(next, incoming) {
+    const previous = store.get().id;
+    const id = incoming || namespace + ++serial;
+    store.set({
+      ...transition(store.get(), { type: 'picked', id, destination: next }),
+      slots: [{ id: slot, status: 'pending', view: null, problem: null }],
+      from: incoming ? null : previous,
+    });
+  }
+  picked(destination, id);
+  return {
+    state: { get: store.get, watch: store.watch },
+    picked,
+    resolved(destination) {
+      store.set({ requested: destination });
+    },
+    identify(id) {
+      if (!id || id === store.get().id) return;
+      picked(store.get().requested, id);
+    },
+    report(view) {
+      const current = store.get();
+      store.set(
+        transition(current, {
+          type: view.problem ? 'failed' : 'ready',
+          id: current.id,
+          slot,
+          view,
+          problem: view.problem || undefined,
+        }),
+      );
+      return { navigation: store.get().id, from: store.get().from };
+    },
+    identity: () => ({ navigation: store.get().id, from: store.get().from }),
+  };
+}

@@ -8,8 +8,8 @@ owns the target layout, the order of the port and its delivery. The
 store the port introduces; each capability's own spec keeps its behavior.
 [Modules](modules.md#browser-source-layout) describes the shipping layout.
 
-**Status:** structural moves and Lattice delivery complete. The bounded
-navigation store is authorized under the [accepted scope](#port-order). See
+**Status:** structural moves, Lattice delivery and the bounded navigation store
+are implemented under the [accepted scope](#port-order). See
 [implementation gaps](#implementation-gaps).
 
 ## Target layout
@@ -365,4 +365,5 @@ The staged-extension VS Code acceptance checks all three document imports.
 - Legacy interface: every document is in `app/`; the code the documents load ships in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
-- Every Lattice adoption step.
+- Capability/view adoption after navigation. Large page-list adoption still
+  waits for the remaining windowing budgets and scope decision.

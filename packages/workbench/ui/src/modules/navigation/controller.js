@@ -1,5 +1,7 @@
 /** The requested destination and supersession belong here, not in DOM handlers. */
 import { begin as beginTrace, phase } from '../trace/browser.js';
+import { createStore } from '../../../../node_modules/@canonic2/lattice/src/index.js';
+import { initial, transition, feedback } from './state.js';
 /**
  * The iterations the canvas shows, keyed like the address's `+` parts ("" for
  * a scenario's implicit artboard): the selection's, for the artboards on the
@@ -17,46 +19,43 @@ export function shownIterations(selection, boards) {
   return shown;
 }
 export function createNavigation(ports) {
+  const store = createStore({ ...initial(), expanding: false, disposed: false });
+  const state = { get: store.get, watch: store.watch };
+  const namespace = 'canvas:' + crypto.randomUUID() + ':';
+  let serial = 0;
+  const mint = () => namespace + ++serial;
+  const send = (event) => store.set((current) => transition(current, event));
+  const current = () => store.get();
   let trace, clicked;
-  let loadingTimer,
-    loading = false;
+  let loadingTimer;
   function cancelLoading() {
     clearTimeout(loadingTimer);
     loadingTimer = undefined;
-    loading = false;
   }
   function deferLoading() {
     cancelLoading();
+    const id = current().id;
     loadingTimer = setTimeout(() => {
       loadingTimer = undefined;
-      if (disposed || !navigating) return;
-      loading = true;
-      ports.present();
+      if (current().disposed) return;
+      send({ type: 'deadline', id });
     }, 200);
   }
-  let sequence = 0,
-    group = '',
-    disposed = false;
-  let selection, sizedSelection;
-  let awaitingSelection = false,
-    navigating = false,
-    expanding = false;
+  let group = '';
+  let sizedSelection;
   function clear() {
     cancelLoading();
     trace = null;
     clicked = null;
-    sequence++;
     group = '';
-    selection = undefined;
     sizedSelection = undefined;
-    awaitingSelection = false;
-    navigating = false;
-    expanding = false;
+    store.set({ ...initial(), expanding: false });
   }
   // Whether the selection's size rules apply to the view a renderer reports:
   // a page's single artboard showing the selected destination. Docs read at
   // the canvas's width and declared artboards keep their authored sizes.
   function sizes(view) {
+    const selection = current().requested;
     return (
       !!selection &&
       !selection.docs &&
@@ -69,10 +68,66 @@ export function createNavigation(ports) {
     );
   }
   return {
-    snapshot: () => ({ selection, awaitingSelection, navigating, expanding, disposed }),
+    state,
+    select: { feedback },
+    snapshot: () => {
+      const value = current();
+      const navigating = ['pending', 'loading'].includes(value.phase);
+      return {
+        selection: value.requested || undefined,
+        awaitingSelection: navigating && !value.requested,
+        navigating,
+        expanding: value.expanding,
+        disposed: value.disposed,
+      };
+    },
+    captureStarted: () => send({ type: 'captureStarted' }),
+    captureEnded: () => send({ type: 'captureEnded' }),
+    adopt(from, id, destination) {
+      if (
+        current().disposed ||
+        current().capturing ||
+        from !== current().id ||
+        typeof id !== 'string' ||
+        !id
+      )
+        return false;
+      send({
+        type: 'navigated',
+        from,
+        id,
+        destination: {
+          ...current().requested,
+          ...destination,
+          iterations: { ...current().requested?.iterations, ...destination.iterations },
+        },
+      });
+      deferLoading();
+      return true;
+    },
+    observe(model) {
+      const { id, requested, expanding, disposed } = current();
+      if (disposed || !requested || expanding) return;
+      for (const board of model.artboards) {
+        const view = board.view;
+        if (view?.navigation !== id || (!view.ready && !view.problem)) continue;
+        send({
+          type: view.problem ? 'failed' : 'ready',
+          id,
+          slot: board.target.artboard || '',
+          view,
+          problem: view.problem || undefined,
+          model,
+        });
+      }
+      const displayed = current().displayed;
+      if (displayed?.id === id && displayed.model !== model)
+        store.set({ displayed: { ...displayed, model } });
+    },
     // A retained renderer reports the destination independently of the route.
     // Consume its requested preset only when that destination's size rules apply.
     takeSize(view) {
+      const selection = current().requested;
       if (selection === sizedSelection || !sizes(view)) return null;
       sizedSelection = selection;
       return selection.size;
@@ -81,74 +136,51 @@ export function createNavigation(ports) {
     // resolve its filled axes again when its room changes. Null while a new
     // preset waits to be taken.
     appliedSize(view) {
+      const selection = current().requested;
       return selection === sizedSelection && sizes(view) ? selection.size : null;
     },
     resize(size) {
-      if (selection && !disposed) selection = { ...selection, size };
+      const selection = current().requested;
+      if (selection && !current().disposed) store.set({ requested: { ...selection, size } });
     },
-    presentation(boards) {
-      const declared =
-        !selection?.docs && selection?.artboards?.length ? selection.artboards : undefined;
-      // Each artboard shows the iteration the selection names for it, or none.
-      // Only the design lens renders iterations.
-      const design = !selection?.lens || selection.lens === 'design';
-      const iterated = (board) =>
-        (board.view?.iteration || null) ===
-        ((design && selection?.iterations?.[board.target.artboard || '']) || null);
-      const matches = (view) =>
-        !!view &&
-        view.src === selection?.src &&
-        view.scenario === selection?.scenario &&
-        view.lens === selection?.lens;
-      const visible =
-        !disposed &&
-        !awaitingSelection &&
-        !!selection &&
-        (declared
-          ? !expanding &&
-            boards.length === declared.length &&
-            boards.every(
-              (board) =>
-                matches(board.target) &&
-                matches(board.view) &&
-                (iterated(board) || !!board.view?.problem) &&
-                !!(board.view?.ready || board.view?.problem) &&
-                declared.some((child) => child.id === board.target.artboard),
-            )
-          : boards.length === 1 &&
-            matches(boards[0].view) &&
-            (iterated(boards[0]) || !!boards[0].view?.problem) &&
-            !!(boards[0].view?.ready || boards[0].view?.problem));
-      const pending = !visible && (navigating || !!selection);
-      return { visible, pending, loading: pending && loading };
+    presentation() {
+      const { visible, pending, loading } = feedback.read(current());
+      return { visible, pending, loading };
     },
     begin() {
-      if (disposed || ports.busy()) return;
+      if (current().disposed || current().capturing || ports.busy()) return;
       clicked = beginTrace();
       trace = null;
-      sequence++;
-      expanding = false;
-      awaitingSelection = true;
-      navigating = true;
+      store.set({
+        ...transition(current(), { type: 'picked', id: mint(), destination: null }),
+        expanding: false,
+      });
       deferLoading();
-      selection = undefined;
-      ports.present();
     },
     complete(outcome = 'visible') {
       cancelLoading();
-      navigating = false;
       if (trace) {
         const completed = trace;
         trace = null;
         requestAnimationFrame(() => {
-          if (!disposed && selection?.trace?.selection === completed.selection)
+          if (!current().disposed && current().requested?.trace?.selection === completed.selection)
             phase(completed, outcome, {
               totalMs: performance.timeOrigin + performance.now() - completed.started,
             });
         });
       }
     },
-    fail: clear,
+    fail(error) {
+      cancelLoading();
+      group = '';
+      if (current().phase === 'idle') send({ type: 'picked', id: mint(), destination: null });
+      send({
+        type: 'failed',
+        id: current().id,
+        problem:
+          error instanceof Error ? error.message : String(error || 'Could not load preview.'),
+      });
+    },
     clear,
     async show(next) {
       trace = beginTrace(next, clicked);
@@ -158,17 +190,23 @@ export function createNavigation(ports) {
         next = { ...next, trace };
         phase(trace, 'selection');
       }
-      const request = ++sequence;
-      await ports.ready;
-      if (disposed || request !== sequence) return;
-      if (ports.busy()) throw new Error('Wait for the canvas capture to finish.');
-      if (!awaitingSelection) {
-        navigating = true;
-        deferLoading();
+      if (current().disposed) return;
+      if (current().capturing || ports.busy())
+        throw new Error('Wait for the canvas capture to finish.');
+      const awaiting = !current().requested && ['pending', 'loading'].includes(current().phase);
+      const request = awaiting ? current().id : mint();
+      send({ type: 'picked', id: request, destination: next });
+      if (!awaiting) deferLoading();
+      try {
+        await ports.ready;
+      } catch (error) {
+        if (current().disposed || request !== current().id) return;
+        throw error;
       }
-      selection = next;
-      awaitingSelection = false;
-      ports.present();
+      if (current().disposed || request !== current().id) return;
+      if (current().capturing || ports.busy())
+        throw new Error('Wait for the canvas capture to finish.');
+      next = { ...next, navigation: request };
       const declared = !next.docs ? next.artboards : undefined;
       const key = JSON.stringify([
         next.src,
@@ -179,32 +217,47 @@ export function createNavigation(ports) {
       ]);
       if (group !== key) {
         group = key;
-        expanding = true;
+        store.set({ expanding: true });
         try {
           await ports.activate(next);
         } catch (error) {
-          if (disposed || request !== sequence) return;
+          if (current().disposed || request !== current().id) return;
           group = '';
+          send({
+            type: 'failed',
+            id: request,
+            problem: error instanceof Error ? error.message : String(error),
+          });
           throw error;
         } finally {
-          if (!disposed && request === sequence) {
-            expanding = false;
+          if (!current().disposed && request === current().id) {
+            store.set({ expanding: false });
             ports.present();
           }
         }
-        if (disposed || request !== sequence) return;
+        if (current().disposed || request !== current().id) return;
         ports.fit();
       } else {
         // The same artboards: only those whose iteration changed render again.
-        await ports.iterate?.(next);
-        if (disposed || request !== sequence) return;
+        try {
+          await ports.iterate?.(next);
+        } catch (error) {
+          if (current().disposed || request !== current().id) return;
+          throw error;
+        }
+        if (current().disposed || request !== current().id) return;
       }
-      await ports.settle(next);
-      if (!disposed && request === sequence) ports.present();
+      try {
+        await ports.settle(next);
+      } catch (error) {
+        if (current().disposed || request !== current().id) return;
+        throw error;
+      }
+      if (!current().disposed && request === current().id) ports.present();
     },
     dispose() {
-      disposed = true;
       clear();
+      store.set({ disposed: true });
     },
   };
 }

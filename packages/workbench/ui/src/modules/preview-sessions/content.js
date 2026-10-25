@@ -7,18 +7,24 @@ import {
 } from '../../../../contracts/src/docs/lenses.js';
 import { scrollAfterZoom } from '../docs/canvas/docs-layout.js';
 import { begin as beginTrace, phase, address } from '../trace/browser.js';
+import { createRendererNavigation } from '../navigation/index.js';
 
 export function createContentController(options) {
   const { frames, services } = options;
   let config = null;
   const pages = new Map();
-  let target = services.address.parse(location.hash);
   const params = new URLSearchParams(location.search);
+  const navigation = createRendererNavigation(
+    params.get('navigation'),
+    services.address.parse(location.hash),
+    params.get('artboard') || '',
+  );
+  const currentTarget = () => navigation.state.get().requested;
   // This renderer's declared artboard, or "" for a scenario's implicit one:
   // the key of its iteration in the address's `+` parts.
   const artboardId = params.get('artboard') || '';
   let trace = beginTrace(
-    target,
+    currentTarget(),
     {
       selection: params.get('wbTrace'),
       started: Number(params.get('wbTraceStart')) || undefined,
@@ -60,7 +66,7 @@ export function createContentController(options) {
   }
   // The iteration the address names for this artboard, when the scenario declares it.
   function iterationEntry(item, scenario) {
-    const id = target.iterations?.[artboardId];
+    const id = currentTarget().iterations?.[artboardId];
     const entry = id ? scenarioEntry(item, scenario) : null;
     if (!entry) return null;
     const owner = artboardId
@@ -77,7 +83,7 @@ export function createContentController(options) {
     return iteration ? { ...rest, iterations: { [artboardId]: iteration } } : rest;
   }
   function write(next) {
-    target = next;
+    navigation.resolved(next);
     if (next.trace) {
       trace = beginTrace(next, next.trace, 'renderer');
       phase(trace, 'renderer-ready', { retained: true });
@@ -88,6 +94,7 @@ export function createContentController(options) {
     window.dispatchEvent(new Event('wb-content-destination'));
   }
   function reveal() {
+    const target = currentTarget();
     if (!target.example) return;
     try {
       const preview = frames.frame().contentWindow;
@@ -98,6 +105,7 @@ export function createContentController(options) {
   }
   async function show(force = false) {
     if (!config || closed) return;
+    const target = currentTarget();
     const sequence = ++generation;
     mounted = null;
     problem = null;
@@ -172,7 +180,7 @@ export function createContentController(options) {
         view.scenarioLabel = picked.name;
         view.url = services.lenses.storyUrl(lens, picked.id);
         view.code = [...new Set([...(picked.code || []), ...view.code])];
-        write({ ...target, scenario: picked.scenario });
+        write({ ...currentTarget(), scenario: picked.scenario });
         rows = list.map((s, i) => ({
           id: String(i),
           target: s.scenario,
@@ -215,27 +223,41 @@ export function createContentController(options) {
     }
     frames.show(view, force);
   }
-  function navigate(next) {
+  function navigate(next, incoming) {
+    const target = currentTarget();
     const same =
       next.src === target.src &&
       (next.scenario || null) === (target.scenario || null) &&
       (next.lens || 'design') === (target.lens || 'design') &&
       (next.example || null) === (target.example || null) &&
       (next.iterations?.[artboardId] || null) === (target.iterations?.[artboardId] || null);
-    if (same && content.read()?.ready) return;
+    if (same && content.read()?.ready) {
+      if (incoming) {
+        navigation.identify(incoming);
+        changed();
+      }
+      return;
+    }
+    navigation.picked(next, incoming);
     write(next);
     void show().catch(fail);
   }
   const content = {
+    identity: navigation.identity,
+    identify(id) {
+      navigation.identify(id);
+      changed();
+    },
     problem: () => problem,
     read() {
       if (!view || !config) return null;
+      const target = currentTarget();
       const { item, lens, scenarioLabel, iteration } = view;
       const declared = artboardId
         ? scenarioEntry(item, view.scenario)?.artboards?.find((b) => b.id === artboardId)
         : null;
       const disabled = !!lens && !['workbench', 'docs'].includes(lens.kind);
-      return {
+      const info = {
         src: item.src,
         scenario: target.scenario,
         lens: lens?.key || null,
@@ -259,6 +281,7 @@ export function createContentController(options) {
         sizes: isDocsLens(lens) ? undefined : config.pages[item.src]?.sizes || config.sizes,
         actions: { checked: disabled || actions, disabled },
       };
+      return { ...info, ...navigation.report({ ...info, problem }) };
     },
     navigate(value) {
       if (!config) throw new Error('The space is still loading.');
@@ -270,6 +293,7 @@ export function createContentController(options) {
           { ...next, scenario: next.scenario || null, lens: next.lens || 'design' },
           typeof next.iteration === 'string' ? next.iteration : null,
         ),
+        next.navigation,
       );
     },
     size(w, h) {
@@ -295,17 +319,19 @@ export function createContentController(options) {
     },
     pickScenario(id) {
       const row = rows.find((r) => r.id === id);
-      if (row) navigate(withIteration({ ...target, scenario: row.target || null }, null));
+      if (row) navigate(withIteration({ ...currentTarget(), scenario: row.target || null }, null));
     },
     lens(key) {
-      navigate({ ...target, lens: key || 'design' });
+      navigate({ ...currentTarget(), lens: key || 'design' });
     },
     reload() {
+      navigation.picked(currentTarget());
       if (view?.lens && ['ios-simulator', 'window'].includes(view.lens.kind))
         services.native.reload();
       else void show(true).catch(fail);
     },
     refresh() {
+      navigation.picked(currentTarget());
       void load().catch(fail);
     },
     action(name, value) {
@@ -319,6 +345,7 @@ export function createContentController(options) {
           return;
         }
         if (!view?.url) return;
+        navigation.picked(currentTarget());
         void show().catch(fail);
       }
     },
@@ -340,9 +367,9 @@ export function createContentController(options) {
   }
   function hashChanged() {
     if (!options.held()) {
-      target = services.address.parse(location.hash);
+      navigation.picked(services.address.parse(location.hash));
       void show().catch(fail);
-    } else write(target);
+    } else write(currentTarget());
   }
   function message(event) {
     frames.storyEvent(event);
@@ -376,7 +403,7 @@ export function createContentController(options) {
   return {
     content,
     view: () => view,
-    target: () => target,
+    target: currentTarget,
     item: (src) => pages.get(src),
     size: () => ({
       key: 'resizable',

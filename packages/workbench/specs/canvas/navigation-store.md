@@ -7,8 +7,8 @@ transitions and asynchronous work. This page owns the store's design.
 [browser UI port](../system/ui-port.md#navigation-store-adoption) owns the order
 in which the store is adopted.
 
-**Status:** agreed, not implemented; see
-[implementation gaps](#implementation-gaps).
+**Status:** implemented for bounded navigation. Large page-list windowing is
+outside this store's scope.
 
 ## State
 
@@ -94,9 +94,26 @@ Transition tests drive generated event sequences through these invariants.
 Browser regressions through the shell and renderer cover the
 [discoveries](navigation.md#discoveries).
 
-## Implementation gaps
+## Implementation
 
-- No store exists. The same facts live in closures across the legacy shell,
-  the navigation and preview-session controllers, the canvas bootstrap and the
-  content renderer, reconciled by explicit calls such as `present()` and
-  per-owner sequence counters.
+`ui/src/modules/navigation/state.js` owns the transitions and feedback selection;
+`controller.js` creates the private Lattice store and owns the grace timer,
+activation, supersession and requested sizing. `renderer.js` creates each
+renderer document's independent store and identity namespace. Rendering and
+transport remain with content and preview sessions; their reports carry
+`navigation` and, for self-navigation, `from`.
+
+The canvas view subscribes to feedback with its connection's abort signal. The
+displayed record holds the settled canvas model used for outgoing presentation
+and review; the view keeps no displayed or painted copy. Pan, zoom and reading
+scroll remain in the canvas element. Capture blocks navigation input through
+the same feedback binding.
+
+The classic route adapter stays navigation-owned in canvas bindings until the
+project/page-list and top-bar adoption steps. It translates existing begin/show
+calls and renderer destinations; it introduces no second navigation state.
+
+Transition tests exercise generated event sequences and selection dependencies.
+Controller and renderer tests cover deadlines, late completion, repeated reports,
+identity adoption and cleanup. The preview-session browser smoke covers warm
+readiness, stale messages, self-navigation and rapid Docs picks across collections.
