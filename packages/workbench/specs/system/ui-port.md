@@ -8,8 +8,8 @@ owns the target layout, the order of the port and its delivery. The
 store the port introduces; each capability's own spec keeps its behavior.
 [Modules](modules.md#browser-source-layout) describes the shipping layout.
 
-**Status:** agreed, not implemented. Structural moves may proceed now; Lattice
-adoption waits for its [readiness point](#port-order). See
+**Status:** structural moves complete. Lattice adoption waits for its
+[readiness point](#port-order). See
 [implementation gaps](#implementation-gaps).
 
 ## Target layout
@@ -133,7 +133,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | `configure-pages` | The Configure pages dialog | `legacy/config-editor.js` |
 | `export` | The export dialog | `components/export-dialog/` |
 | `docs` | A docs lens's reading page | `views/docs/` (in place) |
-| `viewer` | The portable viewer's interface | `ui/viewer/` |
+| `viewer` | The portable viewer's interface | `app/viewer/` |
 
 Other existing files move as follows:
 
@@ -344,8 +344,7 @@ The navigation store's adoption starts only after this slice is in place.
 
 - The Lattice delivery slice: Workbench does not depend on, serve or package
   Lattice, and none of the evidence above exists.
-- Structural moves: every document is in `app/`; the code the documents load
-  ships in the
+- Legacy interface: every document is in `app/`; the code the documents load ships in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
 - Every Lattice adoption step.
