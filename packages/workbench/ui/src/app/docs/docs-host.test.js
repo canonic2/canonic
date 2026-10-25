@@ -232,6 +232,32 @@ test(
       return target;
     }
 
+    await t.test('the shipping reading stylesheet survives warm page changes', async () => {
+      const target = await open();
+      const states = await target.evaluate(`(async()=>{
+        const readingStyle=()=>{
+          const link=document.querySelector('link[rel="stylesheet"]');
+          const style=getComputedStyle(document.querySelector('main.wb-docs'));
+          return {href:link.href,loaded:!!link.sheet?.cssRules.length,
+            boxSizing:style.boxSizing,maxWidth:style.maxWidth};
+        };
+        const states=[readingStyle()];
+        for(const name of ['reading-one','reading-two']){
+          await __wbLoad(name);
+          states.push(readingStyle());
+        }
+        return states;
+      })()`);
+      for (const state of states) {
+        assert.deepEqual(state, {
+          href: origin + '/_workbench/ui/src/views/docs/docs-page.css',
+          loaded: true,
+          boxSizing: 'border-box',
+          maxWidth: '1056px',
+        });
+      }
+    });
+
     await t.test(
       'reassignment restores the baseline and retains dependencies and CSSOM sheets',
       async () => {
