@@ -11,7 +11,7 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Planned, agreed by the owner on 2026-10-25 with the amendments below, before
+Running, agreed by the owner on 2026-10-25 with the amendments below, before
 any run. Both stages are authorized. This compares application patterns using
 existing APIs; no public API or windowing helper is authorized.
 
@@ -178,23 +178,227 @@ As the collection record: the same machine, Node, Playwright and headless
 Chromium. Presented latency and frame timings in headless Chromium are
 reported as such; they do not establish timings on a display.
 
+### Runner reliability amendment (2026-10-25, smoke only)
+
+The first smoke exposed two runner defects: an assignment-count assertion ran
+on pages with counters disabled, and the visible-update loop read `scrollTop`
+after each write, forcing layout inside the timed boundary. Count assertions
+now run only on counted pages, and the visible key is resolved before timing.
+The first smoke is diagnostic only; a complete smoke repeats on the corrected
+runner before measured sets. No threshold changes. Explicit model checks run
+after measurement on every page; resource-count assertions run on counted
+pages. The singleton removal check covers fallback to the empty list.
+
+All inputs are generated locally. Browser requests are fulfilled from local
+fixture and shipping source; no external calls, network installs or paid
+services are needed. Each run owns a fresh results directory and browser
+contexts; cancellation closes the browser and retains partial results.
+
+### Stage A confirmation (2026-10-25, before confirmation)
+
+S2 is the CPU leader, meaningfully cheaper than S1, with lower total heap.
+Neither candidate clears the first set's presented-latency threshold.
+Confirmation repeats S0 and S2 at both sizes: 15 timing pages for random and
+next-row selection, and 10 pages of 20 real clicks. Setup and teardown are
+not deciding selection thresholds and are not repeated. The original failing
+presentation samples remain part of the reported outcome.
+
+### Stage B choice and boundaries (2026-10-25, before any Stage B run)
+
+Neither Stage A candidate is eligible against every all-mounted threshold:
+both fail presented latency. To complete the authorized windowing comparison,
+Stage B uses S2 provisionally: it leads CPU cost and heap, and its CPU scaling
+holds in confirmation. This is an execution choice, not acceptance of a
+selection pattern or a change to any threshold.
+
+W0 leaves ordinary scrolling to the browser; it does not reconcile all rows
+on scroll. W1 and W2 reconcile the window in the driven animation-frame
+callback and respond to native scroll events. A focused input inside a row
+is included in the pinning check. The zero-write offscreen workload targets
+an unmounted item; a pinned focused row retains its binding and its costs.
+
+Scrolling traces bracket exactly 120 driven frames with timing marks. Script
+time is the union of callback, event, function and microtask intervals on the
+page's renderer thread between adjacent frame starts, clipped to the marked
+interval. Long tasks are recorded through both the Long Tasks observer and
+renderer task events. Animation-frame intervals are paint-opportunity cadence,
+not presented-frame latency. These boundaries are established before the
+windowing smoke; they do not alter the 4 ms or 50 ms limits.
+
 ## Conditions
 
-Not run.
+### Stage A (2026-10-25)
+
+| Item | Value |
+| --- | --- |
+| Time | 03:56–04:37 UTC |
+| Host | macOS 15, x86-64, Intel Xeon W-2140B, 16 threads, 64 GB memory; Node 24.12.0; headless Chromium 156.0.8078.4 with Playwright 1.64.1 |
+| Load | One-minute load 16.3 before and 8.0 after; an intermediate observation was 25.6. Power state was not sampled |
+| Source | Public commit `bd61a1e`; shipping collection SHA-256 `a597d35a…`, store `9bf3b436…`, reporter `e4ad2ac9…`; lab page `659b1be1…`, runner `0ecb66bb…` |
+| Samples | Per pattern and size: 15 timing pages, 10 memory/allocation pages, 3 counted pages, 10 presentation pages of 20 clicks; 228 pages total |
+| Warm state | CPU setup and teardown: five warmups, ten measured rounds; changing updates: five warmup and ten measured rounds of 1,000 calls. Presented mount is the first construction in a fresh context; imports precede the input event |
+| Memory | After forced garbage collection; total is mounted minus empty, presentation is mounted minus state-only. Native DOM bytes are not measured; DOM nodes are counted separately |
+
+The common item record includes a `selected` boolean in all patterns; it is
+dormant in S0 and S2. This isolates subscription and wiring differences but
+does not attribute S1's extra item-field cost. Allocation sampling includes
+the common target-array preparation around the selection loop; CPU update
+timers exclude that preparation.
+
+### Stage A confirmation (2026-10-25)
+
+04:38–04:50 UTC, the same host and shipping sources, with lab page
+`659b1be1…` and runner `1f28349e…`. One-minute load was 38.4 before and 21.5
+after. Per pattern and size: 15 timing pages, five warmup and ten measured
+rounds of 1,000 calls; 10 presentation pages of 20 clicks. Setup and heap were
+not repeated. The higher load limits comparisons of presentation tails.
 
 ## Results
 
-Not run.
+### Stage A (2026-10-25)
+
+CPU figures are p50 / p95 / maximum (IQR) across 15 page medians. Each page's
+median is over ten measured rounds. Times exclude style, layout and paint
+that happen after the synchronous operation returns.
+
+| Pattern | Items | Mount, ms | Teardown, ms | Random selection, µs | Next selection, µs | Same selection, µs | Unrelated label update, µs |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| S0 | 1,000 | 31.6 / 32.1 / 32.1 (0.525) | 14.8 / 15.3 / 15.3 (0.370) | 18.2 / 19.0 / 19.0 (0.430) | 18.4 / 19.0 / 19.0 (0.670) | 0.045 / 0.050 / 0.050 (0.005) | 2.88 / 2.98 / 2.98 (0.080) |
+| S0 | 10,000 | 941 / 986 / 986 (41.1) | 172 / 197 / 197 (10.4) | 243 / 577 / 577 (114) | 234 / 349 / 349 (97.5) | 0.050 / 0.050 / 0.050 (0.005) | 2.91 / 3.08 / 3.08 (0.150) |
+| S1 | 1,000 | 31.3 / 32.3 / 32.3 (0.945) | 14.9 / 15.6 / 15.6 (0.575) | 2.62 / 2.81 / 2.81 (0.180) | 2.11 / 2.20 / 2.20 (0.120) | 0.045 / 0.055 / 0.055 (0.005) | 3.06 / 3.24 / 3.24 (0.065) |
+| S1 | 10,000 | 950 / 1032 / 1032 (27.9) | 168 / 175 / 175 (8.57) | 3.55 / 3.75 / 3.75 (0.115) | 2.38 / 2.68 / 2.68 (0.210) | 0.040 / 0.040 / 0.040 (0.000) | 3.03 / 3.21 / 3.21 (0.110) |
+| S2 | 1,000 | 30.8 / 33.0 / 33.0 (1.04) | 13.2 / 14.0 / 14.0 (0.435) | 1.24 / 1.53 / 1.53 (0.100) | 0.995 / 1.38 / 1.38 (0.190) | 0.050 / 0.050 / 0.050 (0.010) | 2.99 / 3.56 / 3.56 (0.150) |
+| S2 | 10,000 | 931 / 1021 / 1021 (46.9) | 171 / 177 / 177 (6.58) | 1.70 / 2.06 / 2.06 (0.210) | 1.35 / 1.58 / 1.58 (0.220) | 0.050 / 0.050 / 0.050 (0.005) | 2.90 / 3.05 / 3.05 (0.110) |
+
+Heap and allocation figures use the same p50 / p95 / maximum (IQR) notation
+over 10 pages; MB is decimal. Every pattern had 10,005 DOM nodes at 1,000
+items and 100,005 at 10,000 items, with no variation.
+
+| Pattern | Items | Total heap, MB | Presentation-only heap, MB | Allocated bytes/selection | Minor GCs/20,000 selections | GC ms/20,000 selections |
+| --- | --- | --- | --- | --- | --- | --- |
+| S0 | 1,000 | 1.10 / 1.10 / 1.10 (0.000388) | 0.965 / 0.966 / 0.966 (0.000388) | 99.2 / 99.7 / 99.7 (0.414) | 1 / 2 / 2 (1) | 0.575 / 0.961 / 0.961 (0.351) |
+| S0 | 10,000 | 10.8 / 10.9 / 10.9 (0.000700) | 9.35 / 9.40 / 9.40 (0.000700) | 99.2 / 99.7 / 99.7 (0.724) | 2 / 2 / 2 (0) | 1.02 / 1.07 / 1.07 (0.079) |
+| S1 | 1,000 | 1.04 / 1.04 / 1.04 (0.00123) | 0.900 / 0.902 / 0.902 (0.00123) | 591 / 593 / 593 (0.656) | 5 / 5 / 5 (0) | 1.87 / 1.97 / 1.97 (0.027) |
+| S1 | 10,000 | 10.6 / 10.6 / 10.6 (0.0635) | 9.11 / 9.11 / 9.11 (0.0635) | 591 / 593 / 593 (0.486) | 2 / 2 / 2 (0) | 1.39 / 1.50 / 1.50 (0.080) |
+| S2 | 1,000 | 0.914 / 0.914 / 0.914 (0.00114) | 0.777 / 0.778 / 0.778 (0.00114) | 100 / 100 / 100 (0.330) | 2 / 2 / 2 (0) | 0.905 / 1.02 / 1.02 (0.068) |
+| S2 | 10,000 | 9.11 / 9.11 / 9.11 (0.00213) | 7.65 / 7.65 / 7.65 (0.00213) | 99.2 / 100 / 100 (0.582) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
+
+No traced selection run had a major GC. S1's two item-record changes and
+batch bookkeeping allocate substantially more than S2's scalar write; these
+are whole-pattern allocation measurements, including the common runner cost.
+
+Event Timing, p50 / p95 / maximum (IQR), in milliseconds. Processing end is
+relative to event start; duration is the headless presentation measurement.
+There are ten mount events and up to 200 trusted click entries per cell.
+Synthetic label-generated clicks with interaction ID zero are excluded.
+
+| Pattern | Items | Mount presented | Click presented | Click processing end | Observed click entries |
+| --- | --- | --- | --- | --- | --- |
+| S0 | 1,000 | 184 / 232 / 232 (0) | 16 / 16 / 16 (0) | 6.36 / 8.50 / 11.2 (1.04) | 200/200 |
+| S0 | 10,000 | 1800 / 1840 / 1840 (32) | 96 / 120 / 128 (8) | 72.5 / 92.7 / 99.3 (6.58) | 200/200 |
+| S1 | 1,000 | 184 / 184 / 184 (0) | 16 / 16 / 16 (0) | 5.94 / 8.02 / 11.0 (0.965) | 199/200 |
+| S1 | 10,000 | 1784 / 1808 / 1808 (32) | 96 / 112 / 120 (8) | 71.7 / 80.9 / 97.8 (6.29) | 200/200 |
+| S2 | 1,000 | 184 / 200 / 200 (0) | 16 / 16 / 16 (0) | 6.17 / 8.06 / 10.6 (1.09) | 198/200 |
+| S2 | 10,000 | 1784 / 8408 / 8408 (40) | 96 / 120 / 528 (8) | 70.9 / 95.8 / 447 (5.93) | 200/200 |
+
+No value is imputed for missing Event Timing entries. The 10,000-item cells
+have complete click coverage. One S2 page had a much slower mount and clicks;
+it remains in the percentiles and maxima.
+
+Observed selection-change counts, identical on all three counted pages at
+each size:
+
+| Pattern | Selection reads at 1,000 / 10,000 | Row assignments | Summary writes |
+| --- | --- | --- | --- |
+| S0 | 1,000 / 10,000 | 2 | 0 |
+| S1 | 2 / 2 | 2 | 0 |
+| S2 | 1 / 1, a list subscription | 2 | 0 |
+
+S2's random selection is 52% cheaper than S1 at 10,000 items, a meaningful
+difference. Its total heap is about 1.5 MB smaller. Setup and teardown at
+10,000 items are within the observed variation between S1 and S2. S2 is the
+CPU and footprint leader; that does not establish the presentation budget.
+
+### Stage A confirmation (2026-10-25)
+
+Same summary notation as the first set; 15 pages per timing cell.
+
+| Pattern | Items | Random selection, µs | Next selection, µs |
+| --- | --- | --- | --- |
+| S0 | 1,000 | 17.3 / 18.2 / 18.2 (0.520) | 16.7 / 18.7 / 18.7 (0.555) |
+| S0 | 10,000 | 196 / 250 / 250 (11.7) | 188 / 210 / 210 (13.6) |
+| S2 | 1,000 | 1.20 / 3.46 / 3.46 (0.110) | 1.03 / 2.18 / 2.18 (0.130) |
+| S2 | 10,000 | 1.80 / 1.88 / 1.88 (0.045) | 1.45 / 1.53 / 1.53 (0.110) |
+
+Event Timing, ten pages per cell:
+
+| Pattern | Items | Mount presented, ms | Click presented, ms | Click processing end, ms | Observed click entries |
+| --- | --- | --- | --- | --- | --- |
+| S0 | 1,000 | 192 / 208 / 208 (8) | 16 / 16 / 24 (0) | 6.69 / 9.09 / 11.3 (1.11) | 198/200 |
+| S0 | 10,000 | 1840 / 5280 / 5280 (64) | 96 / 432 / 568 (8) | 74.4 / 332 / 495 (6.18) | 200/200 |
+| S2 | 1,000 | 192 / 216 / 216 (8) | 16 / 16 / 16 (0) | 6.71 / 8.32 / 10.1 (1.09) | 200/200 |
+| S2 | 10,000 | 1816 / 9416 / 9416 (88) | 96 / 160 / 584 (8) | 73.2 / 120 / 490 (8.18) | 200/200 |
+
+S2 remains meaningfully cheaper than S0. CPU growth is 1.494× for random
+selection and 1.415× for next-row selection, both within 1.5×, with little
+margin for the random case. Presented p95 is 160 ms, failing threshold 3
+again. Presentation tails vary substantially between sets; neither set is
+discarded. All 100 confirmation pages passed their model checks.
 
 ## Correctness
 
-Not run.
+### Smoke (2026-10-25)
+
+The first selection smoke completed 24 cells with two assertion failures from
+the counter-mode runner defect above and no page errors. Timing cells from
+that diagnostic run are not used as performance evidence. The corrected smoke
+completed all 24 cells at both sizes with no failed correctness check or page
+error, including counted teardown returning nodes and listeners to baseline.
+
+### Stage A (2026-10-25)
+
+All three patterns passed: visible values and order against the model;
+selection changes assigning only the affected rows; same-selection actions
+doing no selection read or assignment; unrelated updates retaining row
+identity; clearing a removed selection; deterministic focus fallback to the
+next, preceding or empty-list target; key reuse across commits and in one
+batch creating a fresh row without stale callbacks; and the bulk-update model.
+Every measurement page ran model checks after its timed or profiled work.
+The six counted pages per pattern additionally returned subscription, DOM
+node and listener counts to baseline after teardown. Window-specific focus,
+offscreen and anchoring checks belong to Stage B.
 
 ## Threats to validity
 
-To be completed after the runs. Known in advance: fixed-height rows only;
-headless frame timings; one engine.
+- Fixed-height example rows at 1,000 and 10,000 items, one engine and one
+  shared host. This does not establish windowing for every page-list layout.
+- Headless Event Timing measures Chromium's presentation endpoint, not a
+  frame observed on a physical display. Entries are quantized; the observed
+  96/104 ms boundary is close to the 100 ms budget.
+- Twenty clicks share each page and are correlated. Presented percentiles
+  pool observed trusted clicks; CPU percentiles summarize page medians.
+- Background load varies and was not sampled continuously. The slow S2 page
+  is retained; no cause for its outlier is established.
+- CPU setup excludes deferred rendering. The input-triggered mount measures
+  a separate first-use presentation boundary, including browser work.
+- The common dormant item flag prevents attribution of S1's item-field
+  footprint. Heap excludes native DOM bytes; profiler allocation includes
+  common target preparation and varies with sampling and GC behavior.
 
 ## Decision and follow-ups
 
-Pending measurements and the owner's decision on the reported evidence.
+### Stage A against its thresholds (2026-10-25)
+
+| Threshold | S1 | S2 |
+| --- | --- | --- |
+| 1. At most four row reads, only two row assignments | Holds: two reads, two assignments | Holds: one list read, two assignments |
+| 2. At most 1.5× CPU growth and meaningfully lower than S0 | Holds: random 1.36×, next 1.13× | Holds: random 1.38×, next 1.35× |
+| 3. Click presented p95 at most 100 ms | Fails: 112 ms | Fails: 120 ms |
+| 4. Correctness | Holds | Holds |
+
+Neither candidate is supported against every all-mounted threshold. S2 leads
+synchronous selection CPU time and footprint without a binding-contract
+exception. Its CPU result holds in confirmation, while presented p95 fails
+again at 160 ms. Stage B uses S2 provisionally as recorded in Method; no
+product pattern, helper or API is adopted by these measurements. The owner
+decides on the complete reported evidence.
