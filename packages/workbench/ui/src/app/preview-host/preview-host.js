@@ -1,7 +1,11 @@
 /* An adapter-neutral renderer. Its document, compatibility bridge and shared
    runtime stay alive while preview modules mount and dispose their content. */
 import '/_workbench/preview-runtime.js';
-import { begin as beginTrace, phase, address as tracedAddress } from '../../modules/trace/browser.js';
+import {
+  begin as beginTrace,
+  phase,
+  address as tracedAddress,
+} from '../../modules/trace/browser.js';
 
 let generation = 0;
 let pending = Promise.resolve();
@@ -18,7 +22,8 @@ const pagePaints = new Set();
 // and framework globals stay, since dependency modules stay loaded between
 // previews.
 const baselineGlobals = new Set(Object.keys(window));
-const KEPT_GLOBALS = /^(?:__wb|__workbench|wb[A-Z]|workbench$|webpackChunk|rspack|wb_|\$Refresh|__REACT|__reactRefresh|__VUE|__vue|__rspack|__webpack|regeneratorRuntime)/;
+const KEPT_GLOBALS =
+  /^(?:__wb|__workbench|wb[A-Z]|workbench$|webpackChunk|rspack|wb_|\$Refresh|__REACT|__reactRefresh|__VUE|__vue|__rspack|__webpack|regeneratorRuntime)/;
 const nativeClearTimeout = window.clearTimeout.bind(window);
 const nativeClearInterval = window.clearInterval.bind(window);
 const nativeCancelPaint = window.cancelAnimationFrame.bind(window);
@@ -29,12 +34,27 @@ const nativeCancelPaint = window.cancelAnimationFrame.bind(window);
 const nativeAdd = EventTarget.prototype.addEventListener;
 const nativeRemove = EventTarget.prototype.removeEventListener;
 EventTarget.prototype.addEventListener = function (type, listener, options) {
-  if (activeModule && (this === window || this === document || this === document.body || this === document.documentElement)) {
-    pageListeners.push([this, type, listener, typeof options === 'boolean' ? options : !!options?.capture]);
+  if (
+    activeModule &&
+    (this === window ||
+      this === document ||
+      this === document.body ||
+      this === document.documentElement)
+  ) {
+    pageListeners.push([
+      this,
+      type,
+      listener,
+      typeof options === 'boolean' ? options : !!options?.capture,
+    ]);
   }
   return nativeAdd.call(this, type, listener, options);
 };
-for (const [name, tracked] of [['setTimeout', pageTimers], ['setInterval', pageIntervals], ['requestAnimationFrame', pagePaints]]) {
+for (const [name, tracked] of [
+  ['setTimeout', pageTimers],
+  ['setInterval', pageIntervals],
+  ['requestAnimationFrame', pagePaints],
+]) {
   const original = window[name].bind(window);
   window[name] = function (...args) {
     const id = original(...args);
@@ -44,14 +64,21 @@ for (const [name, tracked] of [['setTimeout', pageTimers], ['setInterval', pageI
 }
 
 function styleSize(style) {
-  try { return style.sheet?.cssRules.length || 0; } catch (_) { return 0; }
+  try {
+    return style.sheet?.cssRules.length || 0;
+  } catch {
+    return 0;
+  }
 }
 
 function rememberStyles(baseline) {
   if (!activeModule) return;
   const owned = moduleStyles.get(activeModule) || new Set();
   for (const style of document.head.querySelectorAll('style:not([data-wb-host-style])')) {
-    if (!retainedStyles.has(style) || (baseline && baseline.has(style) && baseline.get(style) !== styleSize(style))) {
+    if (
+      !retainedStyles.has(style) ||
+      (baseline && baseline.has(style) && baseline.get(style) !== styleSize(style))
+    ) {
       owned.add(style);
       retainedStyles.add(style);
     }
@@ -60,21 +87,30 @@ function rememberStyles(baseline) {
 }
 
 function enableStyles() {
-  for (const style of moduleStyles.get(activeModule) || []) if (style.sheet) style.sheet.disabled = false;
+  for (const style of moduleStyles.get(activeModule) || [])
+    if (style.sheet) style.sheet.disabled = false;
 }
 
 async function clear() {
   const stop = window.__workbenchStop;
   window.__workbenchStop = null;
   if (stop) await stop();
-  pageListeners.splice(0).forEach(([target, type, listener, capture]) => nativeRemove.call(target, type, listener, capture));
-  pageTimers.forEach(nativeClearTimeout); pageTimers.clear();
-  pageIntervals.forEach(nativeClearInterval); pageIntervals.clear();
-  pagePaints.forEach(nativeCancelPaint); pagePaints.clear();
+  pageListeners
+    .splice(0)
+    .forEach(([target, type, listener, capture]) =>
+      nativeRemove.call(target, type, listener, capture),
+    );
+  pageTimers.forEach(nativeClearTimeout);
+  pageTimers.clear();
+  pageIntervals.forEach(nativeClearInterval);
+  pageIntervals.clear();
+  pagePaints.forEach(nativeCancelPaint);
+  pagePaints.clear();
   rememberStyles();
   // Keep runtime-owned CSSOM sheets connected: libraries can hold references
   // to them across mounts. Disable other modules' sheets to prevent leakage.
-  for (const child of Array.from(document.head.children)) if (!retainedStyles.has(child)) child.remove();
+  for (const child of Array.from(document.head.children))
+    if (!retainedStyles.has(child)) child.remove();
   for (const style of retainedStyles) if (style.sheet) style.sheet.disabled = true;
   activeModule = null;
   document.body.replaceChildren();
@@ -82,7 +118,13 @@ async function clear() {
     for (const attribute of Array.from(element.attributes)) element.removeAttribute(attribute.name);
   }
   for (const key of Object.keys(window)) {
-    if (!baselineGlobals.has(key) && !KEPT_GLOBALS.test(key)) { try { delete window[key]; } catch (_) { window[key] = undefined; } }
+    if (!baselineGlobals.has(key) && !KEPT_GLOBALS.test(key)) {
+      try {
+        delete window[key];
+      } catch {
+        window[key] = undefined;
+      }
+    }
   }
   window.__workbenchReady = false;
   window.__workbenchError = null;
@@ -99,101 +141,139 @@ function reset() {
 
 function load(address) {
   const url = new URL(address, location.href);
-  const trace = beginTrace({ page: url.searchParams.get('wbPage') || decodeURIComponent(url.pathname.slice(1)), scenario: url.searchParams.get('wbScenario') || url.searchParams.get('scenario'), lens: url.searchParams.get('wbLens') || 'design' }, { selection: url.searchParams.get('wbTrace') }, 'preview-host');
+  const trace = beginTrace(
+    {
+      page: url.searchParams.get('wbPage') || decodeURIComponent(url.pathname.slice(1)),
+      scenario: url.searchParams.get('wbScenario') || url.searchParams.get('scenario'),
+      lens: url.searchParams.get('wbLens') || 'design',
+    },
+    { selection: url.searchParams.get('wbTrace') },
+    'preview-host',
+  );
   if (url.origin !== location.origin || !/\.workbench\.tsx?$/.test(url.pathname)) {
-    return Promise.reject(new Error('The warm renderer accepts local Workbench preview definitions.'));
+    return Promise.reject(
+      new Error('The warm renderer accepts local Workbench preview definitions.'),
+    );
   }
   const ticket = ++generation;
   fetching?.abort();
-  if (!window.__workbenchReady && window.__workbenchStop) void window.__workbenchStop().catch(() => {});
-  const controller = fetching = new AbortController();
-  const descriptor = fetch(tracedAddress('/_workbench/previews/descriptor?file=' + encodeURIComponent(decodeURIComponent(url.pathname.slice(1))), trace),
-    { signal: controller.signal }).then(async response => {
+  if (!window.__workbenchReady && window.__workbenchStop)
+    void window.__workbenchStop().catch(() => {});
+  const controller = (fetching = new AbortController());
+  const descriptor = fetch(
+    tracedAddress(
+      '/_workbench/previews/descriptor?file=' +
+        encodeURIComponent(decodeURIComponent(url.pathname.slice(1))),
+      trace,
+    ),
+    { signal: controller.signal },
+  ).then(async (response) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Preview compilation failed');
     return result;
   });
   // Superseded fetches may reject before their queued turn starts.
   descriptor.catch(() => {});
-  pending = pending.catch(() => {}).then(async () => {
-    try {
-      const content = await descriptor;
-      if (ticket !== generation) return;
-      phase(trace, 'descriptor-fetched');
-      await clear();
-      if (ticket !== generation) return;
-      history.replaceState(null, '', url.href);
-      const base = document.createElement('base');
-      base.href = new URL(content.base, url).href;
-      document.head.append(base);
-      const viewport = document.createElement('meta');
-      viewport.name = 'viewport'; viewport.content = 'width=device-width,initial-scale=1';
-      document.head.append(viewport);
-      const style = document.createElement('style');
-      style.setAttribute('data-wb-host-style', '');
-      style.textContent = 'html,body{margin:0;min-height:100%}#workbench-preview{width:100%;min-width:0;box-sizing:border-box;min-height:100vh}';
-      document.head.append(style);
-      if (content.stylesheet) {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = content.stylesheet;
-        const loading = new Promise((resolve, reject) => {
-          link.onload = resolve; link.onerror = () => reject(new Error('Preview stylesheet failed to load'));
-        });
-        document.head.append(link);
-        let aborted;
-        const cancelled = new Promise(resolve => {
-          aborted = resolve;
-          controller.signal.addEventListener('abort', aborted, { once: true });
-        });
-        try { await Promise.race([loading, cancelled]); }
-        finally { controller.signal.removeEventListener('abort', aborted); }
-        if (ticket !== generation) return;
-      }
-      document.title = content.title;
-      window.__workbenchOptions = content.options;
-      window.wbPreviewActions?.configure(url.search);
-      activeModule = content.module;
-      enableStyles();
-      const stylesBeforeImport = new Map(Array.from(retainedStyles, style => [style, styleSize(style)]));
-      // Import-time DOM (for example an SVG symbol sprite) is not recreated by
-      // cached imports. Restore it before mounting, but keep mount-time DOM
-      // outside this cache so portals and other page content are still cleared.
-      for (const node of moduleBodyNodes.get(content.module) || []) document.body.append(node);
-      const bodyBeforeImport = new Set(document.body.childNodes);
-      let module;
+  pending = pending
+    .catch(() => {})
+    .then(async () => {
       try {
-        module = await import(content.module);
-        phase(trace, 'bundle-fetched');
-      } finally {
-        // A superseded or failed import may already have created its nodes.
-        // Remember them before the next queued load clears the document.
-        const nodes = moduleBodyNodes.get(content.module) || new Set();
-        for (const node of document.body.childNodes) if (!bodyBeforeImport.has(node)) nodes.add(node);
-        moduleBodyNodes.set(content.module, nodes);
+        const content = await descriptor;
+        if (ticket !== generation) return;
+        phase(trace, 'descriptor-fetched');
+        await clear();
+        if (ticket !== generation) return;
+        history.replaceState(null, '', url.href);
+        const base = document.createElement('base');
+        base.href = new URL(content.base, url).href;
+        document.head.append(base);
+        const viewport = document.createElement('meta');
+        viewport.name = 'viewport';
+        viewport.content = 'width=device-width,initial-scale=1';
+        document.head.append(viewport);
+        const style = document.createElement('style');
+        style.setAttribute('data-wb-host-style', '');
+        style.textContent =
+          'html,body{margin:0;min-height:100%}#workbench-preview{width:100%;min-width:0;box-sizing:border-box;min-height:100vh}';
+        document.head.append(style);
+        if (content.stylesheet) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = content.stylesheet;
+          const loading = new Promise((resolve, reject) => {
+            link.onload = resolve;
+            link.onerror = () => reject(new Error('Preview stylesheet failed to load'));
+          });
+          document.head.append(link);
+          let aborted;
+          const cancelled = new Promise((resolve) => {
+            aborted = resolve;
+            controller.signal.addEventListener('abort', aborted, { once: true });
+          });
+          try {
+            await Promise.race([loading, cancelled]);
+          } finally {
+            controller.signal.removeEventListener('abort', aborted);
+          }
+          if (ticket !== generation) return;
+        }
+        document.title = content.title;
+        window.__workbenchOptions = content.options;
+        window.wbPreviewActions?.configure(url.search);
+        activeModule = content.module;
+        enableStyles();
+        const stylesBeforeImport = new Map(
+          Array.from(retainedStyles, (style) => [style, styleSize(style)]),
+        );
+        // Import-time DOM (for example an SVG symbol sprite) is not recreated by
+        // cached imports. Restore it before mounting, but keep mount-time DOM
+        // outside this cache so portals and other page content are still cleared.
+        for (const node of moduleBodyNodes.get(content.module) || []) document.body.append(node);
+        const bodyBeforeImport = new Set(document.body.childNodes);
+        let module;
+        try {
+          module = await import(content.module);
+          phase(trace, 'bundle-fetched');
+        } finally {
+          // A superseded or failed import may already have created its nodes.
+          // Remember them before the next queued load clears the document.
+          const nodes = moduleBodyNodes.get(content.module) || new Set();
+          for (const node of document.body.childNodes)
+            if (!bodyBeforeImport.has(node)) nodes.add(node);
+          moduleBodyNodes.set(content.module, nodes);
+        }
+        if (ticket !== generation) return;
+        rememberStyles(stylesBeforeImport);
+        enableStyles();
+        await module.mount(content.options);
+        phase(trace, 'examples-mounted');
+        rememberStyles();
+      } catch (error) {
+        if (ticket !== generation) return;
+        window.__workbenchError = String(error?.stack || error);
+        window.__workbenchReady = false;
+        document.body.replaceChildren(
+          Object.assign(document.createElement('pre'), { textContent: window.__workbenchError }),
+        );
       }
-      if (ticket !== generation) return;
-      rememberStyles(stylesBeforeImport);
-      enableStyles();
-      await module.mount(content.options);
-      phase(trace, 'examples-mounted');
-      rememberStyles();
-    } catch (error) {
-      if (ticket !== generation) return;
-      window.__workbenchError = String(error?.stack || error);
-      window.__workbenchReady = false;
-      document.body.replaceChildren(Object.assign(document.createElement('pre'), { textContent: window.__workbenchError }));
-    }
-  });
+    });
   return pending;
 }
 
 async function resume(address) {
   const ticket = generation;
   const url = new URL(address, location.href);
-  const response = await fetch('/_workbench/previews/descriptor?file=' + encodeURIComponent(decodeURIComponent(url.pathname.slice(1))));
+  const response = await fetch(
+    '/_workbench/previews/descriptor?file=' +
+      encodeURIComponent(decodeURIComponent(url.pathname.slice(1))),
+  );
   const descriptor = await response.json();
   if (ticket !== generation) return;
-  if (!response.ok || descriptor.options.revision !== window.__workbenchOptions?.revision || !window.__workbenchReady) {
+  if (
+    !response.ok ||
+    descriptor.options.revision !== window.__workbenchOptions?.revision ||
+    !window.__workbenchReady
+  ) {
     await load(address);
   }
 }
