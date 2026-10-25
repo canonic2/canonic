@@ -53,7 +53,7 @@ Feature specs own the behavior that must not change while making it faster.
 - Sidebar selection changes immediately when a page is picked. Canvas replacement
   and loading feedback follow the [200 ms navigation grace period](rendering-flow.md#navigation-feedback):
   keep the outgoing view under its actual labels and context until the destination
-  is ready or the deadline expires. A ready destination is revealed immediately;
+  settles or the deadline expires. A settled destination is revealed immediately;
   there is no minimum display delay. If still pending at 200 ms, conceal the outgoing
   view and show loading feedback. Pending navigation blocks preview interaction,
   screenshots and handoffs. Completion, failure, supersession and disposal cancel
@@ -65,9 +65,9 @@ Feature specs own the behavior that must not change while making it faster.
   loading or mounting again. Docs resume immediately and check freshness in
   the background; refresh only when the revision changed, under the
   [warm Docs contract](../preview-pipeline/warm-runtime.md#resume-and-freshness).
-- Retain the previous page's live state until its replacement is ready. During
+- Retain the previous page's live state until its replacement settles. During
   the grace period its displayed labels, geometry and reference still identify
-  that outgoing page. Publish the new artboard identity with its ready content,
+  that outgoing page. Publish the new artboard identity with its settled content,
   as [rendering flow](rendering-flow.md) requires.
   A new selection cancels an older one that is still loading, and the
   older one never replaces the newer.

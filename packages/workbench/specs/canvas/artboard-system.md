@@ -235,11 +235,11 @@ checks. Surface server, startup, and trust failures per space/artboard.
    instances remain keyed by ID. Derive top bar/catalog state and notify the
    host. Size/lens/scenario edits target a named artboard, not a global frame.
 3. **Navigate or reload:** increment that instance's generation, cancel its old
-   pending work, and retain its settled runtime until replacement is ready.
-   Outgoing pixels may stay visible only under their outgoing identity; conceal
-   them before publishing the replacement's labels.
-   Ignore superseded completions/messages. A problem preserves any usable
-   outgoing view under its actual identity. Navigation from content routes to
+   pending work, and retain its settled runtime until the replacement settles.
+   Outgoing pixels follow [navigation feedback](../system/rendering-flow.md#navigation-feedback):
+   visible only under their outgoing identity during the grace period, and
+   never after the replacement settles or fails.
+   Ignore superseded completions/messages. Navigation from content routes to
    its own space/artboard and does not steal focus after a later user selection.
 4. **Refresh/remove space:** invalidate space resolution, reconcile only
    dependent artboards, and cancel affected loads. Preserve other instances.

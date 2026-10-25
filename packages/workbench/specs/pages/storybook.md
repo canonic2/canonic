@@ -82,7 +82,7 @@ This work follows the iframe runtime ownership in the
 - The shell follows the [200 ms navigation grace period](../system/rendering-flow.md#navigation-feedback),
   including while the story catalog is unresolved. Sidebar intent updates
   immediately; the outgoing view retains its displayed labels and context until
-  the requested content is ready or the deadline expires. An ordinary preview is
+  the requested content settles or the deadline expires. An ordinary preview is
   revealed only when its reported page, scenario and lens match the request and
   it is ready or has a named failure. Hiding does not detach its renderer or
   reload Storybook. Capture and handoff reject a pending destination; queued

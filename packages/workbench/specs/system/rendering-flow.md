@@ -66,8 +66,9 @@ shell inside an artboard.
   renderers report data rather than creating competing application loading UI.
 - The target content must actually finish rendering before it is ready. Loading
   the renderer wrapper or hiding shell chrome is not a readiness signal. Failure
-  stays an explicit problem for that destination. Any preserved outgoing view
-  keeps its actual identity and cannot be presented as the failed target's content.
+  stays an explicit problem for that destination. A failure ends the outgoing
+  view: the canvas shows the requested destination's failure, never the
+  previous content.
 
 Docs shown alone retain their reading presentation; they do not acquire an
 artboard label or selection border. Docs beside explicitly composed artboards use
@@ -85,10 +86,16 @@ The breadcrumb may identify the requested destination while its artboard is pend
 | Time or outcome | Canvas presentation |
 | --- | --- |
 | Pick begins | Keep the outgoing artboard or Docs viewport visible, with its existing label, geometry, camera, reading mode and reference; make it inert |
-| Destination ready before 200 ms | Swap to its ready content and metadata immediately, with no loading message |
+| Destination settled before 200 ms | Swap to its content and metadata immediately, with no loading message |
 | Still pending at 200 ms | Conceal the outgoing view and show **Loading preview…**; it no longer contributes visible artboards to reference/context publication |
-| Ready after the deadline | Replace loading feedback with the ready destination and its metadata |
-| Failure | End the grace period and show the destination's failure without outgoing pixels under its label |
+| Settled after the deadline | Replace loading feedback with the destination and its metadata |
+| Failure | Show the requested destination's failure under its label, with no outgoing pixels: the destination's problem when it failed as a whole, or each failed slot's problem in its own slot beside its ready neighbors |
+
+A destination is settled when every one of its slots is settled. A slot is one
+artboard of the destination: the implicit artboard of an ordinary page, or each
+artboard a scenario declares. A slot settles when its content is ready or it
+has failed. A destination that fails as a whole, such as one whose page,
+definition or lens cannot be resolved, settles at once as failed.
 
 The 200 ms period starts at each new selection, including a selection whose story
 metadata is still being resolved. It delays feedback, never the rendering work or
@@ -99,8 +106,10 @@ and invalidate older readiness/error callbacks. A view already concealed at a
 deadline is not resurrected by another pending pick. Completion, clear, failure
 and disposal release pending deadlines and transient outgoing renderers.
 
-Only a complete ready declared-artboard group is published as the replacement;
-creating the expected instances alone does not establish content readiness.
+A declared-artboard group is published as the replacement once every slot has
+settled, with each failed slot showing its own problem; one failed artboard
+never hides its neighbors. Until then the 200 ms rule above applies to the group
+as a whole. Creating the expected instances alone does not establish readiness.
 Pending renderers must already have a correctly sized layout viewport. The
 canvas supplies invisible, inert staging slots independently of the displayed
 state. It cannot defer all slot creation or use `display:none` until readiness:
@@ -113,7 +122,9 @@ replacement commits, then are disposed. This transition does not authorize an
 unbounded pool of outgoing runtimes.
 
 Screenshots and handoffs remain unavailable throughout pending navigation, even
-when outgoing pixels are visible. The canvas reference and agent context describe
+when outgoing pixels are visible. A published group with failed slots is
+captured under the [capture contract](../review/capture.md#what-is-captured):
+failed slots become explicit placeholders. The canvas reference and agent context describe
 the displayed outgoing view during the grace period, then no visible artboards
 while loading feedback is shown, then the committed replacement. Incoming labels,
 sizes, automatic camera fitting and reading mode must not be applied to the
@@ -156,16 +167,17 @@ reconciled by explicit calls such as `present()` and per-owner sequence counters
 | `id` | Opaque identity of the current navigation |
 | `requested` | The destination being navigated to: page, scenario, lens, example, declared artboards and the iteration selected for each declared or implicit artboard |
 | `displayed` | The destination and navigation `id` whose content is presented, or `null` |
+| `slots` | For the current `id`, each slot of `requested` and its state: `pending`, `ready` with its view, or `failed` with its problem |
 | `phase` | `idle`, `pending`, `loading`, `shown` or `failed` |
-| `problem` | The failure message when `phase` is `failed` |
+| `problem` | The destination's own failure message when it failed as a whole |
 
 | Phase | Meaning | Canvas presentation |
 | --- | --- | --- |
 | `idle` | Nothing requested yet | Empty canvas |
-| `pending` | Requested, inside the grace period | Outgoing view retained and inert |
-| `loading` | Requested, grace period elapsed | **Loading preview…**, no outgoing pixels |
-| `shown` | Requested content is ready and displayed | Requested content, interactive |
-| `failed` | The requested destination failed | Its failure, no outgoing pixels |
+| `pending` | Requested, inside the grace period, a slot still pending | Outgoing view retained and inert |
+| `loading` | Requested, grace period elapsed, a slot still pending | **Loading preview…**, no outgoing pixels |
+| `shown` | Every slot settled and at least one ready | Ready slots interactive; each failed slot shows its problem in place |
+| `failed` | The destination failed as a whole, or every slot failed | The destination's problem, or each slot's problem in place; no outgoing pixels |
 
 Requested and displayed are separate fields, as [navigation feedback](#navigation-feedback)
 requires. A displayed artboard matches `requested` only when it also shows the
@@ -183,8 +195,13 @@ receives settled values only.
 | --- | --- | --- |
 | `picked(destination)` | Sidebar, route, editor | New `id`; `requested` set; `pending` |
 | `deadline(id)` | Grace timer | `pending` → `loading` when `id` is current |
-| `ready(id, view)` | Renderer | `shown`, `displayed` = view, when `id` is current |
-| `failed(id, problem)` | Renderer or activation | `failed` when `id` is current |
+| `ready(id, slot, view)` | Renderer | The slot becomes `ready`, when `id` is current |
+| `failed(id, slot, problem)` | Renderer | The slot becomes `failed`, when `id` is current |
+| `failed(id, problem)` | Activation | The destination fails as a whole: `failed`, when `id` is current |
+
+When the last pending slot settles, the navigation leaves `pending` or
+`loading`: to `shown`, with `displayed` set to the destination, if any slot is
+ready, otherwise to `failed`.
 | `navigated(from, id, destination)` | Renderer, after a link or form inside the preview | Adopted as the current navigation when `from` is current |
 | `captureStarted` / `captureEnded` | Review | Input blocked for the capture's duration |
 
@@ -211,15 +228,17 @@ messages that carry navigation identity:
 
 These hold after every event, in any order:
 
-1. When `phase` is `shown`, `displayed.id` equals `id` and `displayed`
-   matches `requested`.
+1. When `phase` is `shown`, `displayed.id` equals `id`, every slot is settled,
+   and every ready slot's view matches its slot of `requested`.
 2. An event carrying a non-current `id` returns an empty patch.
 3. The canvas accepts input if and only if `phase` is `shown` or `failed` and no
    capture is running.
-4. In `loading` and `failed`, no outgoing content is presented.
-5. A navigation that receives `ready` or `failed` for its `id` leaves
-   `pending` and `loading`; a link followed inside the preview, once reported,
-   reaches `shown` or `failed` the same way as a pick.
+4. In `loading`, `shown` and `failed`, no outgoing content is presented.
+5. A navigation leaves `pending` and `loading` exactly when every slot has
+   settled or the destination has failed as a whole; a link followed inside the
+   preview, once reported, settles the same way as a pick.
+6. A failed slot never removes, hides or blocks a ready slot of the same
+   destination.
 
 Transition tests drive generated event sequences through these invariants.
 Browser regressions through the shell and renderer cover the discoveries below.

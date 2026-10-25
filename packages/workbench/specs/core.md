@@ -169,7 +169,8 @@ stays unchanged by this refactor.
 - Config and catalog discovery show **Loading pages…**. Sidebar selection updates
   immediately. Preview navigation follows the [200 ms grace period](system/rendering-flow.md#navigation-feedback):
   retain the outgoing view under its settled labels and context until the target
-  is ready or the deadline expires, then swap or show **Loading preview…**.
+  settles (ready, or failed) or the deadline expires, then swap or show
+  **Loading preview…**. A failure never leaves the outgoing view on screen.
   The first preview uses the same delayed loader without outgoing content.
   The shell owns application loading status. Loading indicators honor reduced motion.
 - The size switcher uses the space's ordered sizes and each page's supported

@@ -207,13 +207,12 @@ those proposals do not reopen established support-API limits.
   transition; background and layout authored by preview content remain its own.
   Capabilities such as controls and input differ by content type; the shell
   must not assume every artboard has an iframe, DOM, controls, or input.
-- Distinguish the requested view from the settled view. An outgoing preview
-  may remain visible while replacement loads, but its image must not be
-  labelled as the new page. Capture and context carry the actual rendered
-  identity plus any pending request. A failed replacement may preserve a usable
-  outgoing view only under its actual identity and must name the failed target;
-  otherwise it shows a named problem. A first-load failure has a named
-  placeholder and Retry.
+- Distinguish the requested view from the settled view, as
+  [navigation](../system/rendering-flow.md#navigation-feedback) defines: an
+  outgoing preview stays visible, inert and under its own label only during the
+  200 ms grace period; capture is unavailable until the replacement settles. A
+  failed replacement ends the outgoing view and shows the requested view's
+  named problem with Retry, in that artboard only.
 - Duplicate creates a fresh renderer and copies only space/view/size
   descriptors, with default controls and no copied annotations. Independent
   iframe state does not imply independent cookies, storage, backend state,
