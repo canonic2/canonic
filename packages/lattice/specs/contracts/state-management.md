@@ -464,7 +464,11 @@ identity and removal were identical. It cost about 84% more memory per item
 and 30% more teardown time, beyond the thresholds set before the run; a
 collection-wide value derived over the items stays linear in the collection;
 and an update to many items is observable part-way through. The result was
-mixed, so no shape is adopted yet.
+mixed, so no shape is adopted yet. A follow-up found that a bulk update of the
+field a collection-wide value reads rederives that value once per item:
+updating every item's `done` at 1,000 items took about 5× the shared map's
+time. The extra memory is almost entirely the item stores themselves, about
+520 bytes each.
 
 ## Phases and transitions
 

@@ -186,6 +186,38 @@ states which costs store per item adds, and the contract stays open with that
 evidence. If condition 1 or 6 fails, store per item is not supported. In every
 case the contract stays open until the owner decides.
 
+### Stage 3 follow-up: memory attribution and bulk done updates (2026-10-25, before any follow-up run)
+
+The owner asked, after stage 3, to attribute store per item's extra memory
+and to measure bulk updates of `done` before accepting those costs or
+considering keyed subscriptions.
+
+**Bulk done updates.** Both capabilities gain `setDoneMany(ids, done)`: one
+commit with the shared map, one commit per item with stores per item, under
+the same rules as `setLabels`. Workloads at 10, 100 and 1,000 items: a bulk
+done update of 10 items and of every item. Before each measured set, an
+untimed call sets the chosen items to not done; measured calls then alternate
+done and not done, so every call changes every chosen item. Measures: CPU time
+per call (15 pages, 5 warmup and 10 measured rounds), steady-state bytes per
+bulk update of every item (10 pages), and counted DOM effects, open-count
+derivations and summary text writes per call, with the rows and open count
+checked against the bench's model after each (3 pages). Expected: stores per
+item derive the open count once per changed item, so a bulk update of every
+item costs work proportional to N², and the summary text is written once per
+commit, showing the partly applied update. Reading: the result is reported
+against stage 3's condition 2, at most twice the shared map's time at any
+size, and the record states whether that condition still holds when the bulk
+update changes the field the collection-wide value reads.
+
+**Memory attribution.** Diagnostic variants, never adopted: 1n and 3n are
+variants 1 and 3 without the summary binding. A bare-store cell creates N
+stores holding `label` and `done`, with no bindings, and keeps them. JavaScript
+heap per item after garbage collection, mounted minus empty, for 1, 1n, 3, 3n
+and bare stores at 10, 100 and 1,000 items, 10 pages each. Variant 3 minus 3n,
+less the shared map's single summary subscription (1 minus 1n), gives the
+summary binding's per-item cost; 3n minus 1n gives the cost of the item
+stores in the collection; the bare-store cell gives a store's own size.
+
 ### Host and tools
 
 The same machine and tools as the full-flow lab. Background load is recorded
@@ -210,6 +242,16 @@ with each set.
 | Background load | 1-minute load average 7 to 9 during timing and counted; memory began at 9 and ended at 45, which affects heap and allocation figures less than timings |
 | Samples | Timing: 15 pages per variant and size; memory and allocations: 10; counted: 3. No page errored |
 | Measured source | Lattice as committed with bulk compaction, unchanged in both variants, plus the lab's two capabilities, bindings, summary bindings, reconciler and runner, hashed in each report |
+
+### Stage 3 follow-up (2026-10-25)
+
+| Item | Value |
+| --- | --- |
+| Dates | Timing 01:41–01:43 UTC, counted 01:43, memory 01:43–01:45 |
+| Host and tools | As stage 1 |
+| Background load | 1-minute load average 49 falling to 28 during timing, the busiest of these runs; 19 to 25 for counted and memory |
+| Samples | Timing: 15 pages per variant and size; memory: 10 per variant and size, for variants 1, 1n, 3 and 3n; counted: 3. No page errored |
+| Measured source | As stage 3, with `setDoneMany` in both capabilities and the summary binding switchable for the diagnostic variants |
 
 ## Results
 
@@ -342,6 +384,48 @@ created and removed, observers attached and disconnected.
   summary binding's subscription and controller for its `done`; this lab did
   not attribute the bytes between them.
 
+### Stage 3 follow-up: memory attribution and bulk done updates (2026-10-25)
+
+**Bulk done updates**, medians across pages:
+
+| Measure | Items | Shared map | Store per item | Ratio | Meaningful |
+| --- | --- | --- | --- | --- | --- |
+| Bulk done update of 10 items, µs | 10, 100, 1,000 | 21.4, 40.6, 356 | 29.0, 43.1, 189 | 1.36×, 1.06×, 0.53× | Yes |
+| Bulk done update of every item, µs | 10, 100, 1,000 | 20.6, 240, 4,245 | 28.0, 443, 21,065 | 1.35×, 1.84×, 4.96× | Yes |
+| Bytes allocated per bulk done update of every item | 10, 100, 1,000 | 928, 7,874, 79,808 | 1,448, 16,285, 162,512 | 1.56×, 2.07×, 2.04× | Yes |
+
+Per call, a bulk done update of k items made the same row DOM effects in both
+variants. The shared map read 2N selections, derived the open count once and
+wrote the summary text once. Stores per item read 2k selections, derived the
+open count k times, each over every item, and wrote the summary text k times:
+every intermediate count was written to the DOM during the synchronous call.
+That does not establish that the browser painted any of them, but each write is
+unnecessary work and an intermediate state that subscribers and DOM observers
+can see. At 1,000 items, updating every
+item's `done` with stores per item did about 1,000 derivations over 1,000
+items, 21 ms against 4.2 ms.
+
+**Memory attribution**, JavaScript heap per item, medians across 10 pages:
+
+| Items | 1. Shared map | 1n. Without summary | 3. Store per item | 3n. Without summary | Bare store |
+| --- | --- | --- | --- | --- | --- |
+| 100 | 922 | 920 | 1,693 | 1,434 | 527 |
+| 1,000 | 811 | 806 | 1,486 | 1,335 | 521 |
+
+At 10 items every variant varies by about 550 bytes between pages, too coarse
+to attribute. At 100 and 1,000 items, of the 675 to 770 bytes per item store
+per item adds:
+
+- **the item store**, 3n minus 1n: 514 and 529 bytes, matching a bare store
+  holding the same two fields, 527 and 521 bytes; a store's own size is nearly
+  all of it, and the row bindings cost the same whichever store they watch;
+- **the summary binding's per-item subscription and controller**, 3 minus 3n
+  less the shared map's single summary subscription: 257 and 146 bytes.
+
+Teardown time was not attributed; the extra subscription and controller per
+item, and releasing a store per item, are the only per-item differences in
+teardown.
+
 ## Correctness
 
 | Variant | Counted pages | Failed checks |
@@ -375,6 +459,13 @@ The first smoke run failed teardown in both variants: the bench's identity
 snapshot still held the rows. Clearing it on unmount fixed the runner; no
 variant changed.
 
+### Stage 3 follow-up
+
+Both variants passed every check on 9 counted pages each: after each bulk
+done update the rows and open count matched the bench's model and every row
+kept its element, and after teardown listener and node counts returned to
+their baseline.
+
 ## Threats to validity
 
 - The rows reuse an element with three inputs; heavier rows dilute the
@@ -390,6 +481,10 @@ variant changed.
   both variants.
 - Heap per item at 10 items varies by about 550 bytes between pages in both
   variants, the heap's measurement granularity at that size.
+- The follow-up's timing set ran under the heaviest background load of these
+  labs, a load average of 49 falling to 28; its deciding ratio, about 5× at
+  1,000 items, is far outside the interquartile ranges, and it matches the
+  counted derivations.
 
 ## Decision and follow-ups
 
@@ -436,3 +531,16 @@ meets the contract's update requirements with the current API, at about
 that stays linear in the collection, and bulk updates that are observable
 part-way and allocate twice as much. The collection contract stays open until
 the owner decides.
+
+**Stage 3 follow-up.** Condition 2 does not hold when a bulk update changes
+the field a collection-wide value reads: updating every item's `done` takes
+1.35×, 1.84× and 4.96× the shared map's time at 10, 100 and 1,000 items, and
+the ratio grows with the collection, because each per-item commit rederives
+the value over every item. Updates to a small subset stay within the bar and
+become cheaper than the shared map at 1,000 items. The extra memory is almost
+entirely the item stores themselves, about 520 bytes each, with 150 to
+260 bytes more for the summary binding's per-item subscription. Store per item
+therefore costs, beyond stage 3's findings, quadratic bulk updates of any
+field a collection-wide value derives from, unless that value is maintained
+some other way, and its memory cost is a store's own size. The collection
+contract stays open until the owner decides.
