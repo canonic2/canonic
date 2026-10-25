@@ -40,8 +40,9 @@ including replacement inside one batch. Rows are not recycled.
 
 Composition's completed-range guard includes membership revision and focused key.
 Membership delivery invalidates it even when key strings are unchanged.
-Changing the viewport height invalidates geometry. Bindings continue to update
-item inputs without range reconciliation.
+Range and keyboard-scroll calculations read the current viewport height before
+using geometry, independently of resize-observer delivery order after reconnect.
+Bindings continue to update item inputs without range reconciliation.
 
 Temporary disconnection releases host listeners and the list's geometry observer;
 it retains inputs, nodes and drafts. Atomic `moveBefore` moves preserve the

@@ -133,8 +133,9 @@ export class TaskList extends HTMLElement {
   focusedKey() { return this.#activeKey() ?? this.#focus; }
   /** @returns {string | undefined} Item at the viewport's top edge. */
   get firstVisibleKey() { return this.#keys[Math.floor(this.viewport.scrollTop / ROW_HEIGHT)]; }
-  /** @returns {{ start: number, end: number, focus: string | null }} Requested range; reads geometry without acquiring resources. */
+  /** @returns {{ start: number, end: number, focus: string | null }} Requested range from current geometry, independent of observer delivery order. */
   range() {
+    this.viewportHeight = this.viewport.clientHeight;
     const top = Math.floor(this.viewport.scrollTop / ROW_HEIGHT);
     return { start: this.#windowed ? Math.max(0, top - OVERSCAN) : 0,
       end: this.#windowed ? Math.min(this.#keys.length, top + Math.ceil(this.viewportHeight / ROW_HEIGHT) + OVERSCAN) : this.#keys.length,
@@ -158,6 +159,7 @@ export class TaskList extends HTMLElement {
   /** Make a destination visible; composition mounts it before `focusRow`. @param {string} key Destination. @returns {void} */
   scrollToKey(key) {
     const index = this.#keys.indexOf(key); if (index < 0) return;
+    this.viewportHeight = this.viewport.clientHeight;
     const first = Math.floor(this.viewport.scrollTop / ROW_HEIGHT), visible = Math.max(1, Math.floor(this.viewportHeight / ROW_HEIGHT));
     if (index < first) this.viewport.scrollTop = index * ROW_HEIGHT;
     else if (index >= first + visible) this.viewport.scrollTop = (index + 1) * ROW_HEIGHT - this.viewportHeight;

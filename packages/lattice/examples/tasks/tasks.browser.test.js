@@ -70,6 +70,51 @@ test('temporary detach and atomic moves keep rows, drafts and one connection', a
   expect(choose).toHaveBeenCalledTimes(1);
 });
 
+test('resize after reconnect reconciles current geometry before the viewport observer runs', async () => {
+  const NativeObserver = ResizeObserver;
+  /** @type {string[]} */
+  const deliveries = [];
+  vi.stubGlobal('ResizeObserver', class extends NativeObserver {
+    /** Record native delivery order without changing its scheduling. @param {ResizeObserverCallback} callback Owner callback. */
+    constructor(callback) {
+      super((entries, observer) => {
+        deliveries.push(entries.some(entry => entry.target instanceof TaskList) ? 'composition' : 'viewport');
+        callback(entries, observer);
+      });
+    }
+  });
+  const { list, host, render } = mount(), pinned = row(list, 't1'), input = editor(pinned);
+  input.focus(); input.value = 'Draft'; list.viewport.scrollTop = 100 * ROW_HEIGHT; render();
+  await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  list.remove(); host.append(list);
+  await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  // Establish the same scrolled window after the browser's detach scroll reset.
+  list.viewport.scrollTop = 100 * ROW_HEIGHT; render();
+  await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  const retained = row(list, 't100');
+  deliveries.length = 0;
+  list.viewport.style.height = '960px';
+  await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  expect(deliveries.slice(0, 2)).toEqual(['composition', 'viewport']);
+  expect(list.viewport.scrollTop).toBe(100 * ROW_HEIGHT);
+  expect(list.rows.has('t129')).toBe(true); expect(list.rows.size).toBe(39);
+  expect(row(list, 't100')).toBe(retained); expect(row(list, 't1')).toBe(pinned); expect(input.value).toBe('Draft');
+  list.viewport.style.height = '320px';
+  await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+  expect(list.rows.has('t129')).toBe(false); expect(list.rows.size).toBe(19);
+  expect(row(list, 't100')).toBe(retained); expect(row(list, 't1')).toBe(pinned); expect(input.value).toBe('Draft');
+});
+
+test('keyboard destinations use resized geometry before observer delivery', () => {
+  const { list, render, focusKey } = mount();
+  list.viewport.scrollTop = 100 * ROW_HEIGHT; render();
+  list.viewport.style.height = '320px'; focusKey('t114');
+  const destination = row(list, 't114');
+  expect(list.shadowRoot?.activeElement).toBe(destination);
+  expect(list.viewport.scrollTop).toBe(115 * ROW_HEIGHT - 320);
+  expect(destination.getBoundingClientRect().bottom).toBeLessThanOrEqual(list.viewport.getBoundingClientRect().bottom);
+});
+
 test('an ancestor removing the list before its queued connection prevents acquisition', () => {
   mount(1);
   const name = `acme-removing-parent-${upgradeId++}`, list = new TaskList();
