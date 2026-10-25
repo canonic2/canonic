@@ -2,9 +2,15 @@
 
 This topic owns what Workbench remembers, its scope, and how a canvas opens
 after a reload or restart. [Core](../core.md#selection-and-navigation) owns routing;
-[VS Code](../integrations/vscode-extension.md) owns editor integration. These requirements are
-agreed for implementation; [current status](#current-status) distinguishes the
-existing storage from the required restoration behavior.
+[VS Code](../integrations/vscode-extension.md) owns editor integration.
+
+**Status:** implemented: the first-page fallback when no destination is given
+(including space switches), saving the current space and added spaces in the
+extension, and viewer preferences in browser `localStorage`. Agreed but not
+implemented: saved-selection restoration, the scoped selection record, browser
+IndexedDB storage, editor preferences in `workspaceState` and panel restoration
+through the editor lifecycle; see [implementation gaps](#implementation-gaps).
+The concurrent-viewer conflict policy is unresolved.
 
 ## Opening a canvas
 
@@ -199,21 +205,17 @@ close/reopen, **Developer: Reload Window**, full editor restart and port changes
 in installed VS Code. Existing navigation tests do not establish these new
 restart guarantees. Browser persistence needs separate host evidence.
 
-## Current status
+## Implementation gaps
 
-The extension saves the current space in `workspaceState` and added spaces in
-`globalState`. Viewer preferences currently use browser `localStorage`, scoped
-to the served origin. The canvas URL holds the current view; the panel keeps
-only in-memory selection and uses `retainContextWhenHidden`. These do not
-implement durable complete-selection restoration or stable preference storage
-across port changes. A canvas without an explicit destination opens the first
-page from the resolved collections, including on space switches; imported
-implementation-only pages open their first named scenario. Config refresh does not
-reapply this fallback.
+The extension saves only the current space (`workspaceState`) and added spaces
+(`globalState`). The canvas URL holds the current view; the panel keeps only
+in-memory selection and uses `retainContextWhenHidden`. Viewer preferences use
+browser `localStorage`, scoped to the served origin, so they do not survive a
+port change. Imported implementation-only pages reached by the first-page
+fallback open their first named scenario.
 
-Implementation must add a scoped complete-selection record, extend the host
-relay, restore the panel through the editor lifecycle, and add saved-selection
-restoration before the first-page fallback. Browser mode must add native IndexedDB for
-selection and preference records; editor preferences must move to `workspaceState`.
-Cross-origin browser migration is excluded and arrangement persistence remains
-unresolved.
+- No scoped complete-selection record, and the host relay does not carry one.
+- No saved-selection restoration before the first-page fallback, and no panel
+  restoration through the editor lifecycle.
+- Browser mode has no IndexedDB selection or preference records.
+- Editor viewer preferences are not in `workspaceState`.

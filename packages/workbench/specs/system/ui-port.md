@@ -1,15 +1,15 @@
 # Browser UI port
 
-**Status:** target layout agreed; the port has not started. The whole browser
-UI, `ui/legacy/` included, moves to this layout and to Lattice
-(`@canonic2/lattice`) for application state.
-[Modules](modules.md#browser-source-layout) describes what ships today.
-Iteration UI and other new interface work on the ported areas start after the
-port completes.
-
-This page owns the target layout, the order of the port and its delivery. The
+The whole browser UI, `ui/legacy/` included, moves to this layout and to
+Lattice (`@canonic2/lattice`) for application state. Iteration UI and other new
+interface work on the ported areas start after the port completes. This page
+owns the target layout, the order of the port and its delivery. The
 [navigation store](../canvas/navigation-store.md) owns the design of the first
 store the port introduces; each capability's own spec keeps its behavior.
+[Modules](modules.md#browser-source-layout) describes the shipping layout.
+
+**Status:** agreed, not implemented: neither the Lattice delivery slice nor any
+port step has started; see [implementation gaps](#implementation-gaps).
 
 ## Target layout
 
@@ -259,8 +259,7 @@ Later steps add a row before introducing an adapter.
 
 ## Lattice delivery slice
 
-**Status:** planned, not started. Before any UI code depends on Lattice, one
-narrow change establishes that its modules reach every Workbench document that
+Before any UI code depends on Lattice, one narrow change establishes that its modules reach every Workbench document that
 will import them. The slice changes module delivery only: no navigation,
 canvas or other behavior changes, and no store is used yet.
 
@@ -301,3 +300,11 @@ canvas or other behavior changes, and no store is used yet.
 | Packaged launch | The installed extension, run without the source checkout, loads all three documents and their Lattice imports |
 
 The navigation store's adoption starts only after this slice is in place.
+
+## Implementation gaps
+
+- The Lattice delivery slice: Workbench does not depend on, serve or package
+  Lattice, and none of the evidence above exists.
+- Every port step: the browser UI ships in the
+  [current layout](modules.md#browser-source-layout), with most of the
+  interface in `ui/legacy/`.

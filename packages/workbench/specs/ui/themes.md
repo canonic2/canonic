@@ -1,20 +1,19 @@
 # Workbench themes
 
-## Purpose and status
+## Purpose
 
 Workbench's interface has a complete default theme and can inherit its host's
 theme. In VS Code it follows the active theme, including user color overrides.
 In a standalone browser it remains usable without any VS Code variables or API.
 The same [Web Components](web-components.md) serve both environments.
 
-**Status:** shared tokens and migrated controls implemented.
-`ui/src/theme/defaults.css` supplies the tokens of every migrated control: the
-space switcher and space mark, the size switcher with Custom size and Edit sizes,
-the Actions switch, the canvas presentation and the export dialog, including the
-selected segment, error text and primary button roles, and direct
-webview host mappings. The sidebar maps host roles for its controls; the canvas continues
-to use its existing palette. The canvas theme bridge and full-shell migration
-remain implementation gaps.
+**Status:** shared tokens with standalone defaults and direct-webview host
+mappings are implemented in `ui/src/theme/defaults.css` for every migrated
+control: the space switcher and space mark, the size switcher with Custom size
+and Edit sizes, the Actions switch, the canvas presentation and the export
+dialog. The sidebar maps host roles for its controls. The canvas theme snapshot
+bridge and theming of the rest of the canvas shell are agreed but not
+implemented; see [evidence and implementation gaps](#evidence-and-implementation-gaps).
 
 ## Tokens and default behavior
 
@@ -137,14 +136,14 @@ accent colors; interactive control states use the host's semantic roles.
 
 ## Evidence and implementation gaps
 
-Current source boundaries:
+Implementation gaps:
 
-- [sidebar.css](../../ui/legacy/sidebar.css) already maps panel/text variables but
-  uses fixed blue accents and derived shades.
-- [workbench.css](../../ui/legacy/workbench.css) defines the canvas shell's fixed
+- [sidebar.css](../../ui/legacy/sidebar.css) maps panel/text variables but
+  uses fixed blue accents and derived shades instead of semantic host roles.
+- [workbench.css](../../ui/legacy/workbench.css) gives the canvas shell a fixed
   palette and forces `color-scheme: dark`.
 - [panel.js](../../extension/panel.js) embeds the server canvas as a separate-origin iframe;
-  its current message bridge does not forward theme values.
+  its message bridge does not forward theme snapshots.
 
 Platform references:
 

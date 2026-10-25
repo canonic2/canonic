@@ -1,9 +1,13 @@
 # Code quality
 
-Status: implemented engineering baselines for the JavaScript UI, native Rust server and
-Node integration. Passing these checks is distinct from meeting the
-[performance targets](performance.md#measured-interactions)
-or establishing installed-host acceptance.
+**Status:** implemented: the browser UI gate, the native Rust gates, Node
+integration tests and the workflows that run them. Outside the UI lint/format
+baseline: legacy shell JavaScript, preview adapters and the portable viewer;
+remaining structure and lifecycle debt is in
+[structure review and remaining gaps](#structure-review-and-remaining-gaps).
+Passing these checks is distinct from meeting the
+[performance targets](performance.md#measured-interactions) or establishing
+installed-host acceptance.
 
 ## Scope and ownership
 
@@ -68,14 +72,12 @@ pushes to `main`; extension releases also run it before packaging. Legacy shell
 JavaScript, preview adapters and the portable viewer remain outside this UI
 lint/format baseline. Their existing product tests still run through `pnpm test`.
 Passing the UI gate does not establish architectural conformance of those surfaces.
-It also does not establish [UI/backend independence](modules.md#ui-and-backend-independence):
-component fixtures serve authored JavaScript/CSS directly without backend/compiler
-imports. That proves standalone component hosting; complete application/API
-independence still needs its own acceptance.
-Browser canvas acceptance rejects application document/module requests inside
-content and inspects child markup; that assertion failed against the shell-backed
-renderer. [Rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps)
-records the remaining independent-host and live adapter verification scope.
+Component fixtures serve authored JavaScript/CSS directly without backend/compiler
+imports, which establishes standalone component hosting, not
+[UI/backend independence](modules.md#implementation-gaps). Browser canvas
+acceptance rejects application document/module requests inside content and
+inspects child markup; [rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps)
+owns its scope.
 
 ### Structure review and remaining gaps
 
@@ -96,12 +98,9 @@ hooks, JSX lint rules and native-platform runners do not apply.
 | Lifecycle and dependencies | Controllers expose runtime/disposal ports, and migrated elements release connection resources. Global shell APIs, event interception and renderer polling remain integration debt |
 
 Preserve the existing visible controls and warm preview sessions during migration.
-The JavaScript modules own navigation, retention and review workflows through
-explicit ports; the legacy chrome adapter owns current DOM control wiring.
-The content-only renderer preserves retained Storybook sessions and the outer UI.
-Frame lifecycle, native surfaces and annotation internals remain bounded legacy
-modules; their further separation must preserve destination sizing, docs presentation
-and capture behavior. The detailed contracts remain in [modules](modules.md),
+Further separation of the frame lifecycle, native surfaces and annotation
+internals must preserve destination sizing, docs presentation and capture
+behavior. The detailed contracts remain in [modules](modules.md),
 [Web Components](../ui/web-components.md), [docs](../pages/docs-pages.md) and
 [warm runtime](../preview-pipeline/warm-runtime.md).
 
@@ -182,8 +181,7 @@ Lattice (`@canonic2/lattice`) is the agreed dependency for application state
 rationale: it is a local, zero-dependency package of native ES modules that
 hosts serve and package unchanged, with no build step, and it supplies the
 store, capability and element contracts the port uses. Its delivery follows
-the [Lattice delivery slice](ui-port.md#lattice-delivery-slice); it is not
-yet shipped.
+the [Lattice delivery slice](ui-port.md#lattice-delivery-slice).
 
 Keep project framework packages separate from Workbench UI dependencies:
 adapters resolve the project's React/Vue/Astro packages under their contracts.

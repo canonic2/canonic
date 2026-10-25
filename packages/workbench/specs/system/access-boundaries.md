@@ -1,9 +1,14 @@
 # Local access and execution boundaries
 
-Status: this topic records implemented boundaries and the limits of existing
-assurances. It is not a new authentication scheme or a claim that project code
-is sandboxed. [Server](server.md) owns transport/process lifecycle;
+This topic records the access boundaries and the limits of their assurances.
+It is not an authentication scheme or a claim that project code is sandboxed.
+[Server](server.md) owns transport/process lifecycle;
 [VS Code](../integrations/vscode-extension.md#workspace-trust) owns workspace trust.
+
+**Status:** implemented: the boundaries below as described. Undecided policy:
+uniform origin/Host validation of mutation routes, symlinks and dotfiles in
+static serving, and authentication for a remote or shared server; see
+[verification and unresolved policy](#verification-and-unresolved-policy).
 
 ## Execution and origins
 

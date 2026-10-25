@@ -8,6 +8,11 @@ Selection, addresses, and lens persistence are in [core.md](../core.md); URL
 implementations, code pointers, and the page compatibility script are in
 [implementations.md](implementations.md).
 
+**Status:** title mapping, story lookup, channel switching with its navigation
+fallback, retained Storybook sessions, capture and export are implemented. A
+stopped or failed Storybook is not reported in `problems` up front; see
+[current gaps](#current-gaps).
+
 ## Configuration
 
 The keys, their validation, and examples are in the
@@ -117,7 +122,7 @@ Storybook renders as [content only](../system/rendering-flow.md): a dedicated re
 loads its proxied `iframe.html`, never Workbench's application `index.html`.
 Changing or returning to a story preserves the retained Storybook content
 document/channel where allowed; retaining a nested Workbench shell is not the
-mechanism. Add checks for absence of application startup before claiming this boundary.
+mechanism.
 
 - A screenshot of a story captures the live story, including opened modals,
   typed text, and scroll, with no Storybook changes: the
@@ -181,3 +186,5 @@ mechanism. Add checks for absence of application startup before claiming this bo
   and rendering, failure/retry and
   empty selection, editor acknowledgements, superseded picks, hidden cold
   startup and Reload.
+- No check yet verifies that the Storybook renderer never starts Workbench's
+  application; add one before claiming the content-only boundary.

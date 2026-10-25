@@ -1,15 +1,20 @@
 # Navigation
 
-Status: implemented, with the browser regression below. This topic owns how the
-shell moves from one destination to the next: the requested destination versus
-the displayed one, the 200 ms grace period, pending, loading and failed
-presentation, settling per slot, group publication, and capture, handoff and
-context while navigation is pending. The [navigation store](navigation-store.md)
-specifies the agreed state design that will hold these rules. The
-[rendering flow](../system/rendering-flow.md) owns the shell/content boundary,
-[readiness](../preview-pipeline/readiness.md) owns when content counts as ready,
-and the [warm runtime](../preview-pipeline/warm-runtime.md#retained-sessions)
-owns which sessions stay alive between destinations.
+This topic owns how the shell moves from one destination to the next: the
+requested destination versus the displayed one, the 200 ms grace period,
+pending, loading and failed presentation, settling per slot, group publication,
+and capture, handoff and context while navigation is pending. The
+[navigation store](navigation-store.md) specifies the state design that holds
+these rules. The [rendering flow](../system/rendering-flow.md) owns the
+shell/content boundary, [readiness](../preview-pipeline/readiness.md) owns when
+content counts as ready, and the
+[warm runtime](../preview-pipeline/warm-runtime.md#retained-sessions) owns which
+sessions stay alive between destinations.
+
+**Status:** implemented in the current shell controllers. Not implemented:
+holding these rules in the [navigation store](navigation-store.md), and a fix
+for the two failures recorded under [discoveries](#discoveries); see
+[implementation gaps](#implementation-gaps).
 
 ## Navigation feedback
 
@@ -128,6 +133,15 @@ and group readiness. Preview-session tests cover transient outgoing retention an
 cleanup. The host's [browser regression](../../server/node/src/modules/host/navigation.test.ts)
 exercises sidebar selection, outgoing pixels/labels/reference, ready commit,
 deadline loading, late readiness and failure through the actual shell and renderer.
+
+## Implementation gaps
+
+- Navigation state is not held in the [navigation store](navigation-store.md);
+  its rules are spread across the shell, controllers and renderer.
+- The [discoveries](#discoveries) have no browser regression. The link-freeze
+  is fixed in the canvas bootstrap, which adopts the artboard's destination
+  after a link inside a preview; the blank Docs viewport after rapid collection
+  switches has not been reproduced or traced.
 
 ## Discoveries
 

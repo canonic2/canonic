@@ -4,10 +4,16 @@ This topic owns the product's parts, their dependency direction and the
 UI/backend boundary. The [browser UI port](ui-port.md) owns the target browser
 layout and its migration; [server](server.md) owns the process model.
 
+**Status:** implemented: the product parts, dependency direction, unchanged UI
+asset delivery and the content-only artboard document. Not established:
+complete application loading with a fixture client, backend acceptance without
+UI files, and the remaining legacy shell separation; see
+[implementation gaps](#implementation-gaps).
+
 ## Product parts
 
 **The Workbench UI is independent of the backend. This is a required architecture
-boundary, not a description of the current implementation.**
+boundary.**
 
 The [rendering-flow contract](rendering-flow.md) defines one Workbench shell and
 content-only artboard renderers. Project-preview compilation and static UI
@@ -107,7 +113,7 @@ DOM initialization, filesystem I/O or process lifecycle.
    directions of the boundary. Directory organization or a combined package launch
    alone is insufficient evidence.
 
-#### Current state
+#### Delivery paths
 
 The combined host serves authored JavaScript/CSS and the Docs host HTML through
 [`files.rs`](../../server/src/serve/files.rs).
@@ -120,8 +126,7 @@ navigation and annotation/capture ports. Startup request and child-markup checks
 cover absence of application initialization; see
 [rendering-flow acceptance](rendering-flow.md#acceptance-and-verification-gaps).
 Component fixtures load unchanged modules without the backend or compiler.
-Complete application loading with a fixture API client and backend API acceptance
-without UI files remain unverified; combined-host checks do not prove them.
+Combined-host checks do not establish acceptance items 1 and 2.
 
 JavaScript/TypeScript capability modules use the owning part's
 `src/modules/<capability>/`; the Node host and evaluator use
@@ -182,8 +187,7 @@ The content controller separately derives renderer metadata from the project mod
 without menu DOM. `bootstrap/renderer.js` composes content, retained frame sessions,
 native surfaces and annotation/capture ports inside `content.html`.
 The frame lifecycle, native adapter and annotation internals retain JavaScript
-factories under `ui/legacy/`; renderer polling and deeper annotation separation
-remain bounded legacy debt, along with the docs/sizing acceptance gaps.
+factories under `ui/legacy/`.
 
 ## Asset and packaging checks
 
@@ -226,3 +230,11 @@ owner. No catch-all utilities module is required. Record serialization and the
 CLI protocol remain independent of internal module paths. See
 [page-index acceptance](../preview-pipeline/page-index.md#acceptance-and-evidence)
 and [code quality](code-quality.md) for the behavioral and engineering checks.
+
+## Implementation gaps
+
+- Complete application loading with a fixture API client, and backend API
+  acceptance without UI files, are unverified.
+- Renderer polling and deeper annotation separation remain bounded legacy debt
+  in `ui/legacy/`, along with the docs and sizing acceptance gaps of the
+  [rendering flow](rendering-flow.md#acceptance-and-verification-gaps).

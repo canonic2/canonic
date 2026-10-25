@@ -1,10 +1,5 @@
 # Artboards and iterations
 
-Status: agreed 2026-10-24. The model, render, address, review output and export
-are implemented; canvas presentation is not ([gaps](#implementation-gaps)).
-Iteration UI starts after the whole browser UI is ported to Lattice
-([browser UI port](../system/ui-port.md)).
-
 This topic owns the two levels below a scenario: where artboards are declared,
 what an iteration is, how both change a render, and how they are named in
 addresses, review output and agent context. The
@@ -12,6 +7,13 @@ addresses, review output and agent context. The
 [scenarios](scenarios.md) owns the level above, and
 [multiple artboards](../canvas/multiple-artboards.md) owns artboard instances on
 the canvas: their isolation, geometry and review composition.
+
+**Status:** the contract is agreed. Declared artboards, iterations, the render
+merge, addresses, review output, agent context and export are implemented.
+Canvas presentation of iterations is agreed but not implemented and starts
+after the browser UI is ported to Lattice ([browser UI port](../system/ui-port.md));
+see [implementation gaps](#implementation-gaps) for it and the other unmet
+requirements.
 
 ## Purpose
 
@@ -101,9 +103,8 @@ definePreview({
   `artboards` or `iterations`.
 - Problems name the file and the location, for example
   `previews/feedback.workbench.ts: scenario default › artboard warning: iteration id “Bold” must be kebab-case.`
-  **Requirement:** one invalid artboard or iteration does not hide its
-  scenario or its siblings ([gap](#implementation-gaps)); other previews still
-  load.
+  One invalid artboard or iteration does not hide its scenario or its
+  siblings; other previews still load.
 
 ### What an iteration changes
 

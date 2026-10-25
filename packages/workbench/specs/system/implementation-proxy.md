@@ -7,6 +7,11 @@ step in [space.rs](../../server/src/space.rs), and `upstream` in
 [lenses.js](../../ui/legacy/lenses.js). The user-facing description is
 [Embedding and sign-in](../../docs/lenses.md#embedding-and-sign-in).
 
+**Status:** implemented in `workbench-server`, including proxies for
+processes the server runs. Not supported: identity-provider sign-in, absolute
+links to the implementation's origin, live capture before the bridge connects
+and exact HTTPS origin behavior; see [implementation gaps](#implementation-gaps).
+
 ## The problem it solves
 
 A lens shows a page another server owns: a Storybook on `localhost:6006`, an
@@ -98,25 +103,13 @@ retain their implementation-specific absolute paths, and capture live user
 state. Every framed implementation uses its own proxy origin. Workbench-served
 previews and native streams use their own acquisition paths.
 
-## Current status
+`https` implementations are reached with rustls, accepting any certificate, as
+local dev servers use self-signed ones. Without the server binary,
+implementation lenses are unavailable. Acceptance on a real implementation
+includes an interaction-only state, such as an opened modal, appearing in the
+captured image without project changes.
 
-Implemented in `workbench-server`
-([proxies.rs](../../server/src/proxies.rs)): the page tree answers URL and
-Storybook implementations at their proxy addresses, and an owned
-implementation's proxy asks for its socket on its first request, starting the
-Storybook the server runs
-([processes and connections](server.md#processes-and-connections)). `https` implementations are
-reached with rustls, accepting any certificate, as local dev servers use
-self-signed ones. Without the binary, implementation lenses are unavailable.
-
-### Verified behavior
-
-The proxy and capture tests below cover transport, injection, origins and
-mirrored element names. The lens smoke scenario checks sessions and sign-in.
-Real implementation acceptance includes an interaction-only state, such as an
-opened modal, appearing in the captured image without project changes.
-
-### Known gaps
+## Implementation gaps
 
 - **Identity-provider sign-in.** An OAuth or SSO callback returns to the
   address registered with the provider, the implementation's own origin, so
@@ -153,6 +146,6 @@ opened modal, appearing in the captured image without project changes.
   to `upstream`.
 - [capture-page.test.js](../../ui/legacy/capture-page.test.js): element names from
   the mirrored copy.
-- Manual: [smoke-lenses.cjs](../../scripts/smoke-lenses.cjs) for lens iframes
-  and sessions through the proxy, and a running Storybook for an interaction-only
+- Manual: [smoke-lenses.cjs](../../scripts/smoke-lenses.cjs) for lens iframes,
+  sessions and sign-in through the proxy, and a running Storybook for an interaction-only
   state (such as an opened modal) appearing in a screenshot.

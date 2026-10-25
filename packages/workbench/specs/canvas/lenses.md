@@ -10,6 +10,10 @@ This is the shared lens contract. Rendering contracts live in
 [Storybook](../pages/storybook.md), and [docs pages](../pages/docs-pages.md). Selection and
 addresses follow [core.md](../core.md#selection-and-navigation).
 
+**Status:** implemented: configurable labels for every lens kind, authored
+defaults, docs-lens ordering and lens selection across pages. No
+implementation gaps are recorded.
+
 ## Requirements
 
 - Every lens supports a project-configured display label. This includes the

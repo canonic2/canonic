@@ -5,11 +5,15 @@ This topic owns current module ownership, state and runtime/transport contracts
 and the capability map. [Multiple artboards](multiple-artboards.md) owns product
 behavior and acceptance, [artboard management](artboard-management.md) owns the
 management proposals and delivery plan, and [modules](../system/modules.md) owns
-shared architectural rules.
-The [product contract](multiple-artboards.md#implemented-support-system)
-records support APIs, limits, verification, and remaining work. The current
-implementation composes a scenario's declared artboards inside the existing canvas region,
-preserving the shipping shell's markup, controls and layout.
+shared architectural rules. Instance limits, verification and gaps are in
+[multiple artboards](multiple-artboards.md#instance-model-and-review-limits).
+Declared artboards are composed inside the existing canvas region, preserving
+the shipping shell's markup, controls and layout.
+
+**Status:** implemented: the module boundaries below, composing a scenario's
+declared artboards in the existing shell. Not implemented: the target
+locations of the capability map and the artboard-management UI; see
+[implementation gaps](#implementation-gaps).
 
 The [rendering-flow contract](../system/rendering-flow.md) is authoritative: one application
 shell, dedicated content-only renderers, no shell bootstrap or CSS-hidden shell
@@ -45,12 +49,9 @@ The capability map and contracts
 below describe that target direction. New canvas state and its lifecycle have
 one controller owner; renderer handles never enter serializable state.
 
-Tests live with these capabilities. `scripts/smoke-canvas.cjs` exercises real
-Chrome and the packaged capture runtime through a temporary programmatic harness,
-including full handoff persistence. `smoke-canvas-ui.cjs` exercises the production
-shell, a scenario's declared artboards, ordinary scenario switching, input/size/annotation isolation, preview
-controls and composite native handoff. See the implementation record for actual native-host and
-performance verification limits.
+Tests live with these capabilities; the browser checks
+(`scripts/smoke-canvas.cjs`, `scripts/smoke-canvas-ui.cjs`) and their limits are
+mapped in [multiple artboards](multiple-artboards.md#verification).
 
 ## Standards and runtime constraints
 
@@ -76,8 +77,7 @@ performance verification limits.
 
 ## Future integration capability map
 
-Presentation of a scenario's declared artboards and existing-shell composition are implemented.
-The map below also covers deeper extraction and future artboard-management UI.
+The map covers deeper extraction and future artboard-management UI.
 
 Locations are relative to `packages/workbench/` and come from the agreed
 [target layout](../system/ui-port.md), which owns
@@ -264,8 +264,8 @@ checks. Surface server, startup, and trust failures per space/artboard.
    have bounded acquisition and forced owned-resource cleanup paths.
    On failure/cancel, release all leases and temporary output; report named
    failures, never claim success for omitted ready artboards. Loading/error
-   placeholder policy and image limits follow the implemented support contract;
-   memory budgets and any additional output formats remain delivery decisions.
+   placeholder policy and image limits follow
+   [multiple artboards](multiple-artboards.md#capture-and-handoff); memory budgets and any additional output formats remain delivery decisions.
 6. **Context:** derive a complete versioned record from the same snapshot and
    publish it under one canvas ID to participating space services. Include
    each space's artboards and all other participants, selected ID, and actual
@@ -306,9 +306,7 @@ HTML, images, or full handoff prompts.
    relay against [rendering-flow acceptance](../system/rendering-flow.md#acceptance-and-verification-gaps).
    Preserve the outer UI layout. Do not substitute a UI language/build rewrite.
 
-The remaining integration work is the
-[artboard-management delivery plan](artboard-management.md#delivery-plan).
-UI asset delivery follows [modules](../system/modules.md#current-state); preserve
+UI asset delivery follows [modules](../system/modules.md#delivery-paths); preserve
 native module resolution, CSP, resource roots and packaging while maintaining
 the content-only rendering boundary.
 
@@ -336,6 +334,12 @@ the content-only rendering boundary.
   coverage; measure memory, input responsiveness, and capture size/time before
   adopting limits. Never invent performance pass thresholds from source review.
 
-The implemented support system's evidence and host limitations are recorded in
-[multiple artboards](multiple-artboards.md#implemented-support-system).
-Future integration requirements above do not establish host acceptance.
+Host evidence and its limits are recorded in
+[multiple artboards](multiple-artboards.md#verification).
+
+## Implementation gaps
+
+- Modules keep their current paths; the capability map's target locations
+  follow the [browser UI port](../system/ui-port.md).
+- Artboard-management integration is the
+  [delivery plan](artboard-management.md#delivery-plan).

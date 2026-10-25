@@ -12,7 +12,8 @@ measurements belong to the package's [research](../../research/README.md).
 | [Server](server.md) | Rust server/host process model (evaluators, Storybook, their lifetimes, deadlines and runtime selection), protocol, request tracing, routes, resident index coordination and trust boundary |
 | [Access boundaries](access-boundaries.md) | Local execution/origin model, request authority, file/write boundaries, body bounds and unresolved access policy |
 | [Implementation proxy](implementation-proxy.md) | Loopback proxy routing, HTML/header/cookie rewriting and implementation framing |
-| [Performance](performance.md) | Agreed/proposed budgets, timed boundaries, diagnostics and measurement use of request tracing, resource expectations, first-page status and measurement acceptance |
+| [Performance](performance.md) | Agreed/proposed budgets, timed boundaries, diagnostics and measurement use of request tracing, resource expectations, unmet targets and measurement acceptance |
+| [Verification map](verification.md) | Automated coverage and recorded host acceptance for each capability, kept apart, with links to each topic's gaps |
 | [Code quality](code-quality.md) | Engineering gates, dependency/artifact policy and behavioral evidence conventions |
 | [Lab methodology](labs.md) | Experiment planning in ignored local labs, fair comparisons, shared fixtures, runner reliability, research records and decision/confirmation lifecycle |
 

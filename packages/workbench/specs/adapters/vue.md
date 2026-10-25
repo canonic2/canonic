@@ -2,6 +2,14 @@
 
 Part of the [adapters](README.md). User guide: [Vue](../../docs/vue.md).
 
+**Status:** Implemented through the Node evaluator path of the
+[target](#target): native loaders in [vue.rs](../../server/src/compiler/vue.rs)
+and [loaders.rs](../../server/src/compiler/loaders.rs), with
+`@vue/compiler-sfc` in the evaluator
+([vue.ts](../../server/node/src/modules/evaluator/vue.ts)), shared by live and
+portable builds. A native compiler is conditional on a lab that has not been
+run; Vize is not adopted ([open questions](#open-questions)).
+
 ## Source
 
 A preview's `source` is a Vue 3 single-file component or a component module;
@@ -69,17 +77,11 @@ where it can be, the Node evaluator where it must.
 Either way, the rest of the build (SWC, CSS, chunks, hot updates) is native,
 and Vue's hot-reload runtime is browser code and is unaffected.
 
-## Status
+## Verification
 
-Implemented through the Node evaluator path of the target: native loaders in
-[vue.rs](../../server/src/compiler/vue.rs) and
-[loaders.rs](../../server/src/compiler/loaders.rs), with
-`@vue/compiler-sfc` in the evaluator
-([vue.ts](../../server/node/src/modules/evaluator/vue.ts)). Live and
-portable builds share it. Covered by
-[preview.test.js](../../server/node/preview.test.js) with project Vue
-versions and scoped styles, and by the module's Rust unit tests. Vize is not
-adopted; no lab has compared it with `@vue/compiler-sfc`.
+[preview.test.js](../../server/node/preview.test.js) covers project Vue
+versions and scoped styles; the Rust unit tests in
+[vue.rs](../../server/src/compiler/vue.rs) cover the loader.
 
 ## Open questions
 

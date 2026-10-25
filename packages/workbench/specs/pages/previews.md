@@ -3,17 +3,23 @@
 A Workbench preview renders a component or page from a project's own source,
 in named scenarios, from a `.workbench.ts` or `.workbench.tsx` definition. The
 user guide is [Workbench previews](../../docs/workbench-previews.md); this spec
-records the contract, how it is built, and what is still open. See
+records the contract. See
 [compiler.cjs](../../server/node/preview/compiler.cjs), [compiler.rs](../../server/src/compiler.rs),
 [evaluator.cjs](../../server/node/preview/evaluator.cjs),
 [browser.js](../../ui/preview/browser.js), [catalog.rs](../../server/src/catalog.rs), and
 [manifest.js](../../contracts/manifest.js).
 
-The sections below are the agreed contract. Where the code does not yet meet
-it, the gap is marked; unresolved choices are under
-[open questions](#open-questions). How previews are compiled, served, kept
-warm, made ready and updated after edits is specified in the
-[preview pipeline](../preview-pipeline/README.md).
+**Status:** discovery, sidebar placement, scenarios, preview controls, actions,
+links between previews, request mocks, project environments, the `workbench`
+lens, capture, export, the portable build and the CLI are implemented for every
+built-in and custom adapter. Unmet requirements (script navigation, request
+types beyond fetch and asynchronous XHR, modifier clicks, definition-change
+notices in the standalone browser canvas) are under
+[implementation gaps](#implementation-gaps); unresolved choices are under
+[open questions](#open-questions).
+
+How previews are compiled, served, kept warm, made ready and updated after
+edits is specified in the [preview pipeline](../preview-pipeline/README.md).
 
 ## Purpose and scope
 
@@ -94,8 +100,7 @@ an artboard, even while loading or displaying errors.
   [the extension's refresh contract](../integrations/vscode-extension.md#refresh).
   In VS Code, the [server](../system/server.md#the-resident-index-and-watcher) watches
   the space and the extension runs the same rebuild as a `workbench.yaml`
-  edit when the listed definitions change. **Gap:** the standalone canvas in
-  a browser gets no such notice and needs a reload.
+  edit when the listed definitions change.
 
 ### Open, scenarios, controls, and actions
 
@@ -125,7 +130,7 @@ applies independently within each isolated artboard.
   session until it is evicted or reset. Retention, its budget and the
   return revision check are [retained sessions](../preview-pipeline/warm-runtime.md#retained-sessions).
   The warm-document path can reuse one session across pages; its per-page
-  return-state limitation is recorded in [warm runtime](../preview-pipeline/warm-runtime.md#status).
+  return-state limitation is recorded in [warm runtime](../preview-pipeline/warm-runtime.md#gaps).
 - Body nodes created during a preview module's import, such as SVG symbol
   sprites, are retained by compiled module URL and restored before its next
   mount. They are detached while another module is active or the host is reset.
@@ -411,6 +416,8 @@ timing.
 
 ## Implementation gaps
 
+- **The standalone browser canvas misses definition changes.** It gets no
+  notice when listed definitions change and needs a reload.
 - **Script navigation is not intercepted.** `location.assign`, `location.href`
   writes, `window.open`, and `form.submit()` (which fires no submit event)
   still leave the preview. Sources route them through `context.navigate`.

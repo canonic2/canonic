@@ -19,6 +19,12 @@ in [capture-scripts.js](../../capture/capture-scripts.js). The user-facing descr
 state; this topic owns acquisition, output and completion. [Hosting](../integrations/hosting.md)
 owns capability differences and upgrade/shutdown semantics.
 
+**Status:** the bundled Electron runtime, the warm helper, live mirroring of
+local pages and previews, bridged URL and Storybook capture, streamed-lens DOM
+rendering, full-canvas composition, the camera and handoff are implemented.
+Capturing pages with embedded documents or origin-tainted pixels is agreed but
+not implemented; see [known capture limits](#known-capture-limits).
+
 ## Why a helper exists
 
 The helper also renders export PDFs through its `printExportPage` command,
@@ -179,9 +185,7 @@ See [handoff.rs](../../server/src/handoff.rs).
   `object`, or `embed`, or a canvas or video whose pixels are origin-tainted
   (no CORS), must still be captured. Each such element keeps
   its layout box and renders blank; the rest of the page is captured as
-  usual, and the export reference or handoff is produced. This is not yet
-  implemented: such a capture currently fails (see
-  [known capture limits](#known-capture-limits)).
+  usual, and the export reference or handoff is produced.
 - The mirror cannot read closed shadow roots or browser-owned UI, such as
   native select menus. Linked stylesheets load from their URLs; runtime CSSOM
   edits to those sheets are not copied. The bridge transfers document state,
@@ -213,15 +217,7 @@ completion or bounded plain fallback before reading that snapshot.
   than a second engine that renders differently and needs its own
   hardening.
 
-## Current status
-
-### Verified behavior
-
-The acquisition requirements above run within each artboard; full-canvas
-composition and browser support-harness handoffs have recorded evidence. Not covered by automated tests: the macOS < 13 and display-less Linux
-cases, and embedded documents or tainted pixels.
-
-### Known capture limits
+## Known capture limits
 
 - **Embedded documents and tainted pixels fail the capture.** The mirror
   throws `Live capture cannot yet mirror nested frames or embedded documents`
@@ -268,3 +264,6 @@ cases, and embedded documents or tainted pixels.
   through the development driver [chrome.cjs](../../scripts/chrome.cjs) to check
   lens iframes and sessions through the implementation proxy; the extension
   never uses that driver.
+- Full-canvas composition and handoffs have browser-harness evidence.
+- Not covered by automated tests: the macOS earlier than 13 and display-less
+  Linux cases, and embedded documents or tainted pixels.

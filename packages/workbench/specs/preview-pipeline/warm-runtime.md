@@ -7,6 +7,17 @@ stylesheets and fonts. It also owns the budget of
 [retained content sessions](#retained-sessions) that keep recent pages live.
 The [Docs host](docs-host.md) owns the Docs pool built on that budget.
 
+**Status:** Implemented: pre-warming in the server's preview compiler once the
+page tree configures it, at startup when the host passes `--eager-previews`;
+the warm preview document ([preview-host.js](../../ui/legacy/preview-host.js),
+served as `/_workbench/preview-host.html`), which re-renders scenario, input
+and size changes without reloading modules and isolates successive previews;
+and the shared retained-session budget. Not implemented: pre-warming without
+the host flag, a browser runtime prepared before any native selection,
+per-page runtime-state retention on return, and a measured bound that replaces
+the warm document ([gaps](#gaps)). The Docs pool's status is in the
+[Docs host](docs-host.md).
+
 ## Purpose
 
 In an application with client-side navigation, the first page pays for
@@ -27,8 +38,7 @@ hidden application controls or another canvas.
 - When a trusted space with native pages starts, the Workbench server's
   compiler starts without waiting for a request. It indexes the project,
   declares its entries ([compiler](compiler.md#entries)), restores the
-  persistent cache and builds. Today this happens only when the host passes
-  `--eager-previews` ([status](#status)).
+  persistent cache and builds.
 - A request during pre-warming waits for that build, which contains its
   entry, and never for a later one.
 - The canvas prepares its warm runtime as soon as the build reports, before a
@@ -114,9 +124,6 @@ previews, Docs and Storybook.
   messages, or take part in captures or published context. Story-specific
   return behavior is in [Storybook](../pages/storybook.md).
 
-The [status](#status) identifies the managed per-page return and memory-bound
-gaps.
-
 ### Resource bounds
 
 - At most one preview warm document per owning content renderer, project and profile.
@@ -127,40 +134,24 @@ gaps.
   [Docs host](docs-host.md#resource-bounds).
 - Warm-document and retained-frame memory must have measured bounds. A
   document whose retained resources exceed its bound is replaced without
-  losing the requested view. Choosing the threshold and safe replacement
-  behavior remains implementation work.
+  losing the requested view.
 
-## Status
+## Gaps
 
-Pre-warming is implemented in `workbench-server`'s preview compiler: once the
-page tree configures the compilers, they build every listed preview and docs
-lens ([compiler](compiler.md)). The warm preview document is the preview-host
-document in `ui/legacy/` ([preview-host.js](../../ui/legacy/preview-host.js)),
-served by the server as `/_workbench/preview-host.html`. A new scenario, input
-or size of the preview a warm document shows re-renders through the preview
-runtime without reloading its modules.
-
-What starts pre-warming today: the server configures its compilers when it
-first assembles the page tree. Started with `--eager-previews`, which the
-extension and the standalone command both pass, it does that at startup
-without waiting for a request: `Space::warm_docs` assembles the page tree,
-which indexes the project and configures the compilers (so every listed
-preview and docs lens starts building), then requests each docs lens's bundle
-in turn ([server](../system/server.md#request-tracing)). Without the flag,
-the first page-tree request starts it. Gaps:
-
-- Pre-warming on space start depends on the host passing `--eager-previews`;
-  the server alone waits for the first page-tree request. The target of
-  preparing a shared browser runtime before any native selection is not
-  established by server-side pre-warming alone.
+- Pre-warming on space start depends on the host passing `--eager-previews`,
+  which the extension and the standalone command both pass. With it,
+  `Space::warm_docs` assembles the page tree at startup, which indexes the
+  project and configures the compilers, then requests each docs lens's bundle
+  in turn ([server](../system/server.md#request-tracing)); without it, the
+  server waits for the first page-tree request.
+- Server-side pre-warming does not prepare the canvas's shared browser runtime
+  before a native page is selected.
 - Returning to a page the warm document showed earlier loads its modules
   again rather than guaranteeing per-page runtime-state retention. The
   [retained-page requirement](../system/performance.md#navigation-keeps-the-canvas-usable)
   and resource budget must be met together.
 - The warm document is not replaced after a bound; its heap after long walks
-  is not limited.
-
-The Docs pool's status is in the [Docs host](docs-host.md#status).
+  is not limited, and no threshold or safe replacement behavior is chosen.
 
 ## Verification
 

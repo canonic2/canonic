@@ -3,6 +3,13 @@
 Part of the [adapters](README.md). User guide:
 [React Native Web](../../docs/react-native-web.md).
 
+**Status:** Implemented natively in `workbench-server`'s compiler, as the
+[target](#target) describes: the profile's resolution in
+[options.rs](../../server/src/compiler/options.rs) and its entry styles in
+[project.rs](../../server/src/compiler/project.rs). This topic records no
+implementation gap; compiling untranspiled packages is an
+[open question](#open-questions).
+
 ## Source
 
 A preview's `source` is a React Native component; `inputs` are its props. A
@@ -47,14 +54,12 @@ of the profile is an Rspack resolve or rule option in its Rust crates (an
 alias, extensions, a side-effect rule), with the React adapter's SWC
 loader. No JavaScript loader is involved.
 
-## Status
+## Verification
 
-Implemented natively in `workbench-server`'s compiler, as the target
-describes: the profile's resolution in
-[options.rs](../../server/src/compiler/options.rs) and its entry styles in
-[project.rs](../../server/src/compiler/project.rs). Covered by
-[preview.test.js](../../server/node/preview.test.js) (frames and docs stages
-filled by a root view) and the compiler's unit tests.
+[preview.test.js](../../server/node/preview.test.js) covers frames and docs
+stages filled by a root view, alongside the compiler's unit tests in
+[project.rs](../../server/src/compiler/project.rs) and
+[entries.rs](../../server/src/compiler/entries.rs).
 
 ## Open questions
 

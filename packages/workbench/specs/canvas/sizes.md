@@ -1,8 +1,12 @@
 # Artboard sizes
 
-Status: implemented size model, resolved server configuration, size switcher,
-Custom size… and Edit sizes…. Configure pages cards and public-guide alignment
-remain delivery gaps; see [current status](#current-status).
+**Status:** implemented: the size schema and defaults, server-resolved sizes,
+fill axes, keyed addresses, the size switcher and menu, Custom size… and Edit
+sizes…, handoff size lines, export sizes, preview keys and the portable viewer,
+and multiple-artboard sizes. Agreed but not implemented: Configure pages cards
+for every size of the space, keeping declared artboard sizes that a page's
+`sizes` don't accept, and public guides for the size controls; see
+[implementation gaps](#implementation-gaps).
 
 ## Purpose and scope
 
@@ -175,7 +179,20 @@ resolved config carries:
 The canvas, size switcher, export plan, handoff, portable viewer index, and
 multiple-artboard adapter all read sizes from these; none keeps its own table.
 
+Sizes are resolved on the server. The browser's YAML reader and the sidebar
+webview don't resolve them; the canvas reads the space's sizes and each page's
+from `/_workbench/config`, and the defaults when no server answers. A canvas
+opened off disk can't load the size module and has Fit only.
+
 ## The size switcher
+
+The switcher, the Custom size… dialog and the Edit sizes… editor are the
+[`wb-size-switcher`](../../ui/src/components/size-switcher/element.js),
+[`wb-size-dialog`](../../ui/src/components/size-dialog/element.js) and
+[`wb-sizes-editor`](../../ui/src/components/sizes-editor/element.js) Web
+Components ([contract](../ui/web-components.md)), in the middle of the top bar
+beside the lens switcher. The canvas controller feeds them and posts to
+`/_workbench/sizes`.
 
 The space's sizes with `button` are buttons, in the space's order, each
 showing its icon, with its label and dimensions as its title and accessible
@@ -202,8 +219,7 @@ name. A menu button follows them and opens the **size menu**:
   next preview's dimensions. A size pick replaces that pending choice. Each
   choice is applied once so later content-fit measurements can settle normally;
   explicitly declared artboards retain their authored sizes during navigation
-  (required; a declared artboard can lose its size under the implementation gap
-  in [Multiple artboards](#multiple-artboards)).
+  ([gap](#implementation-gaps)).
 - The size switcher never folds into **More**. The top bar's compact
   measurement includes however many buttons the space has.
 - The menu is a menu of radio items: arrow keys move between enabled entries,
@@ -373,13 +389,8 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
   exactly; a filled axis accepts any length. Artboard dimensions range from
   1 to 8192 pixels.
 - The fallback for an unsupported size is the page's first listed size,
-  instead of Laptop or Mobile. Implementation gap: the canvas controller applies
-  this fallback to declared artboards too, because the view report for every
-  instance, declared or implicit, carries the page's sizes
-  (`ui/src/modules/preview-sessions/content.js`) and the canvas controller
-  replaces an instance size that none of them accepts with the page's first size
-  (`ui/src/modules/canvas/controller.js`), so a declared artboard whose authored
-  size the page's `sizes` do not accept can lose it.
+  instead of Laptop or Mobile. It applies to the implicit artboard, not to
+  declared artboards ([gap](#implementation-gaps)).
 - Artboards size themselves directly, whatever sizes the space lists. A space
   that leaves out `resizable` still gets working artboards; their child
   runtimes don't depend on the space having a Resizable size.
@@ -430,52 +441,29 @@ sizes, the local merge, and problems; `address.test.js` for size keys;
 `server/node/config.test.js` and `server/node/server.test.js` for both readers agreeing, writes
 (including comments kept outside replaced blocks), and export plans;
 `server/src/handoff/tests.rs` for size lines;
-`ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes. The size switcher,
-menu, and dialogs need a browser check of keyboard use and focus with the
-[browser harness](../../scripts/chrome.cjs).
+`ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes;
+[`size-switcher/element.test.js`](../../ui/src/components/size-switcher/element.test.js),
+a real-Chrome test, for the components' inputs, events, keyboard use, focus,
+the dialogs and reconnection, with
+[`size-dialog/form.test.js`](../../ui/src/components/size-dialog/form.test.js) and
+[`sizes-editor/rows.test.js`](../../ui/src/components/sizes-editor/rows.test.js)
+for the dialog and editor rules. Host acceptance: picking, adding a Sidebar
+size from a page and reordering in Edit sizes were checked end to end in
+Chrome on a copy of the Acme demo; the VS Code host has no evidence.
 
-## Current status
-
-- **Built:** the browser size model and schema in
-  [src/sizes/](../../contracts/src/sizes), with tests beside each; the server's
-  reader in [sizes.rs](../../server/src/config/sizes.rs), its edits in
-  [config/edit/](../../server/src/config/edit.rs) behind `/_workbench/sizes`, and
-  export sizes in [export/sizes.rs](../../server/src/export/sizes.rs); the canvas's size choice, fill axes, keyed
-  addresses, and pinned artboard sizes in
-  [workbench.js](../../ui/legacy/workbench.js) and [zoom.js](../../ui/legacy/zoom.js),
-  through the [bridge](../../ui/src/bootstrap/sizes.js); handoff size lines
-  and screenshot names; the export plan and README labels; preview keys and
-  the portable viewer; the multiple-artboard model; the agent policy hook's pattern. This
-  repository's Sidebar page opens at its `sidebar` size, checked in Chrome at
-  340 × 836 on a 956-pixel canvas.
-- **Sizes are resolved on the server.** The browser's YAML reader and the
-  sidebar webview don't resolve them; the canvas reads the space's sizes and
-  each page's from `/_workbench/config`, and the defaults when no server
-  answers. A canvas opened off disk can't load the size module and has Fit
-  only.
-- **Configure pages** keeps a page's sizes as written, its own sizes
-  included.
-- **Interface:** [`wb-size-switcher`](../../ui/src/components/size-switcher/element.js),
-  [`wb-size-dialog`](../../ui/src/components/size-dialog/element.js), and
-  [`wb-sizes-editor`](../../ui/src/components/sizes-editor/element.js) are Web
-  Components ([contract](../ui/web-components.md)), in the middle of the top bar
-  beside the lens switcher. The canvas controller feeds them and posts to
-  `/_workbench/sizes`. Their docs pages are in [design/](../../design); a
-  real-Chrome test covers inputs, events, keyboard, focus, the dialogs, and
-  reconnection. Checked end to end in Chrome on a copy of the Acme demo:
-  picking, adding a Sidebar size from a page, and reordering in Edit sizes.
-- **To do:** Configure pages cards for every size of the space (they still
-  show the default sizes the space has), and the guides listed at the end.
-
-## Remaining delivery
+## Implementation gaps
 
 - Configure pages must list every size resolved for the space, including
-  page-owned sizes, instead of limiting cards to the built-in keys.
+  page-owned sizes, instead of limiting cards to the default sizes the space
+  has. It keeps a page's sizes as written, its own sizes included.
+- Declared artboards can lose their authored size: the view report for every
+  instance, declared or implicit, carries the page's sizes
+  (`ui/src/modules/preview-sessions/content.js`), and the canvas controller
+  replaces an instance size that none of them accepts with the page's first size
+  (`ui/src/modules/canvas/controller.js`).
 - Public guides and the website must describe the configured size switcher,
-  editing actions and keyed addresses. This is documentation debt for the
-  implemented controls, not a future size-model design.
-- Verify these controls in the VS Code host as well as the standalone browser.
-  Source tests and browser checks do not establish every host interaction.
+  editing actions and keyed addresses (listed below).
+- The size controls are not verified in the VS Code host.
 
 ## Public-guide alignment
 

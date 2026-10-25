@@ -9,6 +9,14 @@ the [export route](../../server/src/serve/routes/export.rs), the [export module]
 [capture contract](capture.md) for the renderer it uses. The user-facing
 description is [Design-system export](../../docs/design-system-export.md).
 
+**Status:** export jobs, the space-scoped source closure, the reference
+capture plan (design scenarios, iterations, declared artboards, docs pages and
+Storybook stories), ZIP, PDF, image and browser outputs, split archives and the
+portable viewer are implemented. This topic records no unmet requirements;
+cancellation and an overall job deadline are unspecified
+([connection loss and cancellation](#connection-loss-and-cancellation)), and
+coverage gaps are listed under [verification points](#verification-points).
+
 ## Module ownership
 
 The export is the server's `export` module (`server/src/export/`), following
@@ -117,7 +125,7 @@ cancellation or automatic retry of an interrupted export.
 Overall job deadlines and user-requested cancellation remain unspecified;
 per-reference capture timeouts do not establish a maximum total export duration.
 Their design must cover joined callers, worker disposal, partial artifacts and
-retry identity before a cancel/recovery guarantee is added. Current
+retry identity before a cancel/recovery guarantee is added. The
 [job tests](../../server/src/export/jobs.rs) cover settlement and retention;
 disconnect/restart/cancel acceptance is not established by them.
 
@@ -208,9 +216,7 @@ filters. Browser-only output fails if no compiled previews or docs are available
 ## Capture scheduling versus the camera
 
 The [multiple-artboard support API](../canvas/multiple-artboards.md) composes interactive
-screenshots and handoffs from every supplied instance. The existing shell
-integrates a scenario's declared artboards; free artboard management remains
-future work. This does not change this
+screenshots and handoffs from every supplied instance. This does not change this
 catalog-wide design-system export into an export of the current arrangement.
 On a mixed-space canvas, the export action targets the selected artboard's
 owning space; handoff images are stored by the canvas host space. Reuse
@@ -280,29 +286,16 @@ records the entry, catalog, and each preview's id, source, entry, and scenarios.
 The [previews spec](../pages/previews.md) owns the compiler, adapters, viewer, and the
 CLI `build` command that produces the same viewer without a server.
 
-## Current status
-
-### Verified behavior
-
-Portable-build fallback and local capture reuse are covered by module and server
-regressions. Source, capture and portable warnings all contribute to the final
-export warning count.
-
-Space ownership is explicit in the implementation:
-the server reads its own space's configuration, and its export route passes
-that resolved view into the export's pipeline.
-[source.rs](../../server/src/export/source.rs) starts page records from `view.pages` and copies
-the manifest through the source-root ownership check. Existing
-[server tests](../../server/node/server.test.js) verify that a server selects only its
-configured space's pages. The full multi-space export acceptance criteria
-above do not yet have a dedicated end-to-end test.
-
 ## Verification points
 
 - [server.test.js](../../server/node/server.test.js) checks, through the server
   and a stand-in capture service, progress, waiting for warm-up, coalesced
   jobs, the current-page PDF, retention and expiry (`404`), bounded retained
-  bundles, job and part downloads, and the direct ZIP download.
+  bundles, job and part downloads, and the direct ZIP download. It also checks
+  that a server selects only its configured space's pages;
+  [source.rs](../../server/src/export/source.rs) starts page records from the
+  resolved view's pages and copies the manifest through the source-root
+  ownership check.
 - The export module's tests check the capture plan for scenarios, artboards,
   docs pages and a Storybook lens's stories, the four-worker pool, per-story
   worker reuse, cleanup warnings, revision reuse within a job and refresh
@@ -325,5 +318,6 @@ above do not yet have a dedicated end-to-end test.
   [capture-scripts.test.js](../../capture/capture-scripts.test.js) check the export pool, in-place
   Storybook switching, and settling.
 - Not covered by automated tests: the `409` answer for an incomplete job,
-  the missing-design and Simulator warnings, and the exclusion of `browser/`
-  output from page hashes.
+  the missing-design and Simulator warnings, the exclusion of `browser/`
+  output from page hashes, and the multi-space acceptance criteria under
+  [space scope](#space-scope) end to end.

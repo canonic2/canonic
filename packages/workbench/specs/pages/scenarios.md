@@ -6,6 +6,10 @@ handled. The [glossary](../glossary.md#the-page-hierarchy) places them in the
 hierarchy; [artboards and iterations](iterations.md) own the levels below a
 scenario; each page format's spec owns what a scenario can change there.
 
+**Status:** scenarios are implemented on every page kind listed here. This
+topic records no implementation gaps of its own; gaps in a page format's
+handling of scenarios are listed in that format's spec.
+
 ## What a scenario is
 
 A scenario is one of a page's alternative conditions, such as *Empty*,

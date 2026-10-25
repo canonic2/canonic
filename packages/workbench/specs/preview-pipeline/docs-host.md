@@ -9,6 +9,15 @@ and reading contract. The [performance contract](../system/performance.md#measur
 owns the improvement goal, and [retained sessions](warm-runtime.md#retained-sessions)
 own the retention budget Docs share with other content.
 
+**Status:** Implemented: server Markdown pages and asynchronous highlighting;
+the warm Docs pool (the lab's `pool-rp` design), immediate retained resume, the
+background return check, document isolation and the reusable page lifecycle in
+`ui/src/modules/docs/`, with host-kind routing and idle selection in
+`content-frames.js`/`preview-sessions.js`. This topic records no
+implementation gap; the Docs example hot-update limit is in
+[hot updates](hot-updates.md#gaps) and Show code's extraction limits are in
+[design constraints](#design-constraints).
+
 ## Requirements
 
 ### Serving and compilation
@@ -26,9 +35,8 @@ own the retention budget Docs share with other content.
 - **The page before its examples.** The page answers with its Markdown without
   waiting for a build: its panels are `pending` until the page script learns
   the lens's bundle, which then mounts them or names why not. The examples are
-  usually built already: the Workbench server starts its compiler with the
-  session, which builds every docs page in each lens with the previews as it
-  starts ([warm runtime](warm-runtime.md)).
+  usually built already by
+  [pre-warming](warm-runtime.md#pre-warming-on-project-start).
 - **Compilation.** Each docs page lens is an entry of the
   [preview pipeline](compiler.md#entries), built from that
   lens's example source with the lens's adapter, styles, environment, and the
@@ -231,25 +239,6 @@ or disposed request cannot navigate a newer destination or reopen a removed fram
   and environments. React Native Web examples use a column flex stage without
   imposing viewport height on panels.
 
-## Status
-
-The Docs pool, reusable page lifecycle and nonblocking return revision check
-are implemented in `ui/src/modules/docs/`, with host-kind routing and idle
-selection in `content-frames.js`/`preview-sessions.js`. The server preload
-correction is implemented independently in the generated client
-([serving](serving.md#preload-selection)). The selected design is the lab's
-`pool-rp`; no compiler warm-up redesign is part of this change.
-
-Recent documents resume immediately; a new page can reuse an idle same-lens
-host. Parallel HTML/metadata reads compare their Markdown identity before
-mounting. Return checks distinguish Markdown and compiled example revisions,
-so missed prose updates preserve examples and missed example updates refresh
-the host with scroll kept. Return revision checks are implemented alongside
-the push path. See the
-[decision and measured limits](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
-Shipping-code confirmation and the return checks' verification scope are
-tracked by [integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
-
 ## Verification
 
 Real Chrome [Docs host tests](../../ui/src/modules/docs/host/docs-host.test.js)
@@ -263,5 +252,9 @@ during asynchronous mounting and image readiness, plus cleanup after failure.
 [Content-frame tests](../../ui/legacy/content-frames.test.cjs) and
 [session tests](../../ui/legacy/preview-sessions.test.js) cover retained resume,
 oldest compatible idle reuse, mixed lenses, the shared budget, expiry, Reload
-and disposal. Shipping-code sequences and installed Acme evidence are recorded
-separately from these checks in the performance spec.
+and disposal. [Highlighting tests](../../ui/src/modules/docs/page/highlighting.test.js)
+cover the pinned highlight.js assets and worker colouring after load,
+preserving every character and settling captures. The pool's
+[decision and measured limits](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23)
+and its [shipping-code and installed Acme evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
+are recorded separately from these checks.

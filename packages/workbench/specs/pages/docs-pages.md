@@ -13,9 +13,14 @@ its running code, and its documentation are one page in the page list. A page
 whose `src` is the Markdown file itself, a **Markdown page**, is its docs and
 nothing else: it has no design lens.
 
-**Status:** docs lenses, examples and export are implemented. See
-[current status](#current-status) for remaining integration and verification gaps. The user guide is
-[Docs](../../docs/docs-pages.md). Shared navigation and problem reporting are in [core](../core.md);
+**Status:** docs lenses, Markdown rendering, example compilation and mounting,
+Show and Copy code, the docs canvas mode, annotations, capture, handoff, the
+design-system export and portable docs are implemented, served through the
+warm Docs host. Docs as isolated renderers beside declared artboards are
+implemented; arbitrary artboard management is agreed but not implemented.
+Remaining unmet requirements are under [implementation gaps](#implementation-gaps).
+
+The user guide is [Docs](../../docs/docs-pages.md). Shared navigation and problem reporting are in [core](../core.md);
 compilation, adapters, and environments are in
 [TypeScript previews](previews.md); lenses are in [lenses](../canvas/lenses.md) and
 [implementations](implementations.md). The code is the
@@ -380,6 +385,37 @@ problems update when they arrive.
 - **Docs host.** How Docs are served, highlighted, compiled, hosted, reused
   and kept fresh, and the reusable page lifecycle, are the
   [Docs host](../preview-pipeline/docs-host.md).
+- **Listing examples.** The compiler lists a directory lens's files, or a file
+  lens's named exports read statically with SWC, following `export * from`
+  through local files with packages closed
+  ([exports.rs](../../server/src/compiler/exports.rs)). A listing is kept until
+  a file it read changes; a changed listing raises the server's `catalog`
+  notice (`onCatalogChanged` on the host) so problems update.
+- **Astro lenses.** An `astro` docs lens takes a directory; each `.astro` file
+  renders in the Node evaluator as an Astro preview's scenario does, and the
+  bundle hands the page its HTML with asset URLs made absolute against the
+  bundle.
+- **Serving.** A page's Markdown is served as its docs at the Markdown's path;
+  any other `.md` is served as a file. `/_workbench/docs/bundle` answers what
+  the page mounts: the module, its stylesheet, the lens's example IDs and the
+  page's revision.
+- **Highlighting.** Portable code and explicit server highlighting responses
+  use the server's Syntect highlighting under highlight.js class names; live
+  docs colour code in the browser. Opening docs does not pre-highlight every
+  page or example.
+- **Docs on the canvas.** The canvas element owns undecorated reading-mode
+  presentation and camera geometry and emits viewport dimensions and scroll
+  intent, which the host applies through the content renderer. Viewport
+  resizing and zoom keep the docs document. A standalone Docs capture has no
+  canvas framing or artboard label.
+- **Portable docs.** The portable build writes each page in each lens as a
+  static page under `browser/docs/`: the production bundle, the authored page
+  and mount scripts unchanged, Show code as JSON per example, and the images
+  the Markdown references. The portable viewer lists docs pages, offers a Lens
+  menu in place of the Scenario menu, and follows docs links.
+- **Export planning.** The export plans docs references separately
+  ([plan.rs](../../server/src/export/plan.rs)) through the capture helper's
+  `fullPage` and `selector` options.
 - **Schema documentation.** The schema change updates `ui/legacy/README.md`
   and `docs/configuration.md`. A new user guide, `docs/docs-pages.md`,
   is added to the docs index and the website's `docGroups`.
@@ -449,115 +485,23 @@ Client-project rollout is separate from this product contract.
 - Whole-page references use document height up to the capture limit;
   per-example references crop to the rendered example stage.
 
-## Current status
-
-The dedicated warm Docs pool and reusable lifecycle are implemented; see the
-[Docs host status](../preview-pipeline/docs-host.md#status).
-
-Docs lenses, Markdown rendering, example compilation/mounting, source-code
-controls, annotations, capture, handoff and portable output have source tests
-and Acme browser evidence. Those checks do not establish every VS Code host,
-renderer combination or source-extraction edge case. See
-[verification points](#verification-points).
-
-### Built
-
-- **Schema.** `manifest.js` reads the `docs` kind, the page's `docs` key, `.md`
-  pages, `lens`, and the reserved marks in `src` for both config readers; `address.js` reads
-  and writes `!example`; the canvas leaves the width out of a docs lens's
-  address and a Markdown page's own docs lens out of its address.
-- **Lenses.** [lenses.js](../../contracts/src/docs/lenses.js) and its tests;
-  the canvas's lens switcher, routing, sizes, canvas mode, and docs links in
-  [workbench.js](../../ui/legacy/workbench.js) decide with it.
-- **Discovery.** `defineDocs` from `@canonic2/workbench` (typed in
-  [api.d.ts](../../sdk/api.d.ts)); the compiler's index validates definitions
-  and the server places them by title, in a **Docs** collection when the title has
-  no `/`.
-- **Astro.** An `astro` lens takes a directory; each `.astro` file renders in the
-  Node evaluator as an Astro preview's scenario does, and the bundle hands the page its
-  HTML with asset URLs made absolute against the bundle.
-- **Portable viewer.** [portable.rs](../../server/src/docs/portable.rs) writes each page
-  in each lens as a static page under `browser/docs/`: the production bundle,
-  the authored page and mount scripts copied unchanged, Show code as JSON per example, and the images
-  the Markdown references; [viewer.js](../../ui/viewer/viewer.js) lists docs
-  pages, swaps the Scenario menu for a Lens menu, and follows docs links.
-- **Compilation.** The server's compiler lists a lens's examples
-  ([docs.rs](../../server/src/compiler/docs.rs)): a directory's files, or a
-  file's named exports read statically with SWC, following `export * from`
-  through local files with packages closed
-  ([exports.rs](../../server/src/compiler/exports.rs)). The compiler builds each
-  lens as an entry, and the portable export as a production bundle. A listing
-  is kept until a file it read changes. Compiler routes under
-  `/_workbench/previews/`: `docs/index`, and `docs/bundle`, which answers
-  with the lens's preview module.
-- **Serving.** A page's Markdown is served as its docs at the Markdown's path
-  (`?lens=`, `?scenario=`), with its panels pending; any other `.md` is served as
-  a file.
-  `/_workbench/docs/bundle` answers what the page mounts (the module, its
-  stylesheet, the lens's example IDs, and the page's revision),
-  `/_workbench/docs/source` Show code, and `/_workbench/docs/revision` the
-  page's revision. `eagerPreviews` on the host's `start` (the server's
-  `--eager-previews`) warms every docs bundle, and the server's `catalog`
-  notice, `onCatalogChanged` on the host, says when a listing changes the
-  problems.
-  Workbench browser assets currently use `/_workbench/ui/src/` and
-  `/_workbench/contracts/src/` as unchanged JavaScript/CSS
-  ([files.rs](../../server/src/serve/files.rs)). This asset
-  delivery is distinct from compiling project docs/examples and does not justify
-  mounting the application shell inside the docs content viewport.
-- **The page.** [service.rs](../../server/src/docs/service.rs) decides each
-  panel; [render.rs](../../server/src/docs/render.rs) renders the Markdown with
-  pulldown-cmark, and [highlight.rs](../../server/src/docs/highlight.rs) highlights
-  portable code and explicit server highlighting responses with syntect's
-  Oniguruma backend under highlight.js class names. Live docs use the local
-  [worker](../../ui/src/modules/docs/page/highlight-worker.js) and
-  [range painter](../../ui/src/modules/docs/page/code-colours.js). Unsupported
-  languages or browsers without CSS Custom Highlights retain readable plain code.
-  Opening docs does not pre-highlight every page or example.
-  [docs-page.js](../../ui/src/modules/docs/page/docs-page.js) and
-  [mount-examples.js](../../ui/src/modules/docs/page/mount-examples.js) mount the examples,
-  run Show code and Copy code, report readiness and actions, send links between docs pages to the canvas, and apply pushed Markdown/example updates with scroll position kept.
-- **The canvas.** The host selects the `wb-canvas` reading mode in
-  [canvas.js](../../ui/src/bootstrap/canvas.js). The
-  [element](../../ui/src/components/canvas/element.js) owns undecorated presentation
-  and camera geometry from [docs-layout.js](../../ui/src/modules/docs/canvas/docs-layout.js).
-  It emits viewport dimensions and scroll intent; the host applies those through
-  the authenticated content renderer. Viewport resizing and zoom retain the docs
-  document. Standalone Docs capture has no canvas framing or artboard label.
-  The file-based shell uses [zoom.js](../../ui/legacy/zoom.js) and docs-mode styles in
-  [workbench.css](../../ui/legacy/workbench.css). Lenses, scenarios, addresses,
-  scrolling to an addressed example, and docs links in
-  [workbench.js](../../ui/legacy/workbench.js).
-- **Source menu, handoff, export.** A page's Markdown, when it isn't the
-  page's own file, and each docs lens's example source join the page's code
-  entries; the handoff names the page, the docs lens, the Markdown, and the
-  examples in view with their files; the export plans docs references
-  separately ([plan.rs](../../server/src/export/plan.rs)) through the helper's
-  `fullPage` and `selector` options
-  ([capture/app/main.cjs](../../capture/app/main.cjs)).
-- **Problems.** Missing Markdown, placement problems with their line,
-  unplaced examples, rejected example files, duplicate export IDs, build
-  failures, and blocked examples join `/_workbench/config`'s problems.
-
-### Implementation gaps
+## Implementation gaps
 
 - **VS Code acceptance.** Check docs routing, focus, examples, capture and
   handoff in the real editor host. Packaged TypeScript loading and standalone
   browser checks alone do not establish those interactions.
-
 - **Show code for an `export *` example** answers that the export isn't in
   the example source: the statement lives in the re-exported module, which the
   listing doesn't record.
 - **Multiple-artboard management.** Isolated docs renderers participate in
   declared-artboard composition. Arbitrary artboard management and its
   editor-host acceptance remain [canvas integration work](../canvas/artboard-management.md#delivery-plan).
-
 - **An address naming a page's Markdown** opens nothing when the Markdown
   belongs to a page with a design: the address names the page's own `src`.
 - **The portable viewer** lists each page's docs as an entry of its own with a
   Lens menu, apart from the page's preview.
 
-### Verification points
+## Verification points
 
 - The server's `docs` module tests: Markdown reading, rendering,
   highlighting, placement, export source, portable pages and the docs service

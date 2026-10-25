@@ -5,6 +5,11 @@ browser, portable output and future hosts. It collects the existing
 [host guide](../../docs/extension.md#running-without-vs-code) rather than
 introducing a new host or distribution channel.
 
+**Status:** desktop VS Code, a browser opened by the extension, the standalone
+Node host and the portable viewer are implemented with the capabilities in the
+table below. Browser-only VS Code is unsupported. Host acceptance beyond desktop
+macOS is limited; see [acceptance and gaps](#acceptance-and-gaps).
+
 ## Host capability model
 
 | Host | Services and limits |
@@ -42,10 +47,9 @@ specific interfaces.
   display, filesystem and loopback are the remote host's, and editor URL
   forwarding is distinct from copying a literal server address. Remote URL
   command gaps remain in [VS Code](vscode-extension.md#implementation-gaps).
-- Packaging for six targets is not proof of execution on all six. Current
-  evidence is strongest on desktop macOS; Linux/Windows and remote host
-  acceptance remain limited. Do not infer browser compatibility from a
-  Chromium/VS Code smoke. Portable output needs its own browser acceptance.
+- Packaging for six targets is not proof of execution on all six. Do not
+  infer browser compatibility from a Chromium/VS Code smoke. Portable output
+  needs its own browser acceptance.
 
 ## Update, close and uninstall
 
@@ -77,5 +81,6 @@ every local preference or captured artifact.
 Packaging and process tests are linked by [modules](../system/modules.md#asset-and-packaging-checks)
 and [server](../system/server.md#verification). The
 [installed evidence](../../research/README.md) records fixture/build/host limits.
-No complete cross-platform/browser matrix, browser-only editor implementation
+Host evidence is strongest on desktop macOS; Linux, Windows and remote host
+acceptance remain limited. No complete cross-platform/browser matrix, browser-only editor implementation
 or Studio integration is established by those checks.

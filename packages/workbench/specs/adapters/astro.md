@@ -2,6 +2,15 @@
 
 Part of the [adapters](README.md). User guide: [Astro](../../docs/astro.md).
 
+**Status:** Implemented as the [target](#target) describes: the server side
+runs in the Node evaluator ([astro.ts](../../server/node/src/modules/evaluator/astro.ts),
+[astro.cjs](../../server/node/preview/astro.cjs)), with frontmatter bundled by
+esbuild, and the client side builds natively in `workbench-server` through the
+HTML loader ([astro.rs](../../server/src/compiler/astro.rs)). Saved renders are
+proposed, not agreed or implemented: every warm start renders each scenario in
+the evaluator again. Project plugins and rules do not apply to the server side
+([plugins gaps](../preview-pipeline/plugins.md#gaps)).
+
 ## Source
 
 A preview's `source` is an Astro component or page, its module's default
@@ -88,23 +97,18 @@ the owner on 2026-10-16:
   `lightningcss`, and a compiler bundled with the server serves one Astro
   runtime, so it drifts from the project's Astro as either upgrades.
 
-## Status
+## Verification
 
-Implemented as the target describes, except saved renders: the server side
-runs in the Node evaluator
-([astro.ts](../../server/node/src/modules/evaluator/astro.ts),
-[astro.cjs](../../server/node/preview/astro.cjs)), with frontmatter bundled
-by esbuild, and the client side builds natively in `workbench-server`
-through the HTML loader ([astro.rs](../../server/src/compiler/astro.rs)).
-Covered by [preview-astro.test.js](../../server/node/preview-astro.test.js).
-Saved renders are not implemented: every warm start renders each scenario in
-the evaluator again.
+[preview-astro.test.js](../../server/node/preview-astro.test.js) covers
+server renders with props, scenarios and request mocks, packaged client assets,
+input renders, aliases, docs examples, portable exports and rebuilding a render
+edited while the server was stopped.
 
 ## Open questions
 
 - **Project rules on frontmatter.** The server side bundles with esbuild,
   without project Rspack rules and plugins
-  ([plugins](../preview-pipeline/plugins.md#status)). Whether the Node
+  ([plugins](../preview-pipeline/plugins.md#gaps)). Whether the Node
   evaluator should apply project loaders there is open.
 - **The container's stability.** `experimental_AstroContainer` is
   experimental in Astro; a change in it breaks rendering whatever compiles

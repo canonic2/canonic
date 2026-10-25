@@ -11,6 +11,13 @@ delivering native pages; the
 [extension contract](../integrations/vscode-extension.md#process-boundaries) owns how the
 editor starts and stops it.
 
+**Status:** implemented: the Rust server and its host protocol, request
+tracing, the Node evaluator, the definition-index evaluator, server-run
+Storybook, the page tree, the resident index and the routes below. Not
+implemented or unverified: one evaluator for definition indexing, the
+performance targets, builds run on Windows and Linux, and portable
+highlighting parity; see [implementation gaps](#implementation-gaps).
+
 The [UI/backend independence contract](modules.md#ui-and-backend-independence)
 is mandatory. This server owns project data, operations and previewed content;
 its domain services do not compose the Workbench interface or initialize its
@@ -123,10 +130,10 @@ processes (decided by the owner on 2026-10-16 and 2026-10-18).
 The editor host and the standalone command are Node processes too, outside the
 server.
 
-The one-long-lived-evaluator direction does not yet cover definition indexing:
-its short-lived process is an additional implementation path. Do not infer
-that one persistent compiler evaluator bounds all Node process starts. A
-successful saved literal listing does not need either evaluator.
+Definition indexing uses its own short-lived process
+([gap](#implementation-gaps)); one persistent compiler evaluator does not bound
+all Node process starts. A successful saved literal listing does not need
+either evaluator.
 
 - **Project code stays out of the server and the editor.** Server-side project
   evaluation never runs in the native server or the extension host. Project
@@ -315,11 +322,13 @@ with the statuses and messages the canvas expects.
   and [runtime preparation](../../research/startup.md#installed-runtime-preparation-2026-10-23).
   These probes do not establish general installed-webview navigation latency.
 
-## Known gaps
+## Implementation gaps
 
 - How Studio starts and talks to the server is open: the same stdio messages
   as the extension, or a library interface.
-- First-page, complete-list and edit target acceptance: [performance status](performance.md#status).
+- Definition indexing starts a short-lived evaluator beside the long-lived one.
+- First-page, complete-list and edit target acceptance:
+  [performance gaps](performance.md#implementation-gaps).
 - Builds for Windows and Linux have not been run on those systems.
 - Portable code uses Syntect grammars, so token boundaries can differ from
   live highlight.js output. Markdown does not turn bare URLs into links.

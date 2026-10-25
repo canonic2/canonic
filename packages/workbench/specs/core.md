@@ -10,6 +10,11 @@ compilation, and screenshot processes have separate
 [extension](integrations/vscode-extension.md), [TypeScript preview](pages/previews.md), and
 [capture](review/capture.md) contracts.
 
+**Status:** implemented: configuration and serving, the shared problems list,
+addresses and lens selection. Not implemented: reporting a stopped
+mapping-only Storybook or an unbooted mapped Simulator as problems; see
+[implementation gaps](#implementation-gaps).
+
 ## Purpose
 
 Workbench is for designing inside the codebase. Pages are designed and
@@ -136,7 +141,7 @@ services exist in the editor, standalone browser and portable viewer.
 
 An explicit destination wins over the last saved selection, which wins over the
 space's first page; [persistence and restoration](canvas/persistence.md) owns that
-precedence, what is saved, and its status.
+precedence and what is saved.
 
 ## Canvas and artboard
 

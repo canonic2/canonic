@@ -1,18 +1,22 @@
 # Artboard management
 
-**Proposal: not agreed / not implemented.** This topic collects the design work
-for managing artboard instances beyond a scenario's declared group: adding,
-duplicating and closing instances, a keyboard-accessible artboard list,
-**Fit all** and **Fit selected**, free movement and **Arrange**, restoring or
-sharing arrangements, and the delivery plan for that work. None of it is
-shipped behavior. [Multiple artboards](multiple-artboards.md) owns the
+This topic collects the design work for managing artboard instances beyond a
+scenario's declared group: adding, duplicating and closing instances, a
+keyboard-accessible artboard list, **Fit all** and **Fit selected**, free
+movement and **Arrange**, restoring or sharing arrangements, and the delivery
+plan for that work. [Multiple artboards](multiple-artboards.md) owns the
 requirements and acceptance of what is built; where a proposal below restates
 behavior already built for declared groups, that page is the owner. The
 [artboard system](artboard-system.md) owns the architecture the proposals extend.
 
+**Status:** proposal, not implemented. Only phase 2 arrangement tools are
+agreed; every interaction, edge-case contract and acceptance criterion below
+awaits a decision, and persistence and sharing are open. See
+[agreed and open](#agreed-and-open) and the [delivery plan](#delivery-plan).
+
 ## Agreed and open
 
-Agreed, not implemented:
+Agreed:
 
 - **Phase 2: arrangement tools.** Support free positioning and row/grid
   arrangement. Phase 1 can use deterministic automatic placement; adding and
@@ -23,8 +27,6 @@ Open:
 - **Persistence and sharing.** Remembering an arrangement locally and storing a
   named arrangement in a shared project file are distinct options. Neither
   storage policy has been agreed; see [questions](#questions-for-product-decisions).
-- Every interaction, edge-case contract and acceptance criterion below is a
-  proposal awaiting a decision.
 
 ## Suggested phase 1 interactions
 
@@ -97,8 +99,8 @@ Open:
 
 ## Proposed edge-case contracts
 
-These proposals do not reopen the limits established by the built
-[support system](multiple-artboards.md#implemented-support-system).
+These proposals do not reopen the limits established by the
+[instance model](multiple-artboards.md#instance-model-and-review-limits).
 
 - Duplicate creates a fresh renderer and copies only space/view/size
   descriptors, with default controls and no copied annotations. Independent

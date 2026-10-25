@@ -1,5 +1,8 @@
 # Workbench labs
 
+**Status:** in use: this method governs every lab and its research record. No
+implementation gaps are recorded.
+
 ## Purpose and ownership
 
 A lab answers one engineering question with a reproducible comparison before

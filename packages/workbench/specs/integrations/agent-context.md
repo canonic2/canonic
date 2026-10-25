@@ -9,6 +9,13 @@ context record, its publication, precedence and heartbeats, and its delivery
 to agents; [multiple artboards](../canvas/multiple-artboards.md) owns the
 artboard instances the record describes.
 
+**Status:** the version-2 canvas context record, reference parity with Copy
+reference, publication with precedence and heartbeats, server discovery, the
+prompt hook and the `workbench` MCP server are implemented. The editor
+integrations under [proposals](#proposals) are not agreed. Context for a
+`workbench.yaml` below the Canonic root and acceptance inside each editor are
+open; see [open questions](#open-questions).
+
 ## Purpose and scope
 
 An agent should understand which Workbench view the user means by “this
@@ -36,7 +43,7 @@ single-view report shape. Agent integrations consume `text`.
 
 ### Reference parity
 
-**Requirement (agreed):** people and agents receive the same resolved
+**Requirement:** people and agents receive the same resolved
 reference text. On the composed canvas, **Copy reference** in the top bar
 copies the canvas reference, which is exactly the record's `text`: the
 artboard count and selected artboard, then for each artboard its ID and
@@ -118,10 +125,10 @@ workbench runs its own server.
 
 ### Delivery to agents
 
-| Surface | Agents | What the user does | What the agent gets | Status |
-| --- | --- | --- | --- | --- |
-| Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a page is showing | Implemented |
-| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor the agent configuration covers | Asks about "this page", or attaches the resource | The current view on request | Implemented |
+| Surface | Agents | What the user does | What the agent gets |
+| --- | --- | --- | --- |
+| Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a page is showing |
+| MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor the agent configuration covers | Asks about "this page", or attaches the resource | The current view on request |
 
 ### The agent configuration sets it up
 
@@ -149,7 +156,7 @@ definitions before they can run.
 
 ## Proposals
 
-These integrations are proposed, not agreed or implemented.
+These integrations are proposals.
 
 | Surface | Agents | What the user does | What the agent gets |
 | --- | --- | --- | --- |
@@ -208,7 +215,7 @@ complete canvas record.
   [server.test.js](../../server/node/server.test.js) (the route and the file's lifecycle),
   and the context reader's, output's and loader's own tests in the package
   that generates the agent configuration.
-- Manual, not yet done: the hook and tool inside the Claude Code and Codex
+- Manual (no evidence yet): the hook and tool inside the Claude Code and Codex
   extensions, with their versions recorded.
 
 ## Open questions

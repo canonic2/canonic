@@ -6,6 +6,12 @@ does to an open page, and how errors recover. The edit requirements are in
 [performance](../system/performance.md#edits-apply-in-place); this spec defines how the
 pipeline meets them.
 
+**Status:** Implemented: the push channel and its heartbeat, hot updates for
+every native format, the reload rule, per-entry build errors and in-place Docs
+Markdown updates. Not implemented: a reopened stream starting with the current
+state, the source-accept callback for Docs examples, and keeping open pages
+current when the entry set changes ([gaps](#gaps)).
+
 ## Requirements
 
 ### Push
@@ -26,8 +32,7 @@ pipeline meets them.
 
 - The stream sends a heartbeat every 15 seconds, so a broken connection is
   noticed and reopened. A reopened stream must start with the current state,
-  so a frame that missed a build catches up; this is not implemented yet
-  ([status](#status)).
+  so a frame that missed a build catches up.
 
 ### Frames that apply updates
 
@@ -127,10 +132,7 @@ mounts its preview there. Any other document reloads.
 - When saves follow each other quickly, the page ends with the last save's
   output.
 
-## Status
-
-Implemented: the push channel, hot updates for every native format, the reload
-rule, errors per entry and docs pages updated in place. Gaps:
+## Gaps
 
 - Docs entries register their example modules but do not add the preview
   entry's source-accept callback ([entries.rs](../../server/src/compiler/entries.rs)).

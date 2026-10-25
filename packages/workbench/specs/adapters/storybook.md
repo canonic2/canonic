@@ -5,6 +5,10 @@ The [Storybook contract](../pages/storybook.md) owns configuration, story identi
 story switching, screenshots and export; this spec owns how the Workbench
 server gets Storybook to render a story.
 
+**Status:** Implemented in the Rust Workbench server, for both a Storybook it
+runs (started on the host's Node runtime) and one the user runs
+([server](../system/server.md)). This topic records no implementation gap.
+
 ## Source
 
 A page maps to one exact Storybook title, and its stories are the page's
@@ -84,9 +88,3 @@ Vite 8: ready in about 1.7 to 2 seconds with `--preview-only`; the index,
 through the socket; editing a stories file updated the framed story in
 place; nothing listened on 6006. Vite writes the port it is given into its
 live-update client, which is why Storybook is told the proxy's port.
-
-## Status
-
-Implemented in the Rust Workbench server, for both a Storybook it runs and
-one the user runs ([server](../system/server.md)). The Storybook it runs is started on
-the host's Node runtime.

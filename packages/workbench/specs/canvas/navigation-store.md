@@ -1,15 +1,14 @@
 # Navigation store
 
-**Status:** agreed, not implemented. Navigation will hold its state in a store
-built on Lattice's state management (`@canonic2/lattice`), which defines stores,
-selectors, bindings, phases, transitions and asynchronous work. Today the same
-facts live in closures across the legacy shell, the navigation and
-preview-session controllers, the canvas bootstrap and the content renderer,
-reconciled by explicit calls such as `present()` and per-owner sequence counters.
+Navigation holds its state in a store built on Lattice's state management
+(`@canonic2/lattice`), which defines stores, selectors, bindings, phases,
+transitions and asynchronous work. This page owns the store's design.
+[Navigation](navigation.md) owns the behavior it holds; the
+[browser UI port](../system/ui-port.md#navigation-store-adoption) owns the order
+in which the store is adopted.
 
-This page owns the store's design. [Navigation](navigation.md) owns the
-behavior it holds; the [browser UI port](../system/ui-port.md#navigation-store-adoption)
-owns the order in which the store is adopted.
+**Status:** agreed, not implemented; see
+[implementation gaps](#implementation-gaps).
 
 ## State
 
@@ -94,3 +93,10 @@ These hold after every event, in any order:
 Transition tests drive generated event sequences through these invariants.
 Browser regressions through the shell and renderer cover the
 [discoveries](navigation.md#discoveries).
+
+## Implementation gaps
+
+- No store exists. The same facts live in closures across the legacy shell,
+  the navigation and preview-session controllers, the canvas bootstrap and the
+  content renderer, reconciled by explicit calls such as `present()` and
+  per-owner sequence counters.

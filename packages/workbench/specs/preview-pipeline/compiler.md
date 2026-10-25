@@ -7,6 +7,17 @@ and the project plugin contract are in [plugins](plugins.md); delivering the
 output is in [serving](serving.md). The [page index](page-index.md) owns
 server-side listing; the compiler builds what its listing found.
 
+**Status:** Implemented in [compiler.rs](../../server/src/compiler.rs) and its
+modules, with portable builds in [portable.rs](../../server/src/compiler/portable.rs):
+one compiler per space and profile, generated entries, in-memory output, the
+persistent cache, generations on configuration changes, per-entry build errors
+and the Node evaluator jobs. The implemented start declares and builds every
+entry before serving the first; that first-page gap is owned by
+[performance](../system/performance.md#implementation-gaps), with a proposed replacement
+start in [first page](first-page.md). Live source maps, a rule for
+entries added while pages are open and compiler bounds are not implemented
+([gaps](#gaps)).
+
 ## Requirements
 
 ### One compiler per project and profile
@@ -42,9 +53,7 @@ server-side listing; the compiler builds what its listing found.
 ### Entries
 
 - Every discovered preview, and every docs page in each of its docs lenses,
-  is an entry. Today all of them are declared and built before the first is
-  served; that eager start misses the first-page requirement
-  ([performance status](../system/performance.md#status)).
+  is an entry.
 - Only discovered definitions inside the project compile. A request for one
   definition checks discovery rules directly without scanning every project
   file.
@@ -150,17 +159,10 @@ The portable build and the export's docs examples use a production
 compiler with the same format handling and project plugins
 ([plugins](plugins.md#portable-output)).
 
-## Status
-
-Implemented in [compiler.rs](../../server/src/compiler.rs) and its modules,
-with portable builds in [portable.rs](../../server/src/compiler/portable.rs).
-Gaps:
+## Gaps
 
 - Live builds have no source maps. The lab measured builds without them, and
   turning them on is not yet measured.
-- The first page after a restart waits for every entry to build
-  ([performance status](../system/performance.md#status); proposed
-  [first-page design](first-page.md)).
 - An entry added while pages are open changes the entry set
   ([open questions](#open-questions)).
 - The compiler's memory, and the persistent cache's growth over long

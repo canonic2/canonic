@@ -42,23 +42,15 @@ they develop, separate from current behavior and observed acceptance.
 | Check host prerequisites or upgrades | [Hosting](integrations/hosting.md), then the owning host/capability |
 | Change processes or host messages | [Server](system/server.md), then [VS Code](integrations/vscode-extension.md) |
 | Investigate performance | [Budgets and measurement](system/performance.md), [research](../research/README.md), then [lab method](system/labs.md) |
-| Assess verification | The capability's status/acceptance, [quality gates](system/code-quality.md) and its linked evidence |
+| Assess verification | [Verification index](system/verification.md), then the capability's verification section and [quality gates](system/code-quality.md) |
 
-## Delivery boundaries
+## Status and verification
 
-| Area | Current implementation and remaining work |
-| --- | --- |
-| Shell/content boundary | One shell and dedicated content renderers are implemented; independent UI/backend acceptance remains open |
-| Preview pipeline | Native listing, watching and compilation are implemented. Docs navigation and installed startup have scoped measurements; the full first-page/list target campaign remains open |
-| Artboards | Scenario-owned composition, isolated instances, review and context are implemented. Free artboard management, phase 2 arrangement and saved/shared layouts remain open |
-| Iterations | [Artboards and iterations](pages/iterations.md): model, render, address, review and export are implemented; iteration UI waits for the UI port |
-| UI port | [Target layout and port order](system/ui-port.md) are agreed: the whole browser UI moves to Lattice and an `app/`, `views/`, `components/`, `modules/` layout. Not started; it follows Lattice's guides, its collection lab and the delivery slice |
-| UI and sizes | Components and configurable sizes are implemented. Configure pages size cards, public-guide alignment and the canvas theme bridge remain gaps |
-| Persistence | Current-space choice, origin-bound preferences in `localStorage` and first-page fallback exist. Complete selection/preference restoration is agreed implementation work: IndexedDB in browsers, workspaceState in VS Code |
-
-Detailed status and acceptance stay in their owning topic. An implemented
-support API, passing unit check or prototype comparison does not establish
-a complete user workflow or acceptance on every host.
+Each topic states its status once, in a paragraph at its top, and lists its
+unmet requirements in its own gaps section. [Verification](system/verification.md)
+maps automated coverage and host acceptance evidence across capabilities and
+hosts. An implemented support API, passing unit check or prototype comparison
+does not establish a complete user workflow or acceptance on every host.
 
 ## Maintaining the boundaries
 

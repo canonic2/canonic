@@ -11,6 +11,12 @@ The keys, their validation rules, and examples are in the
 repeat them. It records the behavior those keys produce, the decisions behind
 it, and where the code falls short.
 
+**Status:** authored HTML pages with the compatibility script, URL
+implementations (including Gate service endpoints), code pointers, iOS
+Simulator and window implementations, and the native window stream are
+implemented. Problems for unbooted mapped Simulator devices and handling of
+links to unlisted project pages are not; see [current gaps](#current-gaps).
+
 ## Authored HTML pages
 
 ### Requirements

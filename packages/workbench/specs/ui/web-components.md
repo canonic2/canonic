@@ -1,24 +1,24 @@
 # Workbench Web Components
 
-## Purpose and status
+## Purpose
 
 Workbench's own browser interface uses Web Components as its target component
 architecture. Components ship under `packages/workbench/ui/src/components/<name>/`;
-the agreed [target layout](../system/ui-port.md), not
-yet ported, also places elements only one view uses under that view's
-`components/`. They work
+the agreed [target layout](../system/ui-port.md) also places elements only one
+view uses under that view's `components/`. They work
 in the VS Code sidebar, the embedded canvas, and the standalone browser canvas.
 This contract concerns the tool's interface, not the framework used by pages it
 previews. It does not change the preview adapters or require projects to adopt
 Web Components.
 
-**Status:** migrated space, size and Actions controls use this contract. The space switcher
-and its decorative space mark use this contract in the sidebar, breadcrumb and
-design examples. The size switcher and its two dialogs, Custom size and Edit
-sizes, follow it in the canvas top bar ([sizes](../canvas/sizes.md)), as does the Actions
-switch beside it. The canvas presentation and export dialog also use owned
-Web Components; the existing shell composes them. Remaining interface surfaces
-use HTML, JavaScript and shared CSS.
+**Status:** the space switcher and space mark (sidebar, breadcrumb), the size
+switcher with its Custom size and Edit sizes dialogs, the Actions switch, the
+canvas presentation and the export dialog are implemented under this contract,
+each with its design page; the existing shell composes them. Migrating the
+remaining interface surfaces, which use HTML, JavaScript and shared CSS, and the
+port to the target layout (`ui/src/views/`, Lattice bindings) are agreed but not
+started. See [evidence and implementation gaps](#evidence-and-implementation-gaps).
+
 Related contracts: [themes](themes.md),
 [core behavior](../core.md), and [extension hosting](../integrations/vscode-extension.md).
 
@@ -34,9 +34,7 @@ not initialize another copy of the application.
 The agreed [target layout](../system/ui-port.md) keeps
 shared components under `ui/src/components/`, elements used by one area of the
 interface under its `ui/src/views/<view>/components/`, and capability state and
-operations under `ui/src/modules/<capability>/`. The port to that layout has not
-started: every shipping element is in `ui/src/components/<name>/`, and no
-`ui/src/views/` folder exists. Components receive inputs and emit events across
+operations under `ui/src/modules/<capability>/`. Components receive inputs and emit events across
 that boundary; they do not own capability I/O or application state.
 
 - Use autonomous custom elements extending `HTMLElement`, with `wb-` tag names
@@ -44,8 +42,7 @@ that boundary; they do not own capability I/O or application state.
   Author browser-native JavaScript and CSS. Hosts serve/copy these modules unchanged;
   no TypeScript, transpilation, bundling or generated implementation is required.
 - Give each component a named folder, with its element implementation, owned
-  styles, and meaningful behavioral tests: `ui/src/components/<name>/` today;
-  in the target layout, `ui/src/views/<view>/components/<name>/` when one view
+  styles, and meaningful behavioral tests; in the target layout, `ui/src/views/<view>/components/<name>/` when one view
   uses it and `ui/src/components/<name>/` once a second view or document does.
   Put component helpers beside their owner; extract shared
   behavior only when it has consumers.
@@ -80,7 +77,7 @@ temporary interaction state belong to the component. Avoid mirrored application
 state that can drift away from its owner. Components do not subscribe to stores.
 In the [target layout](../system/ui-port.md), a
 capability's binding supplies their inputs, following Lattice's state management;
-until that port, their controller sets them.
+outside it, their controller sets them.
 
 Emit named, typed custom events from the host for user intent. Events intended
 for ancestor controllers bubble and are composed; document their detail payload
@@ -185,6 +182,10 @@ element, not in the page.
 
 ## Evidence and implementation gaps
 
+- **Unmigrated surfaces.** Interface surfaces other than the components below
+  use HTML, JavaScript and shared CSS.
+- **Target layout.** Every shipping element is in `ui/src/components/<name>/`;
+  no `ui/src/views/` folder or Lattice binding exists yet.
 - [Size switcher](../../ui/src/components/size-switcher/element.js),
   [Custom size](../../ui/src/components/size-dialog/element.js),
   [Edit sizes](../../ui/src/components/sizes-editor/element.js), and the

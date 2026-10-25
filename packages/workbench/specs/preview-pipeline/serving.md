@@ -10,6 +10,15 @@ hosting is separate from this project pipeline and from Workbench UI composition
 artboards follow [content-only rendering](../system/rendering-flow.md). UI assets follow the required
 [UI/backend independence contract](../system/modules.md#ui-and-backend-independence).
 
+**Status:** Implemented in `workbench-server`, which answers
+`/_workbench/previews/` and `*.workbench.ts(x)` page addresses
+([previews.rs](../../server/src/serve/previews.rs)) once its page tree has
+configured previews ([server](../system/server.md#previews)): generation URL
+prefixes and caching, the preview module, preload selection for preview and
+Docs entries in the generated client, and concurrent routes with no serial
+queue. The one gap, descriptors waiting for pre-warming, is listed in
+[gaps](#gaps).
+
 ## Requirements
 
 ### Chunks and URLs
@@ -83,22 +92,10 @@ checks navigation for unused-runtime-preload warnings
 - Preview and docs descriptors wait for the build that contains their entry
   ([compiler](compiler.md#entries)), and for nothing else.
 
-## Status
+## Gaps
 
-Implemented in `workbench-server`, which answers
-`/_workbench/previews/` and `*.workbench.ts(x)` page addresses
-([previews.rs](../../server/src/serve/previews.rs)) once its page tree has
-configured previews ([server](../system/server.md#previews)); a preview asked for
-first assembles the page tree. Requests are
-answered concurrently, with no serial queue; an Astro render waits only for
-the Node evaluator's answer to it. One gap: preview and docs descriptors
-wait for pre-warming to finish ([first-page status](../system/performance.md#status)).
-
-The initialized-runtime preload correction is implemented in `client.rs` for
-preview and Docs entries. Runtime/profile inspection precedes preload selection;
-cold documents retain the existing parallel-fetch and execution order. Focused
-Rust tests cover generated client selection and ordering. Docs HMR fallback and
-compiler replacement keep the dedicated Docs host and release its subscriptions.
+- Preview and docs descriptors wait for pre-warming to finish
+  ([first-page gap](../system/performance.md#implementation-gaps)).
 
 ## Verification
 

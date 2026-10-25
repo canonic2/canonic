@@ -46,11 +46,13 @@ the targets the whole pipeline is measured against.
 
 ## Topics
 
+Each topic states its status in a paragraph at its top.
+
 | Spec | Covers |
 | --- | --- |
 | [Page index](page-index.md) | Complete ordered listing, definition parity, saved-state invalidation, process and storage bounds, failure recovery and acceptance evidence |
 | [Compiler](compiler.md) | Rspack compilers per project and profile, configuration from the page tree, the fixed entry set, in-memory output, persistent caching, config changes, build errors, packaging and the jobs it sends the Node evaluator |
-| [First page](first-page.md) | Proposed, not agreed: design constraints for a compiler start that serves the first page without building every entry |
+| [First page](first-page.md) | Design constraints for a compiler start that serves the first page without building every entry |
 | [Serving](serving.md) | Output URLs and caching, the preview module, stylesheet names, which requests wait for a build |
 | [Hot updates](hot-updates.md) | The push channel, edit behavior per format, the reload rule, state kept across edits, build errors and recovery, hidden frames |
 | [Warm runtime](warm-runtime.md) | Pre-warming, preview reuse, isolation, the retained content-session budget and resource bounds |
@@ -67,7 +69,7 @@ observations and lab/host evidence; neither is a second pipeline implementation 
 Each decision lives with the topic that owns it:
 
 - Rspack as the development and portable compiler: [compiler](compiler.md#decisions).
-- The eager start and its first-page gap: [performance status](../system/performance.md#status);
+- The eager start and its first-page gap: [performance gaps](../system/performance.md#implementation-gaps);
   a proposed replacement start: [first page](first-page.md).
 - Listing independently of compilation: [page index](page-index.md#purpose-and-ownership).
 - First-page and complete-list targets at any page count, and how
@@ -77,41 +79,11 @@ Each decision lives with the topic that owns it:
   [server decisions](../system/server.md#decisions-for-the-owner).
 - One Rust server runtime with Node only as an evaluator: [adapters](../adapters/README.md#decisions).
 
-## Status
-
-| Capability | Implementation and evidence boundary |
-| --- | --- |
-| Native page listing | Implemented in `server/` ([catalog.rs](../../server/src/catalog.rs) reads its answer); [acceptance](page-index.md#acceptance-and-evidence) maps behavior to tests and identifies gaps. [Server timings](../../research/page-listing.md#page-listing) do not establish canvas-paint acceptance |
-| Rust engineering gates | Implemented; [code quality](../system/code-quality.md) owns tools, policy, test conventions and CI enforcement |
-| Warm Docs pool | Implemented: immediate retained resume, background revision checks, parallel metadata and bounded same-lens idle reuse. [Integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23) separates focused tests, shipping measurements and installed Acme confirmation |
-| Rspack compilation and pre-warming | Implemented in `workbench-server` with Rspack's Rust crates, one compiler per space and profile, pre-warming every listed preview and docs lens once the page tree configures them (at startup when the host passes `--eager-previews`, [warm runtime](warm-runtime.md#status)); project JavaScript runs in the Node evaluator over stdin and stdout ([server](../system/server.md#previews), [compiler](compiler.md)). Scoped Docs and startup measurements exist; the complete-list/first-page target campaign remains open |
-
-The implemented page index follows this [design direction](#decisions).
-It lists pages independently of the compilers and the Node evaluator; it
-does not change the compiler's entry preparation or pre-warming.
-
-The Rspack preview pipeline is implemented in
-[server/src/compiler.rs](../../server/src/compiler.rs) and its modules, the
-Node evaluator, and the preview runtime, canvas and docs page. Each topic's
-status names what remains. Automated evidence belongs to each topic's verification section.
-The [Rspack pipeline research](../../research/rspack-pipeline.md)'s stage 1
-checks on the formats fixture have not been run against this
-implementation. The confirmation run the
-[labs methodology](../system/labs.md#reports-and-decisions) asks for, the lab's
-full format-by-format sequences through the shipping server and the VS Code
-webview, remains open. The narrower warm Docs confirmation and installed Acme
-checks are complete, with limits recorded in [Docs navigation evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
-
-Design evidence and comparisons live in the
-[Rspack pipeline research](../../research/rspack-pipeline.md#stage-2-2026-10-13).
-Current product measurements and acceptance limits belong to
-[performance](../system/performance.md#status).
-
 ## Open questions
 
 Each topic owns its unresolved decisions:
 
-- [Page index](page-index.md#remaining-work)
+- [Page index](page-index.md#gaps)
 - [Compiler](compiler.md#open-questions)
 - [First page](first-page.md#open-questions)
 - [Readiness](readiness.md#open-questions)

@@ -13,9 +13,7 @@ Components present supplied data and emit intent. Capability controllers own
 navigation, persistence, rendering and I/O. In the agreed
 [target layout](../system/ui-port.md), application
 state follows Lattice's state management (`@canonic2/lattice`): capability
-stores hold it and bindings connect it to components. That port has not
-started; today the shell and capability controllers in `ui/legacy/` and
-`ui/src/modules/` hold application state. [Modules](../system/modules.md)
+stores hold it and bindings connect it to components. [Modules](../system/modules.md)
 owns that dependency direction; [rendering flow](../system/rendering-flow.md)
 owns shell/content separation. The [VS Code integration](../integrations/vscode-extension.md)
 applies the theme transport contract without defining a second token model.

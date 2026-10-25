@@ -1,9 +1,14 @@
 # Configure pages
 
-Status: the collections form and native config writes are implemented. This
-topic owns editing authored page declarations through **More → Configure pages**.
+This topic owns editing authored page declarations through **More → Configure pages**.
 [Core](../core.md#configuration-and-serving) owns manifest composition and
 [sizes](../canvas/sizes.md) owns size validation and its separate editing dialogs.
+
+**Status:** the collections form and the server's atomic, preserving
+`workbench.yaml` writes are implemented. Fencing stale reads and save
+completions by form and space, and resolved size cards in the form, are agreed
+but not implemented; a conflict policy and draft warnings are open decisions.
+See [gaps and open decisions](#gaps-and-open-decisions).
 
 ## Editing workflow
 
@@ -86,7 +91,7 @@ browser form workflow, concurrent editing or injected filesystem failure matrix.
 
 ## Gaps and open decisions
 
-- Resolved custom/page-owned size cards remain [size-editor delivery work](../canvas/sizes.md#remaining-delivery).
+- Resolved custom/page-owned size cards remain [size-editor delivery work](../canvas/sizes.md#implementation-gaps).
 - The legacy form does not fence asynchronous requests by opening/space
   generation; stale completion acceptance above remains implementation work.
 - Choose a conflict policy for external YAML edits and two open forms. A

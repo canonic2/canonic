@@ -6,6 +6,15 @@ format becomes Rspack input, and the plugin contract projects use in
 `resolveExtensions`, `define`, `environment`) keeps its meaning, as defined in
 [previews](../pages/previews.md#adapters-and-project-configuration).
 
+**Status:** Implemented in the native compiler in `workbench-server`
+([compiler/](../../server/src/compiler.rs), [plugins/](../../server/src/compiler/plugins.rs)):
+Workbench's format handling, the `plugins` capabilities, project `rules` with
+JavaScript loaders run in the Node evaluator
+([node_loader.rs](../../server/src/compiler/node_loader.rs)), problems for
+JavaScript plugin objects and invalid options, and portable output from a
+production build. Not implemented: project plugins and rules for Astro's
+server-side bundling ([gaps](#gaps)).
+
 ## Requirements
 
 ### Workbench format handling
@@ -157,42 +166,32 @@ Migration acceptance must cover:
   fallback. Native capabilities track their file and directory dependencies so
   hot updates and the persisted build cache invalidate correctly.
 
-## Status
+## Gaps
 
-Implemented in the native compiler in `workbench-server`
-([compiler/](../../server/src/compiler.rs)): Workbench's format handling, the
-`plugins` capabilities above
-([plugins/](../../server/src/compiler/plugins.rs)), project `rules` with
-JavaScript loaders run in the Node evaluator
-([node_loader.rs](../../server/src/compiler/node_loader.rs)), problems for
-JavaScript plugin objects and invalid options, and portable output from a
-production build. HTML previews bundle every inline and local script and run
-it per render, with top-level declarations private. An `aliases` entry
-stands in for an Astro application module, such as `astro:content`.
-
-Verified against the acceptance list, with the
-[preview tests](../../server/node/preview.test.js) and the compiler's unit tests
-(2026-10-19, debug build): SVG symbol IDs, view boxes, ID and reference
-prefixing, registration and names modules; glob ordering and keys, default and
-named imports, several calls without name collisions, comments and strings
-left as written; importer-dependent resolution beside the default; a loader
-rule run in Node with options; JavaScript plugins reported as problems. Gaps:
-
-- Rebuilding after an icon or a glob-matched file is added, edited or deleted
-  relies on the modules' recorded folder and file dependencies; no test
-  edits an icon or a matched file in a running server yet.
-- Live and docs-example output use the same rules and plugins as the
-  portable build, but parity between them is not compared in a test.
-- Astro frontmatter and Astro input edits still bundle with esbuild in the
-  Node evaluator, without project plugins or rules.
+- Astro frontmatter and Astro input edits bundle with esbuild in the Node
+  evaluator, without project plugins or rules.
 
 ## Verification
 
 [Preview integration tests](../../server/node/preview.test.js) cover plugin
 capabilities, module rules, format handling and portable builds; the
-compiler's Rust unit tests cover each capability's transformation. Plugin behavior in
-server-side definition and Astro evaluation must be assessed separately from
-browser compilation; successful browser output does not establish that path.
+compiler's Rust unit tests cover each capability's transformation. Against the
+migration acceptance list they cover SVG symbol IDs, view boxes, ID and
+reference prefixing, registration and names modules; glob ordering and keys,
+default and named imports, several calls without name collisions, comments and
+strings left as written; importer-dependent resolution beside the default; a
+loader rule run in Node with options; and JavaScript plugins reported as
+problems. Test gaps:
+
+- Rebuilding after an icon or a glob-matched file is added, edited or deleted
+  relies on the modules' recorded folder and file dependencies; no test
+  edits an icon or a matched file in a running server.
+- Live and docs-example output use the same rules and plugins as the
+  portable build, but parity between them is not compared in a test.
+
+Plugin behavior in server-side definition and Astro evaluation must be assessed
+separately from browser compilation; successful browser output does not
+establish that path.
 
 ## Open questions
 

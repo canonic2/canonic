@@ -1,14 +1,16 @@
 # Workbench shell and content rendering
 
-Status: content-only renderer implemented. Browser acceptance checks document
-requests and child markup as well as warm sessions, labels and review behavior.
-Independent UI/backend hosting acceptance remains separate work.
-
 This topic owns the shell/content boundary. [Modules](modules.md) owns UI/backend
 independence and asset delivery; [core](../core.md) owns selection,
 [navigation](../canvas/navigation.md) owns transitions between destinations,
 [readiness](../preview-pipeline/readiness.md) owns render completion, and
 [multiple artboards](../canvas/multiple-artboards.md) owns instances.
+
+**Status:** implemented: one shell per canvas document and the dedicated
+content-only renderer. Not established: independent UI/backend hosting
+(owned by [modules](modules.md#implementation-gaps)) and live device checks of
+every native adapter; see
+[acceptance and verification gaps](#acceptance-and-verification-gaps).
 
 ## Required flow
 

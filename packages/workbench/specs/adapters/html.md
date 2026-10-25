@@ -2,6 +2,9 @@
 
 Part of the [adapters](README.md). User guide: [HTML](../../docs/html.md).
 
+**Status:** Implemented as Rust loaders in `workbench-server`'s compiler, as
+the [target](#target) describes. This topic records no implementation gap.
+
 ## Source
 
 A preview's `source.entry` is either:
@@ -59,9 +62,8 @@ place ([hot updates](../preview-pipeline/hot-updates.md#edit-behavior)).
 The HTML loader and part loader are Workbench's own code, without project
 JavaScript, so they are Rust loaders in the Workbench server.
 
-## Status
+## Verification
 
-Implemented as Rust loaders in `workbench-server`'s compiler, as the target
-describes, covered by [preview.test.js](../../server/node/preview.test.js)
-(scripts, inline modules, CSS, `srcset`, assets) and the unit tests in
-[html.rs](../../server/src/compiler/html.rs).
+[preview.test.js](../../server/node/preview.test.js) covers scripts, inline
+modules, CSS, `srcset` and assets; the unit tests in
+[html.rs](../../server/src/compiler/html.rs) cover the loaders.

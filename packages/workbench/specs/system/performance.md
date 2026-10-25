@@ -29,15 +29,21 @@ other specs in the [preview pipeline](../preview-pipeline/README.md) define how 
 them. [Labs](labs.md) owns how candidate implementations are compared.
 Feature specs own the behavior that must not change while making it faster.
 
+**Status:** implemented: the native page index, the Rspack compiler and the
+diagnostics below; each [pipeline topic](../preview-pipeline/README.md#topics)
+states the status of the mechanism it owns. Not met: the agreed first-page and complete-list targets, the single shared
+evaluator, and format-by-format acceptance in the VS Code webview; see
+[implementation gaps](#implementation-gaps). Most measured targets are
+proposed, not agreed.
+
 ## Requirements
 
 ### Work is shared per project
 
 - A space root has one compiler per profile in the server, and at most
   one Node evaluator, shared by every native page in it. Opening another
-  page, scenario, size or lens in the same space never starts another compiler.
-  Today definition indexing can start a second, short-lived evaluator; see
-  [Status](#status).
+  page, scenario, size or lens in the same space never starts another compiler
+  ([gap](#implementation-gaps)).
 - Code shared by a project's native pages is compiled once per project and
   adapter. Each compatible warm document retains its initialized shared runtime
   across pages; independently retained documents own separate mutable runtimes.
@@ -225,42 +231,26 @@ Tracing itself adds diagnostic requests and output work. Use it to locate
 waits; controlled lab comparisons must declare its state and independently
 observe the requested content becoming visible.
 
-## Status
+## Implementation gaps
 
-The native page index and Rspack compiler are implemented. The eager compiler
-still waits for the full entry set on first open; complete-list and first-page
-target acceptance remains open. Scoped shipping Docs navigation and installed
-startup checks do not establish the full format or platform matrix.
-
-The shared-evaluator requirement is also incomplete: definition indexing can
-start a short-lived evaluator in addition to the compiler's persistent one
-([process model](server.md#processes-and-connections)). A Storybook the server
-runs is a further Node process, the project's own `storybook dev`, not an
-evaluator. Literal-only listing
-avoids that work; a React/HTML adapter alone does not guarantee every definition
-or project config can be listed without JavaScript.
-
-Dated measurements, fixtures, revisions and limitations live in
-[research](../../research/README.md). The [page-listing record](../../research/page-listing.md)
-records the large-fixture target miss; [installed startup](../../research/startup.md)
-separates runtime preparation from listing. [Docs navigation](../../research/docs-navigation.md)
-and [highlighting](../../research/docs-highlighting.md) distinguish prototype
-comparisons from integrated and installed compatibility evidence.
-
-### Pipeline acceptance
-
-The [pipeline overview](../preview-pipeline/README.md#status) maps implemented capabilities to their
-contracts. The full format-by-format navigation and edit confirmation through
-the shipping server and VS Code webview remains open. Lab comparisons establish
-only their recorded builds and conditions.
-
-### First page
-
-The shipping eager compiler does not meet the [first-open requirement](#first-open-and-edits):
-the first page waits for all entries to be prepared and built, even with a warm
-build cache. Native listing and the adopted native compiler do not change that
-startup boundary. A replacement must preserve navigation, edits, errors and
-isolation while meeting the same end-to-end budget.
+- **First page.** The shipping eager compiler does not meet the
+  [first-open requirement](#first-open-and-edits): the first page waits for all
+  entries to be prepared and built, even with a warm build cache. Native
+  listing and the native compiler do not change that startup boundary. A
+  replacement must preserve navigation, edits, errors and isolation while
+  meeting the same end-to-end budget.
+- **Complete page list.** The agreed listing target is not met on the large
+  fixture ([page-listing record](../../research/page-listing.md)).
+- **Shared evaluator.** Definition indexing can start a short-lived evaluator
+  in addition to the compiler's persistent one
+  ([process model](server.md#processes-and-connections)). A Storybook the server
+  runs is a further Node process, the project's own `storybook dev`, not an
+  evaluator. Literal-only listing avoids that work; a React/HTML adapter alone
+  does not guarantee every definition or project config can be listed without
+  JavaScript.
+- **Pipeline acceptance.** Format-by-format navigation and edit confirmation
+  through the shipping server and VS Code webview is open. Scoped shipping Docs navigation and
+  installed startup checks do not establish the full format or platform matrix.
 
 ## Verification
 
@@ -271,6 +261,13 @@ isolation while meeting the same end-to-end budget.
   capability's status.
 - Keep test coverage, observed correctness, latency and platform acceptance
   distinct. Research records do not redefine budgets or correctness tolerances.
+  Lab comparisons establish only their recorded builds and conditions.
+
+Dated measurements, fixtures, revisions and limitations live in
+[research](../../research/README.md). [Installed startup](../../research/startup.md)
+separates runtime preparation from listing. [Docs navigation](../../research/docs-navigation.md)
+and [highlighting](../../research/docs-highlighting.md) distinguish prototype
+comparisons from integrated and installed compatibility evidence.
 
 ## Open questions
 

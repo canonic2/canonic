@@ -14,6 +14,12 @@ The [preview pipeline](../preview-pipeline/README.md) owns compiling,
 serving, warm documents and hot updates. An adapter spec owns only what
 differs for its technology, and links to those topics for the rest.
 
+**Status:** The [serving model](#how-pages-are-served) is implemented in
+`workbench-server`'s preview compiler ([compiler.rs](../../server/src/compiler.rs))
+and the Node evaluator; each adapter spec states its own status at its top.
+Adapters as separate units, an agreed [decision](#decisions), are not
+implemented ([gaps](#gaps)).
+
 ## Adapters
 
 | Adapter | Spec | Compiles with | Project code on the server | Mounts with |
@@ -75,7 +81,7 @@ evaluator only for the parts that have to run JavaScript:
 | --- | --- | --- |
 | React, React Native Web, HTML | Native compilation and serving | No adapter-specific evaluation; definitions/configuration can still need JavaScript |
 | Vue | Everything but compiling single-file components; a Rust compiler takes that over only if one passes conformance ([target](vue.md#target)) | Workbench's bundled `@vue/compiler-sfc`, for each `.vue` file |
-| Astro | Rendered HTML, client scripts and styles; saved warm-start renders remain proposed | Renders: startup, edits, input changes ([target](astro.md#target)) |
+| Astro | Rendered HTML, client scripts and styles | Renders: startup, edits, input changes ([target](astro.md#target)) |
 | Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server on a local socket ([how](storybook.md#a-storybook-the-server-runs)) |
 | Custom adapters | The browser mount, native plugin capabilities and Rust-native rules | The project's JavaScript loaders |
 
@@ -108,8 +114,8 @@ Decided by the owner on 2026-10-16, after the
   loaders. Project plugin capabilities migrate to Rust
   ([decision](../preview-pipeline/plugins.md#plugin-migration-decision)).
   A project that needs none of the JavaScript steps starts no Node process.
-  The Node processes that exist today beside the evaluator are listed in the
-  server's [processes and connections](../system/server.md#processes-and-connections).
+  The server's [processes and connections](../system/server.md#processes-and-connections)
+  list the Node processes beside the evaluator.
 - **Each adapter is a separate unit** that owns its build settings,
   project-code step, browser mount and documentation, instead of having its
   format handling spread through the pipeline.
@@ -128,25 +134,16 @@ Decided by the owner on 2026-10-16, after the
   with no catalog import ([Storybook adapter](storybook.md#decisions)).
 - The name stays **adapter**, as in the `adapter` key and the user guides.
 
-## Status
+## Gaps
 
-Implemented in `workbench-server`'s preview compiler
-([compiler.rs](../../server/src/compiler.rs)) and the Node evaluator, as the
-[serving model](#how-pages-are-served) describes: React, React Native Web,
-HTML and custom adapters compile natively; Vue compiles with Workbench's
-`@vue/compiler-sfc` in the Node evaluator and native loaders; Astro renders
-in the Node evaluator and its client side builds natively through the HTML
-loader. The evaluator takes no port
-([processes and connections](../system/server.md#processes-and-connections)).
-Format handling is shared code rather than separate units: the profiles and
-Workbench's rules are in [options.rs](../../server/src/compiler/options.rs),
-the adapter-to-module map in [project.rs](../../server/src/compiler/project.rs),
-Vue in [vue.rs](../../server/src/compiler/vue.rs), Astro in
-[astro.rs](../../server/src/compiler/astro.rs) and the evaluator's
-[astro.ts](../../server/node/src/modules/evaluator/astro.ts), and project
-plugin capabilities in [plugins.rs](../../server/src/compiler/plugins.rs).
-A Storybook the server runs is implemented in the server as the target
-describes, on a local socket ([Storybook](storybook.md#status)).
+- **Adapters are not separate units.** Format handling is shared code: the
+  profiles and Workbench's rules are in [options.rs](../../server/src/compiler/options.rs),
+  the adapter-to-module map in [project.rs](../../server/src/compiler/project.rs),
+  Vue in [vue.rs](../../server/src/compiler/vue.rs), Astro in
+  [astro.rs](../../server/src/compiler/astro.rs) and the evaluator's
+  [astro.ts](../../server/node/src/modules/evaluator/astro.ts), and project
+  plugin capabilities in [plugins.rs](../../server/src/compiler/plugins.rs).
+  Where each adapter should live is an [open question](#open-questions).
 
 ## Open questions
 

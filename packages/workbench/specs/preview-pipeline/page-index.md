@@ -1,8 +1,11 @@
 # Page index
 
-Status: implemented for preview and docs discovery in the native server,
-including its resident index and definition watcher. Compilation and
-pre-warming are separate responsibilities of the native compiler.
+**Status:** Implemented in the native server for preview and docs discovery:
+literal parsing, batched evaluation, saved-index reuse, the resident index and
+its definition watcher. The complete-list target is not met on large projects
+([performance](../system/performance.md#implementation-gaps)). Remaining implementation
+gaps are in [gaps](#gaps); test gaps are in
+[acceptance and evidence](#acceptance-and-evidence).
 
 ## Purpose and ownership
 
@@ -149,10 +152,9 @@ acceptance.
 | PI-07 | Cache eviction, byte bounds and process cleanup follow the resource table | Implemented bounds; dedicated boundary/eviction and descendant-cleanup assertions remain verification gaps |
 | PI-08 | Installed platform binary lists pages with the same public manifest shape | Host packaging/install probe recorded in [listing evidence](../../research/page-listing.md); acceptance on all six targets is not established by that probe |
 
-## Remaining work
+## Gaps
 
-The implemented design uses directory-stamp reuse, literal parsing and the
-definition evaluator, a resident index and a definition watcher. [Listing research](../../research/page-listing.md) records measured
+[Listing research](../../research/page-listing.md) records measured
 results and target gaps; [comparison evidence](../../research/instant-first-page.md#stage-1-2026-10-15)
 supports the architecture without defining the shipping interface.
 

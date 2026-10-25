@@ -9,6 +9,11 @@ switching in the editor belongs to [VS Code](../integrations/vscode-extension.md
 space sizes to [sizes](../canvas/sizes.md), and problem reporting to
 [core](../core.md#problem-reporting).
 
+**Status:** spaces, local overrides, authored and imported pages, merging,
+ordering, icons and the page list are implemented. The server does not check
+an authored preview page's per-scenario paths when the page index doesn't run;
+see [implementation gaps](#implementation-gaps).
+
 ## The levels
 
 ```text

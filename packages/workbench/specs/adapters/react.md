@@ -2,6 +2,10 @@
 
 Part of the [adapters](README.md). User guide: [React](../../docs/react.md).
 
+**Status:** Implemented natively in `workbench-server`'s compiler with
+Rspack's Rust crates ([options.rs](../../server/src/compiler/options.rs)).
+This topic records no implementation gap.
+
 ## Source
 
 A preview's `source` is a React component; `inputs` are its props. A docs
@@ -46,10 +50,10 @@ Refresh and native CSS. The lab's Rust host builds React pages natively and
 passes the stage 2 correctness checks
 ([report](../../research/instant-first-page.md#stage-2-2026-10-16)).
 
-## Status
+## Verification
 
-Implemented natively in `workbench-server`'s compiler with Rspack's Rust
-crates ([options.rs](../../server/src/compiler/options.rs)), covered by
-[preview.test.js](../../server/node/preview.test.js) with project React
-versions. The retained-session browser smoke on a React preview passed on a
-debug build ([server verification](../system/server.md#verification)).
+[preview.test.js](../../server/node/preview.test.js) covers project React
+versions. The retained-session browser smoke
+([smoke-preview-sessions.cjs](../../scripts/smoke-preview-sessions.cjs))
+exercises a React preview in headless Chrome
+([server verification](../system/server.md#verification)).

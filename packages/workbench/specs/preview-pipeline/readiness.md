@@ -7,6 +7,11 @@ loading frame when it is ready, and capture and export wait for it
 [capture](../review/capture.md)). This spec defines what it waits for, so that the
 wait covers only real work.
 
+**Status:** Implemented: the font and visible-image waits, per-phase
+diagnostics, hidden-frame rendering and promotion on the renderer's ready
+event. A faster font wait is an [open question](#open-questions), not an agreed
+requirement; this topic records no implementation gap.
+
 ## Requirements
 
 Readiness belongs to the requested [content renderer](../system/rendering-flow.md), not
@@ -19,7 +24,7 @@ and destination must match; a late report cannot reveal another request's pixels
 After mount and the `play` and `ready` hooks, readiness waits for:
 
 - **Fonts the page uses**, including downloads its text starts after mount.
-  Readiness waits on `document.fonts.ready`, as the shipping runtime does.
+  Readiness waits on `document.fonts.ready`.
   Checking `document.fonts.status` once is not enough: the status reads
   `loaded` before layout starts the page's own font downloads
   ([verification](#verification)). A faster rule is [open](#open-questions) and
@@ -62,11 +67,7 @@ font loading and image decoding progress as they would on screen. Only the
 active frame receives input; the others stay inert, as
 [retained sessions](warm-runtime.md#retained-sessions) require.
 
-## Status
-
-Implemented: each phase on its own event, and loading frames rendered behind
-the visible one. Readiness still waits on `document.fonts.ready` and on every
-visible image until the font-wait lab settles a faster rule.
+### Promotion
 
 After a managed document loads, the content-frame owner listens for its
 `workbench:ready` event and rechecks the readiness flag before scheduling

@@ -1,13 +1,15 @@
 # Annotation editing
 
-Status: the annotation tools are implemented in the legacy content renderer.
-This topic collects their existing user workflow and identifies lifecycle and
-verification gaps. It does not introduce an edit-history or storage system.
-
-This spec owns drawing, selection and annotation state. [Interaction](interaction.md)
+This spec owns drawing, selection and annotation state. It does not introduce
+an edit-history or storage system. [Interaction](interaction.md)
 owns focus and shortcut routing; [capture](../review/capture.md) owns pixel
 acquisition and handoff output. The [user guide](../../docs/annotations-and-handoff.md)
 describes the visible controls.
+
+**Status:** implemented in the legacy content renderer: the tools, editing,
+per-artboard ownership and review clearing below. Not settled or implemented:
+consistent clearing across lens changes, annotation bounds and a transactional
+multi-artboard clear; see [implementation gaps](#implementation-gaps).
 
 ## Tools and editing
 
@@ -66,6 +68,10 @@ arrow's tip). An unreadable target remains a coordinate-based annotation; it
 must not be silently omitted or assigned to another artboard. Text is carried
 as user content, not inserted as executable page markup.
 
+A single-view screenshot's file name carries the page, scenario (or story),
+iteration ID, lens key and size key, so iterations of one artboard do not
+overwrite each other's images.
+
 ## Acceptance and evidence
 
 - Draw, select, move, resize, nudge, edit and delete each supported kind without
@@ -82,22 +88,19 @@ Implementation is in [annotations.js](../../ui/legacy/annotations.js) and its
 [styles](../../ui/legacy/annotations.css). [Capture tests](../../ui/legacy/annotations-capture.test.js)
 cover acquisition/handoff paths; [review controller tests](../../ui/src/modules/review/controller.test.js)
 cover completion and failure ownership. [Canvas browser checks](../../scripts/smoke-canvas-ui.cjs)
-exercise instance annotation isolation. These are existing evidence locations,
-not a new test run or complete editing/accessibility acceptance.
+exercise instance annotation isolation. None of them establishes complete
+editing or accessibility acceptance: there is no dedicated behavioral suite
+covering every drawing/editing gesture, text-input composition, touch/pen input
+and keyboard-only creation.
 
-## Gaps and decisions
+## Implementation gaps
 
-- There is no dedicated behavioral suite covering every drawing/editing gesture,
-  text-input composition, touch/pen input and keyboard-only creation.
 - The legacy reset keys annotations by page `src`, scenario and the address's
   iterations map: a change of any of them clears the drawings, while a lens or
   size change keeps them, so a design's notes stay over its implementation for
   comparison. The user guide describes a fresh artboard on page/scenario/lens
   changes. Verify ordinary-renderer retention and explicit artboard replacement
   together before promising consistent cross-lens clearing or preservation.
-- A single-view screenshot's file name carries the page, scenario (or story),
-  iteration ID, lens key and size key, so iterations of one artboard do not
-  overwrite each other's images.
 - Annotation count, freehand-point and text-length bounds are unspecified.
   Establish practical limits with interaction/capture evidence rather than
   assuming the artboard count or image-size limits bound annotation work.

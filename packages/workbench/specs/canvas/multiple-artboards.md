@@ -1,27 +1,29 @@
 # Multiple artboards per canvas
 
-Status: support APIs and composition of a scenario's declared artboards implemented.
-The existing sidebar, top bar, toolbar, view controls and default `index.html`
-entry point remain in place. A scenario's declared artboards appear together inside the canvas
-as artboard instances; the existing controls operate on the selected instance.
-This topic owns the requirements and acceptance of artboard instances and
-declared groups as built. Artboard management (adding, duplicating, closing,
-Fit operations, arrangement and its persistence) is a separate proposal in
-[artboard management](artboard-management.md). The [artboard system](artboard-system.md)
-owns the module architecture.
+A scenario's declared artboards appear together inside the canvas as artboard
+instances; the existing sidebar, top bar, toolbar and view controls operate on
+the selected instance. This topic owns the requirements and acceptance of
+artboard instances and declared groups. Artboard management (adding,
+duplicating, closing, Fit operations, arrangement and its persistence) is a
+separate proposal in [artboard management](artboard-management.md). The
+[artboard system](artboard-system.md) owns the module architecture.
+
+**Status:** implemented: the instance model, isolation, full-canvas review
+composition and context publication, and the canvas showing one scenario's
+declared artboards together. Not implemented: user-facing multi-artboard
+acceptance across mixed content and spaces, and a capture memory budget; see
+[implementation gaps](#implementation-gaps). Management workflows are a
+[proposal](artboard-management.md).
 
 Required architecture: [one shell with content-only renderers](../system/rendering-flow.md).
 The outer application entry point remains unchanged; it must never become an
 artboard's content entry point. Instances use the dedicated `content.html` viewport.
 
-## Implemented support system
+## Instance model and review limits
 
-JavaScript modules under `ui/src/modules/` provide serializable artboard descriptors,
-validated dimensions, insertion-order geometry, a controller with injected
-runtime and snapshot ports, authenticated iframe messaging, full-canvas review,
-and participating-space context publication. `ui/src/bootstrap/canvas.js`
-composes them through `wb-canvas` inside the shipping canvas region. No replacement
-top bar, sidebar, toolbar, artboard picker or inspector is installed.
+`ui/src/bootstrap/canvas.js` composes the artboard modules under
+`ui/src/modules/` through `wb-canvas` inside the shipping canvas region. No
+replacement top bar, sidebar, toolbar, artboard picker or inspector is installed.
 
 Each instance has a stable ID, its space/view/size, a render generation, and
 isolated runtime ownership. Explicit content/annotation ports expose metadata,
@@ -31,8 +33,7 @@ coordinates capture locks.
 The model permits 32 instances with dimensions of 1–8192 CSS pixels. A declared
 artboard opens at its authored width and height; an instance of an implicit
 artboard follows the page's sizes and the size switcher, under
-[sizes](sizes.md#multiple-artboards), which also records the gap by which a
-declared artboard can lose an authored size its page's `sizes` do not accept.
+[sizes](sizes.md#multiple-artboards).
 Automatic placement wraps at 1600 logical pixels
 with 48px gaps. Selection preserves live inputs and annotations. An origin-aligned
 `data-wb-fit-content` root opts into natural content bounds; an owned ResizeObserver
@@ -56,13 +57,7 @@ coordinator permits only config/context operations. Native producers are pooled
 by source and codec, preserving subscribed peers; authored Simulator mappings
 resolve booted names or UDIDs without requiring a catalog.
 
-These APIs have no layout persistence or shared configuration schema. The production
-browser check drives existing controls and a scenario's declared artboards, and proves
-ordinary HTML and Button scenarios remain single alternative views. The support
-harness also exercises injected ports. Verification covers instance/state/size isolation, two-space
-context, combined image geometry, handoff persistence, and disposal, plus the Node
-suite and strict TypeScript check. Actual native capture and Simulator input require
-the appropriate host/devices; no performance benchmark has been performed.
+There is no layout persistence or shared configuration schema for instances.
 
 ## UI and integration scope
 
@@ -76,7 +71,7 @@ declared only inside a scenario; a scenario that declares none has one implicit
 artboard. The Acme demo's Alert component declares five artboards in its
 default scenario. A page selected in a docs lens shows one reading viewport, not its
 declared artboards; docs placed beside other artboards are an artboard, as
-[docs](../pages/docs-pages.md#in-a-multiple-artboard-canvas) specifies as target behavior.
+[docs](../pages/docs-pages.md#in-a-multiple-artboard-canvas) specifies.
 Ordinary single-view pages reuse one renderer across navigation, as
 [navigation](navigation.md#navigation-feedback) specifies. The required
 content-only renderer owns the retained preview sessions and Storybook
@@ -119,8 +114,8 @@ restrict the tool to a particular comparison workflow.
 
 ## System and edge-case contracts
 
-The implemented support system establishes the baseline for instance
-identity, geometry, capture and context. Proposals for management interactions
+The [instance model](#instance-model-and-review-limits) establishes the
+baseline for instance identity, geometry, capture and context. Proposals for management interactions
 are in [artboard management](artboard-management.md#proposed-edge-case-contracts);
 they do not reopen these limits.
 
@@ -184,13 +179,13 @@ they do not reopen these limits.
   Record per-artboard acquisition timestamps. Preserve the existing capture
   fidelity/unsupported-element contracts and label any URL fallback that
   represents a separate browser session.
-- The support API produces one composite JPEG using canvas
+- Review produces one composite JPEG using canvas
   bounds, background, labels, and annotations, excluding the top bar, toolbar,
   selection chrome, and camera cropping. Artboard coordinates use CSS pixels;
-  any output scale must be explicit and uniform. The implemented image bound
-  is 32 megapixels and 32767px per edge. Define the remaining memory budget
-  before UI delivery; never silently crop, omit or reduce quality.
-- The support capture policy represents loading/error/unavailable artboards as named
+  any output scale must be explicit and uniform. The image bound is 32
+  megapixels and 32767px per edge. A memory budget must be defined before UI
+  delivery; never silently crop, omit or reduce quality.
+- The capture policy represents loading/error/unavailable artboards as named
   status placeholders in the complete canvas image and handoff. An unexpected
   capture failure on a ready artboard fails the operation with its ID and reason;
   no successful handoff is emitted with that artboard silently absent. Empty
@@ -260,8 +255,31 @@ canvas is current.
 - Verify oversize capture/context behavior and cleanup at the implemented
   limits.
 
-## Delivery boundary
+## Verification
 
-The support APIs establish instance isolation, review composition and context
-publication. They do not establish user-facing multi-artboard acceptance;
-the remaining work is the [delivery plan](artboard-management.md#delivery-plan).
+- Unit and workflow tests live with the modules:
+  [canvas tests](../../ui/src/modules/canvas/canvas.test.js),
+  [publication tests](../../ui/src/modules/canvas/publication.test.js),
+  [review capture](../../ui/src/modules/review/capture.test.js) and
+  [review controller](../../ui/src/modules/review/controller.test.js) tests,
+  [preview-session tests](../../ui/src/modules/preview-sessions/controller.test.js)
+  and [canvas element tests](../../ui/src/components/canvas/element.test.js).
+- [smoke-canvas.cjs](../../scripts/smoke-canvas.cjs) drives real Chrome and the
+  packaged capture runtime through a programmatic harness with injected ports:
+  instance, state and size isolation, two-space context, combined image
+  geometry, handoff persistence and disposal.
+- [smoke-canvas-ui.cjs](../../scripts/smoke-canvas-ui.cjs) drives the production
+  shell's existing controls and a scenario's declared artboards, and checks that
+  ordinary HTML and Button scenarios remain single alternative views, with
+  input, size and annotation isolation, preview controls and composite native
+  handoff.
+- Not covered: actual native capture and Simulator input on their hosts and
+  devices, the editor host, and performance.
+
+## Implementation gaps
+
+- User-facing multi-artboard acceptance above (mixed content types and spaces,
+  including docs beside other artboards, per-space transport and placeholders,
+  oversize capture/context behavior) is not established; the remaining work is
+  the [delivery plan](artboard-management.md#delivery-plan).
+- The capture memory budget beyond the image bound is undefined.

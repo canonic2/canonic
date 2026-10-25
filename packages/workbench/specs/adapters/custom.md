@@ -3,6 +3,13 @@
 Part of the [adapters](README.md). User guide:
 [Custom adapters](../../docs/custom-adapters.md).
 
+**Status:** Implemented natively in `workbench-server`'s compiler
+([project.rs](../../server/src/compiler/project.rs),
+[options.rs](../../server/src/compiler/options.rs),
+[plugins.rs](../../server/src/compiler/plugins.rs)), with JavaScript loaders
+in the Node evaluator ([node_loader.rs](../../server/src/compiler/node_loader.rs)).
+This topic records no implementation gap.
+
 ## Contract
 
 `workbench.config.ts` registers adapters under `adapters`, each a name with:
@@ -43,13 +50,8 @@ runs only in the frame.
   [plugin migration decision](../preview-pipeline/plugins.md#plugin-migration-decision)
   for required capabilities and verification.
 
-## Status
+## Verification
 
-Implemented natively in `workbench-server`'s compiler
-([project.rs](../../server/src/compiler/project.rs),
-[options.rs](../../server/src/compiler/options.rs),
-[plugins.rs](../../server/src/compiler/plugins.rs)), with JavaScript loaders
-in the Node evaluator ([node_loader.rs](../../server/src/compiler/node_loader.rs)).
-Covered by [preview.test.js](../../server/node/preview.test.js): custom
+[preview.test.js](../../server/node/preview.test.js) covers custom
 adapters on the shared path, plugin capabilities and loader rules, and
 JavaScript plugins reported as problems.

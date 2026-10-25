@@ -1,9 +1,13 @@
 # Camera, focus and input routing
 
-Status: zoom, pan and keyboard/clipboard bridges are implemented. This topic
-owns their existing interaction contract, independently of page content and
-editor keybindings. [Sizes](sizes.md) owns layout dimensions;
+This topic owns the camera, focus and input-routing contract, independently of
+page content and editor keybindings. [Sizes](sizes.md) owns layout dimensions;
 [annotations](annotations.md) owns drawing gestures.
+
+**Status:** implemented: zoom, pan, fitting, recentering and the keyboard,
+clipboard and context-menu bridges. Not implemented: power-of-two zoom steps in
+the canvas element used without the legacy chrome adapter; see
+[implementation gaps](#implementation-gaps).
 
 ## Camera and scrolling
 
@@ -28,7 +32,7 @@ layout dimensions or capture resolution.
 
 Docs shown alone scroll as a document rather than panning an artboard; zoom
 keeps the Docs layout width. Explicitly composed artboards share one outer
-camera. [Multiple artboards](multiple-artboards.md#implemented-support-system)
+camera. [Multiple artboards](multiple-artboards.md#instance-model-and-review-limits)
 owns placement and content fitting; this spec does not introduce a second camera inside a renderer.
 
 ## Focus and command ownership
@@ -88,12 +92,14 @@ host boundary; component tests own dialog focus behavior. These tests do not
 establish real editor/menu/IME behavior on every supported OS. A full native
 keyboard-layout, composition and assistive-technology matrix remains unverified.
 Camera restoration is excluded from [durable persistence](persistence.md).
-
-The legacy chrome adapter supplies power-of-two zoom steps to the shipping
-shell: its document-level capture handler takes the zoom chords before the
-canvas element sees them. The canvas element's own key handler, which runs only
-where the element is used without that adapter, instead multiplies by
-1.25/0.8. That component-level discrepancy is a gap against the power-of-two
-steps above; [element tests](../../ui/src/components/canvas/element.test.js) and
+[Element tests](../../ui/src/components/canvas/element.test.js) and
 [geometry](../../ui/src/modules/canvas/geometry.js) are the owning evidence
 for the composed canvas, not only the singleton zoom tests.
+
+## Implementation gaps
+
+- The legacy chrome adapter supplies power-of-two zoom steps to the shipping
+  shell: its document-level capture handler takes the zoom chords before the
+  canvas element sees them. The canvas element's own key handler, which runs
+  only where the element is used without that adapter, instead multiplies by
+  1.25/0.8.
