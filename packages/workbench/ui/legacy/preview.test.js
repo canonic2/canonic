@@ -51,7 +51,7 @@ function sizeChoice(current, supported) {
     syncHash: function () { calls.push(['sync']); },
   };
   var source = fs.readFileSync(path.join(__dirname, "./workbench.js"), 'utf8');
-  var handler = source.slice(source.indexOf('  function chooseSize('), source.indexOf('  /* ----------------------------------------------------- sidebar resize */'));
+  var handler = source.slice(source.indexOf('  function chooseSize('), source.indexOf('  function rememberSidebar('));
   vm.runInNewContext(handler, state);
   return { choose: state.chooseSize, calls: calls };
 }

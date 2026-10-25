@@ -154,8 +154,8 @@ ui/src/
   app/workbench/             Canvas shell document, styles and module entry, served as /_workbench/
   app/viewer/                Portable export viewer, copied into each portable export
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
-  views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation and styles
-  views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size and Actions elements and registration
+  views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation, browser sidebar sizing and styles
+  views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size/Actions elements and shell control/dialog bindings
   views/toolbar/             Annotation/review control bindings and floating toolbar/view-control styles
   views/configure-pages/     Configure pages editor and modal styles
   views/export/              Export dialog, progress presentation and classic shell bindings

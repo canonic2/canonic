@@ -83,8 +83,6 @@
      and say what was asked for. This controller owns the size and every
      change to workbench.yaml; see src/views/top-bar/components/size-switcher/. */
   var sizeSwitcher = document.getElementById('sizeSwitcher');
-  var sizeDialog = document.getElementById('sizeDialog');
-  var sizesEditor = document.getElementById('sizesEditor');
 
   var BLANK_TEXT = 'Pick a page or a component to see it here.';
 
@@ -1575,18 +1573,6 @@
     if (current) syncHash();
   }
 
-  /* ----------------------------------------------------- sidebar resize */
-
-  var SIDEBAR_MIN = 200;
-  var SIDEBAR_MAX = 480;
-  var SIDEBAR_DEFAULT = 248;
-
-  function setSidebar(px) {
-    var w = Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px)));
-    shell.style.setProperty('--wb-sidebar-w', w + 'px');
-    return w;
-  }
-
   function rememberSidebar(w) {
     try {
       localStorage.setItem('canonic-workbench-sidebar', String(w));
@@ -1594,59 +1580,7 @@
       /* file:// storage can be blocked; the drag still works. */
     }
   }
-
-  var dragging = false;
-
-  /* Pointer capture keeps the drag alive over the iframe, which would
-     otherwise swallow the move events. No preventDefault here — it would
-     suppress the compatibility dblclick that resets the width. The
-     is-resizing class handles text selection instead. */
-  resizer.addEventListener('pointerdown', function (e) {
-    dragging = true;
-    resizer.setPointerCapture(e.pointerId);
-    shell.classList.add('is-resizing');
-  });
-
-  resizer.addEventListener('pointermove', function (e) {
-    if (dragging) setSidebar(e.clientX);
-  });
-
-  function endDrag(e) {
-    if (!dragging) return;
-    dragging = false;
-    shell.classList.remove('is-resizing');
-    if (e.type === 'pointerup') rememberSidebar(setSidebar(e.clientX));
-  }
-
-  resizer.addEventListener('pointerup', endDrag);
-  /* A cancelled or lost drag must clear the class too, or the shell keeps a
-     resize cursor and a dead iframe. */
-  resizer.addEventListener('pointercancel', endDrag);
-  resizer.addEventListener('lostpointercapture', endDrag);
-
-  resizer.addEventListener('dblclick', function () {
-    rememberSidebar(setSidebar(SIDEBAR_DEFAULT));
-  });
-
-  /* Arrow keys nudge it once the handle has focus. */
-  resizer.addEventListener('keydown', function (e) {
-    var step = e.shiftKey ? 32 : 8;
-    var width = parseInt(getComputedStyle(shell).getPropertyValue('--wb-sidebar-w'), 10);
-    if (e.key === 'ArrowLeft') rememberSidebar(setSidebar(width - step));
-    else if (e.key === 'ArrowRight') rememberSidebar(setSidebar(width + step));
-    else return;
-    e.preventDefault();
-  });
-
-  /* ------------------------------------------------------------- wiring */
-
-  sizeSwitcher.iconRenderer = window.wbIcon;
-  actionsToggle.iconRenderer = window.wbIcon;
-  sizeDialog.iconRenderer = window.wbIcon;
-  sizesEditor.iconRenderer = window.wbIcon;
-  sizeSwitcher.addEventListener('wb-size-pick', function (e) { chooseSize(e.detail.key); });
-  sizeSwitcher.addEventListener('wb-size-custom', openSizeDialog);
-  sizeSwitcher.addEventListener('wb-size-edit', openSizesEditor);
+  var setSidebar = window.wbPageList.bindBrowser({ shell: shell, resizer: resizer, remember: rememberSidebar });
 
   /* Whether workbench.yaml lists the page itself, so it can hold sizes of its
      own; a discovered preview or a catalog page isn't there. */
@@ -1655,16 +1589,6 @@
       return (items || []).some(function (entry) { return entry.items ? visit(entry.items) : entry.src === src; });
     }
     return !!(resolved && (resolved.collections || []).some(function (collection) { return visit(collection.items); }));
-  }
-
-  function postSizes(body) {
-    return fetch('/_workbench/sizes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function (response) {
-        return response.json().catch(function () { return {}; }).then(function (result) {
-          if (!response.ok || !result.ok) throw new Error(result.error || 'Could not save workbench.yaml.');
-          return result;
-        });
-      });
   }
 
   /* After a size change the canvas reads the config again. `key`, when
@@ -1681,53 +1605,25 @@
     }, refuse);
   }
 
-  function openSizeDialog() {
-    var item = current ? index[current] : null;
-    var docs = lensRules.isMarkdownPage(item);
-    var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
-    var listed = !!item && !docs && listedInYaml(item.src);
-    sizeDialog.allowPageOnly = listed;
-    sizeDialog.notice = docs ? 'A Markdown page has no size; the new size is added to the space.'
-      : page && page.preview && page.preview.sizes && !listed
-        ? 'This page’s preview definition lists its sizes; add the new size’s key there to use it on this page.' : '';
-    sizeDialog.open = true;
-  }
-
-  sizeDialog.addEventListener('wb-size-add', function (e) {
-    var item = current ? index[current] : null;
-    var docs = lensRules.isMarkdownPage(item);
-    var size = Object.assign({}, e.detail, { page: item && !docs && listedInYaml(item.src) ? item.src : null });
-    sizeDialog.error = '';
-    sizeDialog.pending = true;
-    postSizes({ action: 'add', size: size }).then(function (result) {
-      sizeDialog.pending = false;
-      sizeDialog.open = false;
-      reloadSizes(docs ? null : result.key, 'Added ' + e.detail.name.trim() + ' to workbench.yaml.');
-    }, function (error) {
-      sizeDialog.pending = false;
-      sizeDialog.error = String(error.message || error);
-    });
+  window.wbSizeBindings({
+    choose: chooseSize,
+    context: function () {
+      var item = current ? index[current] : null;
+      var docs = lensRules.isMarkdownPage(item);
+      var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
+      var listed = !!item && !docs && listedInYaml(item.src);
+      return {
+        docs: docs, page: listed ? item.src : null, allowPageOnly: listed,
+        notice: docs ? 'A Markdown page has no size; the new size is added to the space.'
+          : page && page.preview && page.preview.sizes && !listed
+            ? 'This page’s preview definition lists its sizes; add the new size’s key there to use it on this page.' : ''
+      };
+    },
+    sizes: function () { return (resolved && resolved.sizes) || spaceSizes; },
+    post: window.wbProjectConfiguration.postSizes,
+    added: function (result, detail, docs) { reloadSizes(docs ? null : result.key, 'Added ' + detail.name.trim() + ' to workbench.yaml.'); },
+    updated: function () { reloadSizes(null, 'Saved the sizes to workbench.yaml.'); }
   });
-  sizeDialog.addEventListener('wb-size-dialog-close', function () { sizeDialog.open = false; });
-
-  function openSizesEditor() {
-    sizesEditor.sizes = (resolved && resolved.sizes) || spaceSizes;
-    sizesEditor.open = true;
-  }
-
-  sizesEditor.addEventListener('wb-sizes-save', function (e) {
-    sizesEditor.error = '';
-    sizesEditor.pending = true;
-    postSizes({ action: 'update', sizes: e.detail.sizes }).then(function () {
-      sizesEditor.pending = false;
-      sizesEditor.open = false;
-      reloadSizes(null, 'Saved the sizes to workbench.yaml.');
-    }, function (error) {
-      sizesEditor.pending = false;
-      sizesEditor.error = String(error.message || error);
-    });
-  });
-  sizesEditor.addEventListener('wb-sizes-close', function () { sizesEditor.open = false; });
 
   /* Chrome-style rails sit outside the preview. Side rails change width, the
      bottom changes height, and either bottom corner changes both. Pointer
@@ -1792,13 +1688,12 @@
     handle.addEventListener('lostpointercapture', endFrameDrag);
   });
 
-  /* Reloading is what applies it — the flag is read as the page parses. */
-  actionsToggle.addEventListener('wb-actions-toggle', function (e) {
-    setActions(e.detail.checked);
+  window.wbTopBarBindings({
+    actions: function (checked) {
+    setActions(checked);
     if (current) show(current, currentScenario, undefined, currentIterations);
-  });
-
-  reload.addEventListener('click', function () {
+    },
+    reload: function () {
     if (!current) return;
     if (view && window.wbManifest.streamed(view.lens)) {
       window.wbSimulator.reload();
@@ -1809,27 +1704,8 @@
       return;
     }
     loadPreview(view && view.url ? view.url : frame.src, true);
-  });
-
-  scenarioButton.addEventListener('click', function () {
-    openSources(false);
-    openScenarios(scenarioMenu.hidden);
-  });
-
-  sourceButton.addEventListener('click', function () {
-    openScenarios(false);
-    openSources(sourceMenu.hidden);
-  });
-
-  document.addEventListener('pointerdown', function (e) {
-    if (!scenarioMenu.hidden && !e.target.closest('.wb-scenarios-control')) openScenarios(false);
-    if (!sourceMenu.hidden && !e.target.closest('.wb-sources')) openSources(false);
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    openScenarios(false);
-    openSources(false);
+    },
+    openSources: openSources, openScenarios: openScenarios
   });
 
   function route() {

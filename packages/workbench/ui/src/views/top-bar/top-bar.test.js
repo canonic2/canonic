@@ -38,8 +38,10 @@ test(
             'Content-Security-Policy',
             "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'",
           );
-          res.end(`<!doctype html>${styles}<div class="wb">${header}<input id="retained" value="Acme edit"></div>
+          res.end(`<!doctype html>${styles}<div class="wb">${header}<input id="retained" value="Acme edit"></div><wb-size-dialog id="sizeDialog"></wb-size-dialog><wb-sizes-editor id="sizesEditor"></wb-sizes-editor>
           <script type="module" src="/fixture.js"></script>
+          <script src="/_workbench/ui/src/views/top-bar/size-bindings.js"></script>
+          <script src="/_workbench/ui/src/views/top-bar/bindings.js"></script>
           <script src="/_workbench/ui/src/views/top-bar/top-bar.js"></script>`);
         } else if (req.url === '/fixture.js') {
           res.setHeader('Content-Type', 'text/javascript');
@@ -47,6 +49,8 @@ test(
           import {registerActionsComponents} from '/_workbench/ui/src/views/top-bar/register-actions.js';
           registerSizeComponents();registerActionsComponents();
           window.calls=[];
+          wbSizeBindings({choose:key=>calls.push(key),context:()=>({allowPageOnly:true,notice:'Acme notice',page:'account.html',docs:false}),sizes:()=>[],post:body=>{window.posted=body;return new Promise((resolve,reject)=>{window.saveSize=resolve;window.rejectSize=reject})},added:()=>calls.push('added'),updated:()=>calls.push('updated')});
+          wbTopBarBindings({actions:checked=>calls.push(checked),reload:()=>calls.push('reload binding'),openSources:open=>{document.getElementById('sourceMenu').hidden=!open},openScenarios:open=>{document.getElementById('scenarioMenu').hidden=!open}});
           for(const id of ['reload','copyReference','previewControls','configureSpace','exportSpace']){
             const button=document.getElementById(id);button.hidden=false;button.addEventListener('click',()=>calls.push(id));
           }
@@ -129,6 +133,26 @@ test(
       'none',
     );
     assert.equal(await target.evaluate(`document.getElementById('retained').value`), 'Acme edit');
+    await target.evaluate(
+      `document.getElementById('sizeSwitcher').allowEdit=true;document.getElementById('sizeSwitcher').shadowRoot.querySelector('[data-action=custom]').click()`,
+    );
+    await until(`document.getElementById('sizeDialog').open`);
+    assert.equal(
+      await target.evaluate(`document.getElementById('sizeDialog').notice`),
+      'Acme notice',
+    );
+    await target.evaluate(
+      `document.getElementById('sizeDialog').dispatchEvent(new CustomEvent('wb-size-add',{detail:{name:'Acme size',width:640,height:480}}));rejectSize(new Error('Acme write refused'))`,
+    );
+    await until(
+      `document.getElementById('sizeDialog').error==='Acme write refused' && !document.getElementById('sizeDialog').pending`,
+    );
+    assert.equal(await target.evaluate(`document.getElementById('sizeDialog').open`), true);
+    assert.equal(await target.evaluate(`window.posted.size.page`), 'account.html');
+    await target.evaluate(
+      `document.getElementById('sizeDialog').dispatchEvent(new CustomEvent('wb-size-add',{detail:{name:'Acme size',width:640,height:480}}));saveSize({key:'acme'})`,
+    );
+    await until(`!document.getElementById('sizeDialog').open && calls.includes('added')`);
     assert.deepEqual(errors, []);
   },
 );

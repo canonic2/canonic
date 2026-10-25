@@ -112,7 +112,27 @@
     });
   }
 
+  function postSizes(body) {
+    return fetch('/_workbench/sizes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(function (response) {
+      return response
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (result) {
+          if (!response.ok || !result.ok)
+            throw new Error(result.error || 'Could not save workbench.yaml.');
+          return result;
+        });
+    });
+  }
+
   window.wbProjectConfiguration = {
+    postSizes,
     pageSizes,
     toggleSize,
     isGroup,
