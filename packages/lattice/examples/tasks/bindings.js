@@ -28,7 +28,7 @@ export function bindTaskRow(row, tasks, key, { signal, report }) {
 }
 
 /**
- * Apply membership, one selectedKey input and summary for the view lifetime.
+ * Apply one selectedKey input and summary for the view lifetime.
  * @param {import('./task-list.js').TaskList} list Presentation owner.
  * @param {HTMLOutputElement} summary Native summary input.
  * @param {import('./tasks.js').Tasks} tasks Application capability.
@@ -40,7 +40,6 @@ export function bindTaskList(list, summary, tasks, signal) {
   const failed = new AbortController(), own = AbortSignal.any([signal, failed.signal]);
   try {
     tasks.state.watch(tasks.select.selectedKey, (key) => { list.selectedKey = key; }, { signal: own });
-    tasks.items.watchKeys((keys, change) => list.membership(keys, change), { signal: own });
     tasks.items.watch(tasks.select.summary, (text) => { summary.value = text; }, { signal: own });
   } catch (error) { failed.abort(); throw error; }
 }

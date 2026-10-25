@@ -40,7 +40,7 @@
       command('insert', () => tasks.insert(view.list.firstVisibleKey));
       command('remove', () => { const key = tasks.state.get().selectedKey; if (key !== null) tasks.remove(key); });
       command('reuse', () => { const key = tasks.state.get().selectedKey; if (key !== null) tasks.reuse(key); });
-      command('focus', () => { const key = tasks.state.get().selectedKey; if (key !== null) view.list.focusKey(key); });
+      command('focus', () => { const key = tasks.state.get().selectedKey; if (key !== null) view.focusKey(key); });
       command('done', () => tasks.markAll(true));
       command('dispose', () => lifetime.abort());
       window.addEventListener('pagehide', () => lifetime.abort(), { once: true });

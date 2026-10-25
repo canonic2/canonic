@@ -13,6 +13,11 @@ It has no DOM, store or collection dependency. An item may be an element or
 another presentation resource. Full-list reconciliation and window retention
 use the same mechanism; windowing is optional.
 
+Application composition owns a coordinator whose callbacks install bindings.
+Elements receive plain presentation inputs and emit observed user intent; they
+never invoke these callbacks. A temporary disconnection ends an element's
+connection resources, independently of the coordinator's explicit view lifetime.
+
 The application still supplies capability actions, selections, bindings,
 markup, styling, viewport measurement, scroll anchoring, keyboard behavior
 and deterministic focus fallback. It passes the focused key for pinning.
@@ -85,3 +90,6 @@ smaller size and adds source footprint. The proposal remains open; the
 hand-written example remains the shipping-API reference. A completed-range
 path and the cost of the failure protocol need review before integration.
 These results establish no frame-script or presentation-readiness claim.
+The measured source commits identify the comparison baseline. The runnable
+example's upgrade and lifecycle corrections are unmeasured and do not inherit
+those timings or establish an adopted helper.

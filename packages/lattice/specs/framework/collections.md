@@ -16,7 +16,8 @@ it does not mount rows or choose a viewport.
 | Recycling | Experimental until benefits justify reset and lifecycle complexity |
 
 Framework collection mechanics coordinate retained items and their lifetimes
-through explicit callbacks. Elements supply presentation and placement;
+through explicit callbacks supplied by application composition, outside elements.
+Elements supply plain presentation inputs, intent events and placement;
 application bindings connect inputs and intent to capability actions. Mechanics
 do not choose markup, styling or selection policy. Each state-model convention
 does not require a separate framework API.
@@ -32,7 +33,7 @@ example's callback and lifetime boundaries for comparison before adoption.
 ## Guard completed reconciliation
 
 When both an animation-frame callback and a native scroll event can render a
-fixed-height window, they can request the same work. The list element keeps
+fixed-height window, they can request the same work. The reconciliation owner keeps
 the identity of its last completed reconciliation:
 
 - the membership revision;
@@ -55,7 +56,11 @@ onto another item. Mount a keyboard destination before focusing it. When an
 item is removed, apply the element's documented deterministic focus fallback.
 Insertion or removal above the viewport must preserve its scroll anchor.
 
-The guard belongs to the list element. Item bindings continue to assign their
+In the task example, application view composition owns the guard, keyed row
+lifetimes and binding acquisition. The list receives retained presentations
+as a plain input and never calls a binding callback. Temporary DOM detachment
+ends connection resources while preserving rows; final view disposal ends
+bindings before removing presentation. Item bindings continue to assign their
 inputs, and a list-level selection input continues to update the affected
 retained rows independently of range reconciliation. Geometry, row-height or
 other presentation inputs that affect positions must invalidate the guard too.

@@ -1946,3 +1946,24 @@ Selection policy, geometry, anchoring, markup and capability actions remain
 application-owned. Recycling remains experimental. The 4 ms and 100 ms targets,
 the historical 4.079 ms miss and large-list readiness gate remain unchanged;
 delivery and navigation remain independent and unblocked.
+
+### Example review correction (2026-10-25)
+
+Review identifies four correctness/architecture gaps in the measured example:
+uncaptured pre-upgrade inputs, destructive temporary disconnection, missing
+connection-setup rollback, and an element callback that installs application
+bindings. Correct the runnable example before treating it as a reference.
+Application view composition owns keyed reconciliation, the accepted guard
+and incarnation bindings; the list accepts presentation inputs and emits
+observed user intent. Elements capture/replay early inputs, preserve atomic
+moves and retained drafts across temporary detach, guard stale connection
+work, and roll back partial acquisition. Explicit view disposal ends bindings
+before removing rows. No element-callback exception or public helper is adopted.
+
+The original measured commits, samples, failed budgets and prototype comparison
+remain intact. Their correctness evidence covers only the checks listed at
+the time, not these newly identified cases. The corrected composition and its
+additional lifecycle work have no performance measurements in this record;
+do not transfer the reported timings or heap to it. This correction uses focused
+regression coverage without another benchmark. Readiness targets and
+the unadopted status of the helper remain unchanged.

@@ -4,7 +4,7 @@ import { mountTasks } from './app.js';
 import { createTasks } from './tasks.js';
 import { TaskRow } from './task-row.js';
 import { bindTaskRow } from './bindings.js';
-import { ROW_HEIGHT } from './task-list.js';
+import { TaskList, ROW_HEIGHT } from './task-list.js';
 
 /** @type {{ lifetime: AbortController, host: HTMLElement }[]} */
 const owned = [];
@@ -23,23 +23,133 @@ function row(list, key) { const value = list.rows.get(key); if (!value) throw ne
 /** Get a row's native editor. @param {TaskRow} item Row. @returns {HTMLInputElement} */
 function editor(item) { const value = item.shadowRoot?.querySelector('input[type=text]'); if (!(value instanceof HTMLInputElement)) throw new Error('Missing editor'); return value; }
 
-afterEach(() => { vi.restoreAllMocks(); for (const item of owned.splice(0)) { item.lifetime.abort(); item.host.remove(); } });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); for (const item of owned.splice(0)) { item.lifetime.abort(); item.host.remove(); } });
+
+let upgradeId = 0;
+test('row upgrade captures safe inputs immediately and defers host decoration', async () => {
+  const name = `acme-early-row-${upgradeId++}`, host = document.createElement('div');
+  document.body.append(host); const early = /** @type {TaskRow} */ (document.createElement(name));
+  early.text = 'Early'; early.done = true; early.selected = true; host.append(early);
+  try {
+    customElements.define(name, class extends TaskRow {});
+    expect(Object.hasOwn(early, 'text')).toBe(false); expect(early.text).toBe('Early');
+    expect(editor(early).value).toBe('Early'); expect(early.done).toBe(true);
+    expect(early.selected).toBe(true); expect(early.hasAttribute('data-selected')).toBe(false);
+    await Promise.resolve(); expect(early.hasAttribute('data-selected')).toBe(true);
+  } finally { host.remove(); }
+});
+
+test('list upgrade preserves inputs and a newer assignment supersedes pending replay', async () => {
+  const name = `acme-early-list-${upgradeId++}`, early = /** @type {TaskList} */ (document.createElement(name));
+  early.windowed = false; early.selectedKey = 't1';
+  customElements.define(name, class extends TaskList {}); customElements.upgrade(early);
+  try {
+    expect(Object.hasOwn(early, 'windowed')).toBe(false); expect(early.windowed).toBe(false);
+    early.windowed = true; early.selectedKey = null;
+    await Promise.resolve(); expect(early.windowed).toBe(true); expect(early.selectedKey).toBeNull();
+  } finally { early.dispose(); }
+});
+
+test('temporary detach and atomic moves keep rows, drafts and one connection', async () => {
+  const { list, host, render, tasks } = mount(), first = row(list, 't1'), input = editor(first);
+  input.focus(); input.value = 'Draft';
+  const connection = list.connection;
+  host.moveBefore(list, host.firstChild);
+  expect(list.connection).toBe(connection); expect(row(list, 't1')).toBe(first);
+  expect(first.shadowRoot?.activeElement).toBe(input);
+  list.viewport.scrollTop = 100 * ROW_HEIGHT; render();
+  const range = vi.fn(); list.addEventListener('acme-task-range', range);
+  for (let turn = 0; turn < 3; turn++) {
+    list.remove(); expect(list.connection).toBeNull(); host.append(list);
+    await Promise.resolve(); expect(row(list, 't1')).toBe(first); expect(input.value).toBe('Draft');
+    expect(list.connection?.signal.aborted).toBe(false);
+  }
+  expect(range).not.toHaveBeenCalled(); expect(list.rows.size).toBeLessThanOrEqual(24);
+  const choose = vi.spyOn(tasks, 'choose');
+  first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+  expect(choose).toHaveBeenCalledTimes(1);
+});
+
+test('an ancestor removing the list before its queued connection prevents acquisition', () => {
+  mount(1);
+  const name = `acme-removing-parent-${upgradeId++}`, list = new TaskList();
+  customElements.define(name, class extends HTMLElement {
+    /** Remove the child before its queued connected callback runs. @returns {void} */
+    connectedCallback() { this.firstElementChild?.remove(); }
+  });
+  const parent = document.createElement(name); parent.append(list);
+  const observe = vi.spyOn(ResizeObserver.prototype, 'observe');
+  try { document.body.append(parent); expect(list.isConnected).toBe(false); expect(list.connection).toBeNull(); expect(observe).not.toHaveBeenCalled(); }
+  finally { list.dispose(); parent.remove(); }
+});
+
+test('connection failure after observation rolls back and detached callbacks acquire nothing', () => {
+  const { list } = mount(), active = new Set(), originalObserve = ResizeObserver.prototype.observe, originalDisconnect = ResizeObserver.prototype.disconnect;
+  vi.spyOn(ResizeObserver.prototype, 'observe').mockImplementation(function (...args) { active.add(this); return originalObserve.apply(this, args); });
+  vi.spyOn(ResizeObserver.prototype, 'disconnect').mockImplementation(function () { active.delete(this); return originalDisconnect.call(this); });
+  const range = vi.fn(); list.addEventListener('acme-task-range', range);
+  const failure = new Error('render failed'), render = vi.spyOn(list, 'render').mockImplementationOnce(() => { expect(active.size).toBe(1); throw failure; });
+  expect(() => list.connectedCallback()).toThrow(failure);
+  expect(active.size).toBe(0); expect(list.connection).toBeNull();
+  render.mockClear(); list.viewport.dispatchEvent(new Event('scroll')); expect(range).not.toHaveBeenCalled();
+  list.remove(); list.connectedCallback(); expect(active.size).toBe(0); expect(list.connection).toBeNull();
+});
+
+test('upgrade replays supplied rows outside construction and honors newer default-valued inputs', async () => {
+  mount(1); // Register the ordinary row constructor through the shipping entry.
+  const name = `acme-supplied-list-${upgradeId++}`, early = /** @type {TaskList} */ (document.createElement(name));
+  const item = new TaskRow(), items = Object.freeze([{ key: 'early', row: item, index: 0 }]);
+  early.keys = Object.freeze(['early']); early.items = items; early.selectedKey = 'early';
+  const selected = vi.spyOn(TaskRow.prototype, 'selected', 'set');
+  customElements.define(name, class extends TaskList {}); customElements.upgrade(early);
+  try {
+    expect(early.keys).toEqual(['early']); expect(early.items).toBe(items);
+    expect(Object.hasOwn(early, 'items')).toBe(false); expect(selected).not.toHaveBeenCalled();
+    expect(early.rows.size).toBe(0); early.selectedKey = null;
+    await Promise.resolve(); expect(early.rows.get('early')).toBe(item); expect(item.selected).toBe(false);
+    expect(early.selectedKey).toBeNull(); expect(early.items).toBe(items);
+  } finally { early.dispose(); }
+});
+
+test('upgrade selection honors captured defaults and attributes changed before replay', async () => {
+  for (const changed of [false, true]) {
+    const name = `acme-reflected-row-${upgradeId++}`, early = /** @type {TaskRow} */ (document.createElement(name));
+    early.setAttribute('data-selected', ''); early.selected = false;
+    customElements.define(name, class extends TaskRow {}); customElements.upgrade(early);
+    try {
+      expect(early.selected).toBe(false);
+      if (changed) { early.removeAttribute('data-selected'); early.setAttribute('data-selected', ''); }
+      await Promise.resolve(); expect(early.selected).toBe(changed); expect(early.hasAttribute('data-selected')).toBe(changed);
+    } finally { early.remove(); }
+  }
+});
+
+test('entering-row binding failure rolls back acquired rows and allows a clean retry', () => {
+  const { tasks, list, render, lifetime } = mount(), original = tasks.select.done, failure = new Error('entering row');
+  let reads = 0;
+  tasks.select.done = { fields: ['done'], read: state => { if (++reads === 3) throw failure; return state.done; } };
+  list.viewport.scrollTop = 100 * ROW_HEIGHT;
+  expect(() => render()).toThrow(failure); expect(list.rows.size).toBe(0); expect(lifetime.signal.aborted).toBe(false);
+  const setter = vi.spyOn(TaskRow.prototype, 'text', 'set'); tasks.rename('t96', 'After failure'); expect(setter).not.toHaveBeenCalled();
+  tasks.select.done = original; render(); expect(list.rows.size).toBe(23);
+  setter.mockClear(); tasks.rename('t96', 'After retry'); expect(setter).toHaveBeenCalledTimes(1);
+});
 
 test('10,000 items retain a window and selection patches only the affected rows', () => {
-  const { tasks, list } = mount(10000), first = row(list, 't1');
+  const { tasks, list, render, focusKey } = mount(10000), first = row(list, 't1');
   expect(list.rows.size).toBeLessThanOrEqual(23);
-  list.render(); list.render(); expect(row(list, 't1')).toBe(first);
+  render(); render(); expect(row(list, 't1')).toBe(first);
   tasks.choose('t1'); const selected = vi.spyOn(TaskRow.prototype, 'selected', 'set');
   tasks.choose('t2'); expect(selected).toHaveBeenCalledTimes(2);
   selected.mockClear(); tasks.choose('t2'); expect(selected).not.toHaveBeenCalled();
   tasks.choose('t9999'); expect(list.rows.has('t9999')).toBe(false);
-  list.focusKey('t9999'); expect(row(list, 't9999').selected).toBe(true);
+  focusKey('t9999'); expect(row(list, 't9999').selected).toBe(true);
 });
 
 test('focused drafts stay pinned and keyboard destinations exist before focus', () => {
-  const { list } = mount(); const first = row(list, 't1'), input = editor(first);
+  const { list, render } = mount(); const first = row(list, 't1'), input = editor(first);
   input.focus(); input.value = 'Uncommitted draft';
-  list.viewport.scrollTop = 100 * ROW_HEIGHT; list.render();
+  list.viewport.scrollTop = 100 * ROW_HEIGHT; render();
   expect(row(list, 't1')).toBe(first); expect(first.shadowRoot?.activeElement).toBe(input);
   expect(input.value).toBe('Uncommitted draft'); expect(list.rows.size).toBeLessThanOrEqual(24);
   first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
@@ -48,14 +158,14 @@ test('focused drafts stay pinned and keyboard destinations exist before focus', 
 });
 
 test('insertion and removal above the viewport preserve the anchor', () => {
-  const { tasks, list } = mount(); list.viewport.scrollTop = 100 * ROW_HEIGHT + 7; list.render();
+  const { tasks, list, render } = mount(); list.viewport.scrollTop = 100 * ROW_HEIGHT + 7; render();
   const anchor = row(list, 't100'), top = anchor.getBoundingClientRect().top;
   const inserted = tasks.insert('t0'); expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThan(.5);
   tasks.remove(inserted); expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThan(.5);
 });
 
 test('keyboard navigation scrolls a retained overscan destination into view', () => {
-  const { list } = mount(); list.focusKey('t14');
+  const { list, focusKey } = mount(); focusKey('t14');
   row(list, 't14').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
   expect(list.shadowRoot?.activeElement).toBe(row(list, 't15'));
   const destination = row(list, 't15').getBoundingClientRect(), viewport = list.viewport.getBoundingClientRect();
@@ -74,8 +184,8 @@ test('key reuse ends old bindings, replaces the node and applies focus fallback'
 
 test('empty removal focuses the list and duplicate membership leaves the view intact', () => {
   const { tasks, list } = mount(1), first = row(list, 't0');
-  expect(() => list.membership(['t0', 't0'])).toThrow(TypeError); expect(row(list, 't0')).toBe(first);
-  list.focusKey('t0'); tasks.remove('t0'); expect(document.activeElement).toBe(list);
+  expect(() => { list.keys = ['t0', 't0']; }).toThrow(TypeError); expect(row(list, 't0')).toBe(first);
+  list.focusRow('t0'); tasks.remove('t0'); expect(document.activeElement).toBe(list);
   expect(list.rows.size).toBe(0);
 });
 
