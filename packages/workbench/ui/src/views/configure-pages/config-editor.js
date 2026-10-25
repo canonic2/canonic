@@ -4,10 +4,34 @@
    survive edits even when they are not exposed as form controls here. */
 (function () {
   var SIZES = [
-    { id: 'fit', label: 'Fit', icon: 'minimize-2', description: 'Fill the available workbench', exportLabel: '1440 × 900 reference' },
-    { id: 'laptop', label: 'Laptop', icon: 'monitor', description: 'MacBook Pro 14 frame', exportLabel: '1512 × 982 reference' },
-    { id: 'mobile', label: 'Mobile', icon: 'smartphone', description: 'iPhone 15 Pro frame', exportLabel: '393 × 852 reference' },
-    { id: 'resizable', label: 'Resizable', icon: 'scaling', description: 'Drag to test any size', exportLabel: 'Not exported' },
+    {
+      id: 'fit',
+      label: 'Fit',
+      icon: 'minimize-2',
+      description: 'Fill the available workbench',
+      exportLabel: '1440 × 900 reference',
+    },
+    {
+      id: 'laptop',
+      label: 'Laptop',
+      icon: 'monitor',
+      description: 'MacBook Pro 14 frame',
+      exportLabel: '1512 × 982 reference',
+    },
+    {
+      id: 'mobile',
+      label: 'Mobile',
+      icon: 'smartphone',
+      description: 'iPhone 15 Pro frame',
+      exportLabel: '393 × 852 reference',
+    },
+    {
+      id: 'resizable',
+      label: 'Resizable',
+      icon: 'scaling',
+      description: 'Drag to test any size',
+      exportLabel: 'Not exported',
+    },
   ];
 
   function element(name, className, text) {
@@ -42,7 +66,9 @@
     control.type = 'text';
     control.value = value || '';
     control.placeholder = options.placeholder || '';
-    control.addEventListener('input', function () { onChange(control.value); });
+    control.addEventListener('input', function () {
+      onChange(control.value);
+    });
     wrapper.appendChild(control);
     if (options.help) wrapper.appendChild(element('small', '', options.help));
     return wrapper;
@@ -61,7 +87,9 @@
   function pageSizes(page, spaceKeys) {
     var listed = sizeList(page);
     if (!listed) return spaceKeys.slice();
-    return listed.filter(function (entry) { return typeof entry === 'string'; });
+    return listed.filter(function (entry) {
+      return typeof entry === 'string';
+    });
   }
 
   /* Turns one of the space's sizes on or off for a page, keeping its other
@@ -70,11 +98,22 @@
   function toggleSize(page, key, spaceKeys) {
     var listed = sizeList(page) || spaceKeys.slice();
     var at = listed.indexOf(key);
-    var next = at === -1 ? listed.concat([key]) : listed.filter(function (entry) { return entry !== key; });
+    var next =
+      at === -1
+        ? listed.concat([key])
+        : listed.filter(function (entry) {
+            return entry !== key;
+          });
     if (!next.length) return;
-    var keys = next.filter(function (entry) { return typeof entry === 'string'; });
-    var every = keys.length === next.length && keys.length === spaceKeys.length &&
-      spaceKeys.every(function (candidate) { return keys.indexOf(candidate) !== -1; });
+    var keys = next.filter(function (entry) {
+      return typeof entry === 'string';
+    });
+    var every =
+      keys.length === next.length &&
+      keys.length === spaceKeys.length &&
+      spaceKeys.every(function (candidate) {
+        return keys.indexOf(candidate) !== -1;
+      });
     if (every) delete page.sizes;
     else page.sizes = next;
   }
@@ -98,7 +137,10 @@
   function validate(collections) {
     var problem = null;
     (collections || []).some(function (collection, index) {
-      if (!String(collection.name || '').trim()) { problem = 'Collection ' + (index + 1) + ' needs a name.'; return true; }
+      if (!String(collection.name || '').trim()) {
+        problem = 'Collection ' + (index + 1) + ' needs a name.';
+        return true;
+      }
       function visit(entries) {
         return (entries || []).some(function (entry) {
           if (isGroup(entry)) {
@@ -125,7 +167,9 @@
     var body = options.body;
     var status = options.status;
     var collections = [];
-    var spaceKeys = SIZES.map(function (size) { return size.id; });
+    var spaceKeys = SIZES.map(function (size) {
+      return size.id;
+    });
     var selection = null;
     var navPane = null;
     var inspector = null;
@@ -143,7 +187,9 @@
     }
 
     function totalPages() {
-      return collections.reduce(function (count, collection) { return count + pageCount(collection.items); }, 0);
+      return collections.reduce(function (count, collection) {
+        return count + pageCount(collection.items);
+      }, 0);
     }
 
     function select(kind, value, owner, collection) {
@@ -177,9 +223,17 @@
       var at = owner.indexOf(selection.value);
       if (at !== -1) owner.splice(at, 1);
       var collection = selection.collection;
-      selection = collection && collections.indexOf(collection) !== -1
-        ? { kind: 'collection', value: collection, owner: collections, collection: collection }
-        : collections.length ? { kind: 'collection', value: collections[0], owner: collections, collection: collections[0] } : null;
+      selection =
+        collection && collections.indexOf(collection) !== -1
+          ? { kind: 'collection', value: collection, owner: collections, collection: collection }
+          : collections.length
+            ? {
+                kind: 'collection',
+                value: collections[0],
+                owner: collections,
+                collection: collections[0],
+              }
+            : null;
       render();
     }
 
@@ -192,7 +246,9 @@
       copy.appendChild(element('strong', '', page.label || 'Untitled page'));
       copy.appendChild(element('small', '', page.src || 'No source path'));
       row.appendChild(copy);
-      row.addEventListener('click', function () { select('page', page, owner, collection); });
+      row.addEventListener('click', function () {
+        select('page', page, owner, collection);
+      });
       return row;
     }
 
@@ -204,7 +260,9 @@
       head.appendChild(icon('folder', 15));
       head.appendChild(element('strong', '', group.group || 'Untitled group'));
       head.appendChild(element('small', '', String(pageCount(group.items))));
-      head.addEventListener('click', function () { select('group', group, owner, collection); });
+      head.addEventListener('click', function () {
+        select('group', group, owner, collection);
+      });
       block.appendChild(head);
       (group.items || []).forEach(function (page) {
         block.appendChild(navPage(page, group.items, collection, true));
@@ -220,19 +278,37 @@
       pick.setAttribute('aria-current', String(selected(collection)));
       pick.appendChild(element('span', '', collection.name || 'Untitled collection'));
       pick.appendChild(element('small', '', String(pageCount(collection.items))));
-      pick.addEventListener('click', function () { select('collection', collection, collections, collection); });
+      pick.addEventListener('click', function () {
+        select('collection', collection, collections, collection);
+      });
       head.appendChild(pick);
-      head.appendChild(iconButton('Add page to ' + (collection.name || 'collection'), 'plus', function () {
-        addPage(collection.items || (collection.items = []), collection);
-      }, 'wb-config-nav-add'));
-      head.appendChild(iconButton('Add group to ' + (collection.name || 'collection'), 'folder-plus', function () {
-        addGroup(collection);
-      }, 'wb-config-nav-add'));
+      head.appendChild(
+        iconButton(
+          'Add page to ' + (collection.name || 'collection'),
+          'plus',
+          function () {
+            addPage(collection.items || (collection.items = []), collection);
+          },
+          'wb-config-nav-add',
+        ),
+      );
+      head.appendChild(
+        iconButton(
+          'Add group to ' + (collection.name || 'collection'),
+          'folder-plus',
+          function () {
+            addGroup(collection);
+          },
+          'wb-config-nav-add',
+        ),
+      );
       block.appendChild(head);
       (collection.items || []).forEach(function (entry) {
-        block.appendChild(isGroup(entry)
-          ? navGroup(entry, collection.items, collection)
-          : navPage(entry, collection.items, collection, false));
+        block.appendChild(
+          isGroup(entry)
+            ? navGroup(entry, collection.items, collection)
+            : navPage(entry, collection.items, collection, false),
+        );
       });
       return block;
     }
@@ -247,8 +323,12 @@
       navPane.appendChild(head);
       var list = element('nav', 'wb-config-nav-list');
       list.setAttribute('aria-label', 'Workbench pages');
-      if (!collections.length) list.appendChild(element('p', 'wb-config-nav-empty', 'No handwritten collections yet.'));
-      else collections.forEach(function (collection) { list.appendChild(navCollection(collection)); });
+      if (!collections.length)
+        list.appendChild(element('p', 'wb-config-nav-empty', 'No handwritten collections yet.'));
+      else
+        collections.forEach(function (collection) {
+          list.appendChild(navCollection(collection));
+        });
       navPane.appendChild(list);
     }
 
@@ -276,26 +356,53 @@
     }
 
     function renderPage(page) {
-      inspector.appendChild(inspectorHeader(
-        'Page', page.label || 'Untitled page', page.src || 'Add a source path', page.icon || 'file-text'
-      ));
+      inspector.appendChild(
+        inspectorHeader(
+          'Page',
+          page.label || 'Untitled page',
+          page.src || 'Add a source path',
+          page.icon || 'file-text',
+        ),
+      );
       var form = element('div', 'wb-config-inspector-form');
-      form.appendChild(field('Page label', page.label, function (value) {
-        page.label = value;
-        renderNavigation();
-      }, { placeholder: 'Sign in', help: 'Shown in the workbench sidebar and export guide.' }));
-      form.appendChild(field('Source path', page.src, function (value) {
-        page.src = value;
-        renderNavigation();
-      }, { placeholder: 'pages/sign-in.html', help: 'Relative to the project root.' }));
+      form.appendChild(
+        field(
+          'Page label',
+          page.label,
+          function (value) {
+            page.label = value;
+            renderNavigation();
+          },
+          { placeholder: 'Sign in', help: 'Shown in the workbench sidebar and export guide.' },
+        ),
+      );
+      form.appendChild(
+        field(
+          'Source path',
+          page.src,
+          function (value) {
+            page.src = value;
+            renderNavigation();
+          },
+          { placeholder: 'pages/sign-in.html', help: 'Relative to the project root.' },
+        ),
+      );
       inspector.appendChild(form);
 
       var sizeSection = element('section', 'wb-config-option-section');
       sizeSection.appendChild(element('h4', '', 'Supported sizes'));
-      sizeSection.appendChild(element('p', '', 'Only selected sizes are available in the workbench. Each is exported at its size, except Resizable.'));
+      sizeSection.appendChild(
+        element(
+          'p',
+          '',
+          'Only selected sizes are available in the workbench. Each is exported at its size, except Resizable.',
+        ),
+      );
       var grid = element('div', 'wb-config-size-grid');
       var active = pageSizes(page, spaceKeys);
-      SIZES.filter(function (size) { return spaceKeys.indexOf(size.id) !== -1; }).forEach(function (size) {
+      SIZES.filter(function (size) {
+        return spaceKeys.indexOf(size.id) !== -1;
+      }).forEach(function (size) {
         var card = element('button', 'wb-config-size-card');
         card.type = 'button';
         var on = active.indexOf(size.id) !== -1;
@@ -322,48 +429,100 @@
 
       var advanced = element('div', 'wb-config-preserved');
       advanced.appendChild(icon('braces', 16));
-      advanced.appendChild(element('span', '', 'Scenarios, implementations, and code mappings stay in the YAML and are preserved when you save.'));
+      advanced.appendChild(
+        element(
+          'span',
+          '',
+          'Scenarios, implementations, and code mappings stay in the YAML and are preserved when you save.',
+        ),
+      );
       inspector.appendChild(advanced);
-      inspector.appendChild(danger('Remove page', function () {
-        removeSelected('Remove “' + (page.label || 'this page') + '” from the workbench?');
-      }));
+      inspector.appendChild(
+        danger('Remove page', function () {
+          removeSelected('Remove “' + (page.label || 'this page') + '” from the workbench?');
+        }),
+      );
     }
 
     function renderCollection(collection) {
-      inspector.appendChild(inspectorHeader('Collection', collection.name || 'Untitled collection', pageCount(collection.items) + ' pages', collection.icon || 'layers-3'));
+      inspector.appendChild(
+        inspectorHeader(
+          'Collection',
+          collection.name || 'Untitled collection',
+          pageCount(collection.items) + ' pages',
+          collection.icon || 'layers-3',
+        ),
+      );
       var form = element('div', 'wb-config-inspector-form');
-      form.appendChild(field('Collection name', collection.name, function (value) {
-        collection.name = value;
-        renderNavigation();
-      }, { placeholder: 'Pages' }));
-      form.appendChild(field('Lucide icon', collection.icon, function (value) { collection.icon = value; }, {
-        placeholder: 'file-text', help: 'A kebab-case Lucide icon name.',
-      }));
+      form.appendChild(
+        field(
+          'Collection name',
+          collection.name,
+          function (value) {
+            collection.name = value;
+            renderNavigation();
+          },
+          { placeholder: 'Pages' },
+        ),
+      );
+      form.appendChild(
+        field(
+          'Lucide icon',
+          collection.icon,
+          function (value) {
+            collection.icon = value;
+          },
+          {
+            placeholder: 'file-text',
+            help: 'A kebab-case Lucide icon name.',
+          },
+        ),
+      );
       inspector.appendChild(form);
       var primary = element('button', 'wb-config-inspector-action');
       primary.type = 'button';
       primary.appendChild(icon('plus', 15));
       primary.appendChild(document.createTextNode('Add page to this collection'));
-      primary.addEventListener('click', function () { addPage(collection.items || (collection.items = []), collection); });
+      primary.addEventListener('click', function () {
+        addPage(collection.items || (collection.items = []), collection);
+      });
       inspector.appendChild(primary);
       var addGroupAction = element('button', 'wb-config-inspector-action');
       addGroupAction.type = 'button';
       addGroupAction.appendChild(icon('folder-plus', 15));
       addGroupAction.appendChild(document.createTextNode('Add group to this collection'));
-      addGroupAction.addEventListener('click', function () { addGroup(collection); });
+      addGroupAction.addEventListener('click', function () {
+        addGroup(collection);
+      });
       inspector.appendChild(addGroupAction);
-      inspector.appendChild(danger('Remove collection', function () {
-        removeSelected('Remove “' + (collection.name || 'this collection') + '” and all of its pages?');
-      }));
+      inspector.appendChild(
+        danger('Remove collection', function () {
+          removeSelected(
+            'Remove “' + (collection.name || 'this collection') + '” and all of its pages?',
+          );
+        }),
+      );
     }
 
     function renderGroup(group) {
-      inspector.appendChild(inspectorHeader('Group', group.group || 'Untitled group', pageCount(group.items) + ' pages', 'folder'));
+      inspector.appendChild(
+        inspectorHeader(
+          'Group',
+          group.group || 'Untitled group',
+          pageCount(group.items) + ' pages',
+          'folder',
+        ),
+      );
       var form = element('div', 'wb-config-inspector-form');
-      var name = field('Group name', group.group, function (value) {
-        group.group = value;
-        renderNavigation();
-      }, { placeholder: 'Authentication' });
+      var name = field(
+        'Group name',
+        group.group,
+        function (value) {
+          group.group = value;
+          renderNavigation();
+        },
+        { placeholder: 'Authentication' },
+      );
       form.appendChild(name);
       inspector.appendChild(form);
       if (focusName) {
@@ -376,11 +535,15 @@
       primary.type = 'button';
       primary.appendChild(icon('plus', 15));
       primary.appendChild(document.createTextNode('Add page to this group'));
-      primary.addEventListener('click', function () { addPage(group.items || (group.items = []), selection.collection); });
+      primary.addEventListener('click', function () {
+        addPage(group.items || (group.items = []), selection.collection);
+      });
       inspector.appendChild(primary);
-      inspector.appendChild(danger('Remove group', function () {
-        removeSelected('Remove “' + (group.group || 'this group') + '” and all of its pages?');
-      }));
+      inspector.appendChild(
+        danger('Remove group', function () {
+          removeSelected('Remove “' + (group.group || 'this group') + '” and all of its pages?');
+        }),
+      );
     }
 
     function renderInspector() {
@@ -390,7 +553,9 @@
         var empty = element('div', 'wb-config-inspector-empty');
         empty.appendChild(icon('panel-left', 28));
         empty.appendChild(element('h3', '', 'Choose a page'));
-        empty.appendChild(element('p', '', 'Select an item on the left to edit its workbench settings.'));
+        empty.appendChild(
+          element('p', '', 'Select an item on the left to edit its workbench settings.'),
+        );
         inspector.appendChild(empty);
         return;
       }
@@ -414,44 +579,69 @@
     function open() {
       setStatus('Loading…');
       dialog.showModal();
-      fetch('/_workbench/config-file').then(function (response) {
-        return response.json().then(function (result) {
-          if (!response.ok || !result.ok) throw new Error(result.error || 'Could not read workbench.yaml.');
-          return result;
+      fetch('/_workbench/config-file')
+        .then(function (response) {
+          return response.json().then(function (result) {
+            if (!response.ok || !result.ok)
+              throw new Error(result.error || 'Could not read workbench.yaml.');
+            return result;
+          });
+        })
+        .then(function (result) {
+          collections = result.collections || [];
+          if (Array.isArray(result.sizes) && result.sizes.length) spaceKeys = result.sizes;
+          selection = collections.length
+            ? {
+                kind: 'collection',
+                value: collections[0],
+                owner: collections,
+                collection: collections[0],
+              }
+            : null;
+          setStatus('');
+          render();
+        })
+        .catch(function (error) {
+          setStatus(String(error.message || error), true);
         });
-      }).then(function (result) {
-        collections = result.collections || [];
-        if (Array.isArray(result.sizes) && result.sizes.length) spaceKeys = result.sizes;
-        selection = collections.length ? { kind: 'collection', value: collections[0], owner: collections, collection: collections[0] } : null;
-        setStatus('');
-        render();
-      }).catch(function (error) { setStatus(String(error.message || error), true); });
     }
 
     function save() {
       var problem = validate(collections);
-      if (problem) { setStatus(problem, true); return; }
+      if (problem) {
+        setStatus(problem, true);
+        return;
+      }
       options.save.disabled = true;
       setStatus('Saving…');
       fetch('/_workbench/config-file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ collections: collections }),
-      }).then(function (response) {
-        return response.json().then(function (result) {
-          if (!response.ok || !result.ok) throw new Error(result.error || 'Could not save workbench.yaml.');
-          return result;
+      })
+        .then(function (response) {
+          return response.json().then(function (result) {
+            if (!response.ok || !result.ok)
+              throw new Error(result.error || 'Could not save workbench.yaml.');
+            return result;
+          });
+        })
+        .then(function () {
+          dialog.close();
+          options.onSaved();
+        })
+        .catch(function (error) {
+          setStatus(String(error.message || error), true);
+        })
+        .then(function () {
+          options.save.disabled = false;
         });
-      }).then(function () {
-        dialog.close();
-        options.onSaved();
-      }).catch(function (error) {
-        setStatus(String(error.message || error), true);
-      }).then(function () { options.save.disabled = false; });
     }
 
     options.button.addEventListener('click', open);
-    options.close.addEventListener('click', function () { dialog.close(); });
+    options.close.addEventListener('click', function () {
+      dialog.close();
+    });
     options.addCollection.addEventListener('click', function () {
       var collection = { name: 'New collection', icon: 'file-text', items: [] };
       collections.push(collection);
@@ -465,6 +655,10 @@
   }
 
   window.wbConfigEditor = {
-    create: create, pageSizes: pageSizes, toggleSize: toggleSize, newGroup: newGroup, validate: validate,
+    create: create,
+    pageSizes: pageSizes,
+    toggleSize: toggleSize,
+    newGroup: newGroup,
+    validate: validate,
   };
 })();
