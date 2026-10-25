@@ -30,6 +30,13 @@ void test(
           res.end(asset.body);
           return;
         }
+        if (req.url === '/space-entry.js') {
+          res.setHeader('Content-Type', 'text/javascript');
+          res.end(
+            "import {registerSpaceComponents} from '/_workbench/ui/src/components/register-space.js'; registerSpaceComponents();",
+          );
+          return;
+        }
         res.setHeader('Content-Type', 'text/html');
         // Exercise the same no-inline-style and nonce script constraints as sidebar-view.
         res.setHeader(
@@ -40,7 +47,7 @@ void test(
       <wb-space-switcher id="early"></wb-space-switcher><button id="after">After</button>
       <script nonce="test">window.violations=[]; window.errors=[]; window.addEventListener('error', e => window.errors.push(e.message)); document.addEventListener('securitypolicyviolation', e => window.violations.push(e.violatedDirective));
         const early=document.getElementById('early'); early.spaces=[{id:'a',name:'Acme',initial:'A',color:'green'},{id:'b',name:'Beta',initial:'B',removable:true}]; early.currentId='a'; early.allowAdd=true; early.allowRemove=true;</script>
-      <script type="module" ${req.url === '/source' ? '' : 'nonce="test"'} src="/_workbench/ui/src/app/sidebar/sidebar.js"></script>`);
+      <script type="module" ${req.url === '/source' ? '' : 'nonce="test"'} src="/space-entry.js"></script>`);
       })().catch((error) => {
         res.statusCode = 500;
         res.end(String(error));

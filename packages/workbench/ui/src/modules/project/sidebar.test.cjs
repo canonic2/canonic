@@ -5,7 +5,15 @@ var test = require('node:test');
 var vm = require('node:vm');
 
 function loadSidebar(overrides, spaces) {
-  var shell = { hidden: false, dimmed: false, classList: { toggle: function (name, on) { shell.dimmed = on; } } };
+  var shell = {
+    hidden: false,
+    dimmed: false,
+    classList: {
+      toggle: function (name, on) {
+        shell.dimmed = on;
+      },
+    },
+  };
   var listeners = {};
   var posted = [];
   var diagnostics = { hidden: true, textContent: '' };
@@ -17,25 +25,49 @@ function loadSidebar(overrides, spaces) {
     loadingText: { textContent: '' },
     rail: {},
     pageList: {},
-    spaces: { hidden: true, addEventListener: function (name, callback) { listeners[name] = callback; } },
+    spaces: {
+      hidden: true,
+      addEventListener: function (name, callback) {
+        listeners[name] = callback;
+      },
+    },
     spaceButton: {},
     spaceMenu: {},
   };
   var built = null;
   var pick, current;
   var order = [];
-  var config = Object.assign({
-    name: 'Acme',
-    collections: [],
-    implementations: { simulator: { kind: 'ios-simulator', catalog: true } },
-  }, overrides);
+  var config = Object.assign(
+    {
+      name: 'Acme',
+      collections: [],
+      implementations: { simulator: { kind: 'ios-simulator', catalog: true } },
+    },
+    overrides,
+  );
   var window = {
-    addEventListener: function (type, listener) { listeners[type] = listener; },
+    acquireVsCodeApi: function () {
+      return {
+        postMessage: function (message) {
+          posted.push(message);
+          order.push('sent');
+        },
+      };
+    },
+    addEventListener: function (type, listener) {
+      listeners[type] = listener;
+    },
     removeEventListener: function () {},
     wbIcon: function () {},
-    wbConfig: { load: function (ok) { ok(config); } },
+    wbConfig: {
+      load: function (ok) {
+        ok(config);
+      },
+    },
     wbManifest: {
-      mergeCollections: function (base, imported) { return base.concat(imported); },
+      mergeCollections: function (base, imported) {
+        return base.concat(imported);
+      },
     },
     wbPageList: {
       index: function (collections) {
@@ -66,18 +98,30 @@ function loadSidebar(overrides, spaces) {
       if (selector === 'meta[name="canonic-spaces"]') return spaces ? { content: spaces } : null;
       return { hidden: false };
     },
-    querySelectorAll: function () { return []; },
-    getElementById: function (id) { return elements[id]; },
+    querySelectorAll: function () {
+      return [];
+    },
+    getElementById: function (id) {
+      return elements[id];
+    },
   };
 
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "./sidebar.js"), 'utf8'), {
-    window: window,
-    document: document,
-    console: { error: function () {} },
-    acquireVsCodeApi: function () {
-      return { postMessage: function (message) { posted.push(message); order.push('sent'); } };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, './sidebar.js'), 'utf8') + '\nwindow.wbProjectSidebar();',
+    {
+      window: window,
+      document: document,
+      console: { error: function () {} },
+      acquireVsCodeApi: function () {
+        return {
+          postMessage: function (message) {
+            posted.push(message);
+            order.push('sent');
+          },
+        };
+      },
     },
-  });
+  );
 
   return {
     posted: posted,
@@ -85,26 +129,51 @@ function loadSidebar(overrides, spaces) {
     loading: elements.loading,
     loadingText: elements.loadingText,
     search: elements.search,
-    receive: function (data) { listeners.message({ data: data }); },
-    built: function () { return built; },
-    switcher: function () { return elements.spaces.hidden ? null : elements.spaces; },
-    intent: function (name, detail) { listeners[name]({ detail: detail || {} }); },
+    receive: function (data) {
+      listeners.message({ data: data });
+    },
+    built: function () {
+      return built;
+    },
+    switcher: function () {
+      return elements.spaces.hidden ? null : elements.spaces;
+    },
+    intent: function (name, detail) {
+      listeners[name]({ detail: detail || {} });
+    },
     shell: shell,
     spaces: elements.spaces,
-    pick: function (src, scenario) { pick(src, scenario); },
-    current: function () { return current; },
+    pick: function (src, scenario) {
+      pick(src, scenario);
+    },
+    current: function () {
+      return current;
+    },
     order: order,
   };
 }
 
 test('the sidebar shows the space switcher from the spaces the extension lists', function () {
-  var listed = { current: 'a1', spaces: [{ id: 'a1', name: 'Acme', removable: false }, { id: 'b2', name: 'Example', removable: true }] };
+  var listed = {
+    current: 'a1',
+    spaces: [
+      { id: 'a1', name: 'Acme', removable: false },
+      { id: 'b2', name: 'Example', removable: true },
+    ],
+  };
   var sidebar = loadSidebar({ implementations: {}, previews: false }, JSON.stringify(listed));
   var switcher = sidebar.switcher();
 
   assert.equal(sidebar.spaces.hidden, false);
   assert.equal(switcher.currentId, 'a1');
-  assert.equal(switcher.spaces.map(function (p) { return p.name; }).join(), 'Acme,Example');
+  assert.equal(
+    switcher.spaces
+      .map(function (p) {
+        return p.name;
+      })
+      .join(),
+    'Acme,Example',
+  );
   assert.equal(switcher.allowAdd, true);
   assert.equal(switcher.allowRemove, true);
 
@@ -124,14 +193,21 @@ test('the sidebar shows the space switcher from the spaces the extension lists',
 });
 
 test('a sidebar pick marks the destination before sending it to the editor', function () {
-  var sidebar = loadSidebar({ implementations: {}, previews: false, collections: [
-    { name: 'Pages', items: [{ label: 'Sign in', src: 'sign-in.html' }] },
-  ] });
+  var sidebar = loadSidebar({
+    implementations: {},
+    previews: false,
+    collections: [{ name: 'Pages', items: [{ label: 'Sign in', src: 'sign-in.html' }] }],
+  });
   sidebar.pick('sign-in.html', 'error');
-  assert.deepEqual(sidebar.current(), { src: 'sign-in.html', scenario: 'error', collection: 'Pages' });
+  assert.deepEqual(sidebar.current(), {
+    src: 'sign-in.html',
+    scenario: 'error',
+    collection: 'Pages',
+  });
   assert.deepEqual(sidebar.order.slice(-2), ['selected', 'sent']);
   assert.deepEqual(JSON.parse(JSON.stringify(sidebar.posted.at(-1))), {
-    type: 'canonic-pick', hash: 'sign-in.html:error',
+    type: 'canonic-pick',
+    hash: 'sign-in.html:error',
   });
 });
 
@@ -158,7 +234,7 @@ test('the sidebar shows catalog diagnostics while still building imported pages'
   assert.equal(sidebar.diagnostics.hidden, false);
   assert.equal(
     sidebar.diagnostics.textContent,
-    'Storybook is not running.\nNo matching Simulator was found.'
+    'Storybook is not running.\nNo matching Simulator was found.',
   );
   assert.deepEqual(sidebar.built(), collections);
   assert.equal(sidebar.loading.hidden, true);
@@ -174,17 +250,31 @@ test('the sidebar hides catalog diagnostics when every catalog loads', function 
 });
 
 test('with nothing to import, the sidebar shows its own reader’s problems', function () {
-  var sidebar = loadSidebar({ implementations: {}, previews: false, problems: ['Pages › Unlinked: every page needs a label and a src.'] });
-  assert.equal(sidebar.posted.some(function (m) { return m.type === 'canonic-catalog-request'; }), false);
+  var sidebar = loadSidebar({
+    implementations: {},
+    previews: false,
+    problems: ['Pages › Unlinked: every page needs a label and a src.'],
+  });
+  assert.equal(
+    sidebar.posted.some(function (m) {
+      return m.type === 'canonic-catalog-request';
+    }),
+    false,
+  );
   assert.equal(sidebar.diagnostics.hidden, false);
-  assert.equal(sidebar.diagnostics.textContent, 'Pages › Unlinked: every page needs a label and a src.');
+  assert.equal(
+    sidebar.diagnostics.textContent,
+    'Pages › Unlinked: every page needs a label and a src.',
+  );
 });
 
 test('the sidebar requests discovered previews without an implementation catalog', function () {
   var sidebar = loadSidebar({ implementations: {} });
   assert.equal(sidebar.posted[0].type, 'canonic-catalog-request');
 
-  var collections = [{ name: 'Website', items: [{ label: 'Overview', src: 'previews/overview.workbench.ts' }] }];
+  var collections = [
+    { name: 'Website', items: [{ label: 'Overview', src: 'previews/overview.workbench.ts' }] },
+  ];
   sidebar.receive({ type: 'canonic-catalog', collections: collections, problems: [] });
   assert.deepEqual(sidebar.built(), collections);
 });

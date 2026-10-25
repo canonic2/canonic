@@ -17,20 +17,9 @@
 */
 
 (function () {
-  function isGroup(entry) {
-    return !!(entry && entry.group);
-  }
-
-  /* A collection's entries are pages, groups of pages, or both. Everything
-     downstream works on pages, so this is the one place that walks in. */
-  function pagesIn(entries) {
-    var out = [];
-    entries.forEach(function (entry) {
-      if (isGroup(entry)) out = out.concat(pagesIn(entry.items));
-      else out.push(entry);
-    });
-    return out;
-  }
+  var isGroup = window.wbPageList.isGroup;
+  var pagesIn = window.wbPageList.pagesIn;
+  var firstPick = window.wbPageList.firstPick;
 
   /* A single scenario is a page with a note attached, not a fold — the panel
      only splits a page open when there is a choice to make. */
@@ -66,40 +55,8 @@
     return caret || holdsCurrent ? 'toggle' : 'pick';
   }
 
-  /* The page a collection or group opens on: its first page, as authored.
-     Null when it holds no pages. */
-  function firstPick(pages) {
-    var item = pages[0];
-    return item ? { src: item.src, scenario: null } : null;
-  }
-
-  function firstPage(collections) {
-    for (var i = 0; i < collections.length; i++) {
-      var pick = firstPick(pagesIn(collections[i].items));
-      if (pick) return pick;
-    }
-    return null;
-  }
-
   function emptyText(filter) {
-    return (filter || '').trim()
-      ? 'Nothing matches “' + filter + '”.'
-      : 'No pages available.';
-  }
-
-  /* src -> item, with each page told which collection it came from. A row wears
-     its collection's glyph — the icon says which kind of thing the row is, the
-     label says which one — so the item carries that too. */
-  function index(collections) {
-    var out = {};
-    (collections || []).forEach(function (g) {
-      pagesIn(g.items).forEach(function (item) {
-        item.collection = g.name;
-        item.icon = item.icon || g.icon;
-        out[item.src] = item;
-      });
-    });
-    return out;
+    return (filter || '').trim() ? 'Nothing matches “' + filter + '”.' : 'No pages available.';
   }
 
   /* options: list — where the pages go; collectionList — where the collections
@@ -120,7 +77,7 @@
     var treeKeyboard = !!options.treeKeyboard;
 
     var showing = collections.length ? collections[0].name : null; /* the collection showing */
-    var current = null;      /* src of the picked page */
+    var current = null; /* src of the picked page */
     var currentScenario = null; /* its scenario id, or null for the default one */
 
     /* ------------------------------------------------------ collections */
@@ -176,7 +133,9 @@
     }
 
     function openFirst(pages) {
-      var holdsCurrent = pages.some(function (item) { return item.src === current; });
+      var holdsCurrent = pages.some(function (item) {
+        return item.src === current;
+      });
       var first = holdsCurrent ? null : firstPick(pages);
       if (first) onPick(first.src, first.scenario);
     }
@@ -290,7 +249,9 @@
       parts.head.dataset.group = entry.group;
       parts.head.addEventListener('click', function (e) {
         var pages = pagesIn(entry.items);
-        var holdsCurrent = pages.some(function (item) { return item.src === current; });
+        var holdsCurrent = pages.some(function (item) {
+          return item.src === current;
+        });
         if (groupHeadAction(e.target, holdsCurrent) === 'toggle') {
           toggleFold(parts.box);
           return;
@@ -378,9 +339,11 @@
       if (!q) return entry;
       if (isGroup(entry)) {
         if (entry.group.toLowerCase().indexOf(q) > -1) return entry;
-        var kept = entry.items.map(function (child) {
-          return matching(child, q);
-        }).filter(Boolean);
+        var kept = entry.items
+          .map(function (child) {
+            return matching(child, q);
+          })
+          .filter(Boolean);
         return kept.length ? { group: entry.group, items: kept } : null;
       }
       return haystack(entry).indexOf(q) > -1 ? entry : null;
@@ -397,9 +360,11 @@
 
       collections.forEach(function (g) {
         if (!q && g.name !== showing) return;
-        var matches = g.items.map(function (entry) {
-          return matching(entry, q);
-        }).filter(Boolean);
+        var matches = g.items
+          .map(function (entry) {
+            return matching(entry, q);
+          })
+          .filter(Boolean);
         if (!matches.length) return;
         shown += pagesIn(matches).length;
 
@@ -489,7 +454,9 @@
     }
 
     function foldHead(box) {
-      return box && box.firstElementChild && box.firstElementChild.classList.contains('wb-fold-head')
+      return box &&
+        box.firstElementChild &&
+        box.firstElementChild.classList.contains('wb-fold-head')
         ? box.firstElementChild
         : null;
     }
@@ -518,12 +485,16 @@
           next = row;
         } else {
           var childList = row.nextElementSibling;
-          next = rows.filter(function (candidate) {
-            return childList && childList.contains(candidate);
-          })[0] || row;
+          next =
+            rows.filter(function (candidate) {
+              return childList && childList.contains(candidate);
+            })[0] || row;
         }
       } else if (e.key === 'ArrowLeft') {
-        if (row.classList.contains('wb-fold-head') && row.getAttribute('aria-expanded') === 'true') {
+        if (
+          row.classList.contains('wb-fold-head') &&
+          row.getAttribute('aria-expanded') === 'true'
+        ) {
           toggleFold(row.parentElement);
           next = row;
         } else {
@@ -576,7 +547,9 @@
        keyboard listeners remain single and its hand-worked folds survive. */
     function update(nextCollections) {
       collections = nextCollections || [];
-      var stillThere = collections.some(function (g) { return g.name === showing; });
+      var stillThere = collections.some(function (g) {
+        return g.name === showing;
+      });
       if (!stillThere) showing = collections.length ? collections[0].name : null;
       renderCollections();
       render(search ? search.value : '');
@@ -614,13 +587,9 @@
     };
   }
 
-  window.wbPageList = {
-    index: index,
-    firstPage: firstPage,
+  Object.assign(window.wbPageList, {
     create: create,
     scenarios: scenariosOf,
     scenarioPick: scenarioPick,
-    pagesIn: pagesIn,
-    isGroup: isGroup,
-  };
+  });
 })();

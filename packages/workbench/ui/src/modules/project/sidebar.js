@@ -31,8 +31,8 @@
    simply has nowhere to go.
 */
 
-(function () {
-  var host = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+window.wbProjectSidebar = function () {
+  var host = typeof window.acquireVsCodeApi === 'function' ? window.acquireVsCodeApi() : null;
 
   var shell = document.querySelector('.sb');
   var problem = document.getElementById('problem');
@@ -66,7 +66,7 @@
     var listed;
     try {
       listed = JSON.parse(meta.content);
-    } catch (error) {
+    } catch {
       return;
     }
     var switcher = document.getElementById('spaces');
@@ -75,10 +75,18 @@
     switcher.allowRemove = true;
     switcher.spaces = listed.spaces;
     switcher.currentId = listed.current;
-    switcher.addEventListener('wb-space-pick', function (e) { send({ type: 'canonic-space', id: e.detail.id }); });
-    switcher.addEventListener('wb-space-add', function () { send({ type: 'canonic-add-space' }); });
-    switcher.addEventListener('wb-space-remove', function (e) { send({ type: 'canonic-remove-space', id: e.detail.id }); });
-    switcher.addEventListener('wb-space-toggle', function (e) { shell.classList.toggle('is-dimmed', e.detail.open); });
+    switcher.addEventListener('wb-space-pick', function (e) {
+      send({ type: 'canonic-space', id: e.detail.id });
+    });
+    switcher.addEventListener('wb-space-add', function () {
+      send({ type: 'canonic-add-space' });
+    });
+    switcher.addEventListener('wb-space-remove', function (e) {
+      send({ type: 'canonic-remove-space', id: e.detail.id });
+    });
+    switcher.addEventListener('wb-space-toggle', function (e) {
+      shell.classList.toggle('is-dimmed', e.detail.open);
+    });
     switcher.hidden = false;
   }
 
@@ -120,9 +128,11 @@
   }
 
   function start(config) {
-    var imports = config.previews !== false || Object.keys(config.implementations || {}).some(function (key) {
-      return config.implementations[key].catalog;
-    });
+    var imports =
+      config.previews !== false ||
+      Object.keys(config.implementations || {}).some(function (key) {
+        return config.implementations[key].catalog;
+      });
     if (!imports || !host) {
       /* Nothing to ask the server for: this reader reports the same problems
          it would, so its own list is the space's list. */
@@ -130,10 +140,16 @@
       build(config);
       return;
     }
-    var catalogs = Object.keys(config.implementations || {}).filter(function (key) {
-      return config.implementations[key].catalog;
-    }).map(function (key) { return config.implementations[key].label || key; });
-    loadingText.textContent = catalogs.length ? 'Waiting for ' + catalogs.join(', ') + '…' : 'Finding previews…';
+    var catalogs = Object.keys(config.implementations || {})
+      .filter(function (key) {
+        return config.implementations[key].catalog;
+      })
+      .map(function (key) {
+        return config.implementations[key].label || key;
+      });
+    loadingText.textContent = catalogs.length
+      ? 'Waiting for ' + catalogs.join(', ') + '…'
+      : 'Finding previews…';
     /* The first answer builds the list. Later ones carry what the server
        learned afterwards, such as docs pages' problems; they update the
        problems and leave the list, its folds and its filter as they are. */
@@ -144,7 +160,10 @@
       showProblems(data.problems);
       if (built) return;
       built = true;
-      config.collections = window.wbManifest.mergeCollections(config.collections, data.collections || []);
+      config.collections = window.wbManifest.mergeCollections(
+        config.collections,
+        data.collections || [],
+      );
       build(config);
     });
     send({ type: 'canonic-catalog-request' });
@@ -167,4 +186,4 @@
   });
 
   window.wbConfig.load(start, refuse);
-})();
+};

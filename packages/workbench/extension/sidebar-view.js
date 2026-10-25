@@ -4,7 +4,7 @@
    pages, and the scenarios under a page — the same list the workbench draws
    down its left edge, because it is literally the same list.
    The page is this extension's own `ui/src/app/sidebar/sidebar.html`, and the
-   code that builds the rows is `ui/legacy/page-list.js`, which the workbench
+   code that builds the rows is `ui/src/views/page-list/page-list.js`, which the workbench
    uses too.
    Clicking a row puts that page on the canvas in the editor tab.
 
@@ -94,6 +94,10 @@ function page(webview, dir, space, build, spaces) {
   body = body.replace('<script type="module" src="/_workbench/ui/src/app/sidebar/sidebar.js"></script>', function () {
     var resource = vscode.Uri.file(path.join(APP, 'sidebar.js'));
     return '<script type="module" nonce="' + nonce + '" src="' + webview.asWebviewUri(resource).toString() + '"></script>';
+  });
+  body = body.replace(/(src|href)="\/_workbench\/ui\/src\/([^"]+)"/g, function (_match, attribute, file) {
+    var resource = vscode.Uri.file(path.resolve(__dirname, '../ui/src', file));
+    return attribute + '="' + webview.asWebviewUri(resource).toString() + '"';
   });
   var root = vscode.Uri.file(space.root);
   /* A space whose workbench.yaml isn't at its root, or is one of several

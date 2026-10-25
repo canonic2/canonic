@@ -558,8 +558,8 @@ implementation's own address; Workbench never switches to a stream.
 | `../src/app/preview-host/` | the reusable document a TypeScript preview mounts into, still served as `/_workbench/preview-host.html` |
 | `preview-controls.js` + `preview-controls.css` | shared input controls, reset, actions and docs, also included in portable browser exports |
 | `zoom.js` | zooms and pans the artboard on the canvas, Figma-style, and labels it with its name and size |
-| `page-list.js` + `page-list.css` | the collection list and page list, laid out like Sketch's sidebar: collections, then the chosen one's groups, pages, and scenarios, then search |
-| `sidebar.js` + `../src/app/sidebar/` | that same list in the editor's sidebar, in the editor's colours: the classic list wiring here, the document, its styles and module entry there |
+| `../src/views/page-list/` | shared collection/page rows, folds, search, keyboard presentation and styles |
+| `../src/modules/project/` + `../src/app/sidebar/` | collection indexing and initial-page rules, sidebar host/catalog wiring, and the sidebar document, styles and composition entry |
 | `../src/components/space-switcher/` + `../src/components/space-mark/` | Web Components for the space switcher and its mark, with owned Shadow DOM styles |
 | `../src/theme/defaults.css` | shared shell theme defaults and direct webview host mappings for migrated controls |
 | `annotations.js` + `annotations.css` | the draw layer, screenshots, and clipboard handoff |
@@ -575,7 +575,7 @@ implementation's own address; Workbench never switches to a stream.
 | `actions.js` | the preview's half of the Actions toggle, and the hook a TypeScript preview uses to claim its links and forms |
 | `scenarios.js` | the preview's half of page scenarios |
 
-`page-list.js` is the list and nothing else: it is handed the config's collections and
+`../src/views/page-list/page-list.js` is the list: it is handed the config's collections and
 answers with a collection list and a page list that call back with the page you picked. Two
 places build one — the workbench, where it is the left edge of the window, and
 the Workbench sidebar in VS Code, where it stands in for a file tree. `page-list.css`

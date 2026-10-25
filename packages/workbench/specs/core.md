@@ -2,7 +2,7 @@
 
 This contract applies to every page: authored pages, discovered TypeScript
 previews, and imported catalog entries. The implementation is in
-[workbench.js](../ui/legacy/workbench.js), [page-list.js](../ui/legacy/page-list.js),
+[workbench.js](../ui/legacy/workbench.js), [page-list.js](../ui/src/views/page-list/page-list.js),
 [manifest.js](../contracts/manifest.js), [config.js](../ui/legacy/config.js)
 (browser), and the native [config reader](../server/src/config/read.rs) (server).
 The Node [config reader](../server/node/config.js) is a parity-test oracle. The editor host, preview
@@ -196,7 +196,7 @@ composition does not change the outer control layout.
 
 - [address.test.js](../ui/legacy/address.test.js) checks address parsing,
   writing, and round trips.
-- [page-list.test.js](../ui/legacy/page-list.test.js) checks listed scenarios and empty
+- [page-list.test.cjs](../ui/src/views/page-list/page-list.test.cjs) checks listed scenarios and empty
   versus filtered lists.
 - [config.test.js](../server/node/config.test.js) checks YAML reading, the local merge,
   and server-resolved paths and problems;

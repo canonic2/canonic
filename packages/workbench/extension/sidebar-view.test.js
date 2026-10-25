@@ -161,6 +161,10 @@ test('the page loads authored component modules from permitted webview resources
   assert.ok(html.includes("'nonce-" + module[1] + "'"), 'the CSP permits the module nonce literally');
   assert.ok(resolveView(true).view.webview.options.localResourceRoots.some(uri => uri.fsPath === path.resolve(__dirname, '../ui/src')));
   assert.ok(!html.includes('/_workbench/ui/src/app/sidebar/'));
+  for (var file of ['modules/project/pages.js', 'modules/project/sidebar.js', 'views/page-list/page-list.js', 'views/page-list/page-list.css']) {
+    assert.ok(html.includes(path.resolve(__dirname, '../ui/src', file)), 'the moved resource uses the permitted webview origin: ' + file);
+  }
+  assert.ok(!html.includes('/_workbench/ui/src/'));
 });
 
 test('the sidebar loads its local Lucide library, draws icons and reports a missing library', function () {

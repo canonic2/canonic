@@ -222,7 +222,7 @@ prefix matching and collection icon merging; the server's catalog import
 over one corpus and compares their trees and problems, including duplicates,
 dropped entries, lone scenarios with path maps and *nothing to show*.
 `contracts/manifest.test.js` covers merging, preview-`src` path maps and the
-icon ladder; `ui/legacy/page-list.test.js` covers the page list.
+icon ladder; `ui/src/views/page-list/page-list.test.cjs` covers the page list.
 
 ## Implementation gaps
 

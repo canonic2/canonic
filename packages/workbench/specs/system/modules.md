@@ -154,6 +154,7 @@ ui/src/
   app/workbench/             Canvas shell document, styles and module entry, served as /_workbench/
   app/viewer/                Portable export viewer, copied into each portable export
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
+  views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation and styles
   views/top-bar/             Size and Actions elements and their registration
   views/docs/                A docs lens's reading page, its embedded examples and highlighting
   components/<name>/         Element, styles, owned helpers and interaction tests
@@ -161,6 +162,7 @@ ui/src/
   components/register-*.js   Repeatable element registration and the space family
   host/                     Browser HTTP transport
   modules/
+    project/                Collection traversal/indexing and the sidebar host/catalog adapter
     canvas/                 Artboard state, geometry, controller and publication
     navigation/             Requested destination, supersession and transition state
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
@@ -181,6 +183,11 @@ presentation owner. Importing an element class does not register it.
 `app/sidebar/sidebar.js` is the direct webview module entry. `app/renderer/renderer.js`
 composes the content-only renderer. `app/workbench/sizes.js` and `app/workbench/docs.js`
 hand the size and docs rules to the classic scripts.
+The sidebar entry starts `modules/project/sidebar.js` after registering its space
+controls. `modules/project/pages.js` owns traversal, indexing and initial-page
+rules; `views/page-list/page-list.js` owns row rendering and interaction. They
+retain the classic `wbPageList` API and existing closure state for the shell and
+sidebar until the project/page-list adoption step.
 `views/canvas/bindings.js` connects capability ports to the existing shell. Its
 legacy chrome adapter owns the current DOM controls and restores the previous
 zoom API when its connection ends.

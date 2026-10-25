@@ -543,7 +543,7 @@ function shellAddress(hash) {
     { id: 'empty', iterations: [{ id: 'illustrated', label: 'Illustrated' }] },
     { id: 'loading' },
   ] } };
-  for (var file of ['address.js', 'page-list.js']) {
+  for (var file of ['address.js', '../src/modules/project/pages.js', '../src/views/page-list/page-list.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   vm.runInContext(between('  function writeHash(', '  window.wbTarget = parseHash;'), context);

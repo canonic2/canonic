@@ -5,28 +5,34 @@ var test = require('node:test');
 var vm = require('node:vm');
 
 function action(target, selected, filtering) {
-  var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
+  var source = fs.readFileSync(path.join(__dirname, './page-list.js'), 'utf8');
   var start = source.indexOf('  function scenarioHeadAction(');
-  var end = source.indexOf('\n\n  /* src -> item', start);
+  var end = source.indexOf('\n\n  /* options:', start);
   var state = {};
   vm.runInNewContext(source.slice(start, end), state);
   return state.scenarioHeadAction(target, selected, filtering);
 }
 
 function empty(filter) {
-  var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
+  var source = fs.readFileSync(path.join(__dirname, './page-list.js'), 'utf8');
   var start = source.indexOf('  function emptyText(');
-  var end = source.indexOf('\n\n  /* src -> item', start);
+  var end = source.indexOf('\n\n  /* options:', start);
   var state = {};
   vm.runInNewContext(source.slice(start, end), state);
   return state.emptyText(filter);
 }
 
 function picking() {
-  var source = fs.readFileSync(path.join(__dirname, "./page-list.js"), 'utf8');
+  var source = fs.readFileSync(path.join(__dirname, './page-list.js'), 'utf8');
   var start = source.indexOf('  function scenarioPick(');
   var end = source.indexOf('\n\n  function emptyText', start);
   var context = {};
+  var window = {};
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, '../../modules/project/pages.js'), 'utf8'),
+    { window: window },
+  );
+  Object.assign(context, window.wbPageList);
   vm.runInNewContext(source.slice(start, end), context);
   return context;
 }
@@ -45,12 +51,25 @@ test('a collection or group without pages opens nothing', function () {
 
 test('a space opens the first page in collection and group order, skipping empty collections', function () {
   var window = {};
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './page-list.js'), 'utf8'), { window: window });
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, '../../modules/project/pages.js'), 'utf8'),
+    { window: window },
+  );
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './page-list.js'), 'utf8'), {
+    window: window,
+  });
   var first = window.wbPageList.firstPage([
     { name: 'Empty', items: [{ group: 'Empty group', items: [] }] },
-    { name: 'Components', items: [{ group: 'Buttons', items: [
-      { src: 'button.html', scenarios: [{ id: 'primary' }, { id: 'ghost' }] },
-    ] }, { src: 'card.html' }] },
+    {
+      name: 'Components',
+      items: [
+        {
+          group: 'Buttons',
+          items: [{ src: 'button.html', scenarios: [{ id: 'primary' }, { id: 'ghost' }] }],
+        },
+        { src: 'card.html' },
+      ],
+    },
     { name: 'Pages', items: [{ src: 'home.html' }] },
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(first)), { src: 'button.html', scenario: null });
@@ -59,8 +78,16 @@ test('a space opens the first page in collection and group order, skipping empty
 
 test('a group header opens its first page unless it folds', function () {
   var groupHeadAction = picking().groupHeadAction;
-  var label = { closest: function () { return null; } };
-  var caret = { closest: function (selector) { return selector === '.wb-fold' ? {} : null; } };
+  var label = {
+    closest: function () {
+      return null;
+    },
+  };
+  var caret = {
+    closest: function (selector) {
+      return selector === '.wb-fold' ? {} : null;
+    },
+  };
 
   assert.equal(groupHeadAction(label, false), 'pick');
   assert.equal(groupHeadAction(label, true), 'toggle');
@@ -80,7 +107,11 @@ test('the disclosure caret folds a scenario branch without selecting its page', 
 });
 
 test('the rest of a scenario header retains its select and selected-row fold behavior', function () {
-  var label = { closest: function () { return null; } };
+  var label = {
+    closest: function () {
+      return null;
+    },
+  };
 
   assert.equal(action(label, false, false), 'pick');
   assert.equal(action(label, true, false), 'toggle');

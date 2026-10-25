@@ -281,7 +281,7 @@ or handoff prompts.
 - [sidebar-view.test.js](../../extension/sidebar-view.test.js) checks that catalog problems and
   catalog request failures reach the sidebar, and that showing the view opens
   the canvas.
-- [sidebar.test.js](../../ui/legacy/sidebar.test.js) checks the waiting text,
+- [sidebar.test.cjs](../../ui/src/modules/project/sidebar.test.cjs) checks the waiting text,
   disabled search, the problems list, preview-only catalog requests, and the
   immediate build when previews are off.
 - [spaces.test.js](../../server/node/spaces.test.js) checks naming and fallback, ids,
@@ -291,7 +291,7 @@ or handoff prompts.
   and the cross-origin refusal. [panel.test.js](../../extension/panel.test.js) checks
   retargeting an open tab, a slower earlier load not winning, a closed tab
   staying closed, and `wb-space` relay. [sidebar-view.test.js](../../extension/sidebar-view.test.js)
-  and [sidebar.test.js](../../ui/legacy/sidebar.test.js) check the
+  and [sidebar.test.cjs](../../ui/src/modules/project/sidebar.test.cjs) check the
   `canonic-spaces` meta, watcher and resource retargeting, and the
   switcher's messages.
 - [startup.test.js](../../extension/startup.test.js) checks probes, terminal startup only

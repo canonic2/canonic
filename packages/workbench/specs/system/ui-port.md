@@ -98,7 +98,7 @@ owning capability; other capabilities read it through that owner's `state` and
 
 | Module | Owns | Moves from |
 | --- | --- | --- |
-| `project` | The loaded workbench: spaces, collections, pages, problems, reload | `legacy/config.js`, configuration parts of `legacy/workbench.js` |
+| `project` | The loaded workbench: spaces, collections, pages, problems, reload | `modules/project/pages.js`, `modules/project/sidebar.js`, `legacy/config.js`, configuration parts of `legacy/workbench.js` |
 | `page-tree` | Lenses, scenarios and artboards of the selected page, as rules over `project` | `legacy/lenses.js`, `legacy/scenarios.js` |
 | `navigation` | Requested and displayed destination, phase, address reading and writing | `modules/navigation/`, `legacy/address.js` |
 | `canvas` | Artboard instances, geometry, camera and zoom, capture locks | `modules/canvas/`, `legacy/zoom.js` |
@@ -126,7 +126,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 
 | View | Shows | Moves from |
 | --- | --- | --- |
-| `page-list` | Collections, groups, pages, problems and search | `legacy/page-list.js`, `legacy/sidebar.js` |
+| `page-list` | Collections, groups, pages, problems and search | `views/page-list/` (in place); sidebar host/catalog wiring in `modules/project/sidebar.js` |
 | `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `legacy/top-bar.js`, top-bar parts of `legacy/workbench.js` |
 | `canvas` | The canvas element, artboard labels and loading feedback | `views/canvas/bindings.js` (in place), `modules/canvas/legacy-chrome.js` |
 | `toolbar` | Annotation tools and review actions | Toolbar parts of `legacy/workbench.js` and `legacy/annotations.js` |
@@ -155,7 +155,7 @@ Other existing files move as follows:
 - **Icons.** `legacy/icons.js` becomes a shared module under `components/`
   used by every view that draws icons; `legacy/canonic.svg` moves to `theme/`.
 - **Styles.** Legacy CSS moves with the view or document that owns it:
-  `page-list.css` and `sidebar.css` to `page-list` and the sidebar document,
+  `views/page-list/page-list.css` and `app/sidebar/sidebar.css` are in place;
   `content.css` and `annotations.css` to the renderer document,
   `capture.css` to the capture document, `preview-controls.css` beside the
   preview controls' elements, and `workbench.css` to the canvas document, its
@@ -293,6 +293,7 @@ and passes its acceptance:
 | --- | --- | --- |
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
+| Classic `wbPageList` API shared by `modules/project/pages.js` and `views/page-list/page-list.js`; sidebar startup through `wbProjectSidebar` | `project` / `page-list` | The `project`/`page-list` adoption step; existing closure state remains until then |
 
 Later steps add a row before introducing an adapter.
 

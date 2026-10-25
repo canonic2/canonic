@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sidebar</title>
   <link rel="stylesheet" href="/_workbench/ui/src/theme/defaults.css" />
-  <link rel="stylesheet" href="../ui/legacy/page-list.css" />
+  <link rel="stylesheet" href="../ui/src/views/page-list/page-list.css" />
   <link rel="stylesheet" href="../ui/src/app/sidebar/sidebar.css" />
   <link rel="stylesheet" href="design.css" />
 </head>
@@ -32,7 +32,8 @@
   </div>
 
   <script src="../ui/legacy/icons.js"></script>
-  <script src="../ui/legacy/page-list.js"></script>
+  <script src="../ui/src/modules/project/pages.js"></script>
+  <script src="../ui/src/views/page-list/page-list.js"></script>
   <script src="spaces.js"></script>
   <script type="module">
     import Check from '../node_modules/lucide/dist/esm/icons/check.mjs';
@@ -46,7 +47,8 @@
     import Plus from '../node_modules/lucide/dist/esm/icons/plus.mjs';
     import Search from '../node_modules/lucide/dist/esm/icons/search.mjs';
     import X from '../node_modules/lucide/dist/esm/icons/x.mjs';
-    import '/_workbench/ui/src/app/sidebar/sidebar.js';
+    import { registerSpaceComponents } from '../ui/src/components/register-space.js';
+    registerSpaceComponents();
 
     // Keep this authored HTML page as small as its displayed controls.
     window.lucide = { icons: {

@@ -1,4 +1,4 @@
-/* The page list, dressed
+/* Page-list presentation
    ----------------------
    Everything page-list.js builds: the collection list, the heading over the
    pages, the rows — groups, pages, scenarios — and the search field under them.
@@ -35,8 +35,8 @@
 
 .wb-browse {
   --wb-row-h: 28px;
-  --wb-row-x: 8px;    /* a row's own inset, before its depth */
-  --wb-indent: 16px;  /* one level of nesting */
+  --wb-row-x: 8px; /* a row's own inset, before its depth */
+  --wb-indent: 16px; /* one level of nesting */
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -228,7 +228,9 @@
   height: 12px;
   color: var(--wb-fg-3);
   opacity: 0;
-  transition: transform 120ms ease, opacity 120ms ease;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
 }
 
 .wb-page-list:hover .wb-fold,

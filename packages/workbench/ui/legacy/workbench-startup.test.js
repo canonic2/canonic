@@ -32,7 +32,7 @@ function startup(hash, collections, imported, server) {
     route: function () { routed.push(window.wbAddress.parse(location.hash)); },
   };
   vm.createContext(context);
-  for (var file of ['address.js', 'page-list.js']) {
+  for (var file of ['address.js', '../src/modules/project/pages.js', '../src/views/page-list/page-list.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context);
   }
   window.wbManifest = { mergeCollections: function (base, extra) { return base.concat(extra); } };
