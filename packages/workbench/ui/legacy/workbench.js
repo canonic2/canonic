@@ -677,10 +677,10 @@
     drawScenarioMenu(scenarios.map(function (scenario, i) {
       return {
         label: scenario.label,
-        target: window.wbPageList.scenarioPick(item, scenario, i),
+        target: window.wbPageList.scenarioPick(scenario, i),
         current: currentScenario ? currentScenario === scenario.id : i === 0,
         pick: function () {
-          writeHash(current, window.wbPageList.scenarioPick(item, scenario, i), sizeKey(), lens ? lens.key : null);
+          writeHash(current, window.wbPageList.scenarioPick(scenario, i), sizeKey(), lens ? lens.key : null);
         },
       };
     }), 'scenario');
