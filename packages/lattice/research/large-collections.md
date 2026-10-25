@@ -347,6 +347,57 @@ a budget remains a miss even if it improves. Report all variants and failed
 or partial runs. Existing local Chromium tooling and read-only shipping
 modules are used; no external data or network transmission is needed.
 
+### W1 evidence and candidate proposal (2026-10-25, before comparison)
+
+The diagnostic smoke (one page per size) and full diagnostic set (three per
+size) pass the existing model and focus checks. Every 120-step row, viewport
+and end-jump sequence has 240 renders: 120 direct renders and 120 native-scroll
+renders of the same range. Duplicate work is real, but entering-row lifecycle
+is larger. At 10,000 items the three viewport traces attribute, per 120 steps,
+127–165 ms to binding disposal, 133–190 ms to DOM removal including component
+disconnection, 121–146 ms to construction plus input setters, 72–88 ms to DOM
+insertion including connection, 20–26 ms to binding setup, 37–44 ms to remaining
+row setup, and 41–51 ms to reconciliation plus range/position bookkeeping.
+These diagnostic spans exclude nested spans from their parents. They are
+instrumented attribution, not budget measurements. Trace GC totals are
+51–71 ms with six major collections per viewport sequence; these overlap the
+spans and are not added to them.
+
+Sampled allocations concentrate in binding release and component disconnect
+abort paths, with additional controller/composite-signal setup. Diagnostic
+wrappers and the smaller sampling interval perturb allocation totals, so the
+comparison will also preserve uninstrumented allocation stacks. Native DOM
+allocations are outside the JavaScript heap sampler. No historical outlier
+is retrospectively attributed to GC from this evidence.
+
+The three 10,000-item diagnostic mount clicks show 2.16–2.30 ms input delay,
+23.2–26.2 ms event processing and 86.3–138 ms residual to trace Event Timing's
+presentation endpoint. Within that residual, main-thread style, layout,
+pre-paint, paint and layer work total only 6.85–7.43 ms. Handler GC is
+4.47–5.61 ms. These runs include CPU profiling and broad tracing, so their
+latencies are diagnostic only. Most elapsed residual remains scheduling,
+compositor/presentation or unattributed work; it is not established as slow
+JavaScript or main-thread rendering. There is no evidence here to claim a
+reconciliation optimization alone fixes the mount presentation budget.
+
+Compare one combined application candidate, C1, against frozen W1:
+
+- Skip reconciliation when start, end, focused key and membership revision
+  match the completed render. Every membership callback advances the revision,
+  including removal/reinsertion of an identical key. Focus changes invalidate
+  the range; pinning and keyboard/fallback behavior stay intact.
+- Give each row incarnation one owned binding controller. Use that same
+  controller for normal disposal and setup-failure cleanup, eliminating the
+  extra failure controller and composite signal.
+- Supply a per-list reusable `AbortError` reason during normal binding
+  disposal, avoiding a fresh default abort exception for every leaving row.
+  Leave the example component's connection lifecycle unchanged.
+
+The candidate still creates/destroys rows, retains the same native controls
+and selection input, and aborts bindings before removal. It adds no public
+API. All budgets, inputs, sample counts and correctness requirements above
+remain fixed. First smoke the control, candidate and W0 reference cells.
+
 ## Conditions
 
 ### Stage A (2026-10-25)
