@@ -22,6 +22,8 @@ const APP_DOCUMENTS: &[(&str, &str)] = &[
         "ui/src/app/preview-host/preview-host.html",
     ),
     ("/_workbench/content.html", "ui/src/app/renderer/content.html"),
+    ("/_workbench/", "ui/src/app/workbench/index.html"),
+    ("/_workbench/index.html", "ui/src/app/workbench/index.html"),
 ];
 
 /// Where the space's files and Workbench's own come from.
@@ -203,8 +205,8 @@ impl Files {
         let relative = decode(path)?;
         if let Some(rest) = relative.strip_prefix(PREFIX) {
             // Workbench's own files, out of the product's legacy UI folder;
-            // anything not there may be one of the space's routes.
-            let rest = if rest.is_empty() { "index.html" } else { rest };
+            // anything not there may be one of the space's routes. The canvas
+            // document itself is one of the app documents above.
             let file = inside(&self.product.join("ui/legacy"), rest)?;
             return file.is_file().then_some((file, Some("ui")));
         }
@@ -414,7 +416,7 @@ mod tests {
         let root = dir.join("acme");
         for (file, body) in [
             (
-                "workbench/ui/legacy/index.html",
+                "workbench/ui/src/app/workbench/index.html",
                 "<html><head><title>Workbench</title></head></html>",
             ),
             ("workbench/ui/legacy/keys.js", "keys();"),

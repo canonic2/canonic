@@ -151,7 +151,8 @@ ui/src/
   app/docs/                  Docs host document and entry
   app/renderer/              Content-only renderer, served as /_workbench/content.html
   app/sidebar/               VS Code sidebar webview document, styles and module entry
-  bootstrap/                 Browser composition and element registration
+  app/workbench/             Canvas shell document, styles and module entry, served as /_workbench/
+  bootstrap/                 Canvas composition and element registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
   host/                     Browser HTTP transport
@@ -172,7 +173,7 @@ components cannot import capability operations, bootstraps or host services.
 Component styles stay beside their element; shared modal styles have their own
 presentation owner. Importing an element class does not register it.
 
-`bootstrap/workbench.js` registers the browser controls and composes the canvas;
+`app/workbench/workbench.js` registers the browser controls and composes the canvas;
 `app/sidebar/sidebar.js` is the direct webview module entry. `app/renderer/renderer.js`
 composes the content-only renderer. Size and docs bridges also initialize from bootstrap.
 `bootstrap/canvas.js` connects capability ports to the existing shell. Its

@@ -90,7 +90,7 @@ void test(
       <script nonce="test">window.violations=[]; document.addEventListener('securitypolicyviolation', e => window.violations.push(e.violatedDirective));
         const early=document.getElementById('switcher'); early.sizes=${SIZES}; early.current='sidebar'; early.supported=['fit','sidebar','tablet'];
         early.iconRenderer=(name)=>{const s=document.createElement('span');s.dataset.icon=name;s.textContent=name.charAt(0);return s;};</script>
-      <script type="module" src="/_workbench/ui/src/bootstrap/workbench.js"></script>`);
+      <script type="module" src="/_workbench/ui/src/app/workbench/workbench.js"></script>`);
       })().catch((error) => {
         res.statusCode = 500;
         res.end(String(error));

@@ -184,7 +184,7 @@ element, not in the page.
   [Custom size](../../ui/src/components/size-dialog/element.js),
   [Edit sizes](../../ui/src/components/sizes-editor/element.js), and the
   [Actions switch](../../ui/src/components/actions-switch/element.js) are registered for the
-  canvas only, by [workbench.js](../../ui/src/bootstrap/workbench.js);
+  canvas only, by [workbench.js](../../ui/src/app/workbench/workbench.js);
   the sidebar's module registers the space controls. Their pure form and row
   logic is tested in Node beside each element.
 - Each element requires its [design page](#design-pages), a `defineDocs`

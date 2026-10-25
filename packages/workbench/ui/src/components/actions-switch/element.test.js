@@ -40,7 +40,7 @@ void test(
       <script nonce="test">window.violations=[]; document.addEventListener('securitypolicyviolation', e => window.violations.push(e.violatedDirective));
         const early=document.getElementById('early'); early.checked=true; early.hint='set before upgrade';
         early.iconRenderer=(name)=>{const s=document.createElement('span');s.dataset.icon=name;return s;};</script>
-      <script type="module" src="/_workbench/ui/src/bootstrap/workbench.js"></script>`);
+      <script type="module" src="/_workbench/ui/src/app/workbench/workbench.js"></script>`);
       })().catch((error) => {
         res.statusCode = 500;
         res.end(String(error));

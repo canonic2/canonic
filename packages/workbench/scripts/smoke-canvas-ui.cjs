@@ -62,7 +62,7 @@ collections:
     target.on('Network.requestWillBeSent', event => {
       const url = new URL(event.request.url);
       if (event.type === 'Document' && /^\/_workbench\/(?:index\.html)?$/.test(url.pathname)) applicationDocuments.push(event.request.url);
-      if (event.frameId !== mainFrame && /^\/_workbench\/(?:index\.html|workbench\.js|page-list\.js|zoom\.js|top-bar\.js|ui\/src\/bootstrap\/workbench\.js)$/.test(url.pathname)) nestedApplicationResources.push(event.request.url);
+      if (event.frameId !== mainFrame && /^\/_workbench\/(?:index\.html|workbench\.js|page-list\.js|zoom\.js|top-bar\.js|ui\/src\/app\/workbench\/workbench\.js)$/.test(url.pathname)) nestedApplicationResources.push(event.request.url);
     });
     const errors = []; target.on('Runtime.exceptionThrown', e => errors.push(e.exceptionDetails.exception?.description || e.exceptionDetails.text));
     async function until(expression) {

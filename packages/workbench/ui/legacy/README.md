@@ -542,7 +542,7 @@ implementation's own address; Workbench never switches to a stream.
 
 | File | Job |
 | --- | --- |
-| `index.html` | the shell: top bar, sidebar, canvas, and the toolbar and view controls floating over it |
+| `../src/app/workbench/` | the shell document: top bar, sidebar, canvas, and the toolbar and view controls floating over it, with `workbench.css` and its module entry; served as `/_workbench/` |
 | `../src/app/renderer/` | the content-only renderer: viewport, annotation overlay and entry, with no Workbench application controls or canvas, still served as `/_workbench/content.html` |
 | `content-frames.js` | retained content frames, warm preview/Docs hosts and Storybook channel switching |
 | `../src/modules/preview-sessions/content.js` + `renderer-bridge.ts` | model-derived content navigation/metadata and authenticated canvas commands, capture locks and input forwarding |
@@ -569,7 +569,6 @@ implementation's own address; Workbench never switches to a stream.
 | `dom-mirror.js` | caches node records, sends revisioned patches and CSS Highlight ranges, and applies them to the inert capture document |
 | `preview-bridge.js` | external-preview sender for live DOM and scroll state, added to lens pages by the implementation proxy |
 | `preview-bridge-client.js` | validates bridge messages from the active configured iframe |
-| `workbench.css` | the chrome. Every value it uses is declared in it |
 | `icons.js` | turns any configured Lucide name into workbench SVG markup |
 | `modern-screenshot.js` | vendored DOM renderer for standalone file use |
 | `simulator.js` | the canvas side of the native window stream, and Simulator input |

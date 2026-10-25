@@ -312,7 +312,7 @@ canvas or other behavior changes, and no store is used yet.
   webview still needs a resource root for Lattice's files, which its CSP's
   webview source then admits. No export is added to Lattice for the slice.
 - **Documents.** The three documents navigation's adoption needs: the canvas
-  document (`ui/legacy/index.html` through `bootstrap/workbench.js`) and the
+  document (`app/workbench/index.html` through `app/workbench/workbench.js`) and the
   renderer document (`app/renderer/content.html` through `app/renderer/renderer.js`), served by
   the Workbench server inside the panel webview's frame, and the sidebar
   webview, which loads modules through webview resource URLs under its own
@@ -340,8 +340,8 @@ The navigation store's adoption starts only after this slice is in place.
 
 - The Lattice delivery slice: Workbench does not depend on, serve or package
   Lattice, and none of the evidence above exists.
-- Structural moves: the capture, preview-host, docs, renderer and sidebar
-  documents are in `app/`; the canvas and viewer documents ship in the
+- Structural moves: every document but the portable viewer is in `app/`; the
+  viewer, and the code the documents load, ship in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
 - Every Lattice adoption step.

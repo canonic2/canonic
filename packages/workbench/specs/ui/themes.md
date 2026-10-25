@@ -146,7 +146,7 @@ accent colors; interactive control states use the host's semantic roles.
 
 - [sidebar.css](../../ui/src/app/sidebar/sidebar.css) maps panel/text variables but
   uses fixed blue accents and derived shades instead of semantic host roles.
-- [workbench.css](../../ui/legacy/workbench.css) gives the canvas shell a fixed
+- [workbench.css](../../ui/src/app/workbench/workbench.css) gives the canvas shell a fixed
   palette and forces `color-scheme: dark`.
 - [panel.js](../../extension/panel.js) embeds the server canvas as a separate-origin iframe;
   its message bridge does not forward theme snapshots.
