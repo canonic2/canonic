@@ -57,7 +57,9 @@
     ) {
       try {
         if (frame.contentWindow.location.href === url) return Promise.resolve();
-      } catch (error) {}
+      } catch {
+        // A cross-origin frame hides its address; load it again below.
+      }
     }
 
     current = url;
@@ -171,7 +173,7 @@
       if (!point) return null;
       try {
         return window.wbDescribe.at(frame.contentDocument, Number(point.x), Number(point.y));
-      } catch (_) {
+      } catch {
         return null;
       }
     });
@@ -215,7 +217,9 @@
         ) {
           return Promise.resolve(result(payload));
         }
-      } catch (_) {}
+      } catch {
+        // An unreadable frame is not the prepared view; prepare it again.
+      }
       prepared = null;
       return (
         payload.mirror
@@ -235,7 +239,9 @@
               Math.abs(bounds.y) < 1 &&
               bounds.width <= 8192 &&
               bounds.height <= 8192;
-          } catch (_) {}
+          } catch {
+            // An unreadable document is not content-fitted.
+          }
           if (document.body) document.body.style.background = fitted ? '#242424' : '';
           if (frame.style) frame.style.background = fitted ? '#242424' : '';
           annotations.innerHTML = payload.annotations || '';
