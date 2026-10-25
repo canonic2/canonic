@@ -277,6 +277,22 @@ fixtures to check native iframe input, sign-in, session persistence across
 reloads and lens changes, and viewport resizing. Set `CHROME_PATH` to choose
 the browser. The extension itself never uses Chrome.
 
+Run `node scripts/smoke-resize.cjs` from this package for focused Chrome
+acceptance of Fit, mixed fixed/filled axes, oversized fixed axes, fixed sizes,
+Resizable, automatic fitting and manual camera preservation. It also checks
+that resizing retains the renderer and content document, form edits and scroll,
+and that viewport units use the artboard's logical dimensions.
+
+`node scripts/smoke-resize-vscode.cjs` runs the same assertions in VS Code on
+macOS, with an owned temporary project, profile and staged extension. It uses
+the existing host server binary and bundled runtime, so prepare those as for
+packaging before running it after native changes. It opens the canvas through
+the Command Palette and uses System Events to resize only its own editor
+window; macOS Accessibility access is required. Set `VSCODE_PATH` to select
+another Code executable. The runner closes its editor process and removes its
+temporary files on completion or failure. Windows and Linux need separate
+host acceptance.
+
 `node scripts/smoke-canvas.cjs` exercises multi-artboard support through a
 temporary programmatic harness: independent instances, scenario and size changes,
 cross-space context, and complete screenshot/handoff payloads. It uses the

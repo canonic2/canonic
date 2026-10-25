@@ -448,9 +448,16 @@ a real-Chrome test, for the components' inputs, events, keyboard use, focus,
 the dialogs and reconnection, with
 [`size-dialog/form.test.js`](../../ui/src/views/top-bar/components/size-dialog/form.test.js) and
 [`sizes-editor/rows.test.js`](../../ui/src/views/top-bar/components/sizes-editor/rows.test.js)
-for the dialog and editor rules. Not covered: host acceptance of picking,
-adding and reordering sizes, in particular in the VS Code host, and an
-automated browser test of filled axes following a window resize.
+for the dialog and editor rules.
+[`smoke-resize.cjs`](../../scripts/smoke-resize.cjs) exercises the production
+size switcher and host resizing in Chrome: Fit, both mixed fixed/filled axis
+directions, an oversized fixed axis, fixed sizes and Resizable. It checks
+logical viewport dimensions and viewport units, automatic fitting, manual
+camera preservation, retained documents, edits and scroll.
+[`smoke-resize-vscode.cjs`](../../scripts/smoke-resize-vscode.cjs) runs the same
+assertions in a staged extension in an isolated macOS VS Code profile, resizing
+its actual window. Not covered: adding and reordering sizes in the VS Code
+host, or resize acceptance on Windows and Linux.
 
 ## Implementation gaps
 
@@ -464,7 +471,7 @@ automated browser test of filled axes following a window resize.
   (`ui/src/modules/canvas/controller.js`).
 - Public guides and the website must describe the configured size switcher,
   editing actions and keyed addresses (listed below).
-- The size controls are not verified in the VS Code host.
+- Adding and reordering sizes are not verified in the VS Code host.
 
 ## Public-guide alignment
 

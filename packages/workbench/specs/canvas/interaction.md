@@ -93,6 +93,10 @@ host boundary; component tests own dialog focus behavior. These tests do not
 establish real editor/menu/IME behavior on every supported OS. A full native
 keyboard-layout, composition and assistive-technology matrix remains unverified.
 Camera restoration is excluded from [durable persistence](persistence.md).
+The [resize acceptance](../../scripts/smoke-resize.cjs) checks automatic fit and
+preservation of manual pan/zoom and page scroll across host viewport changes;
+the [macOS VS Code runner](../../scripts/smoke-resize-vscode.cjs) applies the
+same assertions through actual window resizing in an isolated editor profile.
 [Element tests](../../ui/src/views/canvas/components/canvas/element.test.js) and
 [geometry](../../ui/src/modules/canvas/geometry.js) are the owning evidence
 for the composed canvas, not only the singleton zoom tests.
