@@ -11,9 +11,10 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Reported, 2026-10-25: the owner accepts the duplicate-reconciliation guard as
-an application pattern. Bounded end-jump and native-mount diagnostics are
-complete with measurement limitations; large-list readiness stays open.
+Running, 2026-10-25: the owner authorizes small measurement calibration, a
+shipping-API list example and comparison of the smallest mechanics proposal
+it exposes. The duplicate-reconciliation guard is accepted; large-list
+readiness and any new public API adoption stay open.
 W1 profiling, targeted comparison
 and confirmation are complete. The owner agreed the original plan
 with the four requested
@@ -531,6 +532,57 @@ presentation/environment limitation beyond state bindings. Use the already
 planned one-second native stack capture on one fresh page per mount variant,
 separate from latency evidence, to investigate the off-CPU wait. Do not start
 a large timing comparison or change the 4 ms/100 ms targets.
+
+### Calibration and runnable-example plan (2026-10-25, before calibration)
+
+The owner assigns reusable collection presentation mechanics to the framework
+where they remove repeated, error-prone work. State-model composition and
+selection policy remain application conventions; keyed state and bulk commits
+remain owned by `createCollection`. Elements choose markup and styling.
+Reconciliation and optional windowing are candidates for callback-based
+retained-item/lifetime coordination. Recycling remains experimental. This
+authorizes an example and a proposal/comparison, not a new shipping API.
+
+First calibrate unchanged W1 and C1 at 10,000 fixed-height items. Compare
+untraced callbacks, a minimal timeline trace (timeline, task boundaries and
+user timing), and the existing full trace. Use the same viewport/end-jump
+sequences, 120 frames per pass after ten warmups, with seeded pass and page
+order. Smoke one page per variant, then take three fresh pages per variant.
+Keep callback timers identical across trace modes. Independently count native
+scroll and ResizeObserver callbacks and correlate them with trace events;
+verify 120 driver frames. Disable allocation and CPU sampling.
+
+A trace method is eligible for further timing comparison only if its callback
+perturbation is not meaningful under the existing rule (over 5% and larger
+than both IQRs) and the observed callback coverage matches. If none qualifies,
+record that limitation and compare mechanics with untraced synchronous
+boundaries and work counts, without claiming the full frame budget is met.
+No assumed scaling factor is subtracted from any result. Small-sample p95
+remains exploratory; original 4.079 ms and 100 ms target misses stay recorded.
+
+Next build a runnable fixed-height collection/list example outside the lab,
+using shipping APIs and the accepted guard. Include application-owned actions
+and selection, row inputs/events, explicit binding lifetimes, focus pinning,
+keyboard destinations, removal fallback, anchoring and incarnation replacement.
+Provide a documented local browser entry and focused behavioral coverage.
+Commit this hand-written baseline independently of a framework proposal.
+
+Record the smallest reusable surface exposed by that example before comparing
+it. Keep its implementation local to the lab until the owner adopts it. Use
+explicit creation, placement and release callbacks; mechanics must not choose
+markup, styles, actions or selection policy. Compare identical example rows,
+data and events against the hand-written baseline, including setup, teardown,
+retained heap, changing ranges, same-range no-ops and key reuse. All interaction
+and lifecycle checks must hold. A candidate must remove repeated ownership
+work without a meaningful regression in time or retained heap. Record exact
+sample counts and prototype boundaries in a dated amendment once the example
+exposes them, before comparison runs.
+
+The existing host/Chromium tooling and neutral local data are used. No external
+data, installation, public exports, core redesign, variable heights or larger
+item counts are authorized. Calibration and comparison are small investigations,
+not a broad readiness rerun. Native presentation cost does not cancel the
+additional framework handler work measured above.
 
 ## Conditions
 
