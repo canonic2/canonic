@@ -155,7 +155,7 @@ ui/src/
   app/viewer/                Portable export viewer, copied into each portable export
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
   views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation and styles
-  views/top-bar/             Size and Actions elements and their registration
+  views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size and Actions elements and registration
   views/docs/                A docs lens's reading page, its embedded examples and highlighting
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles

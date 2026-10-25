@@ -127,7 +127,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | View | Shows | Moves from |
 | --- | --- | --- |
 | `page-list` | Collections, groups, pages, problems and search | `views/page-list/` (in place); sidebar host/catalog wiring in `modules/project/sidebar.js` |
-| `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `legacy/top-bar.js`, top-bar parts of `legacy/workbench.js` |
+| `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `views/top-bar/` presentation in place; state bindings remain in `legacy/workbench.js` |
 | `canvas` | The canvas element, artboard labels and loading feedback | `views/canvas/bindings.js` (in place), `modules/canvas/legacy-chrome.js` |
 | `toolbar` | Annotation tools and review actions | Toolbar parts of `legacy/workbench.js` and `legacy/annotations.js` |
 | `configure-pages` | The Configure pages dialog | `legacy/config-editor.js` |
@@ -294,6 +294,7 @@ and passes its acceptance:
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
 | Classic `wbPageList` API shared by `modules/project/pages.js` and `views/page-list/page-list.js`; sidebar startup through `wbProjectSidebar` | `project` / `page-list` | The `project`/`page-list` adoption step; existing closure state remains until then |
+| Classic `wbTopBar` measurement/menu presentation in `views/top-bar/top-bar.js` | `top-bar` | The `top-bar` adoption step; shell-owned scenario/lens state stays in `legacy/workbench.js` until then |
 
 Later steps add a row before introducing an adapter.
 

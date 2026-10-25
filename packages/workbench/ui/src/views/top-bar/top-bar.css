@@ -1,0 +1,262 @@
+/* Three columns, not a flex row: the equal side tracks put the middle group
+   on the bar's centre line whatever the side controls weigh. */
+.wb-topbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--wb-space-12);
+  padding: 0 var(--wb-space-8) 0 var(--wb-space-16);
+  background: var(--wb-panel);
+  border-bottom: 1px solid var(--wb-line);
+}
+
+.wb-topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--wb-space-4);
+}
+
+/* The bar's left cell: where you are, then the one control that changes how
+   the preview behaves rather than how it's framed. */
+.wb-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-12);
+  min-width: 0;
+}
+
+.wb-topbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--wb-space-8);
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------ breadcrumb */
+
+/* Page / Scenario ▾. The page is plain text — the list picks pages; the
+   scenario is a button, because its siblings are one click away here. */
+.wb-crumb {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wb-crumb[hidden],
+.wb-scenarios-control[hidden] {
+  display: none;
+}
+
+/* The space, ahead of the page, when there is more than one. */
+.wb-space-crumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.wb-space-crumb[hidden] {
+  display: none;
+}
+
+/* Nothing on the canvas yet: the space stands alone, without a slash. */
+.wb-topbar-left:has(.wb-crumb[hidden]) .wb-space-crumb .wb-crumb-sep {
+  display: none;
+}
+
+.wb-crumb-page {
+  overflow: hidden;
+  color: var(--wb-fg-2);
+  text-overflow: ellipsis;
+}
+
+.wb-scenarios-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.wb-crumb-sep {
+  margin: 0 var(--wb-space-4);
+  color: var(--wb-fg-3);
+}
+
+.wb-action.wb-crumb-scenario {
+  width: auto;
+  min-width: 0;
+  max-width: 240px;
+  gap: var(--wb-space-4);
+  padding: 0 var(--wb-space-4);
+  color: var(--wb-fg);
+  font: inherit;
+  font-weight: 590;
+}
+
+.wb-crumb-scenario > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-crumb-scenario[aria-expanded='true'] {
+  background: var(--wb-hover);
+}
+
+.wb-crumb-caret .wb-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--wb-fg-3);
+}
+
+.wb-scenarios-control .wb-menu {
+  right: auto;
+  left: 0;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.wb-topbar-overflow {
+  position: relative;
+  display: flex;
+}
+
+.wb-topbar-overflow[hidden],
+.wb-action.wb-in-menu {
+  display: none;
+}
+
+.wb-topbar-overflow-menu {
+  right: 0;
+  left: auto;
+  width: max-content;
+  min-width: 190px;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: calc(100vh - 72px);
+  overflow: auto;
+}
+
+.wb-topbar-overflow-label {
+  padding: var(--wb-space-8) var(--wb-space-8) var(--wb-space-4);
+  color: var(--wb-fg-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wb-topbar-overflow-label:first-child {
+  padding-top: var(--wb-space-4);
+}
+
+.wb-menu-row.wb-topbar-overflow-row {
+  display: flex;
+  align-items: center;
+  gap: var(--wb-space-8);
+  min-height: 30px;
+}
+
+.wb-topbar-overflow-row .wb-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.wb-topbar-overflow-copy {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wb-topbar-overflow-copy > span:first-child {
+  display: block;
+}
+
+/* When equal side tracks can no longer keep the lens clear of the controls
+   beside it, the measured top bar script folds the view actions into More.
+   The size switcher stays visible because changing the artboard size is the
+   most spatially important action in a narrow editor. Tighter still, the
+   page's name goes; the scenario stays. */
+.wb-topbar.is-topbar-compact #reload,
+.wb-topbar.is-topbar-compact #sourceControl,
+.wb-topbar.is-topbar-compact #copyReference,
+.wb-topbar.is-topbar-compact #previewControls,
+.wb-topbar.is-topbar-compact #open {
+  display: none;
+}
+
+.wb-topbar.is-topbar-measuring .wb-topbar-left > *,
+.wb-topbar.is-topbar-measuring .wb-crumb > *,
+.wb-topbar.is-topbar-measuring .wb-scenarios-control > * {
+  flex-shrink: 0;
+}
+
+.wb-topbar.is-topbar-measuring .wb-action.wb-crumb-scenario {
+  max-width: none;
+}
+
+.wb-topbar.is-topbar-tight .wb-space-crumb wb-space-switcher::part(name),
+.wb-topbar.is-topbar-tight .wb-crumb-page,
+.wb-topbar.is-topbar-tight .wb-crumb-sep {
+  display: none;
+}
+
+/* The lens: the same segmented group as the sizes, with words instead of
+   glyphs — "Storybook" says what a book icon wouldn't. */
+.wb-lenses {
+  display: flex;
+  gap: var(--wb-space-2);
+  padding: 3px;
+  background: var(--wb-raised);
+  border: 1px solid var(--wb-line);
+  border-radius: var(--wb-radius-md);
+}
+
+.wb-lenses[hidden] {
+  display: none;
+}
+
+.wb-lens {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--wb-fg-2);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-lens:hover {
+  color: var(--wb-fg);
+}
+
+.wb-lens[aria-pressed='true'] {
+  background: var(--wb-selected);
+  color: var(--wb-fg);
+}
+
+/* The source menu anchors its menu like the shape control does. */
+.wb-sources {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.wb-sources[hidden] {
+  display: none;
+}
+
+.wb-menu-sources {
+  min-width: 240px;
+  max-width: 480px;
+}

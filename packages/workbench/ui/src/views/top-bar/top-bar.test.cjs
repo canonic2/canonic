@@ -6,7 +6,7 @@ var vm = require('node:vm');
 
 function topBar() {
   var context = {};
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "./top-bar.js"), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './top-bar.js'), 'utf8'), context);
   return context.wbTopBar;
 }
 

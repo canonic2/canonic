@@ -1,4 +1,4 @@
-/* Responsive top bar
+/* Responsive top-bar presentation
    ------------------
    Keep where you are, the lens, the size switcher, and the Actions switch
    visible. The More menu always holds the space-wide actions; when the three
@@ -41,7 +41,9 @@
   }
 
   function labelOf(source, fallback) {
-    return fallback || source.getAttribute('aria-label') || source.title || source.textContent.trim();
+    return (
+      fallback || source.getAttribute('aria-label') || source.title || source.textContent.trim()
+    );
   }
 
   function row(source, label, iconSource, sublabel) {
@@ -85,18 +87,26 @@
   }
 
   function sourceRows() {
-    Array.prototype.forEach.call(document.querySelectorAll('#sourceMenu .wb-menu-row'), function (source) {
-      if (source.disabled) return;
-      var sub = source.querySelector('.wb-menu-sub');
-      var label = Array.prototype.map.call(source.childNodes, function (node) {
-        return node.nodeType === 3 ? node.nodeValue : '';
-      }).join('').trim();
-      row(source, 'Open ' + label, null, sub && sub.textContent.trim());
-    });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('#sourceMenu .wb-menu-row'),
+      function (source) {
+        if (source.disabled) return;
+        var sub = source.querySelector('.wb-menu-sub');
+        var label = Array.prototype.map
+          .call(source.childNodes, function (node) {
+            return node.nodeType === 3 ? node.nodeValue : '';
+          })
+          .join('')
+          .trim();
+        row(source, 'Open ' + label, null, sub && sub.textContent.trim());
+      },
+    );
   }
 
   function spaceActions() {
-    return space.filter(function (source) { return source && !source.hidden; });
+    return space.filter(function (source) {
+      return source && !source.hidden;
+    });
   }
 
   function rebuild() {
@@ -113,7 +123,9 @@
     var actions = spaceActions();
     if (actions.length) {
       if (compact) heading('Space');
-      actions.forEach(function (source) { row(source); });
+      actions.forEach(function (source) {
+        row(source);
+      });
     }
   }
 
@@ -135,8 +147,12 @@
     });
     var innerStyles = root.getComputedStyle(container);
     var innerGap = pixels(innerStyles.columnGap || innerStyles.gap);
-    return children.reduce(function (sum, child) { return sum + child.getBoundingClientRect().width; }, 0) +
-      Math.max(0, children.length - 1) * innerGap;
+    return (
+      children.reduce(function (sum, child) {
+        return sum + child.getBoundingClientRect().width;
+      }, 0) +
+      Math.max(0, children.length - 1) * innerGap
+    );
   }
 
   function measure() {
@@ -148,9 +164,18 @@
     var styles = root.getComputedStyle(topbar);
     var available = topbar.clientWidth - pixels(styles.paddingLeft) - pixels(styles.paddingRight);
     var gap = pixels(styles.columnGap || styles.gap);
-    compact = needsCompact(available, contentWidth(left), contentWidth(center), contentWidth(right), gap);
+    compact = needsCompact(
+      available,
+      contentWidth(left),
+      contentWidth(center),
+      contentWidth(right),
+      gap,
+    );
     topbar.classList.toggle('is-topbar-compact', compact);
-    if (compact && needsCompact(available, contentWidth(left), contentWidth(center), contentWidth(right), gap)) {
+    if (
+      compact &&
+      needsCompact(available, contentWidth(left), contentWidth(center), contentWidth(right), gap)
+    ) {
       topbar.classList.add('is-topbar-tight');
     }
     topbar.classList.remove('is-topbar-measuring');
@@ -169,7 +194,8 @@
   }
 
   button.addEventListener('click', function () {
-    if (menu.hidden) open(); else close();
+    if (menu.hidden) open();
+    else close();
   });
   document.addEventListener('pointerdown', function (event) {
     if (!menu.hidden && !event.target.closest('.wb-topbar-overflow')) close();
@@ -183,7 +209,12 @@
   [left, center, right].forEach(function (region) {
     new MutationObserver(function (records) {
       /* The menu's own rows are rebuilt on open; they don't move the bar. */
-      if (records.every(function (r) { return menu.contains(r.target); })) return;
+      if (
+        records.every(function (r) {
+          return menu.contains(r.target);
+        })
+      )
+        return;
       schedule();
     }).observe(region, watch);
   });

@@ -554,7 +554,7 @@ implementation's own address; Workbench never switches to a stream.
 | `describe.js` | names the element under a point — here, and inside pages the server's browser opens |
 | `workbench.js` | routing, frame loading, resizing, the lens switcher, stories, the source menu |
 | `reference.js` | copies the current page, scenario or story, and lens as a text reference |
-| `top-bar.js` | builds the top bar’s More menu, and folds secondary actions into it before the bar’s regions collide |
+| `../src/views/top-bar/top-bar.js` + `top-bar.css` | responsive More menu, breadcrumb, lens and source presentation; secondary actions fold into More before the bar’s regions collide |
 | `../src/app/preview-host/` | the reusable document a TypeScript preview mounts into, still served as `/_workbench/preview-host.html` |
 | `preview-controls.js` + `preview-controls.css` | shared input controls, reset, actions and docs, also included in portable browser exports |
 | `zoom.js` | zooms and pans the artboard on the canvas, Figma-style, and labels it with its name and size |

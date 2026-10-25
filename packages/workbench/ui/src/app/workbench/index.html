@@ -10,6 +10,8 @@
        project whose scale is named differently or not at all. The product's
        tokens live inside the frame, loaded by the pages themselves. -->
     <link rel="stylesheet" href="/_workbench/ui/src/theme/defaults.css" />
+    <!-- View rules precede the shell's shared menu/control rules, as in the authored cascade. -->
+    <link rel="stylesheet" href="/_workbench/ui/src/views/top-bar/top-bar.css" />
     <link rel="stylesheet" href="/_workbench/ui/src/app/workbench/workbench.css" />
     <link rel="stylesheet" href="/_workbench/ui/src/views/page-list/page-list.css" />
     <link rel="stylesheet" href="annotations.css" />
@@ -592,7 +594,7 @@
     <script src="annotations.js"></script>
     <script src="reference.js"></script>
     <script src="agent-context.js"></script>
-    <script src="top-bar.js"></script>
+    <script src="/_workbench/ui/src/views/top-bar/top-bar.js"></script>
     <script src="preview-controls.js"></script>
   </body>
 </html>
