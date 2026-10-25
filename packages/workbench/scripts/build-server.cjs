@@ -32,8 +32,17 @@ function build(target = process.platform + '-' + process.arch, debug = false) {
   for (const entry of fs.readdirSync(bins)) if (entry !== target) fs.rmSync(path.join(bins, entry), { recursive: true, force: true });
   const destination = path.join(bins, target, name);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination);
-  if (!target.startsWith('win32-')) fs.chmodSync(destination, 0o755);
+  // Running servers map this executable. Never truncate or rewrite their inode,
+  // even for a no-op development build: publish a complete sibling by rename.
+  const pending = fs.mkdtempSync(path.join(path.dirname(destination), '.workbench-server-'));
+  try {
+    const staged = path.join(pending, name);
+    fs.copyFileSync(source, staged);
+    if (!target.startsWith('win32-')) fs.chmodSync(staged, 0o755);
+    fs.renameSync(staged, destination);
+  } finally {
+    fs.rmSync(pending, { recursive: true, force: true });
+  }
   return destination;
 }
 if (require.main === module) build(undefined, process.argv.includes('--debug'));

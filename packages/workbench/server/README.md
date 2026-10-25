@@ -199,6 +199,10 @@ commands; cargo-deny manages its own advisory cache.
 `node ../scripts/build-server.cjs` builds the host release executable into
 `bin/<VSIX target>/`. `--debug` builds the test executable. Packaging calls
 the same builder with a Rust target triple and ships only that target's binary.
+The builder stages a complete executable beside its destination and publishes
+it by rename. Existing processes keep their mapped executable when another
+development check or package build publishes a replacement; failed copies
+leave the published executable intact.
 To package with a prebuilt executable, set `WORKBENCH_SERVER_BINARY` to its
 path. Cross builds require the target's Rust standard library and linker;
 failure stops packaging with those prerequisites in the error.
