@@ -147,8 +147,8 @@ Other existing files move as follows:
   entries that use them.
 - **Spaces.** The space list belongs to `project`. `space-switcher` and
   `space-mark` stay shared components, used by the page list in the sidebar
-  and by the top bar; `bootstrap/register-space.js` becomes element definitions
-  in those entries.
+  and by the top bar; `components/register-space.js` becomes element
+  definitions in those entries.
 - **Docs on the canvas.** The docs bridge for the classic scripts
   (`app/workbench/docs.js`) and `modules/docs/canvas/` join
   the `docs` capability, with the canvas wiring in the `canvas` view's bindings.
@@ -179,9 +179,9 @@ The port has two parts with different starting points:
   collection scope is settled.
 
 1. **Structural moves,** one document at a time, each move reviewable on its
-   own: the document's HTML and entry move to `app/<document>/` (from
-   `bootstrap/` or `legacy/`; `legacy/preview-host.js` becomes the
-   preview-host entry, `legacy/capture-page.js` the capture entry), and the
+   own: the document's HTML and entry move to `app/<document>/`
+   (`legacy/preview-host.js` becomes the preview-host entry,
+   `legacy/capture-page.js` the capture entry), and the
    code it loads is separated into views, shared components, capability
    modules and host adapters where that code already has those roles.
    The module that connects capabilities to the existing shell is

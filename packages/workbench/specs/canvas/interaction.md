@@ -93,7 +93,7 @@ host boundary; component tests own dialog focus behavior. These tests do not
 establish real editor/menu/IME behavior on every supported OS. A full native
 keyboard-layout, composition and assistive-technology matrix remains unverified.
 Camera restoration is excluded from [durable persistence](persistence.md).
-[Element tests](../../ui/src/components/canvas/element.test.js) and
+[Element tests](../../ui/src/views/canvas/components/canvas/element.test.js) and
 [geometry](../../ui/src/modules/canvas/geometry.js) are the owning evidence
 for the composed canvas, not only the singleton zoom tests.
 

@@ -5,7 +5,7 @@ import {
   docsLayout,
   fit,
   zoom,
-} from '../../modules/canvas/presentation.js';
+} from '../../../../modules/canvas/presentation.js';
 
 /** Keyed artboard presentation. The application owns descriptors and renderers;
  * this element owns only its camera and connection-scoped input handlers. */

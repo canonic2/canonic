@@ -79,7 +79,7 @@ export default [
                 '**/extension/**',
                 '**/capture/**',
                 '**/host/**',
-                '**/bootstrap/**',
+                '**/app/**',
                 '**/legacy/**',
                 'vscode',
                 'electron',

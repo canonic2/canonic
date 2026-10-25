@@ -153,11 +153,11 @@ ui/src/
   app/sidebar/               VS Code sidebar webview document, styles and module entry
   app/workbench/             Canvas shell document, styles and module entry, served as /_workbench/
   app/viewer/                Portable export viewer, copied into each portable export
-  bootstrap/                 Element registration
-  views/canvas/              Canvas bindings to the existing shell
+  views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
   views/top-bar/             Size and Actions elements and their registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
+  components/register-*.js   Repeatable element registration and the space family
   host/                     Browser HTTP transport
   modules/
     canvas/                 Artboard state, geometry, controller and publication
@@ -172,7 +172,7 @@ ui/src/
 
 Canvas, navigation, preview-session and review `index.js` files expose their application contracts. Canvas also has
 a pure `presentation.js` entry point for component data and camera geometry;
-components cannot import capability operations, bootstraps or host services.
+components cannot import capability operations, document entries or host services.
 Component styles stay beside their element; shared modal styles have their own
 presentation owner. Importing an element class does not register it.
 

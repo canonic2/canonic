@@ -189,7 +189,7 @@ JSX lint rules and native-platform runners do not apply.
 
 | Area | Current evidence and limitation |
 | --- | --- |
-| Component organization | Element folders own presentation, styles and helpers; design pages load shipping implementations. Shared modal styles live under `components/shared/`; each document's startup lives under `app/<document>/` and registration under `bootstrap/` |
+| Component organization | Element folders own presentation, styles and helpers; design pages load shipping implementations. Shared modal styles live under `components/shared/`; each document's startup lives under `app/<document>/`, and each element family's registration beside its elements |
 | Behavior testing | Existing browser tests cover upgrade-time inputs, independent instances, reconnects, events, keyboard/focus and CSP for migrated controls. Canvas interaction also has a separate browser smoke script; this is not complete keyboard/accessibility coverage for every element |
 | Registration | Elements register through explicit bootstrap functions, including the export dialog. Browser tests verify importing its class is silent and registration is repeatable |
 | Application state | Navigation owns requested destinations and supersession. The content controller derives renderer routes, scenarios, lenses and labels from project data; the outer shell owns its visible controls |

@@ -263,7 +263,7 @@ canvas is current.
   [review capture](../../ui/src/modules/review/capture.test.js) and
   [review controller](../../ui/src/modules/review/controller.test.js) tests,
   [preview-session tests](../../ui/src/modules/preview-sessions/controller.test.js)
-  and [canvas element tests](../../ui/src/components/canvas/element.test.js).
+  and [canvas element tests](../../ui/src/views/canvas/components/canvas/element.test.js).
 - [smoke-canvas.cjs](../../scripts/smoke-canvas.cjs) drives real Chrome and the
   packaged capture runtime through a programmatic harness with injected ports:
   instance, state and size isolation, two-space context, combined image

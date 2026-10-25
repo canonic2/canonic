@@ -4,9 +4,11 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createUiAssets } from '../../../../scripts/ui-browser-fixture.cjs';
+import { createUiAssets } from '../../../../../../scripts/ui-browser-fixture.cjs';
 
-const { Browser, findChrome } = createRequire(import.meta.url)('../../../../scripts/chrome.cjs');
+const { Browser, findChrome } = createRequire(import.meta.url)(
+  '../../../../../../scripts/chrome.cjs',
+);
 
 void test(
   'canvas reading mode owns presentation while the host applies viewport changes',
@@ -17,7 +19,7 @@ void test(
     const browser = new Browser();
     t.after(() => browser.close());
     const serve = createUiAssets(
-      path.resolve(fileURLToPath(new URL('../../../..', import.meta.url))),
+      path.resolve(fileURLToPath(new URL('../../../../../..', import.meta.url))),
     );
     const server = createServer((req, res) => {
       void (async () => {
@@ -30,7 +32,7 @@ void test(
           res.end(`<!doctype html><wb-canvas id="canvas" style="width:800px;height:600px;--wb-accent:blue"></wb-canvas>
           <script>document.getElementById('canvas').reading=true;</script>
           <script type="module">
-          import {WbCanvas} from '/_workbench/ui/src/components/canvas/element.js';
+          import {WbCanvas} from '/_workbench/ui/src/views/canvas/components/canvas/element.js';
           customElements.define('wb-canvas',WbCanvas);
           </script>`);
         }

@@ -7,8 +7,8 @@ transpilation, bundling, generated JavaScript copy or runtime package installati
 `src/components/<name>/` owns an element, its styles and helpers, and
 `src/views/<view>/components/<name>/` an element only one view uses. Importing an
 element does not register it. `src/app/<document>/` holds each document's HTML
-and entry, `src/views/<view>/` an interface area's bindings, and `src/bootstrap/`
-element registration; `src/modules/` owns capabilities; `src/theme/` supplies standalone
+and entry, and `src/views/<view>/` an interface area's bindings and the
+registration of its elements; `src/modules/` owns capabilities; `src/theme/` supplies standalone
 defaults. Browser-used rules under `../contracts/src/` are also JavaScript modules.
 Their declaration files support backend consumers and are never loaded by browsers.
 
@@ -32,11 +32,12 @@ For example, from a static host exposing the product folder:
 </script>
 ```
 
-Small hosts import their registration family directly: `register-space.js` or
-`register-canvas.js` under `src/bootstrap/`, or `register-sizes.js` or
-`register-actions.js` under `src/views/top-bar/`. This keeps the sidebar and component examples from loading
-unrelated elements. The full shell uses `register.js`, which exports all four
-families. Registration is repeatable and rejects a conflicting element definition.
+Small hosts import their registration family directly:
+`src/components/register-space.js`, `src/views/top-bar/register-sizes.js`,
+`src/views/top-bar/register-actions.js` or `src/views/canvas/register-canvas.js`.
+This keeps the sidebar and component examples from loading unrelated elements.
+The canvas document's entry registers all four families. Registration is
+repeatable and rejects a conflicting element definition.
 
 The complete canvas uses project metadata and operations through its API adapter.
 VS Code supplies resource URLs, CSP and host capabilities; it loads the same

@@ -27,7 +27,7 @@ void test(
         }
         res.setHeader('Content-Type', 'text/html');
         res.end(
-          '<!doctype html><button id="opener">Export</button><wb-export-dialog></wb-export-dialog><script>document.querySelector("wb-export-dialog").pages=[{id:"early",label:"Early"}]</script><script type="module">import {WbExportDialog} from "/_workbench/ui/src/components/export-dialog/element.js"; import {registerCanvasComponents} from "/_workbench/ui/src/bootstrap/register.js"; window.importRegistered=!!customElements.get("wb-export-dialog"); registerCanvasComponents(); registerCanvasComponents(); window.registeredClass=customElements.get("wb-export-dialog")===WbExportDialog;</script>',
+          '<!doctype html><button id="opener">Export</button><wb-export-dialog></wb-export-dialog><script>document.querySelector("wb-export-dialog").pages=[{id:"early",label:"Early"}]</script><script type="module">import {WbExportDialog} from "/_workbench/ui/src/components/export-dialog/element.js"; import {registerCanvasComponents} from "/_workbench/ui/src/views/canvas/register-canvas.js"; window.importRegistered=!!customElements.get("wb-export-dialog"); registerCanvasComponents(); registerCanvasComponents(); window.registeredClass=customElements.get("wb-export-dialog")===WbExportDialog;</script>',
         );
       })().catch((error) => {
         res.statusCode = 500;

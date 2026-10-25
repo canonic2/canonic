@@ -1,4 +1,4 @@
-import { WbCanvas } from '../ui/src/components/canvas/element.js';
+import { WbCanvas } from '../ui/src/views/canvas/components/canvas/element.js';
 import { add, change, createState, select } from '../ui/src/modules/canvas/model.js';
 import { scrollAfterZoom } from '../ui/src/modules/docs/canvas/docs-layout.js';
 if (!customElements.get('wb-canvas')) customElements.define('wb-canvas', WbCanvas);

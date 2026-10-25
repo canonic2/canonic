@@ -11,7 +11,7 @@ caption: Open the export dialog for the current page.
 ## Public API
 
 Importing `WbExportDialog` does not register an element. Browser entry points call
-`registerCanvasComponents()` from `ui/src/bootstrap/register-canvas.js` once per document.
+`registerCanvasComponents()` from `ui/src/views/canvas/register-canvas.js` once per document.
 
 `wb-export-dialog` accepts `pages` (ID and label), `collections` (names), and optional `current` (page, scenario, lens, size, width, height). `show()` opens its native modal. It emits the composed, bubbling `wb-export-request` event with the chosen options. The host owns job progress and downloads. Cancel and Escape close the modal without a request. Disconnect closes it and removes listeners.
 

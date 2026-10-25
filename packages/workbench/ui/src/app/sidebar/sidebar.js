@@ -1,3 +1,3 @@
-import { registerSpaceComponents } from '../../bootstrap/register-space.js';
+import { registerSpaceComponents } from '../../components/register-space.js';
 
 registerSpaceComponents();

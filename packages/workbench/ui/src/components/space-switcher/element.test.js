@@ -109,7 +109,7 @@ void test(
       const check = (value, label) => { if (!value) throw new Error(label); results.push(label); };
       const key = (node, value) => node.dispatchEvent(new KeyboardEvent('keydown', {key:value,bubbles:true,composed:true,cancelable:true}));
       check(trigger.textContent.includes('Acme') && el.currentId === 'a' && el.allowAdd && el.allowRemove, 'pre-upgrade inputs');
-      const {registerSpaceComponents}=await import('/_workbench/ui/src/bootstrap/register-space.js');
+      const {registerSpaceComponents}=await import('/_workbench/ui/src/components/register-space.js');
       registerSpaceComponents();
       check(customElements.get('wb-space-switcher')===el.constructor, 'repeated registration keeps the active component');
       check(trigger.getAttribute('aria-haspopup') === 'menu' && menu.getAttribute('role') === 'menu', 'menu semantics');

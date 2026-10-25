@@ -495,7 +495,7 @@ The space also has a page with a design and no docs.
   workspaces, `defineDocs` discovery, export planning, and a page with a
   design whose docs are served, listed in its sources, and named in a review).
 - [zoom.test.js](../../ui/legacy/zoom.test.js): docs canvas mode zoom, fit, and scroll.
-- [element.test.js](../../ui/src/components/canvas/element.test.js): standalone
+- [element.test.js](../../ui/src/views/canvas/components/canvas/element.test.js): standalone
   reading-mode presentation, viewport changes and reconnect lifecycle.
   [capture.test.js](../../ui/src/modules/review/capture.test.js) verifies capture
   framing. [smoke-preview-sessions.cjs](../../scripts/smoke-preview-sessions.cjs)

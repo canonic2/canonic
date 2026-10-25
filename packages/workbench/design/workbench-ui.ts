@@ -1,7 +1,7 @@
 /* Design examples use the shipping elements and explicit icon input. */
 
 import { icon } from './icons.ts';
-import { registerSpaceComponents } from '../ui/src/bootstrap/register-space.js';
+import { registerSpaceComponents } from '../ui/src/components/register-space.js';
 import type { WbSpaceMark } from '../ui/src/components/space-mark/element.js';
 import type { WbSpaceSwitcher } from '../ui/src/components/space-switcher/element.js';
 import './spaces.js';

@@ -199,7 +199,7 @@ element, not in the page.
   Their [public API and examples](../../design/space-switcher.md) document properties,
   events, parts and keyboard behavior. Application operations remain in the
   existing sidebar and canvas controllers.
-- [Canvas](../../ui/src/components/canvas/element.js) owns keyed artboard shells,
+- [Canvas](../../ui/src/views/canvas/components/canvas/element.js) owns keyed artboard shells,
   labels and camera presentation; [export dialog](../../ui/src/components/export-dialog/element.js)
   owns export form presentation. Capability controllers retain application
   state, rendering and I/O. Their colocated browser tests cover the component

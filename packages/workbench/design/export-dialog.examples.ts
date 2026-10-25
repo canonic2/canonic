@@ -1,5 +1,5 @@
 import { WbExportDialog } from '../ui/src/components/export-dialog/element.js';
-import { registerCanvasComponents } from '../ui/src/bootstrap/register-canvas.js';
+import { registerCanvasComponents } from '../ui/src/views/canvas/register-canvas.js';
 
 registerCanvasComponents();
 export const currentPage = (canvas: HTMLElement) => {
