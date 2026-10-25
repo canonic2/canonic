@@ -84,7 +84,8 @@ since the form opened or complete manifest semantic validation on Save.
 - Closed, reopened or retargeted forms ignore old reads/save completions.
   A completion from space A must not refresh or overwrite space B's draft.
 
-The form is in [config-editor.js](../../ui/src/views/configure-pages/config-editor.js); native
+The form is in [config-editor.js](../../ui/src/views/configure-pages/config-editor.js),
+with validation and HTTP operations in [configuration.js](../../ui/src/modules/project/configuration.js); native
 write/preservation code is in [edit.rs](../../server/src/config/edit.rs) and
 [text.rs](../../server/src/config/edit/text.rs). The latter has block-replacement
 and YAML-value round-trip tests. That evidence does not establish the full

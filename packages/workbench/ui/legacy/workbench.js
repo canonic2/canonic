@@ -210,6 +210,8 @@
   });
 
   window.wbConfigEditor.create({
+    read: window.wbProjectConfiguration.read,
+    write: window.wbProjectConfiguration.write,
     button: configureSpace,
     dialog: document.getElementById('configDialog'),
     body: document.getElementById('configBody'),

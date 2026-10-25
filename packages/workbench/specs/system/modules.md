@@ -165,7 +165,7 @@ ui/src/
   components/register-*.js   Repeatable element registration and the space family
   host/                     Browser HTTP transport
   modules/
-    project/                Collection traversal/indexing and the sidebar host/catalog adapter
+    project/                Collection traversal/indexing, handwritten configuration rules/HTTP and the sidebar host/catalog adapter
     canvas/                 Artboard state, geometry, controller and publication
     navigation/             Requested destination, supersession and transition state
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter

@@ -6,8 +6,8 @@ var vm = require('node:vm');
 
 function editor() {
   var context = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './config-editor.js'), 'utf8'), context);
-  return context.window.wbConfigEditor;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './configuration.js'), 'utf8'), context);
+  return context.window.wbProjectConfiguration;
 }
 
 function plain(value) {
@@ -38,11 +38,11 @@ test('save refuses a group without a name', function () {
   var page = { label: 'Sign in', src: 'pages/sign-in.html' };
   assert.equal(
     validate([{ name: 'Pages', items: [{ group: '', items: [page] }] }]),
-    'Every group needs a name and at least one page.'
+    'Every group needs a name and at least one page.',
   );
   assert.equal(
     validate([{ name: 'Pages', items: [{ group: '   ', items: [page] }] }]),
-    'Every group needs a name and at least one page.'
+    'Every group needs a name and at least one page.',
   );
 });
 
@@ -50,15 +50,20 @@ test('save refuses a group whose pages were all removed', function () {
   var validate = editor().validate;
   assert.equal(
     validate([{ name: 'Pages', items: [{ group: 'Authentication', items: [] }] }]),
-    'Every group needs a name and at least one page.'
+    'Every group needs a name and at least one page.',
   );
 });
 
 test('save checks the pages inside a group', function () {
   var validate = editor().validate;
   assert.equal(
-    validate([{ name: 'Pages', items: [{ group: 'Authentication', items: [{ label: 'Sign in', src: '' }] }] }]),
-    'Every page needs a label and source path.'
+    validate([
+      {
+        name: 'Pages',
+        items: [{ group: 'Authentication', items: [{ label: 'Sign in', src: '' }] }],
+      },
+    ]),
+    'Every page needs a label and source path.',
   );
 });
 
@@ -66,8 +71,16 @@ test('save still requires collection names and page fields', function () {
   var validate = editor().validate;
   assert.equal(validate([{ name: ' ', items: [] }]), 'Collection 1 needs a name.');
   assert.equal(
-    validate([{ name: 'Pages', items: [{ label: 'Home', src: 'index.html' }, { label: '', src: 'a.html' }] }]),
-    'Every page needs a label and source path.'
+    validate([
+      {
+        name: 'Pages',
+        items: [
+          { label: 'Home', src: 'index.html' },
+          { label: '', src: 'a.html' },
+        ],
+      },
+    ]),
+    'Every page needs a label and source path.',
   );
   assert.equal(validate([{ name: 'Pages', items: [{ label: 'Home', src: 'index.html' }] }]), null);
 });
