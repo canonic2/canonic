@@ -398,6 +398,26 @@ and selection input, and aborts bindings before removal. It adds no public
 API. All budgets, inputs, sample counts and correctness requirements above
 remain fixed. First smoke the control, candidate and W0 reference cells.
 
+### Reconciliation count amendment (2026-10-25, after comparison smoke)
+
+The 24 comparison smoke pages pass their listed checks; no correctness or
+runner failure is observed. Add precise JavaScript function-call coverage to
+the separate counted pages to verify the proposed duplicate-work reduction.
+Count reconciler calls over 120 viewport steps after resetting coverage.
+Coverage is disabled on timing, heap, presentation and scrolling measurement
+pages. Smoke these four counted cells once before the full comparison. This
+adds an observed-work metric without changing any budget or candidate.
+
+### Reconciliation counter repair (2026-10-25, counted smoke only)
+
+The coverage smoke is a runner defect: the requested coverage counters report
+stale or incomplete function-call totals inconsistent with the diagnostic
+render entries. The existing correctness and teardown checks still pass.
+Replace that metric with a direct counter around the imported reconciler on
+counted pages only, reset before the scroll sequence and read after its final
+native-scroll opportunity. Repeat only the four affected smoke cells. No
+measurement-page source or candidate behavior changes.
+
 ## Conditions
 
 ### Stage A (2026-10-25)
@@ -465,6 +485,29 @@ adds measurement entry points to the unchanged candidate code; runner
 11.8 after. The six-cell smoke passed, then 15 fresh pages per window and
 size ran five warmup and ten measured rounds: 20 insertion/removal pairs
 and 1,000 offscreen selection changes per round, 90 pages total.
+
+### W1 diagnostic profiling (2026-10-25)
+
+The diagnostic set used three fresh pages at each size, after one smoke page
+at each size, on the same Intel Xeon W-2140B host with 16 logical CPUs and
+64 GiB memory, macOS kernel 24.6.0, Node 24.12.0 and headless Chromium
+156.0.8078.4. One-minute load rose from 8.57 to 11.30 during the diagnostic
+set. Power state was not recorded; background workload was not controlled.
+The public source revision was `da0d643f8f8f`. Shipping collection, store,
+reporter, example field and reconciler hashes match Stage B.
+
+Frozen W1 has SHA-256
+`c67117497d44f00ede7c75a4b0d17096d1626e994596e31d9bb9f40eaea870f0`.
+The diagnostic runner hash is
+`ca9adfdcba07f18cd12cfcd30c5a5c388973c7255d65e155d2f9887e8b9c573e`;
+the appended instrumentation hash is
+`484d46da8469a19f056a074dfa4b766b72c22976204b4efc4ba9dbc854241e9e`.
+CPU sampling used a 100 µs requested interval. Allocation sampling requested
+1,024 bytes and included objects collected by minor and major GC. Diagnostic
+timing, CPU sampling and allocation sampling were separate scroll passes.
+Mount tracing and CPU sampling overlapped, so those click durations explain
+phases rather than decide budgets. Comparison pages use the frozen source
+without these diagnostic wrappers.
 
 ## Results
 
@@ -766,6 +809,39 @@ can force layout over that work. W1 and W2 are within variation on these
 membership medians. Selecting an unmounted key updates the scalar and list
 input without a row assignment. All 90 pages passed their checks with no
 page error. These secondary timings change none of the threshold outcomes.
+
+### W1 diagnostic profiling (2026-10-25)
+
+Mount phase medians and maxima from three trace-correlated clicks per size
+are below, in milliseconds. With three samples, p95 equals the maximum and
+is exploratory. The presentation endpoint is Chromium Event Timing evidence,
+not an animation-frame callback or a physical-display measurement.
+
+| Items | Input delay p50 / max | Event processing p50 / max | Residual to presentation p50 / max | Total p50 / max |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 | 2.20 / 2.31 | 11.99 / 12.52 | 87.46 / 97.80 | 102.29 / 112.00 |
+| 10,000 | 2.19 / 2.30 | 24.45 / 26.17 | 92.90 / 137.56 | 119.54 / 165.89 |
+
+At 10,000 items, the dominant post-handler browser main-frame task spans
+70.6–121.1 ms of wall time but only 8.93–15.29 ms of thread CPU time.
+Its 61.7–105.8 ms difference is time off CPU inside that task; the trace
+does not distinguish blocking from descheduling. Main-thread style, layout,
+pre-paint, paint and layer events occupy 6.85–7.43 ms of the residual.
+Across threads in that same residual interval, raster events occupy a
+4.95–5.38 ms wall-time union, display draw/swap 0.87–2.25 ms, commit
+0.74–0.94 ms and composite 0.60–3.10 ms. These intervals can overlap and
+are not added into a critical-path total. Input queueing and the named
+rendering work do not account for the whole mount miss; the large off-CPU
+interval remains unresolved. No browser blocking cause is inferred.
+
+Each row, viewport and end sequence, at both sizes and on all three pages,
+observes 240 render entries for 120 steps. Exactly 120 are native-scroll
+entries for the range already rendered directly. The exclusive lifecycle
+breakdown and allocation evidence that motivated C1 are recorded in the
+dated proposal under Method. Binding disposal and DOM removal dominate the
+viewport and end-jump spans; range bookkeeping matters relatively more for
+one-row steps. GC is observed separately and overlaps those spans. It is
+not counted as an additional application layer.
 
 ## Correctness
 
