@@ -9,7 +9,7 @@ export default defineDocs({
   lenses: {
     docs: {
       label: 'Docs', adapter: 'html', examples: './space-mark.examples.ts',
-      styles: ['../ui/legacy/page-list.css', '../ui/src/theme/defaults.css', '../ui/legacy/sidebar.css', './design.css'],
+      styles: ['../ui/legacy/page-list.css', '../ui/src/theme/defaults.css', '../ui/src/app/sidebar/sidebar.css', './design.css'],
     },
   },
 });

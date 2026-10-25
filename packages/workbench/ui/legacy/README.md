@@ -560,7 +560,7 @@ implementation's own address; Workbench never switches to a stream.
 | `preview-controls.js` + `preview-controls.css` | shared input controls, reset, actions and docs, also included in portable browser exports |
 | `zoom.js` | zooms and pans the artboard on the canvas, Figma-style, and labels it with its name and size |
 | `page-list.js` + `page-list.css` | the collection list and page list, laid out like Sketch's sidebar: collections, then the chosen one's groups, pages, and scenarios, then search |
-| `sidebar.html` + `sidebar.css` + `sidebar.js` | that same list in the editor's sidebar, in the editor's colours |
+| `sidebar.js` + `../src/app/sidebar/` | that same list in the editor's sidebar, in the editor's colours: the classic list wiring here, the document, its styles and module entry there |
 | `../src/components/space-switcher/` + `../src/components/space-mark/` | Web Components for the space switcher and its mark, with owned Shadow DOM styles |
 | `../src/theme/defaults.css` | shared shell theme defaults and direct webview host mappings for migrated controls |
 | `annotations.js` + `annotations.css` | the draw layer, screenshots, and clipboard handoff |

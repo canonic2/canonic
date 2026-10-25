@@ -157,10 +157,10 @@ test('the page loads authored component modules from permitted webview resources
   var html = resolveView(true).view.webview.html;
   var module = /<script type="module" nonce="([^"]+)" src="([^"]+)"><\/script>/.exec(html);
   assert.ok(module, 'the bootstrap is an external JavaScript module');
-  assert.equal(module[2], path.resolve(__dirname, '../ui/src/bootstrap/sidebar.js'));
+  assert.equal(module[2], path.resolve(__dirname, '../ui/src/app/sidebar/sidebar.js'));
   assert.ok(html.includes("'nonce-" + module[1] + "'"), 'the CSP permits the module nonce literally');
   assert.ok(resolveView(true).view.webview.options.localResourceRoots.some(uri => uri.fsPath === path.resolve(__dirname, '../ui/src')));
-  assert.ok(!html.includes('/_workbench/ui/src/bootstrap/sidebar.js'));
+  assert.ok(!html.includes('/_workbench/ui/src/app/sidebar/'));
 });
 
 test('the sidebar loads its local Lucide library, draws icons and reports a missing library', function () {

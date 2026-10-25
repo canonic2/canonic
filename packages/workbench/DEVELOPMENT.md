@@ -110,8 +110,9 @@ So picking a page in the sidebar and pasting a workbench URL are the same
 instruction, and following a link inside a live preview leaves the list showing
 wherever it ended up.
 
-The list is `ui/legacy/sidebar.html` loaded into a webview, with a `<base>`
-saying where that folder is and a `<meta>` saying where the project is — a
+The list is `ui/src/app/sidebar/sidebar.html` loaded into a webview, with a
+`<base>` at `ui/legacy/`, where its classic scripts are, and a `<meta>` saying
+where the project is — a
 webview's address is the editor's, so the page can work out neither by itself.
 It paints in VS Code's theme colours rather than the workbench's: it is standing
 where a file tree usually does, so it dresses like one.

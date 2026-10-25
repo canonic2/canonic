@@ -144,7 +144,7 @@ accent colors; interactive control states use the host's semantic roles.
 
 ## Implementation gaps
 
-- [sidebar.css](../../ui/legacy/sidebar.css) maps panel/text variables but
+- [sidebar.css](../../ui/src/app/sidebar/sidebar.css) maps panel/text variables but
   uses fixed blue accents and derived shades instead of semantic host roles.
 - [workbench.css](../../ui/legacy/workbench.css) gives the canvas shell a fixed
   palette and forces `color-scheme: dark`.

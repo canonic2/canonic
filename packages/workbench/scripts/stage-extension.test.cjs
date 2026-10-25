@@ -19,7 +19,7 @@ function fixture(t) {
   for (const file of ['extension/extension.js', 'extension/icon.svg', 'extension/.vscodeignore', 'capture/app/main.cjs',
     'ui/legacy/index.html', 'ui/src/app/renderer/content.html', 'ui/src/app/renderer/content.css', 'ui/legacy/content-frames.js',
     'ui/src/modules/preview-sessions/content.js', 'ui/src/modules/preview-sessions/renderer-bridge.js',
-    'ui/src/bootstrap/sidebar.js', 'ui/src/app/renderer/renderer.js',
+    'ui/src/app/sidebar/sidebar.js', 'ui/src/app/renderer/renderer.js',
     'ui/src/modules/preview-sessions/index.js', 'ui/src/modules/navigation/index.js',
     'ui/src/modules/canvas/index.js', 'ui/src/modules/review/index.js', 'server/node/src/modules/review/prompt.ts',
     'contracts/manifest.js', 'server/node/server.js',
@@ -42,7 +42,7 @@ test('the VSIX assembly preserves cross-part paths and includes only production 
   assert.equal(manifest.contributes.viewsContainers.activitybar[0].icon, 'extension/icon.svg');
   for (const file of [manifest.main, 'server/node/server.js', 'ui/src/app/renderer/content.html', 'ui/src/app/renderer/content.css', 'ui/legacy/content-frames.js',
     'ui/src/modules/preview-sessions/content.js', 'ui/src/modules/preview-sessions/renderer-bridge.js',
-    'ui/src/bootstrap/sidebar.js', 'ui/src/app/renderer/renderer.js',
+    'ui/src/app/sidebar/sidebar.js', 'ui/src/app/renderer/renderer.js',
     'ui/src/modules/preview-sessions/index.js', 'ui/src/modules/navigation/index.js',
     'ui/src/modules/canvas/index.js', 'ui/src/modules/review/index.js', 'server/node/src/modules/review/prompt.ts', 'contracts/manifest.js',
     'server/bin/acme/workbench-server', 'node_modules/acme-runtime/index.js']) assert.ok(fs.existsSync(path.join(stage, file)), file);

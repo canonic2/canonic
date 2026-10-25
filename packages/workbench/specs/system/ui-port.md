@@ -340,8 +340,8 @@ The navigation store's adoption starts only after this slice is in place.
 
 - The Lattice delivery slice: Workbench does not depend on, serve or package
   Lattice, and none of the evidence above exists.
-- Structural moves: the capture, preview-host, docs and renderer documents are
-  in `app/`; the canvas, sidebar and viewer documents ship in the
+- Structural moves: the capture, preview-host, docs, renderer and sidebar
+  documents are in `app/`; the canvas and viewer documents ship in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
 - Every Lattice adoption step.

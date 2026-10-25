@@ -3,8 +3,9 @@
    The space's pages in the editor's own sidebar: the collection list, groups,
    pages, and the scenarios under a page — the same list the workbench draws
    down its left edge, because it is literally the same list.
-   The page is this extension's own `workbench/sidebar.html`, and the code that
-   builds the rows is `page-list.js` beside it, which the workbench uses too.
+   The page is this extension's own `ui/src/app/sidebar/sidebar.html`, and the
+   code that builds the rows is `ui/legacy/page-list.js`, which the workbench
+   uses too.
    Clicking a row puts that page on the canvas in the editor tab.
 
    A webview rather than a TreeView. A tree gives
@@ -32,6 +33,9 @@ var fs = require('fs');
 var crypto = require('node:crypto');
 
 var VIEW_ID = 'canonic.sidebar';
+/* The sidebar document's own files. Its classic scripts are still in
+   ui/legacy, which stays the page's base. */
+var APP = path.resolve(__dirname, '../ui/src/app/sidebar');
 var PAGE = 'sidebar.html';
 
 /* Everything the page is allowed to reach: the workbench folder, for its
@@ -70,7 +74,7 @@ function attribute(value) {
    anyway, and the list of spaces never has to change under one that's
    built. */
 function page(webview, dir, space, build, spaces) {
-  var body = fs.readFileSync(path.join(dir.fsPath, PAGE), 'utf8');
+  var body = fs.readFileSync(path.join(APP, PAGE), 'utf8');
   var lucide = vscode.Uri.file(require.resolve('lucide/dist/umd/lucide.min.js'));
   body = body.replace('src="../node_modules/lucide/dist/umd/lucide.min.js"', function () {
     return 'src="' + webview.asWebviewUri(lucide).toString() + '"';
@@ -84,8 +88,11 @@ function page(webview, dir, space, build, spaces) {
   body = body.replace('href="/_workbench/ui/src/theme/defaults.css"', function () {
     return 'href="' + webview.asWebviewUri(vscode.Uri.file(path.join(dir.fsPath, '../src/theme/defaults.css'))).toString() + '"';
   });
-  body = body.replace('<script type="module" src="/_workbench/ui/src/bootstrap/sidebar.js"></script>', function () {
-    var resource = vscode.Uri.file(path.join(dir.fsPath, '../src/bootstrap/sidebar.js'));
+  body = body.replace('href="/_workbench/ui/src/app/sidebar/sidebar.css"', function () {
+    return 'href="' + webview.asWebviewUri(vscode.Uri.file(path.join(APP, 'sidebar.css'))).toString() + '"';
+  });
+  body = body.replace('<script type="module" src="/_workbench/ui/src/app/sidebar/sidebar.js"></script>', function () {
+    var resource = vscode.Uri.file(path.join(APP, 'sidebar.js'));
     return '<script type="module" nonce="' + nonce + '" src="' + webview.asWebviewUri(resource).toString() + '"></script>';
   });
   var root = vscode.Uri.file(space.root);
