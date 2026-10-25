@@ -47,7 +47,8 @@ retained.dispose();
 `create` receives the new incarnation's owned signal. If it throws, that
 signal aborts. `place` receives plain retained items; an element may use native
 `moveBefore` to preserve focus. `remove` runs after the corresponding signal
-aborts. The owner calls `dispose` when its view lifetime ends.
+aborts. Construction binds partial resources to the signal and returns its item
+before placement. The owner calls `dispose` when its view lifetime ends.
 
 The factory adds no scheduler. A completed reconciliation is cached only after
 all callbacks finish. The immutable membership and explicit removed metadata
@@ -64,6 +65,9 @@ in reverse acquisition order, before rethrowing the original failure; cleanup
 failures go to `report`. Existing retained items remain owned until repaired
 or disposed. A disposed view releases every item even if one removal fails,
 then throws an aggregate cleanup error. Repeated disposal retries nothing.
+Callbacks may query retained items or dispose the owner. Disposal during a
+callback stops further acquisition and cleans an item returned by an in-flight
+creation. Reentrant membership or range reconciliation fails before mutation.
 
 The comparison must cover key reuse, no-op ranges, selective inputs, focus
 pinning, visible keyboard destinations, anchoring, failure rollback and final
@@ -71,3 +75,13 @@ resource release. A useful result removes repeated ownership work without a
 meaningful time or retained-heap regression. It does not establish the 4 ms or
 100 ms readiness targets from synchronous callback timing. The owner decides
 whether to adopt a surface after reviewing the comparison.
+
+## Comparison status
+
+The [reported comparison](../../research/large-collections.md#example-mechanics-outcome-2026-10-25)
+preserves the checked example behavior and finds similar retained heap.
+It fails the proposed no-regression rule for unchanged-range calls at the
+smaller size and adds source footprint. The proposal remains open; the
+hand-written example remains the shipping-API reference. A completed-range
+path and the cost of the failure protocol need review before integration.
+These results establish no frame-script or presentation-readiness claim.

@@ -11,17 +11,20 @@ whether Lattice documents a windowing pattern or proposes a windowing helper.
 
 ## Status
 
-Running, 2026-10-25: the owner authorizes small measurement calibration, a
-shipping-API list example and comparison of the smallest mechanics proposal
-it exposes. The duplicate-reconciliation guard is accepted; large-list
-readiness and any new public API adoption stay open.
+Reported, 2026-10-25: the authorized small calibration, runnable shipping-API
+example and mechanics comparison are complete. Tracing remains perturbative.
+The proposed coordinator preserves the checked behavior but misses its
+no-regression rule on the 1,000-item unchanged-range input. The accepted
+duplicate-reconciliation guard remains an application pattern; large-list
+readiness and public API adoption stay open.
 W1 profiling, targeted comparison
 and confirmation are complete. The owner agreed the original plan
 with the four requested
 amendments on 2026-10-25, before the first run. Dated execution changes are
 recorded below. Both stages, confirmation and secondary timing coverage are
 complete. This compares application patterns using existing APIs; the owner's
-adoption decision is pending. No public API or windowing helper is authorized.
+adoption decision is pending. No public API or shipping windowing helper is
+adopted by this record.
 
 ## Hypothesis
 
@@ -644,6 +647,12 @@ or noisy difference is inconclusive; no API is adopted automatically. The
 4 ms and 100 ms targets and all historical misses are unchanged. This is a
 bounded mechanics comparison, not a large-list readiness claim.
 
+Before the first mechanics smoke, clarify callback ownership: construction
+returns an item before placement and binds partial resources to its signal.
+Callbacks may query or dispose the owner; reentrant membership/range calls
+fail before mutation. Disposal during creation or placement stops acquisition
+and ends each acquired lifetime once. Probe these cases outside timing.
+
 ## Conditions
 
 ### Stage A (2026-10-25)
@@ -814,6 +823,35 @@ and independent callback hooks
 `7963680b172173bf32852cd1972d03209e57d2ac82e4b4ccb2439ec62d173e75`.
 W1/C1 and runtime modules match the earlier comparison. No CPU or allocation
 sampling ran during calibration.
+
+### Example mechanics comparison (2026-10-25)
+
+Four smoke pages precede twelve comparison pages and six confirmation pages.
+Each set uses a new owned browser context per page, seeded order and the
+sample counts in Method. The unchanged example baseline is `7e39d4dea3ac`;
+the comparison plan/proposal is `ae8833fa2373`. Both sizes use identical
+capability, binding, row, markup and placement/removal code. Only the list's
+retained-item coordination differs. No tracing, CPU profiling or allocation
+sampling runs during these timings. Port spies and protocol probes run after
+timing and are restored before heap collection. A fresh capability is measured
+after releasing the timed one. No browser or server is left running.
+
+Host: Intel Xeon W-2140B, 16 logical CPUs, 64 GiB RAM, macOS kernel 24.6.0,
+Node 24.12.0, Chromium 156.0.8078.4. Comparison one-minute load is 7.93 to
+7.78; confirmation is 8.32 to 8.42. Background work and power state remain
+uncontrolled. No network service or real project supplies input.
+
+SHA-256 of the comparison runner is
+`4da8691f6dc4979c8d9824a554a5f25885e207531fcd7f075e3043e212b5fe15`,
+the shared bench
+`026a58097c64e7c3200246c1ff251fab5721dc939d20d07ab66c25f74252e62b`,
+the prototype coordinator
+`9cf5b152f15c66b8180fd67d4259aeab270a7533ea7f79a24253e6e155e5470c`,
+its list adapter
+`edbe5adabd06f0e10d0bdc3f69b2f329936ca7d3aa910797e12e25aef59d4ddc`,
+and protocol probes
+`2b94c101df3b1c5ed6bf56811912c804a78db41269c4f5a9c8e381868dfd920b`.
+Sources are identical in smoke, comparison and confirmation.
 
 ## Results
 
@@ -1458,6 +1496,103 @@ an existing result, and plain callback time is not full frame-script time.
 Keep the 4.079 ms miss and 4 ms/100 ms targets unchanged. Subsequent mechanics
 timing compares matching untraced synchronous calls and reports that scope.
 
+### Example mechanics comparison (2026-10-25)
+
+H0 is the committed hand-written example; P1 is the proposed callback
+coordinator. Each cell has three fresh pages. Values are nearest-rank
+p50 / p95 (IQR) of page medians; p95 is also the maximum. Cold values are
+one first-use observation per page. Times are synchronous elapsed ms unless
+marked µs; deferred rendering and presentation are excluded.
+
+| 1,000 items | H0 | P1 |
+| --- | ---: | ---: |
+| Cold capability, ms | 1.915 / 1.935 (0.045) | 2.020 / 2.070 (0.200) |
+| Cold view, ms | 22.305 / 27.420 (16.765) | 28.155 / 31.670 (5.185) |
+| Cold total, ms | 24.200 / 29.360 (16.790) | 30.230 / 33.695 (5.340) |
+| Warm view, ms | 1.140 / 1.170 (0.065) | 1.125 / 1.180 (0.065) |
+| Warm teardown, ms | 0.265 / 0.275 (0.015) | 0.275 / 0.280 (0.025) |
+| Viewport change, ms | 1.0300 / 1.0315 (0.01775) | 1.0505 / 1.0635 (0.02850) |
+| End jump, ms | 1.11075 / 1.11125 (0.00625) | 1.1200 / 1.1250 (0.02350) |
+| Unchanged range, µs | 0.430 / 0.440 (0.010) | 0.460 / 0.460 (0.010) |
+| Selection switch, µs | 1.220 / 1.230 (0.030) | 1.185 / 1.195 (0.025) |
+| Same-key replacement, ms | 0.4340 / 0.4490 (0.01700) | 0.43125 / 0.43475 (0.00925) |
+| Total retained JS heap, B | 158804 / 158804 (56) | 159116 / 159132 (72) |
+| Presentation-only JS heap, B | 26220 / 26220 (0) | 26524 / 26540 (16) |
+
+| 10,000 items | H0 | P1 |
+| --- | ---: | ---: |
+| Cold capability, ms | 13.130 / 13.450 (0.705) | 13.665 / 13.960 (0.985) |
+| Cold view, ms | 24.390 / 26.470 (10.175) | 22.775 / 24.880 (11.855) |
+| Cold total, ms | 37.520 / 39.215 (9.470) | 35.755 / 38.550 (11.560) |
+| Warm view, ms | 1.985 / 2.160 (0.205) | 1.935 / 2.035 (0.130) |
+| Warm teardown, ms | 0.295 / 0.310 (0.020) | 0.285 / 0.295 (0.015) |
+| Viewport change, ms | 0.9330 / 0.94525 (0.04725) | 0.9030 / 0.92075 (0.03375) |
+| End jump, ms | 1.1050 / 1.1235 (0.02525) | 1.1210 / 1.12375 (0.01750) |
+| Unchanged range, µs | 0.440 / 0.445 (0.010) | 0.450 / 0.465 (0.015) |
+| Selection switch, µs | 1.195 / 1.220 (0.040) | 1.190 / 1.210 (0.020) |
+| Same-key replacement, ms | 1.7260 / 1.7500 (0.04225) | 1.77075 / 1.7950 (0.03600) |
+| Total retained JS heap, B | 1453888 / 1453972 (84) | 1453816 / 1453896 (96) |
+| Presentation-only JS heap, B | 26820 / 26820 (0) | 26856 / 26856 (0) |
+
+Only the 1,000-item unchanged-range regression clears the meaningful-difference
+rule: +6.98%, or 0.030 µs, exceeding both 0.010 µs IQRs. It remains a failure
+of the predeclared no-regression rule despite its small absolute size. No
+other timing or total-heap difference clears the rule. The 1,000-item cold-view
+increase is +26.23%, but within H0's IQR; it is inconclusive, not a win for P1.
+
+The same observed work holds for both variants and sizes:
+
+| Operation | Creates / placements / removals | Other work |
+| --- | ---: | --- |
+| Initial mount | 19 / 19 / 0 | 19 active lifetimes |
+| Repeated completed range | 0 / 0 / 0 | No row input assignment |
+| One viewport change | 15 / 23 / 15 | 23 active lifetimes |
+| Selection change | 0 / 0 / 0 | Two selected assignments |
+| Offscreen text change | 0 / 0 / 0 | Zero text assignments |
+| Visible key reuse | 1 / 19 / 1 | New incarnation |
+| Teardown at top | 0 / 0 / 19 | Zero active lifetimes |
+
+Mounted-minus-empty DOM counts are 177 nodes and 179 listeners in both
+variants at both sizes. Ended views return both counts to baseline. Total JS
+heap is mounted-minus-empty; presentation-only is mounted-minus-state. These
+are retained deltas after GC, not native DOM bytes or transient allocations.
+They exclude loaded module code common to the empty and mounted snapshots.
+
+As a source-footprint inventory, the baseline list is 10,930 bytes, 3,550 gzip;
+prototype list plus coordinator is 14,394 bytes, 4,475 gzip. The prototype
+centralizes registry, lifetime and reconciliation code but adds failure
+protocol and callback machinery: +3,464 source bytes, +925 gzip. These are
+unminified source sizes, including comments, not a published bundle estimate.
+Loading/evaluation before the entry API is ready is outside cold mount timing.
+
+### Example mechanics confirmation (2026-10-25)
+
+Three new pages per variant at 10,000 items; the same p50 / p95 (IQR)
+notation and maximum-equals-p95 rule apply.
+
+| Metric | H0 | P1 |
+| --- | ---: | ---: |
+| Cold capability, ms | 14.435 / 16.520 (2.890) | 13.840 / 13.980 (1.150) |
+| Cold view, ms | 23.820 / 26.945 (14.880) | 14.265 / 20.355 (6.160) |
+| Cold total, ms | 38.255 / 40.575 (11.985) | 28.250 / 33.185 (5.150) |
+| Warm view, ms | 2.045 / 2.070 (0.090) | 2.085 / 2.175 (0.130) |
+| Warm teardown, ms | 0.310 / 0.320 (0.025) | 0.305 / 0.345 (0.055) |
+| Viewport change, ms | 1.0960 / 1.09625 (0.17625) | 1.07425 / 1.22575 (0.30175) |
+| End jump, ms | 1.2055 / 1.2770 (0.12350) | 1.2855 / 1.2860 (0.16550) |
+| Unchanged range, µs | 0.445 / 0.450 (0.010) | 0.460 / 0.460 (0.000) |
+| Selection switch, µs | 1.205 / 1.210 (0.030) | 1.215 / 1.215 (0.030) |
+| Same-key replacement, ms | 2.0865 / 2.0885 (0.25850) | 1.81475 / 1.99025 (0.20200) |
+| Total retained JS heap, B | 1453676 / 1453744 (84) | 1453800 / 1453980 (180) |
+| Presentation-only JS heap, B | 26676 / 26676 (0) | 26856 / 26856 (0) |
+
+No named timing or total-heap regression clears the meaningful-difference
+rule here. End jumps are +6.64%, within both IQRs. Key replacement improves
+13.02% beyond both IQRs, but this benefit does not repeat the first set's
++2.59% result. It is not an established gain. DOM/work counts and serialized
+initial presentation match again. The planned confirmation covers 10,000
+items only; the 1,000-item unchanged-range regression is not reconfirmed or
+discarded.
+
 ## Correctness
 
 ### Smoke (2026-10-25)
@@ -1565,7 +1700,50 @@ bounded initial mounting, a native edit, selected-key replacement and teardown.
 These checks establish the example's listed behavior, not large-list budgets.
 No lint, typecheck, formatting or full test suite ran.
 
+### Example mechanics comparison (2026-10-25)
+
+All four smoke, twelve comparison and six confirmation pages pass the declared
+interaction/model and ownership checks with no page errors. There are no smoke
+failures to classify and no timing input is dropped. Serialized initial row
+markup, text, checked/selected values, positions and summary match across H0
+and P1 at each size and in confirmation. Observed callback counts match too.
+
+Both variants preserve retained identity, one focused offscreen row and its
+uncommitted draft, mount keyboard destinations before focus, make overscan
+destinations visible, preserve insertion/removal anchors, select offscreen
+items, replace reused-key incarnations and end old row events. Focus fallback
+is the next item at the removed position, the preceding item at the end, or
+the list when empty. Duplicate membership fails before replacing retained rows.
+Bulk updates match summary/row models. Every row signal aborts before removal;
+final lifetime, DOM node and listener counts return to baseline.
+
+P1's additional protocol probes cover completed-range no-ops, sorted pin
+placement and full indices, duplicate/missing-pin rejection, explicit incarnation
+replacement, creation and placement rollback/retry, preserving a primary
+failure when cleanup also fails, aggregate disposal, idempotent disposal,
+disposal from creation/placement callbacks, reentrant membership rejection,
+and avoiding double removal after disposal followed by a callback failure.
+The runnable example's focused tests and actual HTTP smoke are unchanged;
+lint, typecheck, formatting and the full test suite were not run.
+
 ## Threats to validity
+
+### Example mechanics limits (2026-10-25)
+
+Three pages per cell make p95 exploratory. The untraced batched timer resolves
+small synchronous differences but excludes rendering, scheduling and actual
+presentation. It cannot settle the existing 4 ms frame-script or 100 ms
+presentation targets. No W0 heap reference is rerun; no renewed total-heap
+readiness ratio follows. Source bytes expose a footprint cost, not cold module
+evaluation latency. Protocol probes are additional P1 work outside timers;
+their loaded code means empty-context heap is not a fair module-footprint
+comparison. Retained deltas use each context's own baseline instead.
+
+The application tests and lab probes cover fixed-height windowing and bounded
+focus retention. They do not establish arbitrary layouts, variable heights,
+recycling, 100,000 items or every possible callback/reentrancy workflow.
+
+### Earlier stages' limits
 
 - Fixed-height example rows at 1,000 and 10,000 items, one engine and one
   shared host. This does not establish windowing for every page-list layout.
@@ -1743,3 +1921,28 @@ scheduling evidence before general C1 adoption or a readiness claim.
 The 4 ms and 100 ms targets remain unchanged; 4.079 ms remains a miss. Large-list
 readiness and migration stay gated. Delivery and navigation remain independent
 and unblocked. No collection-core redesign or windowing helper is adopted.
+
+### Example mechanics outcome (2026-10-25)
+
+The small calibration establishes that even the reduced trace perturbs the
+named callbacks meaningfully. No correction factor is applied to preserved
+samples. The runnable task example now demonstrates shipping collection/store
+APIs, list-level selection, retained row lifetimes, the accepted guard, bounded
+focus pinning, keyboard destinations, incarnation replacement and anchoring.
+
+The proposed DOM-free coordinator extracts registry/lifetime ownership and
+range reconciliation through explicit callbacks. It preserves the checked
+behavior and total retained heap is close to H0 in both sets. It adds source
+footprint, and its 1,000-item unchanged-range regression fails the predeclared
+no-regression rule. The 10,000-item confirmation is compatible with small
+overhead, not evidence that the first miss can be waived. Cold timings are
+too variable to claim a benefit. No public helper is adopted or exported.
+
+Keep the callback-based ownership proposal available for review, with a narrower
+completed-range path and the additional failure protocol/footprint as concrete
+design questions before any integration request. Further optimization or
+adoption needs its own recorded candidate; this run does not change a threshold.
+Selection policy, geometry, anchoring, markup and capability actions remain
+application-owned. Recycling remains experimental. The 4 ms and 100 ms targets,
+the historical 4.079 ms miss and large-list readiness gate remain unchanged;
+delivery and navigation remain independent and unblocked.
