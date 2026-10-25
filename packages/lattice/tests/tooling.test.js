@@ -1,6 +1,6 @@
 /** @file Verifies that the configured checks reject missing and incorrect JSDoc. */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -98,6 +98,18 @@ test('the pure type-check program contains only runtime files, platform declarat
   expect(unexpected).toEqual([]);
   expect(files.some((file) => file.endsWith('lib.dom.d.ts'))).toBe(false);
   expect(files.some((file) => file.includes('@types/node'))).toBe(false);
+}, 20000);
+
+test('no runtime module imports test support', () => {
+  const runtime = run('node_modules/typescript/bin/tsc', ['--project', 'tsconfig.pure.json', '--listFilesOnly']);
+  const dom = run('node_modules/typescript/bin/tsc', ['--project', 'tsconfig.dom.json', '--listFilesOnly']);
+  const files = [...runtime.stdout.trim().split('\n'), ...dom.stdout.trim().split('\n')].filter(
+    (file) => file.startsWith(join(root, 'src')) && !file.startsWith(join(root, 'src', 'testing')),
+  );
+  expect(files.length).toBeGreaterThan(0);
+  for (const file of files) {
+    expect(readFileSync(file, 'utf8'), file).not.toMatch(/from ['"][^'"]*testing[^'"]*['"]/);
+  }
 }, 20000);
 
 test('the pure configuration rejects DOM and Node globals', () => {

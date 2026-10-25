@@ -7,6 +7,7 @@ bindings. It has no runtime dependencies.
 | --- | --- |
 | `@canonic2/lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |
 | `@canonic2/lattice/elements` | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce` |
+| `@canonic2/lattice/testing` | Test support: `checkSelection`, which checks that a selection's `read` uses only its declared fields. For tests only; no runtime module imports it |
 
 Source files run unchanged in modern browsers. There is no production build,
 bundler, transpilation or CommonJS entry point. TypeScript checks JavaScript and

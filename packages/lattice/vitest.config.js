@@ -9,7 +9,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['src/**/*.test.js', 'tests/**/*.test.js'],
+          include: ['src/**/*.test.js', 'tests/**/*.test.js', 'examples/**/*.test.js'],
           exclude: ['**/*.browser.test.js'],
           maxWorkers: 2,
           // Retention tests force garbage collection to check what is released.

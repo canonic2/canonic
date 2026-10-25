@@ -13,7 +13,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.js",
-    "./elements": "./src/modules/elements/elements.js"
+    "./elements": "./src/modules/elements/elements.js",
+    "./testing": "./src/testing/index.js"
   },
   "scripts": {
     "lint": "oxlint --deny-warnings",

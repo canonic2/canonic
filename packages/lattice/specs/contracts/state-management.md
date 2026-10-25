@@ -9,8 +9,8 @@ it, and bindings that connect stores to elements. Elements stay unaware of
 stores.
 
 **Status:** agreed contract. The store core is implemented and exported from
-the root entry point; the declaration check and `@canonic2/lattice/testing` are
-not yet. [Delivery](delivery.md) owns runtime boundaries, and
+the root entry point, and the declaration check from
+`@canonic2/lattice/testing`. [Delivery](delivery.md) owns runtime boundaries, and
 [resource lifecycle](resources.md) owns shared cleanup guarantees.
 
 ## Layers
@@ -206,8 +206,23 @@ representative snapshots, and the check calls `read` with each of them:
   each branch of `read`; the check cannot prove the absence of dependencies in
   branches it never ran.
 
-How a non-failing diagnostic is returned to the test is not yet decided; the
-check neither logs nor introduces other output channels on its own.
+**Result.** The check neither logs nor uses callbacks or any other output
+channel, and needs no test runner. It throws for undeclared, unknown or
+unsupported access. Otherwise it returns a plain report the test inspects:
+
+| Property | Meaning |
+| --- | --- |
+| `name` | The selection's name, as the test gave it |
+| `declared` | The declared fields |
+| `cases` | One entry per supplied snapshot: its `name` and the fields `read` `accessed` with it |
+| `accessed` | The union of the fields accessed across all cases |
+| `unobserved` | Declared fields absent from that union; reporting them never fails the check |
+
+Every list has a deterministic order, so assertions and failure messages stay
+stable: `cases` in the own-key order of the supplied cases; `declared`,
+`accessed`, `unobserved` and each case's `accessed` in the selection's
+declaration order. A failure names the first failing case in that order and
+lists its unexpected fields alphabetically.
 
 ### Subscriptions
 
@@ -549,6 +564,9 @@ failure is kept as a fixed regression case beside the generator.
 - **Test support outside runtime imports.** The declaration check lives in
   `@canonic2/lattice/testing`, so production pays nothing for it. It checks the
   snapshots a test provides; it cannot prove every possible dependency.
+- **The declaration check returns a plain report** (2026-10-24). Tests inspect
+  it without logging, callbacks or a test-runner dependency; deterministic
+  ordering keeps their assertions and the check's messages stable.
 - **Unobserved is a diagnostic, undeclared is a failure.** Reading an
   undeclared field always loses updates, so it fails. A declared field no
   snapshot reached may be a branch the test did not cover, so it is reported
@@ -562,8 +580,6 @@ failure is kept as a fixed regression case beside the generator.
 
 ## Open questions
 
-- How the declaration check returns non-failing diagnostics to the test that
-  called it.
 - Whether a symbol key in a patch should be rejected. `set` walks string keys
   only, so such a key is ignored. Rejecting it would read the patch's symbol
   keys on every write, an allocation the cost model rules out for unchanged

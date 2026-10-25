@@ -9,15 +9,14 @@ Architecture never defines observable behavior. Every guarantee is owned by a
 When an implementation turns out to need a different guarantee, the page states
 the required contract change explicitly and the contract is changed first.
 
-**Status:** the store, package and element helper pages describe implemented
-code; testing support is not started.
+**Status:** every page describes implemented code.
 
 | Page | Covers |
 | --- | --- |
 | [Store](store.md) | The store core's internal structures and how they meet the state management contract |
 | [Package](package.md) | Entry-point wiring, file locations, type-check configurations and test fixtures |
 | [Element helpers](elements.md) | How the element helpers meet the element lifecycle contract |
-| [Testing support](testing.md) | The declaration check's implementation; not started, written when work on the checker begins |
+| [Testing support](testing.md) | How the selection declaration check meets its contract |
 
 ## Source map
 
@@ -26,7 +25,8 @@ code; testing support is not started.
 | `src/index.js` | The root entry point | Exists; exports the store core |
 | `src/modules/store/` | The store core | Exists, as [store](store.md) describes |
 | `src/modules/elements/` | The element helpers behind the `@canonic2/lattice/elements` subpath | Exists, as [element helpers](elements.md) describes |
-| `src/testing/` | Test support behind `@canonic2/lattice/testing` | Location proposed in [package](package.md); no export until implemented |
+| `src/testing/` | Test support behind `@canonic2/lattice/testing` | Exists, as [testing support](testing.md) describes |
+| `examples/` | Runnable examples written on the real API, with their tests | Exists: the filters example |
 | `tests/` | Package-level import, tooling and platform tests | Exists |
 | Type-check configurations | Pure, DOM and tooling checks | Exist, as [package](package.md) describes |
 | `types/shared-platform.d.ts` | Platform APIs pure modules may use; development only, not shipped | Exists |
@@ -35,7 +35,7 @@ code; testing support is not started.
 
 ```text
 src/index.js        → src/modules/store/
-src/testing/        → src/modules/store/ and platform APIs
+src/testing/        → ECMAScript built-ins only; the store's types in JSDoc
 src/modules/store/  → ECMAScript built-ins and shared platform APIs only
 src/modules/elements/ → ECMAScript built-ins and methods of the objects it is given; DOM types in JSDoc
 runtime modules     ↛ src/testing/, tests/ or development tools

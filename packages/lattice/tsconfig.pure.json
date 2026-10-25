@@ -13,6 +13,11 @@
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true
   },
-  "include": ["src/index.js", "src/modules/store/**/*.js", "types/shared-platform.d.ts"],
+  "include": [
+    "src/index.js",
+    "src/modules/store/**/*.js",
+    "src/testing/**/*.js",
+    "types/shared-platform.d.ts"
+  ],
   "exclude": ["**/*.test.js", "**/*.browser.test.js", "**/*.bench.js"]
 }

@@ -10,14 +10,12 @@ page only says where and how.
 | `exports` entry | File | When |
 | --- | --- | --- |
 | `.` | `src/index.js` | Exists: `createStore`, `shallow` and the store's types |
-| `./testing` | `src/testing/index.js` | Added in the change that implements test support, not before |
+| `./testing` | `src/testing/index.js` | Exists: the selection declaration check |
 | `./elements` | `src/modules/elements/elements.js` | Exists: the element helpers |
 | One entry per further DOM capability | Its module's entry file | Added with that capability |
 
 Test support lives in `src/testing/`, outside `src/modules/`, because it is
 package infrastructure for consumers' tests rather than a runtime capability.
-It is planned now so the `exports` map and type checks account for it; it gets
-no export until its code exists.
 
 `files` in `package.json` ships `src` and the README, and excludes tests and
 benchmarks beside modules with the negated patterns `!src/**/*.test.js` and
@@ -31,7 +29,7 @@ runs them one after another:
 
 | Configuration | Root files | Library and types |
 | --- | --- | --- |
-| `tsconfig.pure.json` | Runtime files only: `src/index.js` and `src/modules/store/**/*.js`, and `src/testing/**/*.js` once it exists, excluding `**/*.test.js`, `**/*.browser.test.js` and `**/*.bench.js` | `types: []`, the ES2024 library, no DOM library, plus `types/shared-platform.d.ts` |
+| `tsconfig.pure.json` | Runtime files only: `src/index.js`, `src/modules/store/**/*.js` and `src/testing/**/*.js`, excluding `**/*.test.js`, `**/*.browser.test.js` and `**/*.bench.js` | `types: []`, the ES2024 library, no DOM library, plus `types/shared-platform.d.ts` |
 | `tsconfig.dom.json` | DOM capability runtime files, `src/modules/elements/**/*.js`, with the same exclusions | `types: []`, the ES2024 library and the DOM library |
 | `tsconfig.json` | Tests, benchmarks and configuration files, and through their imports every runtime file | Node types, plus the DOM library for browser tests |
 
@@ -82,7 +80,7 @@ excluded.
 | Fixture | Location | Purpose |
 | --- | --- | --- |
 | Node import | `tests/import.test.js` | Exists; uses every root export without browser globals |
-| Tooling | `tests/tooling.test.js` | Exists; checks lint and type-check rejection of undocumented or mistyped code, lists the pure program's files and checks that the pure configuration rejects DOM and Node globals |
+| Tooling | `tests/tooling.test.js` | Exists; checks lint and type-check rejection of undocumented or mistyped code, lists the pure program's files, checks that the pure configuration rejects DOM and Node globals, and that no runtime module imports test support |
 | Vitest browser tests | `*.browser.test.js` | Behavior in Chromium through Vitest; they load modules through Vitest's development server and say nothing about unchanged delivery |
 | Static delivery | `tests/static/` | Not written yet: plain HTML pages served unchanged, driven by Playwright |
 | Packed archive | `tests/package.test.js` | Exists; packs the package, installs the archive into a temporary consumer, checks its contents and imports every entry point |

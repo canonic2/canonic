@@ -106,6 +106,7 @@ describe('packed archive', () => {
       join(consumer, 'check.js'),
       `import * as root from '@canonic2/lattice';
 import * as elements from '@canonic2/lattice/elements';
+import * as testing from '@canonic2/lattice/testing';
 const store = root.createStore({ count: 0 });
 const seen = [];
 store.watch({ fields: ['count'], read: (state) => state.count }, (value) => seen.push(value));
@@ -116,9 +117,16 @@ try {
 } catch (error) {
   internal = error.code;
 }
+const checked = testing.checkSelection(
+  'count',
+  { fields: ['count'], read: (state) => state.count },
+  { zero: { count: 0 } },
+);
 console.log(JSON.stringify({
   root: Object.keys(root).sort(),
   elements: Object.keys(elements).sort(),
+  testing: Object.keys(testing).sort(),
+  unobserved: checked.unobserved,
   seen,
   shallow: root.shallow([1], [1]),
   internal,
@@ -129,6 +137,8 @@ console.log(JSON.stringify({
     expect(output).toEqual({
       root: ['createStore', 'shallow'],
       elements: ['captureInputs', 'defineOnce', 'replayInputs', 'skipUpgradeAttribute'],
+      testing: ['checkSelection'],
+      unobserved: [],
       seen: [0, 1],
       shallow: true,
       internal: 'ERR_PACKAGE_PATH_NOT_EXPORTED',

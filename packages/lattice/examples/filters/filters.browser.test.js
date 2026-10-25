@@ -4,8 +4,12 @@
  */
 import { afterEach, expect, test, vi } from 'vitest';
 import { mountFilters } from './app.js';
-import { AcmeFilterField } from './filter-field.js';
+import { bindFilterField } from './bindings.js';
+import { AcmeFilterField, defineAcmeFilterField } from './filter-field.js';
 import { AcmeFilterSummary } from './filter-summary.js';
+import { createFilters } from './filters.js';
+
+defineAcmeFilterField();
 
 /** @type {HTMLElement[]} */
 const containers = [];
@@ -133,12 +137,48 @@ test('teardown removes the elements, releases observers, subscriptions and liste
   lifetime.abort();
 });
 
-test('presents a rejected save through report once', async () => {
+test('presents a rejected save through report once, keeping the query set', async () => {
   const failure = new Error('save failed');
   const report = vi.fn();
-  const { fields } = mount({ save: () => Promise.reject(failure), report });
+  const { fields, filters } = mount({ save: () => Promise.reject(failure), report });
   type(/** @type {AcmeFilterField} */ (fields[0]), 'acme');
   await vi.waitFor(() => expect(report).toHaveBeenCalledExactlyOnceWith(failure));
+  expect(filters.state.get().query).toBe('acme');
+});
+
+test('hands a failure to the platform when report itself throws', async () => {
+  const platform = vi.fn();
+  vi.stubGlobal('reportError', platform);
+  const reportFailure = new Error('report');
+  const { fields } = mount({
+    save: () => Promise.reject(new Error('save')),
+    report: () => {
+      throw reportFailure;
+    },
+  });
+  type(/** @type {AcmeFilterField} */ (fields[0]), 'acme');
+  await vi.waitFor(() => expect(platform).toHaveBeenCalledExactlyOnceWith(reportFailure));
+});
+
+test('rolls back a binding whose setup fails, without aborting the caller’s lifetime', () => {
+  const save = vi.fn();
+  const filters = createFilters({ save });
+  const failure = new Error('read');
+  filters.select.locked = {
+    fields: ['locked'],
+    read: () => {
+      throw failure;
+    },
+  };
+  const field = new AcmeFilterField();
+  const lifetime = new AbortController();
+  expect(() => bindFilterField(field, filters, { signal: lifetime.signal, report: () => {} })).toThrow(failure);
+  expect(lifetime.signal.aborted).toBe(false);
+  const inputs = spyOnInputs();
+  filters.setQuery('after');
+  expect(inputs.value).not.toHaveBeenCalled();
+  field.dispatchEvent(new CustomEvent('acme-filter-input', { detail: { value: 'ignored' } }));
+  expect(save).toHaveBeenCalledExactlyOnceWith('after');
 });
 
 test('hands a save that fails after teardown to the platform instead of report', async () => {

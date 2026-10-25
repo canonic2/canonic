@@ -2,7 +2,8 @@
 
 These topics own required behavior, edge cases, decisions and acceptance
 evidence. They are agreed contracts; of the capabilities they describe, the
-store core and the element helpers are implemented.
+store core, the element helpers and the selection declaration check are
+implemented.
 The [framework](../framework/README.md) folder shows how authors meet them, and
 the [architecture](../architecture/README.md) folder how Lattice implements them.
 

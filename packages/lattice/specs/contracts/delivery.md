@@ -11,10 +11,12 @@ Contributor language, JSDoc and tooling instructions live in the package's
 agent rules and [README](../../README.md).
 
 **Status:** agreed contract. The package is unpublished at version `0.0.0`. The
-root entry point exports the store core; `canonic-lattice/elements` exports the
-element helpers. The Node import, packed-archive and TypeScript consumer cases
-in [acceptance](#acceptance) have tests; unchanged delivery through static
-pages, DOM subpath isolation and test support do not yet.
+root entry point exports the store core, `@canonic2/lattice/elements` the
+element helpers and `@canonic2/lattice/testing` the selection declaration
+check. The Node import, packed-archive, TypeScript consumer, testing-separation
+and runner-independent test support cases in [acceptance](#acceptance) have
+tests; unchanged delivery through static pages and DOM subpath isolation do
+not yet.
 
 ## Native delivery and import isolation
 
@@ -45,8 +47,8 @@ at an unchanged source file:
 
 | Specifier | Exports | May load |
 | --- | --- | --- |
-| `canonic-lattice` | The store core: `createStore`, `shallow` and their types | Pure modules only: no DOM, no browser globals |
-| `canonic-lattice/testing` | Test support, such as the selection declaration check | Platform APIs and Lattice's own modules only; never imported by a runtime module |
+| `@canonic2/lattice` | The store core: `createStore`, `shallow` and their types | Pure modules only: no DOM, no browser globals |
+| `@canonic2/lattice/testing` | Test support, such as the selection declaration check | Platform APIs and Lattice's own modules only; never imported by a runtime module |
 | One subpath per DOM capability, such as a keyed collection helper | That capability only | Its own modules and the pure core |
 
 - The root entry point stays pure. It imports in Node without browser globals,
@@ -159,7 +161,7 @@ unchanged too:
 
 - Lattice's own imports are relative and include the `.js` extension, so served
   files resolve each other without rewriting.
-- A browser resolves a bare specifier such as `canonic-lattice` only through an
+- A browser resolves a bare specifier such as `@canonic2/lattice` only through an
   import map; without one, resolution fails before any request reaches the
   server. An application that imports Lattice by its package name therefore
   declares an import map that maps each specifier it uses to the URL of the
@@ -259,12 +261,12 @@ change, decided with the same fixture.
 
 | Requirement | Evidence |
 | --- | --- |
-| Pure root entry point | A Node test imports `canonic-lattice` without browser globals and uses every export |
+| Pure root entry point | A Node test imports `@canonic2/lattice` without browser globals and uses every export |
 | Separate DOM subpaths | A browser test imports one DOM subpath and confirms no unrelated capability module was loaded |
 | Unchanged delivery | A browser test loads the entry points from unchanged source files through an import map, and another through explicit entry-point URLs |
 | No internal imports | The `exports` map lists only entry points, and a review confirms consumers import nothing else |
-| Testing stays separate | No module reachable from a runtime entry point imports `canonic-lattice/testing` |
-| Runner-independent test support | `canonic-lattice/testing` imports no test framework or development dependency, and works from the isolated consumer fixture |
+| Testing stays separate | No module reachable from a runtime entry point imports `@canonic2/lattice/testing` |
+| Runner-independent test support | `@canonic2/lattice/testing` imports no test framework or development dependency, and works from the isolated consumer fixture |
 | Packaged artifact | The isolated consumer check imports every entry point from the packed archive |
 | TypeScript consumers | The external TypeScript fixture passes before any TypeScript support is claimed |
 | Platform features | Each capability's spec lists the platform features it uses; none is newer than the minimum Chromium version |
@@ -286,8 +288,10 @@ change, decided with the same fixture.
   cost or JavaScript transformation.
 - **Named exports only.** Explicit names keep imports searchable and make
   renames visible to every consumer.
+- **The package name is `@canonic2/lattice`** (2026-10-24), in the `@canonic2`
+  scope Canonic's other npm packages use. It applies now, while the package is
+  private; publication itself is decided separately.
 
 ## Open questions
 
 - Which hosts, and which of their versions, get recorded host evidence first.
-- Whether publication uses the `canonic-lattice` name or a scoped name.
