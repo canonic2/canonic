@@ -207,7 +207,8 @@ impl Catalog {
                 return;
             }
         };
-        // The compiler starts nothing until a preview or docs lens is asked for.
+        // Configuring the compilers starts pre-warming every listed preview and
+        // docs lens in the background.
         self.previews
             .configure(Some(Settings {
                 options: options.clone(),

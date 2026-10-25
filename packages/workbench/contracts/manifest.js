@@ -828,7 +828,8 @@
   /* How the space is marked in the space switcher: `color`, one of the
      named colours or a hex value, and `icon`, a Lucide icon name or an image
      file in the project. Both are optional; without them the mark is the
-     name's first letter on a colour chosen from the space's root folder. A value
+     name's first letter on a colour derived from the space's id, a hash of its
+     file's folder and, for one of several spaces, its key. A value
      that can't be used is named in `problems` and left out. */
   var SPACE_COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'teal', 'red', 'yellow', 'gray'];
   var HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
