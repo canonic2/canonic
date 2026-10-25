@@ -79,9 +79,6 @@
   var sourceMenu = document.getElementById('sourceMenu');
   var configureSpace = document.getElementById('configureSpace');
   var exportSpace = document.getElementById('exportSpace');
-  var exportProgress = document.getElementById('exportProgress');
-  var exportProgressBar = document.getElementById('exportProgressBar');
-  var exportProgressText = document.getElementById('exportProgressText');
   /* The size switcher and its two dialogs: Web Components that show sizes
      and say what was asked for. This controller owns the size and every
      change to workbench.yaml; see src/views/top-bar/components/size-switcher/. */
@@ -110,98 +107,19 @@
     window.dispatchEvent(new CustomEvent('wb-say', { detail: { message: message } }));
   }
 
-  function exportJson(response) {
-    return response.json().catch(function () {
-      throw new Error('The export server answered ' + response.status + '.');
-    }).then(function (result) {
-      if (!response.ok || !result.ok) throw new Error(result.error || 'Export failed.');
-      return result;
-    });
-  }
-
-  function pollExport(job, startedAt) {
-    return fetch('/_workbench/export?job=' + encodeURIComponent(job.id), { cache: 'no-store' }).then(exportJson).then(function (status) {
-      exportProgressBar.max = Math.max(1, status.total || 0);
-      var elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-      if (status.total && !status.completed) {
-        exportProgressBar.removeAttribute('value');
-        exportProgressText.textContent = 'Preparing capture… 0 of ' + status.total +
-          ' complete · ' + elapsed + 's';
-      } else {
-        exportProgressBar.value = status.completed || 0;
-        exportProgressText.textContent = status.total
-          ? 'Captured ' + status.completed + ' of ' + status.total
-          : 'Preparing download…';
-      }
-      if (status.status === 'failed') throw new Error(status.error || 'Export failed.');
-      if (status.status === 'complete') return status;
-      return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(function () { return pollExport(job, startedAt); });
-    });
-  }
-
-  function downloadExport(job) {
-    exportProgressText.textContent = 'Downloading export…';
-    return fetch('/_workbench/export?job=' + encodeURIComponent(job.id) + '&download=1')
-      .then(function (response) {
-        if (!response.ok) return exportJson(response).then(function () { throw new Error('Export failed.'); });
-        var disposition = response.headers.get('Content-Disposition') || '';
-        var match = /filename="([^"]+)"/.exec(disposition);
-        return response.blob().then(function (blob) {
-          return { blob: blob, name: match ? match[1] : 'canonic-design-system.zip' };
-        });
-      }).then(function (download) {
-        var url = URL.createObjectURL(download.blob);
-        var link = document.createElement('a');
-        link.href = url;
-        link.download = download.name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        /* VS Code copies blob downloads through a temporary file. Keep the
-           object URL alive while the editor completes that handoff. */
-        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-        return download.name;
-      });
-  }
-
-  exportSpace.addEventListener('click', function () {
-    var dialog = document.getElementById('exportDialog');
-    dialog.pages = Object.keys(resolved.pages).map(function (id) { return { id: id, label: resolved.pages[id].label }; });
-    dialog.collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
-    dialog.current = current ? { page: current, scenario: currentScenario, lens: view && view.lens ? view.lens.key : null,
+  window.wbExportBindings({
+    review: window.wbExport,
+    say: say,
+    destination: function () {
+    var pages = Object.keys(resolved.pages).map(function (id) { return { id: id, label: resolved.pages[id].label }; });
+    var collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
+    var selected = current ? { page: current, scenario: currentScenario, lens: view && view.lens ? view.lens.key : null,
       artboard: window.wbMultiCanvas ? window.wbMultiCanvas.selectedArtboard() : undefined,
       iteration: (window.wbMultiCanvas ? window.wbMultiCanvas.selectedIteration() : currentIterations['']) || undefined,
       size: canvas.dataset.size, width: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().width : Math.round(frame.offsetWidth) || 1440,
       height: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().height : Math.round(frame.offsetHeight) || 900 } : undefined;
-    dialog.show();
-  });
-  document.getElementById('exportDialog').addEventListener('wb-export-request', function (event) {
-    if (exportSpace.disabled) return;
-    exportSpace.disabled = true;
-    exportSpace.setAttribute('aria-busy', 'true');
-    exportProgress.hidden = false;
-    exportProgressBar.max = 1;
-    exportProgressBar.value = 0;
-    exportProgressText.textContent = 'Finding reference views…';
-    window.dispatchEvent(new CustomEvent('wb-export-start'));
-    say('Preparing export…');
-    var finished = null;
-    var startedAt = Date.now();
-    fetch('/_workbench/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event.detail) })
-      .then(exportJson)
-      .then(function (job) { return pollExport(job, startedAt); })
-      .then(function (status) { finished = status; exportProgressText.textContent = 'Packaging download…'; return downloadExport(status); })
-      .then(function (name) {
-        say('Downloaded ' + name + (finished && finished.warnings ? ' with ' + finished.warnings + ' export warning(s).' : '.') +
-          (finished && finished.warningMessages && finished.warningMessages.length ? ' ' + finished.warningMessages[0] : ''));
-      })
-      .catch(function (error) { say(String(error.message || error)); })
-      .then(function () {
-        exportProgress.hidden = true;
-        exportSpace.disabled = false;
-        exportSpace.removeAttribute('aria-busy');
-        window.dispatchEvent(new CustomEvent('wb-export-end'));
-      });
+    return { pages: pages, collections: collections, current: selected };
+    }
   });
 
   /* Anything marked data-icon gets its Lucide glyph injected once. */

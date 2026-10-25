@@ -158,7 +158,7 @@ ui/src/
   views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size and Actions elements and registration
   views/toolbar/             Annotation/review control bindings and floating toolbar/view-control styles
   views/configure-pages/     Configure pages editor and modal styles
-  views/export/              Export dialog element and its registration
+  views/export/              Export dialog, progress presentation and classic shell bindings
   views/docs/                A docs lens's reading page, its embedded examples and highlighting
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
@@ -169,7 +169,7 @@ ui/src/
     canvas/                 Artboard state, geometry, controller and publication
     navigation/             Requested destination, supersession and transition state
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
-    review/                 Capture, reference projection, review workflow and browser delivery
+    review/                 Capture, reference projection, review workflow, export polling and browser delivery
     docs/                   Docs reading layout on the canvas
     trace/                  Browser timing traces
   theme/                    Standalone tokens and host theme assets
