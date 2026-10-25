@@ -51,7 +51,8 @@ they develop, separate from current behavior and observed acceptance.
 | Shell/content boundary | One shell and dedicated content renderers are implemented; independent UI/backend acceptance remains open |
 | Preview pipeline | Native listing, watching and compilation are implemented. Docs navigation and installed startup have scoped measurements; the full first-page/list target campaign remains open |
 | Artboards | Scenario-owned composition, isolated instances, review and context are implemented. Free artboard management, phase 2 arrangement and saved/shared layouts remain open |
-| Iterations | [Artboards and iterations](pages/iterations.md): model, render, address, review and export are implemented; canvas presentation is undecided |
+| Iterations | [Artboards and iterations](pages/iterations.md): model, render, address, review and export are implemented; iteration UI waits for the UI port |
+| UI port | [Target layout and port order](system/modules.md#browser-source-ownership) are agreed: the whole browser UI moves to Lattice and an `app/`, `views/`, `components/`, `modules/` layout. Not started; it follows Lattice's guides, its collection lab and the delivery slice |
 | UI and sizes | Components and configurable sizes are implemented. Configure pages size cards, public-guide alignment and the canvas theme bridge remain gaps |
 | Persistence | Current-space choice and origin-bound preferences exist. Complete selection/preference restoration and first-page fallback are agreed implementation work: IndexedDB in browsers, workspaceState in VS Code |
 

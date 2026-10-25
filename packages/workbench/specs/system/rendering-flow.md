@@ -226,17 +226,25 @@ Browser regressions through the shell and renderer cover the discoveries below.
 
 ### Migration
 
-- Workbench first adds Lattice as a dependency: the server serves its modules
-  unchanged beside the UI, the canvas, renderer and sidebar entry points resolve
-  its import, the webview CSP admits it, and VSIX packaging includes it.
+- Workbench first adds Lattice as a dependency through the
+  [delivery slice](modules.md#lattice-delivery-slice): the server serves its
+  modules unchanged beside the UI, the canvas, renderer and sidebar entry
+  points resolve its import, the webview CSP admits it, and VSIX packaging
+  includes it.
 - Navigation state, transitions and the grace timer move into a navigation store
-  under `ui/src/modules/navigation/`, with its binding beside it. The canvas
+  under `ui/src/modules/navigation/`. The binding that writes the canvas's
+  `inert`, `aria-busy`, visibility and loading message lives in
+  `ui/src/views/canvas/bindings.js`, per the
+  [layout](modules.md#browser-source-ownership). The canvas
   bootstrap's displayed and painted copies, and the navigation controller's flag
   set, are replaced by the store's fields and selectors.
 - Renderer messages carry navigation identity as specified above.
 - The legacy shell keeps its route and sidebar code; an adapter at its boundary
   turns route changes into `picked` and `shown` destinations into route writes.
-- Other capabilities move to Lattice stores when they are substantially reworked.
+  The route state stays behind that adapter until the shell's route and sidebar
+  code are ported; the [temporary adapters](modules.md#temporary-adapters)
+  table names the step that removes it.
+- The other capabilities follow in the [port order](modules.md#port-order).
 
 ### Discoveries
 
@@ -263,9 +271,6 @@ Browser regressions through the shell and renderer cover the discoveries below.
 - Whether a renderer that never reports for its navigation needs a readiness
   timeout that produces `failed`, or whether `loading` may last indefinitely
   for slow compilation.
-- Whether the first migration also moves the legacy shell's route state into
-  the navigation store, or leaves it behind the adapter until the shell itself
-  is migrated.
 
 ## Backend and asset delivery
 
