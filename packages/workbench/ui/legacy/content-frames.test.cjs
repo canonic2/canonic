@@ -24,6 +24,7 @@ function harness(initialize = true) {
       removeAttribute: name => attrs.delete(name),
       remove() { element.removed = true; },
     });
+    element.contentWindow.postMessage = () => {};
     Object.defineProperty(element, 'src', { set: value => attrs.set('src', value) });
     frames.push(element);
     return element;
@@ -35,12 +36,15 @@ function harness(initialize = true) {
     clearTimeout: id => timers.delete(id),
     dispatchEvent: event => changes.push(event.detail.frame),
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'content-frames.js'), 'utf8'), {
+  const context = {
     window, document: { createElement: frame }, URL,
     location: { href: 'http://example.com/_workbench/', origin: 'http://example.com' },
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     console,
-  });
+    setTimeout: window.setTimeout, clearTimeout: window.clearTimeout,
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'lenses.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'content-frames.js'), 'utf8'), context);
   const initial = frame();
   const runtime = window.wbContentFrames.create({
     frame: initial, buffer: frame(),
@@ -123,6 +127,39 @@ test('closing an unfinished renderer releases its readiness listener and timer',
   h.initial.contentWindow.dispatchEvent(new Event('workbench:ready'));
   assert.equal(h.paints.length, 0);
   assert.deepEqual(h.failures, []);
+});
+
+test('Storybook loading and acknowledgements cannot replace a matching render event', () => {
+  const h = harness(false);
+  const lens = { key: 'storybook', kind: 'storybook', url: 'http://storybook.example.com' };
+  function show(id) {
+    h.runtime.show({ lens, story: { id }, url: lens.url + '/iframe.html?id=' + id + '&viewMode=story' });
+  }
+  function event(type, id, overrides = {}) {
+    h.runtime.storyEvent({ source: h.initial.contentWindow, origin: lens.url,
+      data: JSON.stringify({ key: 'storybook-channel', event: { type, args: [type === 'currentStoryWasSet' ? { storyId: id } : id] } }), ...overrides });
+  }
+  try {
+    show('page--default');
+    h.initial.dispatchEvent(new Event('load'));
+    h.paint();
+    assert.equal(h.runtime.ready(), false, 'document loading alone is not story readiness');
+    event('currentStoryWasSet', 'page--default');
+    assert.equal(h.runtime.ready(), false);
+    event('storyRendered', 'page--default');
+    assert.equal(h.runtime.ready(), true);
+    show('page--secondary');
+    event('currentStoryWasSet', 'page--secondary');
+    h.paint();
+    assert.equal(h.runtime.ready(), false, 'a warm channel acknowledgement is not a render');
+    event('storyRendered', 'page--default');
+    event('storyRendered', 'page--secondary', { origin: 'http://other.example.com' });
+    event('storyRendered', 'page--secondary', { source: {} });
+    assert.equal(h.runtime.ready(), false, 'stale IDs and unauthenticated renders cannot settle the switch');
+    event('storyRendered', 'page--secondary');
+    assert.equal(h.runtime.ready(), true);
+    assert.equal(h.runtime.frame(), h.initial, 'switching retains the loaded Storybook iframe');
+  } finally { h.runtime.close(); }
 });
 
 async function docs(h, name, lens = 'web', force = false) {

@@ -31,9 +31,12 @@ async function main() {
       <details id="menu"><summary>Menu</summary>Open menu</details><div style="height:2500px"></div>
       <script>
       function announce(type,args){parent.postMessage(JSON.stringify({key:'storybook-channel',event:{type,args}}),'*')}
-      function render(id){announce('currentStoryWasSet',[{storyId:id}]);setTimeout(()=>{window.story=id;announce('storyRendered',[id])},250)}
+      const heldRenders=[];
+      function render(id){announce('currentStoryWasSet',[{storyId:id}]);const complete=()=>{window.story=id;announce('storyRendered',[id])};if(window.holdRenders)heldRenders.push(complete);else setTimeout(complete,250)}
       addEventListener('message',event=>{let data=event.data;try{if(typeof data==='string')data=JSON.parse(data)}catch{return}
         if(data?.type==='fixture-command'){
+          if(data.holdRenders!==undefined)window.holdRenders=data.holdRenders;
+          if(data.releaseRenders){window.holdRenders=false;heldRenders.splice(0).forEach(complete=>complete())}
           if(data.key)announce('previewKeydown',[{event:{key:data.key,code:'Equal',metaKey:true,ctrlKey:false,altKey:false,shiftKey:false}}]);
           if(data.value!==undefined)document.querySelector('#edit').value=data.value;
           if(data.menu!==undefined)document.querySelector('#menu').open=data.menu;
@@ -99,15 +102,15 @@ collections:
     target.on('Runtime.exceptionThrown', event => failures.push(event.exceptionDetails.text));
     await target.send('Emulation.setDeviceMetricsOverride', { width: 1900, height: 1100, deviceScaleFactor: 1, mobile: false });
     await target.send('Page.addScriptToEvaluateOnNewDocument', { source:
-      `window.changes=0;window.fixtureReports=[];window.labelTimeline=[];window.loadingFrames=[];
+      `window.changes=0;window.fixtureReports=[];window.viewReports=[];window.labelTimeline=[];window.loadingFrames=[];
       addEventListener('wb-frame-change',()=>changes++);
-      addEventListener('message',event=>{if(event.data?.type==='fixture-state')fixtureReports.push(event.data)});
+      addEventListener('message',event=>{if(event.data?.type==='fixture-state')fixtureReports.push(event.data);if(event.data?.type==='wb-artboard'&&event.data.event==='view')viewReports.push(event.data.value)});
       let previousLabels='';
       function sampleLabels(){
         const loading=document.getElementById('blank');
         if(loading && !loading.hidden && loading.classList.contains('is-loading')) loadingFrames.push(location.hash);
         const canvas=document.getElementById('artboards');
-        if(canvas && getComputedStyle(canvas).display!=='none' && getComputedStyle(canvas).visibility==='visible'){
+        if(canvas && !canvas.inert && getComputedStyle(canvas).display!=='none' && getComputedStyle(canvas).visibility==='visible'){
           const sample={page:document.getElementById('crumbPage').textContent,title:document.title,
             story:document.getElementById('scenarioControl').hidden?null:document.getElementById('scenarioName').textContent,
             preset:document.getElementById('sizeSwitcher').current,size:canvas.state.artboards[0]?.size,
@@ -127,14 +130,21 @@ collections:
     }
     async function pick(lens, scenario = 'default', expectPending = false) {
       const started = performance.now();
+      if (expectPending) {
+        await external({holdRenders:true});
+        await target.evaluate('viewReports=[]');
+      }
       await target.evaluate('location.hash=' + JSON.stringify('page.workbench.ts:' + scenario + '@laptop~' + (lens || 'design')));
       if (expectPending) {
-        await until(`${canvas}.artboards[0]?.target.scenario==='secondary' && !${canvas}.artboards[0]?.view?.ready`);
-        assert.equal(await target.evaluate('getComputedStyle(document.getElementById("artboards")).visibility'), 'hidden', 'outgoing pixels stay private while the requested story renders');
+        await until(`viewReports.some(view=>view.scenario==='secondary' && !view.ready)`);
+        assert.equal(await target.evaluate('document.getElementById("artboards").inert'), true, 'the outgoing view is inert during the navigation grace period');
         await until(`!document.getElementById('blank').hidden && document.getElementById('blank').classList.contains('is-loading')`);
         assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'slow story rendering shows the loading status');
+        assert.equal(await target.evaluate('getComputedStyle(document.getElementById("artboards")).visibility'), 'hidden', 'outgoing pixels stay private after the grace period');
         assert.equal(await target.evaluate('document.title'), 'Page · Error field · Storybook · Acme');
-        await until(`${canvas}.artboards[0].view.label==='Page / Error field' && !${canvas}.artboards[0].view.ready`);
+        await until(`viewReports.some(view=>view.label==='Page / Error field' && !view.ready)`);
+        assert.equal(await target.evaluate(`viewReports.some(view=>view.scenario==='secondary' && view.ready)`), false, 'acknowledgement without the matching render event cannot publish readiness');
+        await external({releaseRenders:true});
       }
       await until(`${canvas}.artboards[0]?.view?.ready && ${canvas}.artboards[0].target.lens===${JSON.stringify(lens || null)}${lens === 'storybook' ? ` && ${canvas}.artboards[0].target.scenario===${JSON.stringify(scenario)}` : ''}`);
       if (lens !== 'docs') {
@@ -232,9 +242,10 @@ collections:
     await until('document.getElementById("crumbPage").textContent === "Other"');
     assert.equal(await target.evaluate('document.title'), 'Other · Storybook · Acme', 'a pending lookup names its destination rather than the previous docs page');
     assert.equal(await target.evaluate('document.getElementById("scenarioName").textContent'), '', 'an unresolved story cannot retain the previous scenario label');
-    assert.deepEqual(await target.evaluate('({visibility:getComputedStyle(document.getElementById("artboards")).visibility,inert:document.getElementById("artboards").inert})'), {visibility:'hidden',inert:true}, 'the docs view is concealed as soon as the destination changes, including during catalog lookup');
+    assert.equal(await target.evaluate('document.getElementById("artboards").inert'), true, 'the outgoing docs view is inert immediately during catalog lookup');
     await until(`!document.getElementById('blank').hidden && document.getElementById('blank').classList.contains('is-loading')`);
     assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'}, 'one canvas status covers slow catalog lookup');
+    assert.equal(await target.evaluate('getComputedStyle(document.getElementById("artboards")).visibility'), 'hidden', 'the outgoing docs view is concealed after the grace period');
     await new Promise(resolve => setTimeout(resolve, 450));
     assert.deepEqual(await loadingStatus(), {hidden:false,text:'Loading preview…',loading:true,busy:'true'});
     assert.equal(await target.evaluate('document.getElementById("toast").textContent.includes("Asking Storybook")'), false, 'slow lookups do not start a competing toast');
@@ -350,9 +361,8 @@ collections:
     assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.lens==='storybook')"), false);
     await until("reports.some(r=>!r.pending && r.lens==='storybook' && r.scenario==='default')");
     await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:secondary~storybook'");
-    const embedded = "document.getElementById('workbench').contentDocument.getElementById('artboards').state.artboards[0]";
-    await until(`${embedded}?.target.scenario==='secondary' && !${embedded}.view?.ready`);
-    assert.equal(await target.evaluate('getComputedStyle(document.getElementById("workbench").contentDocument.getElementById("artboards")).visibility'), 'hidden');
+    await until("document.getElementById('workbench').contentWindow.viewReports.some(view=>view.scenario==='secondary' && !view.ready)");
+    assert.equal(await target.evaluate('document.getElementById("workbench").contentDocument.getElementById("artboards").inert'), true);
     await target.evaluate("document.getElementById('workbench').contentWindow.location.hash='#page.workbench.ts:default~storybook'");
     await until("reports.filter(r=>!r.pending && r.lens==='storybook' && r.scenario==='default').length===2");
     assert.equal(await target.evaluate("reports.some(r=>!r.pending && r.scenario==='secondary')"), false, 'a superseded story cannot acknowledge the current selection');

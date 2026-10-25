@@ -149,6 +149,9 @@ mechanism.
   picks, and channel messages.
   [preview.test.js](../../ui/legacy/preview.test.js) checks channel reuse,
   navigation fallback, and fallback reporting.
+  [content-frames.test.cjs](../../ui/legacy/content-frames.test.cjs) checks the
+  content renderer's cold and warm readiness: loading and acknowledgement cannot
+  replace a matching render event, and stale IDs, origins and sources are refused.
   [keys.test.js](../../ui/legacy/keys.test.js) checks that editor shortcuts are
   accepted only from the active Storybook iframe and its origin.
 - [startup.test.js](../../extension/startup.test.js) checks start commands, trust, and
@@ -156,11 +159,14 @@ mechanism.
 - [smoke-preview-sessions.cjs](../../scripts/smoke-preview-sessions.cjs) drives the
   production canvas with a channel-compatible Storybook fixture. It checks one
   preview load across mapped pages, story/lens switches and explicit artboards,
-  one index lookup per title, retained edits, delayed rendering,
-  painted page/story/artboard labels, continuous loading through delayed lookup
+  one index lookup per title, retained edits, explicitly held rendering,
+  committed page/story/artboard labels, continuous loading through delayed lookup
   and rendering, failure/retry and
   empty selection, editor acknowledgements, superseded picks, hidden cold
   startup and Reload.
+  Pending checks use renderer view reports; the canvas element retains the
+  outgoing displayed state during the navigation grace period. A held render
+  verifies that acknowledgement alone never publishes readiness.
 - No check verifies that the Storybook renderer never starts Workbench's
   application; add one before claiming the content-only boundary.
 
