@@ -12,8 +12,8 @@ page tree configures it, at startup when the host passes `--eager-previews`;
 the warm preview document ([preview-host.js](../../ui/legacy/preview-host.js),
 served as `/_workbench/preview-host.html`), which re-renders scenario, input
 and size changes without reloading modules and isolates successive previews;
-and the shared retained-session budget. Not implemented: pre-warming without
-the host flag, a browser runtime prepared before any native selection,
+and the shared retained-session budget. Not implemented: foreground priority
+over warming, a browser runtime prepared before any native selection,
 per-page runtime-state retention on return, and a measured bound that replaces
 the warm document ([implementation gaps](#implementation-gaps)). The Docs pool's status is in the
 [Docs host](docs-host.md).
@@ -35,12 +35,17 @@ hidden application controls or another canvas.
 
 ### Pre-warming on project start
 
-- When a trusted space with native pages starts, the Workbench server's
-  compiler starts without waiting for a request. It indexes the project,
-  declares its entries ([compiler](compiler.md#entries)), restores the
-  persistent cache and builds.
-- A request during pre-warming waits for that build, which contains its
-  entry, and never for a later one.
+- The host decides whether to spend resources warming a space: it passes
+  `--eager-previews` to the server. With the flag, when a trusted space with
+  native pages starts, the Workbench server's compiler starts without waiting
+  for a request. It indexes the project, declares its entries
+  ([compiler](compiler.md#entries)), restores the persistent cache and builds.
+  Without the flag, the server starts this work on the first page-tree request.
+  The extension and the standalone command both pass the flag.
+- Warming never blocks the page list or the first requested page. Foreground
+  requests take priority over warming work: a page the canvas asks for is
+  listed and built ahead of pages nobody has requested, and never waits for a
+  later build.
 - The canvas prepares its warm runtime as soon as the build reports, before a
   native page is selected.
 - Pre-warming never runs project code outside the Node evaluator, and never
@@ -151,12 +156,12 @@ in the [Docs host](docs-host.md#verification).
 
 ## Implementation gaps
 
-- Pre-warming on space start depends on the host passing `--eager-previews`,
-  which the extension and the standalone command both pass. With it,
+- Warming does not give way to foreground requests. With `--eager-previews`,
   `Space::warm_docs` assembles the page tree at startup, which indexes the
   project and configures the compilers, then requests each docs lens's bundle
-  in turn ([server](../system/server.md#request-tracing)); without it, the
-  server waits for the first page-tree request.
+  in turn ([server](../system/server.md#request-tracing)); the compiler
+  declares and builds every entry, and a first requested page waits for that
+  whole build ([first-page gap](../system/performance.md#implementation-gaps)).
 - Server-side pre-warming does not prepare the canvas's shared browser runtime
   before a native page is selected.
 - Returning to a page the warm document showed earlier loads its modules

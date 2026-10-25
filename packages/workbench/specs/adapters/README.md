@@ -85,8 +85,9 @@ evaluator only for the parts that have to run JavaScript:
 | Storybook | Index and story requests, proxied | Storybook's dev server, started and owned by the server on a local socket ([how](storybook.md#a-storybook-the-server-runs)) |
 | Custom adapters | The browser mount, native plugin capabilities and Rust-native rules | The project's JavaScript loaders |
 
-Storybook's dev server is a separate owned child, not an operation inside the
-Node evaluator. The server's
+Storybook's dev server is a separate preview service running project code,
+owned by the server but not an evaluator and outside the
+[evaluator limit](../system/server.md#processes-and-connections). The server's
 [processes and connections](../system/server.md#processes-and-connections) own
 every child process: the Node evaluator (one per space, not one per adapter),
 the definition-index evaluator and Storybook's dev server, their lifetimes,

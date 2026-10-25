@@ -40,10 +40,11 @@ proposed, not agreed.
 
 ### Work is shared per project
 
-- A space root has one compiler per profile in the server, and at most
-  one Node evaluator, shared by every native page in it. Opening another
-  page, scenario, size or lens in the same space never starts another compiler
-  ([gap](#implementation-gaps)).
+- A space root has one compiler per profile in the server, and the space's
+  server stays within its [evaluator limit](server.md#processes-and-connections):
+  one Node evaluator shared by every native page and by definition indexing.
+  Opening another page, scenario, size or lens in the same space never starts
+  another compiler or evaluator ([gap](#implementation-gaps)).
 - Code shared by a project's native pages is compiled once per project and
   adapter. Each compatible warm document retains its initialized shared runtime
   across pages; independently retained documents own separate mutable runtimes.
@@ -259,12 +260,10 @@ comparisons from integrated and installed compatibility evidence.
 - **Complete page list.** The agreed listing target is not met on the large
   fixture ([page-listing record](../../research/page-listing.md)).
 - **Shared evaluator.** Definition indexing can start a short-lived evaluator
-  in addition to the compiler's persistent one
-  ([process model](server.md#processes-and-connections)). A Storybook the server
-  runs is a further Node process, the project's own `storybook dev`, not an
-  evaluator. Literal-only listing avoids that work; a React/HTML adapter alone
-  does not guarantee every definition or project config can be listed without
-  JavaScript.
+  in addition to the compiler's persistent one, so a space can run two
+  ([evaluator limit](server.md#processes-and-connections)). Literal-only
+  listing avoids that work; a React/HTML adapter alone does not guarantee every
+  definition or project config can be listed without JavaScript.
 - **Pipeline acceptance.** Format-by-format navigation and edit confirmation
   through the shipping server and VS Code webview is open. Scoped shipping Docs navigation and
   installed startup checks do not establish the full format or platform matrix.

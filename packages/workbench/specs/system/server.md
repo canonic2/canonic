@@ -130,10 +130,15 @@ processes (decided by the owner on 2026-10-16 and 2026-10-18).
 The editor host and the standalone command are Node processes too, outside the
 server.
 
-Definition indexing uses its own short-lived process
-([gap](#implementation-gaps)); one persistent compiler evaluator does not bound
-all Node process starts. A successful saved literal listing does not need
-either evaluator.
+**Evaluator limit.** Each space's server runs at most one Node evaluator, and
+every evaluation of project code for that space goes through it: definitions,
+`workbench.config.ts`, adapter steps and definition indexing. The limit is per
+space, so a host serving several spaces runs one per space. A Storybook the
+server runs is not an evaluator: it is a separate preview service running the
+project's own code, outside this limit. Definition indexing currently starts
+its own short-lived evaluator beside the long-lived one, which is an
+[implementation gap](#implementation-gaps) against this limit. A successful
+saved literal listing needs no evaluator.
 
 - **Project code stays out of the server and the editor.** Server-side project
   evaluation never runs in the native server or the extension host. Project
