@@ -33,8 +33,8 @@ own artboard state, geometry and context publication. `navigation/` owns request
 destinations, the 200 ms outgoing-view grace period and supersession;
 `preview-sessions/` owns renderer transport,
 retention and the story catalog; `review/` owns capture and delivery workflows.
-Application composition and registration live under `../src/bootstrap/`.
-`../src/bootstrap/canvas.js` composes the selected scenario's declared `artboards` into independent
+Element registration lives under `../src/bootstrap/`.
+`../src/views/canvas/bindings.js` composes the selected scenario's declared `artboards` into independent
 `wb-canvas` artboards inside the existing canvas region. The existing shell
 continues to own its sidebar, top bar, toolbar, source/configuration/export
 dialogs and routing. Its controls target the selected instance; camera and

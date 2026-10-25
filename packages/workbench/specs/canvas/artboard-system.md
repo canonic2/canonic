@@ -23,7 +23,7 @@ inside an artboard. The dedicated content entry point implements that boundary.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui/src/bootstrap/canvas.js` | A scenario's declared artboards, selected-instance commands, preview controls, review and publication in the existing shell; scenarios remain alternatives. |
+| `ui/src/views/canvas/bindings.js` | A scenario's declared artboards, selected-instance commands, preview controls, review and publication in the existing shell; scenarios remain alternatives. |
 | `ui/src/components/canvas/element.js` | Keyed artboard shells, labels, resizing and shared camera; no chrome or server operations. |
 | `ui/src/modules/canvas/model.js`, `geometry.js` | Serializable state and pure geometry/size policy. |
 | `ui/src/modules/canvas/controller.js` | Sole state writer, instance IDs/generations, runtime creation/replacement/disposal, park/resume outside visible state, capture locks. |

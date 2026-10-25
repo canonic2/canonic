@@ -153,7 +153,8 @@ ui/src/
   app/sidebar/               VS Code sidebar webview document, styles and module entry
   app/workbench/             Canvas shell document, styles and module entry, served as /_workbench/
   app/viewer/                Portable export viewer, copied into each portable export
-  bootstrap/                 Canvas composition and element registration
+  bootstrap/                 Element registration
+  views/canvas/              Canvas bindings to the existing shell
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
   host/                     Browser HTTP transport
@@ -176,8 +177,9 @@ presentation owner. Importing an element class does not register it.
 
 `app/workbench/workbench.js` registers the browser controls and composes the canvas;
 `app/sidebar/sidebar.js` is the direct webview module entry. `app/renderer/renderer.js`
-composes the content-only renderer. Size and docs bridges also initialize from bootstrap.
-`bootstrap/canvas.js` connects capability ports to the existing shell. Its
+composes the content-only renderer. `app/workbench/sizes.js` and `app/workbench/docs.js`
+hand the size and docs rules to the classic scripts.
+`views/canvas/bindings.js` connects capability ports to the existing shell. Its
 legacy chrome adapter owns the current DOM controls and restores the previous
 zoom API when its connection ends.
 

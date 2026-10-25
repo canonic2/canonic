@@ -7,14 +7,14 @@ import {
   describe,
   dimensionsText,
   supported,
-} from '../../../contracts/src/sizes/browser/choice.js';
+} from '../../../../contracts/src/sizes/browser/choice.js';
 import {
   accepts,
   clamp,
   dimensions,
   fills,
-} from '../../../contracts/src/sizes/browser/geometry.js';
-import { defaultSizes } from '../../../contracts/src/sizes/browser/size.js';
+} from '../../../../contracts/src/sizes/browser/geometry.js';
+import { defaultSizes } from '../../../../contracts/src/sizes/browser/size.js';
 
 const sizes = {
   defaultSizes,

@@ -2118,8 +2118,8 @@
   }
 
   function whenRules(then) {
-    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'bootstrap/sizes.js', function () {
-      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'bootstrap/docs.js', function () {
+    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'app/workbench/sizes.js', function () {
+      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'app/workbench/docs.js', function () {
         lensRules = window.wbDocsLenses || NO_DOCS;
         if (window.wbMultiArtboardHost) whenModule(function () { return !!window.wbMultiCanvas; }, 'wb-multi-ready', 'app/workbench/workbench.js', then);
         else then();

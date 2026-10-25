@@ -49,7 +49,7 @@ implementation gap; the Docs example hot-update limit is in
   decides a page's lenses, the lens it shows, its default lens, the lens a
   docs link opens, the lens the address names, and the canvas mode. It is
   pure; the canvas loads it through
-  [bootstrap/docs.js](../../ui/src/bootstrap/docs.js) and waits for it
+  [app/workbench/docs.js](../../ui/src/app/workbench/docs.js) and waits for it
   before applying the config, and Node tests check it. Off a server
   (`file://`) the module can't load and the canvas shows no docs lenses.
 - **Docs entries.** The server keeps one entry per Markdown file, naming the

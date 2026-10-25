@@ -128,7 +128,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | --- | --- | --- |
 | `page-list` | Collections, groups, pages, problems and search | `legacy/page-list.js`, `legacy/sidebar.js` |
 | `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `legacy/top-bar.js`, top-bar parts of `legacy/workbench.js` |
-| `canvas` | The canvas element, artboard labels and loading feedback | `bootstrap/canvas.js`, `modules/canvas/legacy-chrome.js` |
+| `canvas` | The canvas element, artboard labels and loading feedback | `views/canvas/bindings.js` (in place), `modules/canvas/legacy-chrome.js` |
 | `toolbar` | Annotation tools and review actions | Toolbar parts of `legacy/workbench.js` and `legacy/annotations.js` |
 | `configure-pages` | The Configure pages dialog | `legacy/config-editor.js` |
 | `export` | The export dialog | `components/export-dialog/` |
@@ -138,8 +138,8 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 Other existing files move as follows:
 
 - **Sizes.** Size rules and the selected size join `canvas` (the artboard
-  widths it lays out), with `bootstrap/sizes.js`'s wiring moving to the canvas
-  document's entry and bindings; saving sizes to `workbench.yaml` is a
+  widths it lays out), with the size bridge for the classic scripts
+  (`app/workbench/sizes.js`) folding into the canvas bindings; saving sizes to `workbench.yaml` is a
   `project` action. `size-switcher` and the `size-dialog` and `sizes-editor`
   dialogs it opens are `top-bar` elements; each moves to `components/` if a
   second view uses it. `bootstrap/register-sizes.js` becomes
@@ -148,7 +148,8 @@ Other existing files move as follows:
   `space-mark` stay shared components, used by the page list in the sidebar
   and by the top bar; `bootstrap/register-space.js` becomes element definitions
   in those entries.
-- **Docs on the canvas.** `bootstrap/docs.js` and `modules/docs/canvas/` join
+- **Docs on the canvas.** The docs bridge for the classic scripts
+  (`app/workbench/docs.js`) and `modules/docs/canvas/` join
   the `docs` capability, with the canvas wiring in the `canvas` view's bindings.
 - **Icons.** `legacy/icons.js` becomes a shared module under `components/`
   used by every view that draws icons; `legacy/canonic.svg` moves to `theme/`.
@@ -182,9 +183,11 @@ The port has two parts with different starting points:
    preview-host entry, `legacy/capture-page.js` the capture entry), and the
    code it loads is separated into views, shared components, capability
    modules and host adapters where that code already has those roles.
-   `bootstrap/canvas.js`, which connects capabilities to the existing shell,
-   becomes `views/canvas/bindings.js`, so step 2 has a canvas binding to
-   extend; the `canvas` step adds the view's element.
+   The module that connects capabilities to the existing shell is
+   `views/canvas/bindings.js`, so step 2 has a canvas binding to extend; the
+   `canvas` step adds the view's element. Until then the bindings also create
+   the capabilities and their HTTP client, which belong to the canvas
+   document's entry once the `canvas` step moves that composition there.
    No behavior changes; imports, serving, path consumers, webview resources,
    packaging and design pages follow the moved paths. Before the first move,
    the package's developer documentation names these locations, and the

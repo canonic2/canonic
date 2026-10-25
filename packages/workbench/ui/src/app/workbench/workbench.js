@@ -7,7 +7,7 @@ import {
   registerSpaceComponents,
   registerCanvasComponents,
 } from '../../bootstrap/register.js';
-import { initialize } from '../../bootstrap/canvas.js';
+import { initialize } from '../../views/canvas/bindings.js';
 
 registerSpaceComponents();
 registerSizeComponents();

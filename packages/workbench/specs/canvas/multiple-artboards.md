@@ -48,7 +48,7 @@ restrict the tool to a particular comparison workflow.
 
 ## Instance model and review limits
 
-`ui/src/bootstrap/canvas.js` composes the artboard modules under
+`ui/src/views/canvas/bindings.js` composes the artboard modules under
 `ui/src/modules/` through `wb-canvas` inside the shipping canvas region. No
 replacement top bar, sidebar, toolbar, artboard picker or inspector is installed.
 
