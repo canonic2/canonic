@@ -6,7 +6,12 @@ import {
   createPreviewSessions,
   fetchStoryCatalog,
 } from '../../modules/preview-sessions/index.js';
-import { capture, reference, createReview, createBrowserReview } from '../../modules/review/index.js';
+import {
+  capture,
+  reference,
+  createReview,
+  createBrowserReview,
+} from '../../modules/review/index.js';
 import { createNavigation, shownIterations } from '../../modules/navigation/index.js';
 import { requestJson as json } from '../../host/http.js';
 import { dimensions } from '../../../../contracts/src/sizes/browser/geometry.js';
