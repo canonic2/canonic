@@ -9,24 +9,33 @@ import { fileURLToPath } from 'node:url';
 
 const components = fileURLToPath(new URL('.', import.meta.url));
 const design = path.resolve(components, '../../../design');
+const views = path.resolve(components, '../views');
 
-const elements = fs
-  .readdirSync(components, { withFileTypes: true })
-  .filter(
-    (entry) =>
-      entry.isDirectory() && fs.existsSync(path.join(components, entry.name, 'element.js')),
-  )
-  .map((entry) => entry.name);
+/** Element folders under `folder`, as `{ name, at }` with `at` relative to `src/`. */
+function elementsIn(folder, at) {
+  if (!fs.existsSync(folder)) return [];
+  return fs
+    .readdirSync(folder, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(folder, entry.name, 'element.js')))
+    .map((entry) => ({ name: entry.name, at: `${at}/${entry.name}/` }));
+}
+
+// Shared elements, and those a single view keeps in its own `components/`.
+const elements = [
+  ...elementsIn(components, 'src/components'),
+  ...(fs.existsSync(views) ? fs.readdirSync(views, { withFileTypes: true }) : [])
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) =>
+      elementsIn(path.join(views, entry.name, 'components'), `src/views/${entry.name}/components`),
+    ),
+];
 
 void test('every component has a design page listed under Components', () => {
   assert.ok(elements.length > 0);
-  for (const name of elements) {
+  for (const { name, at } of elements) {
     const file = (ending) => path.join(design, name + ending);
     for (const ending of ['.md', '.examples.ts', '.workbench.ts']) {
-      assert.ok(
-        fs.existsSync(file(ending)),
-        `design/${name}${ending} is missing for src/components/${name}/`,
-      );
+      assert.ok(fs.existsSync(file(ending)), `design/${name}${ending} is missing for ${at}`);
     }
     const definition = fs.readFileSync(file('.workbench.ts'), 'utf8');
     assert.match(

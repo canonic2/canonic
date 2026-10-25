@@ -15,10 +15,24 @@ evaluator,
 `sdk/` for the published definition API, and `contracts/` for shared pure rules
 and wire data. See [module ownership](specs/system/modules.md).
 
-`ui/legacy/` holds the HTML/script shell and content document; `ui/src/` holds
-native JavaScript controllers, Web Components and CSS. Hosts serve or copy these
-files unchanged. See [standalone UI use](ui/README.md); project compilation is
-separate from UI delivery.
+`ui/legacy/` holds the HTML/script shell and the documents not yet moved;
+`ui/src/` holds native JavaScript controllers, Web Components and CSS. Hosts
+serve or copy these files unchanged. See [standalone UI use](ui/README.md);
+project compilation is separate from UI delivery.
+
+The UI is moving, one document at a time, into this layout under `ui/src/`
+([browser UI port](specs/system/ui-port.md#target-layout)):
+
+| Location | Holds |
+| --- | --- |
+| `app/<document>/` | A document's HTML and its entry module, composition only |
+| `views/<view>/` | One area of the interface: its main element, `bindings.js`, and `components/<name>/` for elements only it uses |
+| `components/<name>/` | Elements shared by several views or documents |
+| `modules/<capability>/` | Capability state, rules and capability-specific adapters |
+| `host/` | Transport clients shared across capabilities |
+| `theme/`, `vendor/` | Standalone tokens and host theme assets; pinned third-party assets |
+
+Every element, shared or view-local, has its design page under `design/`.
 
 ```sh
 pnpm install --frozen-lockfile

@@ -13,7 +13,7 @@ with annotations, screenshots and agent handoffs. Projects supply
 | `extension/` | VS Code activation, commands, sidebar/webview integration and extension manifest |
 | `server/` | Rust Cargo package: the Workbench server (HTTP, project services, page index and preview compiler); `server/node/` owns its host, the standalone command and the Node evaluator |
 | `capture/` | Electron screenshot helper (`app/`), runtime acquisition (`runtime/` bundle), window capture and native stream lifecycle |
-| `ui/` | Browser-native JavaScript controllers, Web Components (`src/components/`), themes (`src/theme/`), canvas/content documents (`legacy/`), preview adapters (`preview/`) and portable viewer (`viewer/`) |
+| `ui/` | Browser-native JavaScript: documents and entries (`src/app/<document>/`, moving there from `src/bootstrap/` and `legacy/` one document at a time), views (`src/views/<view>/`), Web Components (`src/components/`), capabilities (`src/modules/`), host clients (`src/host/`), themes (`src/theme/`), preview adapters (`preview/`) and portable viewer (`viewer/`); `specs/system/ui-port.md` owns the target layout |
 | `sdk/` | Published `@canonic2/workbench` definition helpers and authoring types |
 | `contracts/` | Shared manifest/YAML interpretation and pure data/rules; browser runtime modules are JavaScript with declarations for backend TypeScript consumers |
 | `scripts/` | Product checks, temporary VSIX assembly, per-platform builds and releases |
@@ -57,8 +57,9 @@ owns the process model and protocol.
 - Capability modules use `<part>/src/modules/<capability>/`; the Node host uses
   `server/node/src/modules/`. Rust uses Cargo's standard `server/src/` layout.
   Keep capability adapters with their owner, application composition at entry
-  points, shared browser components in `ui/src/components/`, and themes in
-  `ui/src/theme/`. Existing capability directories are bounded migration debt.
+  points (`ui/src/app/<document>/`), shared browser components in
+  `ui/src/components/`, view-only ones in `ui/src/views/<view>/components/`, and
+  themes in `ui/src/theme/`. Existing capability directories are bounded migration debt.
 - Pure rules import no DOM, Node, VS Code or Electron. `contracts/` has only
   demonstrated cross-part rules and data, not application state or a utilities
   dumping ground. Browser source never imports a host service, even for types.
@@ -513,8 +514,16 @@ and `packages/workbench/specs/ui/themes.md`; read them before component or theme
 - Workbench UI files are browser-native JavaScript, HTML and CSS. No TypeScript,
   transpilation, bundling or generated implementation participates in UI delivery.
   Runtime imports, including shared browser rules, resolve directly to JavaScript.
+- The UI is moving, one document at a time, into the layout in
+  `packages/workbench/specs/system/ui-port.md`: `ui/src/app/<document>/` for a
+  document's HTML and entry, `ui/src/views/<view>/` for one interface area with
+  its `bindings.js` and view-only `components/<name>/`, `ui/src/components/<name>/`
+  for shared elements, `ui/src/modules/<capability>/` for capability logic and
+  `ui/src/host/` for shared transport clients. Structural moves keep existing
+  state mechanisms; Lattice adoption waits for the readiness point that page names.
 - New components and substantial component migrations use autonomous Web
-  Components in `ui/src/components/<name>/`. Use
+  Components in `ui/src/components/<name>/`, or a view's `components/<name>/`
+  when only that view uses them. Use
   `wb-` tags, open Shadow DOM, owned styles, explicit inputs, and documented public
   events. Register at browser entry points; keep DOM modules out of Node imports.
 - Controllers own application state and product operations. Elements own rendering
@@ -531,7 +540,7 @@ and `packages/workbench/specs/ui/themes.md`; read them before component or theme
 - Verify native semantics, keyboard and focus in a real browser; cover defaults,
   custom host colors and high contrast. Check direct webview and independent browser-host asset
   loading, CSP, and packaging for migrated components and styles.
-- Every element in `ui/src/components/<name>/` has its docs page in the Workbench
+- Every element in `ui/src/components/<name>/` or `ui/src/views/<view>/components/<name>/` has its docs page in the Workbench
   space, in the same change: `design/<name>.md` with one section per meaningful
   state and a **Public API** section, `design/<name>.examples.ts` rendering the
   shipping element through its public inputs, and `design/<name>.workbench.ts`
@@ -542,7 +551,8 @@ and `packages/workbench/specs/ui/themes.md`; read them before component or theme
 - Existing vanilla UI is migration debt, not evidence that the target is shipped.
   Local fixes may remain in place; migrate bounded controls when substantially
   reworking them. Do not combine a component task with an unsolicited full UI
-  rewrite, a new rendering framework, or changes to project preview adapters.
+  rewrite or changes to project preview adapters; the agreed port is the only
+  route to a framework.
 
 These instructions refine the shared UI contracts;
 they do not distribute a UI package or configuration to consuming projects.

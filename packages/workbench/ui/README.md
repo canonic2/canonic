@@ -4,9 +4,11 @@ The UI is authored and shipped as JavaScript ES modules, Web Components, HTML
 and CSS. Serve these files unchanged from a static host. There is no UI build,
 transpilation, bundling, generated JavaScript copy or runtime package installation.
 
-`src/components/<name>/` owns an element, its styles and helpers. Importing an
-element does not register it. `src/bootstrap/` composes registration and application
-controllers; `src/modules/` owns capabilities; `src/theme/` supplies standalone
+`src/components/<name>/` owns an element, its styles and helpers, and
+`src/views/<view>/components/<name>/` an element only one view uses. Importing an
+element does not register it. `src/app/<document>/` holds a moved document's HTML
+and entry, and `src/bootstrap/` the registration and composition of documents not
+yet moved; `src/modules/` owns capabilities; `src/theme/` supplies standalone
 defaults. Browser-used rules under `../contracts/src/` are also JavaScript modules.
 Their declaration files support backend consumers and are never loaded by browsers.
 
