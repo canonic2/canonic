@@ -1,6 +1,7 @@
 /** Connect capability owners to the existing shell and its selected artboard. */
 
 import { bindLegacyChrome, createController, createPublisher } from '../../modules/canvas/index.js';
+import { bindToolbar } from '../toolbar/bindings.js';
 import {
   createRuntime,
   createPreviewSessions,
@@ -379,6 +380,14 @@ function mount() {
       },
     },
     previewControls: chrome.wbPreviewControls,
+  });
+  bindToolbar({
+    document,
+    signal,
+    selected,
+    command,
+    act,
+    say,
     copyReference: () => chrome.wbReference.copy(reference(presented())),
   });
   const delivery = createBrowserReview(document);

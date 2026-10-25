@@ -156,6 +156,7 @@ ui/src/
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
   views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation and styles
   views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size and Actions elements and registration
+  views/toolbar/             Annotation/review control bindings and floating toolbar/view-control styles
   views/docs/                A docs lens's reading page, its embedded examples and highlighting
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
@@ -189,8 +190,9 @@ rules; `views/page-list/page-list.js` owns row rendering and interaction. They
 retain the classic `wbPageList` API and existing closure state for the shell and
 sidebar until the project/page-list adoption step.
 `views/canvas/bindings.js` connects capability ports to the existing shell. Its
-legacy chrome adapter owns the current DOM controls and restores the previous
-zoom API when its connection ends.
+legacy chrome adapter owns camera controls and restores the previous zoom API
+when its connection ends. `views/toolbar/bindings.js` connects the existing
+annotation and reference controls to their commands with the same lifetime.
 
 Navigation owns pending destination and request generations. The preview-session
 controller owns the ordinary renderer's parking/expiry policy and shared catalog;

@@ -13,6 +13,7 @@
     <!-- View rules precede the shell's shared menu/control rules, as in the authored cascade. -->
     <link rel="stylesheet" href="/_workbench/ui/src/views/top-bar/top-bar.css" />
     <link rel="stylesheet" href="/_workbench/ui/src/app/workbench/workbench.css" />
+    <link rel="stylesheet" href="/_workbench/ui/src/views/toolbar/toolbar.css" />
     <link rel="stylesheet" href="/_workbench/ui/src/views/page-list/page-list.css" />
     <link rel="stylesheet" href="annotations.css" />
     <link rel="stylesheet" href="preview-controls.css" />
@@ -363,7 +364,7 @@
 
             <!-- One shape button plus a caret: the button draws the shape it
              shows, the caret swaps which shape that is. The button's icon is
-             set from annotations.js, so it carries no data-icon here. -->
+             set by the toolbar bindings, so it carries no data-icon here. -->
             <span class="wb-shape">
               <button
                 class="wb-action wb-tool"
