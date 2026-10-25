@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lattice task list example</title>
+    <script type="importmap">
+      { "imports": {
+        "@canonic2/lattice": "../../src/index.js",
+        "@canonic2/lattice/collection": "../../src/modules/collection/collection.js",
+        "@canonic2/lattice/elements": "../../src/modules/elements/elements.js"
+      } }
+    </script>
+    <style>
+      body { font: 14px system-ui; max-width: 760px; margin: 24px auto; padding: 0 12px; }
+      nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+      output { display: block; margin: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Task collection</h1>
+    <p>Fixed-height rows. Arrow keys move focus; Select chooses a task. Text commits on change.</p>
+    <nav aria-label="Task actions">
+      <button id="insert">Insert above viewport</button>
+      <button id="remove">Remove selected</button>
+      <button id="reuse">Replace selected key</button>
+      <button id="focus">Focus selected</button>
+      <button id="done">Complete all</button>
+      <button id="dispose">Tear down view</button>
+    </nav>
+    <div id="app"></div>
+    <script type="module">
+      import { createTasks } from './tasks.js';
+      import { mountTasks } from './app.js';
+      const count = new URL(location.href).searchParams.get('count') === '1000' ? 1000 : 10000;
+      const tasks = createTasks(count);
+      const lifetime = new AbortController();
+      const view = mountTasks(document.querySelector('#app'), { signal: lifetime.signal, tasks });
+      const command = (id, run) => document.getElementById(id).addEventListener('click', run, { signal: lifetime.signal });
+      command('insert', () => tasks.insert(view.list.firstVisibleKey));
+      command('remove', () => { const key = tasks.state.get().selectedKey; if (key !== null) tasks.remove(key); });
+      command('reuse', () => { const key = tasks.state.get().selectedKey; if (key !== null) tasks.reuse(key); });
+      command('focus', () => { const key = tasks.state.get().selectedKey; if (key !== null) view.list.focusKey(key); });
+      command('done', () => tasks.markAll(true));
+      command('dispose', () => lifetime.abort());
+      window.addEventListener('pagehide', () => lifetime.abort(), { once: true });
+    </script>
+  </body>
+</html>

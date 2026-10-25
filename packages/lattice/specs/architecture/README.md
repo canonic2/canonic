@@ -29,7 +29,7 @@ the required contract change explicitly and the contract is changed first.
 | `src/report.js` | Callback error handling shared by the store and the collection: the last-resort reporter and the thenable check | Exists |
 | `src/modules/elements/` | The element helpers behind the `@canonic2/lattice/elements` subpath | Exists, as [element helpers](elements.md) describes |
 | `src/testing/` | Test support behind `@canonic2/lattice/testing` | Exists, as [testing support](testing.md) describes |
-| `examples/` | Runnable examples written on the real API, with their tests | Exists: the filters example |
+| `examples/` | Runnable examples written on the real API, with their tests | Filters and task collection examples; a loopback host serves unchanged source |
 | `tests/` | Package-level import, tooling and platform tests | Exists |
 | Type-check configurations | Pure, DOM and tooling checks | Exist, as [package](package.md) describes |
 | `types/shared-platform.d.ts` | Platform APIs pure modules may use; development only, not shipped | Exists |

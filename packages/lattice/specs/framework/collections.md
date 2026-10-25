@@ -4,6 +4,29 @@ Application elements own row presentation and window geometry. The keyed
 [collection](../contracts/collections.md) supplies membership and item inputs;
 it does not mount rows or choose a viewport.
 
+## Ownership
+
+| Area | Owner |
+| --- | --- |
+| Ordinary, shared-map and per-item stores | `createStore`; application conventions compose them |
+| Keyed records, incarnations and bulk commits | `createCollection` |
+| Which item is selected | Application capability policy; a list input patches affected retained rows |
+| Keyed row reconciliation | Candidate reusable mechanics for retained identity, incarnation replacement and cleanup |
+| Windowing | Candidate optional mechanics for retained ranges, entering/leaving lifetimes and focus pinning |
+| Recycling | Experimental until benefits justify reset and lifecycle complexity |
+
+Framework collection mechanics coordinate retained items and their lifetimes
+through explicit callbacks. Elements supply presentation and placement;
+application bindings connect inputs and intent to capability actions. Mechanics
+do not choose markup, styling or selection policy. Each state-model convention
+does not require a separate framework API.
+
+The runnable [task collection example](../../examples/tasks/README.md) uses
+shipping APIs and the guard below. Its hand-written coordination is a baseline
+for identifying the smallest reusable mechanics, not a requirement that every
+application maintain its own reconciliation and windowing implementation.
+No shared presentation API is adopted by the example itself.
+
 ## Guard completed reconciliation
 
 When both an animation-frame callback and a native scroll event can render a
