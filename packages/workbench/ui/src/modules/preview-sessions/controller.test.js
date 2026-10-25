@@ -18,7 +18,7 @@ const declared = {
   pageLabel: 'Feedback',
   artboards: ['info', 'warning'].map((id) => ({ id, label: id, width: 320, height: 120 })),
 };
-function fixture() {
+function fixture(command = () => {}) {
   const visible = new Map();
   const parked = new Map();
   const closed = [],
@@ -57,8 +57,9 @@ function fixture() {
     conceal(id, value) {
       concealed.push([id, value]);
     },
-    async command(id, command, value) {
-      commands.push({ id, command, value });
+    async command(id, name, value) {
+      commands.push({ id, command: name, value });
+      await command(id, name, value);
     },
     busy: () => busy,
     async stories() {
@@ -158,6 +159,44 @@ void test('returning to an iteration before the artboard reports the last one st
     ],
   );
   f.sessions.dispose();
+});
+
+void test('a superseded iteration cannot re-identify replacement or retained renderers after its command settles', async (t) => {
+  for (const replacement of [false, true]) {
+    await t.test(
+      replacement ? 'another page creates new renderers' : 'another iteration retains renderers',
+      async (t) => {
+        const delayed = Promise.withResolvers();
+        const f = fixture((_id, command, value) =>
+          command === 'navigate' && value.navigation === 'old' ? delayed.promise : undefined,
+        );
+        t.after(() => f.sessions.dispose());
+        const design = {
+          ...declared,
+          target: { ...declared.target, lens: null, navigation: 'initial' },
+        };
+        await f.sessions.activate(design);
+        const old = f.sessions.iterate({ warning: 'bold' }, 'old');
+        assert.ok(f.commands.some((c) => c.command === 'navigate' && c.value.navigation === 'old'));
+        if (replacement)
+          await f.sessions.activate({ ...page, target: { ...page.target, navigation: 'new' } });
+        else await f.sessions.iterate({}, 'new');
+        const settled = f.commands.length;
+        delayed.resolve();
+        await old;
+        assert.deepEqual(
+          f.commands.slice(settled),
+          [],
+          'superseded work sends no late identity writes',
+        );
+        assert.equal(
+          f.commands.filter((c) => c.command === 'identify' && c.value === 'new').length,
+          replacement ? 0 : 1,
+          'retained unchanged artboards receive the current identity',
+        );
+      },
+    );
+  }
 });
 
 void test('outgoing artboards survive until presentation commits or the grace period expires', async () => {

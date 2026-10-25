@@ -125,15 +125,16 @@ export function createPreviewSessions(ports) {
       const wanted = (board) => iterations?.[board.target.artboard || ''] || null;
       const last = (board) =>
         requested.has(board.id) ? requested.get(board.id) : board.target.iteration || null;
-      const changed = ports
-        .visible()
-        .filter(
-          (board) =>
-            (!board.target.lens || board.target.lens === 'design') && last(board) !== wanted(board),
-        );
+      const boards = ports.visible();
+      const changed = boards.filter(
+        (board) =>
+          (!board.target.lens || board.target.lens === 'design') && last(board) !== wanted(board),
+      );
       for (const board of changed) requested.set(board.id, wanted(board));
-      await Promise.all(
-        changed.map((board) =>
+      // Issue the entire request before yielding. A later selection may reuse
+      // these renderers or replace the visible group while a command is pending.
+      await Promise.all([
+        ...changed.map((board) =>
           ports.command(board.id, 'navigate', {
             src: board.target.src,
             scenario: board.target.scenario,
@@ -143,14 +144,12 @@ export function createPreviewSessions(ports) {
             ...(navigation ? { navigation } : {}),
           }),
         ),
-      );
-      if (navigation)
-        await Promise.all(
-          ports
-            .visible()
-            .filter((board) => !changed.includes(board))
-            .map((board) => ports.command(board.id, 'identify', navigation)),
-        );
+        ...(navigation
+          ? boards
+              .filter((board) => !changed.includes(board))
+              .map((board) => ports.command(board.id, 'identify', navigation))
+          : []),
+      ]);
     },
     finish,
     identify(navigation, except) {
