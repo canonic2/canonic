@@ -595,6 +595,55 @@ plus work counts for the mechanics comparison. These omit asynchronous
 rendering and some callbacks; do not use them to claim a frame/presentation
 budget pass, and do not rescale prior results.
 
+### Example mechanics proposal and comparison (2026-10-25, before comparison)
+
+The hand-written task example is committed as `7e39d4dea3ac`. It uses shipping
+state APIs, fixed 32 px rows, a 480 px viewport and four rows of overscan on
+each side. Initial mounting retains 19 rows, a middle window 23, plus at most
+one focused row. Capability creation and view attachment are distinct phases;
+the comparison reports both, rather than hiding capability construction.
+
+The provisional [retained-items surface](../specs/framework/collection-mechanics.md)
+has creation, placement, removal and error ports, plus `setKeys`, `retain`,
+`get` and `dispose`. It owns the keyed registry and incarnation lifetimes,
+supports full-list or bounded retention and one pinned item, and never chooses
+DOM, styling, actions or selection. Implement it only in the ignored lab.
+The experimental list adapter replaces the example's hand-written coordination
+but uses the same capability, bindings, row constructor and placement/removal
+callbacks. The candidate can reuse an already validated immutable keys array
+and avoid the per-range position map by using known range indices; record
+its complete cost rather than assigning a speedup to
+callback abstraction alone. Recycling is excluded.
+
+Compare hand-written H0 and prototype P1 at 1,000 and 10,000 items. Smoke one
+fresh page per size/variant, then take three fresh pages per cell (12 pages).
+Use seeded order and a separate three-page-per-variant confirmation at 10,000
+items. No tracing or allocation sampling runs in timing cells. Per page, record
+first capability creation and view attachment separately. For warm setup and
+teardown take five warmups and ten measured rounds. Batched operations take
+five warmups and ten measured rounds: 20 one-viewport changes, 20 end jumps,
+1,000 unchanged-range calls, 1,000 selection switches and 20 same-key
+replacements per round. Timers include synchronous state/binding/DOM work for
+the named operation and exclude asynchronous rendering; flush a frame outside
+each round. Use page medians, nearest-rank p50/p95/max and IQR.
+
+After timing, run interaction/model and observed port-count checks. Then
+release the timed capability/view before measuring empty, state-only and
+mounted GC baselines for a fresh capability; report total and presentation-
+only heap and DOM counts separately. Capture endpoint ownership after disposal.
+Correctness includes new incarnations, duplicate rejection before mutation,
+selective assignment, one focused pin, drafts, visible keyboard destinations,
+fallback, anchors, and cleanup. Exercise the prototype's partial creation/
+placement failure and aggregate disposal separately, without weakening the
+application checks. Report setup/lifetime work even if hot reconciliation wins.
+
+A candidate is supported for owner review only if all checks hold and no
+named timing or total retained-heap median meaningfully regresses (over 5% of
+H0 and larger than both IQRs). Presentation-only heap remains visible. A small
+or noisy difference is inconclusive; no API is adopted automatically. The
+4 ms and 100 ms targets and all historical misses are unchanged. This is a
+bounded mechanics comparison, not a large-list readiness claim.
+
 ## Conditions
 
 ### Stage A (2026-10-25)

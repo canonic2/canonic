@@ -26,6 +26,8 @@ shipping APIs and the guard below. Its hand-written coordination is a baseline
 for identifying the smallest reusable mechanics, not a requirement that every
 application maintain its own reconciliation and windowing implementation.
 No shared presentation API is adopted by the example itself.
+The [retained-mechanics proposal](collection-mechanics.md) extracts the
+example's callback and lifetime boundaries for comparison before adoption.
 
 ## Guard completed reconciliation
 
