@@ -133,6 +133,9 @@ and group readiness. Preview-session tests cover transient outgoing retention an
 cleanup. The host's [browser regression](../../server/node/src/modules/host/navigation.test.ts)
 exercises sidebar selection, outgoing pixels/labels/reference, ready commit,
 deadline loading, late readiness and failure through the actual shell and renderer.
+The preview-session smoke also checks that a current failed-artboard report
+leaves its four ready siblings visible and interactive, then accepts recovery
+for the same navigation identity.
 
 ## Implementation gaps
 

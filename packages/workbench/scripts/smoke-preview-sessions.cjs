@@ -282,6 +282,31 @@ collections:
     await until(`${canvas}.artboards.length===5`);
     assert.deepEqual(await target.evaluate(`${canvas}.artboards.map(b=>b.target.label)`), ['info','success','warning','danger','autopilot'].map(id=>'Feedback / '+id), 'authored artboard names are available before their renderers initialize');
     await until(`${canvas}.artboards.length===5 && ${canvas}.artboards.every(b=>b.target.artboard && b.view?.ready)`);
+    await target.evaluate(`(()=>{
+      const board=${canvas}.artboards.find(b=>b.target.artboard==='danger');
+      const frame=document.querySelector('wb-canvas > iframe[slot="'+board.id+'"]').contentWindow;
+      window.failedRenderer=frame;
+      window.originalView=board.view;
+      const packet={type:'wb-artboard',channel:new URL(frame.location.href).searchParams.get('artboard-runtime'),
+        event:'view',value:{...board.view,ready:false,problem:'Fixture unavailable'}};
+      frame.eval('parent.postMessage('+JSON.stringify(packet)+',location.origin)');
+    })()`);
+    await until(`${canvas}.artboards.find(b=>b.target.artboard==='danger').view?.problem==='Fixture unavailable'`);
+    assert.equal(await target.evaluate('document.getElementById("artboards").inert'), false, 'one failed slot does not block ready siblings');
+    assert.equal(await target.evaluate(`${canvas}.artboards.filter(b=>b.view?.ready).length`), 4);
+    assert.equal(await target.evaluate(`[...document.getElementById('artboards').shadowRoot.querySelectorAll('section')].every(section=>section.getClientRects().length>0)`), true, 'the group keeps each ready and failed slot visible');
+    assert.equal(await target.evaluate(`document.getElementById('artboards').shadowRoot.textContent.includes('Fixture unavailable')`), true);
+    const readyLabel = await target.evaluate(`(()=>{
+      const canvas=document.getElementById('artboards');
+      const index=canvas.state.artboards.findIndex(b=>b.target.artboard==='success');
+      const box=canvas.shadowRoot.querySelectorAll('section button')[index].getBoundingClientRect();
+      return {x:box.x+box.width/2,y:box.y+box.height/2};
+    })()`);
+    await target.send('Input.dispatchMouseEvent', {type:'mousePressed',...readyLabel,button:'left',buttons:1,clickCount:1});
+    await target.send('Input.dispatchMouseEvent', {type:'mouseReleased',...readyLabel,button:'left',buttons:0,clickCount:1});
+    await until(`${canvas}.artboards.find(b=>b.id===${canvas}.selected)?.target.artboard==='success'`);
+    await target.evaluate(`failedRenderer.eval('parent.postMessage('+JSON.stringify({type:'wb-artboard',channel:new URL(failedRenderer.location.href).searchParams.get('artboard-runtime'),event:'view',value:originalView})+',location.origin)')`);
+    await until(`${canvas}.artboards.every(b=>b.view?.ready && !b.view.problem)`);
     assert.deepEqual(await target.evaluate("({rects:ordinaryRenderer.getClientRects().length,inert:ordinaryRenderer.inert,connected:ordinaryRenderer.isConnected})"), {rects:0,inert:true,connected:true}, 'the warm owner stays attached, hidden and inert');
     await pick('storybook', 'secondary');
     assert.equal(await target.evaluate("document.querySelector('wb-canvas > iframe')===ordinaryRenderer"), true);
