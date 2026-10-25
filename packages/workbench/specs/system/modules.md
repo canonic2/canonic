@@ -156,7 +156,7 @@ ui/src/
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
   views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation, browser sidebar sizing and styles
   views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size/Actions elements and shell control/dialog bindings
-  views/toolbar/             Annotation/review control bindings and floating toolbar/view-control styles
+  views/toolbar/             Annotation/review control bindings, classic toolbar presentation and floating toolbar/view-control styles
   views/configure-pages/     Configure pages editor and modal styles
   views/export/              Export dialog, progress presentation and classic shell bindings
   views/docs/                A docs lens's reading page, its embedded examples and highlighting

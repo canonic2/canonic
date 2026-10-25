@@ -36,8 +36,6 @@
  function create(options) {
   options = options || {};
   var NS = 'http://www.w3.org/2000/svg';
-  var SHAPE_ICONS = { line: 'minus', rect: 'square', ellipse: 'circle' };
-  var SHAPE_NAMES = { line: 'Line', rect: 'Rectangle', ellipse: 'Circle' };
   var TAGS = { draw: 'path', line: 'line', arrow: 'line', rect: 'rect', ellipse: 'ellipse' };
   var MIN_DRAG = 3; /* below this a drag is a stray click, not an annotation */
   var SAMPLE = 2; /* scribble points closer together than this are dropped */
@@ -64,19 +62,12 @@
   var layer = document.getElementById('annotationLayer');
   var svg = document.getElementById('annotationSvg');
   var toast = document.getElementById('toast');
-  var shapeButton = document.getElementById('shapeTool');
-  var shapeCaret = document.getElementById('shapeCaret');
-  var shapeMenu = document.getElementById('shapeMenu');
-  var handoffControl = document.getElementById('handoffControl');
-  var handoffButton = document.getElementById('handoff');
-  var annotationCount = document.getElementById('annotationCount');
-  var toolButtons = slice(document.querySelectorAll('.wb-tool'));
-  var menuItems = shapeMenu ? slice(shapeMenu.querySelectorAll('.wb-menu-item')) : [];
+  var toolbar = options.toolbar || null;
 
   /* The workbench double-buffers page navigation. Follow whichever iframe it
      promotes so inspection, screenshots, and handoff use the visible page. */
   var tool = 'pointer';
-  var shape = shapeButton ? shapeButton.dataset.tool : 'rect';
+  var shape = toolbar ? toolbar.shapeName() : 'rect';
   var annotations = []; /* creation order — that's paint order and undo order */
   var selected = null;
 
@@ -109,38 +100,19 @@
     tool = name;
     layer.classList.toggle('is-drawing', name !== 'pointer');
     layer.dataset.tool = name;
-    toolButtons.forEach(function (b) {
-      b.setAttribute('aria-pressed', String(b.dataset.tool === name));
-    });
+    if (toolbar) toolbar.tool(name);
     /* What's held stays held through a tool change — picking up the arrow
        doesn't drop the box you were adjusting. */
   }
 
   function setShape(name) {
     shape = name;
-    if (!shapeButton) { setTool(name); return; }
-    shapeButton.dataset.tool = name;
-    shapeButton.title = SHAPE_NAMES[name];
-    shapeButton.setAttribute('aria-label', SHAPE_NAMES[name]);
-    shapeButton.innerHTML = '';
-    shapeButton.appendChild(window.wbIcon(SHAPE_ICONS[name]));
-    menuItems.forEach(function (b) {
-      b.setAttribute('aria-current', String(b.dataset.shape === name));
-    });
+    if (toolbar) toolbar.shape(name);
     setTool(name);
   }
 
-  function show(menu, caret, open) {
-    menu.hidden = !open;
-    caret.setAttribute('aria-expanded', String(open));
-  }
-
-  function openMenu(open) {
-    if (shapeMenu && shapeCaret) show(shapeMenu, shapeCaret, open);
-  }
-
   function closeMenus() {
-    openMenu(false);
+    if (toolbar) toolbar.close();
   }
 
   /* ---------------------------------------------------- the annotations */
@@ -446,9 +418,7 @@
 
   /* Beside the handoff: how many annotations it will carry. */
   function countAnnotations() {
-    if (!annotationCount) return;
-    annotationCount.hidden = !annotations.length;
-    annotationCount.textContent = annotations.length === 1 ? '1 annotation' : annotations.length + ' annotations';
+    if (toolbar) toolbar.count(annotations.length);
   }
 
   function annotationOf(node) {
@@ -1453,8 +1423,7 @@
 
   function finishHandoff() {
     handoffBusy = false;
-    handoffButton.disabled = false;
-    handoffButton.removeAttribute('aria-busy');
+    if (toolbar) toolbar.busyHandoff(false);
   }
 
   /* Same shot as the camera takes — saved first, so the prompt can point at a
@@ -1466,8 +1435,7 @@
       return;
     }
     handoffBusy = true;
-    handoffButton.disabled = true;
-    handoffButton.setAttribute('aria-busy', 'true');
+    if (toolbar) toolbar.busyHandoff(true);
     var targets = null;
     var handoffFile = null;
     var phase = 'capture';
@@ -1508,13 +1476,13 @@
       });
   }
 
-  if (handoffControl) fetch('/_workbench/handoff')
+  if (toolbar && toolbar.hasHandoff) fetch('/_workbench/handoff')
     .then(function (res) {
       return res.json();
     })
     .then(function (result) {
       if (!result.ok || !result.available) throw new Error('clipboard handoff is unavailable');
-      handoffControl.hidden = false;
+      toolbar.enableHandoff();
     })
     .catch(function (err) {
       /* Not the extension serving this. A button that can't copy through the
@@ -1524,35 +1492,14 @@
 
   /* -------------------------------------------------------------- wiring */
 
-  toolButtons.forEach(function (b) {
-    if (b === shapeButton) return;
-    b.addEventListener('click', function () {
-      /* Clicking the tool you're already holding puts it back. */
-      setTool(tool === b.dataset.tool ? 'pointer' : b.dataset.tool);
-      closeMenus();
-    });
-  });
-
-  if (shapeButton) shapeButton.addEventListener('click', function () {
-    setTool(tool === shape ? 'pointer' : shape);
-    closeMenus();
-  });
-
-  if (shapeCaret) shapeCaret.addEventListener('click', function () {
-    openMenu(shapeMenu.hidden);
-  });
-
-  menuItems.forEach(function (b) {
-    b.addEventListener('click', function () {
-      setShape(b.dataset.shape);
-      openMenu(false);
-    });
+  if (toolbar) toolbar.connect({
+    tool: function () { return tool; }, shape: function () { return shape; },
+    setTool: setTool, setShape: setShape, undo: undo, clear: clearAll, shoot: shoot, handoff: handoff
   });
 
   /* Anything outside the layer drops the selection — including a click into
      the preview, which lands on the iframe and takes focus with it. */
   document.addEventListener('pointerdown', function (e) {
-    if (shapeMenu && !shapeMenu.hidden && !e.target.closest('.wb-shape')) openMenu(false);
     if (selected && !e.target.closest('.wb-annotation-layer')) select(null);
   });
 
@@ -1560,10 +1507,6 @@
     select(null);
   });
 
-  if (document.getElementById('undo')) document.getElementById('undo').addEventListener('click', undo);
-  if (document.getElementById('clearAnnotations')) document.getElementById('clearAnnotations').addEventListener('click', clearAll);
-  if (document.getElementById('shoot')) document.getElementById('shoot').addEventListener('click', shoot);
-  if (document.getElementById('handoff')) document.getElementById('handoff').addEventListener('click', handoff);
 
   /* Inside a note or the filter box, the keyboard is the browser's. */
   function typing() {
@@ -1659,5 +1602,5 @@
   return api;
  }
  window.wbCreateAnnotations = create;
- if (!window.wbMultiArtboardHost && !window.wbContentOnly) window.wbArtboardAnnotations = create();
+ if (!window.wbMultiArtboardHost && !window.wbContentOnly) window.wbArtboardAnnotations = create({ toolbar: window.wbAnnotationToolbar() });
 })();

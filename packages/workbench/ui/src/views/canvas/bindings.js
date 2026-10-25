@@ -25,6 +25,7 @@ export function initialize() {
   window.dispatchEvent(new Event('wb-multi-ready'));
 }
 function mount() {
+  const toolbar = chrome.wbAnnotationToolbar();
   const canvas = document.createElement('wb-canvas');
   canvas.id = 'artboards';
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:none';
@@ -188,19 +189,13 @@ function mount() {
           (Array.isArray(b.view?.payload.annotations) ? b.view.payload.annotations.length : 0),
         0,
       );
-      $('annotationCount').hidden = !count;
-      $('annotationCount').textContent = count === 1 ? '1 annotation' : count + ' annotations';
+      toolbar.count(count);
       if (board.id !== previewBoard) {
         previewBoard = board.id;
         chrome.wbPreviewControls.reset();
         if (previews.has(board.id)) chrome.wbPreviewControls.receive(previews.get(board.id));
       }
-      if (board.view?.tool)
-        document
-          .querySelectorAll('[data-tool]')
-          .forEach((button) =>
-            button.setAttribute('aria-pressed', String(button.dataset.tool === board.view.tool)),
-          );
+      if (board.view?.tool) toolbar.tool(board.view.tool);
     },
     host(board, data) {
       const message = data;

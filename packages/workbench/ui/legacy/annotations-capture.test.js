@@ -197,8 +197,9 @@ test('handoff saves, snapshots its prompt, clears annotations, then copies', asy
   };
   var source = fs.readFileSync(path.join(__dirname, "./annotations.js"), 'utf8');
   var start = source.indexOf('  var handoffBusy = false;');
-  var end = source.indexOf("\n  if (handoffControl) fetch('/_workbench/handoff')", start);
+  var end = source.indexOf("\n  if (toolbar && toolbar.hasHandoff) fetch('/_workbench/handoff')", start);
   assert.ok(end > start, 'the handoff behavior is isolated from optional control wiring');
+  state.toolbar = { busyHandoff: function (busy) { state.handoffButton.disabled = busy; } };
   vm.runInNewContext(source.slice(start, end), state);
   await state.handoff();
   assert.deepEqual(order, ['save', 'prompt', 'clear', 'copy']);

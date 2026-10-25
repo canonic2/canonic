@@ -129,7 +129,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | `page-list` | Collections, groups, pages, problems and search | `views/page-list/` (in place); sidebar host/catalog wiring in `modules/project/sidebar.js` |
 | `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `views/top-bar/` presentation and control/dialog bindings in place; route/lens rules remain in `legacy/workbench.js` |
 | `canvas` | The canvas element, artboard labels and loading feedback | `views/canvas/bindings.js` (in place), `modules/canvas/legacy-chrome.js` |
-| `toolbar` | Annotation tools and review actions | `views/toolbar/` bindings and floating-bar styles in place; renderer annotations remain in `legacy/annotations.js` |
+| `toolbar` | Annotation tools and review actions | `views/toolbar/` bindings, legacy presentation and floating-bar styles in place; renderer annotation state remains in `legacy/annotations.js` |
 | `configure-pages` | The Configure pages dialog | `views/configure-pages/` (in place) |
 | `export` | The export dialog | `views/export/components/export-dialog/` (in place) |
 | `docs` | A docs lens's reading page | `views/docs/` (in place) |
@@ -296,6 +296,7 @@ and passes its acceptance:
 | Classic single-artboard resize rails in `views/canvas/legacy-bindings.js` | `canvas` | The `canvas` adoption step; dimensions and persistence remain in the shell until then |
 | `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js` publish shared browser rules to classic consumers | `canvas` / `docs` | Their adoption steps; existing globals and ready events stay until then |
 | Existing DOM controls in `views/toolbar/bindings.js`, connected by canvas bindings | `annotations` / `review` | The `annotations` / `review` adoption step; commands retain their existing state owners |
+| `views/toolbar/legacy-presentation.js` supplies classic toolbar presentation to canvas bindings and the single-artboard annotation adapter | `annotations` / `toolbar` | The annotation adoption step; renderer-only annotation instances receive no toolbar |
 | Classic `wbExportBindings` with `modules/review/browser-export.js` | `review` / `export` | The Export adoption step; the shell supplies its current destination and the existing request/progress lifecycle stays intact |
 | Classic `wbConfigEditor` in `views/configure-pages/config-editor.js`, with rules and HTTP in `modules/project/configuration.js` | `project` / `configure-pages` | The Configure pages adoption step; draft/selection state remains in the existing dialog closure |
 | Classic `wbPageList` API shared by `modules/project/pages.js` and `views/page-list/page-list.js`; sidebar startup through `wbProjectSidebar` | `project` / `page-list` | The `project`/`page-list` adoption step; existing closure state remains until then |
