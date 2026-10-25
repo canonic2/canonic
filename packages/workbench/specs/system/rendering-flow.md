@@ -93,8 +93,8 @@ The [browser source layout](modules.md#browser-source-layout) places the rendere
 composition. Renderer-specific responsibilities:
 
 - [`runtime.js`](../../ui/src/modules/preview-sessions/runtime.js) mounts
-  [`content.html`](../../ui/legacy/content.html). Its dedicated
-  [`bootstrap`](../../ui/src/bootstrap/renderer.js) imports no application
+  [`content.html`](../../ui/src/app/renderer/content.html). Its dedicated
+  [entry](../../ui/src/app/renderer/renderer.js) imports no application
   bootstrap and mounts no shell controls.
 - [`content.js`](../../ui/src/modules/preview-sessions/content.js) derives destinations,
   scenarios, lenses and labels from project data through an injected loader/catalog.

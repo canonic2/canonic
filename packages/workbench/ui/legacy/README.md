@@ -543,7 +543,7 @@ implementation's own address; Workbench never switches to a stream.
 | File | Job |
 | --- | --- |
 | `index.html` | the shell: top bar, sidebar, canvas, and the toolbar and view controls floating over it |
-| `content.html` + `content.css` | content-only viewport and annotation overlay, with no Workbench application controls or canvas |
+| `../src/app/renderer/` | the content-only renderer: viewport, annotation overlay and entry, with no Workbench application controls or canvas, still served as `/_workbench/content.html` |
 | `content-frames.js` | retained content frames, warm preview/Docs hosts and Storybook channel switching |
 | `../src/modules/preview-sessions/content.js` + `renderer-bridge.ts` | model-derived content navigation/metadata and authenticated canvas commands, capture locks and input forwarding |
 | `server/node/config.js` | finds the project root, reads `workbench.yaml` and `workbench.local.yaml`, checks them |

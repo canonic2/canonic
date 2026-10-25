@@ -1,9 +1,9 @@
 /** Composes one content viewport. Never imports the Workbench application bootstrap. */
-import { createContentController } from '../modules/preview-sessions/content.js';
+import { createContentController } from '../../modules/preview-sessions/content.js';
 
-import { initializeRenderer } from '../modules/preview-sessions/renderer-bridge.js';
+import { initializeRenderer } from '../../modules/preview-sessions/renderer-bridge.js';
 
-import { connectStoryCatalog } from '../modules/preview-sessions/story-catalog.js';
+import { connectStoryCatalog } from '../../modules/preview-sessions/story-catalog.js';
 
 const services = window;
 const params = new URLSearchParams(location.search);

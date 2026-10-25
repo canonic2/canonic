@@ -149,7 +149,8 @@ ui/src/
   app/capture/               Capture document, served as /_workbench/capture.html
   app/preview-host/          TypeScript preview host, served as /_workbench/preview-host.html
   app/docs/                  Docs host document and entry
-  bootstrap/                 Browser, sidebar and renderer composition/registration
+  app/renderer/              Content-only renderer, served as /_workbench/content.html
+  bootstrap/                 Browser and sidebar composition/registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
   host/                     Browser HTTP transport
@@ -171,8 +172,8 @@ Component styles stay beside their element; shared modal styles have their own
 presentation owner. Importing an element class does not register it.
 
 `bootstrap/workbench.js` registers the browser controls and composes the canvas;
-`sidebar.js` is the direct webview module entry. `renderer.js` composes the
-content-only renderer. Size and docs bridges also initialize from bootstrap.
+`sidebar.js` is the direct webview module entry. `app/renderer/renderer.js`
+composes the content-only renderer. Size and docs bridges also initialize from bootstrap.
 `bootstrap/canvas.js` connects capability ports to the existing shell. Its
 legacy chrome adapter owns the current DOM controls and restores the previous
 zoom API when its connection ends.
@@ -186,7 +187,7 @@ tests live in the server ([handoff.rs](../../server/src/handoff.rs)), not in bro
 
 The outer legacy shell still interprets its configuration, hash and controls.
 The content controller separately derives renderer metadata from the project model,
-without menu DOM. `bootstrap/renderer.js` composes content, retained frame sessions,
+without menu DOM. `app/renderer/renderer.js` composes content, retained frame sessions,
 native surfaces and annotation/capture ports inside `content.html`.
 The frame lifecycle, native adapter and annotation internals retain JavaScript
 factories under `ui/legacy/`.

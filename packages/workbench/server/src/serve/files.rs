@@ -21,6 +21,7 @@ const APP_DOCUMENTS: &[(&str, &str)] = &[
         "/_workbench/preview-host.html",
         "ui/src/app/preview-host/preview-host.html",
     ),
+    ("/_workbench/content.html", "ui/src/app/renderer/content.html"),
 ];
 
 /// Where the space's files and Workbench's own come from.
@@ -435,6 +436,10 @@ mod tests {
                 "<html><head><title>Preview</title></head></html>",
             ),
             (
+                "workbench/ui/src/app/renderer/content.html",
+                "<html><head><title>Content</title></head></html>",
+            ),
+            (
                 "acme/pages/landing.html",
                 "<!doctype html><html><head><title>Acme</title></head><body></body></html>",
             ),
@@ -490,6 +495,10 @@ mod tests {
         assert_eq!(
             text(get("/_workbench/preview-host.html").unwrap()).await.1,
             "<html><head><title>Preview</title></head></html>"
+        );
+        assert_eq!(
+            text(get("/_workbench/content.html").unwrap()).await.1,
+            "<html><head><title>Content</title></head></html>"
         );
         assert_eq!(
             text(get("/_workbench/ui/src/shell.js").unwrap()).await.0,
