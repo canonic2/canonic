@@ -78,6 +78,18 @@
  * @property {boolean} active Whether it still receives commits.
  */
 
+/**
+ * Stand-in for a deactivated subscription's released `read` and `run`.
+ * @returns {undefined} Nothing.
+ */
+const released = () => undefined;
+
+/**
+ * Stand-in for a deactivated subscription's released `equals`.
+ * @returns {boolean} Always true; an inactive record is never compared anyway.
+ */
+const releasedEquals = () => true;
+
 /** Placeholder for cleared queue slots, so no changed-key array stays referenced. */
 const NO_CHANGES = Object.freeze(/** @type {string[]} */ ([]));
 
@@ -196,16 +208,22 @@ export function createStore(initial, options = {}) {
   }
 
   /**
-   * Deactivates a subscription; it is skipped from now on and removed when no
-   * delivery is running.
+   * Deactivates a subscription at once: it is skipped from now on, and its
+   * callbacks and last value are released. Only its slot in the array waits:
+   * outside a delivery, inactive records are removed in one pass once they are
+   * more than half the array, so removing many subscriptions stays linear.
    * @param {Subscription} record The subscription.
    * @returns {void}
    */
   function deactivate(record) {
     if (!record.active) return;
     record.active = false;
+    record.read = released;
+    record.equals = releasedEquals;
+    record.run = released;
+    record.last = undefined;
     inactive++;
-    if (!delivering) removeInactive();
+    if (!delivering && inactive * 2 > subscriptions.length) removeInactive();
   }
 
   /**
@@ -238,7 +256,7 @@ export function createStore(initial, options = {}) {
       for (let index = 0; index < queued; index++) queuedChanges[index] = NO_CHANGES;
       queued = 0;
       delivering = false;
-      if (inactive > 0) removeInactive();
+      if (inactive * 2 > subscriptions.length) removeInactive();
     }
   }
 

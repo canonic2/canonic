@@ -475,6 +475,40 @@ describe('delivery errors', () => {
   });
 });
 
+describe('deactivation', () => {
+  test('releases callbacks at once, while the record may still wait to be removed', async () => {
+    const store = createStore(initial());
+    store.watch(count, () => {});
+    store.watch(count, () => {});
+    const controller = new AbortController();
+    /** @type {WeakRef<object>} */
+    let reference = new WeakRef({});
+    (() => {
+      const captured = { payload: new Array(1000).fill('acme') };
+      reference = new WeakRef(captured);
+      store.watch(count, () => captured.payload.length, { signal: controller.signal });
+    })();
+    // One inactive record among three is below the compaction threshold.
+    controller.abort();
+    const collect = /** @type {unknown} */ (Reflect.get(globalThis, 'gc'));
+    if (typeof collect !== 'function') throw new Error('The unit project must run with --expose-gc.');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    collect();
+    expect(reference.deref()).toBeUndefined();
+  });
+
+  test('keeps delivering to the remaining subscriptions after many are removed', () => {
+    const store = createStore(initial());
+    const controllers = Array.from({ length: 50 }, () => new AbortController());
+    for (const controller of controllers) store.watch(count, () => {}, { signal: controller.signal });
+    const kept = vi.fn();
+    store.watch(count, kept);
+    for (const controller of controllers) controller.abort();
+    store.set({ count: 1 });
+    expect(kept).toHaveBeenLastCalledWith(1, 0);
+  });
+});
+
 describe('review regressions', () => {
   test('rolls back and delivers nothing when reading the result’s then throws', () => {
     const store = createStore(initial());

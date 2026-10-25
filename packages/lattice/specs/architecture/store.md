@@ -156,7 +156,7 @@ Draining the queue:
    `deliverError`, and continues with the next record.
 6. When the queue is empty, clears `delivering` in a `finally` block, so the
    store can never stay marked as delivering, and removes inactive records if
-   `inactive` is above zero.
+   they are more than half the array.
 
 Commits made by subscribers during step 4 are appended to the queue and drained
 by the same loop, so they never reenter. The outermost `set` or `batch` returns
@@ -164,13 +164,17 @@ only after the loop ends.
 
 ### Removal and additions during delivery
 
-Records are deactivated, never removed, while a delivery runs; a deactivated
-record is skipped from that moment on, including later in the same commit.
-Deactivating increments `inactive`. Additions are appended and excluded from
-commits made before them by the version check. Inactive records are removed in
-one pass after delivery, or immediately when no delivery is running, and that
-pass is skipped entirely when `inactive` is zero. No delivery copies the
-subscription array.
+Deactivation is immediate, during a delivery or not: the record is skipped from
+that moment on, including later in the same commit, and its `read`, `equals`,
+`run` and last value are replaced by shared stand-ins, so nothing the
+subscription captured stays reachable. Deactivating increments `inactive`.
+Only the empty record's slot in the array waits: one compaction pass removes
+inactive records when they are more than half the array, outside a delivery
+or at its end. Removing N subscriptions one by one therefore costs work
+proportional to N, not N², and at most as many inactive records as active ones
+wait in the array. Additions are appended and excluded from commits made before
+them by the version check. No delivery copies the subscription array, and no
+timer or scheduling is involved.
 
 ## Errors
 
@@ -217,6 +221,8 @@ patch keys, `read` receiving `Readonly<S>` and `run` receiving `V` under a
 | Nested writes do not reenter | Queue plus `delivering` flag | A subscriber's `set` returns before its subscribers run; order of `run` calls recorded |
 | Latest snapshot, never older | `read(current)` at notification | Subscriber reading during queued commits sees non-decreasing versions |
 | Removal during delivery | Deactivation | A record aborted by an earlier subscriber is not called in the same or queued commits |
+| Callbacks released at deactivation | Stand-ins replace the record's functions | A callback's captured object is collected after its signal aborts, while the record waits below the compaction threshold |
+| Delivery after many removals | Compaction above half | After 50 of 51 subscriptions abort, a commit still reaches the remaining one |
 | Addition during delivery | Version check | A subscription added by a subscriber is not notified for the current commit |
 | Delivery errors isolated | Per-record catch | Throwing `read`, `equals` and `run` each reach `report`; later records still run; `set` returns |
 | Batch rollback | Savepoint in a local variable | Throwing callback restores the start snapshot and delivers nothing |
@@ -254,6 +260,13 @@ Work counts use wrappers around `read`, `equals` and `run`, as
   fields the gain was inconclusive under heavy machine load. See the
   [full-flow record](../../research/full-flow.md), stage 2. The remaining
   bytes are the snapshot itself and the changed-key array.
+- **Compaction in bulk** (2026-10-25). Removing inactive records on every
+  deactivation outside a delivery made tearing down N subscriptions
+  quadratic. Compacting once inactive records exceed half the array cut
+  teardown of a 1,000-item collection from 20.7 to 13.5 µs per item and
+  repeated mounting of 100 items by 6%, with no other measure worse and
+  retained memory unchanged within 0.4%. See the
+  [collection record](../../research/collection.md), stage 2.
 
 ## Open questions
 
@@ -261,11 +274,6 @@ Work counts use wrappers around `read`, `equals` and `run`, as
   check and fit selections with one or two fields. A batch that changes many
   fields may favor a `Set` of changed keys built once per commit. The choice is
   measured on the wide fan-out and burst workloads before any change.
-- **When inactive records are removed.** Removing them after each delivery that
-  deactivated something, or immediately when idle, costs a pass over the array
-  per removal in the churn workload. Removing in bulk once inactive records exceed a share of the array
-  would cost less there but keep dead records longer. The simple rule comes
-  first; the churn workload decides.
 - **Savepoint cost.** The mechanism above suggests savepoints add no structure
   beyond `batchBase` and `touched`. If implementation shows otherwise, the
   contract simplification is proposed explicitly before coding continues.

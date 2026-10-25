@@ -426,6 +426,39 @@ camera during a drag or a scroll offset, stay in the element that produces them.
 A store receives the settled value when it matters to the application, such as
 the camera when the drag ends.
 
+### Collections (open)
+
+**Not settled.** How a capability stores a collection of items, so that one
+item's change does not cost work proportional to the whole collection, is an
+open question. Lattice is not described as ready for large collections until
+it is settled.
+
+**Finding.** Selections skip subscriptions at the level of state fields, not
+of items inside a field. In the [collection record](../../research/collection.md),
+a capability held its items in one map field, `byId`, replaced immutably, with
+two selections per row on that field. Changing one item considered every row's
+subscriptions and copied the map: at 1,000 items, 2,000 `read`s, about 245 µs
+and 4 KB per single-item update, against 1.8 µs for hand-written wiring.
+
+**Requirements** a collection shape must meet:
+
+- the collection owns membership and order;
+- each item owns its changing fields;
+- updating an item does not copy the membership or evaluate other items;
+- removing an item ends that item's bindings and resources.
+
+**Candidates**, to be compared before any is adopted:
+
+| Candidate | Shape | Known trade-off |
+| --- | --- | --- |
+| Shared map | One store with the order and a map of items, as measured | Meets none of the update requirements; the baseline |
+| One store per item | The capability keeps the order in its own store and creates one store per item, whose fields the item's bindings select; removing an item drops its store | Uses only the current API. One store per item costs memory and setup; an update to many items is one commit per item rather than one commit |
+| Keyed subscriptions in the core | The core indexes subscriptions by an item key inside a field | Would be a new API and a contract change; considered only if the candidates without one fail |
+| Windowing | Mount rows only for visible items | Addresses mounting cost, not update cost; considered when mounting every row dominates |
+
+The comparison covers single-item updates, updates to many items, insertion,
+removal, reorder, setup and memory, as the collection record's next stage.
+
 ## Phases and transitions
 
 A flow with stages has one `phase` field holding a named value. It does not use
@@ -579,6 +612,9 @@ failure is kept as a fixed regression case beside the generator.
   reporting one failure twice.
 
 ## Open questions
+
+- How a capability stores a collection so that changing one item costs work
+  independent of the collection's size; see [collections](#collections-open).
 
 - Whether a symbol key in a patch should be rejected. `set` walks string keys
   only, so such a key is ignored. Rejecting it would read the patch's symbol
