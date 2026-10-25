@@ -5,7 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Workbench previews</title>
     <link rel="stylesheet" href="./viewer.css" />
-    <link rel="stylesheet" href="./preview-controls.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@canonic2/lattice": "./node_modules/@canonic2/lattice/src/index.js",
+          "@canonic2/lattice/elements": "./node_modules/@canonic2/lattice/src/modules/elements/elements.js"
+        }
+      }
+    </script>
   </head>
   <body class="wb">
     <aside class="catalog">
@@ -49,7 +56,13 @@
         </div>
       </section>
     </main>
-    <script src="./preview-controls.js"></script>
-    <script src="./viewer.js"></script>
+    <wb-preview-controls
+      id="previewPanel"
+      class="wb-preview-controls"
+      role="complementary"
+      aria-label="Preview controls"
+      hidden
+    ></wb-preview-controls>
+    <script type="module" src="./ui/src/app/viewer/viewer.js"></script>
   </body>
 </html>

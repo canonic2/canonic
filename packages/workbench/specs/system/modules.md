@@ -169,6 +169,7 @@ ui/src/
     canvas/                 Artboard state, geometry, controller and publication
     navigation/             Requested destination, supersession and transition state
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
+    preview-controls/       Lattice-owned transient inputs, action reports, selection and open state per renderer
     review/                 Capture, reference projection, review workflow, export polling and browser delivery
     shortcuts/              Existing shell keyboard scoping
     docs/                   Docs reading layout on the canvas
@@ -177,7 +178,7 @@ ui/src/
   vendor/                   Pinned third-party browser assets
 ```
 
-Canvas, navigation, preview-session and review `index.js` files expose their application contracts. Canvas also has
+Canvas, navigation, preview-session, preview-controls and review `index.js` files expose their application contracts. Canvas also has
 a pure `presentation.js` entry point for component data and camera geometry;
 components cannot import capability operations, document entries or host services.
 Component styles stay beside their element; shared modal styles have their own

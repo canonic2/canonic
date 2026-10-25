@@ -254,8 +254,9 @@ reached through `node_modules` are listed by name and version.
 ### Portable build and CLI
 
 - The portable build writes each preview's production bundle, an interactive
-  viewer (`index.html`, `viewer.js`, `viewer.css`), the canvas's own
-  `preview-controls.js`/`.css`, and `workbench.json` (version 1, name,
+  viewer (`index.html`, `viewer.css`, and its authored entry under `ui/src/app/viewer/`),
+  the shared preview-controls capability, element and top-bar binding with unchanged
+  Lattice modules, and `workbench.json` (version 1, name,
   previews, warnings). The viewer offers search, Scenario and Size menus,
   resizable dimensions, Reload, the shared controls, and **Open preview**;
   its address keeps the selection (`size` is a resolved size key, with `width`

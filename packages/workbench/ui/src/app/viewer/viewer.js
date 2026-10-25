@@ -1,4 +1,8 @@
 /* A static, portable reader for the exported versioned preview catalog. */
+import { createPreviewControls } from '../../modules/preview-controls/index.js';
+import { registerPreviewControls } from '../../components/preview-controls/register.js';
+import { bindPreviewControls } from '../../views/top-bar/preview-bindings.js';
+registerPreviewControls();
 (function () {
   var frame = document.getElementById('previewFrame');
   var list = document.getElementById('previews');
@@ -6,6 +10,23 @@
   var scenario = document.getElementById('scenario');
   var size = document.getElementById('size');
   var status = document.getElementById('status');
+  var lifetime = new AbortController();
+  var controls = createPreviewControls({
+    send(_id, value) {
+      frame.contentWindow.postMessage(
+        { type: 'workbench-preview-command', ...value },
+        new URL(frame.src).origin,
+      );
+    },
+  });
+  bindPreviewControls({
+    controls,
+    button: document.getElementById('previewControls'),
+    panel: document.getElementById('previewPanel'),
+    signal: lifetime.signal,
+    report: (error) => notice(error.message, true),
+  });
+  window.addEventListener('pagehide', () => lifetime.abort(), { once: true });
   var selected = null;
   var catalog = null;
   /* The implicit artboard's iteration, from the viewer's own address; there is
@@ -134,7 +155,8 @@
   }
   function load() {
     if (!selected) return;
-    window.wbPreviewControls.reset();
+    controls.clear();
+    controls.choose('viewer');
     var url = target();
     document.getElementById('open').href = url.href;
     document.getElementById('open').hidden = false;
@@ -230,6 +252,10 @@
   document.getElementById('reload').addEventListener('click', load);
   frame.addEventListener('load', function () {
     window.dispatchEvent(new CustomEvent('wb-frame-change', { detail: { frame: frame } }));
+    frame.contentWindow.postMessage(
+      { type: 'workbench-preview-command', command: 'inspect' },
+      new URL(frame.src).origin,
+    );
   });
   window.addEventListener('message', function (event) {
     if (
@@ -258,6 +284,7 @@
       return;
     }
     if (!selected.docs && event.data.scenario && event.data.scenario !== scenario.value) return;
+    controls.receive('viewer', event.data);
     if (event.data.event === 'ready')
       notice('Ready · ' + (selected.docs ? 'docs page' : selected.adapter));
     if (event.data.event === 'error') notice(event.data.message, true);

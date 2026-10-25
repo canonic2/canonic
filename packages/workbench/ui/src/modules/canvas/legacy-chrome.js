@@ -3,7 +3,6 @@
 export function bindLegacyChrome(ports) {
   const { canvas, document, signal, command, act, activityChanged } = ports;
   const $ = (id) => document.getElementById(id);
-  ports.previewControls.connect({ send: (value) => act(() => command('preview', value)) });
   function camera(key) {
     if (key === 'fit' || key === 'fit-all') canvas.fitAll();
     else if (key === 'fit-selected') canvas.fitSelected();

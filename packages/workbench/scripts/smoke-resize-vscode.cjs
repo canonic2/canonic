@@ -62,6 +62,17 @@ async function main() {
       'update.mode': 'none', 'telemetry.telemetryLevel': 'off',
     }));
     createFixture(fixture);
+    fs.appendFileSync(path.join(fixture, 'form.html'), `<script>
+      const edit=document.getElementById('edit');
+      function report(){parent.postMessage({type:'workbench-preview',event:'ready',id:'acme-controls',scenario:null,
+        controls:{label:{type:'text'}},inputs:{label:edit.value},actions:[]},location.origin)}
+      addEventListener('message',event=>{
+        if(event.source!==parent||event.origin!==location.origin||event.data?.type!=='workbench-preview-command')return;
+        if(event.data.command==='reset')edit.value='Original';
+        else if(typeof event.data.inputs?.label==='string')edit.value=event.data.inputs.label;
+        report();
+      });report();
+    </script>`);
     const product = path.resolve(__dirname, '..');
     staged = stageExtension(product);
     const version = require('../extension/package.json').version;
@@ -90,12 +101,16 @@ async function main() {
     const [port, endpoint] = fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').trim().split('\n');
     const c = connection = await connect('ws://127.0.0.1:' + port + endpoint);
     const sessions = new Map();
+    const runtimeErrors = [];
     c.listeners.push(event => {
+      if (event.method === 'Runtime.exceptionThrown') runtimeErrors.push(event.params.exceptionDetails.exception?.description || event.params.exceptionDetails.text);
       if (event.method !== 'Target.attachedToTarget') return;
       const { sessionId, targetInfo } = event.params;
       sessions.set(targetInfo.targetId, sessionId);
-      if (['page', 'iframe'].includes(targetInfo.type))
+      if (['page', 'iframe'].includes(targetInfo.type)) {
+        void c.send('Runtime.enable', {}, sessionId).catch(error => console.warn('Runtime diagnostics:', error.message));
         void c.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId).catch(error => console.warn('Nested debugger attachment:', error.message));
+      }
     });
     await c.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
     async function session(target) {
@@ -109,14 +124,19 @@ async function main() {
     const code = await until(async () => (await c.send('Target.getTargets')).targetInfos.find(t => t.type === 'page'), 'editor window');
     const editor = await session(code);
     await until(() => evaluate(`!!document.querySelector('.monaco-workbench') && document.readyState==='complete'`, editor), 'editor layout');
+    // A new profile scans extensions after the editor first paints. Opening
+    // the palette before contributions arrive caches a list without Workbench.
+    await until(() => evaluate(`!!document.querySelector('.activitybar [aria-label^="Workbench"]')`, editor), 'Workbench extension contribution');
     cp.execFileSync('osascript', ['-e', `tell application "System Events" to set frontmost of first application process whose unix id is ${child.pid} to true`]);
     async function key(key, code, value) {
       for (const type of ['keyDown', 'keyUp']) await c.send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: value }, editor);
     }
     await key('F1', 'F1', 112);
     await until(() => evaluate(`!!document.querySelector('.quick-input-widget input')?.getClientRects().length`, editor), 'command palette');
-    await c.send('Input.insertText', { text: 'Workbench: Open Canvas' }, editor);
-    await until(() => evaluate(`document.querySelector('.quick-input-widget')?.innerText.includes('Open Canvas')`, editor), 'Open Canvas command');
+    await evaluate(`document.querySelector('.quick-input-widget input').select()`, editor);
+    await c.send('Input.insertText', { text: '>Workbench: Open Canvas' }, editor);
+    await until(() => evaluate(`document.querySelector('.quick-input-widget')?.innerText.includes('Open Canvas')`, editor), 'Open Canvas command')
+      .catch(async error => { console.error(await evaluate(`JSON.stringify({input:document.querySelector('.quick-input-widget input')?.value,results:[...document.querySelectorAll('.quick-input-widget .monaco-list-row')].map(row=>row.innerText),title:document.title})`, editor)); throw error; });
     await key('Enter', 'Enter', 13);
     const canvas = await until(async () => (await c.send('Target.getTargets')).targetInfos.find(t => /^http:\/\/127\.0\.0\.1:\d+\/_workbench\/$/.test(t.url)), 'Workbench webview');
     const content = await session(canvas);
@@ -125,7 +145,25 @@ async function main() {
       cp.execFileSync('osascript', ['-e', `tell application "System Events" to set size of front window of (first application process whose unix id is ${child.pid}) to {${width}, ${height}}`]);
       await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))', editor);
     };
-    const results = await verifyResize(evaluateCanvas, resize);
+    const results = await verifyResize(evaluateCanvas, resize).catch(async error => {
+      console.error(runtimeErrors);
+      console.error(await evaluateCanvas(`JSON.stringify({blank:document.getElementById('blank')?.textContent,
+        toast:document.getElementById('toast')?.textContent,state:document.getElementById('artboards')?.state,
+        canvas:typeof window.wbMultiCanvas,panel:!!document.getElementById('previewPanel'),
+        globals:{sizes:typeof window.wbSizes,docs:typeof window.wbDocsLenses,config:typeof window.wbConfig,view:typeof window.wbView,root:window.wbConfig?.root},
+        requests:performance.getEntriesByType('resource').filter(e=>/config|legacy-sizes|legacy-rules|workbench.js/.test(e.name)).map(e=>({name:e.name,duration:e.duration})),
+        body:document.body.innerText.slice(-1500)})`));
+      throw error;
+    });
+    await until(() => evaluateCanvas(`!document.getElementById('previewControls').hidden`), 'preview controls readiness');
+    await evaluateCanvas(`document.getElementById('previewControls').click();
+      const input=document.getElementById('previewPanel').shadowRoot.querySelector('input');
+      input.value='Preview edit';input.dispatchEvent(new Event('change',{bubbles:true}));`);
+    await until(() => evaluateCanvas(`__resizeProbe.doc.getElementById('edit').value==='Preview edit'`), 'preview control command');
+    if (!await evaluateCanvas(`!document.getElementById('previewPanel').hidden &&
+      getComputedStyle(document.getElementById('previewPanel')).getPropertyValue('--wb-panel')===getComputedStyle(document.querySelector('.wb')).getPropertyValue('--wb-panel')`)) throw Error('Preview controls lost their shell theme or open state');
+    await evaluateCanvas(`document.getElementById('previewPanel').shadowRoot.querySelector('button').click()`);
+    await until(() => evaluateCanvas(`__resizeProbe.doc.getElementById('edit').value==='Original'`), 'preview control reset');
     const latticeImports = `(()=>{
       const resources=win=>{
         let entries=[];
@@ -141,7 +179,8 @@ async function main() {
     if (!await evaluateCanvas(`document.querySelector('wb-canvas > iframe').contentWindow.eval(${JSON.stringify(latticeImports)})`)) throw Error('Renderer Lattice imports missing');
     await key('F1', 'F1', 112);
     await until(() => evaluate(`!!document.querySelector('.quick-input-widget input')?.getClientRects().length`, editor), 'command palette');
-    await c.send('Input.insertText', { text: 'View: Show Workbench' }, editor);
+    await evaluate(`document.querySelector('.quick-input-widget input').select()`, editor);
+    await c.send('Input.insertText', { text: '>View: Show Workbench' }, editor);
     await until(() => evaluate(`document.querySelector('.quick-input-widget')?.innerText.includes('Show Workbench')`, editor), 'Workbench sidebar command');
     await key('Enter', 'Enter', 13);
     let webviewResources;
@@ -153,8 +192,15 @@ async function main() {
       }
       return false;
     }, 'sidebar Lattice imports under webview CSP').catch(error => { console.error(webviewResources); throw error; });
-    console.log(JSON.stringify({ host: 'VS Code on macOS', version: await evaluate('navigator.userAgent', editor), results }));
+    const applicationErrors = runtimeErrors.filter(error => error.includes('/_workbench/'));
+    if (applicationErrors.length) throw Error(applicationErrors.join('\n'));
+    console.log(JSON.stringify({ host: 'VS Code on macOS', version: await evaluate('navigator.userAgent', editor), previewControls: true, results }));
   } catch (error) {
+    const logs = path.join(root, 'profile/logs');
+    if (fs.existsSync(logs)) for (const file of fs.readdirSync(logs, { recursive: true })) {
+      if (file.endsWith('/exthost.log') || /workbench.*\.log$/i.test(file)) console.error(file + '\n' + fs.readFileSync(path.join(logs, file), 'utf8'));
+      else if (file.endsWith('/renderer.log')) console.error(file + '\n' + fs.readFileSync(path.join(logs, file), 'utf8').split('\n').filter(line => /\[(error|warning)\]|canonic/i.test(line)).join('\n'));
+    }
     if (fs.existsSync(path.join(root, 'code.log'))) console.error(fs.readFileSync(path.join(root, 'code.log'), 'utf8'));
     throw error;
   } finally {

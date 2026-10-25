@@ -14,7 +14,7 @@ Related contracts: [themes](themes.md),
 
 **Status:** the space switcher and space mark (sidebar, breadcrumb), the size
 switcher with its Custom size and Edit sizes dialogs, the Actions switch, the
-canvas presentation and the export dialog are implemented under this contract,
+canvas presentation, preview-controls panel and the export dialog are implemented under this contract,
 each with its design page; the existing shell composes them. Migrating the
 remaining interface surfaces, which use HTML, JavaScript and shared CSS, and the
 port to the target layout (`ui/src/views/`, Lattice bindings) are agreed but not

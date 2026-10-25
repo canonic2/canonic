@@ -179,12 +179,12 @@ collections:
     await until('document.getElementById("exportDialog").shadowRoot.querySelector("dialog").open');
     await target.evaluate('document.getElementById("exportDialog").shadowRoot.querySelector("dialog").close()');
     await target.evaluate('document.getElementById("topbarOverflowButton").click()');
-    await until('!document.querySelector(".wb-preview-controls").hidden && document.querySelector(".wb-preview-controls label input")');
-    await target.evaluate(`const labels=[...document.querySelectorAll('.wb-preview-controls label')];const field=labels.find(l=>l.firstChild.textContent.toLowerCase()==='body').querySelector('input,textarea');field.value='Long content '.repeat(100);field.dispatchEvent(new Event('change'));`);
+    await until('!document.querySelector(".wb-preview-controls").hidden && document.querySelector(".wb-preview-controls").shadowRoot.querySelector("label input")');
+    await target.evaluate(`const labels=[...document.querySelector('.wb-preview-controls').shadowRoot.querySelectorAll('label')];const field=labels.find(l=>l.firstChild.textContent.toLowerCase()==='body').querySelector('input,textarea');field.value='Long content '.repeat(100);field.dispatchEvent(new Event('change',{bubbles:true}));`);
     await until(`${state}.artboards[0].size.height>150`);
     assert.equal(await target.evaluate(`${state}.artboards.slice(1).every(b=>b.size.height<150)`), true);
     assert.equal(await target.evaluate(`getComputedStyle(${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.body).backgroundColor`), 'rgba(0, 0, 0, 0)');
-    await target.evaluate(`document.querySelector('.wb-preview-controls>button').click()`);
+    await target.evaluate(`document.querySelector('.wb-preview-controls').shadowRoot.querySelector('button').click()`);
     await until(`${state}.artboards.every(b=>b.size.height<150)`);
     await target.evaluate('document.getElementById("previewControls").click()');
     const shot = await target.send('Page.captureScreenshot', { format: 'png' });
@@ -203,6 +203,12 @@ collections:
     await until(`(()=>{const page=${frames}[0].contentDocument.querySelector('iframe.is-active')?.contentDocument;const examples=page?.querySelectorAll('[data-wb-example]');return examples?.length===5 && [...examples].every(e=>e.dataset.status==='ready')})()`);
     assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="reading"] wb-canvas').reading`), true, 'the reading example uses the shipping public input');
     assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="loading"] wb-canvas').shadowRoot.querySelector('section button').textContent`), 'Feedback / Info · 320 × 180 · Loading…', 'a standalone pending canvas uses the supplied name instead of its source filename');
+    const controlsPage = Object.keys(config.pages).find(src => src === 'design/preview-controls.md' || src === 'design/preview-controls.workbench.ts');
+    assert.ok(controlsPage, 'the preview controls design page is discovered');
+    await target.evaluate(`location.hash=${JSON.stringify('#' + controlsPage + '~docs')}`);
+    await until(`${state}?.artboards.length===1 && ${state}.artboards[0].target.src===${JSON.stringify(controlsPage)} && ${state}.artboards[0].view?.ready`);
+    await until(`(()=>{const page=${frames}[0].contentDocument.querySelector('iframe.is-active')?.contentDocument;const examples=page?.querySelectorAll('[data-wb-example]');return examples?.length===2 && [...examples].every(e=>e.dataset.status==='ready' && e.querySelector('wb-preview-controls')?.shadowRoot.querySelectorAll('label').length===5)})()`);
+    assert.equal(await target.evaluate(`${frames}[0].contentDocument.querySelector('iframe.is-active').contentDocument.querySelector('[data-wb-example="action-log"] wb-preview-controls').shadowRoot.querySelector('li').textContent`), 'Continue: Acme', 'preview controls design examples use the shipping element and public model');
     assert.deepEqual(nestedApplicationResources, [], 'no transition or artboard starts the Workbench application inside content');
     assert.deepEqual(errors, []);
     console.log('Scenario artboards passed: ordinary HTML and Button scenarios remain single views; Feedback\'s default scenario declares five artboards; an iteration renders only its own artboard; independent sizes, controls, annotations, handoff and design examples work.');

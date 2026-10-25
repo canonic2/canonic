@@ -26,7 +26,6 @@
     <link rel="stylesheet" href="/_workbench/ui/src/views/export/export.css" />
     <link rel="stylesheet" href="/_workbench/ui/src/views/page-list/page-list.css" />
     <link rel="stylesheet" href="annotations.css" />
-    <link rel="stylesheet" href="preview-controls.css" />
   </head>
   <body>
     <div class="wb" data-canvas-mode="default">
@@ -568,6 +567,13 @@
         </div>
       </dialog>
 
+      <wb-preview-controls
+        id="previewPanel"
+        class="wb-preview-controls"
+        role="complementary"
+        aria-label="Preview controls"
+        hidden
+      ></wb-preview-controls>
       <p class="wb-toast" id="toast" role="status" aria-live="polite" hidden></p>
     </div>
 
@@ -616,6 +622,5 @@
     <script src="reference.js"></script>
     <script src="agent-context.js"></script>
     <script src="/_workbench/ui/src/views/top-bar/top-bar.js"></script>
-    <script src="preview-controls.js"></script>
   </body>
 </html>

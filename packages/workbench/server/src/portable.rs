@@ -189,14 +189,52 @@ fn docs_entries(
 
 /// The viewer, the shared preview controls and the licence.
 fn viewer_files(product: &Path, add: &mut impl FnMut(String, Vec<u8>)) -> Result<()> {
-    for (folder, name) in [
-        ("ui/src/app/viewer", "index.html"),
-        ("ui/src/app/viewer", "viewer.js"),
-        ("ui/src/app/viewer", "viewer.css"),
-        ("ui/legacy", "preview-controls.js"),
-        ("ui/legacy", "preview-controls.css"),
+    for (source, name) in [
+        ("ui/src/app/viewer/index.html", "index.html"),
+        ("ui/src/app/viewer/viewer.css", "viewer.css"),
+        ("ui/src/app/viewer/viewer.js", "ui/src/app/viewer/viewer.js"),
+        (
+            "ui/src/modules/preview-controls/index.js",
+            "ui/src/modules/preview-controls/index.js",
+        ),
+        (
+            "ui/src/views/top-bar/preview-bindings.js",
+            "ui/src/views/top-bar/preview-bindings.js",
+        ),
+        (
+            "ui/src/components/preview-controls/element.js",
+            "ui/src/components/preview-controls/element.js",
+        ),
+        (
+            "ui/src/components/preview-controls/styles.js",
+            "ui/src/components/preview-controls/styles.js",
+        ),
+        (
+            "ui/src/components/preview-controls/register.js",
+            "ui/src/components/preview-controls/register.js",
+        ),
+        (
+            "node_modules/@canonic2/lattice/src/index.js",
+            "node_modules/@canonic2/lattice/src/index.js",
+        ),
+        (
+            "node_modules/@canonic2/lattice/src/report.js",
+            "node_modules/@canonic2/lattice/src/report.js",
+        ),
+        (
+            "node_modules/@canonic2/lattice/src/modules/store/store.js",
+            "node_modules/@canonic2/lattice/src/modules/store/store.js",
+        ),
+        (
+            "node_modules/@canonic2/lattice/src/modules/store/shallow.js",
+            "node_modules/@canonic2/lattice/src/modules/store/shallow.js",
+        ),
+        (
+            "node_modules/@canonic2/lattice/src/modules/elements/elements.js",
+            "node_modules/@canonic2/lattice/src/modules/elements/elements.js",
+        ),
     ] {
-        let path = product.join(folder).join(name);
+        let path = product.join(source);
         add(
             name.to_owned(),
             std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?,

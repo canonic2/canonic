@@ -15,10 +15,12 @@ import { registerActionsComponents } from '../../views/top-bar/register-actions.
 import { registerCanvasComponents } from '../../views/canvas/register-canvas.js';
 import { registerExportComponents } from '../../views/export/register-export.js';
 import { initialize } from '../../views/canvas/bindings.js';
+import { registerPreviewControls } from '../../components/preview-controls/register.js';
 
 registerSpaceComponents();
 registerSizeComponents();
 registerActionsComponents();
 registerCanvasComponents();
 registerExportComponents();
+registerPreviewControls();
 initialize();

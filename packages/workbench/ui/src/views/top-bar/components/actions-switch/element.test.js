@@ -35,7 +35,7 @@ void test(
           'Content-Security-Policy',
           "default-src 'none'; script-src 'self' 'nonce-test'; style-src 'self'; connect-src 'self'",
         );
-        res.end(`<!doctype html><link rel="stylesheet" href="/_workbench/ui/src/theme/defaults.css">
+        res.end(`<!doctype html><script type="importmap" nonce="test">{"imports":{"@canonic2/lattice":"/_workbench/node_modules/@canonic2/lattice/src/index.js","@canonic2/lattice/elements":"/_workbench/node_modules/@canonic2/lattice/src/modules/elements/elements.js"}}</script><link rel="stylesheet" href="/_workbench/ui/src/theme/defaults.css">
       <wb-actions-switch id="early"></wb-actions-switch>
       <script nonce="test">window.violations=[]; document.addEventListener('securitypolicyviolation', e => window.violations.push(e.violatedDirective));
         const early=document.getElementById('early'); early.checked=true; early.hint='set before upgrade';

@@ -2,6 +2,8 @@
 
 import { bindLegacyChrome, createController, createPublisher } from '../../modules/canvas/index.js';
 import { bindToolbar } from '../toolbar/bindings.js';
+import { createPreviewControls } from '../../modules/preview-controls/index.js';
+import { bindPreviewControls } from '../top-bar/preview-bindings.js';
 import {
   createRuntime,
   createPreviewSessions,
@@ -40,9 +42,19 @@ function mount() {
   let space,
     registry = [],
     activity = Date.now();
-  let previewBoard = '',
-    toastTimer;
-  const previews = new Map();
+  let toastTimer;
+  const previewControls = createPreviewControls({
+    send: (id, value) => controller.command(id, 'preview', value),
+  });
+  bindPreviewControls({
+    controls: previewControls,
+    button: $('previewControls'),
+    panel: $('previewPanel'),
+    signal,
+    report: say,
+  });
+  // Preview-controls owns this route-reset adapter until project/top-bar adoption.
+  chrome.wbPreviewControls = { reset: previewControls.deselect };
   const ready = json('/_workbench/spaces').then(async (listed) => {
     registry = listed.spaces;
     const resolved = await json('/_workbench/canvas/space', {
@@ -213,11 +225,7 @@ function mount() {
         0,
       );
       toolbar.count(count);
-      if (board.id !== previewBoard) {
-        previewBoard = board.id;
-        chrome.wbPreviewControls.reset();
-        if (previews.has(board.id)) chrome.wbPreviewControls.receive(previews.get(board.id));
-      }
+      previewControls.choose(board.id);
       if (board.view?.tool) toolbar.tool(board.view.tool);
     },
     host(board, data) {
@@ -228,8 +236,7 @@ function mount() {
       }
       if (message.type === 'wb-runtime-preview') {
         const value = message.value;
-        if (value?.event === 'ready') previews.set(board.id, value);
-        if (controller.snapshot().selected === board.id) chrome.wbPreviewControls.receive(value);
+        previewControls.receive(board.id, value);
         return;
       }
       if (message.type === 'wb-runtime-camera') {
@@ -398,7 +405,6 @@ function mount() {
         chrome.wbZoom = value;
       },
     },
-    previewControls: chrome.wbPreviewControls,
   });
   bindToolbar({
     document,
@@ -445,7 +451,7 @@ function mount() {
     busy: review.busy,
     present,
     async activate(next) {
-      previews.clear();
+      previewControls.clear();
       await sessions.activate({
         target: {
           space,
@@ -528,7 +534,8 @@ function mount() {
       delivery.dispose();
       publisher.dispose();
       controller.dispose();
-      previews.clear();
+      previewControls.clear();
+      delete chrome.wbPreviewControls;
     },
     { once: true },
   );

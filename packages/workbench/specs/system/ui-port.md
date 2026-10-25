@@ -8,8 +8,8 @@ owns the target layout, the order of the port and its delivery. The
 store the port introduces; each capability's own spec keeps its behavior.
 [Modules](modules.md#browser-source-layout) describes the shipping layout.
 
-**Status:** structural moves, Lattice delivery and the bounded navigation store
-are implemented under the [accepted scope](#port-order). See
+**Status:** structural moves, Lattice delivery, bounded navigation and transient
+preview-controls state with its top-bar binding are implemented under the [accepted scope](#port-order). See
 [implementation gaps](#implementation-gaps).
 
 ## Target layout
@@ -107,7 +107,7 @@ owning capability; other capabilities read it through that owner's `state` and
 | `native-surfaces` | Renderer document: simulator and window streams and their input | `legacy/simulator.js` |
 | `annotations` | Annotation tools, marks and the DOM mirror | `legacy/annotations.js`, `legacy/dom-mirror.js` |
 | `review` | Capture, references, agent context, handoff and export delivery | `modules/review/`, `legacy/capture-*.js`, `legacy/reference.js`, `legacy/agent-context.js`, `legacy/describe.js`, `legacy/modern-screenshot.js` |
-| `preview-controls` | Preview inputs, controls and Actions for the selected instance | `legacy/preview-controls.js`, `legacy/actions.js` |
+| `preview-controls` | Transient preview inputs, reset, action reports and documentation per renderer | `modules/preview-controls/` in place; the Actions on/off policy remains in `legacy/actions.js` for the top-bar step |
 | `shortcuts` | Keyboard shortcuts and their scoping | `legacy/keys.js` |
 | `docs` | Reading layout and embedded examples | `modules/docs/` |
 | `trace` | Browser timing traces | `modules/trace/` |
@@ -157,9 +157,9 @@ Other existing files move as follows:
 - **Styles.** Legacy CSS moves with the view or document that owns it:
   `views/page-list/page-list.css` and `app/sidebar/sidebar.css` are in place;
   `content.css` and `annotations.css` to the renderer document,
-  `capture.css` to the capture document, `preview-controls.css` beside the
-  preview controls' elements, and `workbench.css` to the canvas document, its
+  `capture.css` to the capture document, and `workbench.css` to the canvas document, its
   theme tokens to `theme/`. Path consumers of a moved stylesheet follow it.
+  Preview controls own their styles in `components/preview-controls/styles.js`.
 - **Injected script.** `legacy/preview-bridge.js` is not part of any Workbench
   document: it stays a standalone script served at
   `/_workbench/preview-bridge.js` and injected into proxied pages.
@@ -283,7 +283,7 @@ and passes its acceptance:
 | --- | --- | --- |
 | Server preview injection (`serve/files.rs`) | `legacy/keys.js`, `legacy/actions.js`, `legacy/scenarios.js`, read as text and injected into design pages | A served design page answers shortcuts, Actions and `?scenario=` as before |
 | Preview proxy (`proxies.rs`) | `/_workbench/preview-bridge.js`, injected into proxied URL and Storybook pages | A proxied page reports readiness and takes live screenshots |
-| Portable export (`portable.rs`) | `app/viewer/` files, `legacy/preview-controls.js` and `.css`, `views/docs/` and the trace module it imports | An exported archive opens from a static server and its viewer, controls and docs work |
+| Portable export (`portable.rs`) | `app/viewer/`, `modules/preview-controls/`, `components/preview-controls/`, the top-bar preview binding and unchanged Lattice modules; `views/docs/` and trace | An exported archive opens from a static server and its viewer, controls and docs work |
 | Compiled previews and renderers | `/_workbench/preview-host.html`, which the server maps to `app/preview-host/preview-host.html`, and `/_workbench/preview-runtime.js` | A TypeScript preview renders, re-renders a scenario in place and reloads after an edit |
 | Screenshot helper (`capture/app/main.cjs`) and its Node host (`server/node/src/modules/host/`) | `/_workbench/capture.html`, which the server maps to `app/capture/capture.html`; `legacy/describe.js` read as text and run in every captured page | An Electron capture and a handoff screenshot succeed |
 | Space styles (`space.rs`) | `legacy/annotations.css` read as text | Annotations render in the renderer document |
@@ -295,6 +295,7 @@ and passes its acceptance:
 | Adapter | Owner | Removed in |
 | --- | --- | --- |
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
+| Classic `wbPreviewControls.reset()` route boundary in canvas bindings | `preview-controls` | The project/top-bar adoption step; it delegates deselection to the capability and holds no state |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
 | Classic single-artboard resize rails in `views/canvas/legacy-bindings.js` | `canvas` | The `canvas` adoption step; dimensions and persistence remain in the shell until then |
 | `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js` publish shared browser rules to classic consumers | `canvas` / `docs` | Their adoption steps; existing globals and ready events stay until then |
@@ -365,5 +366,7 @@ The staged-extension VS Code acceptance checks all three document imports.
 - Legacy interface: every document is in `app/`; the code the documents load ships in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
-- Capability/view adoption after navigation. Large page-list adoption still
+- Capability/view adoption beyond navigation and transient preview controls.
+  Full top-bar state, including the Actions policy, remains in its existing owner.
+  Large page-list adoption still
   waits for the remaining windowing budgets and scope decision.

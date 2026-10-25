@@ -260,3 +260,6 @@
   min-width: 240px;
   max-width: 480px;
 }
+.wb-topbar #previewControls[hidden] {
+  display: none;
+}

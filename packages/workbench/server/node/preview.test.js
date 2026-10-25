@@ -1086,7 +1086,7 @@ test('the published package types definitions in installed projects', t => {
 
 test('the portable build includes the interactive viewer and shared controls while retaining successful previews', async t => {
   const root = fixture(t, {
-    'button.workbench.ts': definition('html', './button.ts'),
+    'button.workbench.ts': definition('html', './button.ts', "controls: { label: { type: 'text' } }"),
     'button.ts': 'export default function(canvas, context) { canvas.textContent = context.inputs.label; }',
     'broken.workbench.ts': "export default { id: 'broken', adapter: 'unknown', source: { entry: './button.ts' } }",
   });
@@ -1103,9 +1103,46 @@ test('the portable build includes the interactive viewer and shared controls whi
   assert.deepEqual(catalog.previews[0].scenarios.map(scenario => scenario.id), ['default', 'disabled']);
   assert.equal(catalog.previews[0].files, undefined);
   assert.ok(fs.existsSync(path.join(output, catalog.previews[0].directory.replace(/^browser\//, ''), 'index.html')));
-  assert.deepEqual(contents('preview-controls.js'), fs.readFileSync(path.join(__dirname, "../../ui/legacy/preview-controls.js")));
-  assert.deepEqual(contents('preview-controls.css'), fs.readFileSync(path.join(__dirname, "../../ui/legacy/preview-controls.css")));
+  for (const file of ['ui/src/app/viewer/viewer.js', 'ui/src/modules/preview-controls/index.js',
+    'ui/src/views/top-bar/preview-bindings.js', 'ui/src/components/preview-controls/element.js',
+    'ui/src/components/preview-controls/styles.js', 'ui/src/components/preview-controls/register.js',
+    'node_modules/@canonic2/lattice/src/index.js', 'node_modules/@canonic2/lattice/src/report.js',
+    'node_modules/@canonic2/lattice/src/modules/store/store.js', 'node_modules/@canonic2/lattice/src/modules/store/shallow.js',
+    'node_modules/@canonic2/lattice/src/modules/elements/elements.js'])
+    assert.deepEqual(contents(file), fs.readFileSync(path.join(__dirname, '../..', file)), file);
   assert.deepEqual(contents('CANONIC-LICENSE.txt'), fs.readFileSync(path.join(__dirname, "../../LICENSE")));
+  if (findChrome()) {
+    const listener = require('node:http').createServer((request, response) => {
+      const file = path.resolve(output, '.' + new URL(request.url, 'http://example.com').pathname.replace(/\/$/, '/index.html'));
+      if (!file.startsWith(output + path.sep)) { response.writeHead(404).end(); return; }
+      try {
+        response.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
+        response.end(fs.readFileSync(file));
+      } catch { response.writeHead(404).end(); }
+    });
+    await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
+    const browser = new Browser();
+    t.after(async () => { await browser.close(); await new Promise(resolve => listener.close(resolve)); });
+    await browser.launch(); const target = await browser.createTarget();
+    const errors = [];
+    target.on('Runtime.exceptionThrown', event => errors.push(event.exceptionDetails.text));
+    await target.navigate('http://127.0.0.1:' + listener.address().port + '/');
+    async function until(expression) {
+      const deadline = Date.now() + 10000;
+      while (!await target.evaluate(expression)) {
+        if (Date.now() > deadline) throw Error('Portable controls did not settle: ' + expression + ' ' + errors.join('\n'));
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+    await until('!document.getElementById("previewControls").hidden');
+    await target.evaluate('document.getElementById("previewControls").click()');
+    await until('!document.getElementById("previewPanel").hidden && !!document.getElementById("previewPanel").shadowRoot.querySelector("input")');
+    await target.evaluate(`const input=document.getElementById('previewPanel').shadowRoot.querySelector('input');input.value='Portable edit';input.dispatchEvent(new Event('change',{bubbles:true}));`);
+    await until('document.getElementById("previewFrame").contentDocument.body.textContent.includes("Portable edit")');
+    await target.evaluate('document.getElementById("previewPanel").shadowRoot.querySelector("button").click()');
+    await until('document.getElementById("previewFrame").contentDocument.body.textContent.includes("Continue")');
+    assert.deepEqual(errors, []);
+  }
 });
 
 test('portable export compiles only selected previews and filters declared variants', async t => {
