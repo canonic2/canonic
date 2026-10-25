@@ -160,13 +160,21 @@ void test('the applied size stays available for refilling until a new size is re
   navigation.takeSize(page);
   assert.equal(navigation.appliedSize(page), page.size);
   assert.equal(navigation.appliedSize(page), page.size, 'reading it does not consume it');
-  assert.equal(navigation.appliedSize({ ...page, scenario: 'other' }), null, 'only the shown destination');
+  assert.equal(
+    navigation.appliedSize({ ...page, scenario: 'other' }),
+    null,
+    'only the shown destination',
+  );
   const fit = { ...page.size, key: 'fit', kind: 'fit' };
   navigation.resize(fit);
   assert.equal(navigation.appliedSize(page), null, 'a new pick waits to be taken first');
   navigation.takeSize(page);
   assert.equal(navigation.appliedSize(page), fit);
-  await navigation.show({ ...page, size: fit, artboards: [{ id: 'one', width: 320, height: 120 }] });
+  await navigation.show({
+    ...page,
+    size: fit,
+    artboards: [{ id: 'one', width: 320, height: 120 }],
+  });
   navigation.takeSize(page);
   assert.equal(navigation.appliedSize(page), null, 'declared artboards keep their authored sizes');
   const docs = { ...selection('page'), lens: 'docs', docs: true };

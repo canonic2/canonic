@@ -16,7 +16,9 @@ function elementsIn(folder, at) {
   if (!fs.existsSync(folder)) return [];
   return fs
     .readdirSync(folder, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(folder, entry.name, 'element.js')))
+    .filter(
+      (entry) => entry.isDirectory() && fs.existsSync(path.join(folder, entry.name, 'element.js')),
+    )
     .map((entry) => ({ name: entry.name, at: `${at}/${entry.name}/` }));
 }
 
