@@ -13,7 +13,7 @@ with annotations, screenshots and agent handoffs. Projects supply
 | `extension/` | VS Code activation, commands, sidebar/webview integration and extension manifest |
 | `server/` | Rust Cargo package: the Workbench server (HTTP, project services, page index and preview compiler); `server/node/` owns its host, the standalone command and the Node evaluator |
 | `capture/` | Electron screenshot helper (`app/`), runtime acquisition (`runtime/` bundle), window capture and native stream lifecycle |
-| `ui/` | Browser-native JavaScript: documents and entries (`src/app/<document>/`, moving there from `src/bootstrap/` and `legacy/` one document at a time), views (`src/views/<view>/`), Web Components (`src/components/`), capabilities (`src/modules/`), host clients (`src/host/`), themes (`src/theme/`), preview adapters (`preview/`) and portable viewer (`viewer/`); `specs/system/ui-port.md` owns the target layout |
+| `ui/` | Browser-native JavaScript: every document and its entry, the portable viewer included (`src/app/<document>/`), views (`src/views/<view>/`), Web Components (`src/components/`), capabilities (`src/modules/`), host clients (`src/host/`), themes (`src/theme/`), classic scripts not yet ported (`legacy/`) and preview adapters (`preview/`); `specs/system/ui-port.md` owns the target layout |
 | `sdk/` | Published `@canonic2/workbench` definition helpers and authoring types |
 | `contracts/` | Shared manifest/YAML interpretation and pure data/rules; browser runtime modules are JavaScript with declarations for backend TypeScript consumers |
 | `scripts/` | Product checks, temporary VSIX assembly, per-platform builds and releases |
