@@ -1,7 +1,7 @@
 /* Edit sizes… examples: the shipping wb-sizes-editor, opened by a button
    that stands in for the size switcher's menu. */
 
-import type { WbSizesEditor } from '../ui/src/components/sizes-editor/element.js';
+import type { WbSizesEditor } from '../ui/src/views/top-bar/components/sizes-editor/element.js';
 import { icon, opener, sampleSizes } from './sizes-ui.ts';
 
 function editor(sizes = sampleSizes) {

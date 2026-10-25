@@ -4,7 +4,7 @@
    or the first reason it can't be sent yet. The server checks again; this
    keeps Add disabled and says why while the fields are wrong. */
 
-import { isLength, MAX_LENGTH, MIN_LENGTH } from '../../../../contracts/src/sizes/browser/size.js';
+import { isLength, MAX_LENGTH, MIN_LENGTH } from '../../../../../../contracts/src/sizes/browser/size.js';
 
 /** What wb-size-add carries: the size as the server's add route takes it. */
 

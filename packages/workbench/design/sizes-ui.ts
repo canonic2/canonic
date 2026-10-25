@@ -2,10 +2,10 @@
    canvas's icons and sample sizes as the server resolves them. */
 
 import { icon } from './icons.ts';
-import { registerSizeComponents } from '../ui/src/bootstrap/register-sizes.js';
+import { registerSizeComponents } from '../ui/src/views/top-bar/register-sizes.js';
 import { defaultSizes } from '../contracts/src/sizes/browser/size.js';
 import type { ResolvedSize } from '../contracts/src/sizes/browser/size.js';
-import type { WbSizeSwitcher } from '../ui/src/components/size-switcher/element.js';
+import type { WbSizeSwitcher } from '../ui/src/views/top-bar/components/size-switcher/element.js';
 
 registerSizeComponents();
 

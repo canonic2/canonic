@@ -6,7 +6,7 @@
    sizes and says what was asked for; the canvas controller owns the current
    size and every change to workbench.yaml. See specs/canvas/sizes.md. */
 
-import { describe, dimensionsText } from '../../../../contracts/src/sizes/browser/choice.js';
+import { describe, dimensionsText } from '../../../../../../contracts/src/sizes/browser/choice.js';
 
 import { styles } from './styles.js';
 

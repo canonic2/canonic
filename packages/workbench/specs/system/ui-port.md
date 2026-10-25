@@ -141,9 +141,10 @@ Other existing files move as follows:
   widths it lays out), with the size bridge for the classic scripts
   (`app/workbench/sizes.js`) folding into the canvas bindings; saving sizes to `workbench.yaml` is a
   `project` action. `size-switcher` and the `size-dialog` and `sizes-editor`
-  dialogs it opens are `top-bar` elements; each moves to `components/` if a
-  second view uses it. `bootstrap/register-sizes.js` becomes
-  element definitions in the entries that use them.
+  dialogs it opens are `top-bar` elements, in `views/top-bar/components/`;
+  each moves to `components/` if a second view uses it.
+  `views/top-bar/register-sizes.js` becomes element definitions in the
+  entries that use them.
 - **Spaces.** The space list belongs to `project`. `space-switcher` and
   `space-mark` stay shared components, used by the page list in the sidebar
   and by the top bar; `bootstrap/register-space.js` becomes element definitions

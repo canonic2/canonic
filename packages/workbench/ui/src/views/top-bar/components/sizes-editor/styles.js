@@ -1,4 +1,4 @@
-import { dialogStyles } from '../shared/dialog-styles.js';
+import { dialogStyles } from '../../../../components/shared/dialog-styles.js';
 export const styles =
   dialogStyles +
   `

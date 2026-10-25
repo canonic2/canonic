@@ -155,6 +155,7 @@ ui/src/
   app/viewer/                Portable export viewer, copied into each portable export
   bootstrap/                 Element registration
   views/canvas/              Canvas bindings to the existing shell
+  views/top-bar/             Size and Actions elements and their registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
   host/                     Browser HTTP transport

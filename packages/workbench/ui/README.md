@@ -24,7 +24,7 @@ For example, from a static host exposing the product folder:
 <link rel="stylesheet" href="./ui/src/theme/defaults.css">
 <wb-actions-switch></wb-actions-switch>
 <script type="module">
-  import { registerActionsComponents } from './ui/src/bootstrap/register-actions.js';
+  import { registerActionsComponents } from './ui/src/views/top-bar/register-actions.js';
   registerActionsComponents();
   document.querySelector('wb-actions-switch').addEventListener('wb-actions-toggle', event => {
     console.log(event.detail);
@@ -32,9 +32,9 @@ For example, from a static host exposing the product folder:
 </script>
 ```
 
-Small hosts import their registration family directly: `register-space.js`,
-`register-sizes.js`, `register-actions.js`, or `register-canvas.js` under
-`src/bootstrap/`. This keeps the sidebar and component examples from loading
+Small hosts import their registration family directly: `register-space.js` or
+`register-canvas.js` under `src/bootstrap/`, or `register-sizes.js` or
+`register-actions.js` under `src/views/top-bar/`. This keeps the sidebar and component examples from loading
 unrelated elements. The full shell uses `register.js`, which exports all four
 families. Registration is repeatable and rejects a conflicting element definition.
 

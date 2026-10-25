@@ -180,10 +180,10 @@ element, not in the page.
 
 ## Verification points
 
-- [Size switcher](../../ui/src/components/size-switcher/element.js),
-  [Custom size](../../ui/src/components/size-dialog/element.js),
-  [Edit sizes](../../ui/src/components/sizes-editor/element.js), and the
-  [Actions switch](../../ui/src/components/actions-switch/element.js) are registered for the
+- [Size switcher](../../ui/src/views/top-bar/components/size-switcher/element.js),
+  [Custom size](../../ui/src/views/top-bar/components/size-dialog/element.js),
+  [Edit sizes](../../ui/src/views/top-bar/components/sizes-editor/element.js), and the
+  [Actions switch](../../ui/src/views/top-bar/components/actions-switch/element.js) are registered for the
   canvas only, by [workbench.js](../../ui/src/app/workbench/workbench.js);
   the sidebar's module registers the space controls. Their pure form and row
   logic is tested in Node beside each element.

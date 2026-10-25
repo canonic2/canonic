@@ -187,9 +187,9 @@ opened off disk can't load the size module and has Fit only.
 ## The size switcher
 
 The switcher, the Custom size… dialog and the Edit sizes… editor are the
-[`wb-size-switcher`](../../ui/src/components/size-switcher/element.js),
-[`wb-size-dialog`](../../ui/src/components/size-dialog/element.js) and
-[`wb-sizes-editor`](../../ui/src/components/sizes-editor/element.js) Web
+[`wb-size-switcher`](../../ui/src/views/top-bar/components/size-switcher/element.js),
+[`wb-size-dialog`](../../ui/src/views/top-bar/components/size-dialog/element.js) and
+[`wb-sizes-editor`](../../ui/src/views/top-bar/components/sizes-editor/element.js) Web
 Components ([contract](../ui/web-components.md)), in the middle of the top bar
 beside the lens switcher. The canvas controller feeds them and posts to
 `/_workbench/sizes`.
@@ -443,11 +443,11 @@ sizes, the local merge, and problems; `address.test.js` for size keys;
 `ui/src/modules/canvas/canvas.test.js` for multiple-artboard sizes;
 `ui/src/modules/navigation/controller.test.js` for which applied size a
 filled axis is resolved again from when the canvas's room changes;
-[`size-switcher/element.test.js`](../../ui/src/components/size-switcher/element.test.js),
+[`size-switcher/element.test.js`](../../ui/src/views/top-bar/components/size-switcher/element.test.js),
 a real-Chrome test, for the components' inputs, events, keyboard use, focus,
 the dialogs and reconnection, with
-[`size-dialog/form.test.js`](../../ui/src/components/size-dialog/form.test.js) and
-[`sizes-editor/rows.test.js`](../../ui/src/components/sizes-editor/rows.test.js)
+[`size-dialog/form.test.js`](../../ui/src/views/top-bar/components/size-dialog/form.test.js) and
+[`sizes-editor/rows.test.js`](../../ui/src/views/top-bar/components/sizes-editor/rows.test.js)
 for the dialog and editor rules. Not covered: host acceptance of picking,
 adding and reordering sizes, in particular in the VS Code host, and an
 automated browser test of filled axes following a window resize.

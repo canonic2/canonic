@@ -84,7 +84,7 @@
   var exportProgressText = document.getElementById('exportProgressText');
   /* The size switcher and its two dialogs: Web Components that show sizes
      and say what was asked for. This controller owns the size and every
-     change to workbench.yaml; see src/components/size-switcher/. */
+     change to workbench.yaml; see src/views/top-bar/components/size-switcher/. */
   var sizeSwitcher = document.getElementById('sizeSwitcher');
   var sizeDialog = document.getElementById('sizeDialog');
   var sizesEditor = document.getElementById('sizesEditor');

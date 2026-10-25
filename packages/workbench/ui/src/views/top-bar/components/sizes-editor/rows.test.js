@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { draftOf, rowsProblem, rowValue } from './rows.js';
-import { defaultSizes } from '../../../../contracts/src/sizes/browser/size.js';
+import { defaultSizes } from '../../../../../../contracts/src/sizes/browser/size.js';
 
 const [fit, laptop] = defaultSizes();
 const sidebar = {

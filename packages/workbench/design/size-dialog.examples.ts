@@ -1,7 +1,7 @@
 /* Custom size… examples: the shipping wb-size-dialog, opened by a button
    that stands in for the size switcher's menu. */
 
-import type { WbSizeDialog } from '../ui/src/components/size-dialog/element.js';
+import type { WbSizeDialog } from '../ui/src/views/top-bar/components/size-dialog/element.js';
 import { icon, opener } from './sizes-ui.ts';
 
 function dialog(options: { pageOnly?: boolean; notice?: string; error?: string }) {

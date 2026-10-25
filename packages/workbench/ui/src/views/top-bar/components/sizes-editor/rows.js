@@ -6,7 +6,7 @@
    The server checks again; see src/sizes/edit.ts. */
 
 import { lengthOf } from '../size-dialog/form.js';
-import { defaultSize, labelOf } from '../../../../contracts/src/sizes/browser/size.js';
+import { defaultSize, labelOf } from '../../../../../../contracts/src/sizes/browser/size.js';
 
 /** What wb-sizes-save carries for each row, as the server's update route takes it. */
 

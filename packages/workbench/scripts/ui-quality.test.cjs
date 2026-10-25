@@ -80,7 +80,7 @@ test('UI lint enforces component and browser ownership boundaries', async () => 
   const root = path.resolve(__dirname, '..');
   const eslint = new ESLint({ cwd: root });
   // Exercise the actual JavaScript component and runtime boundary rules.
-  const component = path.join(root, 'ui/src/components/actions-switch/element.js');
+  const component = path.join(root, 'ui/src/views/top-bar/components/actions-switch/element.js');
   const runtime = path.join(root, 'ui/src/modules/preview-sessions/runtime.js');
   async function rules(code, filePath) {
     const [result] = await eslint.lintText(code, { filePath });

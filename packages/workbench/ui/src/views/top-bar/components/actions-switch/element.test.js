@@ -4,11 +4,11 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createUiAssets } from '../../../../scripts/ui-browser-fixture.cjs';
+import { createUiAssets } from '../../../../../../scripts/ui-browser-fixture.cjs';
 
 const require = createRequire(import.meta.url);
 
-const chrome = require('../../../../scripts/chrome.cjs');
+const chrome = require('../../../../../../scripts/chrome.cjs');
 
 void test(
   'Actions switch in real Chrome',
@@ -20,7 +20,7 @@ void test(
     t.after(() => browser.close());
     await browser.launch();
     const serve = createUiAssets(
-      path.resolve(fileURLToPath(new URL('../../../..', import.meta.url))),
+      path.resolve(fileURLToPath(new URL('../../../../../..', import.meta.url))),
     );
     const server = createServer((req, res) => {
       void (async () => {

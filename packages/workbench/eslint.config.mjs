@@ -49,7 +49,7 @@ export default [
   },
   {
     ...wc.configs['flat/recommended'],
-    files: ['ui/src/components/**/element.js'],
+    files: ['ui/src/components/**/element.js', 'ui/src/views/*/components/**/element.js'],
     rules: {
       ...wc.configs['flat/recommended'].rules,
       'wc/no-closed-shadow-root': 'error',
@@ -59,7 +59,7 @@ export default [
     },
   },
   {
-    files: ['ui/src/components/**/*.js'],
+    files: ['ui/src/components/**/*.js', 'ui/src/views/*/components/**/*.js'],
     ignores: ['**/*.test.js'],
     rules: {
       'no-restricted-globals': [
