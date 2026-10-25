@@ -328,7 +328,7 @@ test('React hot updates advance the Docs revision so a later Markdown save prese
   t.after(() => browser.close());
   await browser.launch();
   const page = await browser.createTarget();
-  await page.navigate(`http://127.0.0.1:${running.port}/_workbench/ui/src/modules/docs/host/docs-host.html?lens=web`);
+  await page.navigate(`http://127.0.0.1:${running.port}/_workbench/ui/src/app/docs/docs-host.html?lens=web`);
   const wait = async expression => {
     for (let attempt = 0; attempt < 300; attempt++) {
       if (await page.evaluate(expression)) return;
@@ -391,10 +391,10 @@ test('the page script and stylesheet are served unchanged from browser-ready sou
   assert.match(script.headers.get('content-type'), /text\/javascript/);
   const body = await script.text();
   assert.equal(body, fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
-  const host = await request(base + '/_workbench/ui/src/modules/docs/host/docs-host.html');
+  const host = await request(base + '/_workbench/ui/src/app/docs/docs-host.html');
   assert.equal(host.status, 200);
   assert.match(host.headers.get('content-type'), /text\/html/);
-  assert.equal(await host.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/host/docs-host.html'), 'utf8'));
+  assert.equal(await host.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/app/docs/docs-host.html'), 'utf8'));
   const mount = await request(base + '/_workbench/ui/src/modules/docs/page/mount-examples.js');
   assert.equal(await mount.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
   assert.equal((await request(base + '/_workbench/server/node/src/modules/docs/docs-service.ts')).status, 404);

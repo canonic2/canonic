@@ -14,6 +14,7 @@ the required contract change explicitly and the contract is changed first.
 | Page | Covers |
 | --- | --- |
 | [Store](store.md) | The store core's internal structures and how they meet the state management contract |
+| [Collection](collection.md) | The keyed collection's storage, undo log and delivery, and how they meet the collections contract |
 | [Package](package.md) | Entry-point wiring, file locations, type-check configurations and test fixtures |
 | [Element helpers](elements.md) | How the element helpers meet the element lifecycle contract |
 | [Testing support](testing.md) | How the selection declaration check meets its contract |
@@ -24,6 +25,8 @@ the required contract change explicitly and the contract is changed first.
 | --- | --- | --- |
 | `src/index.js` | The root entry point | Exists; exports the store core |
 | `src/modules/store/` | The store core | Exists, as [store](store.md) describes |
+| `src/modules/collection/` | The keyed collection behind the `@canonic2/lattice/collection` subpath | Exists, as [collection](collection.md) describes |
+| `src/report.js` | Callback error handling shared by the store and the collection: the last-resort reporter and the thenable check | Exists |
 | `src/modules/elements/` | The element helpers behind the `@canonic2/lattice/elements` subpath | Exists, as [element helpers](elements.md) describes |
 | `src/testing/` | Test support behind `@canonic2/lattice/testing` | Exists, as [testing support](testing.md) describes |
 | `examples/` | Runnable examples written on the real API, with their tests | Exists: the filters example |
@@ -36,7 +39,9 @@ the required contract change explicitly and the contract is changed first.
 ```text
 src/index.js        → src/modules/store/
 src/testing/        → ECMAScript built-ins only; the store's types in JSDoc
-src/modules/store/  → ECMAScript built-ins and shared platform APIs only
+src/modules/store/  → src/report.js; ECMAScript built-ins and shared platform APIs
+src/modules/collection/ → src/report.js; ECMAScript built-ins and shared platform APIs
+src/report.js       → ECMAScript built-ins and shared platform APIs only
 src/modules/elements/ → ECMAScript built-ins and methods of the objects it is given; DOM types in JSDoc
 runtime modules     ↛ src/testing/, tests/ or development tools
 ```

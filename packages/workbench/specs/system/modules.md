@@ -148,6 +148,7 @@ component folders; most of the interface still runs in `ui/legacy/`. The
 ui/src/
   app/capture/               Capture document, served as /_workbench/capture.html
   app/preview-host/          TypeScript preview host, served as /_workbench/preview-host.html
+  app/docs/                  Docs host document and entry
   bootstrap/                 Browser, sidebar and renderer composition/registration
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles

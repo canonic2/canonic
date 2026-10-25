@@ -15,7 +15,9 @@
   },
   "include": [
     "src/index.js",
+    "src/report.js",
     "src/modules/store/**/*.js",
+    "src/modules/collection/**/*.js",
     "src/testing/**/*.js",
     "types/shared-platform.d.ts"
   ],

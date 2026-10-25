@@ -13,6 +13,7 @@ page is corrected.
 | `src/modules/store/shallow.js` | `shallow` |
 | `src/modules/store/store.test.js`, `shallow.test.js` | Node unit tests, grouped by contract area as [tests](#tests) lists |
 | `src/index.js` | Re-exports `createStore`, `shallow` and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types |
+| `src/report.js` | `fallback` and `isThenable`, shared with the collection |
 
 ## Store state
 

@@ -113,6 +113,11 @@ export function bindToggle(element, notifications, { signal, report }) {
   code that creates that lifetime creates the binding and ends it.
 - Reconnecting an element, or recreating a dialog or item, creates a new binding
   with a new signal. A binding is never resumed.
+- For an item of a [keyed collection](collections.md), removing the item ends
+  its item subscriptions when the removal commits, before the membership
+  binding aborts the row's lifetime; that abort then finds them already ended.
+  A key removed and reinserted is a new item: the membership binding gives it
+  a new row and binding.
 - If acquiring a subscription or applying an initial value throws, the binding
   releases everything it already acquired before the error propagates. It does
   so with an internal controller combined with the given signal, as in the

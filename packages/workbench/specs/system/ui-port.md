@@ -132,7 +132,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | `toolbar` | Annotation tools and review actions | Toolbar parts of `legacy/workbench.js` and `legacy/annotations.js` |
 | `configure-pages` | The Configure pages dialog | `legacy/config-editor.js` |
 | `export` | The export dialog | `components/export-dialog/` |
-| `docs` | A docs lens's reading page | `modules/docs/page/`, `modules/docs/host/` |
+| `docs` | A docs lens's reading page | `modules/docs/page/` |
 | `viewer` | The portable viewer's interface | `ui/viewer/` |
 
 Other existing files move as follows:
@@ -222,7 +222,10 @@ Structural moves follow these conventions, each with a reason:
 
 - **Served addresses stay.** A moved document keeps its `/_workbench/` address;
   the server's table of app documents maps it to the new file, so callers such
-  as the capture helper, renderers and compiled previews change nothing.
+  as the capture helper, renderers and compiled previews change nothing. A
+  document served by its module path under `ui/src/`, such as the Docs host,
+  has only Workbench's own callers; its address moves with it and every
+  caller follows.
 - **Moves are reviewable as renames.** A file is first committed moved, with
   only the edits its new path requires; formatting it to the UI's formatter
   and fixing its lint findings follow in a separate commit.
@@ -337,8 +340,8 @@ The navigation store's adoption starts only after this slice is in place.
 
 - The Lattice delivery slice: Workbench does not depend on, serve or package
   Lattice, and none of the evidence above exists.
-- Structural moves: the capture and preview-host documents are in `app/`; the
-  canvas, sidebar, renderer, docs and viewer documents ship in the
+- Structural moves: the capture, preview-host and docs documents are in `app/`;
+  the canvas, sidebar, renderer and viewer documents ship in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
 - Every Lattice adoption step.

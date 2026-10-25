@@ -6,6 +6,7 @@ bindings. It has no runtime dependencies.
 | Entry point | Exports |
 | --- | --- |
 | `@canonic2/lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |
+| `@canonic2/lattice/collection` | The keyed collection: `createCollection`, and the `Collection`, `CollectionView`, `ItemSelection`, `CollectionSelection`, `KeysChange`, `CollectionOptions` and `CollectionWatchOptions` types. Pure: it loads no DOM code and runs in Node |
 | `@canonic2/lattice/elements` | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce` |
 | `@canonic2/lattice/testing` | Test support: `checkSelection`, which checks that a selection's `read` uses only its declared fields. For tests only; no runtime module imports it |
 

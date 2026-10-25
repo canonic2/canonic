@@ -365,7 +365,7 @@ impl Files {
         let kind = match extension.as_str() {
             "js" => "text/javascript; charset=utf-8",
             "css" => "text/css; charset=utf-8",
-            "html" if relative == "ui/src/modules/docs/host/docs-host.html" => {
+            "html" if relative == "ui/src/app/docs/docs-host.html" => {
                 "text/html; charset=utf-8"
             }
             _ => return missing(),
@@ -423,7 +423,7 @@ mod tests {
             ("workbench/ui/src/shell.test.js", "test();"),
             ("workbench/ui/src/shell.ts", "export {};"),
             (
-                "workbench/ui/src/modules/docs/host/docs-host.html",
+                "workbench/ui/src/app/docs/docs-host.html",
                 "<!doctype html><title>Docs</title>",
             ),
             (
@@ -495,7 +495,7 @@ mod tests {
             text(get("/_workbench/ui/src/shell.js").unwrap()).await.0,
             StatusCode::OK
         );
-        let docs = get("/_workbench/ui/src/modules/docs/host/docs-host.html").unwrap();
+        let docs = get("/_workbench/ui/src/app/docs/docs-host.html").unwrap();
         assert_eq!(
             docs.headers()[header::CONTENT_TYPE],
             "text/html; charset=utf-8"

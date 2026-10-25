@@ -11,10 +11,11 @@ Contributor language, JSDoc and tooling instructions live in the package's
 agent rules and [README](../../README.md).
 
 **Status:** agreed contract. The package is unpublished at version `0.0.0`. The
-root entry point exports the store core, `@canonic2/lattice/elements` the
-element helpers and `@canonic2/lattice/testing` the selection declaration
-check. The Node import, packed-archive, TypeScript consumer, testing-separation
-and runner-independent test support cases in [acceptance](#acceptance) have
+root entry point exports the store core, `@canonic2/lattice/collection` the
+keyed collection, `@canonic2/lattice/elements` the element helpers and
+`@canonic2/lattice/testing` the selection declaration check. The Node import,
+packed-archive, TypeScript consumer, testing-separation and runner-independent
+test support cases in [acceptance](#acceptance) have
 tests; unchanged delivery through static pages and DOM subpath isolation do
 not yet.
 
@@ -48,6 +49,7 @@ at an unchanged source file:
 | Specifier | Exports | May load |
 | --- | --- | --- |
 | `@canonic2/lattice` | The store core: `createStore`, `shallow` and their types | Pure modules only: no DOM, no browser globals |
+| `@canonic2/lattice/collection` | The keyed collection: `createCollection` and its types | Pure modules only: its own module and the shared callback error handling, not the store core |
 | `@canonic2/lattice/testing` | Test support, such as the selection declaration check | Platform APIs and Lattice's own modules only; never imported by a runtime module |
 | One subpath per DOM capability, such as a keyed collection helper | That capability only | Its own modules and the pure core |
 
@@ -124,11 +126,12 @@ Modern syntax and APIs must be available in every runtime an entry point
 supports at the minimum versions above. There is no runtime feature detection
 or polyfill; staying inside this boundary is a development obligation.
 
-- Pure modules reachable from the root entry point and test support run in both
-  Node and Chromium. They use only ECMAScript built-ins both minimum versions
-  implement, plus shared APIs such as `AbortController`, `queueMicrotask` and
-  `structuredClone`. They do not use runtime-specific globals such as `window`,
-  `document`, `customElements`, `process` or `Buffer`.
+- Pure modules reachable from the root and collection entry points and test
+  support run in both Node and Chromium. They use only ECMAScript built-ins
+  both minimum versions implement, plus shared APIs such as `AbortController`,
+  `queueMicrotask` and `structuredClone`. They do not use runtime-specific
+  globals such as `window`, `document`, `customElements`, `process` or
+  `Buffer`.
 - DOM modules reachable only from DOM subpaths may use the minimum Chromium's
   APIs and no Node API.
 - Pure-module type checking excludes DOM and Node global types and targets an
@@ -262,6 +265,7 @@ change, decided with the same fixture.
 | Requirement | Evidence |
 | --- | --- |
 | Pure root entry point | A Node test imports `@canonic2/lattice` without browser globals and uses every export |
+| Pure collection entry point | A Node test imports `@canonic2/lattice/collection` without browser globals and uses its export |
 | Separate DOM subpaths | A browser test imports one DOM subpath and confirms no unrelated capability module was loaded |
 | Unchanged delivery | A browser test loads the entry points from unchanged source files through an import map, and another through explicit entry-point URLs |
 | No internal imports | The `exports` map lists only entry points, and a review confirms consumers import nothing else |

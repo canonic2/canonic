@@ -10,6 +10,7 @@ page only says where and how.
 | `exports` entry | File | When |
 | --- | --- | --- |
 | `.` | `src/index.js` | Exists: `createStore`, `shallow` and the store's types |
+| `./collection` | `src/modules/collection/collection.js` | Exists: `createCollection` and its types; pure |
 | `./testing` | `src/testing/index.js` | Exists: the selection declaration check |
 | `./elements` | `src/modules/elements/elements.js` | Exists: the element helpers |
 | One entry per further DOM capability | Its module's entry file | Added with that capability |
@@ -29,7 +30,7 @@ runs them one after another:
 
 | Configuration | Root files | Library and types |
 | --- | --- | --- |
-| `tsconfig.pure.json` | Runtime files only: `src/index.js`, `src/modules/store/**/*.js` and `src/testing/**/*.js`, excluding `**/*.test.js`, `**/*.browser.test.js` and `**/*.bench.js` | `types: []`, the ES2024 library, no DOM library, plus `types/shared-platform.d.ts` |
+| `tsconfig.pure.json` | Runtime files only: `src/index.js`, `src/report.js`, `src/modules/store/**/*.js`, `src/modules/collection/**/*.js` and `src/testing/**/*.js`, excluding `**/*.test.js`, `**/*.browser.test.js` and `**/*.bench.js` | `types: []`, the ES2024 library, no DOM library, plus `types/shared-platform.d.ts` |
 | `tsconfig.dom.json` | DOM capability runtime files, `src/modules/elements/**/*.js`, with the same exclusions | `types: []`, the ES2024 library and the DOM library |
 | `tsconfig.json` | Tests, benchmarks and configuration files, and through their imports every runtime file | Node types, plus the DOM library for browser tests |
 
@@ -79,7 +80,7 @@ excluded.
 
 | Fixture | Location | Purpose |
 | --- | --- | --- |
-| Node import | `tests/import.test.js` | Exists; uses every root export without browser globals |
+| Node import | `tests/import.test.js` | Exists; uses every root export and the collection entry point without browser globals |
 | Tooling | `tests/tooling.test.js` | Exists; checks lint and type-check rejection of undocumented or mistyped code, lists the pure program's files, checks that the pure configuration rejects DOM and Node globals, and that no runtime module imports test support |
 | Vitest browser tests | `*.browser.test.js` | Behavior in Chromium through Vitest; they load modules through Vitest's development server and say nothing about unchanged delivery |
 | Static delivery | `tests/static/` | Not written yet: plain HTML pages served unchanged, driven by Playwright |
@@ -134,8 +135,10 @@ The files in `tests/types/` are templates, not a program checked in place:
   asserted by running the type checker and matching the specific error, as
   `tests/tooling.test.js` already does, not with suppression comments.
 - `valid.ts` and four `invalid-*.ts` files cover the root entry point and run in
-  both environments; `valid-dom.ts` covers the element helpers and runs with
-  the DOM library only, since that entry point is a DOM capability.
+  both environments; `valid-collection.ts` and `invalid-collection-field.ts`
+  cover the collection entry point in both environments; `valid-dom.ts` covers
+  the element helpers and runs with the DOM library only, since that entry
+  point is a DOM capability.
 - The consumer configuration is the one consumers are told to use: `allowJs`
   with `maxNodeModuleJsDepth: 2`, as
   [delivery](../contracts/delivery.md#types-for-typescript-consumers) records.

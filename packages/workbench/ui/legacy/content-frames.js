@@ -113,7 +113,7 @@
     target.wbWarmHost = true;
     target.wbWarmKind = kind;
     target.src = kind === 'preview' ? new URL('preview-host.html?actions=off', location.href).href :
-      new URL('/_workbench/ui/src/modules/docs/host/docs-host.html?lens=' + encodeURIComponent(kind.slice(5)), location.href).href;
+      new URL('/_workbench/ui/src/app/docs/docs-host.html?lens=' + encodeURIComponent(kind.slice(5)), location.href).href;
   }
 
   function cancelReadyWait(target) {

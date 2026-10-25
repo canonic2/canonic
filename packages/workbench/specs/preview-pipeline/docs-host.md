@@ -81,9 +81,10 @@ This section owns document reuse, isolation, freshness and resource bounds
 between Docs destinations.
 
 The canvas uses a dedicated Docs host, separate from the preview host. The
-Docs capability owns its browser-native host under `ui/src/modules/docs/host/`
-and its reusable page lifecycle under `ui/src/modules/docs/page/`. The host is
-a content-only document; neither module initializes the Workbench shell. The
+host document and its entry are under `ui/src/app/docs/`, served as
+`/_workbench/ui/src/app/docs/docs-host.html`, and the Docs capability's reusable
+page lifecycle is under `ui/src/modules/docs/page/`. The host is a content-only
+document; neither initializes the Workbench shell. The
 host reports readiness, visible examples for handoffs, and scroll for
 annotations.
 
@@ -241,7 +242,7 @@ or disposed request cannot navigate a newer destination or reopen a removed fram
 
 ## Verification
 
-Real Chrome [Docs host tests](../../ui/src/modules/docs/host/docs-host.test.js)
+Real Chrome [Docs host tests](../../ui/src/app/docs/docs-host.test.js)
 cover baseline restoration, retained dependencies/CSSOM sheets, repeated starts,
 real React selection events across reuse and runtime-listener disposal,
 rejecting unmount replacement through the canvas owner and superseded cleanup,

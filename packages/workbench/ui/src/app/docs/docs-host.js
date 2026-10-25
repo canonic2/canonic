@@ -1,4 +1,4 @@
-import * as page from '../page/docs-page.js';
+import * as page from '../../modules/docs/page/docs-page.js';
 
 page.wireOnce();
 window.__workbenchHost = true;
@@ -282,7 +282,7 @@ function replace() {
   ticket++;
   fetching?.abort();
   window.__workbenchReady = false;
-  const fresh = new URL('/_workbench/ui/src/modules/docs/host/docs-host.html', location.href);
+  const fresh = new URL('/_workbench/ui/src/app/docs/docs-host.html', location.href);
   fresh.searchParams.set('lens', lens);
   releaseRuntime();
   location.replace(fresh.href);

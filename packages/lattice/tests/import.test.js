@@ -15,3 +15,16 @@ test('imports the root entry point in Node without browser globals and uses ever
   expect(seen).toEqual([0, 1]);
   expect(lattice.shallow({ a: 1 }, { a: 1 })).toBe(true);
 });
+
+test('imports the collection entry point in Node without browser globals and uses it', async () => {
+  expect(Reflect.has(globalThis, 'document')).toBe(false);
+  const entry = await import('@canonic2/lattice/collection');
+  expect(Object.keys(entry).sort()).toEqual(['createCollection']);
+
+  const collection = entry.createCollection([['a', { count: 0 }]]);
+  /** @type {number[]} */
+  const seen = [];
+  collection.watchItem('a', { fields: ['count'], read: (item) => item.count }, (value) => seen.push(value));
+  collection.update('a', { count: 1 });
+  expect(seen).toEqual([0, 1]);
+});

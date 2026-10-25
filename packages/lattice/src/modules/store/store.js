@@ -4,6 +4,8 @@
  * Node API. Importing it has no effects.
  */
 
+import { fallback, isThenable } from '../../report.js';
+
 /**
  * A selection: the state fields `read` depends on, and the derivation itself.
  * Selections are plain objects; annotate them with
@@ -92,40 +94,6 @@ const releasedEquals = () => true;
 
 /** Placeholder for cleared queue slots, so no changed-key array stays referenced. */
 const NO_CHANGES = Object.freeze(/** @type {string[]} */ ([]));
-
-/**
- * Reports an error through the platform's `reportError` when it exists, and
- * otherwise, or when that throws, rethrows it from a microtask so it surfaces
- * as uncaught. Never throws itself.
- * @param {unknown} error The error to report.
- * @returns {void}
- */
-function fallback(error) {
-  if (typeof reportError === 'function') {
-    try {
-      reportError(error);
-      return;
-    } catch {
-      // The platform reporter failed; surface the original error instead.
-    }
-  }
-  queueMicrotask(() => {
-    throw error;
-  });
-}
-
-/**
- * Tells whether a value has a `then` method, as promises and thenables do.
- * @param {unknown} value The value `fn` returned.
- * @returns {boolean} Whether it is a thenable.
- */
-function isThenable(value) {
-  return (
-    value !== null &&
-    (typeof value === 'object' || typeof value === 'function') &&
-    typeof (/** @type {{ then?: unknown }} */ (value).then) === 'function'
-  );
-}
 
 /**
  * Tells whether any declared field is among a commit's changed fields.

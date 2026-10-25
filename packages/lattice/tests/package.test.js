@@ -96,6 +96,8 @@ describe('packed archive', () => {
     expect(archived).toContain('package/src/index.js');
     expect(archived).toContain('package/src/modules/store/store.js');
     expect(archived).toContain('package/src/modules/elements/elements.js');
+    expect(archived).toContain('package/src/modules/collection/collection.js');
+    expect(archived).toContain('package/src/report.js');
     expect(archived.filter((file) => file.endsWith('.test.js'))).toEqual([]);
     expect(archived.filter((file) => file.startsWith('package/types/'))).toEqual([]);
     expect(archived.filter((file) => file.startsWith('package/tests/'))).toEqual([]);
@@ -105,12 +107,17 @@ describe('packed archive', () => {
     writeFileSync(
       join(consumer, 'check.js'),
       `import * as root from '@canonic2/lattice';
+import * as collection from '@canonic2/lattice/collection';
 import * as elements from '@canonic2/lattice/elements';
 import * as testing from '@canonic2/lattice/testing';
 const store = root.createStore({ count: 0 });
 const seen = [];
 store.watch({ fields: ['count'], read: (state) => state.count }, (value) => seen.push(value));
 store.set({ count: 1 });
+const items = collection.createCollection([['a', { count: 0 }]]);
+const counts = [];
+items.watchItem('a', { fields: ['count'], read: (item) => item.count }, (value) => counts.push(value));
+items.update('a', { count: 1 });
 let internal = 'imported';
 try {
   await import('@canonic2/lattice/src/modules/store/store.js');
@@ -124,6 +131,8 @@ const checked = testing.checkSelection(
 );
 console.log(JSON.stringify({
   root: Object.keys(root).sort(),
+  collection: Object.keys(collection).sort(),
+  counts,
   elements: Object.keys(elements).sort(),
   testing: Object.keys(testing).sort(),
   unobserved: checked.unobserved,
@@ -136,6 +145,8 @@ console.log(JSON.stringify({
     const output = JSON.parse(run(process.execPath, ['check.js'], consumer));
     expect(output).toEqual({
       root: ['createStore', 'shallow'],
+      collection: ['createCollection'],
+      counts: [0, 1],
       elements: ['captureInputs', 'defineOnce', 'replayInputs', 'skipUpgradeAttribute'],
       testing: ['checkSelection'],
       unobserved: [],
@@ -156,7 +167,14 @@ describe('TypeScript consumer types', () => {
 
     // A run expecting another type than read returns is reported on read's
     // result, because TypeScript infers the value type from run's parameter.
+    test(`valid collection uses type-check with ${environment} types`, () => {
+      const { status, output } = typecheck('valid-collection.ts', environment);
+      expect(output).toBe('');
+      expect(status).toBe(0);
+    }, 60000);
+
     for (const [file, code] of [
+      ['invalid-collection-field.ts', 'TS2322'],
       ['invalid-key.ts', 'TS2353'],
       ['invalid-field.ts', 'TS2322'],
       ['invalid-run.ts', "TS2322: Type 'string' is not assignable to type 'number'"],

@@ -5,11 +5,11 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createUiAssets } from '../../../../../scripts/ui-browser-fixture.cjs';
+import { createUiAssets } from '../../../../scripts/ui-browser-fixture.cjs';
 
-const { Browser, findChrome } = createRequire(import.meta.url)('../../../../../scripts/chrome.cjs');
+const { Browser, findChrome } = createRequire(import.meta.url)('../../../../scripts/chrome.cjs');
 const { build } = createRequire(import.meta.url)('esbuild');
-const root = path.resolve(fileURLToPath(new URL('../../../../../', import.meta.url)));
+const root = path.resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
 
 test(
   'warm Docs lifecycle, isolation and retained freshness in the browser',
@@ -61,7 +61,7 @@ test(
               window.__wbShow=address=>__wbFrames.show({url:new URL(address,location.href).href,
                 lens:{kind:'docs',key:'web'}});
             </script>`);
-        } else if (url.pathname === '/_workbench/ui/src/modules/docs/host/docs-host.html') {
+        } else if (url.pathname === '/_workbench/ui/src/app/docs/docs-host.html') {
           res.setHeader('Content-Type', 'text/html');
           res.end(await readFile(new URL('./docs-host.html', import.meta.url)));
         } else if (url.pathname === '/_workbench/docs/bundle') {
@@ -197,7 +197,7 @@ test(
           res.setHeader('Content-Type', 'text/javascript');
           res.end(
             'window.wbPreviewActions={configure(){}};\n' +
-              (await readFile(new URL('../../../../legacy/scenarios.js', import.meta.url), 'utf8')),
+              (await readFile(new URL('../../../legacy/scenarios.js', import.meta.url), 'utf8')),
           );
         } else {
           const asset = await assets(req.url);
@@ -223,7 +223,7 @@ test(
         source: 'window.__wbTestLater = window.setTimeout.bind(window);',
       });
       await target.navigate(
-        origin + '/_workbench/ui/src/modules/docs/host/docs-host.html?lens=web',
+        origin + '/_workbench/ui/src/app/docs/docs-host.html?lens=web',
       );
       await target.evaluate(`(async()=>{
       window.__wbWait=async test=>{const end=performance.now()+5000;while(!test()){

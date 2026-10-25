@@ -162,7 +162,7 @@ test('Docs retains four documents, resumes exact pages, and reuses the oldest id
     const three = await docs(h, 'three');
     const four = await docs(h, 'four');
     assert.equal(new Set([one, two, three, four]).size, 4);
-    assert.match(one.getAttribute('src'), /docs\/host\/docs-host.html\?lens=web$/);
+    assert.match(one.getAttribute('src'), /app\/docs\/docs-host.html\?lens=web$/);
     assert.equal(await docs(h, 'two'), two);
     assert.equal(two.contentWindow.loads.length, 1);
     assert.equal(two.contentWindow.resumes.length, 1);

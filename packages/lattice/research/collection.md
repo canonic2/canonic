@@ -19,7 +19,8 @@ result: per-item stores make item updates independent of the collection's
 size but cost more memory and teardown than the thresholds allow. The state
 shape for collections stays open until the owner decides. Stage 4 evaluated
 a keyed collection prototype against agreed thresholds and is reported as
-supported: every threshold holds.
+supported: every threshold holds. Decided 2026-10-25: the keyed collection is
+accepted for implementation; stage 5 measures the shipping implementation.
 
 ## Hypothesis
 
@@ -125,7 +126,7 @@ tests passing and a test that deactivation releases callbacks immediately.
 ### Stage 3: collection state shape (2026-10-25, before any stage 3 run)
 
 **Question.** Can the existing API meet the collection requirements in the
-[state management contract](../specs/contracts/state-management.md#collections-open)
+[state management contract](../specs/contracts/state-management.md#collections)
 with one store per item, and at what cost compared with the shared map?
 
 **Variants.** Both use the store as committed, with bulk compaction, and the
@@ -222,8 +223,9 @@ stores in the collection; the bare-store cell gives a store's own size.
 
 ### Stage 4: keyed collection prototype (2026-10-25, before any stage 4 run)
 
-**Question.** Does the [keyed collection proposal](../specs/proposals/keyed-collections.md),
-as amended by the owner's decisions of 2026-10-25, meet the collection
+**Question.** Does the keyed collection proposal, since accepted as the
+[collections contract](../specs/contracts/collections.md), as amended by the
+owner's decisions of 2026-10-25, meet the collection
 requirements within the agreed thresholds?
 
 **Authorization.** The owner accepted the separate collection capability as
@@ -317,6 +319,45 @@ commit. Variant 4's summary iterates the keys with an indexed loop, with a
 comment saying why. The prototype tests, extended with a savepoint case, pass.
 The `for…of` cost is a finding for the proposal: freezing the keys array
 makes the natural loop over it allocate in this engine.
+
+### Stage 5: shipping path (2026-10-25, before any stage 5 run)
+
+**Question.** Does the shipping keyed collection, implemented from the
+[collections contract](../specs/contracts/collections.md), meet the stage 4
+thresholds on the shipping path, and what does it allocate and collect?
+
+**Authorization.** The owner accepted the proposal for implementation on
+2026-10-25 and asked for the comparison to be repeated through the shipping
+path, including a confirmation run, without further approval.
+
+**Variants.** Variant 5 is the tasks capability and bindings of variant 4,
+unchanged except that it imports `createCollection` from
+`@canonic2/lattice/collection`, served unchanged from the package's source
+through the page's import map. Variant 1, the shared map, is the baseline;
+variant 3, store per item, is needed for condition 1; variant 4, the lab
+prototype, is a reference.
+
+**Workloads, measures and correctness** as stage 4, for variants 1, 3, 4 and 5
+in timing, 1, 4 and 5 in counted and memory sets. The counted checks of stage 4
+apply to variant 5, including the summary limits and key reuse.
+
+**Garbage collection.** For variants 1 and 5 at each size, 10 pages each: after
+a warmup, trace Chromium's `MinorGC` and `MajorGC` events while running 20,000
+label updates, 20,000 done toggles and a bulk done update of every item
+repeated 20,000 ÷ N times (at least 20), each separately, and report the
+number of collections and their total duration per 1,000 operations next to
+the run's own CPU time and allocated bytes.
+
+**Confirmation.** After the first timing set, a second timing set of variants
+1 and 5 alone, 15 pages per size, under comparable conditions.
+
+**Reading.** The shipping path confirms the stage 4 result when the five
+thresholds hold for variant 5 in the first timing set and in the
+confirmation, and in the memory and counted sets. Allocation and collection
+are reported against the prototype and the shared map with no threshold: the
+owner accepted bulk allocation as a cost of this design. If a threshold fails,
+the prototype figures do not carry over to the product, the record says which
+measure failed, and the owner decides.
 
 ### Host and tools
 
@@ -779,3 +820,22 @@ allocations, nearly four times the shared map's, and collection-wide values
 that remain linear when evaluated. The collection contract stays open until
 the owner decides; adopting the proposal means implementing it in the
 product with its tests and measuring it again on the shipping path.
+
+**Owner's decision (2026-10-25):** the proposal is accepted for
+implementation, within the measured scope. It meets the agreed thresholds and
+resolves the trade-off between shared-map updates and per-item stores.
+
+- `keys()` stays a frozen array; measured hot paths use indexed loops.
+- Bulk allocation, about 170 bytes per changed item, is an accepted cost of
+  this design. It was not a rejection threshold and none is added; allocation
+  and garbage-collection effects are measured again through the shipping
+  implementation.
+- Aggregate costs stay explicit: item-local updates are selective, and
+  collection-wide derivations can still scan every item.
+- Prototype performance is not established product performance; stage 5
+  measures the shipping implementation.
+- This settles the primitive, not any application's large-list readiness.
+  Selection over 10,000 items and windowing remain separate work.
+
+The [collections contract](../specs/contracts/collections.md) records the
+accepted design, and `src/modules/collection/` implements it.
