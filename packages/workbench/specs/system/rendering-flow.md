@@ -5,8 +5,10 @@ requests and child markup as well as warm sessions, labels and review behavior.
 Independent UI/backend hosting acceptance remains separate work.
 
 This topic owns the shell/content boundary. [Modules](modules.md) owns UI/backend
-independence; [core](../core.md) owns selection, [readiness](../preview-pipeline/readiness.md)
-owns render completion, and [multiple artboards](../canvas/multiple-artboards.md) owns instances.
+independence and asset delivery; [core](../core.md) owns selection,
+[navigation](../canvas/navigation.md) owns transitions between destinations,
+[readiness](../preview-pipeline/readiness.md) owns render completion, and
+[multiple artboards](../canvas/multiple-artboards.md) owns instances.
 
 ## Required flow
 
@@ -25,6 +27,14 @@ One Workbench application shell is mounted per canvas document. A VS Code
 webview may embed that shell in an iframe, and the editor sidebar may separately
 host the page-list components. Neither case permits another Workbench application
 shell inside an artboard.
+
+Compiling a project's React/Vue previews, rendering Astro/docs content, or running
+and proxying the project's Storybook is expected backend work that produces
+project content, not Workbench's sidebar, canvas or toolbar; the UI chooses and
+mounts the content destination. [UI and backend independence](modules.md#ui-and-backend-independence)
+owns the rest of that boundary and asset delivery. Neither the UI's source
+language nor its hosting arrangement is the cause of, or a reason for, nested
+shell rendering.
 
 ### Ownership
 
@@ -60,8 +70,7 @@ shell inside an artboard.
   session within the documented resource bounds. Removing the nested shell must
   not reintroduce full Storybook startup or iframe reloads on every selection.
 - Navigation revokes interaction with the outgoing destination before accepting
-  new work. Its pixels remain during the bounded grace period under its outgoing
-  labels and context; they cannot appear beneath the next destination's label.
+  new work; its outgoing pixels follow [navigation](../canvas/navigation.md).
   The shell owns transition status;
   renderers report data rather than creating competing application loading UI.
 - The target content must actually finish rendering before it is ready. Loading
@@ -76,258 +85,24 @@ a content viewport, not another Workbench shell. Embedded docs examples likewise
 mount content. Workbench's own design examples may intentionally render individual
 Workbench components as project content; they still do not initialize the application.
 
-## Navigation feedback
-
-Page selection expresses the user's intent immediately, while the canvas keeps
-the identity of the content it actually displays. The sidebar marks the picked
-page synchronously, before editor messaging, story lookup or rendering finishes.
-The breadcrumb may identify the requested destination while its artboard is pending.
-
-| Time or outcome | Canvas presentation |
-| --- | --- |
-| Pick begins | Keep the outgoing artboard or Docs viewport visible, with its existing label, geometry, camera, reading mode and reference; make it inert |
-| Destination settled before 200 ms | Swap to its content and metadata immediately, with no loading message |
-| Still pending at 200 ms | Conceal the outgoing view and show **Loading preview…**; it no longer contributes visible artboards to reference/context publication |
-| Settled after the deadline | Replace loading feedback with the destination and its metadata |
-| Failure | Show the requested destination's failure under its label, with no outgoing pixels: the destination's problem when it failed as a whole, or each failed slot's problem in its own slot beside its ready neighbors |
-
-A destination is settled when every one of its slots is settled. A slot is one
-artboard of the destination: the implicit artboard of an ordinary page, or each
-artboard a scenario declares. A slot settles when its content is ready or it
-has failed. A destination that fails as a whole, such as one whose page,
-definition or lens cannot be resolved, settles at once as failed.
-
-The 200 ms period starts at each new selection, including a selection whose story
-metadata is still being resolved. It delays feedback, never the rendering work or
-a ready page. On first open there is no outgoing content to retain; the loader
-still observes the grace period. Rapid picks restart the deadline for the latest
-destination, preserve the last displayed view while its new grace period applies,
-and invalidate older readiness/error callbacks. A view already concealed at a
-deadline is not resurrected by another pending pick. Completion, clear, failure
-and disposal release pending deadlines and transient outgoing renderers.
-
-A declared-artboard group is published as the replacement once every slot has
-settled, with each failed slot showing its own problem; one failed artboard
-never hides its neighbors. Until then the 200 ms rule above applies to the group
-as a whole. Creating the expected instances alone does not establish readiness.
-Pending renderers must already have a correctly sized layout viewport. The
-canvas supplies invisible, inert staging slots independently of the displayed
-state. It cannot defer all slot creation or use `display:none` until readiness:
-the renderer's paint/readiness callbacks may depend on that layout, producing
-a startup deadlock. Promotion preserves the prepared iframe document and its
-state; it changes presentation without reloading content.
-Existing warm ordinary/Storybook/Docs sessions keep their retention semantics.
-Outgoing declared instances may remain parked until the grace period ends or the
-replacement commits, then are disposed. This transition does not authorize an
-unbounded pool of outgoing runtimes.
-
-Screenshots and handoffs remain unavailable throughout pending navigation, even
-when outgoing pixels are visible. A published group with failed slots is
-captured under the [capture contract](../review/capture.md#what-is-captured):
-failed slots become explicit placeholders. The canvas reference and agent context describe
-the displayed outgoing view during the grace period, then no visible artboards
-while loading feedback is shown, then the committed replacement. Incoming labels,
-sizes, automatic camera fitting and reading mode must not be applied to the
-outgoing presentation.
-
-### Why the grace period exists
-
-Immediate sidebar feedback confirms the pick independently of rendering latency.
-Keeping the previous view briefly provides visual continuity through fast page
-changes, while suppressing both a blank canvas flash and a loading-message flash.
-A page ready at 25 ms appears at once; it does not wait for 200 ms. A slower page
-receives explicit loading feedback at the deadline so the old content cannot
-linger indefinitely and suggest that the pick was ignored. The threshold is a
-product interaction choice, not a claim that rendering completes within 200 ms.
-
-Keeping requested selection separate from displayed identity also prevents a
-reference or handoff from describing a new page while showing the old one's
-pixels. This improves perceived responsiveness without changing rendering speed,
-weakening readiness, or permitting capture of unfinished content.
-
-The navigation controller tests cover deadline cancellation, restart, supersession
-and group readiness. Preview-session tests cover transient outgoing retention and
-cleanup. The host's [browser regression](../../server/node/src/modules/host/navigation.test.ts)
-exercises sidebar selection, outgoing pixels/labels/reference, ready commit,
-deadline loading, late readiness and failure through the actual shell and renderer.
-
-## Navigation state
-
-**Status:** agreed, not implemented. Navigation will hold its state in a store
-built on Lattice's state management (`@canonic2/lattice`), which defines stores,
-selectors, bindings, phases, transitions and asynchronous work. Today the same
-facts live in closures across the legacy shell, the navigation and
-preview-session controllers, the canvas bootstrap and the content renderer,
-reconciled by explicit calls such as `present()` and per-owner sequence counters.
-
-### State
-
-| Field | Meaning |
-| --- | --- |
-| `id` | Opaque identity of the current navigation |
-| `requested` | The destination being navigated to: page, scenario, lens, example, declared artboards and the iteration selected for each declared or implicit artboard |
-| `displayed` | The destination and navigation `id` whose content is presented, or `null` |
-| `slots` | For the current `id`, each slot of `requested` and its state: `pending`, `ready` with its view, or `failed` with its problem |
-| `phase` | `idle`, `pending`, `loading`, `shown` or `failed` |
-| `problem` | The destination's own failure message when it failed as a whole |
-
-| Phase | Meaning | Canvas presentation |
-| --- | --- | --- |
-| `idle` | Nothing requested yet | Empty canvas |
-| `pending` | Requested, inside the grace period, a slot still pending | Outgoing view retained and inert |
-| `loading` | Requested, grace period elapsed, a slot still pending | **Loading preview…**, no outgoing pixels |
-| `shown` | Every slot settled and at least one ready | Ready slots interactive; each failed slot shows its problem in place |
-| `failed` | The destination failed as a whole, or every slot failed | The destination's problem, or each slot's problem in place; no outgoing pixels |
-
-Requested and displayed are separate fields, as [navigation feedback](#navigation-feedback)
-requires. A displayed artboard matches `requested` only when it also shows the
-iteration requested for it, or none when none is requested; under a lens other
-than design, every artboard matches with no iteration, since only the design
-lens renders [iterations](../pages/iterations.md). The canvas accepts input exactly when `phase` is `shown` or `failed`
-and no capture is running. One binding writes the canvas's `inert`,
-`aria-busy`, visibility and loading message; no other code writes them. The
-camera during pan, zoom and reading scroll stays in `<wb-canvas>`; navigation
-receives settled values only.
-
-### Events
-
-| Event | Source | Effect |
-| --- | --- | --- |
-| `picked(destination)` | Sidebar, route, editor | New `id`; `requested` set; `pending` |
-| `deadline(id)` | Grace timer | `pending` → `loading` when `id` is current |
-| `ready(id, slot, view)` | Renderer | The slot becomes `ready`, when `id` is current |
-| `failed(id, slot, problem)` | Renderer | The slot becomes `failed`, when `id` is current |
-| `failed(id, problem)` | Activation | The destination fails as a whole: `failed`, when `id` is current |
-
-When the last pending slot settles, the navigation leaves `pending` or
-`loading`: to `shown`, with `displayed` set to the destination, if any slot is
-ready, otherwise to `failed`.
-| `navigated(from, id, destination)` | Renderer, after a link or form inside the preview | Adopted as the current navigation when `from` is current |
-| `captureStarted` / `captureEnded` | Review | Input blocked for the capture's duration |
-
-### Identity across documents
-
-The canvas document and each content renderer own separate stores and exchange
-messages that carry navigation identity:
-
-- The shell sends every render request with its navigation `id`. The renderer
-  tags readiness, failure and metadata reports with the `id` of the request
-  they answer, as the [content renderer contract](#content-renderer-contract)
-  requires.
-- When the preview navigates itself, through a link or form the shell hands
-  back to it, the renderer mints a new `id` in its own namespace and reports
-  `navigated(from, id, destination)`. The shell adopts it only when `from` is
-  its current `id`; later reports for the new `id` then match.
-- Reports whose `id` is not current change nothing. A late report from a
-  superseded navigation, a parked session or a reused warm renderer can never
-  mark the current navigation ready or replace what is displayed.
-- The shell and each renderer runtime mint identities with distinct prefixes,
-  unique per document lifetime.
-
-### Invariants
-
-These hold after every event, in any order:
-
-1. When `phase` is `shown`, `displayed.id` equals `id`, every slot is settled,
-   and every ready slot's view matches its slot of `requested`.
-2. An event carrying a non-current `id` returns an empty patch.
-3. The canvas accepts input if and only if `phase` is `shown` or `failed` and no
-   capture is running.
-4. In `loading`, `shown` and `failed`, no outgoing content is presented.
-5. A navigation leaves `pending` and `loading` exactly when every slot has
-   settled or the destination has failed as a whole; a link followed inside the
-   preview, once reported, settles the same way as a pick.
-6. A failed slot never removes, hides or blocks a ready slot of the same
-   destination.
-
-Transition tests drive generated event sequences through these invariants.
-Browser regressions through the shell and renderer cover the discoveries below.
-
-### Migration
-
-- Workbench first adds Lattice as a dependency through the
-  [delivery slice](modules.md#lattice-delivery-slice): the server serves its
-  modules unchanged beside the UI, the canvas, renderer and sidebar entry
-  points resolve its import, and VSIX packaging includes it. The server-served
-  canvas and renderer documents need no CSP change for explicit-URL imports;
-  the sidebar webview gains a resource root for Lattice's files, which its
-  CSP's webview source then admits.
-- Navigation state, transitions and the grace timer move into a navigation store
-  under `ui/src/modules/navigation/`. The binding that writes the canvas's
-  `inert`, `aria-busy`, visibility and loading message lives in
-  `ui/src/views/canvas/bindings.js`, per the
-  [layout](modules.md#browser-source-ownership). The canvas
-  bootstrap's displayed and painted copies, and the navigation controller's flag
-  set, are replaced by the store's fields and selectors.
-- Renderer messages carry navigation identity as specified above.
-- The legacy shell keeps its route and sidebar code; an adapter at its boundary
-  turns route changes into `picked` and `shown` destinations into route writes.
-  The route state stays behind that adapter until the shell's route and sidebar
-  code are ported; the [temporary adapters](modules.md#temporary-adapters)
-  table names the step that removes it.
-- The other capabilities follow in the [port order](modules.md#port-order).
-
-### Discoveries
-
-- **Link inside a preview froze the canvas (2026-10-23).** Acme demo, App ›
-  Dashboard, **Actions** on: clicking **Inbox** inside the preview loaded
-  `app/inbox.html` in the artboard while the shell's selection stayed on the
-  dashboard. The canvas computed itself as pending, set `inert` on the artboards
-  and skipped the step that adopts the renderer's destination as the route, so it
-  never left that state. Every click and key on the artboard was ignored until
-  another page was picked. Cause: the requested destination had two owners (the
-  shell's selection and the renderer's target) reconciled by a call that a later
-  change gated on the very state it was meant to resolve. Invariants 3 and 5 and
-  the `navigated` event cover it.
-- **Blank Docs page after rapid collection switches (2026-10-23).** In the
-  Workbench space, switching from the Actions switch Docs page to Interface ›
-  Sidebar and back within about a second left a blank Docs viewport that stayed
-  blank. Observed in a screen recording; not yet reproduced or traced.
-  Hypothesis: a late report from the superseded visit or the retained Docs
-  session was accepted as readiness for the returning navigation. Invariants 1
-  and 2 cover that class of failure.
-
-### Open questions
-
-- Whether a renderer that never reports for its navigation needs a readiness
-  timeout that produces `failed`, or whether `loading` may last indefinitely
-  for slow compilation.
-
-## Backend and asset delivery
-
-Compiling a project's React/Vue previews, rendering Astro/docs content, or running
-and proxying the project's Storybook is expected backend work. That work produces
-project content, not Workbench's sidebar, canvas or toolbar. The frontend is
-responsible for choosing and mounting the correct content destination.
-
-Workbench UI source is browser-native JavaScript, HTML and CSS. The browser host,
-VS Code sidebar and portable exports serve or copy authored assets unchanged;
-no UI compiler, type stripping or bundler participates. Browser runtime imports,
-including shared rules, resolve directly to JavaScript. A static host can deliver
-those assets without knowing their component tree. The UI must also
-be usable with a fixture API client; the backend APIs must work without mounting UI.
-The source-language or hosting arrangement is not the cause of nested shell rendering.
-
 ## Implementation ownership
 
-[`runtime.js`](../../ui/src/modules/preview-sessions/runtime.js) mounts
-[`content.html`](../../ui/legacy/content.html). Its dedicated
-[`bootstrap`](../../ui/src/bootstrap/renderer.js) composes the content controller,
-retained frame sessions, native surface, annotation overlay and authenticated
-canvas protocol. It imports no application bootstrap and mounts no shell controls.
+The [browser source layout](modules.md#browser-source-layout) places the renderer
+composition. Renderer-specific responsibilities:
 
-[`content.js`](../../ui/src/modules/preview-sessions/content.js) derives destinations,
-scenarios, lenses and labels from project data through an injected loader/catalog.
-Readiness belongs to the view submitted to the frame runtime, so a delayed lookup
-cannot inherit the outgoing document's readiness. Shared manifest rules preserve
-authored labels/mappings while merging discovered preview scenarios. External interaction preferences do
-not restart a pending or retained Storybook document.
-
-[`renderer-bridge.js`](../../ui/src/modules/preview-sessions/renderer-bridge.js) owns
-canvas commands, metadata, capture locking, focus and keyboard forwarding through
-explicit content/annotation ports. The existing frame lifecycle and annotations
-remain JavaScript under `ui/legacy/`, with explicit factory initialization. Further
-annotation/native modularization remains separate work.
+- [`runtime.js`](../../ui/src/modules/preview-sessions/runtime.js) mounts
+  [`content.html`](../../ui/legacy/content.html). Its dedicated
+  [`bootstrap`](../../ui/src/bootstrap/renderer.js) imports no application
+  bootstrap and mounts no shell controls.
+- [`content.js`](../../ui/src/modules/preview-sessions/content.js) derives destinations,
+  scenarios, lenses and labels from project data through an injected loader/catalog.
+  Readiness belongs to the view submitted to the frame runtime, so a delayed lookup
+  cannot inherit the outgoing document's readiness. Shared manifest rules preserve
+  authored labels/mappings while merging discovered preview scenarios. External
+  interaction preferences do not restart a pending or retained Storybook document.
+- [`renderer-bridge.js`](../../ui/src/modules/preview-sessions/renderer-bridge.js) owns
+  canvas commands, metadata, capture locking, focus and keyboard forwarding through
+  explicit content/annotation ports.
 
 ## Acceptance and verification gaps
 

@@ -32,15 +32,22 @@ server-side listing; the compiler builds what its listing found.
   runtime chunk per profile ([serving](serving.md#chunks-and-urls)).
 - The compiler runs in development mode with hot module replacement, and
   React Refresh for React sources ([hot updates](hot-updates.md)).
+- Each page-tree request configures the compilers with the space's
+  `previews` settings and the page index's listing, and they pre-warm every
+  listed preview and docs lens after applying it. For `previews: false`, the
+  compilers close; an untrusted workspace never configures them. A change to
+  the resolved `previews` value replaces the compilers with new ones. A
+  preview or docs request that arrives first assembles the page tree.
 
 ### Entries
 
 - Every discovered preview, and every docs page in each of its docs lenses,
-  is an entry. Today all of them are declared before the first build, and all
-  are built. That eager start is current behavior, not a requirement:
-  [performance](../system/performance.md#first-open-and-edits) requires the
-  first page not to wait for other pages' builds, and the eager start misses
-  that ([status](#status)).
+  is an entry. Today all of them are declared and built before the first is
+  served; that eager start misses the first-page requirement
+  ([performance status](../system/performance.md#status)).
+- Only discovered definitions inside the project compile. A request for one
+  definition checks discovery rules directly without scanning every project
+  file.
 - The entry set stays fixed while documents that loaded its output are open.
   Rspack's hot updates do not follow a module that moves to another chunk.
   Adding an entry can move shared modules into a new split chunk. A document
@@ -109,10 +116,8 @@ server-side listing; the compiler builds what its listing found.
 
 - The compiler is Rspack's Rust crates inside `workbench-server`, built with
   Rspack's nightly toolchain ([server previews](../system/server.md#previews)).
-  Server-side project evaluation runs in the Node evaluator, outside the native
-  server and extension host. Project browser code runs in preview documents,
-  including those opened by the capture helper
-  ([processes and connections](../system/server.md#processes-and-connections)).
+  Where project code runs is the server's
+  [process model](../system/server.md#processes-and-connections).
 - The installed extension downloads no compiler, and projects install none.
 
 The compiler is [compiler.rs](../../server/src/compiler.rs) in
@@ -128,13 +133,10 @@ development defaults.
 ### What runs in the Node evaluator
 
 Evaluating project code is the Node evaluator's job, not the compiler's.
-The page index currently uses a separate short-lived definition evaluator for
-listing and selection; [server process ownership](../system/server.md#processes-and-connections)
-records that deviation from the shared-evaluator target. The evaluator the
-compiler uses is one long-lived Node process per space
-([node.rs](../../server/src/node.rs),
-[evaluator/](../../server/node/src/modules/evaluator/index.ts)), started on
-first need and reached over stdin and stdout with one JSON request per line:
+The server owns [the evaluator's process](../system/server.md#the-node-evaluator),
+its lifetime and deadlines, and the page index's separate
+[definition-index evaluator](../system/server.md#the-definition-index-evaluator).
+The compiler sends the evaluator these jobs:
 
 | Job | How |
 | --- | --- |
@@ -157,33 +159,20 @@ Gaps:
 - Live builds have no source maps. The lab measured builds without them, and
   turning them on is not yet measured.
 - The first page after a restart waits for every entry to build
-  ([open questions](#open-questions)).
+  ([performance status](../system/performance.md#status); proposed
+  [first-page design](first-page.md)).
 - An entry added while pages are open changes the entry set
   ([open questions](#open-questions)).
 - The compiler's memory, and the persistent cache's growth over long
   sessions, are unmeasured ([open questions](#open-questions)).
 
-## First-page design constraints
+## Decisions
 
-A different start must allow the requested page to build independently of the
-catalog size while preserving stable module/chunk identity and hot updates.
-Lazy compilation and incremental entry registration are candidates only when
-new pages, build errors, configuration replacement and already-open documents
-all meet their contracts. The implemented compiler declares and builds every
-entry; no alternative start is adopted.
-
-The [first-page research](../../research/first-page.md) and
-[compiler-host research](../../research/instant-first-page.md) hold
-candidate comparisons. Packaging requirements follow the
-[extension process boundary](../integrations/vscode-extension.md#process-boundaries) and
-[code-quality gates](../system/code-quality.md).
+- Rspack is the development compiler, with hot updates for every native
+  format, shared chunks, pushed build results and a warm document. Portable
+  output uses an Rspack production build with the same project plugin form.
 
 ## Open questions
-
-- **The first page after a restart.** The implemented eager start still
-  prepares and builds every entry. A start that meets the
-  [first-page target](../system/performance.md#measured-interactions) without scaling
-  with catalog size remains open.
 
 - **Changing the entry set.** A preview or docs lens added or removed while
   pages are open changes the entry set. The proposed rule treats this like a

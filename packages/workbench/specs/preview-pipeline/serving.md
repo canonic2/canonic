@@ -92,9 +92,7 @@ configured previews ([server](../system/server.md#previews)); a preview asked fo
 first assembles the page tree. Requests are
 answered concurrently, with no serial queue; an Astro render waits only for
 the Node evaluator's answer to it. One gap: preview and docs descriptors
-wait for pre-warming to finish, so after a restart the first descriptor
-waits for every listed entry to build
-([compiler](compiler.md#status)).
+wait for pre-warming to finish ([first-page status](../system/performance.md#status)).
 
 The initialized-runtime preload correction is implemented in `client.rs` for
 preview and Docs entries. Runtime/profile inspection precedes preload selection;

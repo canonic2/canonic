@@ -52,30 +52,23 @@ Feature specs own the behavior that must not change while making it faster.
 
 ### Navigation keeps the canvas usable
 
-- Sidebar selection changes immediately when a page is picked. Canvas replacement
-  and loading feedback follow the [200 ms navigation grace period](rendering-flow.md#navigation-feedback):
-  keep the outgoing view under its actual labels and context until the destination
-  settles or the deadline expires. A settled destination is revealed immediately;
-  there is no minimum display delay. If still pending at 200 ms, conceal the outgoing
-  view and show loading feedback. Pending navigation blocks preview interaction,
-  screenshots and handoffs. Completion, failure, supersession and disposal cancel
-  the feedback timer, so a fast return cannot flash a late loader.
+- Sidebar selection changes immediately when a page is picked. Canvas replacement,
+  the 200 ms grace period and loading feedback follow [navigation](../canvas/navigation.md).
+  A settled destination is revealed immediately; there is no minimum display
+  delay. Completion, failure, supersession and disposal cancel the feedback
+  timer, so a fast return cannot flash a late loader.
 - Changing the scenario, size, lens or inputs of a native page does not reload
   its compiled code. A scenario or input change re-renders in place; a size
   change resizes the frame.
 - Returning to a page the canvas still retains shows it without compiling,
   loading or mounting again. Docs resume immediately and check freshness in
   the background; refresh only when the revision changed, under the
-  [warm Docs contract](../preview-pipeline/warm-runtime.md#resume-and-freshness).
-- Retain the previous page's live state until its replacement settles. During
-  the grace period its displayed labels, geometry and reference still identify
-  that outgoing page. Publish the new artboard identity with its settled content,
-  as [rendering flow](rendering-flow.md) requires.
-  A new selection cancels an older one that is still loading, and the
-  older one never replaces the newer.
-- Readiness waits only for what a capture needs: the render, fonts and
-  visible images. It adds no fixed delays, and its time is measured
-  separately so that a slow wait is visible.
+  [warm Docs contract](../preview-pipeline/docs-host.md#resume-and-freshness).
+- The previous page's live state, labels and identity during the replacement,
+  and supersession of an older selection, follow [navigation](../canvas/navigation.md).
+- Readiness waits only for what a capture needs, as
+  [readiness](../preview-pipeline/readiness.md) defines. It adds no fixed delays,
+  and its time is measured separately so that a slow wait is visible.
 
 ### First open and edits
 
@@ -205,13 +198,14 @@ logged through the existing `preview.request.*` and `preview.browser.phase`
 events, correlated by page and scenario, so that a slow selection in someone's
 editor can be broken down from the Workbench log without a profiler.
 
-Enable `workbench.trace` and reload VS Code to collect these records in
-**Output → Workbench**. Standalone hosts accept `--trace`. Both default to off.
-`preview.request.completed` and `preview.browser.phase` share `selection`
-(a navigation ID), page, scenario and lens where available. Local document and
-descriptor/bundle requests carry the ID as `wbTrace`; asset URLs and retained
-session identity remain stable. The server's `Server-Timing` header exposes
-its request durations in webview developer tools.
+[Request tracing](server.md#request-tracing) owns enabling these records
+(`workbench.trace`, `--trace`), the server's request records and its
+`Server-Timing` header. In VS Code, enable `workbench.trace` and reload VS Code
+to collect them in **Output → Workbench**; the `Server-Timing` durations are
+visible in webview developer tools. `preview.request.completed` and
+`preview.browser.phase` share `selection` (a navigation ID), page, scenario and
+lens where available. Local document and descriptor/bundle requests carry the
+ID as `wbTrace`; asset URLs and retained session identity remain stable.
 
 Browser records identify selection, content renderer readiness, document load
 (with retained/warm flags), descriptor/bundle fetch, example mount, readiness

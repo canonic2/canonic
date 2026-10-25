@@ -52,8 +52,12 @@ The keys, their validation, and examples are in the
   names. The top bar's scenario switcher lists the title's stories in place of
   the design's scenarios.
 - The server fetches stories for the selected title through
-  `/_workbench/stories`. The canvas keeps each title's list for the session.
-  Source paths come from Storybook's `componentPath` and `importPath`,
+  `/_workbench/stories`. The canvas keeps each title's list for the session in
+  one catalog cache keyed by implementation and exact title. The outer UI and
+  content renderers share pending and completed lookups over source-, origin-
+  and channel-checked messages. Failed lookups can retry; refreshing
+  configuration clears the shared cache. Closing a renderer cancels its pending
+  catalog responses and deadlines. Source paths come from Storybook's `componentPath` and `importPath`,
   resolved against `root` and kept only when they exist; a page's own
   `code` pointers are added after them. A failed lookup shows its error on
   the canvas, and a stopped Storybook does not remove other usable pages.
@@ -72,48 +76,25 @@ This work follows the iframe runtime ownership in the
 - The first story loads in the preview iframe. Later picks on the same
   Storybook origin ask the loaded preview to switch through Storybook's
   `setCurrentStory` channel. This keeps the Storybook runtime warm.
-- The ordinary single-view canvas keeps its owning renderer across page, scenario
-  and lens navigation. Its first paint stays hidden until the requested preview
-  is ready, so the renderer's hosting interface cannot flash inside the artboard.
-  Ready status requires the matching story's render event and visible iframe;
-  iframe document loading alone does not make a story ready. The selected
-  renderer's completion is relayed to the editor only for the requested page,
-  scenario and lens.
-- The shell follows the [200 ms navigation grace period](../system/rendering-flow.md#navigation-feedback),
-  including while the story catalog is unresolved. Sidebar intent updates
-  immediately; the outgoing view retains its displayed labels and context until
-  the requested content settles or the deadline expires. An ordinary preview is
-  revealed only when its reported page, scenario and lens match the request and
-  it is ready or has a named failure. Hiding does not detach its renderer or
-  reload Storybook. Capture and handoff reject a pending destination; queued
-  focus reports cannot route back to the inert outgoing page.
-- One outer canvas status, `Loading preview…`, covers catalog lookup and
-  rendering. The preview's own loading documents and host labels stay hidden
-  during this transition. Story lookup emits no progress toast. A matching
-  ready view clears the status; a lookup failure replaces it with a persistent
-  error and clears `aria-busy`. Superseded reports cannot overwrite that error.
-  Choosing another page or retrying the failed title starts a fresh status;
-  choosing no available page restores the empty message without a spinner.
+- Transitions between stories, pages and lenses follow [navigation](../canvas/navigation.md),
+  including its grace period while the story catalog is unresolved and its single
+  **Loading preview…** status for catalog lookup and rendering. Story lookup emits
+  no progress toast; a lookup failure is the destination's failure, and retrying
+  the failed title starts a fresh status.
+- Ready status requires the matching story's render event and visible iframe;
+  iframe document loading alone does not make a story ready.
 - Titles, scenario controls and renderer labels derive from the current page and
-  resolved story metadata. Navigation immediately names the destination page;
-  an unresolved story leaves no previous scenario name behind. A resolved story
-  updates those names before preview switching starts. `wb-view-change` relays
-  label metadata independently of `wb-frame-change` and readiness, so a label
-  update cannot acknowledge an unrendered story. Cold artboards receive their
-  human-readable `target.label` before mounting, including authored child names.
-- Opening explicit artboards parks the ordinary renderer for up to 15 minutes.
-  Returning restores its Storybook iframe without loading another preview
-  document. Parked renderers cannot select a visible artboard or send editor
-  navigation messages, and do not participate in captures or published context.
-- The canvas owns one catalog cache keyed by implementation and exact title.
-  The outer UI and content renderers share pending and completed lookups over
-  source-, origin- and channel-checked messages. Failed lookups can retry;
-  refreshing configuration clears the shared cache. Closing a renderer cancels
-  its pending catalog responses and deadlines.
-- Leaving a Storybook lens retains its iframe under the canvas's 15-minute,
-  three-inactive-session policy. Returning to its current story preserves
-  interactions without rendering again. Picking another story in that session
-  uses the channel; the session retains the most recently rendered story.
+  resolved story metadata. An unresolved story leaves no previous scenario name
+  behind; a resolved story updates those names before preview switching starts,
+  and a label update cannot acknowledge an unrendered story.
+- Returning from explicit artboards restores the
+  [parked ordinary renderer's](../canvas/multiple-artboards.md#ui-and-integration-scope)
+  Storybook iframe without loading another preview document.
+- Leaving a Storybook lens retains its iframe under the
+  [retained-session budget](../preview-pipeline/warm-runtime.md#retained-sessions).
+  Returning to its current story preserves interactions without rendering again.
+  Picking another story in that session uses the channel; the session retains
+  the most recently rendered story.
 - Workbench accepts `currentStoryWasSet` and `storyRendered` only from the
   active or loading preview iframe, at the resolved Storybook proxy origin, and for
   the requested story ID. It reports the selection to the VS Code sidebar and

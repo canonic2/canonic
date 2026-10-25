@@ -54,7 +54,7 @@ iframe lifecycle, and `../src/modules/preview-sessions/content.js` derives metad
 from project data without menu DOM. The outer canvas alone owns placement, labels, grid and zoom;
 the content viewport fills its artboard at the supplied logical dimensions.
 
-The [warm Docs pool](../../specs/preview-pipeline/warm-runtime.md#warm-docs-pool)
+The [warm Docs pool](../../specs/preview-pipeline/docs-host.md#warm-docs-pool)
 extends this lifecycle with a dedicated Docs host under `../src/modules/docs/host/`
 and reusable page start/stop under `../src/modules/docs/page/`. It retains recent
 Docs pages and, once three sessions are idle, reuses the oldest compatible idle

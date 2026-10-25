@@ -38,8 +38,10 @@ project-registered adapters. They do not run a project's application server,
   Live and portable output share one
   adapter and render lifecycle, and that lifecycle is shared by every built-in
   and custom adapter.
-- Managed previews use retained iframe sessions and become ready only
-  after mounting, fonts, and visible images.
+- Managed previews use
+  [retained iframe sessions](../preview-pipeline/warm-runtime.md#retained-sessions)
+  and become ready as the [readiness contract](../preview-pipeline/readiness.md)
+  defines.
 - The preview mount fills the artboard width, including when project styles
   make the body a flex container. Loading, empty, and error content use the
   same width. The mount retains a viewport minimum height; web content does
@@ -79,35 +81,13 @@ an artboard, even while loading or displaying errors.
 - Each preview becomes a page whose `src` is the definition file. The title's
   first segment names the collection, the last the page, and the segments
   between are joined with ` / ` into one group. A title without `/` goes in
-  **Previews**; a missing title uses the ID. Page icon precedence is definition
-  `icon`, longest `previews.icons` title prefix, configured `previews.icon`,
-  then `component`. Prefixes match complete `/` segments, including an exact
-  title. Definition icons do not set collection icons. Invalid definition icon
-  syntax isolates that definition; invalid configuration icon values are
-  reported and ignored. Validation checks kebab-case syntax, not Lucide membership.
-- Collection icons resolve independently against the collection name. Highest
-  priority first: explicit authored icon, preview prefix mapping, configured
-  preview fallback, built-in default. Preview collections default to
-  `component`. Conflicting values at equal priority use lexical icon-name
-  order; import order cannot change the selected icon. The shared manifest
-  owns prefix matching and collection icon merging, including provenance
-  priorities. An authored collection with no explicit icon retains its
-  `file-text` default against imported built-in defaults; mappings and
-  configured fallbacks win.
-- Authored collections with only `name` and `icon` survive both config
-  readers and configuration-editor saves. They style imported pages in that
-  collection and remain hidden if imports leave them empty, including failed
-  catalogs.
-- Imported collections merge into authored collections with the same name.
-  Within a collection, groups with exactly the same name merge across authored
-  pages, previews, and implementation catalogs. The first group keeps its
-  position and metadata; later pages append in source order. Matching names
-  in different collections remain separate, as do names with different casing.
-- An authored page whose `src` is a definition file keeps its place and
-  label and takes the definition's scenarios and icon unless it has an explicit
-  authored icon; the imported duplicate is dropped.
-  The file must still match discovery. Authored-page size precedence follows
-  the [sizes contract](../canvas/sizes.md#typescript-previews).
+  **Previews**; a missing title uses the ID. Page and collection icons follow
+  the [icon rules](page-tree.md#icons).
+- Imported previews merge into the authored tree, including placeholder
+  collections, same-name groups and authored pages whose `src` is a definition
+  file, under the page tree's [merging rules](page-tree.md#merging).
+  Authored-page size precedence follows the
+  [sizes contract](../canvas/sizes.md#typescript-previews).
 - **Requirement:** the sidebar and canvas update when a
   definition file matching discovery is added, removed, renamed, or changes
   its title, scenarios, or sizes, without **Workbench: Refresh Pages**; see
@@ -142,8 +122,8 @@ applies independently within each isolated artboard.
 - Same-origin `.workbench.ts(x)` addresses load into a warm preview host
   rather than navigating the iframe. A newer load supersedes a queued one, and
   page-level listeners, timers, and animation frames remain owned by that
-  session until it is evicted or reset. The canvas retains up to three inactive
-  sessions for 15 minutes; return checks the compiled revision before reuse.
+  session until it is evicted or reset. Retention, its budget and the
+  return revision check are [retained sessions](../preview-pipeline/warm-runtime.md#retained-sessions).
   The warm-document path can reuse one session across pages; its per-page
   return-state limitation is recorded in [warm runtime](../preview-pipeline/warm-runtime.md#status).
 - Body nodes created during a preview module's import, such as SVG symbol
@@ -205,8 +185,9 @@ applies independently within each isolated artboard.
 - `requests` (preview, scenario and iteration) maps keys `[METHOD] /path [Operation]` or a
   full URL to a response object or a function `(request, context)`.
   Validation checks key shape and value type. Matching
-  ([requests.js](../../ui/preview/requests.js)): the iteration's map, then the
-  scenario's, then the preview's, declaration order within each; a bare path matches any origin;
+  ([requests.js](../../ui/preview/requests.js)): the maps in the
+  [merge order](iterations.md#what-an-iteration-changes), declaration order
+  within each; a bare path matches any origin;
   `*` matches any characters; a key's query parameters must be present with
   those values; the operation is the body's `operationName`, or the name in
   its `query`, or the same from the query string.
@@ -223,7 +204,8 @@ applies independently within each isolated artboard.
   `passthrough` sends the original request. The Actions switch does not
   affect requests.
 - Astro: the compiler swaps `globalThis.fetch` for the rendered iteration's,
-  scenario's and preview's maps, in that order, around
+  scenario's and preview's maps, in the
+  [merge order](iterations.md#what-an-iteration-changes), around
   each server render, relative URLs resolving against `http://localhost/`,
   with a 10-second abort. Unmatched requests are not logged there.
 - `workbench.config.ts` `environment` (a path from the project root, inside
@@ -306,10 +288,9 @@ reached through `node_modules` are listed by name and version.
   [artboards and iterations](iterations.md#declaring-artboards-and-iterations),
   which owns their validation (ID syntax, artboard fields and sizes, iteration
   fields). A definition has no top-level `artboards` or `iterations`.
-- `inputs` merge preview, scenario, declared artboard, iteration, then control
-  overrides; `fixtures` and `globals` merge preview, scenario, then iteration
-  (a declared artboard supplies inputs only). All are structured-cloned per
-  render. Validation checks that scenario, artboard and iteration `inputs`,
+- `inputs`, `fixtures` and `globals` merge in the
+  [iteration merge order](iterations.md#what-an-iteration-changes). All are
+  structured-cloned per render. Validation checks that scenario, artboard and iteration `inputs`,
   `fixtures` and `globals` serialize as JSON, that `requests` keys and values
   have the request-mock shape, and that iteration hooks are functions.
 - `sizes`: a nonempty list of kebab-case `SizeKey` values, including keys
@@ -320,11 +301,9 @@ reached through `node_modules` are listed by name and version.
   assets must stay inside the project.
 - [api.d.ts](../../sdk/api.d.ts) types scenario inputs against preview inputs.
 - `sdk/` is published to npm as `@canonic2/workbench` (`api.js`,
-  `api.d.ts`) at the extension's version by each `workbench/v*` release, so
-  `tsc` and editors resolve the import from an ordinary dev dependency. It
-  must type-check with `Bundler` and `NodeNext` resolution, from ESM and
-  CommonJS projects. Publishing uses npm trusted publishing from
-  `extension.yml`; the release refuses a tag whose package version differs.
+  `api.d.ts`), so `tsc` and editors resolve the import from an ordinary dev
+  dependency. It must type-check with `Bundler` and `NodeNext` resolution,
+  from ESM and CommonJS projects.
 
 ### Adapters and project configuration
 
@@ -342,68 +321,27 @@ reached through `node_modules` are listed by name and version.
 
 ### Server processes, lifecycle and trust
 
-The target follows the Workbench server's
-[processes and connections](../system/server.md#processes-and-connections):
+Compilation runs in `workbench-server`'s
+[preview pipeline](../preview-pipeline/README.md), which owns how the
+compilers are configured, build and pre-warm
+([compiler](../preview-pipeline/compiler.md)). Evaluation and Astro rendering
+run in its Node evaluator; the server's
+[processes and connections](../system/server.md#processes-and-connections) own
+the evaluators' processes, lifetimes, deadlines, runtime selection and request
+timing.
 
-- Server-side project evaluation runs in a Node child of the Workbench
-  server, outside the native server and extension host. Project browser code
-  also runs in preview documents, including the capture renderer. The
-  compiler evaluator starts on first need in a trusted workspace,
-  is reached over stdin and stdout or a local socket, never a TCP port, and
-  stops with the server.
-- Previews and docs lenses build in the server's
-  [preview pipeline](../preview-pipeline/README.md): Rspack compilers in watch
-  mode, with output in memory and a persistent cache in the host's temporary
-  folder. Only discovered definitions inside the project compile. A request
-  for one definition checks discovery rules directly without scanning every
-  project file.
-
-Compilation runs in `workbench-server`
-([compiler](../preview-pipeline/compiler.md)); evaluation and Astro rendering
-run in its Node evaluator ([node.rs](../../server/src/node.rs),
-[evaluator.cjs](../../server/node/preview/evaluator.cjs)); the
-[page index](../preview-pipeline/page-index.md) owns its separate evaluator.
-
-- Each page-tree request configures the compilers with the space's
-  `previews` settings and the page index's listing, and they pre-warm every
-  listed preview and docs lens after applying it. For `previews: false`, the
-  compilers close; an untrusted workspace never configures them. A change to
-  the resolved `previews` value replaces the compilers with new ones. A
-  preview or docs request that arrives first assembles the page tree.
-- The evaluator starts on the first request that needs project JavaScript,
-  waits up to a minute for the runtime, and fails a request that has no
-  answer within two minutes, stopping the process. When it exits, every
-  waiting request fails and the next request starts a new one; there is no
-  proactive restart. It is killed with the server. It asks the host for its
-  Node runtime the first time it starts, so a space whose definitions are
-  literals and that has no `workbench.config.ts` starts none.
-- The evaluator's error output goes to the server's standard error.
-  Per-request timing is logged as `preview.request.completed`.
 - In an untrusted server (`isTrusted: false`), no definition runs, discovered
   files produce `Workbench previews require a trusted workspace.`, and preview
   routes answer 404. When trust applies is part of the
   [extension's trust contract](../integrations/vscode-extension.md#workspace-trust).
 
-### Runtime selection
-
-The evaluator runs on the [bundled Electron runtime](../review/capture.md#bundled-electron-runtime)
-in Node mode when that runtime is used on the host, and otherwise on the
-host's Node (the standalone command's executable). `NODE_OPTIONS` is removed
-from its environment. Previews compile with Rspack's Rust crates in
-`workbench-server`, and esbuild in the evaluator bundles definitions and
-`workbench.config.ts` for evaluation
-([compiler](../preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)).
-Each platform VSIX bundles the matching pinned esbuild binary at build time;
-source checkouts use the package's installed esbuild. Projects install no
-compiler, and the installed extension downloads none.
-
 ### Readiness and errors
 
 - A render aborts the previous signal and runs cleanups in reverse; a failed
-  cleanup does not stop the others. `setup` runs environment, preview,
-  scenario, then iteration; the source mounts; `play` and `ready` follow; then fonts, then visible
-  images (offscreen lazy images excluded) or 3 seconds. Each phase is logged on its own event
-  ([readiness](../preview-pipeline/readiness.md)).
+  cleanup does not stop the others. `setup`, `play` and `ready` run in the
+  [iteration order](iterations.md#what-an-iteration-changes), with the source
+  mounting after `setup`; readiness then waits as the
+  [readiness contract](../preview-pipeline/readiness.md) defines.
 - Thrown errors, unhandled rejections, adapter errors, and `context.error`
   clear readiness, release resources, and show the error in the frame.
   **Reset scenario** recovers.
@@ -458,12 +396,11 @@ compiler, and the installed extension downloads none.
 
 ## Design constraints
 
-- Project code runs only in the Node evaluator (or the page index's
-  evaluator). Astro frontmatter
+- Project code runs only in the server's
+  [evaluators](../system/server.md#processes-and-connections). Astro frontmatter
   runs on the server side; only rendered HTML and client assets reach browsers.
-- Runtime readiness cannot depend on animation frames being delivered to a
-  hidden frame. The [readiness contract](../preview-pipeline/readiness.md) owns
-  rendering, font and image waits.
+- The [readiness contract](../preview-pipeline/readiness.md) owns rendering,
+  font and image waits, including progress in hidden frames.
 - Asset requests recheck configuration and trust without rebuilding the catalog.
 - Fragment navigation is handled inside the preview because the warm host's
   `<base>` points at compiler output. A fragment must scroll its source page
@@ -493,7 +430,5 @@ compiler, and the installed extension downloads none.
 - **Scenario data.** Validation uses JSON serialization while runtime isolation
   uses `structuredClone`. Decide whether JSON data or the broader cloneable
   set is the authoring contract.
-- **Evaluator exit.** Decide whether an unexpected evaluator exit should publish a
-  persistent problem before a subsequent request starts its replacement.
 - **Trust changes.** Live workspace-trust transitions and added spaces are
   governed by the [extension contract](../integrations/vscode-extension.md#open-questions).

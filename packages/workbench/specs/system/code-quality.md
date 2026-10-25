@@ -178,11 +178,11 @@ ownership. This policy does not claim that the native compiler, evaluator or
 development toolchain has only those dependencies.
 
 Lattice (`@canonic2/lattice`) is the agreed dependency for application state
-([browser source ownership](modules.md#browser-source-ownership)). Its
+([browser UI port](ui-port.md)). Its
 rationale: it is a local, zero-dependency package of native ES modules that
 hosts serve and package unchanged, with no build step, and it supplies the
 store, capability and element contracts the port uses. Its delivery follows
-the [Lattice delivery slice](modules.md#lattice-delivery-slice); it is not
+the [Lattice delivery slice](ui-port.md#lattice-delivery-slice); it is not
 yet shipped.
 
 Keep project framework packages separate from Workbench UI dependencies:

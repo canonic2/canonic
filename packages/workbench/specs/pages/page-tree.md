@@ -34,28 +34,48 @@ Space › Collection › (Group) › Page
   breadcrumb.
 - **Several spaces.** `spaces` maps kebab-case IDs to entries; a non-map entry
   or another ID is dropped with a problem. Each entry may set `name`, `color`,
-  `icon`, `root` and `sizes`, which belong to that space only; every other
-  key falls back to the file's top level, so top-level `collections` are
+  `icon`, `root` and `sizes`, which belong to that space only and are never
+  inherited; every other key falls back to the file's top level, and a key the
+  space sets replaces the top-level one, so top-level `collections` are
   shared by spaces that declare none, except `implementations`, which merge
-  with the space's own by name. A top-level `sizes` beside `spaces` is
+  with the space's own by name (`selectSpace` in
+  [manifest.js](../../contracts/manifest.js), which the server's reader
+  matches). A top-level `sizes` beside `spaces` is
   a problem. A space's name defaults to its ID in sentence case
   (`design-system` → *Design system*). An unknown space asked for at startup
   falls back to the first, with a problem.
-- `root` is a folder path relative to the file, not a URL.
-- `color` is one of nine named colors or a hex value. Without one, the space
-  takes one of six colors chosen from a hash of its ID.
-- `icon` is a Lucide icon name or an image file of at most 256 KB.
+- `root` is a folder path relative to the file's folder, not a URL; a value
+  that isn't a folder path is a problem. Without one, the space is served from
+  the file's folder, so several spaces may share one root.
+- `color` is one of nine named colors (`blue`, `green`, `orange`, `purple`,
+  `pink`, `teal`, `red`, `yellow`, `gray`) or a hex value. Without one, the
+  space takes one of six colors chosen from a hash of its ID, except behind an
+  image icon, which gets none.
+- `icon` is a Lucide icon name or a project-relative `.svg`, `.png`, `.jpg`,
+  `.webp` or `.gif` file of at most 256 KB. A missing, oversized or escaping
+  image falls back to the name's initial, and a missing one is a problem.
+  `color` and `icon` are validated by `spaceMark` in
+  [manifest.js](../../contracts/manifest.js) for both readers; an invalid value
+  is a problem and left out.
 
-`workbench.local.yaml` merges over the committed file: `spaces` merge by key,
-each space as the whole file merges; `implementations` and space `sizes` merge
-by key one level deep; a local `collections`, `previews` or nested `start`
-block replaces the committed one ([core](../core.md#configuration-and-serving)).
+### Local overrides
+
+`workbench.local.yaml` is optional and merges over the committed file
+(`merge` in [manifest.js](../../contracts/manifest.js)):
+
+- A top-level value it sets replaces the committed one, except as below.
+- `spaces` merge by key, each space as the whole file merges.
+- `implementations` and `sizes` merge by key, one level deep: a local entry's
+  fields replace the committed entry's, so a nested `start` block supplied
+  locally replaces the whole committed `start` block.
+- A local `collections` or `previews` value replaces the committed one.
 
 ## Collections, groups and pages in `workbench.yaml`
 
 - A **page** entry needs `label` and `src`. `src` is relative to the space
-  root, without `..`, and cannot contain the address marks `:`, `+`, `!` or
-  `~`. A `src` ending in `.md` is a Markdown page.
+  root, without `..`, and cannot contain a mark the
+  [address](../core.md#selection-and-navigation) reserves in page paths. A
+  `src` ending in `.md` is a Markdown page.
 - A **group** entry (`group:`) needs a name and at least one page. A group
   inside a group is dropped.
 - A **collection** needs a `name` and either items or an `icon`. A collection
@@ -94,8 +114,9 @@ authored tree.
   implementation's `label`, with its `catalogIcon` (`smartphone` by default):
   one page per booted device matching `device`, or every booted device
   ([implementations](implementations.md)).
-- A discovered definition whose path contains `:`, `+`, `!` or `~` is a
-  problem naming the file and is not listed, since no address could name it.
+- A discovered definition whose path contains a mark the
+  [address](../core.md#selection-and-navigation) reserves is a problem naming
+  the file and is not listed, since no address could name it.
 
 ### Merging
 
@@ -109,21 +130,18 @@ server's imported collections into it with the shared `mergeCollections` rule
 - An imported preview whose `src` an authored page already lists is not added
   again. The authored page keeps its label, lenses and code pointers and takes
   the definition's scenarios; it takes the definition's lens label and icon
-  only when it has none. Its per-scenario implementation paths are checked
+  only when it has none. The file must still match discovery. Its per-scenario implementation paths are checked
   against those scenarios after the merge. A discovered docs page is skipped
   when an authored page lists its `src` or Markdown.
-- Groups and collections left empty by the merge are removed.
-- **Collection icons** follow one ladder for every import, highest first:
-  1. an icon written on the authored collection;
-  2. an icon configured for the import: `previews.icons` or `previews.icon`
-     for collections of previews and docs pages, or a catalog's `catalogIcon`;
-  3. the authored default, `file-text`;
-  4. the import's built-in default (`book-open` for docs, `smartphone` for a
-     catalog, the preview default for previews).
-
-  An import that joins a collection another import created first still
-  applies a higher icon. [Preview placement](previews.md#sidebar-placement)
-  details the preview mappings.
+- Groups with exactly the same name merge across authored pages, previews and
+  catalogs within one collection: the first keeps its position and metadata,
+  and later pages append in source order. Matching names in different
+  collections stay separate, as do names that differ in case.
+- Groups and collections left empty by the merge are removed, including an
+  icon-only placeholder collection no import fills or whose catalog failed.
+  Placeholders survive both config readers and **Configure pages** saves.
+- Merged collections take their icon from the [collection icon](#icons)
+  ladder.
 
 ### Order
 
@@ -147,16 +165,51 @@ server's imported collections into it with the shared `mergeCollections` rule
 - A page with two or more scenarios lists them under it, expanded while it is
   showing ([scenarios](scenarios.md#in-the-page-list)). Iterations are not
   listed.
-- A page written in `workbench.yaml` without its own `icon` shows its
-  collection's icon. Imported pages always carry one: a preview's resolves as
-  in [preview placement](previews.md#sidebar-placement), a docs page's
-  defaults to `book-open`, and a catalog page takes its catalog's icon.
-  Groups show `folder` and scenarios `circle-dot`.
+- Every page shows an icon ([icons](#icons)); groups show `folder` and
+  scenarios `circle-dot`.
 - Search matches page labels, `src` and scenario labels across collections,
   and keeps a group whole when its name matches; collection names are not
   searched. Results are grouped by collection only when several match.
 - Folds set by hand survive refreshes; navigation from elsewhere reveals the
   page's ancestors.
+
+### Icons
+
+Page and collection icons are Lucide icon names. Validation checks kebab-case
+syntax, not membership in Lucide. An invalid `icon` on a definition fails that
+definition alone, and other definitions still load; an invalid
+`previews.icon`, `previews.icons` or catalog icon value is reported as a
+problem and ignored.
+
+Each page's icon is the first that applies:
+
+| Page | Icon |
+| --- | --- |
+| Written in `workbench.yaml` | Its own `icon`, else its collection's icon |
+| Written in `workbench.yaml` with a preview definition as `src` | Its own `icon`, else the preview's icon below |
+| TypeScript preview | The `definePreview` `icon`; else the `previews.icons` value of the longest title prefix that matches whole `/` segments, an exact title included; else `previews.icon`; else `component` |
+| `defineDocs` page | The definition's `icon`, else `book-open` |
+| Simulator catalog page | Its catalog's icon: the implementation's `catalogIcon`, else `smartphone` |
+
+A definition's icon never sets its collection's icon. Each collection's icon
+resolves against the collection name, highest first:
+
+1. an icon written on the authored collection;
+2. an icon configured for the import: the `previews.icons` value of the
+   longest prefix matching the collection name (collections of previews and
+   docs pages), or a catalog's `catalogIcon`;
+3. `previews.icon` (collections of previews and docs pages);
+4. the authored default, `file-text`, for an authored collection written
+   without an icon;
+5. the import's built-in default: `component` for previews, `book-open` for
+   docs pages, `smartphone` for a Simulator catalog.
+
+When imports offer different icons at the same level, the alphabetically first
+icon name wins, so import order never changes the result. An import that joins
+a collection another import created first still applies a higher icon.
+`mergeCollectionIcon` in [manifest.js](../../contracts/manifest.js) owns
+prefix matching and collection icon merging; the server's catalog import
+([import.rs](../../server/src/catalog/import.rs)) matches it.
 
 ## Verification
 

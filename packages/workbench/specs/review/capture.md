@@ -3,9 +3,9 @@
 This spec covers the camera download and the screenshot-backed handoff from
 the current canvas, and the bundled Electron runtime that renders them. The
 [design-system export](export.md) uses the same capture service on its own
-schedule. The server's Node evaluators, which run project JavaScript for
-[TypeScript previews](../pages/previews.md) and the page index, use the same
-runtime; previews themselves compile in `workbench-server`. See [annotations.js](../../ui/legacy/annotations.js),
+schedule. The server's Node evaluators also run on this runtime
+([processes and connections](../system/server.md#processes-and-connections)).
+See [annotations.js](../../ui/legacy/annotations.js),
 [dom-mirror.js](../../ui/legacy/dom-mirror.js),
 [capture-sync.js](../../ui/legacy/capture-sync.js),
 [capture-page.js](../../ui/legacy/capture-page.js),
@@ -21,12 +21,9 @@ owns capability differences and upgrade/shutdown semantics.
 
 ## Why a helper exists
 
-The helper also accepts `printExportPage` for export jobs. It settles the page,
-measures its document height, switches to screen media for visual pages or print
-media for docs, and returns PDF bytes. Visual pages use their viewport width and
-full height; docs use A4/Letter with half-inch margins. Inserted print styles and
-media emulation are restored after every request. Export owns selection, job
-progress, PDF assembly and downloading; the camera retains its image workflow.
+The helper also renders export PDFs through its `printExportPage` command,
+specified with the [export's output formats](export.md#options-and-output-formats);
+the camera retains its image workflow.
 
 The VS Code extension host can run Node code but does not own the compositor
 pixels of a webview. The embedded webview also cannot rely on browser display
@@ -57,13 +54,14 @@ web-page capture, not an operating-system screenshot of VS Code.
   when shared. Completion or failure releases the in-flight entry so a failed
   preparation can retry and a removed cache is checked again. Different storage
   roots remain independent; separate host processes still publish atomically.
+  A cached executable needs no archive read. First use of a changed runtime
+  can still require extraction before project definitions that need
+  evaluation can be listed.
 - The runtime is one shared install. The screenshot helper runs it as an
-  Electron app. The server's Node evaluator and definition-index evaluator run
-  the same executable as Node (`ELECTRON_RUN_AS_NODE`), so project JavaScript
-  runs without a separate Node installation; previews compile in
-  `workbench-server` with Rspack's Rust crates and need no Node runtime of
-  their own. The capture helper's environment explicitly
-  removes `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS`.
+  Electron app; how the server's evaluators run the same executable is in
+  [processes and connections](../system/server.md#processes-and-connections).
+  The capture helper's environment explicitly removes `ELECTRON_RUN_AS_NODE`
+  and `NODE_OPTIONS`.
 - The runtime is used only when its `runtime.json` target matches the host,
   the archive is present, the host is not macOS earlier than 13 (Darwin 22),
   and a Linux host has `DISPLAY` or `WAYLAND_DISPLAY`. Otherwise there are no

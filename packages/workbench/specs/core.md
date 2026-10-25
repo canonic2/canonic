@@ -38,11 +38,8 @@ owns the levels below.
   and compiled TypeScript previews at their definition paths
   (`/<path>.workbench.ts`) with assets under `/_workbench/previews/`, all on
   one origin. Workbench does not copy files into the project.
-- `workbench.local.yaml` is optional. It replaces top-level values except that
-  `spaces` merge by key (each space as the whole file merges), and
-  `implementations` and space `sizes` merge by key, one level deep. A nested
-  `start` block supplied locally replaces the whole committed `start` block,
-  and a local `previews` or `collections` value replaces the committed one.
+- `workbench.local.yaml` is optional and merges over the committed file under
+  the [page tree's local merge rules](pages/page-tree.md#local-overrides).
 - The config accepts block YAML. Names and IDs used in addresses are checked;
   invalid entries are reported rather than silently converted into pages.
   The browser uses `manifest.js`; the native server implements matching
@@ -59,7 +56,7 @@ owns the levels below.
 - Icon-only authored collections style matching imported collections and stay
   in the configuration editor. Empty collections are hidden after imports. Icon
   precedence and order-independent merging are specified in
-  [preview placement](pages/previews.md#sidebar-placement).
+  [page tree icons](pages/page-tree.md#icons).
 - Discovered previews and imported catalog collections join authored
   collections with the same name. A discovered preview whose definition is
   also listed as an authored `src` stays one page: the authored label,
@@ -119,7 +116,9 @@ services exist in the editor, standalone browser and portable viewer.
   Selected iterations follow the scenario
   ([address](pages/iterations.md#address)). It normalizes the address after
   routing to the view it actually shows. `:`, `+`, `!` and `~` are reserved
-  in page paths, so the parts split unambiguously.
+  in page paths, so the parts split unambiguously; the page tree reports an
+  [authored `src`](pages/page-tree.md#collections-groups-and-pages-in-workbenchyaml)
+  or [discovered path](pages/page-tree.md#imported-pages) that contains one.
 - The sidebar lists the collections, then the chosen collection's pages;
   search finds pages across collections, including scenario and group labels.
   A page lists its scenarios under it only when it has two or more
@@ -135,20 +134,9 @@ services exist in the editor, standalone browser and portable viewer.
 
 ## Persistence
 
-[Persistence and restoration](canvas/persistence.md) owns the durable state contract.
-On opening an ordinary canvas, an explicit destination wins; otherwise restore
-the last valid selection for that space, then fall back to its first page in
-resolved order. Usable spaces must not open to an unselected blank canvas.
-VS Code owns per-workspace/per-space records independently of server ports;
-switching spaces preserves each selection. Restart restoration saves logical
-view parameters and mounts fresh content. Live frame retention below preserves
-runtime state only while those documents remain alive.
-
-First-page startup fallback is implemented for a canvas without an addressed
-page, including space switches. Complete-selection persistence remains required
-implementation work; the existing URL and hidden-webview retention do not
-establish restart persistence. The owning spec supplies validation, lifecycle,
-storage-failure behavior, browser limits and acceptance.
+An explicit destination wins over the last saved selection, which wins over the
+space's first page; [persistence and restoration](canvas/persistence.md) owns that
+precedence, what is saved, and its status.
 
 ## Canvas and artboard
 
@@ -167,52 +155,22 @@ iteration ([artboards and iterations](pages/iterations.md)). Outer control layou
 stays unchanged by this refactor.
 
 - Config and catalog discovery show **Loading pages…**. Sidebar selection updates
-  immediately. Preview navigation follows the [200 ms grace period](system/rendering-flow.md#navigation-feedback):
-  retain the outgoing view under its settled labels and context until the target
-  settles (ready, or failed) or the deadline expires, then swap or show
-  **Loading preview…**. A failure never leaves the outgoing view on screen.
-  The first preview uses the same delayed loader without outgoing content.
-  The shell owns application loading status. Loading indicators honor reduced motion.
+  immediately; preview navigation, its 200 ms grace period and loading feedback
+  follow [navigation](canvas/navigation.md).
 - The size switcher uses the space's ordered sizes and each page's supported
   sizes, including page-specific sizes. With no space configuration the
   defaults are Fit, Laptop, Mobile and Resizable. Filled axes follow the
   available canvas; fixed dimensions remain fixed when the editor is smaller.
   The [sizes contract](canvas/sizes.md) owns the schema, menu, editing and defaults.
 
-- A content renderer may prepare a replacement in a spare content iframe. It
-  must not use a spare Workbench application document. Promotion waits for
-  matching destination readiness; superseded loads cannot replace a newer selection
-  or put outgoing pixels beneath the new destination's label.
-- Retained content sessions, including previews and Docs, preserve their attached iframe
-  across selections: one active session and up to three inactive
-  sessions for 15 minutes after departure. Returning preserves form edits,
-  scroll, menus, and application state. Inactive frames are inert, keep their
-  layout dimensions, and cannot send navigation or keyboard commands to the
-  active canvas. A loading replacement is protected until promoted or cancelled.
-- Docs use this same session budget across lenses and content kinds. Exact
-  retained returns show immediately and check revisions in the background;
-  new destinations may reuse an idle same-lens Docs document under the
-  [warm Docs pool contract](preview-pipeline/warm-runtime.md#warm-docs-pool).
-- Oldest inactive sessions are evicted first; expiry, Reload, configuration
-  refresh, and canvas closure release their resources. Managed hosts dispose
-  adapters and tracked page work before removal. Returning to a managed preview
-  checks its source revision and remounts if it changed. Sessions are local to
-  the open canvas; no destination page is predicted or preloaded. The
-  [preview pipeline](preview-pipeline/README.md) adds a warm runtime of shared
-  code per project, not a predicted page, and keeps retained frames current
-  through hot updates. The [warm-runtime status](preview-pipeline/warm-runtime.md#status)
-  identifies the managed per-page return and memory-bound gaps.
-- Managed previews wait for mounting, fonts, and visible images before becoming
-  ready. Offscreen lazy images keep native lazy loading and do not delay the
-  frame swap. Readiness must also progress when the browser suspends animation
-  frames in the hidden loading iframe.
-- The top bar exposes the page with its scenario or Storybook story picker, the
-  lens switcher, the size switcher, reload, source files when resolved, a copyable
-  reference, **Open on its own**, preview controls for a ready TypeScript
-  preview, and **More** (page configuration and design-system export when the
-  server is running). Narrow canvases fold secondary actions into **More**.
-  The toolbar, with the annotation, screenshot, and handoff actions, floats
-  over the canvas.
+- A content renderer may prepare a replacement in a spare content iframe, under
+  [navigation](canvas/navigation.md#navigation-feedback).
+- Retained content sessions, including previews and Docs, preserve their attached
+  iframe across selections within the budget, eviction and cleanup rules of
+  [retained sessions](preview-pipeline/warm-runtime.md#retained-sessions).
+- What a managed preview waits for before becoming ready, and its constants,
+  are owned by [readiness](preview-pipeline/readiness.md).
+- The top bar's controls are named in the [glossary](glossary.md#top-bar).
 - Canvas zoom scales the artboard without changing its layout size; captures
   use the real artboard size. **Recenter view** in the view controls
   centers the artboard at its current zoom without reloading or scrolling the preview.
@@ -226,10 +184,8 @@ stays unchanged by this refactor.
   escaping `config` ([manifest.js](../contracts/manifest.js)).
 - Merging a discovered preview into an authored page is done by
   `manifest.mergeCollections`, used by both the sidebar and the canvas.
-- Managed-document readiness uses a signal with a 50 ms compatibility poll.
-  After 300 unsuccessful checks the destination fails rather than becoming
-  visible unready; visible images are awaited for at most 3 seconds
-  ([content-frames.js](../ui/legacy/content-frames.js), [browser.js](../ui/preview/browser.js)).
+- Managed-document readiness polling and its limits are verified under
+  [readiness](preview-pipeline/readiness.md).
 
 ## Implementation gaps
 

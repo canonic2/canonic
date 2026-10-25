@@ -3,7 +3,7 @@
 Status: agreed 2026-10-24. The model, render, address, review output and export
 are implemented; canvas presentation is not ([gaps](#implementation-gaps)).
 Iteration UI starts after the whole browser UI is ported to Lattice
-([browser source ownership](../system/modules.md#browser-source-ownership)).
+([browser UI port](../system/ui-port.md)).
 
 This topic owns the two levels below a scenario: where artboards are declared,
 what an iteration is, how both change a render, and how they are named in
@@ -119,6 +119,8 @@ An iteration has a scenario's shape without nesting: it can set `label`,
 | `requests` | Matched iteration first, then scenario, then preview ([request mocks](previews.md#data-request-mocks-and-the-project-environment)) |
 | `setup`, `play`, `ready` | Run in order: environment, preview, scenario, iteration |
 
+`inputs`, `fixtures` and `globals` are structured-cloned per render.
+
 The preview context carries the position: `context.scenario`,
 `context.artboard` (a declared artboard's ID; absent for the implicit one) and
 `context.iteration` (absent when none is selected). A TypeScript preview also
@@ -180,12 +182,9 @@ iterations, so returning to the design lens shows them again.
 
 ## Address
 
-The canvas address ([core](../core.md#selection-and-navigation)) names each
-shown artboard's selected iteration with a `+` part after the scenario:
-
-```text
-#<src>[:<scenario>][+<iteration> | +<artboard>/<iteration> …][!<example>][@<size>][~<lens>]
-```
+The canvas address names each shown artboard's selected iteration with a `+`
+part after the scenario; [core](../core.md#selection-and-navigation) owns the
+full grammar and the marks reserved in page paths.
 
 | Address | Shows |
 | --- | --- |
@@ -197,10 +196,9 @@ shown artboard's selected iteration with a `+` part after the scenario:
   `+<artboard>/<iteration>` a declared artboard's. An artboard appears at most
   once; the workbench writes the parts in the scenario's artboard order. An
   artboard with no part shows its authored design.
-- `:`, `+`, `!` and `~` are reserved in page paths, so the parts split
-  unambiguously. A `src` containing one is a configuration problem, and a
-  discovered definition whose path contains one is a problem naming the file
-  and is not listed.
+- A `src` or discovered definition path containing a reserved mark is a
+  problem ([page tree](page-tree.md#collections-groups-and-pages-in-workbenchyaml),
+  [imported pages](page-tree.md#imported-pages)).
 - **Unknown IDs.** On the canvas, a part naming an unknown artboard or
   iteration is dropped: the artboard shows its authored design and the address
   is rewritten to what is shown. Loaded directly, a preview URL with an unknown

@@ -4,7 +4,7 @@
 
 Workbench's own browser interface uses Web Components as its target component
 architecture. Components ship under `packages/workbench/ui/src/components/<name>/`;
-the agreed [target layout](../system/modules.md#browser-source-ownership), not
+the agreed [target layout](../system/ui-port.md), not
 yet ported, also places elements only one view uses under that view's
 `components/`. They work
 in the VS Code sidebar, the embedded canvas, and the standalone browser canvas.
@@ -31,7 +31,7 @@ application backend or project compiler to initialize. Generic host asset delive
 is permitted. Artboards must follow the [content-only rendering flow](../system/rendering-flow.md),
 not initialize another copy of the application.
 
-The agreed [target layout](../system/modules.md#browser-source-ownership) keeps
+The agreed [target layout](../system/ui-port.md) keeps
 shared components under `ui/src/components/`, elements used by one area of the
 interface under its `ui/src/views/<view>/components/`, and capability state and
 operations under `ui/src/modules/<capability>/`. The port to that layout has not
@@ -78,7 +78,7 @@ values, handle later updates, and do not mutate caller-owned data. Application
 selection and pending/error state belong to the controller; focus, hover, and
 temporary interaction state belong to the component. Avoid mirrored application
 state that can drift away from its owner. Components do not subscribe to stores.
-In the [target layout](../system/modules.md#browser-source-ownership), a
+In the [target layout](../system/ui-port.md), a
 capability's binding supplies their inputs, following Lattice's state management;
 until that port, their controller sets them.
 
@@ -130,7 +130,7 @@ or actual interaction. Do not maintain a parallel mock component.
 
 Every element under `ui/src/components/<name>/`, and under
 `ui/src/views/<view>/components/<name>/` once the
-[target layout](../system/modules.md#browser-source-ownership) is ported, has a docs page in this
+[target layout](../system/ui-port.md) is ported, has a docs page in this
 repository's **Workbench** space, under **Components**. The page ships in the
 same change as the element, and changes with it: a new or changed property,
 attribute, event, part, keyboard behavior, or visible state updates the page in
@@ -209,15 +209,13 @@ element, not in the page.
   owns export form presentation. Capability controllers retain application
   state, rendering and I/O. Their colocated browser tests cover the component
   contracts; importing the classes does not register them.
-- [files.rs](../../server/src/serve/files.rs) serves component modules
-  and shared theme CSS unchanged, excluding tests, declarations, TypeScript
-  and server modules. The direct sidebar webview loads the same JavaScript
-  registration entry through a resource URL. Host-owned CSP and local resource
-  roots authorize the script and its module graph.
-  This is the current host asset/tooling path, not Workbench component rendering
-  by the backend. Keep that infrastructure separate from domain and project-compiler
-  lifecycle. Owned styles use adopted stylesheets. Artboard renderers must not load
-  the shell bootstrap from those assets.
+- Component modules and shared theme CSS are delivered as host assets under
+  [asset and packaging checks](../system/modules.md#asset-and-packaging-checks):
+  [files.rs](../../server/src/serve/files.rs) serves them unchanged, excluding
+  tests, declarations, TypeScript and server modules, and the direct sidebar
+  webview loads the same JavaScript registration entry through a resource URL,
+  authorized by host-owned CSP and local resource roots. Owned styles use
+  adopted stylesheets.
 - [Browser component tests](../../ui/src/components/space-switcher/element.test.js)
   exercise source loading and nonce bootstrap, upgrade timing, events, keyboard
   focus, reconnect cleanup, defaults and token overrides. They require Chrome;

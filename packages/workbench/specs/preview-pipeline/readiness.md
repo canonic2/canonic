@@ -25,13 +25,17 @@ After mount and the `play` and `ready` hooks, readiness waits for:
   ([verification](#verification)). A faster rule is [open](#open-questions) and
   gets its own lab.
 - **Visible images**, only those not yet complete. Offscreen lazy images are
-  excluded, and the wait is capped at 3 seconds.
+  excluded: they keep native lazy loading and do not delay the frame swap. The
+  wait is capped at 3 seconds.
 
 It adds no fixed delay. A capture still shows the final fonts and images.
 The selected page becomes visible after readiness. Fonts, CSS, images and docs
-examples remain readiness blockers; asynchronous syntax colours alone may finish
-after the page is visible. Capture retains its highlighting-completion or bounded
-plain-text-fallback wait.
+examples remain readiness blockers; Docs syntax colouring is outside readiness
+([Docs host](docs-host.md#syntax-highlighting)).
+
+Readiness must progress when the browser suspends animation frames in a hidden
+loading frame: runtime readiness cannot depend on animation frames being
+delivered to a hidden frame ([hidden frames](#hidden-frames)).
 
 ### Phase diagnostics
 
@@ -56,7 +60,7 @@ view beneath new destination labels, nor a nested Workbench shell. The browser
 keeps painting them, so animation frames,
 font loading and image decoding progress as they would on screen. Only the
 active frame receives input; the others stay inert, as
-[core](../core.md#canvas-and-artboard) requires.
+[retained sessions](warm-runtime.md#retained-sessions) require.
 
 ## Status
 
@@ -69,6 +73,9 @@ After a managed document loads, the content-frame owner listens for its
 promotion. It removes the listener and pending poll on completion, replacement,
 suspension or disposal. A 50 ms poll remains a compatibility fallback for
 renderers that expose only the flag; signalling docs do not wait for that poll.
+After 300 unsuccessful checks the destination fails rather than becoming
+visible unready ([content-frames.js](../../ui/legacy/content-frames.js),
+[browser.js](../../ui/preview/browser.js)).
 
 ## Verification
 

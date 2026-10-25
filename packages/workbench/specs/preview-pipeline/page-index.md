@@ -101,10 +101,10 @@ pure definition rules, application stages, shared observations and adapters.
 
 The server's [catalog](../../server/src/catalog.rs) owns the request: the
 saved index's location, its identity, ordering and duplicate IDs. The resident
-index answers it in the server process. The host's bundled Electron runtime is
-prepared only when evaluation is requested; literal-only listing requires
-neither runtime extraction nor a Node subprocess. Evaluation uses a second
-request, reusing the first one's parsed records. `workbench-server index` runs
+index answers it in the server process. Evaluation uses a second
+request, reusing the first one's parsed records, and runs in the server's
+[definition-index evaluator](../system/server.md#the-definition-index-evaluator),
+which owns its process, runtime preparation and deadline. `workbench-server index` runs
 one transaction per process, and `workbench-server list` prints the read
 answer.
 
@@ -112,16 +112,14 @@ answer.
 | --- | --- |
 | Saved records | At most 32 MiB of versioned postcard data per project; a larger index is not saved, and the timings report it as a save error |
 | Project saves | At most 32 root-digest directories under `canonic-workbench-index/` in the system temporary folder; evict inactive directories after seven days and oldest directories beyond the count bound during index requests |
-| Evaluator run | The request's deadline, 120 seconds by default, in the one-process index and the [server's resident index](../system/server.md#the-resident-index-and-watcher) alike; the evaluator is killed at the deadline |
+| Evaluator run | The request's deadline; the evaluator is killed at it ([definition-index evaluator](../system/server.md#the-definition-index-evaluator)) |
 | Index answer | At most 128 MiB, the one-process index's output bound and the resident index's answer bound |
 
 Saved indexes belong outside the project. They are not authoring files or
 portable build outputs. A failing or timed-out index adds a
 `Workbench previews: …` problem to the page tree. Listing does not require
-preview compilation. Literal-only listing needs no JavaScript process; computed
-definitions, Docs and unsupported native glob patterns can start the index's
-short-lived evaluator in [evaluate.rs](../../server/src/evaluate.rs). This is
-separate from the compiler's long-lived evaluator. The page tree then configures the compilers,
+preview compilation; which listings start an evaluator process is the
+[server's process model](../system/server.md#processes-and-connections). The page tree then configures the compilers,
 which build and pre-warm what it lists ([server](../system/server.md#previews)).
 
 ### Distribution

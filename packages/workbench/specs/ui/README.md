@@ -11,7 +11,7 @@ keeps its own framework, styles and theme.
 
 Components present supplied data and emit intent. Capability controllers own
 navigation, persistence, rendering and I/O. In the agreed
-[target layout](../system/modules.md#browser-source-ownership), application
+[target layout](../system/ui-port.md), application
 state follows Lattice's state management (`@canonic2/lattice`): capability
 stores hold it and bindings connect it to components. That port has not
 started; today the shell and capability controllers in `ui/legacy/` and

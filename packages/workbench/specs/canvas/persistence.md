@@ -72,6 +72,7 @@ Pending navigation must not overwrite a later accepted selection.
   existing validated host relay. The extension stores the complete view,
   including lens, size and example; sidebar highlighting alone is insufficient.
   Scope messages and writes to their owning space and panel generation.
+  Storage writes do not delay page rendering.
 - On **Open Canvas**, restored panel startup, **Developer: Reload Window** or
   editor restart, start the current space's server and restore the logical
   destination against its current config. Never retain a former server URL.
@@ -156,8 +157,8 @@ acceptance once the policy is selected.
 
 Retained frames preserve form values, menus, component state, open code panels
 and scroll while their live documents survive, under
-[core retention](../core.md#canvas-and-artboard) and the
-[warm Docs pool](../preview-pipeline/warm-runtime.md#warm-docs-pool). A restart
+[retained sessions](../preview-pipeline/warm-runtime.md#retained-sessions) and the
+[warm Docs pool](../preview-pipeline/docs-host.md#warm-docs-pool). A restart
 mounts fresh content at its normal initial position, or an explicit example
 anchor. Do not serialize page DOM, form contents, component instances, timers,
 workers, capture mirrors, annotations, zoom/pan or arbitrary project inputs as
@@ -166,7 +167,7 @@ their own lifecycle.
 
 Multiple-artboard arrangements, camera restoration, named/shared canvases and
 cross-device synchronization remain outside this contract; see
-[multiple artboards](multiple-artboards.md#agreed-requirements-and-phases).
+[artboard management](artboard-management.md#agreed-and-open).
 Startup fallback must not undo a deliberate clear/close-last-artboard action
 within an active comparison session.
 

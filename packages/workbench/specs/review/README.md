@@ -7,7 +7,7 @@ review must not change the user's selection to produce an output.
 | Topic | Owns |
 | --- | --- |
 | [Interactive capture](capture.md) | Pixel acquisition, live mirroring, bundled helper, camera/handoff outputs, limits and failures |
-| [Design-system export](export.md) | Page/collection/space scopes, capture plan, jobs, source closure, portable/PDF/image archives, warnings and retention |
+| [Design-system export](export.md) | Page/collection/space scopes, capture plan, jobs, source closure, PDF rendering and portable/PDF/image archives, warnings and retention; export sizes are in [sizes](../canvas/sizes.md#design-system-export) |
 
 Interactive review captures supplied live state. Catalog export schedules its
 own declared references and background workers. Their shared helper does not

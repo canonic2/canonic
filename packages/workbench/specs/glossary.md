@@ -117,14 +117,14 @@ The bar across the top of the canvas, with controls for the page showing.
 | Term | Meaning |
 | --- | --- |
 | **Top bar** | The whole bar. |
-| **Breadcrumb** | The space, page, and scenario showing, at the left. The scenario part is the **scenario switcher**. |
+| **Breadcrumb** | The space, page, and scenario showing, at the left. The scenario part is the **scenario switcher**, which lists the title's stories under a Storybook lens. |
 | **Actions switch** | Whether links and forms in the page work. |
 | **Lens switcher** | One button per lens, in the middle. Shown only when the page has two or more lenses. |
 | **Size switcher** | The space's configured size buttons, defaulting to **Fit**, **Laptop**, **Mobile**, and **Resizable**. A page's `sizes` limits or extends its choices. Disabled in the docs canvas mode. |
 | **Size menu** | Defined in [artboard sizes](canvas/sizes.md): the menu at the end of the size switcher, with the sizes that aren't buttons, **Custom size…**, and **Edit sizes…**. |
-| **Reload**, **Open the source**, **Copy reference**, **Open on its own** | Actions on the page showing, named by their labels. |
-| **Preview controls** | The panel of a preview's inputs, actions, and **Reset scenario**. |
-| **More menu** | Space-wide commands, such as **Configure pages** and the design-system export, and the top bar's controls that don't fit a narrow window. |
+| **Reload**, **Open the source**, **Copy reference**, **Open on its own** | Actions on the page showing, named by their labels. **Open the source** shows when the page's source files are resolved. |
+| **Preview controls** | The panel of a preview's inputs, actions, and **Reset scenario**, shown for a ready TypeScript preview. |
+| **More menu** | Space-wide commands, such as **Configure pages** and, when the server is running, the design-system export, and the top bar's secondary controls, which fold into it on a narrow canvas. |
 
 ### Canvas
 
@@ -149,10 +149,10 @@ document, such as a heading's section in docs or a guide.
 
 | Term | Meaning |
 | --- | --- |
-| **Workbench server** | What the VS Code extension, or the standalone command under `server/node/`, starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary, `workbench-server` in `server/`, answers the public port, holds the page index and compiles previews with Rspack's Rust crates; its host under `server/node/` answers what belongs to the editor and the capture helper ([server](system/server.md)). Every request goes through it; its child processes take no TCP port ([processes and connections](system/server.md#processes-and-connections)). |
+| **Workbench server** | What the VS Code extension, or the standalone command under `server/node/`, starts for a space: it answers the canvas, serves the page tree and serves pages through their adapters. Its Rust binary is `workbench-server` in `server/`; its host under `server/node/` answers what belongs to the editor and the capture helper. See [server](system/server.md) and its [processes and connections](system/server.md#processes-and-connections). |
 | **Page index** | The part of the Workbench server that finds preview and docs definitions and keeps the saved index; see [page index](preview-pipeline/page-index.md). |
 | **Adapter** | What renders one kind of page: `html`, `react`, `react-native-web`, `vue`, `astro`, or a custom adapter registered in `workbench.config.ts`. A definition or docs lens names its adapter. Storybook stories are the adapter that renders through Storybook's own server: one the Workbench server runs on a local socket, or one the user runs at `url`; see [adapters](adapters/README.md). |
-| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions, `workbench.config.ts` and Astro renders. One per space, started on need in a trusted workspace, reached only by the server over stdin and stdout or a local socket, never a TCP port ([processes and connections](system/server.md#processes-and-connections)). |
+| **Node evaluator** | A Node child process of the Workbench server that runs project code an adapter or the page index needs, such as computed definitions, `workbench.config.ts` and Astro renders. Its lifetime and connection are in [processes and connections](system/server.md#processes-and-connections). |
 
 ## Naming across interfaces
 

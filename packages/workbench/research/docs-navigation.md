@@ -15,8 +15,8 @@ Decided and confirmed, 2026-10-23. The owner selected the warm pool with
 immediate resume and parallel metadata fetching (`pool-rp`), accepting about
 13 MB more JS heap with four docs documents. The shipping implementation passed
 a three-session confirmation, a final source pass and isolated installed Acme
-checks. Current requirements live in [Docs](../specs/pages/docs-pages.md#reusable-page-lifecycle),
-[warm runtime](../specs/preview-pipeline/warm-runtime.md#warm-docs-pool) and
+checks. Current requirements live in the [Docs host](../specs/preview-pipeline/docs-host.md#reusable-page-lifecycle),
+its [warm Docs pool](../specs/preview-pipeline/docs-host.md#warm-docs-pool) and
 [serving](../specs/preview-pipeline/serving.md#preload-selection).
 
 ## Hypothesis
@@ -240,7 +240,7 @@ left the canvas at `display:none` on first open, so a pending content renderer
 had a 0 × 0 viewport and never promoted. An isolated foreground VS Code webview
 reproduced the hang. Pending renderers now get invisible, inert, correctly
 sized slots independently of the displayed canvas model
-([rendering flow](../specs/system/rendering-flow.md#navigation-feedback)); the same
+([navigation](../specs/canvas/navigation.md#declared-artboard-groups)); the same
 probe reached the visible phase after installation.
 
 ## Correctness

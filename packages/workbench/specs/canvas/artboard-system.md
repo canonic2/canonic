@@ -1,9 +1,11 @@
 # Artboard system and integration
 
-Architecture and bounded integration plan.
-This topic owns module/state/transport design and the remaining integration
-sequence. [Multiple artboards](multiple-artboards.md) owns product behavior and
-acceptance; [modules](../system/modules.md) owns shared architectural rules.
+Architecture of artboard instances.
+This topic owns current module ownership, state and runtime/transport contracts
+and the capability map. [Multiple artboards](multiple-artboards.md) owns product
+behavior and acceptance, [artboard management](artboard-management.md) owns the
+management proposals and delivery plan, and [modules](../system/modules.md) owns
+shared architectural rules.
 The [product contract](multiple-artboards.md#implemented-support-system)
 records support APIs, limits, verification, and remaining work. The current
 implementation composes a scenario's declared artboards inside the existing canvas region,
@@ -65,7 +67,7 @@ performance verification limits.
   paths support any migration.
 - Use the existing Node runner, pnpm scripts, DOM/CSS vocabulary, and manifest
   rules. Application state moves to Lattice (`@canonic2/lattice`) under the
-  agreed [browser UI port](../system/modules.md#browser-source-ownership); this
+  agreed [browser UI port](../system/ui-port.md); this
   capability adds no other framework, new root package, dependency-injection
   container, event bus, or repository-wide migration.
 - Organize by capability. A directory owns coherent behavior, types, tests,
@@ -78,7 +80,7 @@ Presentation of a scenario's declared artboards and existing-shell composition a
 The map below also covers deeper extraction and future artboard-management UI.
 
 Locations are relative to `packages/workbench/` and come from the agreed
-[target layout](../system/modules.md#browser-source-ownership), which owns
+[target layout](../system/ui-port.md), which owns
 them; the actual module boundaries above retain current paths until the port
 moves them. Ownership and dependency constraints are the contract.
 
@@ -201,15 +203,18 @@ by resolved renderer kind. No lookup through `window.wbView`, global
 
 Iframe runtime owns active/pending frames and warm-session reuse within one
 artboard. Separate artboards cannot share a mutable iframe, even for identical
-URLs or stories. A canvas-owned retention budget accounts for hidden sessions;
-the runtime owns their disposal. Visible instances cannot be evicted as idle
+URLs or stories. Hidden sessions count against the
+[retained-session budget](../preview-pipeline/warm-runtime.md#retained-sessions);
+the runtime owns their disposal. Declared-group parking of the ordinary renderer
+is specified in [multiple artboards](multiple-artboards.md#ui-and-integration-scope).
+Visible instances cannot be evicted as idle
 merely because another instance is selected. Reuse existing preview-host
 mount/reset and bridge APIs behind explicit adapters; do not rewrite compiler
 or framework mounts for this feature.
 
 Native runtime owns decoder/client subscriptions, not the device/window itself.
 The renderer's stream client (`ui/legacy/simulator.js`) moves to the
-`native-surfaces` capability of the [target layout](../system/modules.md#capabilities).
+`native-surfaces` capability of the [target layout](../system/ui-port.md#capabilities).
 The producer pool, `capture/src/native-streams/pool.ts`, is keyed by
 validated source and codec, with reference-counted subscriptions. Closing the
 last subscriber stops owned capture resources; other devices/codecs/subscribers
@@ -228,19 +233,17 @@ checks. Surface server, startup, and trust failures per space/artboard.
 
 ## How workflows execute
 
-1. **Add or duplicate:** validate the descriptor, allocate a stable ID, place it,
+1. **Mount an artboard:** validate the descriptor, allocate a stable ID, place it,
    and create a loading artboard. Resolve against its space and mount its
    renderer. Completion updates that instance's generation, then publishes the
-   canvas snapshot. Duplication mounts a fresh instance; it cannot clone native
-   external state.
+   canvas snapshot. Proposed duplication is in
+   [artboard management](artboard-management.md#proposed-edge-case-contracts).
 2. **Select and edit:** selection changes the model only; existing DOM/runtime
    instances remain keyed by ID. Derive top bar/catalog state and notify the
    host. Size/lens/scenario edits target a named artboard, not a global frame.
 3. **Navigate or reload:** increment that instance's generation, cancel its old
-   pending work, and retain its settled runtime until the replacement settles.
-   Outgoing pixels follow [navigation feedback](../system/rendering-flow.md#navigation-feedback):
-   visible only under their outgoing identity during the grace period, and
-   never after the replacement settles or fails.
+   pending work, and retain its settled runtime until the replacement settles;
+   what is presented meanwhile follows [navigation](navigation.md).
    Ignore superseded completions/messages. Navigation from content routes to
    its own space/artboard and does not steal focus after a later user selection.
 4. **Refresh/remove space:** invalidate space resolution, reconcile only
@@ -266,9 +269,9 @@ checks. Surface server, startup, and trust failures per space/artboard.
 6. **Context:** derive a complete versioned record from the same snapshot and
    publish it under one canvas ID to participating space services. Include
    each space's artboards and all other participants, selected ID, and actual
-   versus requested views. Host/user activity ordering is distinct from load
-   completion/heartbeat ordering. Retain complete textual output for agent
-   integrations; validate size limits rather than truncating.
+   versus requested views. Record contents, precedence and size limits follow
+   [agent context](../integrations/agent-context.md) and
+   [multiple artboards](multiple-artboards.md#agent-context-and-compatibility).
 7. **Successful handoff annotations:** preserve current clear-after-handoff
    behavior only for annotations included in the completed review. A
    concurrent new annotation must survive; failures/cancellation clear none.
@@ -303,21 +306,11 @@ HTML, images, or full handoff prompts.
    relay against [rendering-flow acceptance](../system/rendering-flow.md#acceptance-and-verification-gaps).
    Preserve the outer UI layout. Do not substitute a UI language/build rewrite.
 
-## Remaining delivery sequence
-
-| Slice | Integration work | Acceptance evidence |
-| --- | --- | --- |
-| Artboard management UI | Design adding, removing and choosing arbitrary artboards beyond composing a scenario's declared artboards; preserve the existing shell and one-view behavior | Accessible repeated-view workflows, keyboard/focus, geometry and cleanup |
-| Space and native host acceptance | Verify the implemented owning-space routing and pooled native subscriptions on real hosts | Mixed-space and shared-root recovery, real native capture/input, independent subscriptions |
-| Review and context host acceptance | Verify the integrated camera, handoff, reference and participating-space publication paths in supported editors | Complete composite/prompt, hooks and MCP, race/failure cleanup |
-| Product completion | Resolve arrangement storage/sharing, recovery, host limits and public guides; single-view restoration follows [persistence](persistence.md) | Phase 1 acceptance in browser and VS Code |
-| Phase 2 arrangement | Extend geometry and interactions for free positioning and row/grid placement | Stable renderer state, capture mapping and accessible movement |
-
-The browser host serves authored JavaScript/CSS bytes through
-[files.rs](../../server/src/serve/files.rs). The sidebar
-loads its module through a VS Code resource URL; portable docs copy their modules.
-No UI compiler or bundler participates. Preserve native module resolution, CSP,
-resource roots and packaging while maintaining the content-only rendering boundary.
+The remaining integration work is the
+[artboard-management delivery plan](artboard-management.md#delivery-plan).
+UI asset delivery follows [modules](../system/modules.md#current-state); preserve
+native module resolution, CSP, resource roots and packaging while maintaining
+the content-only rendering boundary.
 
 ## Verification plan
 

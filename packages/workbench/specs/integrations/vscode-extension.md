@@ -110,14 +110,9 @@ arranged within a space are in the [page tree](../pages/page-tree.md). The
 specifies how one canvas keeps artboard instances from several spaces; the
 space switcher here changes the editor's host space.
 
-- Spaces come from `workbench.yaml` files. A file without `spaces` is one
-  space served from its folder; a file with `spaces` is one space per
-  valid entry, each served from its `root` (relative to the file's folder,
-  default that folder, so several may share one). Shared top-level keys are
-  inherited, `implementations` merged by name; a space's own keys `name`,
-  `color`, `icon`, `root` and `sizes` are not (`selectSpace` in
-  [manifest.js](../../contracts/manifest.js), which the server's reader
-  matches). A top-level `sizes` beside `spaces` is reported as a problem. Folders are the window's that have a file, in folder
+- Spaces come from `workbench.yaml` files: one space per file, or one per
+  valid `spaces` entry, each served from its root, under the
+  [page tree's space rules](../pages/page-tree.md#spaces). Folders are the window's that have a file, in folder
   order, then the folders the user added (stored in `globalState`, shared by
   every window). A folder in both is listed once, as the window's, and is not
   removable. An added folder whose `workbench.yaml` is missing is hidden but
@@ -138,15 +133,10 @@ space switcher here changes the editor's host space.
   showed the shared collections. Agents: spaces sharing a root share its
   `server.json`; selecting a space re-announces its server there.
 - Removal acts on the added folder, so it removes every space its file
-  lists. Its mark takes the manifest's `color` (named
-  or hex) and `icon` (Lucide name or project image), validated by
-  `spaceMark` in [manifest.js](../../contracts/manifest.js) for both readers,
-  with `workbench.local.yaml` merged over them. Without a color, the color is
-  derived from the id, except behind an image, which gets none. Images travel
-  as data URIs of at most 256 KB, because every surface draws every
-  space's mark and none can read another space's folder; a missing, large,
-  or escaping image falls back to the initial, and a missing one is a config
-  problem.
+  lists. Its mark takes the space's `color` and `icon`
+  ([page tree](../pages/page-tree.md#spaces)). Images travel as data URIs,
+  because every surface draws every space's mark and none can read another
+  space's folder.
 - The sidebar rereads the list on every build, and the canvas on every config
   load or refresh, so an edited name, color, or icon shows without a reload.
 - Sidebar and canvas icons use the complete pinned Lucide library bundled in
@@ -189,28 +179,9 @@ space switcher here changes the editor's host space.
 
 ### Persistence and restored editor tabs
 
-[Persistence and restoration](../canvas/persistence.md#vs-code-ownership-and-lifecycle)
-owns what is saved and the explicit-destination → saved-selection → first-page
-precedence. The extension stores versioned logical selections per stable space
-in `workspaceState`, alongside the existing current-space choice. Browser local
-storage and the panel's in-memory `current` value are not durable editor state.
-Viewer preferences are intended to use `workspaceState` too; native IndexedDB is
-the standalone browser's persistence mechanism and is not needed by the embedded
-editor canvas.
-
-Restore against the newly started server's address and current page model on
-panel reopening, window reload and editor restart. The webview lifecycle must
-support editor-restored tabs without opening a tab the user closed. Hidden
-panels retain their live context; restarted panels remount content. Host messages
-carry the complete normalized view and are checked against their owning space
-and panel generation. Storage writes do not delay page rendering.
-
-Current implementation saves the space choice and opens the first page when a
-canvas has no explicit destination, but lacks complete-selection storage and
-editor-tab restoration wiring. Viewer preferences currently use browser
-`localStorage`, scoped to the served origin. The new restoration acceptance
-remains implementation work; see
-[current status](../canvas/persistence.md#current-status).
+The extension's `workspaceState` storage, restored editor tabs and their
+lifecycle follow [persistence and restoration](../canvas/persistence.md#vs-code-ownership-and-lifecycle),
+which owns them.
 
 ## Sidebar and problems
 
@@ -259,43 +230,24 @@ remains implementation work; see
 
 ## Process boundaries
 
-```text
-VS Code extension host
-  ├─ host, one per space ── answers its server on stdin/stdout: editor, capture and spaces
-  │    ├─ workbench-server ── the public loopback port: project, workbench, preview and docs pages,
-  │    │    │                 the page tree and routes; resident page index and watcher
-  │    │    ├─ Node evaluator ── project JavaScript, on stdin/stdout, when needed (bundled runtime or Node)
-  │    │    ├─ definition-index evaluator ── short-lived, one JSON request over pipes, when indexing
-  │    │    │                               needs evaluation or custom selection (same runtime)
-  │    │    └─ Storybook ── one the server runs, on a local socket, when a story is asked for
-  │    └─ window capture helper ── ScreenCaptureKit stream of a Simulator or app window, macOS,
-  │                                on a local socket the server forwards to
-  ├─ screenshot capture service ── bundled Electron helper, shared by every space
-  └─ VS Code webviews ── sidebar and workbench tab
-```
+The extension host starts and owns these processes; the
+[server's processes and connections](../system/server.md#processes-and-connections)
+own the server, its children and how each is reached:
 
-The screenshot helper renders pages for [interactive capture](../review/capture.md) and
-[export](../review/export.md). The window helper streams native windows for the
-[Simulator and window lenses](../pages/implementations.md#native-window-stream); it is a separate process and
-Screen Recording permission path. Both evaluators and the screenshot helper
-share the bundled Electron runtime, unpacked once into the extension's global
-storage; the evaluators run it with `ELECTRON_RUN_AS_NODE`, and fall back to
-the host process's own executable where no bundled runtime is available. See
-[processes and connections](../system/server.md#processes-and-connections). Browser-only VS Code cannot spawn any of these local processes.
-Concurrent capture/evaluator requests in the same extension host share one
-runtime preparation; a cached executable needs no archive read. First use of
-a changed runtime can still require extraction before project definitions
-that need evaluation can be listed.
+- **A host per space**, which starts that space's `workbench-server` and
+  answers it on stdin and stdout for the editor, capture and spaces. On macOS
+  it also runs the window capture helper, a ScreenCaptureKit stream of a
+  Simulator or app window for the
+  [Simulator and window lenses](../pages/implementations.md#native-window-stream),
+  a separate process and Screen Recording permission path.
+- **One screenshot capture service**, the bundled Electron helper shared by
+  every space, which renders pages for [interactive capture](../review/capture.md)
+  and [export](../review/export.md). Its runtime, unpacked once into the
+  extension's global storage, is specified in
+  [capture](../review/capture.md#bundled-electron-runtime).
+- **VS Code webviews**: the sidebar and the workbench tab.
 
-### Preview compiler and Node evaluator
-
-The server compiles previews itself; project JavaScript runs only in the
-Node evaluator and the definition-index evaluator, separate processes from the
-extension host and the server. The Node evaluator is killed with the server;
-the definition-index evaluator exits after each request and is killed on
-failure or deadline. Their lifecycle, timeouts,
-and logging are specified in
-[TypeScript previews](../pages/previews.md#server-processes-lifecycle-and-trust).
+Browser-only VS Code cannot spawn any of these local processes.
 
 ## Logging
 

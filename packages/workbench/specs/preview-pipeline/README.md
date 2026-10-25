@@ -17,8 +17,8 @@ This folder owns how they are built, delivered and kept current.
 2. **Evaluate.** The Node evaluator runs definitions and
    `workbench.config.ts`, which are project code. The index batches its evaluated
    definitions; compilation uses a long-lived evaluator for project settings,
-   definitions and adapter jobs. These are currently separate process paths
-   ([compiler](compiler.md#what-runs-in-the-node-evaluator)).
+   definitions and adapter jobs ([compiler](compiler.md#what-runs-in-the-node-evaluator),
+   [server processes](../system/server.md#processes-and-connections)).
 3. **Compile.** The Workbench server's compiler, one Rspack development
    compiler per project and profile, builds every preview and docs lens in
    one compilation, with shared chunks, hot updates and a persistent cache
@@ -30,9 +30,10 @@ This folder owns how they are built, delivered and kept current.
    gets a small preview module that loads only the chunks its document is
    missing ([serving](serving.md)).
 5. **Load and mount.** A warm document that has already
-   loaded the runtime and shared code mounts the preview. Docs use a dedicated
+   loaded the runtime and shared code mounts the preview
+   ([warm runtime](warm-runtime.md)). Docs use a dedicated
    pool that preserves recent page documents and reuses idle documents for new
-   pages ([warm runtime](warm-runtime.md)).
+   pages ([Docs host](docs-host.md)).
 6. **Ready.** After mount and hooks, readiness waits for fonts and visible images
    ([readiness](readiness.md)).
 7. **Update.** The server pushes build results to the canvas. Open frames apply
@@ -48,11 +49,13 @@ the targets the whole pipeline is measured against.
 | Spec | Covers |
 | --- | --- |
 | [Page index](page-index.md) | Complete ordered listing, definition parity, saved-state invalidation, process and storage bounds, failure recovery and acceptance evidence |
-| [Compiler](compiler.md) | Rspack compilers per project and profile, the fixed entry set, in-memory output, persistent caching, config changes, build errors, packaging and first-page constraints |
+| [Compiler](compiler.md) | Rspack compilers per project and profile, configuration from the page tree, the fixed entry set, in-memory output, persistent caching, config changes, build errors, packaging and the jobs it sends the Node evaluator |
+| [First page](first-page.md) | Proposed, not agreed: design constraints for a compiler start that serves the first page without building every entry |
 | [Serving](serving.md) | Output URLs and caching, the preview module, stylesheet names, which requests wait for a build |
 | [Hot updates](hot-updates.md) | The push channel, edit behavior per format, the reload rule, state kept across edits, build errors and recovery, hidden frames |
-| [Warm runtime](warm-runtime.md) | Pre-warming, preview reuse, the Docs pool, return freshness, isolation and resource bounds |
-| [Readiness](readiness.md) | What readiness waits for, phase diagnostics, rendering hidden frames |
+| [Warm runtime](warm-runtime.md) | Pre-warming, preview reuse, isolation, the retained content-session budget and resource bounds |
+| [Docs host](docs-host.md) | Docs serving and highlighting, the warm Docs pool, the Docs return check, Docs isolation, the reusable page lifecycle and Docs implementation constraints |
+| [Readiness](readiness.md) | What readiness waits for and its constants, phase diagnostics, rendering hidden frames |
 | [Plugins](plugins.md) | Workbench's format handling as Rspack loaders and plugins, and the project plugin contract in `workbench.config.ts` |
 
 Shared [performance budgets and measurement rules](../system/performance.md)
@@ -61,28 +64,18 @@ observations and lab/host evidence; neither is a second pipeline implementation 
 
 ## Decisions
 
-- Rspack is the development compiler, with hot updates for every native
-  format, shared chunks, pushed build results and a warm document. Portable
-  output uses an Rspack production build with the same project plugin form.
-- Today the compiler declares and builds every entry before serving its first
-  completed generation. That eager start is current behavior, not a
-  requirement: [performance](../system/performance.md#first-open-and-edits)
-  requires the first page not to wait for other pages' builds, and the eager
-  start misses it. A replacement start must preserve chunk stability,
-  freshness, errors and hot updates while meeting the first-page target.
-- The native page index lists independently of compilation. It combines
-  directory/file-stamp reuse, conservative literal parsing and the Node
-  definition evaluator for other definitions.
-- Warm first-page rendering and complete listing must meet the agreed
-  [performance targets](../system/performance.md#measured-interactions) at any page
-  count. Proposed optimizations are evaluated against correctness and the
-  existing interaction regression limits in [labs](../system/labs.md).
-- Rust is the direction for suitable host capabilities in the extension and
-  Studio. Electron owns screenshot rendering. An additional Rust component
-  needs a defined integration contract; a lab prototype does not establish it.
-- The Workbench server becomes one Rust runtime, with the page index and the
-  compiler, and Node only as an evaluator of project code; Astro and React
-  Native Web are required ([adapters](../adapters/README.md#decisions)).
+Each decision lives with the topic that owns it:
+
+- Rspack as the development and portable compiler: [compiler](compiler.md#decisions).
+- The eager start and its first-page gap: [performance status](../system/performance.md#status);
+  a proposed replacement start: [first page](first-page.md).
+- Listing independently of compilation: [page index](page-index.md#purpose-and-ownership).
+- First-page and complete-list targets at any page count, and how
+  optimizations are evaluated: [performance](../system/performance.md#measured-interactions)
+  and [labs](../system/labs.md).
+- Rust for host capabilities and Electron for screenshot rendering:
+  [server decisions](../system/server.md#decisions-for-the-owner).
+- One Rust server runtime with Node only as an evaluator: [adapters](../adapters/README.md#decisions).
 
 ## Status
 
@@ -116,15 +109,11 @@ Current product measurements and acceptance limits belong to
 
 ## Open questions
 
-Each topic owns its unresolved decisions. The ones that change the plan:
+Each topic owns its unresolved decisions:
 
-- Native index cache identity limits and Studio integration
-  ([page index](page-index.md#remaining-work)).
-- How to show the requested first page within the budget without waiting
-  for catalog-size-dependent entry preparation and compilation
-  ([compiler](compiler.md#open-questions)).
-
-- How readiness waits for fonts a page starts loading
-  ([readiness](readiness.md#open-questions)).
-- How the entry set changes when a preview or docs lens is added or removed
-  while pages are open ([compiler](compiler.md#open-questions)).
+- [Page index](page-index.md#remaining-work)
+- [Compiler](compiler.md#open-questions)
+- [First page](first-page.md#open-questions)
+- [Readiness](readiness.md#open-questions)
+- [Warm runtime](warm-runtime.md#open-questions)
+- [Plugins](plugins.md#open-questions)

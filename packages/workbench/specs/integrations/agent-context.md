@@ -4,7 +4,10 @@ This spec covers how AI chats in the editor learn which page the user has
 open in the workbench canvas. It builds on
 [Copy a reference](../../docs/canvas.md#copy-a-reference), the
 [VS Code extension contract](vscode-extension.md), and the canvas host
-messages in [workbench.js](../../ui/legacy/workbench.js).
+messages in [workbench.js](../../ui/legacy/workbench.js). It owns the canvas
+context record, its publication, precedence and heartbeats, and its delivery
+to agents; [multiple artboards](../canvas/multiple-artboards.md) owns the
+artboard instances the record describes.
 
 ## Purpose and scope
 
@@ -19,25 +22,28 @@ Cursor. Other MCP clients get the same tool at no extra cost. Annotations and
 screenshots keep their own path, the
 [handoff](../../docs/annotations-and-handoff.md#hand-off-to-an-agent).
 
-## The current view
+## Requirement: the canvas context record
 
-The support API can publish a version-2 record with canvas ID, selected
-artboard ID, complete reference text, and every artboard's space/view/size/status.
-The publisher under `ui/src/modules/canvas/` serializes updates to participating spaces
-and their shared-root siblings. User activity determines the current canvas;
-background readiness and heartbeats only update its report. Oversize reports
-fail explicitly without silently truncating artboards. The server validates
-version 2 and the single-view report shape. Agent
-integrations consume `view.text`.
+### The record
 
-The canvas composition publishes this complete report through its controller-owned
-publisher. The legacy singleton publisher remains for legacy hosts and is disabled
-for an isolated renderer. A content renderer reports instance-local metadata to
-the outer canvas; it does not publish another application-level current view.
-See the [rendering flow](../system/rendering-flow.md).
+The canvas publishes one version-2 record
+([review/reference.js](../../ui/src/modules/review/reference.js) `report`):
+canvas ID, selected artboard ID, artboard order, and for every artboard its
+space, view (page `src`, scenario, lens), size, status, and the declared
+artboard ID (`artboard`) and `iteration` when they apply, plus the complete
+readable reference as `text`. The server validates version 2 and the
+single-view report shape. Agent integrations consume `text`.
 
-**Requirement (agreed):** the current view carries what
-[reference.js](../../ui/legacy/reference.js) puts in **Copy reference**:
+### Reference parity
+
+**Requirement (agreed):** people and agents receive the same resolved
+reference text. On the composed canvas, **Copy reference** in the top bar
+copies the canvas reference, which is exactly the record's `text`: the
+artboard count and selected artboard, then for each artboard its ID and
+space, its size in CSS pixels, its single-view reference and its status.
+
+Each artboard's single-view reference carries what
+[reference.js](../../ui/legacy/reference.js) puts in a one-page reference:
 
 - the page's label and design file (`src`);
 - its story (label and id) on a Storybook lens, otherwise its scenario (label and
@@ -46,38 +52,57 @@ See the [rendering flow](../system/rendering-flow.md).
   `{ id: 'default', label: 'Default' }`;
 - the iteration the artboard shows, if any, as `` - Iteration: <Label> — `<id>` ``,
   followed by `` - Iteration source: `<path>` `` when the iteration has a source.
-  The reference does not name the declared artboard;
+  The reference does not name the declared artboard; the record's
+  `artboard` field does;
 - the lens (label and key) with its upstream implementation address, or the
   resolved authored lens label.
 
-The composed canvas's reference additionally names every artboard's space,
-dimensions and status through [review/reference.js](../../ui/src/modules/review/reference.js).
-Each version-2 artboard record also carries `artboard` (the declared artboard
-ID) and `iteration` when they apply.
-The legacy singleton reference omits dimensions; that does not limit the
-complete canvas record.
+Single-view and canvas reports preserve their own complete identities;
+selected focus does not hide other supplied artboards. Keep the selected-view
+compatibility fields for existing consumers, but hooks and MCP consume the
+complete canvas `text` rather than only those fields.
 
-**Legacy singleton publication behavior:**
+### Publication, precedence and heartbeats
 
-- [agent-context.js](../../ui/legacy/agent-context.js) builds the view with
-  `wbReference.text()`, the function behind **Copy reference**, so the two
-  can't differ. It adds the ids: `src`, `scenario` or `story`, `lens`, and
-  `iteration` when the view shows one. The server keeps the same fields.
-- Every canvas posts its view to `POST /_workbench/view` under a random
-  client id: when it settles on a page (each `wb-here`), on `hashchange`
-  and `wb-frame-change`, and every 30 seconds as a heartbeat. The VS Code tab
-  and a browser canvas both report, embedded or not. A `file://` canvas
-  doesn't.
-- A view that isn't ready is posted as `null`, in the cases where
-  **Copy reference** says to wait.
-- A canvas posts `closed` on `pagehide`. One that stops reporting stops
-  counting after 3 minutes.
-- [agent_view.rs](../../server/src/agent_view.rs) keeps the views. `GET /_workbench/view`
-  answers `{ root, open, view, changedAt }` for the canvas changed most
-  recently. A heartbeat doesn't count as a change.
-- With no canvas open, `open` is false and agents are told nothing.
+- The canvas composition publishes the record through its controller-owned
+  publisher ([publication.js](../../ui/src/modules/canvas/publication.js)). A
+  content renderer reports instance-local metadata to the outer canvas; it
+  does not publish another application-level current view. See the
+  [rendering flow](../system/rendering-flow.md).
+- Publish on artboard add and remove, view, status and size changes, and
+  selection changes, and every 30 seconds as a heartbeat.
+- The publisher sends the full record to each participating space's context
+  service, and to the spaces sharing a participating space's root, under the
+  same canvas ID, serializing updates. Each service keeps its own root for
+  the context reader's validation. Shared-root announcements are handled
+  explicitly rather than letting space selection decide which context
+  survives.
+- Closing the canvas or removing a space's participation withdraws the record
+  there. A canvas that stops reporting stops counting after 3 minutes, so
+  heartbeat expiry handles vanished canvases.
+- User activity (selection and user changes) determines the current canvas.
+  Automatic loads, background readiness updates and heartbeats only update its
+  report; they never take precedence from a different canvas the user has
+  used since.
+- [agent_view.rs](../../server/src/agent_view.rs) keeps the views.
+  `GET /_workbench/view` answers `{ root, open, view, changedAt }` for the
+  canvas changed most recently. A heartbeat doesn't count as a change. With no
+  canvas open, `open` is false and agents are told nothing.
+- Context stays available during partial loading and failure: a loading or
+  failed artboard is represented without hiding usable neighbors. It makes no
+  claim that an agent has access to every referenced root.
+- A canvas with no artboards reports open with an empty list and no selected
+  artboard; closing the canvas reports closed.
+- Complete context is bounded at 32 artboards and 100,000 text characters.
+  An oversize report fails explicitly; slicing text or silently dropping later
+  artboards violates the complete-context requirement. UI delivery must expose
+  that error without hiding other available review operations.
+- Context contains references and status. Screenshot sharing remains a
+  deliberate handoff action.
 
-## Finding the server
+## Delivery and discovery
+
+### Finding the server
 
 The server's port changes between runs, and each VS Code window with a
 workbench runs its own server.
@@ -91,20 +116,19 @@ workbench runs its own server.
   that port by then.
 - Projects should ignore `.canonic/.workbench/`.
 
-## Delivery to agents
+### Delivery to agents
 
 | Surface | Agents | What the user does | What the agent gets | Status |
 | --- | --- | --- | --- | --- |
 | Prompt hook (`UserPromptSubmit`) | Claude Code, Codex | Allow the hook when the host requires review; no action on each prompt | The current view on every prompt while a page is showing | Implemented |
 | MCP server `workbench`: `current_view` tool, `workbench://view/current` resource | Every editor the agent configuration covers | Asks about "this page", or attaches the resource | The current view on request | Implemented |
-| Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request | Proposed |
-| **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled | Proposed |
-| Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file | Proposed; host capability review required |
 
 ### The agent configuration sets it up
 
 The project's agent configuration writes the hook
 and MCP configuration when Workbench agent context is enabled for the project.
+Agent configuration owns generated project integration. Editor-specific
+registration must not introduce a second context model or conflicting files.
 
 One context reader does the work in both roles: `hook` prints the view (or
 nothing), and `mcp` serves the tool and resource over stdio. The
@@ -123,7 +147,15 @@ definitions before they can run.
   visible, with how long ago it changed. People often ask about the page
   from a chat beside it.
 
-### Proposed integrations
+## Proposals
+
+These integrations are proposed, not agreed or implemented.
+
+| Surface | Agents | What the user does | What the agent gets |
+| --- | --- | --- | --- |
+| Copilot language model tool, `#page` | Copilot | Types `#page`, or nothing in agent mode | The current view on request |
+| **Ask agent** button in the top bar | Whichever agent is installed | Clicks it | A chat opened with the reference prefilled |
+| Copilot chat context provider | Copilot | Nothing | The canvas as implicit context, like an open file; host capability review required |
 
 - A Copilot page-reference tool, callable explicitly or by the agent.
 - Extension-owned MCP registration for hosts that support it, without requiring
@@ -135,6 +167,25 @@ Each integration requires a review of the editor's documented capabilities
 before implementation. No proposed editor API or specific host version is
 assumed available by this contract.
 
+## Implementation note: the legacy single-reference publisher
+
+The legacy singleton publisher remains for legacy hosts and is disabled for an
+isolated renderer. Its reference omits dimensions; that does not limit the
+complete canvas record.
+
+- [agent-context.js](../../ui/legacy/agent-context.js) builds the view with
+  `wbReference.text()`, the function behind the one-page reference, so the two
+  can't differ. It adds the ids: `src`, `scenario` or `story`, `lens`, and
+  `iteration` when the view shows one. The server keeps the same fields.
+- Every canvas posts its view to `POST /_workbench/view` under a random
+  client id: when it settles on a page (each `wb-here`), on `hashchange`
+  and `wb-frame-change`, and every 30 seconds as a heartbeat. The VS Code tab
+  and a browser canvas both report, embedded or not. A `file://` canvas
+  doesn't.
+- A view that isn't ready is posted as `null`, in the cases where
+  **Copy reference** says to wait.
+- A canvas posts `closed` on `pagehide`.
+
 ## Acceptance criteria
 
 - With the canvas on a page, the server's view text equals what
@@ -143,6 +194,13 @@ assumed available by this contract.
   changes the next answer.
 - Closing the canvas stops the context: the hook prints nothing and
   `current_view` says no canvas is open.
+- Agent context includes every artboard, its space and view, and the selected
+  ID through both hooks and MCP. A loading or failed artboard is represented
+  without hiding usable neighbors.
+- Complete context reaches agents working in every participating configured
+  space; shared-root spaces and simultaneous editor/browser canvases do not
+  overwrite one another's identities. Heartbeats and background readiness do
+  not change which canvas the user last used.
 - The generated hook and MCP commands find the script from the project root
   and from nested folders, including a nested Git repository.
 - Automated: [agent_view tests](../../server/src/agent_view/tests.rs) (latest canvas,
@@ -152,18 +210,6 @@ assumed available by this contract.
   that generates the agent configuration.
 - Manual, not yet done: the hook and tool inside the Claude Code and Codex
   extensions, with their versions recorded.
-
-## Integration constraints
-
-- People and agents receive the same resolved reference text. Single-view and
-  canvas reports preserve their own complete identities; selected focus does
-  not hide other supplied artboards.
-- User activity determines the current canvas. Background readiness updates
-  and heartbeats cannot steal precedence from the canvas last used.
-- Context contains references and status. Screenshot sharing remains a
-  deliberate handoff action.
-- Agent configuration owns generated project integration. Editor-specific
-  registration must not introduce a second context model or conflicting files.
 
 ## Open questions
 

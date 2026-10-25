@@ -161,7 +161,7 @@ The other axis keeps its exact length.
 ## Resolved sizes
 
 Both config readers resolve sizes with the same rules from `manifest.js`, as
-they do for implementations ([core](../core.md#configuration-and-serving)). The
+they do for implementations ([local overrides](../pages/page-tree.md#local-overrides)). The
 resolved config carries:
 
 - `sizes` on the space: every size in order, each
@@ -367,16 +367,19 @@ when it has no sizes of its own, and otherwise leaves its own sizes alone.
 - A size resolves to numeric CSS pixels when an artboard takes it: a fixed
   axis exactly, and a filled axis at the canvas's length at that moment.
   After that the artboard is an ordinary numeric size; it doesn't follow the
-  canvas.
+  canvas. Returning to one artboard does not implicitly change its dimensions.
+  Native content retains its renderer's aspect ratio and coordinate mapping.
 - `supportsSize` accepts a size the page supports when the fixed axes match
   exactly; a filled axis accepts any length. Artboard dimensions range from
   1 to 8192 pixels.
 - The fallback for an unsupported size is the page's first listed size,
   instead of Laptop or Mobile. Implementation gap: the canvas controller applies
-  this fallback to declared artboards too, because their view report carries the
-  page's sizes, so a declared artboard whose authored size the page's `sizes`
-  do not accept can lose it
-  ([multiple artboards](multiple-artboards.md#implemented-support-system)).
+  this fallback to declared artboards too, because the view report for every
+  instance, declared or implicit, carries the page's sizes
+  (`ui/src/modules/preview-sessions/content.js`) and the canvas controller
+  replaces an instance size that none of them accepts with the page's first size
+  (`ui/src/modules/canvas/controller.js`), so a declared artboard whose authored
+  size the page's `sizes` do not accept can lose it.
 - Artboards size themselves directly, whatever sizes the space lists. A space
   that leaves out `resizable` still gets working artboards; their child
   runtimes don't depend on the space having a Resizable size.

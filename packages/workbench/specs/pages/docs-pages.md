@@ -377,89 +377,12 @@ problems update when they arrive.
 
 ## System behavior
 
-- **Manifest.** `manifest.js` accepts `.md` sources, `lens`, and the `docs`
-  kind, and rejects a `src` that contains `:`, `+`, `!` or `~`, for the
-  browser and the server alike; every config reader also rejects a `src` that
-  starts with `/` or contains `..`.
-- **Serving.** The server serves a docs page at its Markdown path and renders
-  the Markdown to HTML with example placeholders. Markdown parsing and syntax
-  highlighting use pinned dependencies shipped in the extension, like Lucide;
-  no runtime dependency downloads or external highlighting service. Live HTML
-  contains escaped, readable code. One lazy, document-owned module worker uses
-  pinned local highlight.js 11.11.1 with explicitly registered languages for
-  fences and Show code. It starts after document load and two animation frames,
-  outside page readiness. Tokenization runs off the browser's main thread;
-  CSS Custom Highlight ranges colour the original text nodes without syntax spans.
-  CSS, fonts, images and examples retain their readiness waits. Token colours
-  cannot change code font metrics. Requests time out to readable plain code;
-  edits/disposal cancel pending work and stale results cannot overwrite new text.
-  Captures wait for colouring to settle (including a plain-text failure fallback).
-  Portable docs are highlighted at export time and never need a live endpoint.
-- **The page before its examples.** The page answers with its Markdown without
-  waiting for a build: its panels are `pending` until the page script learns
-  the lens's bundle, which then mounts them or names why not. The examples are
-  usually built already: the Workbench server starts its compiler with the
-  session, which builds every docs page in each lens with the previews as it
-  starts ([warm runtime](../preview-pipeline/warm-runtime.md)).
-- **Compilation.** Each docs page lens is an entry of the
-  [preview pipeline](../preview-pipeline/compiler.md#entries), built from that
-  lens's example source with the lens's adapter, styles, environment, and the
-  project's `workbench.config.ts`. Lenses share the previews' compilers, cache
-  and trust rules.
-- **The Docs host.** The canvas loads Docs through a dedicated warm Docs
-  document, separate from the preview host. Its bounded pool retains recent
-  pages and reassigns the oldest compatible idle document when capacity is
-  reached. HTML and examples metadata fetch in parallel. The host reports
-  readiness, visible examples for handoffs, and scroll for annotations. Pool
-  ownership, isolation, retention and background return revision checks are
-  defined by [warm runtime](../preview-pipeline/warm-runtime.md#warm-docs-pool).
-- **Source text.** The server returns an example's source text for **Show
-  code**: the whole file for directory examples, the export's declaration for
-  named exports.
-- **Which lens shows.** [lenses.js](../../contracts/src/docs/lenses.js)
-  decides a page's lenses, the lens it shows, its default lens, the lens a
-  docs link opens, the lens the address names, and the canvas mode. It is
-  pure; the canvas loads it through
-  [bootstrap/docs.js](../../ui/src/bootstrap/docs.js) and waits for it
-  before applying the config, and Node tests check it. Off a server
-  (`file://`) the module can't load and the canvas shows no docs lenses.
-- **Docs entries.** The server keeps one entry per Markdown file, naming the
-  page it belongs to ([docs.rs](../../server/src/docs.rs)); the first page
-  to claim a file has it. Docs are served at the Markdown's path in the lens
-  `?lens=` names, and the routes take the Markdown as `page`. Handoffs, the
-  source menu, and export references use the owning page.
+- **Docs host.** How Docs are served, highlighted, compiled, hosted, reused
+  and kept fresh, and the reusable page lifecycle, are the
+  [Docs host](../preview-pipeline/docs-host.md).
 - **Schema documentation.** The schema change updates `ui/legacy/README.md`
   and `docs/configuration.md`. A new user guide, `docs/docs-pages.md`,
   is added to the docs index and the website's `docGroups`.
-
-### Reusable page lifecycle
-
-- `docs-page.js` exposes `start(options)` and `stop()`. Install document-level
-  interaction listeners once; they dispatch only to the current page. Importing
-  the module does not mount a page. A second start stops the earlier lifecycle
-  and mounts fresh, without duplicate tool/link handlers or revision listeners.
-- Each start owns its options, action log, source cache, mounted examples,
-  highlighting, readiness and revision subscription. `stop()` disposes mounts,
-  cancels pending work and releases that state; it is safe after partial startup
-  and safe to repeat. Async work from a stopped page cannot report actions or
-  readiness, update code panels or affect its successor. Host-level listeners
-  and retained runtime assets survive until the host is disposed.
-- A cleanup rejection is sticky for that page module's document: later
-  start/stop calls continue to reject instead of mounting into uncertain state.
-  The warm host must replace that document and let its owner retry the current
-  destination under [the isolation contract](../preview-pipeline/warm-runtime.md#docs-document-isolation).
-  Removing a closing/disposed frame does not retry or reopen it.
-- Served pages opened on their own explicitly start once, with their existing
-  page options. Portable exports do the same with their static metadata and
-  pre-highlighted code, without requiring the warm host or live revision,
-  metadata or highlighting endpoints. Preserve relative asset/module paths and
-  standalone link behavior.
-- Reassignment mounts a fresh page; resuming the exact retained destination
-  does not call start again. Markdown updates preserve mounted examples where
-  the [existing edit contract](../preview-pipeline/hot-updates.md#docs-pages)
-  permits, including open code panels with fresh source text. Page tools,
-  scenarios, actions, docs links and example anchors retain the same behavior in
-  warm, standalone and portable delivery.
 
 ## Pilot
 
@@ -501,7 +424,7 @@ Client-project rollout is separate from this product contract.
   releases resources. An exact retained return preserves live state and scroll;
   an evicted return mounts fresh. Example anchors still select the requested
   example after reuse, refresh and a docs/design round trip.
-- The pool meets [warm-runtime acceptance](../preview-pipeline/warm-runtime.md#verification)
+- The pool meets [Docs host acceptance](../preview-pipeline/docs-host.md#verification)
   without changing annotations, zoom, readiness, screenshots, handoffs, error
   containment, trust rules or standalone/portable behavior. Shipping-code lab
   sequences and installed Acme confirmation are required separately from unit
@@ -516,22 +439,9 @@ Client-project rollout is separate from this product contract.
 - Docs shown alone use the canvas viewport so fixed-position content and `vh`
   resolve against the reader's visible area. Beside other artboards they use
   an ordinary sized viewport; full-page document height is reserved for export.
-- Prose and examples share the light DOM for annotations, anchors and capture.
-  Prose rules exclude `.wb-docs-example` descendants. Highly specific project
-  rules can still restyle prose; keep that limitation explicit.
-- Named-export source text is extracted by column-zero declaration boundaries,
-  including attached comments/decorators, without introducing a second parser.
-  The compiler lists export names. Re-exports and multiline templates require
-  dedicated source-location handling; see
-  [export_source.rs](../../server/src/docs/export_source.rs).
-- Docs render as content through the [dedicated renderer contract](../system/rendering-flow.md).
-  A docs page or example does not initialize Workbench navigation, toolbar or canvas.
-  Project docs/example compilation remains a backend content service; UI asset
-  delivery serves/copies browser-native JavaScript/CSS unchanged, with no UI
-  compilation or bundling.
-- Previews and docs examples share compiler profiles, aliases, rules, plugins
-  and environments. React Native Web examples use a column flex stage without
-  imposing viewport height on panels.
+- Implementation constraints (shared light DOM, source-text extraction,
+  content-only rendering, shared compiler profiles) are in the
+  [Docs host](../preview-pipeline/docs-host.md#design-constraints).
 - A declared YAML page wins when a discovered docs definition claims the same
   Markdown file. One Markdown file has one owning page.
 - The page list represents pages and scenarios, not docs examples. Examples are
@@ -541,15 +451,8 @@ Client-project rollout is separate from this product contract.
 
 ## Current status
 
-The dedicated warm Docs pool and reusable lifecycle above are implemented.
-Recent documents resume immediately; a new page can reuse an idle same-lens
-host. Parallel HTML/metadata reads compare their Markdown identity before
-mounting. Return checks distinguish Markdown and compiled example revisions,
-so missed prose updates preserve examples and missed example updates refresh
-the host with scroll kept. See the
-[decision and measured limits](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23).
-Shipping confirmation is tracked by
-[integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23).
+The dedicated warm Docs pool and reusable lifecycle are implemented; see the
+[Docs host status](../preview-pipeline/docs-host.md#status).
 
 Docs lenses, Markdown rendering, example compilation/mounting, source-code
 controls, annotations, capture, handoff and portable output have source tests
@@ -647,7 +550,7 @@ renderer combination or source-extraction edge case. See
   listing doesn't record.
 - **Multiple-artboard management.** Isolated docs renderers participate in
   declared-artboard composition. Arbitrary artboard management and its
-  editor-host acceptance remain [canvas integration work](../canvas/multiple-artboards.md#remaining-integration-plan).
+  editor-host acceptance remain [canvas integration work](../canvas/artboard-management.md#delivery-plan).
 
 - **An address naming a page's Markdown** opens nothing when the Markdown
   belongs to a page with a design: the address names the page's own `src`.

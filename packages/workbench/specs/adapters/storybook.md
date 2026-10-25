@@ -31,11 +31,9 @@ A Storybook implementation without `url` is the Workbench server's
   `storybook dev --preview-only --exact-port -p <port> --ci --no-open --quiet
   --no-version-updates --disable-telemetry` from that folder. A version that
   rejects `--preview-only` is started again without it.
-- **On first need.** The first request through the implementation's proxy,
-  or the stories route, starts it. It is ready when `/index.json` answers;
-  a start that takes more than 120 seconds fails with Storybook's output.
-  After it exits, the next request starts it again. It stops with the
-  server.
+- **On first need.** When it starts, when it counts as ready, its start
+  deadline and when it stops are the server's
+  [process lifetimes](../system/server.md#a-storybook-the-server-runs).
 - **No TCP port.** A preload
   ([socket-listen.cjs](../../server/node/src/modules/storybook/socket-listen.cjs)),
   loaded with `--require`, moves every TCP listen in that process to a
@@ -54,9 +52,9 @@ A Storybook implementation without `url` is the Workbench server's
   the stories route answers `Workbench couldn’t run Storybook in <root>:
   <output>` or `Storybook isn’t installed in <root>. Install storybook and a
   framework there, or set url to a Storybook you run.`
-- **A Storybook the user runs** keeps `url` (or `url: auto`) and, in VS
-  Code, `start`; the server reads it at that address. `start` without `url`
-  is reported, and so is `base` on a Storybook implementation.
+- **A Storybook the user runs** is read at its `url`; its configuration,
+  including which keys are problems, is the
+  [Storybook contract](../pages/storybook.md)'s.
 
 ## Decisions
 

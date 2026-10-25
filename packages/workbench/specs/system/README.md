@@ -6,12 +6,13 @@ measurements belong to the package's [research](../../research/README.md).
 
 | Topic | Owns |
 | --- | --- |
-| [Modules](modules.md) | Product/source owners, dependency direction, UI/backend independence and bounded migration |
-| [Rendering flow](rendering-flow.md) | One shell, content-only renderers, responsibility boundaries and isolation acceptance |
-| [Server](server.md) | Rust server/host process model, protocol, routes, resident index coordination and trust boundary |
+| [Modules](modules.md) | Product/source owners, dependency direction, UI/backend independence and the current browser source layout |
+| [Browser UI port](ui-port.md) | Target browser layout, capability and view map, port order, path consumers, temporary adapters and the Lattice delivery slice |
+| [Rendering flow](rendering-flow.md) | One shell, the content renderer contract, renderer-specific implementation ownership, responsibility boundaries and isolation acceptance; navigation behavior is in [canvas navigation](../canvas/navigation.md) |
+| [Server](server.md) | Rust server/host process model (evaluators, Storybook, their lifetimes, deadlines and runtime selection), protocol, request tracing, routes, resident index coordination and trust boundary |
 | [Access boundaries](access-boundaries.md) | Local execution/origin model, request authority, file/write boundaries, body bounds and unresolved access policy |
 | [Implementation proxy](implementation-proxy.md) | Loopback proxy routing, HTML/header/cookie rewriting and implementation framing |
-| [Performance](performance.md) | Agreed/proposed budgets, timed boundaries, diagnostics, resource expectations and measurement acceptance |
+| [Performance](performance.md) | Agreed/proposed budgets, timed boundaries, diagnostics and measurement use of request tracing, resource expectations, first-page status and measurement acceptance |
 | [Code quality](code-quality.md) | Engineering gates, dependency/artifact policy and behavioral evidence conventions |
 | [Lab methodology](labs.md) | Experiment planning in ignored local labs, fair comparisons, shared fixtures, runner reliability, research records and decision/confirmation lifecycle |
 

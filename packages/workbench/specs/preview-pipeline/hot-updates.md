@@ -15,7 +15,7 @@ pipeline meets them.
   stream, and open no connection of their own.
 - No frame starts periodic revision polling. Edit latency depends on the build
   and update, not on an interval. One-shot checks on retained return protect
-  against missed updates ([warm runtime](warm-runtime.md)).
+  against missed updates ([retained sessions](warm-runtime.md#retained-sessions)).
 - The stream carries:
 
   | Event | Meaning |
@@ -33,7 +33,7 @@ pipeline meets them.
 
 - Every open frame whose document runs a profile's runtime applies that
   profile's hot updates as they arrive: the visible frame, the spare (the
-  content iframe preparing a replacement, [core](../core.md#canvas-and-artboard))
+  content iframe preparing a replacement, [navigation](../canvas/navigation.md#navigation-feedback))
   and hidden retained frames. Push keeps retained frames current during normal
   operation; return-time revision checks cover updates missed while retained.
 - A frame applies updates until its document runs the build hash the `built`
@@ -109,15 +109,9 @@ mounts its preview there. Any other document reloads.
 - Examples revisions use the entry's reachable module content hashes, errors
   and compiler generation. Adding unrelated entries or repartitioning shared
   chunks does not change that identity.
-- A retained Docs return is shown immediately, then checks its revision once
-  in the background to catch a missed push. An unchanged page stays mounted;
-  a changed page follows these same update rules with scroll preserved.
-  This is a return-time check, not periodic polling. Superseded or disposed
-  lifecycles ignore late check/update results. The
-  [warm Docs contract](warm-runtime.md#resume-and-freshness) owns failure and
-  replacement behavior. Return revision checks are implemented alongside the
-  push path; [integration evidence](../../research/docs-navigation.md#warm-docs-integration-2026-10-23)
-  records their verification scope.
+- A retained Docs return catches a missed push with the
+  [Docs return check](docs-host.md#resume-and-freshness); a changed page
+  follows these same update rules.
 
 ### Errors and recovery
 

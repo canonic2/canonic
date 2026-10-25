@@ -6,9 +6,9 @@ these integrations.
 
 | Topic | Owns |
 | --- | --- |
-| [VS Code extension](vscode-extension.md) | Activation/trust, spaces, commands, sidebar/panel messages, restored-tab lifecycle and host-owned services |
+| [VS Code extension](vscode-extension.md) | Activation/trust, space listing, IDs, servers and switching, commands, sidebar/panel messages, restored-tab lifecycle and host-owned services |
 | [Hosts and updates](hosting.md) | Editor/browser/standalone/portable capabilities, platform prerequisites, remote limits and update/shutdown semantics |
-| [Agent context](agent-context.md) | Published view identity, server discovery, hook/MCP delivery, editor proposals and host acceptance |
+| [Agent context](agent-context.md) | The canvas context record and its parity with Copy reference, publication, precedence and heartbeats, server discovery, hook/MCP delivery, editor proposals and host acceptance |
 
 [Persistence](../canvas/persistence.md) owns what is saved, stable identity,
 startup precedence and storage-failure behavior. VS Code owns its workspaceState

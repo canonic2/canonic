@@ -137,9 +137,14 @@ The dialog offers all declared variants or the current view. Source ZIP defaults
 to all; single-page PDF/images default to current. Browser ZIP uses declared
 variants. The request is recorded in ZIP metadata.
 
-Capture owns PDF rendering. Visual pages use screen media, full document height,
-custom paper size and zero margins. Docs use print media, A4/Letter, half-inch
-margins and automatic pagination. The export module merges them with `lopdf`,
+The capture helper renders each PDF page through its `printExportPage` command.
+It settles the page, measures its document height, switches to screen media
+for visual pages or print media for docs, and returns PDF bytes. Visual pages
+use their viewport width and full document height, a custom paper size and
+zero margins. Docs use A4/Letter, half-inch margins and automatic pagination.
+Inserted print styles and media emulation are restored after every request.
+Export owns selection, job progress, PDF assembly and downloading. The export
+module merges the pages with `lopdf`,
 preserving each page's size and selectable text. Individual capture failures are
 warnings; no successful pages fails the job. PDF returns `application/pdf`.
 Visual pages above 19,200 CSS pixels fail their capture rather than clip. Images
@@ -180,16 +185,13 @@ filters. Browser-only output fails if no compiled previews or docs are available
   page mapped to that lens, each story of its mapped title at each of the
   page's export sizes, from `<url>/iframe.html?id=<story>&viewMode=story`,
   in place of the page's design references.
-- Capture each size the page supports, as resolved by its space. Fixed sizes
-  use their dimensions; filled axes use 1440 wide or 900 tall. Fit uses
-  1440 × 900. Resizable is skipped; a page whose only size is Resizable gets
-  one 1440 × 900 reference. A page without `sizes` uses its space's sizes.
-  Duplicate dimensions are removed. Screenshot records carry the size key
-  as `size` and its label as `sizeLabel`, plus optional `artboard` and
-  `iteration` IDs. README headings read `<reference label> · <size label>`
-  (*Default · Laptop*), with the dimensions on the line below the image; a
-  declared artboard's heading is its reference label alone.
-  See the [sizes contract](../canvas/sizes.md#design-system-export).
+- Each page is captured at the export sizes the
+  [sizes contract](../canvas/sizes.md#design-system-export) resolves for it.
+  Screenshot records carry the size key as `size` and its label as
+  `sizeLabel`, plus optional `artboard` and `iteration` IDs. README headings
+  read `<reference label> · <size label>` (*Default · Laptop*), with the
+  dimensions on the line below the image; a declared artboard's heading is its
+  reference label alone.
 - Design pages load as designed with actions off; the first scenario loads
   without a `scenario` parameter, and an iteration adds `iteration=<id>`. Current-view or explicit lens requests use the
   page's declared URL/workbench mapping, or a Storybook lens's mapped stories.

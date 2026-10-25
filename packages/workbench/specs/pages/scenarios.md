@@ -55,7 +55,7 @@ kind:
   `globals`, `requests`, `setup`, `play` and `ready`, and either `artboards`
   or `iterations` ([artboards and iterations](iterations.md#declaring-artboards-and-iterations)).
   It merges over the preview's own values; the merge order is in
-  [previews](previews.md#definition-contract).
+  [artboards and iterations](iterations.md#what-an-iteration-changes).
 
 ## In the page list
 

@@ -4,7 +4,8 @@ The Workbench server is what the extension or the standalone command starts
 for a space: it
 answers the canvas, serves the [page tree](../glossary.md#what-a-space-holds) and
 serves pages through their [adapters](../adapters/README.md). This spec owns its
-process model, its routes and its protocol with the process that starts it.
+process model (its child processes, their lifetimes, deadlines and runtime
+selection), its routes and its protocol with the process that starts it.
 The [preview pipeline](../preview-pipeline/README.md) owns compiling and
 delivering native pages; the
 [extension contract](../integrations/vscode-extension.md#process-boundaries) owns how the
@@ -115,17 +116,25 @@ processes (decided by the owner on 2026-10-16 and 2026-10-18).
 | Process | Runs | Listens on | Started |
 | --- | --- | --- | --- |
 | `workbench-server`, one per space | HTTP for the canvas, the page index and its watcher, the compiler (Rspack's Rust crates), serving and pushed updates, the [implementation proxies](implementation-proxy.md) | The space's public loopback port, and one loopback port per proxied implementation origin, because each framed implementation needs an origin of its own | By the host |
-| The Node evaluator, one per space | Project code: computed definitions, `workbench.config.ts`, Astro compiling and rendering, Vue's compiler, project JavaScript loaders ([adapters](../adapters/README.md#how-pages-are-served)) | Nothing: stdin and stdout pipes | On first need, in a trusted workspace, on the Node runtime the host gives |
-| Definition-index evaluator, current separate path | Computed/Docs listing and non-native glob selection ([evaluate.rs](../../server/src/evaluate.rs)) | Nothing: one JSON request/answer over pipes, then exit | When indexing requires evaluation/selection; killed/reaped on failure or deadline |
-| A Storybook the server runs | The project's `storybook dev --preview-only` ([Storybook adapter](../adapters/storybook.md#a-storybook-the-server-runs)) | A local socket only | On the first story request, in a trusted workspace |
+| The Node evaluator, one per space | Project code: computed definitions, `workbench.config.ts`, Astro compiling and rendering, Vue's compiler, project JavaScript loaders ([adapters](../adapters/README.md#how-pages-are-served), [compiler jobs](../preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)) | Nothing: stdin and stdout pipes | On first need, in a trusted workspace, on the Node runtime the host gives ([lifetime](#the-node-evaluator)) |
+| Definition-index evaluator, current separate path | Computed/Docs listing and non-native glob selection ([evaluate.rs](../../server/src/evaluate.rs)) | Nothing: one JSON request/answer over pipes, then exit | When indexing requires evaluation/selection; killed/reaped on failure or deadline ([lifetime](#the-definition-index-evaluator)) |
+| A Storybook the server runs | The project's `storybook dev --preview-only` ([Storybook adapter](../adapters/storybook.md#a-storybook-the-server-runs)) | A local socket only | On the first story request, in a trusted workspace ([lifetime](#a-storybook-the-server-runs)) |
+
+The editor host and the standalone command are Node processes too, outside the
+server.
 
 The one-long-lived-evaluator direction does not yet cover definition indexing:
 its short-lived process is an additional implementation path. Do not infer
 that one persistent compiler evaluator bounds all Node process starts. A
 successful saved literal listing does not need either evaluator.
 
+- **Project code stays out of the server and the editor.** Server-side project
+  evaluation never runs in the native server or the extension host. Project
+  browser code runs in preview documents, including those the capture helper
+  opens when taking pictures.
 - **No child takes a TCP port.** A child is reached over stdin and stdout
-  pipes or a local socket in a private temporary folder, so only the server
+  pipes or a local socket in a private temporary folder (a Unix socket, or a
+  named pipe on Windows), so only the server
   can reach it, and a dev server or Storybook the user runs on any port never
   conflicts with it.
 - **Children are the server's.** Started on need, restarted on the next need
@@ -142,6 +151,74 @@ successful saved literal listing does not need either evaluator.
   process the host shares between spaces. Window and Simulator video streams
   are the capture part's: the host serves them on a local socket, and the
   server forwards `/_workbench/window/stream` there, upgrades included.
+
+#### The Node evaluator
+
+The evaluator is one long-lived Node process per space, not one per adapter
+([node.rs](../../server/src/node.rs),
+[evaluator/](../../server/node/src/modules/evaluator/index.ts)), reached over
+stdin and stdout with one JSON request per line.
+
+- The server starts it on the first request that needs project JavaScript,
+  with the space's trust and configuration, and it loads only what the
+  adapters in use need. It asks the host for its Node runtime the first time
+  it starts, so a space whose definitions are literals and that has no
+  `workbench.config.ts` starts none.
+- It waits up to a minute for the runtime, and fails a request that has no
+  answer within two minutes, stopping the process.
+- When it exits, every waiting request fails and the next request starts a
+  new one; there is no proactive restart.
+- A change to `workbench.config.ts` or a file it imports stops it, and the
+  next need, such as the rebuild that change triggers, starts a new one.
+- It is killed with the server. Its error output goes to the server's
+  standard error.
+
+#### The definition-index evaluator
+
+The page index starts a short-lived evaluator
+([evaluate.rs](../../server/src/evaluate.rs)) when a listing needs evaluation
+(computed definitions and all `defineDocs` definitions) or a glob pattern
+outside native matching ([page index](../preview-pipeline/page-index.md#parsing-and-evaluation)).
+
+- It answers one JSON request over pipes, then exits.
+- Its deadline is the index request's, 120 seconds by default, in the
+  one-process `workbench-server index` and the
+  [resident index](#the-resident-index-and-watcher) alike. It is killed at the
+  deadline or on failure, and reaped.
+- The host's bundled Electron runtime is prepared only when evaluation is
+  requested; literal-only listing requires neither runtime extraction nor a
+  Node subprocess.
+
+#### A Storybook the server runs
+
+A Storybook implementation without `url` runs the project's own Storybook
+([Storybook adapter](../adapters/storybook.md#a-storybook-the-server-runs) owns
+the command, the socket and its error messages):
+
+- In a trusted workspace only, on the host's Node runtime.
+- The first request through the implementation's proxy, or the stories route,
+  starts it. It is ready when `/index.json` answers; a start that takes more
+  than 120 seconds fails with Storybook's output.
+- After it exits, the next request starts it again. It stops with the server.
+
+#### Runtime selection
+
+Both evaluators, the long-lived Node evaluator and the short-lived
+definition-index evaluator, run the executable the host's `node` answer names
+([host/](../../server/node/src/modules/host/index.ts) `runtime()`): the
+[bundled Electron runtime](../review/capture.md#bundled-electron-runtime),
+prepared once and run as Node (`ELECTRON_RUN_AS_NODE`), when that runtime is
+available, and otherwise the host process's own executable (the standalone
+command's Node). They therefore need no separate Node install.
+`NODE_OPTIONS` is removed from their environment. A Storybook the server runs
+starts on the same executable, also as Node. Previews compile in
+`workbench-server` with Rspack's Rust crates and need no Node runtime of their
+own. esbuild in the evaluator
+bundles definitions and `workbench.config.ts` for evaluation
+([compiler](../preview-pipeline/compiler.md#what-runs-in-the-node-evaluator)).
+Each platform VSIX bundles the matching pinned esbuild binary at build time;
+source checkouts use the package's installed esbuild. Projects install no
+compiler, and the installed extension downloads none.
 
 ### The page tree
 
@@ -242,9 +319,7 @@ with the statuses and messages the canvas expects.
 
 - How Studio starts and talks to the server is open: the same stdio messages
   as the extension, or a library interface.
-- The full format-by-format first-page, complete-list and edit target campaign
-  has not been repeated against this server. Scoped shipping Docs navigation
-  and installed startup evidence is recorded in [performance](performance.md).
+- First-page, complete-list and edit target acceptance: [performance status](performance.md#status).
 - Builds for Windows and Linux have not been run on those systems.
 - Portable code uses Syntect grammars, so token boundaries can differ from
   live highlight.js output. Markdown does not turn bare URLs into links.
@@ -260,8 +335,13 @@ with the statuses and messages the canvas expects.
    for later.
 4. **The resident index and watcher live in the server,** so the warm page
    list needs no process per request.
+5. **Rust is the direction for suitable host capabilities in the extension.**
+   Electron owns screenshot rendering. An additional Rust component needs a
+   defined integration contract; a lab prototype does not establish it.
 
 ## Open questions
 
 - Whether the browser keeps `manifest.js` as its reader, or moves to the
   server's answer only.
+- **Evaluator exit.** Decide whether an unexpected evaluator exit should publish a
+  persistent problem before a subsequent request starts its replacement.

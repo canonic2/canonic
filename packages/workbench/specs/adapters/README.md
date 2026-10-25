@@ -80,30 +80,17 @@ evaluator only for the parts that have to run JavaScript:
 | Custom adapters | The browser mount, native plugin capabilities and Rust-native rules | The project's JavaScript loaders |
 
 Storybook's dev server is a separate owned child, not an operation inside the
-Node evaluator. Definition indexing currently also has a short-lived evaluator
-process, separate from the long-lived compiler evaluator. The
-[server process model](../system/server.md#processes-and-connections) records
-that implementation gap against the one-evaluator direction.
+Node evaluator. The server's
+[processes and connections](../system/server.md#processes-and-connections) own
+every child process: the Node evaluator (one per space, not one per adapter),
+the definition-index evaluator and Storybook's dev server, their lifetimes,
+deadlines and sockets.
 
-- **One Node evaluator per space,** not one per adapter. The server starts
-  it on first need, with the space's trust and configuration; it loads only
-  what the adapters in use need and exits with the server. A change to
-  `workbench.config.ts` or a file it imports stops it, and the next need,
-  such as the rebuild that change triggers, starts a new one. A space that
-  needs no JavaScript on the server never starts it.
 - **An adapter declares which parts are Rust and which are Node,** so adding
   an adapter does not change the server's core.
-- A child process of any kind, the Node evaluator or Storybook's dev server,
-  is the Workbench server's: started on need, reached only by the server over
-  stdin and stdout pipes or a local socket (a Unix socket, or a named pipe on
-  Windows) and never on a TCP port, and stopped with it. A process the user
-  runs on any port never conflicts with it
-  ([processes and connections](../system/server.md#processes-and-connections)).
 
 The [glossary](../glossary.md#behind-the-canvas) defines the Workbench
-server, the page index, adapters and the Node evaluator. Server-side project
-evaluation never runs in the native server or extension host. Project browser
-code runs in preview documents, including the capture renderer when taking pictures.
+server, the page index, adapters and the Node evaluator.
 "Runtime" alone names neither the server nor an adapter: the preview runtime
 is the browser module every frame shares ([browser.js](../../ui/preview/browser.js)),
 and the bundled runtime is the Electron build Workbench ships
@@ -121,11 +108,8 @@ Decided by the owner on 2026-10-16, after the
   loaders. Project plugin capabilities migrate to Rust
   ([decision](../preview-pipeline/plugins.md#plugin-migration-decision)).
   A project that needs none of the JavaScript steps starts no Node process.
-  Today two more Node processes exist beside the evaluator: definition
-  indexing starts its own short-lived evaluator when a listing needs
-  JavaScript, and a Storybook the server runs is the project's own dev server
-  ([how pages are served](#how-pages-are-served)). The editor host and the
-  standalone command are Node processes too, outside the server.
+  The Node processes that exist today beside the evaluator are listed in the
+  server's [processes and connections](../system/server.md#processes-and-connections).
 - **Each adapter is a separate unit** that owns its build settings,
   project-code step, browser mount and documentation, instead of having its
   format handling spread through the pipeline.
