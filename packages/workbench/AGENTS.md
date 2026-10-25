@@ -150,6 +150,37 @@ their generated reference pages. Keep Cargo caches between runs.
 
 ---
 
+# Agent-facing messages
+
+Applies to MCP instructions, tool and argument descriptions, tool results,
+errors, hook context and SDK feedback. Developer documentation and user-facing
+UI, CLI output and approval reviews have their own writing contracts.
+
+- Write the shortest complete instruction: outcome, necessary constraint, next
+  action and retry condition when relevant. Use direct verbs and exact tool or
+  field names. Omit introductions, repeated cautions and implementation history.
+- Give each instruction one owner. Server instructions explain purpose and tool
+  routing; tool descriptions explain effects; schemas explain arguments; results
+  explain the current outcome; errors give the nearest recovery step. Keep a
+  local reminder only when omitting it could cause a wrong or unsafe action.
+- Review the assembled message, including appended host guidance and structured
+  data. Do not repeat a workflow in every fragment or restate the full result in
+  prose. Preserve structured evidence and text-only client compatibility.
+- Prefer one sentence for tool descriptions and a short paragraph for routine
+  feedback. Use compact steps for a necessary workflow; expose detailed evidence
+  through existing inspection tools. No word target justifies losing a required
+  trigger, scope, side effect, user step, authority limit or uncertainty.
+- Preserve approval, denial, cancellation, ownership and unknown-outcome semantics.
+  Name who must act and what must happen before retrying; never imply that a
+  preview, proposal or missing response authorizes or completes an action.
+- Keep examples only when they resolve ambiguity. Keep vendor research and
+  rationale in specs or research rather than repeated runtime instructions.
+- Update affected message expectations and owning contracts when wording changes.
+  Test behavior and actionable routes, not copies of prose or rigid word counts.
+  Run checks only when the user requests them.
+
+---
+
 # Behavioral testing and package verification
 
 - Read the package guide and existing tests before choosing a runner, location

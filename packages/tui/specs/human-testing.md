@@ -156,15 +156,15 @@ numbered gates below are its review checklists. The cycle is:
    for the applicable human gate. Ask for the failing step/observed behavior if feedback is unclear.
 5. If a step fails, fix the current delivery unit and present updated verification; do
    not move to another delivery unit or commit a knowingly failed result.
-6. Commit only when explicitly requested or authorized; use the commit skill,
-   rerun checks when changes require it, and report hashes for the reviewed scope
+6. Commit only when explicitly requested or authorized; rerun checks when
+   changes require it, and report hashes for the reviewed scope
    in the owning repositories. Commit authorization does not imply human acceptance.
    Nothing is pushed automatically.
 
 One confirmation accepts only the demonstrated scope on the user's reported
 terminal. New material changes after confirmation reopen the affected gate.
-If engineering checks fail, the commit skill's failure handling applies; human
-acceptance does not waive a failing check. Maintain human review status here,
+A failing engineering check blocks the commit; human acceptance does not
+waive it. Maintain human review status here,
 without claiming untested platform coverage.
 
 Use `make -C packages/tui run` from the repository root for human tests.

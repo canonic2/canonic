@@ -163,13 +163,13 @@ pub(super) fn board(component: Component) -> &'static str {
         Component::SessionBrowser => {
             "Session Browser · Navigation / Search / Actions / Return / Profiles"
         }
-        Component::Picker => "design/option-picker/README.md · States / Hosts",
-        Component::Chat => "design/chat/README.md · Turns / Content / Search / Selection",
-        Component::Editor => "design/editor/README.md · States / Hosts",
-        Component::Dialog => "design/dialog/README.md · States",
-        Component::Commands => "design/commands-and-bindings/README.md · States / / list",
-        Component::Composer => "design/composer/README.md · States / The ↑ key",
-        Component::CompletionMenu => "design/completion-menu/README.md · States / Keys & behavior",
+        Component::Picker => "Option Picker · States / Hosts",
+        Component::Chat => "Chat · Turns / Content / Search / Selection",
+        Component::Editor => "Editor · States / Hosts",
+        Component::Dialog => "Dialog · States",
+        Component::Commands => "Commands & Bindings · States / / list",
+        Component::Composer => "Composer · States / The ↑ key",
+        Component::CompletionMenu => "Completion Menu · States / Keys & behavior",
         Component::ToolCallCard => "Tool Call Card · States / Actions / Concurrency / Fallbacks",
         Component::PermissionReview => {
             "Permission Review · States / Confirmation / Queue / Profiles"
