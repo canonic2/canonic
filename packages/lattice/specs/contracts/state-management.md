@@ -468,7 +468,10 @@ mixed, so no shape is adopted yet. A follow-up found that a bulk update of the
 field a collection-wide value reads rederives that value once per item:
 updating every item's `done` at 1,000 items took about 5× the shared map's
 time. The extra memory is almost entirely the item stores themselves, about
-520 bytes each.
+520 bytes each. Store per item is therefore not the default shape. A
+[keyed collection proposal](../proposals/keyed-collections.md), evaluated as
+a prototype in the record's stage 4, met every agreed threshold; the question
+stays open until the owner accepts it.
 
 ## Phases and transitions
 
