@@ -99,15 +99,15 @@ test('opening another space without a destination routes to its first resolved p
   assert.equal(app.routed[0].src, 'home.html');
 });
 
-test('an imported-only space opens its first named scenario after catalog resolution', function () {
-  var app = startup('', [], [{ name: 'Stories', items: [
-    { src: 'Components/Button', implementationOnly: 'storybook', scenarios: [{ id: 'primary' }] },
+test('an imported-only space opens its first catalog page after catalog resolution', function () {
+  var app = startup('', [], [{ name: 'Simulators', items: [
+    { label: 'iPhone 17', src: '__ios-simulator/ios/SIM-1.html', implementationOnly: 'ios' },
   ] }]);
   app.apply(true);
   assert.equal(app.routed.length, 0);
   app.finish();
-  assert.equal(app.routed[0].src, 'Components/Button');
-  assert.equal(app.routed[0].scenario, 'primary');
+  assert.equal(app.routed[0].src, '__ios-simulator/ios/SIM-1.html');
+  assert.equal(app.routed[0].scenario, null);
 });
 
 test('explicit destinations, including invalid links, take precedence over the first page', function () {

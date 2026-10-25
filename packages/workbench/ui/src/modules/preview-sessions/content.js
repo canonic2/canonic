@@ -189,7 +189,7 @@ export function createContentController(options) {
         mapped && (item.scenarios?.length || 0) > 1
           ? item.scenarios.map((s, i) => ({
               id: String(i),
-              target: item.implementationOnly ? s.id : i ? s.id : null,
+              target: i ? s.id : null,
               label: s.label,
               current: i ? s.id === scenario : !scenario,
             }))

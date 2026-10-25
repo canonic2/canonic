@@ -702,7 +702,6 @@
         if (seq !== showSeq) return;
         var picked = window.wbLenses.pick(list, scenario);
         currentScenario = picked.scenario;
-        if (item.implementationOnly && pageList) pageList.setCurrent(current, currentScenario, item.collection);
         view.story = picked;
         view.scenarioLabel = picked.name;
         view.url = window.wbLenses.storyUrl(lens, picked.id);

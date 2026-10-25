@@ -38,16 +38,16 @@
     return item && item.scenarios && item.scenarios.length > 1 ? item.scenarios : null;
   }
 
-  /* An authored page's scenario header carries two actions in one row: its
-     caret folds, while its label selects the page. Imported titles are
-     disclosure-only because their named scenarios are the actual pages. */
-  function scenarioHeadAction(target, selected, filtering, disclosureOnly) {
+  /* A page's scenario header carries two actions in one row: its caret
+     folds, while its label selects the page. */
+  function scenarioHeadAction(target, selected, filtering) {
     var caret = target && target.closest && target.closest('.wb-fold');
-    return disclosureOnly || caret || (selected && !filtering) ? 'toggle' : 'pick';
+    return caret || (selected && !filtering) ? 'toggle' : 'pick';
   }
 
-  function scenarioPick(item, scenario, index) {
-    return item && item.implementationOnly ? scenario.id : index === 0 ? null : scenario.id;
+  /* The first scenario is the page as authored, picked as none. */
+  function scenarioPick(scenario, index) {
+    return index === 0 ? null : scenario.id;
   }
 
   /* Whether a row (its data attributes) is the selection. The canvas reports
@@ -66,14 +66,11 @@
     return caret || holdsCurrent ? 'toggle' : 'pick';
   }
 
-  /* The page a collection or group opens on: its first page, as authored,
-     or the first named scenario of an imported title that has no page of its
-     own. Null when it holds no pages. */
+  /* The page a collection or group opens on: its first page, as authored.
+     Null when it holds no pages. */
   function firstPick(pages) {
     var item = pages[0];
-    if (!item) return null;
-    var scenarios = item.implementationOnly && item.scenarios && item.scenarios.length ? item.scenarios : null;
-    return { src: item.src, scenario: scenarios ? scenarioPick(item, scenarios[0], 0) : null };
+    return item ? { src: item.src, scenario: null } : null;
   }
 
   function firstPage(collections) {
@@ -338,24 +335,17 @@
         row.dataset.src = item.src;
         row.dataset.scenario = scenario.id;
         /* The canvas reports a page's first scenario as none, whatever its
-           id. An implementation-only page names each of its scenarios. */
-        if (i === 0 && !item.implementationOnly) row.dataset.first = 'true';
+           id. */
+        if (i === 0) row.dataset.first = 'true';
         row.addEventListener('click', function () {
-          onPick(item.src, scenarioPick(item, scenario, i));
+          onPick(item.src, scenarioPick(scenario, i));
         });
         parts.list.appendChild(row);
       });
 
-      /* An imported implementation has no page apart from its named scenarios,
-         so its title is disclosure-only. Authored pages retain the shortcut
-         where their title picks the default scenario and folds when reselected. */
+      /* The title picks the default scenario and folds when reselected. */
       parts.head.addEventListener('click', function (e) {
-        if (scenarioHeadAction(
-          e.target,
-          current === item.src,
-          filtering,
-          !!item.implementationOnly
-        ) === 'toggle') {
+        if (scenarioHeadAction(e.target, current === item.src, filtering) === 'toggle') {
           toggleFold(parts.box);
           return;
         }
