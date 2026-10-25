@@ -293,6 +293,7 @@ and passes its acceptance:
 | --- | --- | --- |
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
+| Classic single-artboard resize rails in `views/canvas/legacy-bindings.js` | `canvas` | The `canvas` adoption step; dimensions and persistence remain in the shell until then |
 | Existing DOM controls in `views/toolbar/bindings.js`, connected by canvas bindings | `annotations` / `review` | The `annotations` / `review` adoption step; commands retain their existing state owners |
 | Classic `wbExportBindings` with `modules/review/browser-export.js` | `review` / `export` | The Export adoption step; the shell supplies its current destination and the existing request/progress lifecycle stays intact |
 | Classic `wbConfigEditor` in `views/configure-pages/config-editor.js`, with rules and HTTP in `modules/project/configuration.js` | `project` / `configure-pages` | The Configure pages adoption step; draft/selection state remains in the existing dialog closure |

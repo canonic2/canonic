@@ -256,14 +256,14 @@ test('accepts editor shortcuts only from the active Storybook iframe and its ori
 
 test('the shell cancels select-all over its chrome and leaves fields and notes to it', function () {
   var keys = load().window.wbKeys;
-  var source = fs.readFileSync(path.join(__dirname, "./workbench.js"), 'utf8');
-  var start = source.indexOf('  /* ⌘A is a text command.');
-  var handler = source.slice(source.indexOf("  document.addEventListener('keydown'", start), source.indexOf('}, true);', start) + 9);
+  var source = fs.readFileSync(path.join(__dirname, '../src/modules/shortcuts/shell.js'), 'utf8');
   var listener = null;
-  vm.runInNewContext(handler, {
+  var context = {
     window: { wbKeys: keys },
-    document: { addEventListener: function (type, fn, capture) { assert.equal(capture, true); listener = fn; } },
-  });
+    document: { addEventListener: function (type, fn, capture) { if (capture) listener = fn; } },
+  };
+  vm.runInNewContext(source, context);
+  context.window.wbShellShortcuts({ host: function () { return false; } });
 
   var chrome = event({ key: 'a', metaKey: true, target: { nodeType: 1, tagName: 'BUTTON', isContentEditable: false } });
   listener(chrome);

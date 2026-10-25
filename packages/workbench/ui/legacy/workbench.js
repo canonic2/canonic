@@ -1569,12 +1569,6 @@
     updated: function () { reloadSizes(null, 'Saved the sizes to workbench.yaml.'); }
   });
 
-  /* Chrome-style rails sit outside the preview. Side rails change width, the
-     bottom changes height, and either bottom corner changes both. Pointer
-     travel is screen pixels, so it is divided by the zoom; a left-edge drag
-     moves the frame over by what it grew, so the right edge stays put. */
-  var artboardDrag = null;
-
   function rememberFrameSize() {
     try {
       localStorage.setItem('canonic-workbench-resizable-width', String(resizableWidth));
@@ -1583,53 +1577,10 @@
       /* file:// storage can be blocked; resizing still works this session. */
     }
   }
-
-  Array.prototype.forEach.call(document.querySelectorAll('.wb-artboard-resize'), function (handle) {
-    handle.addEventListener('pointerdown', function (e) {
-      if (canvas.dataset.size !== 'resizable') return;
-      if (window.wbZoom) window.wbZoom.hold();
-      artboardDrag = {
-        edge: handle.dataset.resize,
-        x: e.clientX,
-        y: e.clientY,
-        width: artboard.offsetWidth,
-        height: artboard.offsetHeight,
-        scale: window.wbZoom ? window.wbZoom.scale() : 1,
-        pan: window.wbZoom ? window.wbZoom.pan() : null,
-      };
-      handle.setPointerCapture(e.pointerId);
-      shell.classList.add('is-frame-resizing');
-      e.preventDefault();
-    });
-
-    handle.addEventListener('pointermove', function (e) {
-      if (!artboardDrag) return;
-      var left = artboardDrag.edge.indexOf('left') > -1;
-      var horizontal = (left ? artboardDrag.x - e.clientX : e.clientX - artboardDrag.x) / artboardDrag.scale;
-      if (artboardDrag.edge !== 'bottom') {
-        resizableWidth = Math.max(1, Math.round(artboardDrag.width + horizontal));
-        artboard.style.width = resizableWidth + 'px';
-        if (left && artboardDrag.pan) {
-          window.wbZoom.panTo(artboardDrag.pan.x - (resizableWidth - artboardDrag.width) * artboardDrag.scale, artboardDrag.pan.y);
-        }
-      }
-      if (artboardDrag.edge.indexOf('bottom') > -1) {
-        resizableHeight = Math.max(1, Math.round(artboardDrag.height + (e.clientY - artboardDrag.y) / artboardDrag.scale));
-        artboard.style.height = resizableHeight + 'px';
-      }
-      showFrameSize();
-    });
-
-    function endFrameDrag() {
-      if (!artboardDrag) return;
-      artboardDrag = null;
-      shell.classList.remove('is-frame-resizing');
-      rememberFrameSize();
-    }
-
-    handle.addEventListener('pointerup', endFrameDrag);
-    handle.addEventListener('pointercancel', endFrameDrag);
-    handle.addEventListener('lostpointercapture', endFrameDrag);
+  window.wbCanvasShellBindings({
+    canvas: canvas, artboard: artboard, shell: shell, remember: rememberFrameSize, showFrameSize: showFrameSize,
+    get width() { return resizableWidth; }, set width(value) { resizableWidth = value; },
+    get height() { return resizableHeight; }, set height(value) { resizableHeight = value; }
   });
 
   window.wbTopBarBindings({
@@ -1667,26 +1618,7 @@
 
   window.addEventListener('hashchange', route);
 
-  /* ⌘A is a text command. In a field or a note it selects the text there; over
-     the chrome, where nothing is text, it would select the whole shell and the
-     frame with it, so it does nothing. Pages inside the frame are their own
-     documents and keep the browser's select-all. */
-  document.addEventListener('keydown', function (e) {
-    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'a') return;
-    if (!window.wbKeys.editingTarget(e)) e.preventDefault();
-  }, true);
-
-  /* ⌘K / ctrl-K jumps to the filter, like every other tool — but only where
-     there is one. Embedded, the filter is in the editor's sidebar, and this
-     half has no business swallowing the chord. */
-  document.addEventListener('keydown', function (e) {
-    if (host) return;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      search.focus();
-      search.select();
-    }
-  });
+  window.wbShellShortcuts({ host: function () { return host; }, search: search });
 
   /* How the top bar was left. These are the tool's preferences rather than
      the space's, so they are shared by every space the workbench opens —

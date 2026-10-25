@@ -170,6 +170,7 @@ ui/src/
     navigation/             Requested destination, supersession and transition state
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
     review/                 Capture, reference projection, review workflow, export polling and browser delivery
+    shortcuts/              Existing shell keyboard scoping
     docs/                   Docs reading layout on the canvas
     trace/                  Browser timing traces
   theme/                    Standalone tokens and host theme assets
