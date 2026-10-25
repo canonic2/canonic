@@ -13,8 +13,11 @@ collection workload shows a meaningful cost.
 Reported, 2026-10-25. The owner asked for the lab to run after the framework
 guides; this plan was written before any run but not reviewed separately.
 Binding setup costs little per item; single-item updates and teardown grow
-with the collection. Stage 2 adopted bulk compaction for teardown; the state
-shape for collections is open.
+with the collection. Stage 2 adopted bulk compaction for teardown. Stage 3
+compared the shared map with one store per item and is reported with a mixed
+result: per-item stores make item updates independent of the collection's
+size but cost more memory and teardown than the thresholds allow. The state
+shape for collections stays open until the owner decides.
 
 ## Hypothesis
 
@@ -117,6 +120,72 @@ and every correctness check passes, including that no callback of a removed
 row runs. Adoption means implementing the change in the store with its unit
 tests passing and a test that deactivation releases callbacks immediately.
 
+### Stage 3: collection state shape (2026-10-25, before any stage 3 run)
+
+**Question.** Can the existing API meet the collection requirements in the
+[state management contract](../specs/contracts/state-management.md#collections-open)
+with one store per item, and at what cost compared with the shared map?
+
+**Variants.** Both use the store as committed, with bulk compaction, and the
+same rows, reconciler and per-row lifetimes as stages 1 and 2. Keyed
+subscriptions and windowing are out of scope.
+
+| Variant | Shape |
+| --- | --- |
+| 1. Shared map | One store holding `order` and `byId`, replaced immutably. A collection-wide selection, the number of open items, declares `order` and `byId` |
+| 3. Store per item | The capability keeps `order` in a membership store and creates one store per item holding `label` and `done`. `item(id)` returns a stable read-only view of that item's store, `{ get, watch }`, or `undefined` for an id not in the collection; label and done selections are shared by every item. The open count is computed over the items by a summary binding that watches the membership and each item's `done` |
+
+Both variants define the same rules:
+
+- Writes go through named actions only: `setLabel`, `setDone`, `setLabels` for
+  several items, `add`, `remove` and `reverse`.
+- An action naming an id not in the collection throws a `TypeError` and
+  changes nothing.
+- Removing an item ends its row's bindings, by aborting the row's lifetime,
+  before the item's store is released.
+- A bulk update of several items is one commit with the shared map and one
+  commit per item with stores per item. With stores per item, subscribers can
+  observe a partially applied bulk update between those commits; this is
+  documented, not prevented, and no cross-store transaction is added.
+
+**Workloads**, at 10, 100 and 1,000 items: mount; single-item label update;
+single-item done toggle, which changes the open count; bulk label update of
+10 items and of every item; insertion of one item at the end; removal of one
+item; reorder by reversal; teardown.
+
+**Measures.** CPU time per operation, as `performance.now()` around the
+synchronous operation in isolated pages, which includes the DOM writes and
+excludes rendering, identical by construction in both variants; steady-state
+bytes allocated per single-item update, done toggle and bulk update of every
+item; JavaScript heap per mounted item; and counted DOM effects, selection
+reads and open-count derivations per operation. Pages and repetitions as in
+stage 1.
+
+**Correctness checks**, on every counted page, in both variants: identical DOM
+effects per operation; keyed identity, every remaining row keeping its element
+across insertion, removal and reorder; the open count correct after every
+operation; teardown leaving no row, observer, listener or node; an action on a
+removed id throwing a `TypeError`; and no callback of a removed row running.
+
+**Decision thresholds**, set before running. Store per item is supported as
+the collection shape when every condition holds:
+
+1. A single-item label update at 1,000 items is meaningfully faster than the
+   shared map, and at 10 items no more than 25% slower.
+2. A bulk update of every item is no more than twice the shared map's time at
+   any size.
+3. Mount, insertion, removal, reorder and teardown are no more than 25% slower
+   at any size.
+4. Memory per item is no more than 50% higher at 100 and 1,000 items.
+5. A done toggle, which changes the collection-wide open count, is no more than
+   25% slower at any size.
+6. Every correctness check passes.
+
+If conditions 1 and 6 hold and others fail, the result is mixed: the record
+states which costs store per item adds, and the contract stays open with that
+evidence. If condition 1 or 6 fails, store per item is not supported. In every
+case the contract stays open until the owner decides.
+
 ### Host and tools
 
 The same machine and tools as the full-flow lab. Background load is recorded
@@ -131,6 +200,16 @@ with each set.
 | Background load | 1-minute load average 27 falling to 11 during the timing set, 11 to 12 for the others: the quietest runs of these labs |
 | Samples | Timing: 15 pages per variant and size; memory and allocations: 10; counted: 3. No page errored |
 | Measured source | The store, element helpers and example element as committed with the store's write change, plus the lab's capability, bindings, reconciler and runner, hashed in each report |
+
+### Stage 3 (2026-10-25)
+
+| Item | Value |
+| --- | --- |
+| Dates | Timing 01:16–01:24 UTC, counted 01:24–01:25, memory 01:25–01:33 |
+| Host and tools | As stage 1 |
+| Background load | 1-minute load average 7 to 9 during timing and counted; memory began at 9 and ended at 45, which affects heap and allocation figures less than timings |
+| Samples | Timing: 15 pages per variant and size; memory and allocations: 10; counted: 3. No page errored |
+| Measured source | Lattice as committed with bulk compaction, unchanged in both variants, plus the lab's two capabilities, bindings, summary bindings, reconciler and runner, hashed in each report |
 
 ## Results
 
@@ -201,6 +280,68 @@ deactivated subscription's callbacks are released at once, while its record
 still waits; the store's unit tests, the example's tests and the browser tests
 pass.
 
+### Stage 3: collection state shape (2026-10-25)
+
+Variant 1, the shared map, against variant 3, one store per item. Medians
+across pages of each page's median; "meaningful" uses the stage 1 rule.
+Store-per-item p95 and maximum across pages stayed within 10% of its median
+except mount at 100 items (35.2 against 21.0 µs) and teardown at 100 items
+(23.4 against 15.4 µs), single pages in both cases.
+
+| Measure | Items | Shared map | Store per item | Relative | Meaningful |
+| --- | --- | --- | --- | --- | --- |
+| Label update, µs | 10, 100, 1,000 | 3.81, 21.2, 339 | 2.68, 2.99, 5.20 | −30%, −86%, −98% | Yes |
+| Done toggle, µs | 10, 100, 1,000 | 3.63, 22.0, 342 | 2.84, 4.73, 31.8 | −22%, −79%, −91% | Yes |
+| Bulk label update of 10 items, µs | 10, 100, 1,000 | 19.4, 39.5, 361 | 19.8, 19.9, 21.6 | +2%, −50%, −94% | At 100 and 1,000 |
+| Bulk label update of every item, µs | 10, 100, 1,000 | 19.2, 220, 3,665 | 19.4, 194, 3,820 | +1%, −12%, +4% | At 100 only |
+| Insertion at the end, µs | 10, 100, 1,000 | 34.3, 92.6, 849 | 30.3, 54.5, 355 | −12%, −41%, −58% | At 100 and 1,000 |
+| Removal, µs | 10, 100, 1,000 | 31.6, 125, 2,469 | 35.0, 64.3, 400 | +11%, −49%, −84% | At 100 and 1,000 |
+| Reorder, µs per item | 10, 100, 1,000 | 2.64, 3.79, 12.6 | 2.44, 3.72, 12.7 | −8% to +1% | No |
+| Mount, µs per item | 10, 100, 1,000 | 20.0, 20.8, 23.2 | 22.3, 21.0, 25.7 | +12%, +1%, +11% | At 10 and 1,000 |
+| Teardown, µs per item | 10, 100, 1,000 | 11.4, 11.9, 13.0 | 15.1, 15.4, 17.0 | +33%, +30%, +31% | Yes |
+| JavaScript heap per item, bytes | 10, 100, 1,000 | 2,618, 920, 807 | 3,206, 1,692, 1,486 | +22%, +84%, +84% | Yes |
+| Bytes allocated per label update | 10, 100, 1,000 | 268, 652, 4,253 | 85, 85, 85 | −68% to −98% | Yes |
+| Bytes allocated per done toggle | 10, 100, 1,000 | 247, 632, 4,231 | 114, 138, 138 | −54% to −97% | Yes |
+| Bytes allocated per bulk update of every item | 10, 100, 1,000 | 700, 4,753, 44,993 | 986, 9,039, 89,424 | +41%, +90%, +99% | Yes |
+
+Selection reads and open-count derivations per operation, from the counted
+pages (N items):
+
+| Operation | Shared map reads | Shared map derivations | Store per item reads | Store per item derivations |
+| --- | --- | --- | --- | --- |
+| Mount | 2N + 2 | 1 | 3N + 2 | 1 |
+| Label update | 2N + 1 | 1 | 1 | 0 |
+| Done toggle | 2N + 1 | 1 | 2 | 1 |
+| Bulk label update of k items | 2N + 1 | 1 | k | 0 |
+| Insertion | 2N + 4 | 1 | 5 | 1 |
+| Removal | 2N + 2 | 1 | 2 | 1 |
+| Reorder | 2 | 1 | 2 | 1 |
+
+Every DOM effect count was identical between the variants at every step and
+size: label and disabled assignments, text and attribute writes, moves, rows
+created and removed, observers attached and disconnected.
+
+**Reading the costs.**
+
+- **Item updates** cost the same at every size with stores per item: one
+  store, one or two subscriptions, about 85 bytes. The shared map pays 2N
+  reads, a derivation and a copy of the map on every update.
+- **The collection-wide derivation stays linear.** A done toggle at 1,000
+  items costs 31.8 µs against 5.2 µs for a label update, because the open
+  count is recomputed over every item's store. The shared map derives on every
+  change to the map, including label changes that cannot alter the count;
+  stores per item derive only when membership or a `done` changes. A bulk
+  update of `done` on k items would derive k times with stores per item, one
+  per commit; that workload was not in the plan and was not measured.
+- **Bulk updates of every item** take about the same time in both, dominated
+  by the row writes, and stores per item allocate about twice as much: one
+  snapshot and delivery per item instead of one map copy. Subscribers of
+  other items can observe the update partly applied between those commits.
+- **Memory and teardown** are the variant's costs: about 680 to 770 bytes and
+  4 µs more per item at 100 and 1,000 items. Each item adds its store and the
+  summary binding's subscription and controller for its `done`; this lab did
+  not attribute the bytes between them.
+
 ## Correctness
 
 | Variant | Counted pages | Failed checks |
@@ -214,6 +355,26 @@ without creating or removing any; after teardown no row remained, every
 observer was disconnected and listener and node counts returned to their
 baseline.
 
+### Stage 3
+
+| Variant | Counted pages | Failed checks |
+| --- | --- | --- |
+| 1. Shared map | 9 | None |
+| 3. Store per item | 9 | None |
+
+Both passed, at 10, 100 and 1,000 items, after mount and after every
+operation: rows and the open count matched the bench's own model; every
+remaining row kept its element across label, done and bulk updates,
+insertion, removal and reorder, and a reorder created or removed no row; each
+of `setLabel`, `setDone`, `setLabels` and `remove` on a removed id threw a
+`TypeError` and caused no DOM effect, derivation or row callback; after
+teardown no row or summary remained, every observer was disconnected and
+listener and node counts returned to their baseline.
+
+The first smoke run failed teardown in both variants: the bench's identity
+snapshot still held the rows. Clearing it on unmount fixed the runner; no
+variant changed.
+
 ## Threats to validity
 
 - The rows reuse an element with three inputs; heavier rows dilute the
@@ -221,6 +382,14 @@ baseline.
 - The capability's state shape, items by id replaced immutably, is one common
   design; another shape changes the update cost.
 - Headless Chromium on one shared machine under varying background load.
+- Stage 3 measures one collection-wide value, a count over one boolean field.
+  Derivations over more fields, or bulk updates of the field they read, cost
+  more with stores per item and were not measured.
+- Stage 3 runs workloads in a fixed order within each page; earlier workloads
+  change labels and done states the later ones start from, identically in
+  both variants.
+- Heap per item at 10 items varies by about 550 bytes between pages in both
+  variants, the heap's measurement granularity at that size.
 
 ## Decision and follow-ups
 
@@ -248,3 +417,22 @@ with the collection:
   not give item-level selectivity inside one shared field; Lattice is not
   called ready for large collections until that is settled. One store per
   item is a candidate, not yet the rule.
+
+**Stage 3 against its thresholds:**
+
+| Condition | Result |
+| --- | --- |
+| 1. Label update faster at 1,000 items, at most 25% slower at 10 | Holds: −98% at 1,000, −30% at 10 |
+| 2. Bulk update of every item at most twice the shared map | Holds: +1%, −12%, +4% |
+| 3. Mount, insertion, removal, reorder and teardown at most 25% slower | Fails for teardown, +30% to +33% at every size; the others hold, at most +12% |
+| 4. Memory per item at most 50% higher at 100 and 1,000 | Fails: +84% at both |
+| 5. Done toggle at most 25% slower | Holds: faster at every size |
+| 6. Every correctness check | Holds |
+
+**Outcome: mixed.** Conditions 1 and 6 hold and 3 and 4 fail, so by the
+plan's rule store per item is not established as the collection shape. It
+meets the contract's update requirements with the current API, at about
+700 bytes and 4 µs of teardown more per item, a collection-wide derivation
+that stays linear in the collection, and bulk updates that are observable
+part-way and allocate twice as much. The collection contract stays open until
+the owner decides.

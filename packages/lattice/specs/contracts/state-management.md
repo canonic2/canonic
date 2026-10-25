@@ -456,8 +456,15 @@ and 4 KB per single-item update, against 1.8 µs for hand-written wiring.
 | Keyed subscriptions in the core | The core indexes subscriptions by an item key inside a field | Would be a new API and a contract change; considered only if the candidates without one fail |
 | Windowing | Mount rows only for visible items | Addresses mounting cost, not update cost; considered when mounting every row dominates |
 
-The comparison covers single-item updates, updates to many items, insertion,
-removal, reorder, setup and memory, as the collection record's next stage.
+**Evidence so far.** The collection record's stage 3 compared the shared map
+with one store per item at 10, 100 and 1,000 items. Store per item met the
+update requirements with the current API: a label update cost 5.2 µs and
+85 bytes at 1,000 items against 339 µs and 4 KB, and DOM effects, keyed
+identity and removal were identical. It cost about 84% more memory per item
+and 30% more teardown time, beyond the thresholds set before the run; a
+collection-wide value derived over the items stays linear in the collection;
+and an update to many items is observable part-way through. The result was
+mixed, so no shape is adopted yet.
 
 ## Phases and transitions
 
