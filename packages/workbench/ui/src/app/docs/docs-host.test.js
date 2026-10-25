@@ -222,9 +222,7 @@ test(
       await target.send('Page.addScriptToEvaluateOnNewDocument', {
         source: 'window.__wbTestLater = window.setTimeout.bind(window);',
       });
-      await target.navigate(
-        origin + '/_workbench/ui/src/app/docs/docs-host.html?lens=web',
-      );
+      await target.navigate(origin + '/_workbench/ui/src/app/docs/docs-host.html?lens=web');
       await target.evaluate(`(async()=>{
       window.__wbWait=async test=>{const end=performance.now()+5000;while(!test()){
         if(performance.now()>end)throw Error('Docs fixture timed out');await new Promise(r=>__wbTestLater(r,10));}};
