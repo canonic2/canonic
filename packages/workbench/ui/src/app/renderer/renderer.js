@@ -1,11 +1,11 @@
 /** Composes one content viewport. Never imports the Workbench application bootstrap. */
-import { createStore, shallow } from '../../../../node_modules/@canonic2/lattice/src/index.js';
+import { createStore, shallow } from '@canonic2/lattice';
 import {
   captureInputs,
   replayInputs,
   skipUpgradeAttribute,
   defineOnce,
-} from '../../../../node_modules/@canonic2/lattice/src/modules/elements/elements.js';
+} from '@canonic2/lattice/elements';
 void [createStore, shallow, captureInputs, replayInputs, skipUpgradeAttribute, defineOnce];
 import { createContentController } from '../../modules/preview-sessions/content.js';
 

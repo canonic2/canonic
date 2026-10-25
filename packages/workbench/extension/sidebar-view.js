@@ -84,6 +84,13 @@ function page(webview, dir, space, build, spaces) {
     body = body.replace('src="' + script + '"', 'src="' + webview.asWebviewUri(resource).toString() + '"');
   }
   var nonce = crypto.randomBytes(18).toString('base64');
+  body = body.replace(/<script type="importmap">[\s\S]*?<\/script>/, function () {
+    var imports = {};
+    for (var entry of [['@canonic2/lattice', 'src/index.js'], ['@canonic2/lattice/elements', 'src/modules/elements/elements.js']]) {
+      imports[entry[0]] = webview.asWebviewUri(vscode.Uri.file(path.resolve(__dirname, '../node_modules/@canonic2/lattice', entry[1]))).toString();
+    }
+    return '<script type="importmap" nonce="' + nonce + '">' + JSON.stringify({ imports }).replace(/</g, '\\u003c') + '</script>';
+  });
   /* Resource URLs are host configuration, not source rewriting. */
   body = body.replace('href="/_workbench/ui/src/theme/defaults.css"', function () {
     return 'href="' + webview.asWebviewUri(vscode.Uri.file(path.join(dir.fsPath, '../src/theme/defaults.css'))).toString() + '"';

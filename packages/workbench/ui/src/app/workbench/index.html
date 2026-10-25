@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Replaced with the space's name as soon as the config is read. -->
     <title>Workbench</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "@canonic2/lattice": "/_workbench/node_modules/@canonic2/lattice/src/index.js",
+          "@canonic2/lattice/elements": "/_workbench/node_modules/@canonic2/lattice/src/modules/elements/elements.js"
+        }
+      }
+    </script>
     <!-- The chrome brings its own values. Nothing here loads the project's
        tokens: the workbench is the tool, and it has to look the same in a
        project whose scale is named differently or not at all. The product's

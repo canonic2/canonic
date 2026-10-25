@@ -56,10 +56,12 @@ test(
           const html = await readFile(new URL('./sidebar.html', import.meta.url), 'utf8');
           res.setHeader('Content-Type', 'text/html');
           res.end(
-            html.replace(
-              '<head>',
-              `<head><base href="/_workbench/"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">`,
-            ),
+            html
+              .replace('<script type="importmap">', '<script type="importmap" nonce="fixture">')
+              .replace(
+                '<head>',
+                `<head><base href="/_workbench/"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'nonce-fixture'; style-src 'self'; img-src 'self' data:; connect-src 'self'">`,
+              ),
           );
         } else if (url.pathname === '/_workbench/config.js') {
           res.setHeader('Content-Type', 'text/javascript');

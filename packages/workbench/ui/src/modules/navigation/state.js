@@ -1,5 +1,5 @@
 /** Navigation rules. No DOM, transport, clock or renderer lifecycle. */
-import { shallow } from '../../../../node_modules/@canonic2/lattice/src/index.js';
+import { shallow } from '@canonic2/lattice';
 export const initial = () => ({
   id: null,
   requested: null,

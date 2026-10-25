@@ -1,6 +1,6 @@
 /** The requested destination and supersession belong here, not in DOM handlers. */
 import { begin as beginTrace, phase } from '../trace/browser.js';
-import { createStore } from '../../../../node_modules/@canonic2/lattice/src/index.js';
+import { createStore } from '@canonic2/lattice';
 import { initial, transition, feedback } from './state.js';
 /**
  * The iterations the canvas shows, keyed like the address's `+` parts ("" for

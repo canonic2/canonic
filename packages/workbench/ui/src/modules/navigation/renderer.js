@@ -1,4 +1,4 @@
-import { createStore } from '../../../../node_modules/@canonic2/lattice/src/index.js';
+import { createStore } from '@canonic2/lattice';
 import { initial, transition } from './state.js';
 
 /** The renderer's request identity belongs to its own document lifetime. */

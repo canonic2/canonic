@@ -255,7 +255,7 @@ Structural moves follow these conventions, each with a reason:
   [delivery slice](#lattice-delivery-slice): the server serves its modules
   unchanged beside the UI, the canvas, renderer and sidebar entry points
   resolve its import, and VSIX packaging includes it. The server-served canvas
-  and renderer documents need no CSP change for explicit-URL imports; the
+  and renderer documents map the shipping package specifiers; the
   sidebar webview gains a resource root for Lattice's files, which its CSP's
   webview source then admits.
 - Navigation state, transitions and the grace timer move into a navigation store
@@ -321,12 +321,11 @@ canvas or other behavior changes, and no store is used yet.
 - **Serving.** The server serves Lattice's runtime files unchanged under a fixed
   path `/_workbench/node_modules/@canonic2/lattice/`, following the same rules as `ui/src/`:
   JavaScript modules only, tests, declarations and development files refused.
-- **Imports.** Each document in scope imports Lattice's root entry point (the
-  store core: `createStore`, `shallow`) and its `elements` subpath by explicit
-  URL, without calling them. Explicit URLs need no import map, so documents
-  without one need no inline script and no CSP change for it; the sidebar
-  webview still needs a resource root for Lattice's files, which its CSP's
-  webview source then admits. No export is added to Lattice for the slice.
+- **Imports.** Each document in scope maps `@canonic2/lattice` and
+  `@canonic2/lattice/elements` to the shipping public entry files with an import
+  map before its modules. The sidebar host supplies webview resource URLs and
+  a CSP nonce for that map; its resource root and CSP source admit the module
+  requests. No export is added to Lattice for the slice.
 - **Documents.** The three documents navigation's adoption needs: the canvas
   document (`app/workbench/index.html` through `app/workbench/workbench.js`) and the
   renderer document (`app/renderer/content.html` through `app/renderer/renderer.js`), served by
@@ -351,9 +350,10 @@ canvas or other behavior changes, and no store is used yet.
 | Packaged launch | The installed extension, run without the source checkout, loads all three documents and their Lattice imports |
 
 The product uses `file:../lattice`; distribution assembly dereferences that
-dependency into the staged product. Explicit relative imports address Lattice's
-public root and elements entry files, resolving through the server or the
-sidebar's webview resource URL without rewriting the modules.
+dependency into the staged product. Bare imports resolve through document import
+maps to Lattice's public root and elements entry files. The server serves those
+files unchanged; the sidebar host configures its map with webview resource URLs
+without rewriting the modules.
 
 The delivery checks cover byte-preserving serving and refusal of development
 paths, a staged product outside the checkout loading canvas and renderer,

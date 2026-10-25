@@ -159,6 +159,11 @@ test('the page loads authored component modules from permitted webview resources
   assert.ok(module, 'the bootstrap is an external JavaScript module');
   assert.equal(module[2], path.resolve(__dirname, '../ui/src/app/sidebar/sidebar.js'));
   assert.ok(html.includes("'nonce-" + module[1] + "'"), 'the CSP permits the module nonce literally');
+  const importMap = /<script type="importmap" nonce="([^"]+)">([\s\S]*?)<\/script>/.exec(html);
+  assert.equal(importMap[1], module[1], 'the CSP nonce permits the import map');
+  const imports = JSON.parse(importMap[2]).imports;
+  assert.equal(imports['@canonic2/lattice'], path.resolve(__dirname, '../node_modules/@canonic2/lattice/src/index.js'));
+  assert.equal(imports['@canonic2/lattice/elements'], path.resolve(__dirname, '../node_modules/@canonic2/lattice/src/modules/elements/elements.js'));
   assert.ok(resolveView(true).view.webview.options.localResourceRoots.some(uri => uri.fsPath === path.resolve(__dirname, '../ui/src')));
   assert.ok(resolveView(true).view.webview.options.localResourceRoots.some(uri => uri.fsPath === path.resolve(__dirname, '../node_modules/@canonic2/lattice')));
   assert.ok(!html.includes('/_workbench/ui/src/app/sidebar/'));

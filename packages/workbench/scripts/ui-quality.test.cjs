@@ -9,6 +9,25 @@ test('the UI ships native JavaScript with a complete browser-ready module graph'
   const root = path.resolve(__dirname, '..');
   const ui = path.join(root, 'ui');
   const lattice = path.join(root, 'node_modules/@canonic2/lattice');
+  const expectedImports = {
+    '@canonic2/lattice': '/_workbench/node_modules/@canonic2/lattice/src/index.js',
+    '@canonic2/lattice/elements':
+      '/_workbench/node_modules/@canonic2/lattice/src/modules/elements/elements.js',
+  };
+  for (const document of [
+    'workbench/index.html',
+    'renderer/content.html',
+    'sidebar/sidebar.html',
+  ]) {
+    const html = fs.readFileSync(path.join(ui, 'src/app', document), 'utf8');
+    const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html);
+    assert.ok(map, document + ' supplies the shipping import map');
+    assert.deepEqual(JSON.parse(map[1]).imports, expectedImports);
+    assert.ok(
+      map.index < html.indexOf('<script type="module"'),
+      document + ' maps imports before modules',
+    );
+  }
   const files = fs.readdirSync(ui, { recursive: true });
   assert.deepEqual(
     files.filter((file) => /\.(?:[cm]?ts|tsx)$/.test(file)),
@@ -56,14 +75,16 @@ test('the UI ships native JavaScript with a complete browser-ready module graph'
       // every compiled preview share a single instance of it.
       if (specifier === SHARED_PREVIEW_RUNTIME) continue;
       assert.ok(
-        specifier.startsWith('.'),
+        specifier.startsWith('.') || Object.hasOwn(expectedImports, specifier),
         file + ' has no runtime package/host dependency: ' + specifier,
       );
       assert.ok(
-        specifier.endsWith('.js'),
+        specifier.endsWith('.js') || Object.hasOwn(expectedImports, specifier),
         file + ' imports browser-ready JavaScript: ' + specifier,
       );
-      const dependency = path.resolve(path.dirname(file), specifier);
+      const dependency = Object.hasOwn(expectedImports, specifier)
+        ? path.join(root, expectedImports[specifier].slice('/_workbench/'.length))
+        : path.resolve(path.dirname(file), specifier);
       assert.ok(fs.existsSync(dependency), file + ' resolves ' + specifier);
       if (dependency.startsWith(lattice + path.sep) && !file.startsWith(lattice + path.sep)) {
         assert.ok(

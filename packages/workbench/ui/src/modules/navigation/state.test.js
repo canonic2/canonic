@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initial, transition, feedback, matches } from './state.js';
-import { checkSelection } from '../../../../node_modules/@canonic2/lattice/src/testing/index.js';
+import { checkSelection } from '@canonic2/lattice/testing';
 import { createRendererNavigation } from './renderer.js';
 
 const destination = (src = 'page') => ({
