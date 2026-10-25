@@ -8,8 +8,9 @@ owns the target layout, the order of the port and its delivery. The
 store the port introduces; each capability's own spec keeps its behavior.
 [Modules](modules.md#browser-source-layout) describes the shipping layout.
 
-**Status:** agreed, not implemented: neither the Lattice delivery slice nor any
-port step has started; see [implementation gaps](#implementation-gaps).
+**Status:** agreed, not implemented. Structural moves may proceed now; Lattice
+adoption waits for its [readiness point](#port-order). See
+[implementation gaps](#implementation-gaps).
 
 ## Target layout
 
@@ -165,17 +166,25 @@ Other existing files move as follows:
 
 ## Port order
 
-The port starts after Lattice's framework guides and its keyed-collection
-evaluation are complete, and after
-the [Lattice delivery slice](#lattice-delivery-slice). Then:
+The port has two parts with different starting points:
 
-1. **Skeleton.** Create `app/` from `bootstrap/`, move the HTML documents
-   beside their entries (`legacy/preview-host.js` becomes the preview-host
-   entry, `legacy/capture-page.js` the capture entry) and move existing
-   modules and components into place. `bootstrap/canvas.js`, which connects
-   capabilities to the existing shell, becomes `views/canvas/bindings.js`, so
-   step 2 has a canvas binding to extend; the `canvas` step adds the view's
-   element.
+- **Structural moves** (step 1) start now. They relocate existing code into
+  the target layout and keep every existing state mechanism; they introduce no
+  Lattice dependency, no store, no collection API and no navigation redesign.
+- **Lattice adoption** (steps 2 and 3, and the
+  [delivery slice](#lattice-delivery-slice) before them) starts after Lattice's
+  framework guides and its keyed-collection evaluation are complete and its
+  collection scope is settled.
+
+1. **Structural moves,** one document at a time, each move reviewable on its
+   own: the document's HTML and entry move to `app/<document>/` (from
+   `bootstrap/` or `legacy/`; `legacy/preview-host.js` becomes the
+   preview-host entry, `legacy/capture-page.js` the capture entry), and the
+   code it loads is separated into views, shared components, capability
+   modules and host adapters where that code already has those roles.
+   `bootstrap/canvas.js`, which connects capabilities to the existing shell,
+   becomes `views/canvas/bindings.js`, so step 2 has a canvas binding to
+   extend; the `canvas` step adds the view's element.
    No behavior changes; imports, serving, path consumers, webview resources,
    packaging and design pages follow the moved paths. Before the first move,
    the package's developer documentation names these locations, and the
