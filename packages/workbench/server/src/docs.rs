@@ -5,7 +5,7 @@
 //! HTML it is served as ([`render`], [`page`]), and the page service the
 //! routes call ([`service`]). Listing and building a lens's examples belong to
 //! the preview compiler and are passed in. The browser half is
-//! `ui/src/modules/docs/page/`, served unchanged.
+//! `ui/src/views/docs/`, served unchanged.
 
 pub(crate) mod export_source;
 pub(crate) mod highlight;

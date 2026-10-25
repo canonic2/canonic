@@ -132,7 +132,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | `toolbar` | Annotation tools and review actions | Toolbar parts of `legacy/workbench.js` and `legacy/annotations.js` |
 | `configure-pages` | The Configure pages dialog | `legacy/config-editor.js` |
 | `export` | The export dialog | `components/export-dialog/` |
-| `docs` | A docs lens's reading page | `modules/docs/page/` |
+| `docs` | A docs lens's reading page | `views/docs/` (in place) |
 | `viewer` | The portable viewer's interface | `ui/viewer/` |
 
 Other existing files move as follows:
@@ -227,9 +227,9 @@ Structural moves follow these conventions, each with a reason:
 - **Served addresses stay.** A moved document keeps its `/_workbench/` address;
   the server's table of app documents maps it to the new file, so callers such
   as the capture helper, renderers and compiled previews change nothing. A
-  document served by its module path under `ui/src/`, such as the Docs host,
-  has only Workbench's own callers; its address moves with it and every
-  caller follows.
+  document or file served by its module path under `ui/src/`, such as the Docs
+  host or the docs page's script and stylesheet, has only Workbench's own
+  callers; its address moves with it and every caller follows.
 - **Moves are reviewable as renames.** A file is first committed moved, with
   only the edits its new path requires; formatting it to the UI's formatter
   and fixing its lint findings follow in a separate commit.
@@ -280,7 +280,7 @@ and passes its acceptance:
 | --- | --- | --- |
 | Server preview injection (`serve/files.rs`) | `legacy/keys.js`, `legacy/actions.js`, `legacy/scenarios.js`, read as text and injected into design pages | A served design page answers shortcuts, Actions and `?scenario=` as before |
 | Preview proxy (`proxies.rs`) | `/_workbench/preview-bridge.js`, injected into proxied URL and Storybook pages | A proxied page reports readiness and takes live screenshots |
-| Portable export (`portable.rs`) | `app/viewer/` files, `legacy/preview-controls.js` and `.css`, `modules/docs/page/` | An exported archive opens from a static server and its viewer, controls and docs work |
+| Portable export (`portable.rs`) | `app/viewer/` files, `legacy/preview-controls.js` and `.css`, `views/docs/` and the trace module it imports | An exported archive opens from a static server and its viewer, controls and docs work |
 | Compiled previews and renderers | `/_workbench/preview-host.html`, which the server maps to `app/preview-host/preview-host.html`, and `/_workbench/preview-runtime.js` | A TypeScript preview renders, re-renders a scenario in place and reloads after an edit |
 | Screenshot helper (`capture/app/main.cjs`) and its Node host (`server/node/src/modules/host/`) | `/_workbench/capture.html`, which the server maps to `app/capture/capture.html`; `legacy/describe.js` read as text and run in every captured page | An Electron capture and a handoff screenshot succeed |
 | Space styles (`space.rs`) | `legacy/annotations.css` read as text | Annotations render in the renderer document |

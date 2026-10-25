@@ -155,6 +155,7 @@ ui/src/
   app/viewer/                Portable export viewer, copied into each portable export
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
   views/top-bar/             Size and Actions elements and their registration
+  views/docs/                A docs lens's reading page, its embedded examples and highlighting
   components/<name>/         Element, styles, owned helpers and interaction tests
   components/shared/         Shared modal presentation styles
   components/register-*.js   Repeatable element registration and the space family
@@ -164,7 +165,7 @@ ui/src/
     navigation/             Requested destination, supersession and transition state
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
     review/                 Capture, reference projection, review workflow and browser delivery
-    docs/                   Reading layout and embedded examples
+    docs/                   Docs reading layout on the canvas
     trace/                  Browser timing traces
   theme/                    Standalone tokens and host theme assets
   vendor/                   Pinned third-party browser assets

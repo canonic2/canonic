@@ -1,15 +1,15 @@
 // Local, explicitly registered grammars. This module runs only in a worker.
-import hljs from '../../../vendor/highlight.js/core.min.js';
-import bash from '../../../vendor/highlight.js/languages/bash.min.js';
-import css from '../../../vendor/highlight.js/languages/css.min.js';
-import diff from '../../../vendor/highlight.js/languages/diff.min.js';
-import javascript from '../../../vendor/highlight.js/languages/javascript.min.js';
-import json from '../../../vendor/highlight.js/languages/json.min.js';
-import markdown from '../../../vendor/highlight.js/languages/markdown.min.js';
-import scss from '../../../vendor/highlight.js/languages/scss.min.js';
-import typescript from '../../../vendor/highlight.js/languages/typescript.min.js';
-import xml from '../../../vendor/highlight.js/languages/xml.min.js';
-import yaml from '../../../vendor/highlight.js/languages/yaml.min.js';
+import hljs from '../../vendor/highlight.js/core.min.js';
+import bash from '../../vendor/highlight.js/languages/bash.min.js';
+import css from '../../vendor/highlight.js/languages/css.min.js';
+import diff from '../../vendor/highlight.js/languages/diff.min.js';
+import javascript from '../../vendor/highlight.js/languages/javascript.min.js';
+import json from '../../vendor/highlight.js/languages/json.min.js';
+import markdown from '../../vendor/highlight.js/languages/markdown.min.js';
+import scss from '../../vendor/highlight.js/languages/scss.min.js';
+import typescript from '../../vendor/highlight.js/languages/typescript.min.js';
+import xml from '../../vendor/highlight.js/languages/xml.min.js';
+import yaml from '../../vendor/highlight.js/languages/yaml.min.js';
 
 for (const [name, grammar] of Object.entries({
   bash,

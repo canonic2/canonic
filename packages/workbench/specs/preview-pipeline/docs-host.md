@@ -83,7 +83,7 @@ between Docs destinations.
 The canvas uses a dedicated Docs host, separate from the preview host. The
 host document and its entry are under `ui/src/app/docs/`, served as
 `/_workbench/ui/src/app/docs/docs-host.html`, and the Docs capability's reusable
-page lifecycle is under `ui/src/modules/docs/page/`. The host is a content-only
+page lifecycle is the `docs` view under `ui/src/views/docs/`. The host is a content-only
 document; neither initializes the Workbench shell. The
 host reports readiness, visible examples for handoffs, and scroll for
 annotations.
@@ -248,12 +248,12 @@ real React selection events across reuse and runtime-listener disposal,
 rejecting unmount replacement through the canvas owner and superseded cleanup,
 parallel responses across a save, metadata failure, immediate resume, changed
 and failed revision checks, missed example updates, supersession and disposal.
-[Mount tests](../../ui/src/modules/docs/page/mount-examples.test.js) cover aborts
+[Mount tests](../../ui/src/views/docs/mount-examples.test.js) cover aborts
 during asynchronous mounting and image readiness, plus cleanup after failure.
 [Content-frame tests](../../ui/legacy/content-frames.test.cjs) and
 [session tests](../../ui/legacy/preview-sessions.test.js) cover retained resume,
 oldest compatible idle reuse, mixed lenses, the shared budget, expiry, Reload
-and disposal. [Highlighting tests](../../ui/src/modules/docs/page/highlighting.test.js)
+and disposal. [Highlighting tests](../../ui/src/views/docs/highlighting.test.js)
 cover the pinned highlight.js assets and worker colouring after load,
 preserving every character and settling captures. The pool's
 [decision and measured limits](../../research/docs-navigation.md#warm-docs-pool-decision-2026-10-23)

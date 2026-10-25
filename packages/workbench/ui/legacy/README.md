@@ -55,7 +55,7 @@ the content viewport fills its artboard at the supplied logical dimensions.
 
 The [warm Docs pool](../../specs/preview-pipeline/docs-host.md#warm-docs-pool)
 extends this lifecycle with a dedicated Docs host under `../src/app/docs/`
-and reusable page start/stop under `../src/modules/docs/page/`. It retains recent
+and reusable page start/stop under `../src/views/docs/`. It retains recent
 Docs pages and, once three sessions are idle, reuses the oldest compatible idle
 Docs document of the same lens for a new destination. Previews and Docs share
 the existing three-idle-session, 15-minute budget. Exact retained Docs returns

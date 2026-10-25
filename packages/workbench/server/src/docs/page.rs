@@ -8,9 +8,9 @@ use serde::Serialize;
 use std::fmt::Write as _;
 
 /// The docs page stylesheet, served from Workbench's browser files.
-pub(crate) const PAGE_STYLESHEET: &str = "/_workbench/ui/src/modules/docs/page/docs-page.css";
+pub(crate) const PAGE_STYLESHEET: &str = "/_workbench/ui/src/views/docs/docs-page.css";
 /// The docs page script, served from Workbench's browser files.
-pub(crate) const PAGE_SCRIPT: &str = "/_workbench/ui/src/modules/docs/page/docs-page.js";
+pub(crate) const PAGE_SCRIPT: &str = "/_workbench/ui/src/views/docs/docs-page.js";
 
 /// The lens's examples bundle, or where a deferred page asks for it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

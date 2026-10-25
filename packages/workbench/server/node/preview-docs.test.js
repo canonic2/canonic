@@ -222,7 +222,7 @@ test('the server serves a declared docs page at its Markdown path, in the lens a
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /text\/html/);
   const html = await page.text();
-  assert.match(html, /<link rel="stylesheet" href="\/_workbench\/ui\/src\/modules\/docs\/page\/docs-page.css">/);
+  assert.match(html, /<link rel="stylesheet" href="\/_workbench\/ui\/src\/views\/docs\/docs-page.css">/);
   // The Markdown answers at once; its panels wait for the page's script to ask for the bundle.
   assert.match(html, /data-wb-example="primary" data-status="pending"/);
   assert.match(html, /data-wb-example="secondary" data-status="pending"/);
@@ -386,19 +386,19 @@ test('the page script and stylesheet are served unchanged from browser-ready sou
   const running = await server.start({ root, capture: { close: () => Promise.resolve() } });
   t.after(() => running.close());
   const base = `http://127.0.0.1:${running.port}`;
-  const script = await request(base + '/_workbench/ui/src/modules/docs/page/docs-page.js');
+  const script = await request(base + '/_workbench/ui/src/views/docs/docs-page.js');
   assert.equal(script.status, 200);
   assert.match(script.headers.get('content-type'), /text\/javascript/);
   const body = await script.text();
-  assert.equal(body, fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
+  assert.equal(body, fs.readFileSync(path.join(__dirname, '../../ui/src/views/docs/docs-page.js'), 'utf8'));
   const host = await request(base + '/_workbench/ui/src/app/docs/docs-host.html');
   assert.equal(host.status, 200);
   assert.match(host.headers.get('content-type'), /text\/html/);
   assert.equal(await host.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/app/docs/docs-host.html'), 'utf8'));
-  const mount = await request(base + '/_workbench/ui/src/modules/docs/page/mount-examples.js');
-  assert.equal(await mount.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
+  const mount = await request(base + '/_workbench/ui/src/views/docs/mount-examples.js');
+  assert.equal(await mount.text(), fs.readFileSync(path.join(__dirname, '../../ui/src/views/docs/mount-examples.js'), 'utf8'));
   assert.equal((await request(base + '/_workbench/server/node/src/modules/docs/docs-service.ts')).status, 404);
-  assert.equal((await request(base + '/_workbench/ui/src/modules/docs/page/docs-page.css')).status, 200);
+  assert.equal((await request(base + '/_workbench/ui/src/views/docs/docs-page.css')).status, 200);
 });
 
 test('without trust, a docs page renders its Markdown and says why its examples are missing', async t => {
@@ -500,9 +500,9 @@ test('the portable export builds each docs page in each lens as a static page wi
   assert.deepEqual([options.bundle, options.sourceUrl, options.revisionUrl], [{ module: './examples.js' }, './sources/', '']);
   assert.ok(files.has('browser/docs/docs-button/web/examples.js'));
   assert.ok(files.has('browser/docs/docs-button/web/files/docs/anatomy.svg'));
-  assert.equal(files.get('browser/docs/page/page.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/docs-page.js'), 'utf8'));
-  assert.equal(files.get('browser/docs/page/mount-examples.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/docs/page/mount-examples.js'), 'utf8'));
-  assert.equal(files.get('browser/trace/browser.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/trace/browser.js'), 'utf8'));
+  assert.equal(files.get('browser/docs/page/page.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/views/docs/docs-page.js'), 'utf8'));
+  assert.equal(files.get('browser/docs/page/mount-examples.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/views/docs/mount-examples.js'), 'utf8'));
+  assert.equal(files.get('browser/modules/trace/browser.js').toString(), fs.readFileSync(path.join(__dirname, '../../ui/src/modules/trace/browser.js'), 'utf8'));
   assert.equal(JSON.parse(files.get('browser/docs/docs-button/native/sources/primary')).text,
     'export const primary = (canvas: HTMLElement) => { canvas.textContent = "Native primary"; };');
   assert.match(files.get('browser/docs/docs-button/native/index.html').toString(), /data-wb-example="secondary" data-status="missing"/);

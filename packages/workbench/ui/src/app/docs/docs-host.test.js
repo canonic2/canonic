@@ -188,7 +188,7 @@ test(
           })}</script>${
             url.searchParams.has('standalone')
               ? `<script type="module">
-            import { start } from '/_workbench/ui/src/modules/docs/page/docs-page.js';
+            import { start } from '/_workbench/ui/src/views/docs/docs-page.js';
             await start(window.__workbenchDocs);
           </script>`
               : ''
@@ -421,7 +421,7 @@ test(
         const target = await open();
         const result = await target.evaluate(`(async()=>{
       await __wbLoad('one');
-      const page=await import('/_workbench/ui/src/modules/docs/page/docs-page.js');
+      const page=await import('/_workbench/ui/src/views/docs/docs-page.js');
       await page.start({...__workbenchDocs,bundle:{module:'/examples.js?page=again&load=direct'}});
       const actions=[];const ready=e=>actions.push(e.detail.actions);window.addEventListener('workbench:ready',ready);
       await page.start({...__workbenchDocs,bundle:{module:'/examples.js?page=last&load=direct'}});

@@ -262,7 +262,7 @@ pub(crate) async fn build(
         &mut warnings,
     );
     let pages = docs_entries(request.index, config.as_ref(), request.selection);
-    let page_files = request.product.join("ui/src/modules/docs/page");
+    let page_files = request.product.join("ui/src/views/docs");
     let docs = portable_docs(
         request.root,
         &page_files,

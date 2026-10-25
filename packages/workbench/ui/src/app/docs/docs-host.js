@@ -1,4 +1,4 @@
-import * as page from '../../modules/docs/page/docs-page.js';
+import * as page from '../../views/docs/docs-page.js';
 
 page.wireOnce();
 window.__workbenchHost = true;

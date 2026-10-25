@@ -217,7 +217,7 @@ fn add_built(
 }
 
 /// Exports `entries` through `add(name, body)`, names relative to `browser/`.
-/// `page_files` is Workbench's `ui/src/modules/docs/page/` folder.
+/// `page_files` is Workbench's `ui/src/views/docs/` folder.
 ///
 /// # Errors
 /// Fails when the docs page's own browser files can't be read.
@@ -237,7 +237,7 @@ pub(crate) async fn portable_docs(
         ("docs/page/mount-examples.js", "mount-examples.js"),
         ("docs/page/highlighting.js", "highlighting.js"),
         ("docs/docs-page.css", "docs-page.css"),
-        ("trace/browser.js", "../../trace/browser.js"),
+        ("modules/trace/browser.js", "../../modules/trace/browser.js"),
     ] {
         let path = page_files.join(file);
         add(
@@ -362,7 +362,7 @@ mod tests {
     fn fixture() -> (PathBuf, PathBuf) {
         let base = std::env::temp_dir().join(format!("wb-docs-portable-{}", std::process::id()));
         let root = base.join("acme");
-        let page = base.join("ui/src/modules/docs/page");
+        let page = base.join("ui/src/views/docs");
         std::fs::create_dir_all(root.join("docs/images")).expect("root");
         std::fs::create_dir_all(&page).expect("page");
         std::fs::write(
@@ -384,7 +384,7 @@ mod tests {
         ] {
             std::fs::write(page.join(file), file).expect("page file");
         }
-        let trace = page.join("../../trace");
+        let trace = page.join("../../modules/trace");
         std::fs::create_dir_all(&trace).expect("trace folder");
         std::fs::write(trace.join("browser.js"), "export {};").expect("trace file");
         (root, page)
@@ -421,7 +421,7 @@ mod tests {
                 "docs/page/mount-examples.js",
                 "docs/page/highlighting.js",
                 "docs/docs-page.css",
-                "trace/browser.js",
+                "modules/trace/browser.js",
                 "docs/docs-card/web/examples.js",
                 "docs/docs-card/web/examples.css",
                 "docs/docs-card/web/sources/basic",

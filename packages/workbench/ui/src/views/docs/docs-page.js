@@ -1,5 +1,5 @@
 import { mountExamples } from './mount-examples.js';
-import { documentTrace, phase, address } from '../../trace/browser.js';
+import { documentTrace, phase, address } from '../../modules/trace/browser.js';
 import { createHighlighting } from './highlighting.js';
 
 let current = null;

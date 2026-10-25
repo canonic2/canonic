@@ -62,7 +62,7 @@ dependency install:
 
 ```sh
 # Run just the files affected by an edit (optional test-name filter).
-pnpm run test:focus ui/src/modules/docs/page/highlighting.test.js
+pnpm run test:focus ui/src/views/docs/highlighting.test.js
 pnpm run test:focus server/node/server.test.js --name 'trace'
 
 # Open this repository in a separate VS Code Extension Development Host.

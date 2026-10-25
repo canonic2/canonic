@@ -6,10 +6,10 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createUiAssets } from '../../../../../scripts/ui-browser-fixture.cjs';
+import { createUiAssets } from '../../../../scripts/ui-browser-fixture.cjs';
 
-const { Browser, findChrome } = createRequire(import.meta.url)('../../../../../scripts/chrome.cjs');
-const root = path.resolve(fileURLToPath(new URL('../../../../../', import.meta.url)));
+const { Browser, findChrome } = createRequire(import.meta.url)('../../../../scripts/chrome.cjs');
+const root = path.resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
 
 void test('the shipped highlight.js modules match their pinned local assets', async () => {
   const vendor = path.join(root, 'ui/src/vendor/highlight.js');
@@ -52,12 +52,12 @@ void test(
           res.end(JSON.stringify({ text, file: 'acme.ts' }));
         } else {
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
-          res.end(`<!doctype html><link rel="stylesheet" href="/_workbench/ui/src/modules/docs/page/docs-page.css">
+          res.end(`<!doctype html><link rel="stylesheet" href="/_workbench/ui/src/views/docs/docs-page.css">
           <main class="wb-docs"><h1>Acme</h1><pre class="wb-docs-code"><code data-wb-code="ts">const value = &quot;&lt;Acme&gt; λ&quot;; // note ffi =&gt;</code></pre>
           <figure data-wb-example="basic"><button data-wb-show-code>Show code</button><button data-wb-copy-code>Copy code</button><div class="wb-docs-example-code" data-wb-example-code hidden></div></figure></main>
           <script>window.__workbenchDocs={page:'acme.md',highlightUrl:'/colour',sourceUrl:'/source?example=',bundle:null};
           window.workerLoadStates=[];const NativeWorker=Worker;window.Worker=class extends NativeWorker{constructor(...args){window.workerLoadStates.push(document.readyState);super(...args);}};</script>
-          <script type="module">import {start} from '/_workbench/ui/src/modules/docs/page/docs-page.js'; start(window.__workbenchDocs);</script>`);
+          <script type="module">import {start} from '/_workbench/ui/src/views/docs/docs-page.js'; start(window.__workbenchDocs);</script>`);
         }
       })().catch((error) => {
         res.statusCode = 500;
@@ -146,7 +146,7 @@ void test(
     );
 
     const lifecycle = await target.evaluate(`(async()=>{
-    const {createHighlighting}=await import('/_workbench/ui/src/modules/docs/page/highlighting.js');
+    const {createHighlighting}=await import('/_workbench/ui/src/views/docs/highlighting.js');
     const node=document.createElement('code');document.body.append(node);node.textContent='original';
     const originalRanges=[...CSS.highlights].reduce((n,[,value])=>n+value.size,0);
     let answers=[];
@@ -169,7 +169,7 @@ void test(
     assert.deepEqual(lifecycle, { fresh: true, disposed: true, failed: true, timeout: true });
 
     const coverage = await target.evaluate(`(async()=>{
-    const {createWorkerColouring}=await import('/_workbench/ui/src/modules/docs/page/highlight-worker-client.js');
+    const {createWorkerColouring}=await import('/_workbench/ui/src/views/docs/highlight-worker-client.js');
     const client=createWorkerColouring();
     try {
       const snippets=[['sh','# Acme note'],['css','/* Acme */'],['diff','-old\\n+new'],['js','const value = 42;'],['jsx','const value = <button/>;'],['json','{"count":42}'],['md','# Acme'],['scss','$accent: red;'],[' TS ','const value: number = 42;'],['tsx','const value = <button/>;'],['html','<button title="Acme"/>'],['svg','<card title="Acme"/>'],['yml','count: 42'],['unknown-acme','<img src=x onerror="throw 1"> λ &'],['','<script>throw 1</script>']];
@@ -195,10 +195,10 @@ void test(
     });
 
     const failure = await target.evaluate(`(async()=>{
-    const {createWorkerColouring}=await import('/_workbench/ui/src/modules/docs/page/highlight-worker-client.js');
+    const {createWorkerColouring}=await import('/_workbench/ui/src/views/docs/highlight-worker-client.js');
     const url=URL.createObjectURL(new Blob(['throw Error("Acme worker failure")'],{type:'text/javascript'}));
     let attempts=0;
-    const client=createWorkerColouring({createWorker:()=>++attempts===1?new Worker(url):new Worker(new URL('/_workbench/ui/src/modules/docs/page/highlight-worker.js',location.href),{type:'module'})});
+    const client=createWorkerColouring({createWorker:()=>++attempts===1?new Worker(url):new Worker(new URL('/_workbench/ui/src/views/docs/highlight-worker.js',location.href),{type:'module'})});
     try {
       const blocks=[{text:'const value=42',language:'ts'}];
       const error=await client.colour(blocks,{signal:new AbortController().signal}).then(()=>'',error=>error.message);
@@ -211,7 +211,7 @@ void test(
 
     const mirror = await target.evaluate(`(async()=>{
     await import('/_workbench/ui/legacy/dom-mirror.js');
-    const {createCodeColours}=await import('/_workbench/ui/src/modules/docs/page/code-colours.js');
+    const {createCodeColours}=await import('/_workbench/ui/src/views/docs/code-colours.js');
     const makeFrame=()=>new Promise(resolve=>{const frame=document.createElement('iframe');frame.onload=()=>resolve(frame);frame.srcdoc='<!doctype html><style>:root{--wb-docs-syntax-keyword:rgb(207,34,46)}</style><code>const value = 42;</code>';document.body.append(frame);});
     const source=await makeFrame(),receiver=await makeFrame();
     const paint=createCodeColours(source.contentDocument),mirror=wbDOMMirror.create(source.contentDocument);
