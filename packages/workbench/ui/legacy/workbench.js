@@ -1790,8 +1790,8 @@
   }
 
   function whenRules(then) {
-    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'app/workbench/sizes.js', function () {
-      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'app/workbench/docs.js', function () {
+    whenModule(function () { return !!window.wbSizes; }, 'wb-sizes-ready', 'modules/canvas/legacy-sizes.js', function () {
+      whenModule(function () { return !!window.wbDocsLenses; }, 'wb-docs-ready', 'modules/docs/legacy-rules.js', function () {
         lensRules = window.wbDocsLenses || NO_DOCS;
         if (window.wbMultiArtboardHost) whenModule(function () { return !!window.wbMultiCanvas; }, 'wb-multi-ready', 'app/workbench/workbench.js', then);
         else then();

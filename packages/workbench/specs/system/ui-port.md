@@ -139,7 +139,7 @@ Other existing files move as follows:
 
 - **Sizes.** Size rules and the selected size join `canvas` (the artboard
   widths it lays out), with the size bridge for the classic scripts
-  (`app/workbench/sizes.js`) folding into the canvas bindings; saving sizes to `workbench.yaml` is a
+  (`modules/canvas/legacy-sizes.js`) folding into the canvas bindings; saving sizes to `workbench.yaml` is a
   `project` action. `size-switcher` and the `size-dialog` and `sizes-editor`
   dialogs it opens are `top-bar` elements, in `views/top-bar/components/`;
   each moves to `components/` if a second view uses it.
@@ -150,7 +150,7 @@ Other existing files move as follows:
   and by the top bar; `components/register-space.js` becomes element
   definitions in those entries.
 - **Docs on the canvas.** The docs bridge for the classic scripts
-  (`app/workbench/docs.js`) and `modules/docs/canvas/` join
+  (`modules/docs/legacy-rules.js`) and `modules/docs/canvas/` join
   the `docs` capability, with the canvas wiring in the `canvas` view's bindings.
 - **Icons.** `legacy/icons.js` becomes a shared module under `components/`
   used by every view that draws icons; `legacy/canonic.svg` moves to `theme/`.
@@ -294,6 +294,7 @@ and passes its acceptance:
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
 | Classic single-artboard resize rails in `views/canvas/legacy-bindings.js` | `canvas` | The `canvas` adoption step; dimensions and persistence remain in the shell until then |
+| `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js` publish shared browser rules to classic consumers | `canvas` / `docs` | Their adoption steps; existing globals and ready events stay until then |
 | Existing DOM controls in `views/toolbar/bindings.js`, connected by canvas bindings | `annotations` / `review` | The `annotations` / `review` adoption step; commands retain their existing state owners |
 | Classic `wbExportBindings` with `modules/review/browser-export.js` | `review` / `export` | The Export adoption step; the shell supplies its current destination and the existing request/progress lifecycle stays intact |
 | Classic `wbConfigEditor` in `views/configure-pages/config-editor.js`, with rules and HTTP in `modules/project/configuration.js` | `project` / `configure-pages` | The Configure pages adoption step; draft/selection state remains in the existing dialog closure |

@@ -185,7 +185,7 @@ presentation owner. Importing an element class does not register it.
 
 `app/workbench/workbench.js` registers the browser controls and composes the canvas;
 `app/sidebar/sidebar.js` is the direct webview module entry. `app/renderer/renderer.js`
-composes the content-only renderer. `app/workbench/sizes.js` and `app/workbench/docs.js`
+composes the content-only renderer. `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js`
 hand the size and docs rules to the classic scripts.
 The sidebar entry starts `modules/project/sidebar.js` after registering its space
 controls. `modules/project/pages.js` owns traversal, indexing and initial-page
