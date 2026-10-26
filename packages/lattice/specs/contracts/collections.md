@@ -425,3 +425,14 @@ update the architecture, public collection reference and guide, a runnable
 tasks capability action and its behavior tests together, and repeat the
 decisive comparison through the shipping export before closing this stage.
 
+The bounded single-append diagnosis subsequently corrected unnecessary lookup
+allocation in the experimental implementation. Empty input acquires no plan
+lookups, no-removal calls acquire no removal set, and one insertion needs no
+duplicate set or anchor buckets: its validated anchor is stored directly.
+Multiple insertions retain ordered buckets and duplicate validation. The
+target remains O(N + C + F), with the same atomicity and read behavior.
+The corrected C02 diagnostic allocation range fits the unchanged allowance;
+this does not establish full-matrix acceptance. Separate retention calibration
+still has shared first-use residue and baseline drift larger than its byte
+budget. Setup attribution, retention acceptance and confirmation remain open.
+

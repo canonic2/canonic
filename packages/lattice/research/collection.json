@@ -1,5 +1,485 @@
 {
   "stage": 6,
+  "boundedAppendAndRetentionDiagnosis": {
+    "date": "2026-10-26",
+    "status": "experimental-unaccepted",
+    "implementationCommit": "dfc342e66eccb33a213fa778541ec5ca304c051f",
+    "measuredOriginalCommit": "a92011d64fe6c979c9b6450b101d15daec8ac856",
+    "interpretation": "C02 diagnostic range fits after attributable correction; setup and retention acceptance remain unresolved; no confirmation or full matrix.",
+    "allocation": [
+      {
+        "label": "before",
+        "source": "7610e112f6a165f95bbcd13903c92d50e30853729499aca5a884926388405af1",
+        "reportHash": "f9f6b4c0f4b82f70686926a10c3401845181c8c927524b14748e47e001273d8c",
+        "elapsedMs": 3108,
+        "B0": {
+          "n": 5,
+          "mean": 1193.4216,
+          "min": 1178.068,
+          "p50": 1189.36,
+          "p95": 1217.452,
+          "max": 1217.452,
+          "sampleCount": 10999
+        },
+        "B1": {
+          "n": 5,
+          "mean": 1615.6216000000002,
+          "min": 1571.324,
+          "p50": 1621.904,
+          "p95": 1647.62,
+          "max": 1647.62,
+          "sampleCount": 14997
+        },
+        "meanIncrease": 422.2000000000003,
+        "lower": 353.87200000000007,
+        "upper": 469.5519999999999,
+        "status": "fails diagnostic range"
+      },
+      {
+        "label": "after",
+        "source": "6aaeeed3671aba587fb20e0b0ad530a6ac219040e816e24d9b35bff49c208bf8",
+        "reportHash": "6a5e8a35c654aa0da9890ec882b6735277da2d299c0f00acd0d329fd0ca596b4",
+        "elapsedMs": 2370,
+        "B0": {
+          "n": 5,
+          "mean": 1201.1032,
+          "min": 1180.8,
+          "p50": 1192.984,
+          "p95": 1226.964,
+          "max": 1226.964,
+          "sampleCount": 11074
+        },
+        "B1": {
+          "n": 5,
+          "mean": 1459.0504,
+          "min": 1413.372,
+          "p50": 1466.84,
+          "p95": 1481.72,
+          "max": 1481.72,
+          "sampleCount": 13548
+        },
+        "meanIncrease": 257.94720000000007,
+        "lower": 186.40800000000013,
+        "upper": 300.9200000000001,
+        "status": "inconclusive"
+      },
+      {
+        "label": "after-map",
+        "source": "406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116",
+        "reportHash": "209546518dbcc4343aa01cb978777dd841995a49c3671bd4788d54ec862d67b3",
+        "elapsedMs": 2144,
+        "B0": {
+          "n": 5,
+          "mean": 1209.004,
+          "min": 1201.452,
+          "p50": 1207.352,
+          "p95": 1222.848,
+          "max": 1222.848,
+          "sampleCount": 11139
+        },
+        "B1": {
+          "n": 5,
+          "mean": 1276.6072,
+          "min": 1255.296,
+          "p50": 1272.348,
+          "p95": 1297.536,
+          "max": 1297.536,
+          "sampleCount": 11876
+        },
+        "meanIncrease": 67.60320000000002,
+        "lower": 32.44800000000009,
+        "upper": 96.08400000000006,
+        "status": "fits diagnostic range"
+      }
+    ],
+    "retention": [
+      {
+        "label": "exploratory 64 KiB control",
+        "source": "406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116",
+        "reportHash": "0f59fdd2f8026ea691a60ba8285d37a17a33c08c5c2a1679bff7ab2aa6cdbe43",
+        "elapsedMs": 7377,
+        "rows": [
+          {
+            "mode": "canonical",
+            "cell": "C01",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 65016,
+              "max": 65600
+            },
+            "controlReleased": {
+              "min": -524,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 1132,
+              "p50": 6232,
+              "p95": 20188,
+              "max": 20188
+            }
+          },
+          {
+            "mode": "canonical",
+            "cell": "C01",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 65600,
+              "max": 65600
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 1132,
+              "p50": 6232,
+              "p95": 20576,
+              "max": 20576
+            }
+          },
+          {
+            "mode": "canonical",
+            "cell": "replacement-diagnostic",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 65600,
+              "max": 65600
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 9632,
+              "p50": 21716,
+              "p95": 111628,
+              "max": 111628
+            }
+          },
+          {
+            "mode": "canonical",
+            "cell": "replacement-diagnostic",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 65600,
+              "max": 65600
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 8196,
+              "p50": 22820,
+              "p95": 110200,
+              "max": 110200
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "C01",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 65632,
+              "max": 65632
+            },
+            "controlReleased": {
+              "min": 72,
+              "max": 72
+            },
+            "residual": {
+              "n": 3,
+              "min": 16,
+              "p50": 188,
+              "p95": 5372,
+              "max": 5372
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "C01",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 65632,
+              "max": 65632
+            },
+            "controlReleased": {
+              "min": 72,
+              "max": 72
+            },
+            "residual": {
+              "n": 3,
+              "min": 16,
+              "p50": 188,
+              "p95": 5200,
+              "max": 5200
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "replacement-diagnostic",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 33320,
+              "max": 33320
+            },
+            "controlReleased": {
+              "min": -32240,
+              "max": -32240
+            },
+            "residual": {
+              "n": 3,
+              "min": -19484,
+              "p50": -6320,
+              "p95": 7520,
+              "max": 7520
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "replacement-diagnostic",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 65632,
+              "max": 65632
+            },
+            "controlReleased": {
+              "min": 72,
+              "max": 72
+            },
+            "residual": {
+              "n": 3,
+              "min": -5876,
+              "p50": 1080,
+              "p95": 7112,
+              "max": 7112
+            }
+          }
+        ],
+        "snapshot": {
+          "nodes": 35679,
+          "edges": 157168,
+          "categories": {
+            "synthetic": 0,
+            "native": 799907,
+            "string": 41328,
+            "object shape": 153620,
+            "code": 202752,
+            "array": 116420,
+            "number": 228,
+            "symbol": 64,
+            "object": 12724,
+            "closure": 86676,
+            "concatenated string": 380
+          }
+        }
+      },
+      {
+        "label": "corrected 128 KiB control",
+        "source": "406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116",
+        "reportHash": "44bd97c6acc573ef3aa835f26ba23cb44d2412081887b65d553ebe08fd0d85d0",
+        "elapsedMs": 6933,
+        "deadline": 1793031820201,
+        "rows": [
+          {
+            "mode": "canonical",
+            "cell": "C01",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 131136,
+              "max": 131136
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 1132,
+              "p50": 6232,
+              "p95": 20188,
+              "max": 20188
+            }
+          },
+          {
+            "mode": "canonical",
+            "cell": "C01",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 131136,
+              "max": 131136
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 1132,
+              "p50": 6232,
+              "p95": 20576,
+              "max": 20576
+            }
+          },
+          {
+            "mode": "canonical",
+            "cell": "replacement-diagnostic",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 131136,
+              "max": 131136
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 9524,
+              "p50": 21716,
+              "p95": 111660,
+              "max": 111660
+            }
+          },
+          {
+            "mode": "canonical",
+            "cell": "replacement-diagnostic",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 131136,
+              "max": 131136
+            },
+            "controlReleased": {
+              "min": 60,
+              "max": 60
+            },
+            "residual": {
+              "n": 3,
+              "min": 8196,
+              "p50": 22820,
+              "p95": 110200,
+              "max": 110200
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "C01",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 131168,
+              "max": 131168
+            },
+            "controlReleased": {
+              "min": 72,
+              "max": 72
+            },
+            "residual": {
+              "n": 3,
+              "min": 16,
+              "p50": 188,
+              "p95": 5372,
+              "max": 5372
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "C01",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 131168,
+              "max": 131168
+            },
+            "controlReleased": {
+              "min": 72,
+              "max": 72
+            },
+            "residual": {
+              "n": 3,
+              "min": 16,
+              "p50": 188,
+              "p95": 5200,
+              "max": 5200
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "replacement-diagnostic",
+            "variant": "B0",
+            "controlHeld": {
+              "min": 99148,
+              "max": 99148
+            },
+            "controlReleased": {
+              "min": -31948,
+              "max": -31948
+            },
+            "residual": {
+              "n": 3,
+              "min": -19532,
+              "p50": -6320,
+              "p95": 7196,
+              "max": 7196
+            }
+          },
+          {
+            "mode": "exact",
+            "cell": "replacement-diagnostic",
+            "variant": "B1",
+            "controlHeld": {
+              "min": 131168,
+              "max": 131168
+            },
+            "controlReleased": {
+              "min": 72,
+              "max": 72
+            },
+            "residual": {
+              "n": 3,
+              "min": -5840,
+              "p50": 912,
+              "p95": 7112,
+              "max": 7112
+            }
+          }
+        ],
+        "snapshot": {
+          "nodes": 35689,
+          "edges": 157198,
+          "categories": {
+            "synthetic": 0,
+            "native": 799955,
+            "string": 41328,
+            "object shape": 153620,
+            "code": 203316,
+            "array": 116420,
+            "number": 228,
+            "symbol": 64,
+            "object": 12724,
+            "closure": 86676,
+            "concatenated string": 380
+          }
+        }
+      }
+    ],
+    "heapInspection": {
+      "perInstanceNamedClosuresAbsent": [
+        "updateMembership",
+        "watchItem",
+        "watchKeys",
+        "commitBatch",
+        "rollback",
+        "subscribe",
+        "deactivate",
+        "release"
+      ],
+      "limitation": "Single post-drop snapshot without pre-action match; supports release at that point, cannot attribute delta or waive gates."
+    },
+    "retentionDecision": "Not ready for substantial acceptance run: shared warmup footprint and approximately 32 KiB baseline drift exceed 16 KiB resolution requirement."
+  },
   "independentMemoryEvidence": {
     "date": "2026-10-26",
     "status": "reported-unaccepted",

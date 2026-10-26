@@ -51,6 +51,11 @@ ceiling. Large allocation targets fit, the single-append small allocation gate
 fails, and retained-heap acceptance remains unestablished. Setup-only profiles
 do not resolve the tail. The regular collection/store received independent
 once-listener fixes. None of this adopts bulk membership or starts confirmation.
+The subsequent scoped-commit and diagnosis round preserved the measured
+checkpoint in Git, corrected attributable single-insertion planning overhead,
+and reproduced C02 within its unchanged allocation allowance. Separate
+retention calibration still cannot resolve the 16 KiB budget reliably; the
+experimental API remains unaccepted and no substantial rerun was started.
 The approved cap amendment resolved the small-cell calibration in both engines.
 A runner correction preserved an unnecessary extended-calibration attempt and
 continued without resetting the original initial-set deadline. The 45-minute
@@ -1328,6 +1333,58 @@ its pre-stop report preserved. The continuation races target operations against
 cancellation so deadline/cleanup cannot leave that same stale wait. This is a
 runner correction, not a threshold, sampling-count or budget amendment.
 
+### Stage 6: single-append diagnosis and separate retention calibration (2026-10-26 UTC)
+
+The owner requested scoped commits, profiling of the additional 375.871
+bytes per single append, an attributable correction, and retention calibration
+before another substantial run. The measured experimental bytes are preserved
+in public commit `a92011d64fe6c979c9b6450b101d15daec8ac856`; independent cleanup,
+regression coverage and findings are separate commits. Frozen B0/prototype and
+earlier raw reports remain intact. The regular API is not changed by this work.
+
+This is a bounded diagnosis, not a new adoption comparison. First profile C02
+through the actual experimental package export, with the unchanged frozen B0:
+five profiles per variant, 1,000 warmed/restored actions per profile, 512-byte
+sampling including collected objects. Preserve full allocation stacks/lines.
+Preparation, reset, validation and abort remain outside sampling, and each
+chunk respects 100,000 live items. Alternate first variant by replicate.
+Use a three-minute ceiling per before/after diagnostic, without adding samples
+or extending the matrix. Inspect attribution before editing; after an
+attributable correction, repeat the same probe. Keep the 256-byte allowance
+and report observed ranges. This cannot clear other gates or authorize adoption.
+
+Calibrate retention independently, with a separate three-minute ceiling and
+no full matrix. Fixed shapes are C01's subscribed empty action at ten items
+and a diagnostic subscribed full replacement at 1,000 items. Compare frozen
+B0 and the package candidate in separate fresh realms under canonical warmup
+and ten exact create/action/abort warmups (including commit and rollback).
+Keep all five forced-GC heap readings before and after each of three measured
+lifetimes. Report every residual against the original 16 KiB budget, without
+warming until a favorable result appears. In each realm also hold/release a
+128 KiB numeric-array positive control: distinguish failure to resolve retained
+objects from product/runtime residue. Keep control observations separate from
+product observations. A first persistent post-drop failure gets one bounded
+heap snapshot for retainer/category inspection; no repeated snapshot search.
+This calibration cannot establish retained-heap acceptance or waive previous
+failures. Preserve timeouts/partial results and stop rather than expanding it.
+
+The first allocation correction makes duplicate/removal lookups conditional.
+Its five-profile reproduction reduces the mean gap but leaves the 256-byte
+decision inconclusive over observed ranges. Preserve that intermediate source
+and report; do not call it passing. The remaining sampled map/bucket is also
+unnecessary with one insertion. A second bounded correction stores that one
+anchor directly and uses the already prepared incarnation, retaining bucket
+lookup for multiple insertions. Repeat only the same fixed C02 reproduction;
+no other cell, count, threshold or budget changes.
+
+The first calibration's nominal 128 KiB positive control used 16,384 small
+integers; Chromium's compressed representation made its backing storage about
+64 KiB. Preserve that complete run as exploratory calibration, including its
+baseline drift. Correct to 32,768 integers for the specified 128 KiB backing
+store and repeat the fixed calibration once within the original three-minute
+deadline. This is a control-fixture correction, not a relaxed byte gate or an
+extension of calibration time. Preserve the original runner bytes separately.
+
 ### Host and tools
 
 The same machine and tools as the full-flow lab. Background load is recorded
@@ -1572,6 +1629,116 @@ and reporter hashes were checked again after these runs and were unchanged.
 | Measured source | The shipping collection as implemented, served unchanged from the package source (`collection.js` SHA-256 `a597d35a…`, `report.js` `e4ad2ac9…`, `store.js` `9bf3b436…`), with the lab's variants, reconciler and runner, hashed in each report |
 
 ## Results
+
+### Stage 6: single-append correction and retention calibration (2026-10-26 UTC)
+
+**Outcome: attributable append overhead corrected; retention measurement is
+not ready for acceptance.** These are bounded diagnostic reproductions, not
+confirmation or a substitute for the unresolved setup and retention gates.
+
+The original measured package checkpoint is preserved at public commit
+`a92011d64fe6c979c9b6450b101d15daec8ac856`, source SHA-256
+`7610e112f6a165f95bbcd13903c92d50e30853729499aca5a884926388405af1`.
+The correction is commit `dfc342e66eccb33a213fa778541ec5ca304c051f`, source
+`406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116`.
+The intermediate conditional-set source, hash
+`6aaeeed3671aba587fb20e0b0ad530a6ac219040e816e24d9b35bff49c208bf8`,
+is separately preserved locally with its report. Frozen measured B0 and all
+earlier reports remain intact. The independent regular cleanup commit is
+`193c1620599e730bdecce22edee12839ea47a9df`; regression/consumer coverage is
+`f1fa16a038dd782e21656cc34610ae683cde3f3c`; preceding findings are saved in
+`154c3b4e1f16634c858ee7c419363d6ac93bf308`. Pending regular-API changes and
+unrelated work were excluded from these commits.
+
+#### Single append
+
+Chromium 156.0.8078.4 used the actual experimental export and unchanged frozen
+B0, with five 1,000-action profiles per variant per reproduction, alternating
+first variant. Preparation/warmup/reset, validation and abort stayed outside
+512-byte sampling; collected allocations were included. Every bounded action
+chunk was below the 100,000-live-item cap. All executed result/identity checks
+completed; no page or cleanup errors occurred. Runs took 3.108, 2.370 and
+2.144 seconds respectively. Source bytes, profiles and reports are preserved.
+Per-reproduction source hashes identify uncommitted measured bytes alongside
+the recorded repository HEAD; the final commit preserves those same bytes.
+
+Values below are estimated bytes/action, with n=5 independent profiles per
+variant. At five profiles p95 equals maximum. The gap envelope is candidate
+minimum minus control maximum through candidate maximum minus control minimum;
+it is descriptive, not a confidence interval.
+
+| Revision | B0 mean; p50 / p95 | B1 mean; p50 / p95 | Mean extra | Gap envelope | 256-byte allowance |
+| --- | --- | --- | --- | --- | --- |
+| Measured checkpoint | 1,193.422; 1,189.360 / 1,217.452 | 1,615.622; 1,621.904 / 1,647.620 | 422.200 | 353.872–469.552 | Fails diagnostic range |
+| Conditional sets | 1,201.103; 1,192.984 / 1,226.964 | 1,459.050; 1,466.840 / 1,481.720 | 257.947 | 186.408–300.920 | Inconclusive |
+| Single insertion without buckets | 1,209.004; 1,207.352 / 1,222.848 | 1,276.607; 1,272.348 / 1,297.536 | 67.603 | 32.448–96.084 | Fits diagnostic range |
+
+Total allocation samples B0/B1 are 10,999/14,997, 11,074/13,548 and
+11,139/11,876. The original 375.871-byte failure remains its original evidence;
+the new before run reproduces the same direction with a larger control gap.
+No original sample was replaced or pooled with these diagnoses.
+
+The stacks and source identify unnecessary general-plan bookkeeping: a
+removal set without removals, an insertion-duplicate set with only one
+insertion, and a map plus bucket for that insertion's one anchor. The first
+correction removes unnecessary sets but does not establish the gate. The
+second stores the one anchor directly and uses the already prepared
+incarnation. Multiple insertions retain duplicate detection and ordered
+buckets; removals retain membership lookup. Both follow the same validation,
+write guard, order construction, undo log and delivery. No global caching,
+retained index or change to ordinary operations was introduced. Sampled sites
+are attribution evidence, not exact individual object sizes.
+
+Report SHA-256, before/intermediate/final:
+`f9f6b4c0f4b82f70686926a10c3401845181c8c927524b14748e47e001273d8c`,
+`6a5e8a35c654aa0da9890ec882b6735277da2d299c0f00acd0d329fd0ca596b4`,
+`209546518dbcc4343aa01cb978777dd841995a49c3671bd4788d54ec862d67b3`.
+
+#### Separate retention calibration
+
+The exploratory control-size run took 7.377 seconds; its corrected repetition
+took 6.933 seconds. Including diagnosis/correction, both finished within the
+original 16:20:40.201–16:23:40.201 UTC deadline. Both used the final experimental
+source above and frozen B0. Eight fresh realms per run cover both variants,
+two fixed shapes and two fixed warmup conditions; each has three independent
+product lifetimes (commit, rollback, commit), not independent OS processes.
+All five GC readings per state remain saved; the table gives each lifetime's
+post-drop residual in bytes against its own preceding empty baseline.
+
+| Warmup | Shape | B0 residuals | B1 residuals |
+| --- | --- | --- | --- |
+| Canonical only | Empty, N=10 | 20,188; 1,132; 6,232 | 20,576; 1,132; 6,232 |
+| Canonical only | Full replacement, N=1,000 | 111,660; 9,524; 21,716 | 110,200; 8,196; 22,820 |
+| Ten exact lifetimes | Empty, N=10 | 5,372; 188; 16 | 5,200; 188; 16 |
+| Ten exact lifetimes | Full replacement, N=1,000 | −19,532; 7,196; −6,320 | 912; 7,112; −5,840 |
+
+Canonical warmup reproducibly leaves a shared first-use footprint exceeding
+16 KiB. Exact workload/probe warmup reduces it, supporting a warmup mismatch
+in the earlier measurement. It does not settle the instrument: in exact-warmed
+B0 replacement, the held 128 KiB control registers only 99,148 bytes and its
+release ends 31,948 bytes below the starting baseline. Seven other realms
+register 131,136–131,168 bytes held and 60–72 bytes after release. That one
+approximately 32 KiB baseline shift exceeds the retention budget and cannot
+be dismissed or pooled away. The earlier 64 KiB exploratory run shows a
+similar shift (−32,240 bytes), so this concern survives the fixture correction.
+No extra warmups, samples or calibration search followed.
+
+The fixed first-failure snapshot is from B0's canonical empty action, after
+its first product lifetime. It contains no named per-instance `watchItem`,
+`watchKeys`, `commitBatch`, `rollback`, `subscribe`, `deactivate`, `release` or
+`updateMembership` closures; exported factory helpers remain. This supports
+release of those instance contexts at that point. The heap includes native,
+code, shape and shared closure storage; without a matched before snapshot
+its categories cannot attribute the 20 KiB delta. Snapshot collection may
+perturb that realm's later two lifetimes; other realms do not capture a heap.
+Neither this inspection nor negative deltas prove leak freedom.
+
+The corrected report hash is
+`44bd97c6acc573ef3aa835f26ba23cb44d2412081887b65d553ebe08fd0d85d0`;
+the preserved exploratory report is
+`0f59fdd2f8026ea691a60ba8285d37a17a33c08c5c2a1679bff7ab2aa6cdbe43`.
+All owned browsers closed. No substantial retention run, setup rerun or
+adoption confirmation was launched.
 
 ### Stage 6: independent allocation and retention outcome (2026-10-26 UTC)
 
@@ -2908,6 +3075,23 @@ planned clean lifetime measurement without correction before use.
   happen.
 
 ## Decision and follow-ups
+
+### Stage 6: attributable append correction, calibration still unresolved
+
+Keep the API experimental and unaccepted. The regular API retains only the
+independent cleanup corrections in this commit series; previous working-tree
+API changes are outside it. The new single-append diagnostic range fits the
+unchanged allocation allowance, with behavioral coverage for the affected
+validation/identity/rollback path. This is not a completed timing, lifetime,
+retention or full-matrix confirmation of the corrected revision.
+
+The retention instrument detects an intentionally held object, but a shared
+first-use footprint and a repeated approximately 32 KiB baseline shift prevent
+reliable resolution of the 16 KiB gate. Before a substantial acceptance run,
+isolate that shift with matched heap/retainer evidence and stable positive
+controls; predeclare workload-specific warmup rather than warming until a
+passing baseline appears. The original failures remain recorded. Setup-tail
+attribution is still open. No public API adoption follows from these fixes.
 
 ### Stage 6: independent memory reported, regular cleanup fixed
 
