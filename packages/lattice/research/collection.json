@@ -1,0 +1,4724 @@
+{
+  "stage": 6,
+  "independentMemoryEvidence": {
+    "date": "2026-10-26",
+    "status": "reported-unaccepted",
+    "adoption": "blocked",
+    "setupGate": "unresolved; not waived",
+    "regularCleanup": {
+      "collectionHash": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+      "storeHash": "368915a3f34abd4cfc2ed4f709473f4529019dbf53e99537a09478a1024ddd5e",
+      "change": "Collection avoids redundant removal of dispatched once-listeners; store avoids redundant removal after initial callback aborts and throws. No experimental API dependency."
+    },
+    "checkpointHash": "7610e112f6a165f95bbcd13903c92d50e30853729499aca5a884926388405af1",
+    "memory": {
+      "chromium": "156.0.8078.4",
+      "totalBudgetSeconds": 2073.588,
+      "deadlineReset": false,
+      "validAllocationProfiles": 800,
+      "actualProfiles": 400,
+      "matchedControls": 400,
+      "reusedProfiles": 410,
+      "newProfiles": 390,
+      "exploratoryFreshActionProfiles": 12,
+      "interruptedProfiles": 1,
+      "retainedSamples": 400,
+      "callerHeldKeySamples": 20,
+      "weakReleaseObservations": "All targeted referents absent after commit/rollback GC observations",
+      "confirmation": "not run",
+      "allocationUnits": "estimated bytes/action; five independent profiles; 512-byte sampling includes collected objects; means and observed ranges are not exact totals or confidence intervals",
+      "allocation": [
+        {
+          "id": "B01",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 15444961.6,
+                "min": 15438236,
+                "p50": 15442720,
+                "p95": 15454804,
+                "max": 15454804,
+                "iqr": 3752,
+                "sampleCount": 11825
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 16265315.2,
+                "min": 16234252,
+                "p50": 16270688,
+                "p95": 16280940,
+                "max": 16280940,
+                "iqr": 21120,
+                "sampleCount": 19211
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 430909.6,
+                "min": 419820,
+                "p50": 431176,
+                "p95": 445708,
+                "max": 445708,
+                "iqr": 6372,
+                "sampleCount": 1902
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 1281331.2,
+                "min": 1271004,
+                "p50": 1279708,
+                "p95": 1295016,
+                "max": 1295016,
+                "iqr": 7312,
+                "sampleCount": 9576
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.027899687364713162,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.07877690559602558,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B02",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1504797301.6,
+                "min": 1504768124,
+                "p50": 1504800284,
+                "p95": 1504818596,
+                "max": 1504818596,
+                "iqr": 17432,
+                "sampleCount": 116026
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 1511730284,
+                "min": 1511511364,
+                "p50": 1511574188,
+                "p95": 1512441708,
+                "max": 1512441708,
+                "iqr": 43240,
+                "sampleCount": 175386
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 4661298.4,
+                "min": 4639824,
+                "p50": 4666504,
+                "p95": 4680720,
+                "max": 4680720,
+                "iqr": 25652,
+                "sampleCount": 15967
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11519525.6,
+                "min": 11239484,
+                "p50": 11374896,
+                "p95": 12218440,
+                "max": 12218440,
+                "iqr": 109320,
+                "sampleCount": 74658
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.0030976254376877204,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.00762009316206832,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B03",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 7050569.6,
+                "min": 7028724,
+                "p50": 7050120,
+                "p95": 7086356,
+                "max": 7086356,
+                "iqr": 17912,
+                "sampleCount": 22688
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 7693279.2,
+                "min": 7679448,
+                "p50": 7695344,
+                "p95": 7706132,
+                "max": 7706132,
+                "iqr": 9704,
+                "sampleCount": 28293
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 272720.8,
+                "min": 265748,
+                "p50": 272096,
+                "p95": 279732,
+                "max": 279732,
+                "iqr": 8276,
+                "sampleCount": 1073
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 896860.8,
+                "min": 855628,
+                "p50": 902368,
+                "p95": 917464,
+                "max": 917464,
+                "iqr": 6380,
+                "sampleCount": 6574
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.03868067623926441,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.11657718076837768,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B04",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 708719379.2,
+                "min": 708611608,
+                "p50": 708705088,
+                "p95": 708806148,
+                "max": 708806148,
+                "iqr": 70116,
+                "sampleCount": 483647
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 715432289.6,
+                "min": 715296500,
+                "p50": 715472184,
+                "p95": 715506900,
+                "max": 715506900,
+                "iqr": 120992,
+                "sampleCount": 540891
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 2625309.6,
+                "min": 2600804,
+                "p50": 2630744,
+                "p95": 2645252,
+                "max": 2645252,
+                "iqr": 13492,
+                "sampleCount": 5471
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 9339866.4,
+                "min": 9274560,
+                "p50": 9353576,
+                "p95": 9391096,
+                "max": 9391096,
+                "iqr": 51724,
+                "sampleCount": 62873
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.0037043005695194062,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.013054857232152526,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B05",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 12450267.2,
+                "min": 12401880,
+                "p50": 12445512,
+                "p95": 12486776,
+                "max": 12486776,
+                "iqr": 51520,
+                "sampleCount": 33406
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13084736.8,
+                "min": 13048380,
+                "p50": 13091788,
+                "p95": 13117248,
+                "max": 13117248,
+                "iqr": 29108,
+                "sampleCount": 38965
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 715676,
+                "min": 698032,
+                "p50": 715776,
+                "p95": 740068,
+                "max": 740068,
+                "iqr": 16256,
+                "sampleCount": 2999
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 1343952.8,
+                "min": 1322976,
+                "p50": 1329420,
+                "p95": 1381024,
+                "max": 1381024,
+                "iqr": 34920,
+                "sampleCount": 8547
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.057482782377554116,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.10271148900755879,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B06",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1213737101.6,
+                "min": 1213379324,
+                "p50": 1213611892,
+                "p95": 1214137452,
+                "max": 1214137452,
+                "iqr": 554912,
+                "sampleCount": 598406
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 1220584213.6,
+                "min": 1220563800,
+                "p50": 1220568792,
+                "p95": 1220634488,
+                "max": 1220634488,
+                "iqr": 16948,
+                "sampleCount": 656839
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 6680596.8,
+                "min": 6494460,
+                "p50": 6548220,
+                "p95": 6984472,
+                "max": 6984472,
+                "iqr": 350600,
+                "sampleCount": 21902
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13356872.8,
+                "min": 13269300,
+                "p50": 13332608,
+                "p95": 13513204,
+                "max": 13513204,
+                "iqr": 51748,
+                "sampleCount": 78946
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.005504154722792401,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.010943016181247456,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B07",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 7033413.6,
+                "min": 7017276,
+                "p50": 7034868,
+                "p95": 7054008,
+                "max": 7054008,
+                "iqr": 12820,
+                "sampleCount": 22562
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 7295776,
+                "min": 7274608,
+                "p50": 7304236,
+                "p95": 7309400,
+                "max": 7309400,
+                "iqr": 20908,
+                "sampleCount": 24683
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 248760,
+                "min": 238392,
+                "p50": 246588,
+                "p95": 261936,
+                "max": 261936,
+                "iqr": 8676,
+                "sampleCount": 878
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 503726.4,
+                "min": 496044,
+                "p50": 498508,
+                "p95": 522156,
+                "max": 522156,
+                "iqr": 7356,
+                "sampleCount": 2926
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.03536831674451791,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.06904356712706092,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B08",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 118730647.2,
+                "min": 118697608,
+                "p50": 118729108,
+                "p95": 118770740,
+                "max": 118770740,
+                "iqr": 52412,
+                "sampleCount": 58666
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 125370185.6,
+                "min": 125261848,
+                "p50": 125381440,
+                "p95": 125475492,
+                "max": 125475492,
+                "iqr": 32388,
+                "sampleCount": 115292
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 371386.4,
+                "min": 362996,
+                "p50": 371096,
+                "p95": 381184,
+                "max": 381184,
+                "iqr": 6800,
+                "sampleCount": 1091
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 7094300,
+                "min": 7040772,
+                "p50": 7081424,
+                "p95": 7180488,
+                "max": 7180488,
+                "iqr": 10464,
+                "sampleCount": 58408
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "membership-action-allocations",
+              "limit": 0.35,
+              "meanRatio": 0.003127974189969715,
+              "numericalMeanFits": true,
+              "status": "fits"
+            },
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.05658681899566399,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B09",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 214857043.2,
+                "min": 214825344,
+                "p50": 214866076,
+                "p95": 214872352,
+                "max": 214872352,
+                "iqr": 19140,
+                "sampleCount": 72389
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 221693963.2,
+                "min": 221421232,
+                "p50": 221503568,
+                "p95": 222525968,
+                "max": 222525968,
+                "iqr": 49080,
+                "sampleCount": 130763
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1497123.2,
+                "min": 1476016,
+                "p50": 1492964,
+                "p95": 1519248,
+                "max": 1519248,
+                "iqr": 24532,
+                "sampleCount": 5531
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 8221864.8,
+                "min": 8002620,
+                "p50": 8245636,
+                "p95": 8332740,
+                "max": 8332740,
+                "iqr": 85552,
+                "sampleCount": 62846
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.037086552476770375,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "B10",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1214169855.2,
+                "min": 1213864240,
+                "p50": 1214066632,
+                "p95": 1214571756,
+                "max": 1214571756,
+                "iqr": 527304,
+                "sampleCount": 598505
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 1220927187.2,
+                "min": 1220713496,
+                "p50": 1220980920,
+                "p95": 1221070024,
+                "max": 1221070024,
+                "iqr": 98816,
+                "sampleCount": 656480
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 7044036,
+                "min": 6833688,
+                "p50": 6849392,
+                "p95": 7351900,
+                "max": 7351900,
+                "iqr": 511424,
+                "sampleCount": 21483
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13762152,
+                "min": 13695700,
+                "p50": 13778340,
+                "p95": 13817088,
+                "max": 13817088,
+                "iqr": 68600,
+                "sampleCount": 78939
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "lifetime-allocation-regression",
+              "limit": 1.1,
+              "meanRatio": 0.011271885943961392,
+              "numericalMeanFits": true,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "Q01",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 145692.90959999998,
+                "min": 145449.516,
+                "p50": 145687.984,
+                "p95": 145955.176,
+                "max": 145955.176,
+                "iqr": 119.05600000001141,
+                "sampleCount": 340132
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 373879.39680000005,
+                "min": 373533.096,
+                "p50": 373675.716,
+                "p95": 374357.104,
+                "max": 374357.104,
+                "iqr": 655.3640000000014,
+                "sampleCount": 2109859
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 16616.216800000002,
+                "min": 16491.508,
+                "p50": 16581.64,
+                "p95": 16879.54,
+                "max": 16879.54,
+                "iqr": 54.54000000000087,
+                "sampleCount": 52035
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 244856.8664,
+                "min": 244326.248,
+                "p50": 244995.304,
+                "p95": 245057.376,
+                "max": 245057.376,
+                "iqr": 135.15599999998813,
+                "sampleCount": 1822122
+              }
+            }
+          },
+          "gates": []
+        },
+        {
+          "id": "Q02",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 7698.897599999999,
+                "min": 7619.936,
+                "p50": 7690.416,
+                "p95": 7788.5,
+                "max": 7788.5,
+                "iqr": 18.82799999999952,
+                "sampleCount": 51837
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 79170.6648,
+                "min": 78166.056,
+                "p50": 78904.588,
+                "p95": 80334.044,
+                "max": 80334.044,
+                "iqr": 1900.6440000000002,
+                "sampleCount": 684611
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 7178.3856,
+                "min": 7144.308,
+                "p50": 7162.696,
+                "p95": 7244.804,
+                "max": 7244.804,
+                "iqr": 29.392000000000735,
+                "sampleCount": 50493
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 79735.3976,
+                "min": 79395.764,
+                "p50": 79789.5,
+                "p95": 80092.1,
+                "max": 80092.1,
+                "iqr": 462.98399999999674,
+                "sampleCount": 694787
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "small-bulk-additional-action-bytes",
+              "limit": 256,
+              "meanIncrease": -520.5119999999997,
+              "lower": -644.192,
+              "upper": -375.1319999999996,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "Q03",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 2013.4352,
+                "min": 1977.352,
+                "p50": 2001.168,
+                "p95": 2087.448,
+                "max": 2087.448,
+                "iqr": 7.695999999999913,
+                "sampleCount": 15880
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 72269.7864,
+                "min": 71897.344,
+                "p50": 72369.976,
+                "p95": 72555.272,
+                "max": 72555.272,
+                "iqr": 295.0359999999928,
+                "sampleCount": 638431
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 2338.1472000000003,
+                "min": 2306.06,
+                "p50": 2334.072,
+                "p95": 2371.54,
+                "max": 2371.54,
+                "iqr": 35.552000000000135,
+                "sampleCount": 18863
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 72742.432,
+                "min": 72509.404,
+                "p50": 72739.524,
+                "p95": 73111.504,
+                "max": 73111.504,
+                "iqr": 258.11999999999534,
+                "sampleCount": 642701
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "small-bulk-additional-action-bytes",
+              "limit": 256,
+              "meanIncrease": 324.71200000000044,
+              "lower": 218.61200000000008,
+              "upper": 394.1879999999999,
+              "status": "inconclusive"
+            }
+          ]
+        },
+        {
+          "id": "C01",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 259.6352,
+                "min": 238.384,
+                "p50": 254.292,
+                "p95": 279.4,
+                "max": 279.4,
+                "iqr": 22.78800000000001,
+                "sampleCount": 2459
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11617.263200000001,
+                "min": 11538.98,
+                "p50": 11624,
+                "p95": 11688.064,
+                "max": 11688.064,
+                "iqr": 86.1919999999991,
+                "sampleCount": 95033
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 387.35360000000003,
+                "min": 357.968,
+                "p50": 387.444,
+                "p95": 406.504,
+                "max": 406.504,
+                "iqr": 15.51600000000002,
+                "sampleCount": 3593
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11738.179999999998,
+                "min": 11672.556,
+                "p50": 11731.376,
+                "p95": 11794.836,
+                "max": 11794.836,
+                "iqr": 88.53999999999905,
+                "sampleCount": 95731
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "small-bulk-additional-action-bytes",
+              "limit": 256,
+              "meanIncrease": 127.71840000000003,
+              "lower": 78.56800000000004,
+              "upper": 168.12000000000003,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "C02",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1239.7928000000002,
+                "min": 1224.628,
+                "p50": 1242.104,
+                "p95": 1246.656,
+                "max": 1246.656,
+                "iqr": 1.9200000000000728,
+                "sampleCount": 11432
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13054.5432,
+                "min": 12908.7,
+                "p50": 13081.376,
+                "p95": 13134.06,
+                "max": 13134.06,
+                "iqr": 96.83600000000115,
+                "sampleCount": 108100
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1615.6640000000002,
+                "min": 1592.528,
+                "p50": 1612.432,
+                "p95": 1638.848,
+                "max": 1638.848,
+                "iqr": 40.615999999999985,
+                "sampleCount": 14979
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13480.648000000001,
+                "min": 13408.04,
+                "p50": 13469.128,
+                "p95": 13591.788,
+                "max": 13591.788,
+                "iqr": 10.188000000000102,
+                "sampleCount": 111827
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "small-bulk-additional-action-bytes",
+              "limit": 256,
+              "meanIncrease": 375.87120000000004,
+              "lower": 345.87200000000007,
+              "upper": 414.22,
+              "status": "fails"
+            }
+          ]
+        },
+        {
+          "id": "C03",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1621.7504,
+                "min": 1561.996,
+                "p50": 1631.572,
+                "p95": 1673.088,
+                "max": 1673.088,
+                "iqr": 23.623999999999796,
+                "sampleCount": 14904
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13422.852000000003,
+                "min": 13344.4,
+                "p50": 13440.072,
+                "p95": 13485.324,
+                "max": 13485.324,
+                "iqr": 44.504000000000815,
+                "sampleCount": 111429
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 1771.7704,
+                "min": 1714.32,
+                "p50": 1787.396,
+                "p95": 1812.508,
+                "max": 1812.508,
+                "iqr": 77.60400000000004,
+                "sampleCount": 16439
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 13769.928,
+                "min": 13735.064,
+                "p50": 13774.492,
+                "p95": 13801.244,
+                "max": 13801.244,
+                "iqr": 41.63999999999942,
+                "sampleCount": 114469
+              }
+            }
+          },
+          "gates": [
+            {
+              "gate": "small-bulk-additional-action-bytes",
+              "limit": 256,
+              "meanIncrease": 150.0200000000002,
+              "lower": 41.23199999999997,
+              "upper": 250.51199999999994,
+              "status": "fits"
+            }
+          ]
+        },
+        {
+          "id": "C04",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 263.8592,
+                "min": 255.216,
+                "p50": 262.808,
+                "p95": 275.756,
+                "max": 275.756,
+                "iqr": 7.612000000000023,
+                "sampleCount": 2511
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11631.9192,
+                "min": 11561.744,
+                "p50": 11629.376,
+                "p95": 11753.472,
+                "max": 11753.472,
+                "iqr": 65.92399999999907,
+                "sampleCount": 95139
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 266.924,
+                "min": 254.232,
+                "p50": 266.772,
+                "p95": 275.456,
+                "max": 275.456,
+                "iqr": 6.240000000000009,
+                "sampleCount": 2528
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11635.2984,
+                "min": 11570.132,
+                "p50": 11642.6,
+                "p95": 11664.488,
+                "max": 11664.488,
+                "iqr": 25.65599999999904,
+                "sampleCount": 94963
+              }
+            }
+          },
+          "gates": []
+        },
+        {
+          "id": "C05",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 427.7664,
+                "min": 414.62,
+                "p50": 422.544,
+                "p95": 454.316,
+                "max": 454.316,
+                "iqr": 16.048000000000002,
+                "sampleCount": 3887
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 12250.9616,
+                "min": 12150.44,
+                "p50": 12233.884,
+                "p95": 12384.408,
+                "max": 12384.408,
+                "iqr": 111.62800000000061,
+                "sampleCount": 100688
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 400.0568,
+                "min": 392.492,
+                "p50": 399.04,
+                "p95": 407.072,
+                "max": 407.072,
+                "iqr": 8.048000000000002,
+                "sampleCount": 3599
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 12264.340800000002,
+                "min": 12153.224,
+                "p50": 12246.884,
+                "p95": 12352.076,
+                "max": 12352.076,
+                "iqr": 110.71199999999953,
+                "sampleCount": 100615
+              }
+            }
+          },
+          "gates": []
+        },
+        {
+          "id": "C06",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 243.368,
+                "min": 223.772,
+                "p50": 239.952,
+                "p95": 263.936,
+                "max": 263.936,
+                "iqr": 16.163999999999987,
+                "sampleCount": 2286
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 12126.439999999999,
+                "min": 12063.972,
+                "p50": 12110.42,
+                "p95": 12210.376,
+                "max": 12210.376,
+                "iqr": 89.8159999999989,
+                "sampleCount": 99587
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 206.79760000000002,
+                "min": 195.436,
+                "p50": 202.916,
+                "p95": 219.692,
+                "max": 219.692,
+                "iqr": 20.831999999999994,
+                "sampleCount": 1939
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 12110.896,
+                "min": 12057.264,
+                "p50": 12120.76,
+                "p95": 12165.964,
+                "max": 12165.964,
+                "iqr": 35.40400000000045,
+                "sampleCount": 99209
+              }
+            }
+          },
+          "gates": []
+        },
+        {
+          "id": "C07",
+          "variants": {
+            "B0": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 153.2088,
+                "min": 141.092,
+                "p50": 152.152,
+                "p95": 164.264,
+                "max": 164.264,
+                "iqr": 9.680000000000007,
+                "sampleCount": 1427
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11955.660800000001,
+                "min": 11858.648,
+                "p50": 11969.296,
+                "p95": 12008.164,
+                "max": 12008.164,
+                "iqr": 48.572000000000116,
+                "sampleCount": 97995
+              }
+            },
+            "B1": {
+              "actionBytes": {
+                "n": 5,
+                "mean": 110.62800000000001,
+                "min": 96.128,
+                "p50": 106.572,
+                "p95": 124.18,
+                "max": 124.18,
+                "iqr": 17.820000000000007,
+                "sampleCount": 983
+              },
+              "lifetimeBytes": {
+                "n": 5,
+                "mean": 11985.7304,
+                "min": 11910.056,
+                "p50": 11942.44,
+                "p95": 12092.108,
+                "max": 12092.108,
+                "iqr": 125.47199999999975,
+                "sampleCount": 97992
+              }
+            }
+          },
+          "gates": []
+        }
+      ],
+      "retentionUnits": "bytes adjusted by each sample's empty baseline; all five GC observations retained; null bytes/item for zero-item final states",
+      "retention": [
+        {
+          "id": "B01",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 546668,
+              "max": 648828
+            },
+            "dropRange": {
+              "min": 400,
+              "max": 102856
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 273.334,
+              "max": 324.414
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 540292,
+              "max": 642808
+            },
+            "dropRange": {
+              "min": 540,
+              "max": 103604
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 270.146,
+              "max": 321.404
+            }
+          },
+          "finalItems": 2000
+        },
+        {
+          "id": "B01",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 427308,
+              "max": 438588
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 6720
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 427.308,
+              "max": 438.588
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 421076,
+              "max": 451200
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 13996
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 421.076,
+              "max": 451.2
+            }
+          },
+          "finalItems": 1000
+        },
+        {
+          "id": "B02",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 5548284,
+              "max": 5657028
+            },
+            "dropRange": {
+              "min": -5724,
+              "max": 108976
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 277.4142,
+              "max": 282.8514
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 5512240,
+              "max": 5622420
+            },
+            "dropRange": {
+              "min": -6156,
+              "max": 110512
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 275.612,
+              "max": 281.121
+            }
+          },
+          "finalItems": 20000
+        },
+        {
+          "id": "B02",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 4311916,
+              "max": 4329608
+            },
+            "dropRange": {
+              "min": -6428,
+              "max": 17272
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 431.1916,
+              "max": 432.9608
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 4305640,
+              "max": 4347276
+            },
+            "dropRange": {
+              "min": -8088,
+              "max": 17188
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 430.564,
+              "max": 434.7276
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B03",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 27572,
+              "max": 137380
+            },
+            "dropRange": {
+              "min": 564,
+              "max": 110236
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": null
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 22208,
+              "max": 131696
+            },
+            "dropRange": {
+              "min": 944,
+              "max": 109488
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": null
+          },
+          "finalItems": 0
+        },
+        {
+          "id": "B03",
+          "rollback": true,
+          "liveStatus": "fails",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 407372,
+              "max": 416012
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 8676
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 407.372,
+              "max": 416.012
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 406740,
+              "max": 455384
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 11660
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 406.74,
+              "max": 455.384
+            }
+          },
+          "finalItems": 1000
+        },
+        {
+          "id": "B04",
+          "rollback": false,
+          "liveStatus": "fails",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 36660,
+              "max": 139488
+            },
+            "dropRange": {
+              "min": 4168,
+              "max": 112344
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": null
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 22676,
+              "max": 131352
+            },
+            "dropRange": {
+              "min": -5960,
+              "max": 110360
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": null
+          },
+          "finalItems": 0
+        },
+        {
+          "id": "B04",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 4077044,
+              "max": 4092588
+            },
+            "dropRange": {
+              "min": -6440,
+              "max": 15200
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 407.7044,
+              "max": 409.2588
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 4076404,
+              "max": 4122932
+            },
+            "dropRange": {
+              "min": -6380,
+              "max": 15328
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 407.6404,
+              "max": 412.2932
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B05",
+          "rollback": false,
+          "liveStatus": "fails",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 172376,
+              "max": 283072
+            },
+            "dropRange": {
+              "min": 808,
+              "max": 111776
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 172.376,
+              "max": 283.072
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 166528,
+              "max": 274504
+            },
+            "dropRange": {
+              "min": 1276,
+              "max": 110348
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 166.528,
+              "max": 274.504
+            }
+          },
+          "finalItems": 1000
+        },
+        {
+          "id": "B05",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 413120,
+              "max": 419700
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 6792
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 413.12,
+              "max": 419.7
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 406936,
+              "max": 413412
+            },
+            "dropRange": {
+              "min": 52,
+              "max": 6792
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 406.936,
+              "max": 413.412
+            }
+          },
+          "finalItems": 1000
+        },
+        {
+          "id": "B06",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 1592464,
+              "max": 1707988
+            },
+            "dropRange": {
+              "min": -6312,
+              "max": 115652
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 159.2464,
+              "max": 170.7988
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 1566344,
+              "max": 1677464
+            },
+            "dropRange": {
+              "min": -6212,
+              "max": 112564
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 156.6344,
+              "max": 167.7464
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B06",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 4082636,
+              "max": 4098312
+            },
+            "dropRange": {
+              "min": -6464,
+              "max": 15316
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 408.2636,
+              "max": 409.8312
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 4074772,
+              "max": 4124040
+            },
+            "dropRange": {
+              "min": -8040,
+              "max": 15492
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 407.4772,
+              "max": 412.404
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B07",
+          "rollback": false,
+          "liveStatus": "inconclusive",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 11568,
+              "max": 120072
+            },
+            "dropRange": {
+              "min": 52,
+              "max": 108968
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": null
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 6468,
+              "max": 114520
+            },
+            "dropRange": {
+              "min": 28,
+              "max": 108352
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": null
+          },
+          "finalItems": 0
+        },
+        {
+          "id": "B07",
+          "rollback": true,
+          "liveStatus": "inconclusive",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 131792,
+              "max": 140492
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 8700
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 131.792,
+              "max": 140.492
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 131160,
+              "max": 162108
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 8664
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 131.16,
+              "max": 162.108
+            }
+          },
+          "finalItems": 1000
+        },
+        {
+          "id": "B08",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 3709104,
+              "max": 3821476
+            },
+            "dropRange": {
+              "min": -6384,
+              "max": 112536
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 412.12266666666665,
+              "max": 424.60844444444444
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 3702920,
+              "max": 3812832
+            },
+            "dropRange": {
+              "min": -6312,
+              "max": 110408
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 411.43555555555554,
+              "max": 423.648
+            }
+          },
+          "finalItems": 9000
+        },
+        {
+          "id": "B08",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 4077184,
+              "max": 4092660
+            },
+            "dropRange": {
+              "min": -6240,
+              "max": 15272
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 407.7184,
+              "max": 409.266
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 4076484,
+              "max": 4122908
+            },
+            "dropRange": {
+              "min": -6312,
+              "max": 15236
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 407.6484,
+              "max": 412.2908
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B09",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 3801152,
+              "max": 3927036
+            },
+            "dropRange": {
+              "min": -5856,
+              "max": 132448
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 380.1152,
+              "max": 392.7036
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 3821184,
+              "max": 3916892
+            },
+            "dropRange": {
+              "min": 7200,
+              "max": 130432
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 382.1184,
+              "max": 391.6892
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B09",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 4097248,
+              "max": 4109276
+            },
+            "dropRange": {
+              "min": -6368,
+              "max": 17092
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 409.7248,
+              "max": 410.9276
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 4091028,
+              "max": 4137956
+            },
+            "dropRange": {
+              "min": -6512,
+              "max": 16972
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 409.1028,
+              "max": 413.7956
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B10",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 1458524,
+              "max": 1571744
+            },
+            "dropRange": {
+              "min": -6184,
+              "max": 118256
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 145.8524,
+              "max": 157.1744
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 1453152,
+              "max": 1562964
+            },
+            "dropRange": {
+              "min": -5864,
+              "max": 116180
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 145.3152,
+              "max": 156.2964
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "B10",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 4087948,
+              "max": 4098420
+            },
+            "dropRange": {
+              "min": -6464,
+              "max": 15460
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 408.7948,
+              "max": 409.842
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 4080132,
+              "max": 4123492
+            },
+            "dropRange": {
+              "min": -7996,
+              "max": 15456
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 408.0132,
+              "max": 412.3492
+            }
+          },
+          "finalItems": 10000
+        },
+        {
+          "id": "Q01",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 130768,
+              "max": 232408
+            },
+            "dropRange": {
+              "min": 252,
+              "max": 102172
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 132.0888888888889,
+              "max": 234.75555555555556
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 130716,
+              "max": 231724
+            },
+            "dropRange": {
+              "min": 252,
+              "max": 101532
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 132.03636363636363,
+              "max": 234.06464646464647
+            }
+          },
+          "finalItems": 990
+        },
+        {
+          "id": "Q01",
+          "rollback": true,
+          "liveStatus": "inconclusive",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 131056,
+              "max": 138000
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 6944
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 131.056,
+              "max": 138
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 131088,
+              "max": 162128
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 6944
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 131.088,
+              "max": 162.128
+            }
+          },
+          "finalItems": 1000
+        },
+        {
+          "id": "Q02",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 42504,
+              "max": 79868
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 38076
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 425.04,
+              "max": 798.68
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 43164,
+              "max": 79676
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 37852
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 431.64,
+              "max": 796.76
+            }
+          },
+          "finalItems": 100
+        },
+        {
+          "id": "Q02",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 42036,
+              "max": 50920
+            },
+            "dropRange": {
+              "min": 64,
+              "max": 8508
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 420.36,
+              "max": 509.2
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 43136,
+              "max": 53332
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 10260
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 431.36,
+              "max": 533.32
+            }
+          },
+          "finalItems": 100
+        },
+        {
+          "id": "Q03",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 42560,
+              "max": 71052
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 29212
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 429.8989898989899,
+              "max": 717.6969696969697
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 42068,
+              "max": 70824
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 29028
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 424.92929292929296,
+              "max": 715.3939393939394
+            }
+          },
+          "finalItems": 99
+        },
+        {
+          "id": "Q03",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 42452,
+              "max": 53496
+            },
+            "dropRange": {
+              "min": 96,
+              "max": 11124
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 424.52,
+              "max": 534.96
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 42404,
+              "max": 53528
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 11124
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 424.04,
+              "max": 535.28
+            }
+          },
+          "finalItems": 100
+        },
+        {
+          "id": "C01",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 27472
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 20512
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 2747.2
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7264,
+              "max": 27892
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 20900
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 726.4,
+              "max": 2789.2
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C01",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 13572
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 6400
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 1357.2
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7264,
+              "max": 13576
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 6372
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 726.4,
+              "max": 1357.6
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C02",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7856,
+              "max": 27284
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 19700
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 714.1818181818181,
+              "max": 2480.3636363636365
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7828,
+              "max": 27796
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 20240
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 711.6363636363636,
+              "max": 2526.909090909091
+            }
+          },
+          "finalItems": 11
+        },
+        {
+          "id": "C02",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 20120
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 12248
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 2012
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7264,
+              "max": 19488
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 12224
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 726.4,
+              "max": 1948.8
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C03",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 8628,
+              "max": 27432
+            },
+            "dropRange": {
+              "min": 656,
+              "max": 19732
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 719,
+              "max": 2286
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 8592,
+              "max": 27904
+            },
+            "dropRange": {
+              "min": 656,
+              "max": 20240
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 716,
+              "max": 2325.3333333333335
+            }
+          },
+          "finalItems": 12
+        },
+        {
+          "id": "C03",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 13220
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 5988
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 1322
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7264,
+              "max": 13236
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 5972
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 726.4,
+              "max": 1323.6
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C04",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 26968
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 20008
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 2696.8
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7264,
+              "max": 27540
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 20548
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 726.4,
+              "max": 2754
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C04",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 8204
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 6400
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 820.4
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7264,
+              "max": 8236
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 6400
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 726.4,
+              "max": 823.6
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C05",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7820,
+              "max": 27916
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 20368
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 710.9090909090909,
+              "max": 2537.818181818182
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7852,
+              "max": 29124
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 21544
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 713.8181818181819,
+              "max": 2647.6363636363635
+            }
+          },
+          "finalItems": 11
+        },
+        {
+          "id": "C05",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7232,
+              "max": 13188
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 5956
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 723.2,
+              "max": 1318.8
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7280,
+              "max": 13220
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 5956
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 728,
+              "max": 1322
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C06",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7496,
+              "max": 28652
+            },
+            "dropRange": {
+              "min": 60,
+              "max": 21496
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 832.8888888888889,
+              "max": 3183.5555555555557
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7528,
+              "max": 29240
+            },
+            "dropRange": {
+              "min": 60,
+              "max": 22052
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 836.4444444444445,
+              "max": 3248.8888888888887
+            }
+          },
+          "finalItems": 9
+        },
+        {
+          "id": "C06",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7248,
+              "max": 13432
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 6200
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 724.8,
+              "max": 1343.2
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7280,
+              "max": 13464
+            },
+            "dropRange": {
+              "min": 16,
+              "max": 6200
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 728,
+              "max": 1346.4
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C07",
+          "rollback": false,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7824,
+              "max": 29244
+            },
+            "dropRange": {
+              "min": 116,
+              "max": 21808
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 782.4,
+              "max": 2924.4
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7856,
+              "max": 29816
+            },
+            "dropRange": {
+              "min": 116,
+              "max": 22348
+            },
+            "postDropGate": "fails",
+            "liveBytesPerItem": {
+              "min": 785.6,
+              "max": 2981.6
+            }
+          },
+          "finalItems": 10
+        },
+        {
+          "id": "C07",
+          "rollback": true,
+          "liveStatus": "fits",
+          "baseline": {
+            "n": 5,
+            "liveRange": {
+              "min": 7272,
+              "max": 17388
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 10116
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 727.2,
+              "max": 1738.8
+            }
+          },
+          "candidate": {
+            "n": 5,
+            "liveRange": {
+              "min": 7304,
+              "max": 17420
+            },
+            "dropRange": {
+              "min": 0,
+              "max": 10116
+            },
+            "postDropGate": "fits",
+            "liveBytesPerItem": {
+              "min": 730.4,
+              "max": 1742
+            }
+          },
+          "finalItems": 10
+        }
+      ],
+      "churn": [
+        {
+          "id": "B06",
+          "variant": "B0",
+          "cycles": 100,
+          "first": {
+            "min": 115556,
+            "max": 115556
+          },
+          "ending": {
+            "min": 156148,
+            "max": 156148
+          },
+          "firstToFinal": {
+            "min": 40592,
+            "max": 40592
+          },
+          "maxObserved": 1734328,
+          "gate": "inconclusive-or-growth"
+        },
+        {
+          "id": "B06",
+          "variant": "B1",
+          "cycles": 100,
+          "first": {
+            "min": 112756,
+            "max": 112756
+          },
+          "ending": {
+            "min": 155852,
+            "max": 155852
+          },
+          "firstToFinal": {
+            "min": 43096,
+            "max": 43096
+          },
+          "maxObserved": 1711292,
+          "gate": "inconclusive-or-growth"
+        },
+        {
+          "id": "Q02",
+          "variant": "B0",
+          "cycles": 100,
+          "first": {
+            "min": 38072,
+            "max": 38072
+          },
+          "ending": {
+            "min": 75828,
+            "max": 75828
+          },
+          "firstToFinal": {
+            "min": 37756,
+            "max": 37756
+          },
+          "maxObserved": 101240,
+          "gate": "inconclusive-or-growth"
+        },
+        {
+          "id": "Q02",
+          "variant": "B1",
+          "cycles": 100,
+          "first": {
+            "min": 37848,
+            "max": 37848
+          },
+          "ending": {
+            "min": 68548,
+            "max": 68548
+          },
+          "firstToFinal": {
+            "min": 30700,
+            "max": 30700
+          },
+          "maxObserved": 130604,
+          "gate": "inconclusive-or-growth"
+        }
+      ],
+      "reportHashes": {
+        "partial": "bb6880b743891ecba5bff9a51ff194c0f9167ea738f9055857270e0575321321",
+        "continued": "4d1fa1781d1f6cc177a57e609127ed47a6b246b563580b8e8eba673ba53dc1b2"
+      }
+    },
+    "setupProfiling": {
+      "durationSeconds": 16.699,
+      "processes": 3,
+      "profiles": "Separate CPU and allocation, 1000 subscribed 100-item initializations per variant/profile; abort outside window",
+      "allocationDifferencePercent": [
+        0.3,
+        -0.22,
+        0.09
+      ],
+      "cpuObservation": "First profiled variant slower in every process; common construction/listener/GC sites",
+      "cause": "unresolved",
+      "gcObserver": "No delivered events despite GC CPU samples; cannot use empty event arrays as absence-of-GC evidence"
+    }
+  },
+  "checkpointImplementation": {
+    "date": "2026-10-26",
+    "status": "implemented-experimental-unaccepted",
+    "packageEntry": "@canonic2/lattice/experimental/collection",
+    "normalEntry": "unchanged",
+    "initialHash": "c45e032bca979be04c6f285ea0a44a24e81883af902614693a6eeaa45ede0f7d",
+    "correctedHash": "7610e112f6a165f95bbcd13903c92d50e30853729499aca5a884926388405af1",
+    "preserved": "Original measured baseline, reporter, prototype and both checkpoint source revisions; original reports unchanged",
+    "teardown": {
+      "units": "milliseconds per abort; seven measured single-action blocks per variant per process; p95 equals maximum",
+      "cause": "Redundant removeEventListener calls from once-listener callbacks after dispatch has already removed them",
+      "before": [
+        {
+          "process": 1,
+          "B0": {
+            "n": 7,
+            "p50": 278.16391499999736,
+            "p95": 299.54086400000233,
+            "max": 299.54086400000233,
+            "iqr": 18.7065419999999
+          },
+          "B1": {
+            "n": 7,
+            "p50": 627.1711030000006,
+            "p95": 664.5905069999972,
+            "max": 664.5905069999972,
+            "iqr": 356.66662799999904
+          },
+          "gates": [
+            {
+              "quantile": "p50",
+              "deltaMs": 349.0071880000032,
+              "allowanceMs": 13.90819574999987,
+              "failed": true
+            },
+            {
+              "quantile": "p95",
+              "deltaMs": 365.04964299999483,
+              "allowanceMs": 29.954086400000236,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "process": 2,
+          "B0": {
+            "n": 7,
+            "p50": 268.5159999999996,
+            "p95": 355.049884,
+            "max": 355.049884,
+            "iqr": 9.170306999996683
+          },
+          "B1": {
+            "n": 7,
+            "p50": 679.6488079999981,
+            "p95": 786.109583999998,
+            "max": 786.109583999998,
+            "iqr": 464.87789200000407
+          },
+          "gates": [
+            {
+              "quantile": "p50",
+              "deltaMs": 411.1328079999985,
+              "allowanceMs": 13.425799999999981,
+              "failed": true
+            },
+            {
+              "quantile": "p95",
+              "deltaMs": 431.059699999998,
+              "allowanceMs": 35.5049884,
+              "failed": true
+            }
+          ]
+        },
+        {
+          "process": 3,
+          "B0": {
+            "n": 7,
+            "p50": 266.4605720000036,
+            "p95": 287.5422529999996,
+            "max": 287.5422529999996,
+            "iqr": 25.30115200000364
+          },
+          "B1": {
+            "n": 7,
+            "p50": 621.484663999996,
+            "p95": 653.0247689999997,
+            "max": 653.0247689999997,
+            "iqr": 350.5890490000056
+          },
+          "gates": [
+            {
+              "quantile": "p50",
+              "deltaMs": 355.0240919999924,
+              "allowanceMs": 13.32302860000018,
+              "failed": true
+            },
+            {
+              "quantile": "p95",
+              "deltaMs": 365.48251600000003,
+              "allowanceMs": 28.754225299999963,
+              "failed": true
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "process": 1,
+          "B0": {
+            "n": 7,
+            "p50": 293.1354410000022,
+            "p95": 362.72570899999846,
+            "max": 362.72570899999846,
+            "iqr": 97.18056699999943
+          },
+          "B1": {
+            "n": 7,
+            "p50": 3.433796999997867,
+            "p95": 4.390871999999945,
+            "max": 4.390871999999945,
+            "iqr": 1.2817530000029365
+          },
+          "gates": [
+            {
+              "quantile": "p50",
+              "deltaMs": -289.7016440000043,
+              "allowanceMs": 14.656772050000109,
+              "failed": false
+            },
+            {
+              "quantile": "p95",
+              "deltaMs": -358.3348369999985,
+              "allowanceMs": 36.27257089999985,
+              "failed": false
+            }
+          ]
+        },
+        {
+          "process": 2,
+          "B0": {
+            "n": 7,
+            "p50": 263.10480299999836,
+            "p95": 293.1558409999998,
+            "max": 293.1558409999998,
+            "iqr": 14.973019000000932
+          },
+          "B1": {
+            "n": 7,
+            "p50": 4.260849999998754,
+            "p95": 7.508378999998968,
+            "max": 7.508378999998968,
+            "iqr": 3.757593000005727
+          },
+          "gates": [
+            {
+              "quantile": "p50",
+              "deltaMs": -258.8439529999996,
+              "allowanceMs": 13.15524014999992,
+              "failed": false
+            },
+            {
+              "quantile": "p95",
+              "deltaMs": -285.6474620000008,
+              "allowanceMs": 29.31558409999998,
+              "failed": false
+            }
+          ]
+        },
+        {
+          "process": 3,
+          "B0": {
+            "n": 7,
+            "p50": 276.5423789999986,
+            "p95": 292.4926200000009,
+            "max": 292.4926200000009,
+            "iqr": 33.21819900000264
+          },
+          "B1": {
+            "n": 7,
+            "p50": 3.64585100000113,
+            "p95": 5.260011999998824,
+            "max": 5.260011999998824,
+            "iqr": 1.4166170000025886
+          },
+          "gates": [
+            {
+              "quantile": "p50",
+              "deltaMs": -272.8965279999975,
+              "allowanceMs": 13.827118949999932,
+              "failed": false
+            },
+            {
+              "quantile": "p95",
+              "deltaMs": -287.2326080000021,
+              "allowanceMs": 29.24926200000009,
+              "failed": false
+            }
+          ]
+        }
+      ],
+      "correction": "Only experimental abort callback clears its ended registration before deactivation; live-listener release paths retain explicit detach",
+      "reportHashes": [
+        "06f4f78739b7156d55f13dd1d45eeb6d199658a13330546b1e69f51dab3c9000",
+        "8e5a2bba4efe7163fc9f933c3e5b4e66870955bea4ec5137fcc83f4c7a0f3201"
+      ]
+    },
+    "admission": {
+      "elapsedSeconds": 72.702,
+      "units": "microseconds; fifteen measured block means per variant, p95 equals maximum",
+      "cases": [
+        {
+          "id": "Q01",
+          "counts": {
+            "B1": 1000,
+            "B0": 1000
+          },
+          "B0": {
+            "actionUs": {
+              "n": 15,
+              "p50": 913.0946180000539,
+              "p95": 1438.442077000167,
+              "max": 1438.442077000167,
+              "iqr": 317.55064999994636
+            },
+            "setupUs": {
+              "n": 15,
+              "p50": 492.24080000130925,
+              "p95": 2604.0457999988575,
+              "max": 2604.0457999988575,
+              "iqr": 620.8974000066519
+            },
+            "teardownUs": {
+              "n": 15,
+              "p50": 84.25919999863254,
+              "p95": 614.3321999988984,
+              "max": 614.3321999988984,
+              "iqr": 88.89340000168886
+            }
+          },
+          "B1": {
+            "actionUs": {
+              "n": 15,
+              "p50": 55.54517700015276,
+              "p95": 79.12970999979734,
+              "max": 79.12970999979734,
+              "iqr": 14.314019999939774
+            },
+            "setupUs": {
+              "n": 15,
+              "p50": 404.0708000015002,
+              "p95": 1382.9729999997653,
+              "max": 1382.9729999997653,
+              "iqr": 299.12700000131736
+            },
+            "teardownUs": {
+              "n": 15,
+              "p50": 47.9535999984364,
+              "p95": 102.16620000137482,
+              "max": 102.16620000137482,
+              "iqr": 22.106400004122406
+            }
+          },
+          "findings": []
+        },
+        {
+          "id": "Q02",
+          "counts": {
+            "B1": 1000,
+            "B0": 1000
+          },
+          "B0": {
+            "actionUs": {
+              "n": 15,
+              "p50": 22.238459999789484,
+              "p95": 29.785871000000043,
+              "max": 29.785871000000043,
+              "iqr": 4.616656999773113
+            },
+            "setupUs": {
+              "n": 15,
+              "p50": 101.74288999900455,
+              "p95": 157.33869999909075,
+              "max": 157.33869999909075,
+              "iqr": 17.30751999944914
+            },
+            "teardownUs": {
+              "n": 15,
+              "p50": 53.18983000019216,
+              "p95": 128.3418200010783,
+              "max": 128.3418200010783,
+              "iqr": 10.907280000683386
+            }
+          },
+          "B1": {
+            "actionUs": {
+              "n": 15,
+              "p50": 18.576884000067366,
+              "p95": 28.805224000272574,
+              "max": 28.805224000272574,
+              "iqr": 1.4592700006032828
+            },
+            "setupUs": {
+              "n": 15,
+              "p50": 102.33049000045867,
+              "p95": 236.901940000389,
+              "max": 236.901940000389,
+              "iqr": 31.166080002003582
+            },
+            "teardownUs": {
+              "n": 15,
+              "p50": 33.40959999943152,
+              "p95": 145.3779699995357,
+              "max": 145.3779699995357,
+              "iqr": 9.634380000206875
+            }
+          },
+          "findings": [
+            {
+              "gate": "setupUs-p95",
+              "metric": "setupUs",
+              "quantile": "p95",
+              "b0": 157.33869999909075,
+              "b1": 236.901940000389,
+              "allowance": 15.733869999909075,
+              "clear": true
+            },
+            {
+              "gate": "teardownUs-p95",
+              "metric": "teardownUs",
+              "quantile": "p95",
+              "b0": 128.3418200010783,
+              "b1": 145.3779699995357,
+              "allowance": 12.83418200010783,
+              "clear": false
+            }
+          ]
+        }
+      ],
+      "reportHash": "2efe7311cce9214c80151ee8a32e201ba4bc683d340c7bbd89e8d84e7994aa73"
+    },
+    "allocationRetentionConfirmation": "Not started: checkpoint admission failed setup p95 under agreed stop rule"
+  },
+  "eightMinuteDiagnostic": {
+    "date": "2026-10-26",
+    "status": "diagnostic-complete",
+    "engine": "Node 24.12.0",
+    "adoption": "unadopted",
+    "phaseSeconds": {
+      "setup": 35.362,
+      "bulk": 210.023,
+      "total": 245.385
+    },
+    "setupTailClassification": "inconsistent/unresolved",
+    "setupQuantiles": "200 block averages per variant per process; 100 setups per block; p95 is not individual setup latency",
+    "setupProcesses": [
+      {
+        "process": 1,
+        "B0": {
+          "n": 200,
+          "p50": 98.67156000002524,
+          "p95": 162.8152300000056,
+          "max": 277.0062500000404,
+          "iqr": 9.33397999994213
+        },
+        "B1": {
+          "n": 200,
+          "p50": 98.50583000002189,
+          "p95": 214.51749999998356,
+          "max": 384.8325599999771,
+          "iqr": 10.439569999998639
+        },
+        "gates": [
+          {
+            "metric": "setupUs",
+            "quantile": "p50",
+            "delta": -0.16573000000335014,
+            "allowance": 4.933578000001262,
+            "failed": false
+          },
+          {
+            "metric": "setupUs",
+            "quantile": "p95",
+            "delta": 51.70226999997794,
+            "allowance": 16.28152300000056,
+            "failed": true
+          },
+          {
+            "metric": "teardownUs",
+            "quantile": "p50",
+            "delta": -0.3135200000497207,
+            "allowance": 2.0719020000015007,
+            "failed": false
+          },
+          {
+            "metric": "teardownUs",
+            "quantile": "p95",
+            "delta": -1.948610000026747,
+            "allowance": 5.432309000000714,
+            "failed": false
+          }
+        ],
+        "uncertainty": {
+          "replicates": 2000,
+          "blockLength": 10,
+          "p95Ratio95Interval": [
+            0.6500019635569756,
+            1.8962529827979118
+          ],
+          "p95GateExcessUs95Interval": [
+            -99.46191400005,
+            91.89699000004839
+          ]
+        }
+      },
+      {
+        "process": 2,
+        "B0": {
+          "n": 200,
+          "p50": 99.15718000001107,
+          "p95": 132.98025999993115,
+          "max": 524.73571000005,
+          "iqr": 8.900260000013986
+        },
+        "B1": {
+          "n": 200,
+          "p50": 99.52324000001681,
+          "p95": 139.38009000004058,
+          "max": 487.99716999998964,
+          "iqr": 8.156430000001365
+        },
+        "gates": [
+          {
+            "metric": "setupUs",
+            "quantile": "p50",
+            "delta": 0.3660600000057457,
+            "allowance": 4.957859000000553,
+            "failed": false
+          },
+          {
+            "metric": "setupUs",
+            "quantile": "p95",
+            "delta": 6.399830000109432,
+            "allowance": 13.298025999993115,
+            "failed": false
+          },
+          {
+            "metric": "teardownUs",
+            "quantile": "p50",
+            "delta": 0.2655899999945177,
+            "allowance": 2.0690870000000814,
+            "failed": false
+          },
+          {
+            "metric": "teardownUs",
+            "quantile": "p95",
+            "delta": 3.241989999996804,
+            "allowance": 5.6631149999975605,
+            "failed": false
+          }
+        ],
+        "uncertainty": {
+          "replicates": 2000,
+          "blockLength": 10,
+          "p95Ratio95Interval": [
+            0.6272245856922343,
+            1.3907587358361897
+          ],
+          "p95GateExcessUs95Interval": [
+            -102.38875399994458,
+            35.425082000077964
+          ]
+        }
+      },
+      {
+        "process": 3,
+        "B0": {
+          "n": 200,
+          "p50": 95.95870999997715,
+          "p95": 119.8189299999558,
+          "max": 204.55808999999812,
+          "iqr": 10.593390000015006
+        },
+        "B1": {
+          "n": 200,
+          "p50": 96.80692999998428,
+          "p95": 121.07298999995692,
+          "max": 1422.2327000000023,
+          "iqr": 8.820600000090053
+        },
+        "gates": [
+          {
+            "metric": "setupUs",
+            "quantile": "p50",
+            "delta": 0.8482200000071316,
+            "allowance": 4.797935499998857,
+            "failed": false
+          },
+          {
+            "metric": "setupUs",
+            "quantile": "p95",
+            "delta": 1.2540600000011182,
+            "allowance": 11.98189299999558,
+            "failed": false
+          },
+          {
+            "metric": "teardownUs",
+            "quantile": "p50",
+            "delta": 0.2985300000455027,
+            "allowance": 2.1029765000021143,
+            "failed": false
+          },
+          {
+            "metric": "teardownUs",
+            "quantile": "p95",
+            "delta": 0.786260000004404,
+            "allowance": 5.888703999997233,
+            "failed": false
+          }
+        ],
+        "uncertainty": {
+          "replicates": 2000,
+          "blockLength": 10,
+          "p95Ratio95Interval": [
+            0.8650963737019911,
+            1.1085068370304516
+          ],
+          "p95GateExcessUs95Interval": [
+            -31.347351000182243,
+            0.9789599999949132
+          ]
+        }
+      }
+    ],
+    "bulkClassification": "Diagnostic only; seven measured actions per variant; p95 equals maximum; no allocation/retention acceptance or confirmation",
+    "bulk": [
+      {
+        "id": "B02",
+        "actionUnits": "milliseconds per action",
+        "B0": {
+          "n": 7,
+          "p50": 4571.5074259999965,
+          "p95": 5919.0535820000005,
+          "max": 5919.0535820000005,
+          "iqr": 1203.7470840000024
+        },
+        "B1": {
+          "n": 7,
+          "p50": 16.424119999999675,
+          "p95": 91.85026699999435,
+          "max": 91.85026699999435,
+          "iqr": 23.3072800000009
+        },
+        "speedup": 278.3410877416925,
+        "halvingTarget": true,
+        "gainExceedsBothIQRs": true,
+        "teardownB0Ms": {
+          "n": 7,
+          "p50": 239.42395100000067,
+          "p95": 277.8119880000013,
+          "max": 277.8119880000013,
+          "iqr": 23.77429299999494
+        },
+        "teardownB1Ms": {
+          "n": 7,
+          "p50": 627.3743370000011,
+          "p95": 664.5558999999994,
+          "max": 664.5558999999994,
+          "iqr": 328.67518800000835
+        }
+      },
+      {
+        "id": "B04",
+        "actionUnits": "milliseconds per action",
+        "B0": {
+          "n": 7,
+          "p50": 4514.037118,
+          "p95": 4678.941736000001,
+          "max": 4678.941736000001,
+          "iqr": 470.25797299999977
+        },
+        "B1": {
+          "n": 7,
+          "p50": 320.5713420000029,
+          "p95": 355.49466499999835,
+          "max": 355.49466499999835,
+          "iqr": 128.96666299999924
+        },
+        "speedup": 14.08122475901155,
+        "halvingTarget": true,
+        "gainExceedsBothIQRs": true,
+        "teardownB0Ms": {
+          "n": 7,
+          "p50": 0.12990999999601627,
+          "p95": 0.13860700000077486,
+          "max": 0.13860700000077486,
+          "iqr": 0.06166099999973085
+        },
+        "teardownB1Ms": {
+          "n": 7,
+          "p50": 0.08122099999309285,
+          "p95": 0.27693700000236277,
+          "max": 0.27693700000236277,
+          "iqr": 0.08208400000148686
+        }
+      },
+      {
+        "id": "B06",
+        "actionUnits": "milliseconds per action",
+        "B0": {
+          "n": 7,
+          "p50": 4532.285988000003,
+          "p95": 4981.974993,
+          "max": 4981.974993,
+          "iqr": 573.4212770000086
+        },
+        "B1": {
+          "n": 7,
+          "p50": 342.0831509999989,
+          "p95": 368.3369820000007,
+          "max": 368.3369820000007,
+          "iqr": 80.25137499999983
+        },
+        "speedup": 13.249076941529978,
+        "halvingTarget": true,
+        "gainExceedsBothIQRs": true,
+        "teardownB0Ms": {
+          "n": 7,
+          "p50": 0.12019600000348873,
+          "p95": 0.17540899999949033,
+          "max": 0.17540899999949033,
+          "iqr": 0.05763999999908265
+        },
+        "teardownB1Ms": {
+          "n": 7,
+          "p50": 0.08346499999606749,
+          "p95": 0.2063449999986915,
+          "max": 0.2063449999986915,
+          "iqr": 0.03129099999205209
+        }
+      }
+    ],
+    "attribution": "GC overlaps setup in both variants; no supported candidate-specific cause. Candidate large-append teardown is slower and was not traced.",
+    "originalEvidence": "preserved; numerical gates unchanged"
+  },
+  "approvedReducedComparison": {
+    "date": "2026-10-26",
+    "status": "rejected-gate",
+    "interpretation": "Current candidate not accepted for adoption; Q03 setup tail cause unresolved. Earlier cells below remain their original independent evidence.",
+    "engine": "Node 24.12.0",
+    "elapsedSeconds": 65.045,
+    "plannedPairedCasesPerEngine": 20,
+    "completedNodeCases": 3,
+    "completedChromiumCases": 0,
+    "allocationRetentionConfirmation": "not run after gate-triggered stop",
+    "measuredBlocksPerVariant": 15,
+    "warmupBlocksPerVariant": 5,
+    "units": "microseconds per action or fresh setup/teardown",
+    "quantileBasis": "per-action block means; nearest-rank p95 equals maximum at n=15",
+    "cases": [
+      {
+        "id": "Q01",
+        "size": 1000,
+        "changes": 10,
+        "workload": "scatter-remove",
+        "subscribed": false,
+        "actionRepetitionsPerBlock": 1000,
+        "coldRepetitionsPerBlock": 5,
+        "B0": {
+          "actionUs": { "p50": 636.752838, "p95": 660.267394, "max": 660.267394, "iqr": 13.235302 },
+          "setupUs": { "p50": 398.663, "p95": 939.1574, "max": 939.1574, "iqr": 279.2084 },
+          "teardownUs": { "p50": 43.8454, "p95": 91.2146, "max": 91.2146, "iqr": 10.6058 }
+        },
+        "B1": {
+          "actionUs": { "p50": 43.337741, "p95": 156.227575, "max": 156.227575, "iqr": 1.339216 },
+          "setupUs": { "p50": 416.3252, "p95": 967.008, "max": 967.008, "iqr": 62.9628 },
+          "teardownUs": { "p50": 38.2056, "p95": 48.8324, "max": 48.8324, "iqr": 9.1912 }
+        },
+        "timingGateFailures": []
+      },
+      {
+        "id": "Q02",
+        "size": 100,
+        "changes": 1,
+        "workload": "mixed",
+        "subscribed": true,
+        "actionRepetitionsPerBlock": 2000,
+        "coldRepetitionsPerBlock": 100,
+        "B0": {
+          "actionUs": { "p50": 19.285448, "p95": 20.17809, "max": 20.17809, "iqr": 0.842811 },
+          "setupUs": { "p50": 90.11936, "p95": 221.43236, "max": 221.43236, "iqr": 4.70628 },
+          "teardownUs": { "p50": 45.64154, "p95": 63.27945, "max": 63.27945, "iqr": 3.0598 }
+        },
+        "B1": {
+          "actionUs": { "p50": 14.859162, "p95": 15.703394, "max": 15.703394, "iqr": 1.247234 },
+          "setupUs": { "p50": 91.00391, "p95": 94.72653, "max": 94.72653, "iqr": 2.99905 },
+          "teardownUs": { "p50": 46.16347, "p95": 48.35129, "max": 48.35129, "iqr": 2.06628 }
+        },
+        "timingGateFailures": []
+      },
+      {
+        "id": "Q03",
+        "size": 100,
+        "changes": 1,
+        "workload": "scatter-remove",
+        "subscribed": true,
+        "actionRepetitionsPerBlock": 4000,
+        "coldRepetitionsPerBlock": 100,
+        "B0": {
+          "actionUs": { "p50": 8.463593, "p95": 9.060878, "max": 9.060878, "iqr": 0.248365 },
+          "setupUs": { "p50": 87.69911, "p95": 112.30676, "max": 112.30676, "iqr": 2.85752 },
+          "teardownUs": { "p50": 43.97338, "p95": 48.37275, "max": 48.37275, "iqr": 2.16976 }
+        },
+        "B1": {
+          "actionUs": { "p50": 4.642063, "p95": 4.94852, "max": 4.94852, "iqr": 0.182971 },
+          "setupUs": { "p50": 87.89197, "p95": 217.28169, "max": 217.28169, "iqr": 2.76846 },
+          "teardownUs": { "p50": 44.05461, "p95": 54.2135, "max": 54.2135, "iqr": 1.8023 }
+        },
+        "timingGateFailures": ["setup-p95: clear margin beyond both IQRs", "teardown-p95: excess within IQR uncertainty"]
+      }
+    ]
+  },
+  "status": "inconclusive",
+  "units": "microseconds",
+  "engine": "Node 24.12.0",
+  "actionTimingClassification": "Subscribed cells: instrumented exploratory. No-subscription cells: counters not executed, unconfirmed initial evidence. No complete acceptance established.",
+  "coldTimingClassification": "Uncounted subscriptions; concerns remain pending confirmation",
+  "measuredBlocksPerVariant": 15,
+  "warmupBlocksPerVariant": 5,
+  "plannedCells": 184,
+  "completedCells": 12,
+  "cells": [
+    {
+      "size": 1000,
+      "changes": 10,
+      "workload": "scatter-remove",
+      "subscribed": false,
+      "actionRepetitionsPerBlock": 412,
+      "coldRepetitionsPerBlock": 5,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 710.8978033981296,
+            "p95": 752.0627281553361,
+            "max": 752.0627281553361,
+            "iqr": 7.20637378642266
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 378.5466000008455,
+            "p95": 443.5700000005454,
+            "max": 443.5700000005454,
+            "iqr": 29.296000000431377
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 374.44699999905424,
+            "p95": 439.4847999999911,
+            "max": 439.4847999999911,
+            "iqr": 29.320000000370783
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 1.8331999996007653,
+            "p95": 2.354199999535922,
+            "max": 2.354199999535922,
+            "iqr": 0.3092000008109608
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 44.47899999941001,
+            "p95": 58.4947999988799,
+            "max": 58.4947999988799,
+            "iqr": 5.129800000577234
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 1149.9092000000019,
+            "p95": 1216.1370000005263,
+            "max": 1216.1370000005263,
+            "iqr": 38.14280000042345
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 45.041800970810655,
+            "p95": 49.415798543677035,
+            "max": 49.415798543677035,
+            "iqr": 0.4108737863483398
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 423.3088000000862,
+            "p95": 468.57380000037665,
+            "max": 468.57380000037665,
+            "iqr": 26.296399999409914
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 420.37820000005013,
+            "p95": 465.3967999998713,
+            "max": 465.3967999998713,
+            "iqr": 26.641600000402832
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 1.4884000003803521,
+            "p95": 3.47979999933159,
+            "max": 3.47979999933159,
+            "iqr": 0.22259999968810007
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 36.49440000008326,
+            "p95": 47.075999999651685,
+            "max": 47.075999999651685,
+            "iqr": 2.9540000006818445
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 505.6027999995422,
+            "p95": 555.4940000001807,
+            "max": 555.4940000001807,
+            "iqr": 23.977999999624444
+          }
+        }
+      }
+    },
+    {
+      "size": 10,
+      "changes": 0,
+      "workload": "replace",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 54549,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 0.36086500208559275,
+            "p95": 0.37280483600331993,
+            "max": 0.37280483600331993,
+            "iqr": 0.0073755705974634655
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 14.52928999940923,
+            "p95": 16.76089000007778,
+            "max": 16.76089000007778,
+            "iqr": 1.3210000003891764
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 7.411820000124862,
+            "p95": 8.735230000165757,
+            "max": 8.735230000165757,
+            "iqr": 0.3329800001301919
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 6.636290000315057,
+            "p95": 8.134629999949539,
+            "max": 8.134629999949539,
+            "iqr": 1.1237000000255648
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 14.368809999941732,
+            "p95": 17.49818000011146,
+            "max": 17.49818000011146,
+            "iqr": 1.3586300000315532
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 29.405839999599266,
+            "p95": 34.94346999992558,
+            "max": 34.94346999992558,
+            "iqr": 3.457129999587778
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 0.49573554053580404,
+            "p95": 0.523269702468638,
+            "max": 0.523269702468638,
+            "iqr": 0.025843461849403226
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 15.29458999990311,
+            "p95": 17.52598000013677,
+            "max": 17.52598000013677,
+            "iqr": 2.4986300003001816
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 8.035600000075647,
+            "p95": 9.22619000004488,
+            "max": 9.22619000004488,
+            "iqr": 0.5217800005630124
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 6.720420000274316,
+            "p95": 9.201199999952223,
+            "max": 9.201199999952223,
+            "iqr": 1.5466500007460127
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 14.680350000417093,
+            "p95": 17.90690000008908,
+            "max": 17.90690000008908,
+            "iqr": 1.3985299998603296
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 30.912980000211974,
+            "p95": 37.80117000009341,
+            "max": 37.80117000009341,
+            "iqr": 4.53109999991284
+          }
+        }
+      }
+    },
+    {
+      "size": 10,
+      "changes": 2,
+      "workload": "prepend",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 9089,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 2.288844647356225,
+            "p95": 2.879001430333608,
+            "max": 2.879001430333608,
+            "iqr": 0.08931609638516402
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 14.328280000117957,
+            "p95": 20.400909999953,
+            "max": 20.400909999953,
+            "iqr": 1.6375000000698492
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 7.530159999732859,
+            "p95": 10.921879999950761,
+            "max": 10.921879999950761,
+            "iqr": 0.4190699994796887
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 6.554620000097202,
+            "p95": 12.409240000051796,
+            "max": 12.409240000051796,
+            "iqr": 1.2283000000024913
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 14.58394000037515,
+            "p95": 19.00895999984641,
+            "max": 19.00895999984641,
+            "iqr": 1.5247199998702854
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 31.421789999876637,
+            "p95": 43.30489000014495,
+            "max": 43.30489000014495,
+            "iqr": 3.932689999783179
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 2.527519198961476,
+            "p95": 2.651208383708112,
+            "max": 2.651208383708112,
+            "iqr": 0.07348762242504048
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 15.185640000199783,
+            "p95": 30.76000999979442,
+            "max": 30.76000999979442,
+            "iqr": 1.075150000033318
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 8.252759999595582,
+            "p95": 16.373019999882672,
+            "max": 16.373019999882672,
+            "iqr": 0.47420999988389667
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 6.716580000138492,
+            "p95": 14.002960000070743,
+            "max": 14.002960000070743,
+            "iqr": 0.8037600002717227
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 15.252219999892986,
+            "p95": 21.81570000051579,
+            "max": 21.81570000051579,
+            "iqr": 1.0641700000996934
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 33.49230999934662,
+            "p95": 53.5158999999112,
+            "max": 53.5158999999112,
+            "iqr": 2.540740000185906
+          }
+        }
+      }
+    },
+    {
+      "size": 100,
+      "changes": 100,
+      "workload": "prepend",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 343,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 115.55137609345203,
+            "p95": 127.90861807594894,
+            "max": 127.90861807594894,
+            "iqr": 9.452632653200112
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 103.16100999960327,
+            "p95": 130.97078999977384,
+            "max": 130.97078999977384,
+            "iqr": 3.55937999971502
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 43.514750000758795,
+            "p95": 47.92822999981581,
+            "max": 47.92822999981581,
+            "iqr": 1.5844999997352716
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 58.662769999646116,
+            "p95": 86.05301000054169,
+            "max": 86.05301000054169,
+            "iqr": 1.92851999985578
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 53.862779999763006,
+            "p95": 57.798640000255546,
+            "max": 57.798640000255546,
+            "iqr": 5.086690000753151
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 274.0756300002977,
+            "p95": 291.77386000024853,
+            "max": 291.77386000024853,
+            "iqr": 20.510900000372203
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 57.69986880490246,
+            "p95": 65.66657434420765,
+            "max": 65.66657434420765,
+            "iqr": 4.283049563119903
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 103.02727000031155,
+            "p95": 117.54555999999866,
+            "max": 117.54555999999866,
+            "iqr": 3.089810000237776
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 46.434729999891715,
+            "p95": 53.0817299989576,
+            "max": 53.0817299989576,
+            "iqr": 1.518730000461801
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 55.979329999900074,
+            "p95": 64.08074000253691,
+            "max": 64.08074000253691,
+            "iqr": 1.9885799994517583
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 47.83469000038167,
+            "p95": 55.26099999930011,
+            "max": 55.26099999930011,
+            "iqr": 3.4162799990008352
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 210.25095999961195,
+            "p95": 244.98183999981848,
+            "max": 244.98183999981848,
+            "iqr": 20.838349999685306
+          }
+        }
+      }
+    },
+    {
+      "size": 10,
+      "changes": 0,
+      "workload": "item-only",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 29600,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 0.6998507770013758,
+            "p95": 0.7090880068106934,
+            "max": 0.7090880068106934,
+            "iqr": 0.0061830405295926205
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 13.774700000940356,
+            "p95": 19.466540000139503,
+            "max": 19.466540000139503,
+            "iqr": 0.33481999940704554
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 7.557690000103321,
+            "p95": 8.733079999801703,
+            "max": 8.733079999801703,
+            "iqr": 0.14543000012054108
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 5.951649999333313,
+            "p95": 11.694050000078278,
+            "max": 11.694050000078278,
+            "iqr": 0.19293999968795106
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 12.239949999784585,
+            "p95": 12.403880001947982,
+            "max": 12.403880001947982,
+            "iqr": 0.6879499994101934
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 27.125290000112727,
+            "p95": 32.274690000049304,
+            "max": 32.274690000049304,
+            "iqr": 0.34442000091075897
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 0.6914203039756299,
+            "p95": 0.7014479392199899,
+            "max": 0.7014479392199899,
+            "iqr": 0.008435067609113722
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 14.54539999976987,
+            "p95": 22.827599999582162,
+            "max": 22.827599999582162,
+            "iqr": 0.7648600003449246
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 8.222910000331467,
+            "p95": 16.27379000041401,
+            "max": 16.27379000041401,
+            "iqr": 0.4908700013766065
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 6.061870000703493,
+            "p95": 6.436459999822546,
+            "max": 6.436459999822546,
+            "iqr": 0.26153000071644783
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 12.510569999576546,
+            "p95": 13.902359999920009,
+            "max": 13.902359999920009,
+            "iqr": 1.1090399991371669
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 28.089480000489857,
+            "p95": 37.27056999865454,
+            "max": 37.27056999865454,
+            "iqr": 2.5944299992988817
+          }
+        }
+      }
+    },
+    {
+      "size": 1000,
+      "changes": 1000,
+      "workload": "scatter-remove",
+      "subscribed": false,
+      "actionRepetitionsPerBlock": 50,
+      "coldRepetitionsPerBlock": 5,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 37292.33819999674,
+            "p95": 124699.29180000036,
+            "max": 124699.29180000036,
+            "iqr": 37304.26603999687
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 391.73619999783114,
+            "p95": 3901.605599996401,
+            "max": 3901.605599996401,
+            "iqr": 51.66420000605285
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 388.82359999697655,
+            "p95": 3893.5620000003837,
+            "max": 3893.5620000003837,
+            "iqr": 50.958200002787635
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 0.3733999968972057,
+            "p95": 1.1230000003706664,
+            "max": 1.1230000003706664,
+            "iqr": 0.48219999007415026
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 70.63100000959821,
+            "p95": 238.68320000183303,
+            "max": 238.68320000183303,
+            "iqr": 11.397999999462627
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 38264.29360000184,
+            "p95": 137507.76560000086,
+            "max": 137507.76560000086,
+            "iqr": 1607.829400000628
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 411.1463600001298,
+            "p95": 3743.5405400008312,
+            "max": 3743.5405400008312,
+            "iqr": 50.92215999902692
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 437.9242000024533,
+            "p95": 1270.9621999994852,
+            "max": 1270.9621999994852,
+            "iqr": 58.974200004013255
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 435.4165999975521,
+            "p95": 1262.3351999995066,
+            "max": 1262.3351999995066,
+            "iqr": 58.47560000256635
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 0.3330000035930425,
+            "p95": 1.5498000022489578,
+            "max": 1.5498000022489578,
+            "iqr": 0.11239999439567327
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 59.760999999707565,
+            "p95": 305.9248000005027,
+            "max": 305.9248000005027,
+            "iqr": 12.256600012187846
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 876.4692000026116,
+            "p95": 7767.492800002219,
+            "max": 7767.492800002219,
+            "iqr": 162.48760001035407
+          }
+        }
+      }
+    },
+    {
+      "size": 100,
+      "changes": 10,
+      "workload": "scatter-insert",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 1687,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 13.01376407808129,
+            "p95": 15.698285121881284,
+            "max": 15.698285121881284,
+            "iqr": 1.3780130406422888
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 102.99311000009766,
+            "p95": 113.72659999877214,
+            "max": 113.72659999877214,
+            "iqr": 9.270060003036633
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 42.178120001917705,
+            "p95": 52.499089997727424,
+            "max": 52.499089997727424,
+            "iqr": 2.6947900012601167
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 58.120630001067184,
+            "p95": 70.95700999896508,
+            "max": 70.95700999896508,
+            "iqr": 10.364390001050197
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 48.24648000037996,
+            "p95": 51.300919999484904,
+            "max": 51.300919999484904,
+            "iqr": 2.0830000028945506
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 166.36452999984613,
+            "p95": 175.64198999811197,
+            "max": 175.64198999811197,
+            "iqr": 8.563080001913477
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 12.331370479991344,
+            "p95": 14.03960225315669,
+            "max": 14.03960225315669,
+            "iqr": 0.6235435685925701
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 106.38285999884829,
+            "p95": 125.59055000077933,
+            "max": 125.59055000077933,
+            "iqr": 12.493589998630341
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 47.65862999949604,
+            "p95": 62.05657000071369,
+            "max": 62.05657000071369,
+            "iqr": 4.773509998631198
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 58.255319998424966,
+            "p95": 73.59516000171425,
+            "max": 73.59516000171425,
+            "iqr": 8.088889995706268
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 46.82896999962395,
+            "p95": 57.06485000089742,
+            "max": 57.06485000089742,
+            "iqr": 8.238120000169147
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 167.67728000006173,
+            "p95": 194.6108199999435,
+            "max": 194.6108199999435,
+            "iqr": 26.001920000417158
+          }
+        }
+      }
+    },
+    {
+      "size": 100,
+      "changes": 10,
+      "workload": "replace",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 950,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 92.1375473681531,
+            "p95": 96.03211368473957,
+            "max": 96.03211368473957,
+            "iqr": 2.801923157438921
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 98.18332999944687,
+            "p95": 133.1853599983151,
+            "max": 133.1853599983151,
+            "iqr": 13.886460000358056
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 41.72883000137517,
+            "p95": 69.45659999968484,
+            "max": 69.45659999968484,
+            "iqr": 6.363179999461863
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 56.153889998968225,
+            "p95": 77.38001999794506,
+            "max": 77.38001999794506,
+            "iqr": 7.607549999665935
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 41.995969999115914,
+            "p95": 61.38155000109691,
+            "max": 61.38155000109691,
+            "iqr": 5.8803000004263595
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 230.5535300000338,
+            "p95": 297.1078900017892,
+            "max": 297.1078900017892,
+            "iqr": 33.136970000050496
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 21.0802178945711,
+            "p95": 26.33043157953867,
+            "max": 26.33043157953867,
+            "iqr": 1.1117799998886007
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 106.32101999945007,
+            "p95": 116.85266000014963,
+            "max": 116.85266000014963,
+            "iqr": 12.12271999946097
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 47.15721000015037,
+            "p95": 57.20273999904748,
+            "max": 57.20273999904748,
+            "iqr": 2.8214500000467524
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 57.239340000087395,
+            "p95": 69.25886999844806,
+            "max": 69.25886999844806,
+            "iqr": 8.972249997896142
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 42.41271999955643,
+            "p95": 46.31863999937195,
+            "max": 46.31863999937195,
+            "iqr": 2.9706799998530187
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 169.2295299973921,
+            "p95": 183.28487999911886,
+            "max": 183.28487999911886,
+            "iqr": 14.96993999928236
+          }
+        }
+      }
+    },
+    {
+      "size": 100,
+      "changes": 100,
+      "workload": "append",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 319,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 88.02366457648903,
+            "p95": 112.11427586112276,
+            "max": 112.11427586112276,
+            "iqr": 15.82784326104769
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 102.87431000062497,
+            "p95": 126.45525000058115,
+            "max": 126.45525000058115,
+            "iqr": 19.195530001015868
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 43.642679999466054,
+            "p95": 68.45305999799166,
+            "max": 68.45305999799166,
+            "iqr": 6.640029999834951
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 57.52858999941964,
+            "p95": 79.16985000047134,
+            "max": 79.16985000047134,
+            "iqr": 3.6892100019031204
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 52.76704000134487,
+            "p95": 69.84655999956885,
+            "max": 69.84655999956885,
+            "iqr": 2.9957099992316216
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 251.1236400011694,
+            "p95": 315.4750799984322,
+            "max": 315.4750799984322,
+            "iqr": 19.437920001510065
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 61.43923511062267,
+            "p95": 66.4214231977991,
+            "max": 66.4214231977991,
+            "iqr": 5.341702194878586
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 101.76571999851149,
+            "p95": 110.57257000240497,
+            "max": 110.57257000240497,
+            "iqr": 9.180320001905784
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 46.23832000273978,
+            "p95": 51.22281999880215,
+            "max": 51.22281999880215,
+            "iqr": 4.85729000007268
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 55.25333000085084,
+            "p95": 59.850339999829885,
+            "max": 59.850339999829885,
+            "iqr": 4.125830003176816
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 46.1742699999013,
+            "p95": 54.315059997024946,
+            "max": 54.315059997024946,
+            "iqr": 5.472500000032596
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 213.2864200012409,
+            "p95": 243.511100000469,
+            "max": 243.511100000469,
+            "iqr": 32.29511999787064
+          }
+        }
+      }
+    },
+    {
+      "size": 10000,
+      "changes": 10000,
+      "workload": "mixed",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 1,
+      "coldRepetitionsPerBlock": 1,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 4345645.814999938,
+            "p95": 6485489.589000004,
+            "max": 6485489.589000004,
+            "iqr": 387024.9629999744
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 667557.3539999314,
+            "p95": 10538060.498999955,
+            "max": 10538060.498999955,
+            "iqr": 33671.278999885544
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 5644.449999963399,
+            "p95": 17587.12000004016,
+            "max": 17587.12000004016,
+            "iqr": 1581.0180000262335
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 659589.9910000153,
+            "p95": 10525743.214000016,
+            "max": 10525743.214000016,
+            "iqr": 29482.62700001942
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 89.42699991166592,
+            "p95": 769.9530000099912,
+            "max": 769.9530000099912,
+            "iqr": 5.9460001066327095
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 5239041.552999988,
+            "p95": 29996386.191,
+            "max": 29996386.191,
+            "iqr": 349536.2109999405
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 28036.70100000454,
+            "p95": 39288.24099997291,
+            "max": 39288.24099997291,
+            "iqr": 1740.2930000680499
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 661535.116000101,
+            "p95": 2071999.1680000676,
+            "max": 2071999.1680000676,
+            "iqr": 95840.83800000371
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 6057.695000024978,
+            "p95": 17508.550000027753,
+            "max": 17508.550000027753,
+            "iqr": 952.9819999588653
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 652829.7889999812,
+            "p95": 2065223.924000049,
+            "max": 2065223.924000049,
+            "iqr": 95852.96500002733
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 82.70200004335493,
+            "p95": 109.99600007198751,
+            "max": 109.99600007198751,
+            "iqr": 18.50499992724508
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 948050.687000039,
+            "p95": 2552224.0510000847,
+            "max": 2552224.0510000847,
+            "iqr": 169604.3119999813
+          }
+        }
+      }
+    },
+    {
+      "size": 100,
+      "changes": 1,
+      "workload": "mixed",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 1279,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 20.010506646599158,
+            "p95": 21.36471305673096,
+            "max": 21.36471305673096,
+            "iqr": 0.9589913992744243
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 91.14620999898762,
+            "p95": 113.81092998199165,
+            "max": 113.81092998199165,
+            "iqr": 3.7857199949212372
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 36.14180999342352,
+            "p95": 56.764770003501326,
+            "max": 56.764770003501326,
+            "iqr": 0.9929499914869666
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 54.3012599949725,
+            "p95": 73.3836599974893,
+            "max": 73.3836599974893,
+            "iqr": 2.1290099946781993
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 43.85137999546714,
+            "p95": 47.76752999983728,
+            "max": 47.76752999983728,
+            "iqr": 2.306269994005561
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 156.8759399955161,
+            "p95": 185.92872999375686,
+            "max": 185.92872999375686,
+            "iqr": 7.409539994550869
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 15.453530883178423,
+            "p95": 44.41354339294269,
+            "max": 44.41354339294269,
+            "iqr": 1.1937302578039635
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 103.65126000368036,
+            "p95": 125.81336999777704,
+            "max": 125.81336999777704,
+            "iqr": 22.8661600057967
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 43.3810999954585,
+            "p95": 65.47736000386067,
+            "max": 65.47736000386067,
+            "iqr": 21.7604700056836
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 54.80985000031069,
+            "p95": 76.52873000013642,
+            "max": 76.52873000013642,
+            "iqr": 4.53329001320526
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 44.72041000844911,
+            "p95": 49.08273000619374,
+            "max": 49.08273000619374,
+            "iqr": 1.4017600018996745
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 169.7752399998717,
+            "p95": 193.387290003011,
+            "max": 193.387290003011,
+            "iqr": 23.217740005347878
+          }
+        }
+      }
+    },
+    {
+      "size": 10,
+      "changes": 0,
+      "workload": "scatter-insert",
+      "subscribed": true,
+      "actionRepetitionsPerBlock": 42567,
+      "coldRepetitionsPerBlock": 100,
+      "variants": {
+        "B0": {
+          "actionUs": {
+            "n": 15,
+            "p50": 0.3658713321600685,
+            "p95": 0.385174501927979,
+            "max": 0.385174501927979,
+            "iqr": 0.01106230190588825
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 12.788449994986877,
+            "p95": 17.20459999749437,
+            "max": 17.20459999749437,
+            "iqr": 1.4555499970447272
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 6.754159999545664,
+            "p95": 9.910310006234795,
+            "max": 9.910310006234795,
+            "iqr": 0.8878700016066432
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 5.819350003730506,
+            "p95": 7.053649988956749,
+            "max": 7.053649988956749,
+            "iqr": 0.6431399995926768
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 13.172910006251186,
+            "p95": 108.54023000225425,
+            "max": 108.54023000225425,
+            "iqr": 2.4622599978465587
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 26.330920001491904,
+            "p95": 126.44221999915317,
+            "max": 126.44221999915317,
+            "iqr": 4.5467700029257685
+          }
+        },
+        "B1": {
+          "actionUs": {
+            "n": 15,
+            "p50": 0.5283124015933709,
+            "p95": 0.7117966498561652,
+            "max": 0.7117966498561652,
+            "iqr": 0.038805483339771185
+          },
+          "setupUs": {
+            "n": 15,
+            "p50": 13.369909999892116,
+            "p95": 15.366699999431148,
+            "max": 15.366699999431148,
+            "iqr": 1.3681599905248731
+          },
+          "collectionSetupUs": {
+            "n": 15,
+            "p50": 7.4107899982482195,
+            "p95": 8.36074999650009,
+            "max": 8.36074999650009,
+            "iqr": 0.9401200013235211
+          },
+          "subscriptionSetupUs": {
+            "n": 15,
+            "p50": 5.840799999423325,
+            "p95": 6.932050008326769,
+            "max": 6.932050008326769,
+            "iqr": 0.4847099957987666
+          },
+          "teardownUs": {
+            "n": 15,
+            "p50": 13.178889997070655,
+            "p95": 15.143109995406121,
+            "max": 15.143109995406121,
+            "iqr": 0.6259900075383484
+          },
+          "lifetimeUs": {
+            "n": 15,
+            "p50": 27.273049994837493,
+            "p95": 31.66319999960251,
+            "max": 31.66319999960251,
+            "iqr": 1.6934300027787685
+          }
+        }
+      }
+    }
+  ]
+}
