@@ -33,10 +33,12 @@ own artboard state, geometry and context publication. `navigation/` owns request
 destinations, the 200 ms outgoing-view grace period and supersession;
 `preview-sessions/` owns renderer transport,
 retention and the story catalog; `review/` owns capture and delivery workflows.
-`../src/views/canvas/bindings.js` composes the selected scenario's declared `artboards` into independent
-`wb-canvas` artboards inside the existing canvas region. The existing shell
-continues to own its sidebar, top bar, toolbar, source/configuration/export
-dialogs and routing. Its controls target the selected instance; camera and
+`../src/app/workbench/canvas.js` composes the selected scenario's declared `artboards` into independent
+`wb-canvas` artboards inside the existing canvas region. `../src/modules/top-bar/`
+owns route choices, lens/Actions preferences and size form workflows; its views
+receive data and named actions through document composition. The existing shell's
+`wbCreateShell` factory supplies project resolution, sidebar, applied sizing and
+configuration/export wiring. Its controls target the selected instance; camera and
 review operations cover the complete canvas. Shell and annotation ports expose
 the isolated renderers; native producers are pooled by source/codec.
 One ordinary renderer can stay attached, hidden and inert, while explicit

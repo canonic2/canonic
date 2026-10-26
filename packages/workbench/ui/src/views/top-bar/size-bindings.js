@@ -1,62 +1,74 @@
-/* Existing dialog event wiring; size rules and persistence stay with their owners. */
-window.wbSizeBindings = function (options) {
-  var sizeSwitcher = document.getElementById('sizeSwitcher');
-  var actionsToggle = document.getElementById('actionsToggle');
-  var sizeDialog = document.getElementById('sizeDialog');
-  var sizesEditor = document.getElementById('sizesEditor');
-  sizeSwitcher.iconRenderer = window.wbIcon;
-  actionsToggle.iconRenderer = window.wbIcon;
-  sizeDialog.iconRenderer = window.wbIcon;
-  sizesEditor.iconRenderer = window.wbIcon;
-  sizeSwitcher.addEventListener('wb-size-pick', function (e) {
-    options.choose(e.detail.key);
-  });
-  sizeSwitcher.addEventListener('wb-size-custom', function () {
-    var context = options.context();
-    sizeDialog.allowPageOnly = context.allowPageOnly;
-    sizeDialog.notice = context.notice;
-    sizeDialog.open = true;
-  });
-  sizeSwitcher.addEventListener('wb-size-edit', function () {
-    sizesEditor.sizes = options.sizes();
-    sizesEditor.open = true;
-  });
-  sizeDialog.addEventListener('wb-size-add', function (e) {
-    var context = options.context();
-    var size = Object.assign({}, e.detail, { page: context.page });
-    sizeDialog.error = '';
-    sizeDialog.pending = true;
-    options.post({ action: 'add', size: size }).then(
-      function (result) {
-        sizeDialog.pending = false;
-        sizeDialog.open = false;
-        options.added(result, e.detail, context.docs);
+/** Size controls receive a workflow owner and a connection lifetime. */
+export function bindSizes({ switcher, add, editor }, owner, { signal, report }) {
+  if (signal.aborted) return;
+  const failed = new AbortController(),
+    own = AbortSignal.any([signal, failed.signal]);
+  function present(error) {
+    if (own.aborted) return globalThis.reportError(error);
+    try {
+      report(error);
+    } catch (failure) {
+      globalThis.reportError(failure);
+    }
+  }
+  function act(run) {
+    try {
+      Promise.resolve(run()).catch(present);
+    } catch (error) {
+      present(error);
+    }
+  }
+  own.addEventListener(
+    'abort',
+    () => {
+      add.open = false;
+      editor.open = false;
+    },
+    { once: true },
+  );
+  try {
+    owner.state.watch(
+      owner.select.add,
+      (value) => {
+        add.allowPageOnly = value.allowPageOnly;
+        add.notice = value.notice;
+        add.error = value.error;
+        add.pending = value.pending;
+        add.open = value.open;
       },
-      function (error) {
-        sizeDialog.pending = false;
-        sizeDialog.error = String(error.message || error);
-      },
+      { signal: own },
     );
-  });
-  sizeDialog.addEventListener('wb-size-dialog-close', function () {
-    sizeDialog.open = false;
-  });
-  sizesEditor.addEventListener('wb-sizes-save', function (e) {
-    sizesEditor.error = '';
-    sizesEditor.pending = true;
-    options.post({ action: 'update', sizes: e.detail.sizes }).then(
-      function () {
-        sizesEditor.pending = false;
-        sizesEditor.open = false;
-        options.updated();
+    let sizes;
+    owner.state.watch(
+      owner.select.edit,
+      (value) => {
+        if (sizes !== value.sizes) {
+          sizes = value.sizes;
+          editor.sizes = sizes;
+        }
+        editor.error = value.error;
+        editor.pending = value.pending;
+        editor.open = value.open;
       },
-      function (error) {
-        sizesEditor.pending = false;
-        sizesEditor.error = String(error.message || error);
-      },
+      { signal: own },
     );
-  });
-  sizesEditor.addEventListener('wb-sizes-close', function () {
-    sizesEditor.open = false;
-  });
-};
+    switcher.addEventListener(
+      'wb-size-pick',
+      (event) => act(() => owner.choose(event.detail.key)),
+      { signal: own },
+    );
+    switcher.addEventListener('wb-size-custom', () => act(owner.openAdd), { signal: own });
+    switcher.addEventListener('wb-size-edit', () => act(owner.openEdit), { signal: own });
+    add.addEventListener('wb-size-add', (event) => act(() => owner.add(event.detail)), {
+      signal: own,
+    });
+    add.addEventListener('wb-size-dialog-close', owner.closeAdd, { signal: own });
+    editor.addEventListener('wb-sizes-save', (event) => act(() => owner.save(event.detail.sizes)), {
+      signal: own,
+    });
+    editor.addEventListener('wb-sizes-close', owner.closeEdit, { signal: own });
+  } catch (error) {
+    failed.abort();
+    throw error;
+  }
+}

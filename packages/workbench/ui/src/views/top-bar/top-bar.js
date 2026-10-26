@@ -1,38 +1,26 @@
-/* Responsive top-bar presentation
-   ------------------
-   Keep where you are, the lens, the size switcher, and the Actions switch
-   visible. The More menu always holds the space-wide actions; when the three
-   top bar regions would collide, the secondary view actions fold into it
-   too, and on a very narrow bar the page's name in the breadcrumb goes. The
-   menu's rows invoke the original controls. */
-(function (root) {
-  function needsCompact(available, left, center, right, gap) {
-    return 2 * Math.max(left, right) + center + 2 * gap > available;
-  }
+import { createMenuBehavior } from '../../components/shared/menu-behavior.js';
 
-  function pixels(value) {
-    var parsed = parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
+export function needsCompact(available, left, center, right, gap) {
+  return 2 * Math.max(left, right) + center + 2 * gap > available;
+}
 
-  if (!root.document) {
-    root.wbTopBar = { needsCompact: needsCompact, pixels: pixels };
-    return;
-  }
+export function pixels(value) {
+  var parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-  var document = root.document;
-  var topbar = document.querySelector('.wb-topbar');
-  var left = document.querySelector('.wb-topbar-left');
-  var center = document.querySelector('.wb-topbar-center');
-  var right = document.querySelector('.wb-topbar-right');
-  var overflow = document.getElementById('topbarOverflow');
-  var button = document.getElementById('topbarOverflowButton');
-  var menu = document.getElementById('topbarOverflowMenu');
-  if (!topbar || !left || !center || !right || !overflow || !button || !menu) return;
-  /* Configure and export only ever appear as rows of this menu. */
-  var space = [document.getElementById('configureSpace'), document.getElementById('exportSpace')];
-
-  var scheduled = false;
+export function bindResponsiveTopBar(
+  { topbar, left, center, right, overflow, button, menu, sourceMenu, controls },
+  { signal: connection },
+) {
+  if (connection.aborted) return;
+  const failed = new AbortController(),
+    signal = AbortSignal.any([connection, failed.signal]);
+  const document = topbar.ownerDocument,
+    root = document.defaultView;
+  const control = (id) => controls[id];
+  const space = [controls.configureSpace, controls.exportSpace];
+  var scheduled = 0;
   var compact = false;
 
   function iconOf(source) {
@@ -71,7 +59,7 @@
     var current = source.getAttribute('aria-pressed') || source.getAttribute('aria-current');
     if (current != null) proxy.setAttribute('aria-current', current);
     proxy.addEventListener('click', function () {
-      close();
+      close(true);
       source.click();
     });
     menu.appendChild(proxy);
@@ -87,20 +75,17 @@
   }
 
   function sourceRows() {
-    Array.prototype.forEach.call(
-      document.querySelectorAll('#sourceMenu .wb-menu-row'),
-      function (source) {
-        if (source.disabled) return;
-        var sub = source.querySelector('.wb-menu-sub');
-        var label = Array.prototype.map
-          .call(source.childNodes, function (node) {
-            return node.nodeType === 3 ? node.nodeValue : '';
-          })
-          .join('')
-          .trim();
-        row(source, 'Open ' + label, null, sub && sub.textContent.trim());
-      },
-    );
+    Array.prototype.forEach.call(sourceMenu.querySelectorAll('.wb-menu-row'), function (source) {
+      if (source.disabled) return;
+      var sub = source.querySelector('.wb-menu-sub');
+      var label = Array.prototype.map
+        .call(source.childNodes, function (node) {
+          return node.nodeType === 3 ? node.nodeValue : '';
+        })
+        .join('')
+        .trim();
+      row(source, 'Open ' + label, null, sub && sub.textContent.trim());
+    });
   }
 
   function spaceActions() {
@@ -113,11 +98,11 @@
     menu.innerHTML = '';
     if (compact) {
       heading('View');
-      row(document.getElementById('reload'));
+      row(control('reload'));
       sourceRows();
-      row(document.getElementById('copyReference'));
-      row(document.getElementById('open'));
-      var controls = document.getElementById('previewControls');
+      row(control('copyReference'));
+      row(control('open'));
+      var controls = control('previewControls');
       if (controls && !controls.hidden) row(controls);
     }
     var actions = spaceActions();
@@ -129,16 +114,9 @@
     }
   }
 
-  function close() {
+  function close(focus = false) {
     if (menu.hidden) return; /* no attribute writes, no mutation, no re-measure */
-    menu.hidden = true;
-    button.setAttribute('aria-expanded', 'false');
-  }
-
-  function open() {
-    rebuild();
-    menu.hidden = false;
-    button.setAttribute('aria-expanded', 'true');
+    interaction.setOpen(false, false, focus);
   }
 
   function contentWidth(container) {
@@ -156,7 +134,8 @@
   }
 
   function measure() {
-    scheduled = false;
+    if (signal.aborted) return;
+    scheduled = 0;
     topbar.classList.remove('is-topbar-compact', 'is-topbar-tight');
     /* Measure the breadcrumb at its natural width: it ellipsizes to fit
        otherwise, and a clipped name would never ask for the room. */
@@ -188,36 +167,73 @@
   }
 
   function schedule() {
-    if (scheduled) return;
-    scheduled = true;
-    root.requestAnimationFrame(measure);
+    if (signal.aborted || scheduled) return;
+    scheduled = root.requestAnimationFrame(measure);
   }
 
-  button.addEventListener('click', function () {
-    if (menu.hidden) open();
-    else close();
+  const interaction = createMenuBehavior({
+    host: overflow,
+    root: document,
+    trigger: button,
+    menu,
+    disabled: () => button.disabled,
+    items: () => [...menu.querySelectorAll('button')].filter((node) => !node.disabled),
+    preferred: () => menu.querySelector('[aria-current=true]'),
+    toggled() {},
   });
-  document.addEventListener('pointerdown', function (event) {
-    if (!menu.hidden && !event.target.closest('.wb-topbar-overflow')) close();
-  });
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') close();
-  });
-
-  var watch = { subtree: true, childList: true, attributes: true, characterData: true };
-  if (root.ResizeObserver) new root.ResizeObserver(schedule).observe(topbar);
-  [left, center, right].forEach(function (region) {
-    new MutationObserver(function (records) {
-      /* The menu's own rows are rebuilt on open; they don't move the bar. */
-      if (
-        records.every(function (r) {
-          return menu.contains(r.target);
-        })
-      )
-        return;
-      schedule();
-    }).observe(region, watch);
-  });
-  schedule();
-  root.wbTopBar = { needsCompact: needsCompact, pixels: pixels, measure: measure };
-})(typeof window === 'undefined' ? globalThis : window);
+  button.addEventListener(
+    'keydown',
+    (event) => {
+      if (!interaction.open && ['ArrowDown', 'ArrowUp'].includes(event.key)) rebuild();
+    },
+    { signal },
+  );
+  let resize;
+  const observers = [];
+  signal.addEventListener(
+    'abort',
+    () => {
+      interaction.setOpen(false, false, menu.contains(document.activeElement));
+      resize?.disconnect();
+      observers.forEach((observer) => observer.disconnect());
+      if (scheduled) root.cancelAnimationFrame(scheduled);
+    },
+    { once: true },
+  );
+  try {
+    interaction.connect(signal);
+    button.addEventListener(
+      'click',
+      function (event) {
+        if (interaction.open) interaction.setOpen(false, true, event.detail === 0);
+        else {
+          rebuild();
+          interaction.setOpen(true, true, event.detail === 0);
+        }
+      },
+      { signal },
+    );
+    var watch = { subtree: true, childList: true, attributes: true, characterData: true };
+    resize = new root.ResizeObserver(schedule);
+    resize.observe(topbar);
+    [left, center, right].forEach(function (region) {
+      const observer = new root.MutationObserver(function (records) {
+        /* The menu's own rows are rebuilt on open; they don't move the bar. */
+        if (
+          records.every(function (r) {
+            return menu.contains(r.target);
+          })
+        )
+          return;
+        schedule();
+      });
+      observers.push(observer);
+      observer.observe(region, watch);
+    });
+    schedule();
+    return { measure };
+  } catch (error) {
+    failed.abort();
+    throw error;
+  }
+}

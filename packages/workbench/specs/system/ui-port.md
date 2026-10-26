@@ -8,8 +8,8 @@ owns the target layout, the order of the port and its delivery. The
 store the port introduces; each capability's own spec keeps its behavior.
 [Modules](modules.md#browser-source-layout) describes the shipping layout.
 
-**Status:** structural moves, Lattice delivery, bounded navigation and transient
-preview-controls state with its top-bar binding are implemented under the [accepted scope](#port-order). See
+**Status:** structural moves, Lattice delivery, bounded navigation, transient
+preview controls and top-bar state/bindings are implemented under the [accepted scope](#port-order). See
 [implementation gaps](#implementation-gaps).
 
 ## Target layout
@@ -101,13 +101,14 @@ owning capability; other capabilities read it through that owner's `state` and
 | `project` | The loaded workbench: spaces, collections, pages, problems, reload | `modules/project/pages.js`, `modules/project/sidebar.js`, `legacy/config.js`, configuration parts of `legacy/workbench.js` |
 | `page-tree` | Lenses, scenarios and artboards of the selected page, as rules over `project` | `legacy/lenses.js`, `legacy/scenarios.js` |
 | `navigation` | Requested and displayed destination, phase, address reading and writing | `modules/navigation/`, `legacy/address.js` |
+| `top-bar` | Route choices, lens/Actions preferences, presentation selections and size form workflows | `modules/top-bar/` in place; project resolution supplies facts through an injected adapter |
 | `canvas` | Artboard instances, geometry, camera and zoom, capture locks | `modules/canvas/`, `legacy/zoom.js` |
 | `preview-sessions` | Canvas document: one renderer session per artboard, its transport, parking and expiry, and the shared story catalog | `modules/preview-sessions/` except `content.js`, `legacy/preview-sessions.js` |
 | `content` | Renderer document: the content it shows, its frame lifecycle, readiness reports and the preview bridge client | `modules/preview-sessions/content.js`, `legacy/content-frames.js`, `legacy/preview-bridge-client.js` |
 | `native-surfaces` | Renderer document: simulator and window streams and their input | `legacy/simulator.js` |
 | `annotations` | Annotation tools, marks and the DOM mirror | `legacy/annotations.js`, `legacy/dom-mirror.js` |
 | `review` | Capture, references, agent context, handoff and export delivery | `modules/review/`, `legacy/capture-*.js`, `legacy/reference.js`, `legacy/agent-context.js`, `legacy/describe.js`, `legacy/modern-screenshot.js` |
-| `preview-controls` | Transient preview inputs, reset, action reports and documentation per renderer | `modules/preview-controls/` in place; the Actions on/off policy remains in `legacy/actions.js` for the top-bar step |
+| `preview-controls` | Transient preview inputs, reset, action reports and documentation per renderer | `modules/preview-controls/` in place; `legacy/actions.js` enforces the top-bar preference inside authored previews |
 | `shortcuts` | Keyboard shortcuts and their scoping | `legacy/keys.js` |
 | `docs` | Reading layout and embedded examples | `modules/docs/` |
 | `trace` | Browser timing traces | `modules/trace/` |
@@ -127,7 +128,7 @@ renderer messages [rendering flow](rendering-flow.md) defines.
 | View | Shows | Moves from |
 | --- | --- | --- |
 | `page-list` | Collections, groups, pages, problems and search | `views/page-list/` (in place); sidebar host/catalog wiring in `modules/project/sidebar.js` |
-| `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | `views/top-bar/` presentation and control/dialog bindings in place; route/lens rules remain in `legacy/workbench.js` |
+| `top-bar` | Breadcrumb, lens, scenario, size and Actions controls, More menu | Supplied targets and capability selections; document composition creates owners and wires HTTP, storage and project ports |
 | `canvas` | The canvas element, artboard labels and loading feedback | `views/canvas/bindings.js` (in place), `modules/canvas/legacy-chrome.js` |
 | `toolbar` | Annotation tools and review actions | `views/toolbar/` bindings, legacy presentation and floating-bar styles in place; renderer annotation state remains in `legacy/annotations.js` |
 | `configure-pages` | The Configure pages dialog | `views/configure-pages/` (in place) |
@@ -294,8 +295,7 @@ and passes its acceptance:
 
 | Adapter | Owner | Removed in |
 | --- | --- | --- |
-| Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
-| Classic `wbPreviewControls.reset()` route boundary in document composition | `preview-controls` | The project/top-bar adoption step; it delegates deselection to the capability and holds no state |
+| Legacy project resolution and sidebar to navigation's `picked`/`shown`, wired in `app/workbench/canvas.js` | `navigation` / `project` | The `project`/`page-list` step; top-bar choices come from their sole capability owner |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
 | Classic single-artboard resize rails in `views/canvas/legacy-bindings.js` | `canvas` | The `canvas` adoption step; dimensions and persistence remain in the shell until then |
 | `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js` publish shared browser rules to classic consumers | `canvas` / `docs` | Their adoption steps; existing globals and ready events stay until then |
@@ -304,8 +304,8 @@ and passes its acceptance:
 | Classic `wbExportBindings` with `modules/review/browser-export.js` | `review` / `export` | The Export adoption step; the shell supplies its current destination and the existing request/progress lifecycle stays intact |
 | Classic `wbConfigEditor` in `views/configure-pages/config-editor.js`, with rules and HTTP in `modules/project/configuration.js` | `project` / `configure-pages` | The Configure pages adoption step; draft/selection state remains in the existing dialog closure |
 | Classic `wbPageList` API shared by `modules/project/pages.js` and `views/page-list/page-list.js`; sidebar startup through `wbProjectSidebar` | `project` / `page-list` | The `project`/`page-list` adoption step; existing closure state remains until then |
-| Classic `wbTopBar` measurement/menu presentation and `wbTopBarPresentation` lens/scenario/source rows | `top-bar` | The `top-bar` adoption step; shell-owned scenario/lens state stays in `legacy/workbench.js` until then |
-| Classic top-bar control and size-dialog bindings, and `wbPageList.bindBrowser` | `top-bar` / `page-list` | Their adoption steps; callbacks read the shell's existing state, and size writes go through `project/configuration.js` |
+| `wbCreateShell` project resolver factory, receiving top-bar and size-workflow ports from document composition | `project` / `canvas` | Their adoption steps; project/config facts and applied canvas dimensions remain in the resolver, while route choices, preferences and form workflows belong to `modules/top-bar/` |
+| `wbPageList.bindBrowser` | `page-list` | The page-list adoption step; browser sidebar sizing remains in its existing owner |
 
 Later steps add a row before introducing an adapter.
 
@@ -366,7 +366,8 @@ The staged-extension VS Code acceptance checks all three document imports.
 - Legacy interface: every document is in `app/`; the code the documents load ships in the
   [current layout](modules.md#browser-source-layout), with most of the
   interface in `ui/legacy/`.
-- Capability/view adoption beyond navigation and transient preview controls.
-  Full top-bar state, including the Actions policy, remains in its existing owner.
+- Capability/view adoption beyond navigation, transient preview controls and the top bar.
+  Project resolution, address serialization, applied canvas dimensions and renderer lifecycles
+  retain their existing owners; the top-bar bindings receive capabilities and targets.
   Large page-list adoption still
   waits for the remaining windowing budgets and scope decision.

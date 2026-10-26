@@ -109,9 +109,11 @@ and review; the view keeps no displayed or painted copy. Pan, zoom and reading
 scroll remain in the canvas element. Capture blocks navigation input through
 the same feedback binding.
 
-The classic route adapter stays navigation-owned in canvas bindings until the
-project/page-list and top-bar adoption steps. It translates existing begin/show
-calls and renderer destinations; it introduces no second navigation state.
+The classic route adapter stays navigation-owned in document composition
+(`app/workbench/canvas.js`) until project/page-list adoption. It translates
+existing begin/show calls and renderer destinations; it introduces no second
+navigation state. The top-bar capability owns route choices and preferences;
+navigation alone owns the requested/displayed transition and its identity.
 
 Transition tests exercise generated event sequences and selection dependencies.
 Controller and renderer tests cover deadlines, late completion, repeated reports,

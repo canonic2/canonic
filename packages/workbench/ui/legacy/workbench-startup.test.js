@@ -3,6 +3,7 @@ var fs = require('node:fs');
 var path = require('node:path');
 var test = require('node:test');
 var vm = require('node:vm');
+var installTopBar = require('../../scripts/top-bar-fixture.cjs').installTopBar;
 
 function startup(hash, collections, imported, server) {
   var window = {};
@@ -31,6 +32,7 @@ function startup(hash, collections, imported, server) {
     parseHash: function () { return window.wbAddress.parse(location.hash); },
     route: function () { routed.push(window.wbAddress.parse(location.hash)); },
   };
+  installTopBar(context);
   vm.createContext(context);
   for (var file of ['address.js', '../src/modules/project/pages.js', '../src/views/page-list/page-list.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context);

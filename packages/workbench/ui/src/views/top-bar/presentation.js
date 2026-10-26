@@ -1,92 +1,110 @@
-/* Existing top-bar DOM rendering; callers supply choices and pick callbacks. */
-window.wbTopBarPresentation = function (options) {
-  var lensesBox = options.lensesBox;
-  var scenarioMenu = options.scenarioMenu;
-  var scenarioButton = options.scenarioButton;
-  var scenarioControl = options.scenarioControl;
-  var scenarioName = options.scenarioName;
-  var sourceMenu = options.sourceMenu;
-  var sourceButton = options.sourceButton;
-  function openScenarios(open) {
-    scenarioMenu.hidden = !open;
-    scenarioButton.setAttribute('aria-expanded', String(open));
-  }
-
-  function drawScenarioMenu(rows, kind) {
-    scenarioMenu.innerHTML = '';
-    openScenarios(false);
-    scenarioControl.hidden = !rows;
-    if (!rows) {
-      scenarioName.textContent = '';
-      scenarioButton.removeAttribute('title');
-      return;
+/** Retained native controls. No capability creation, global lookup or host work. */
+export function createTopBarPresentation({ lensesBox, scenario, source, document }) {
+  const lenses = new Map(),
+    scenarios = new Map(),
+    sources = new Map();
+  const text = (node, value) => {
+    if (node.textContent !== value) node.textContent = value;
+  };
+  const attribute = (node, name, value) => {
+    if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+  };
+  function reconcile(container, rows, cache, create, update) {
+    const wanted = new Set(rows.map((row) => row.key));
+    for (const [key, node] of cache)
+      if (!wanted.has(key)) {
+        node.remove();
+        cache.delete(key);
+      }
+    for (const [at, row] of rows.entries()) {
+      let node = cache.get(row.key);
+      if (!node) {
+        node = create(row);
+        cache.set(row.key, node);
+      }
+      update(node, row);
+      const before = container.children[at];
+      if (before !== node) container.insertBefore(node, before || null);
     }
-    var picked =
-      rows.filter(function (row) {
-        return row.current;
-      })[0] || rows[0];
-    scenarioName.textContent = picked.label;
-    scenarioButton.title =
-      (kind === 'story' ? 'Story: ' : 'Scenario: ') + picked.label + ' — pick another';
-    scenarioMenu.setAttribute('aria-label', kind === 'story' ? 'Story' : 'Scenario');
-    rows.forEach(function (entry) {
-      var row = document.createElement('button');
-      row.className = 'wb-menu-row';
-      row.type = 'button';
-      row.setAttribute('role', 'menuitem');
-      row.setAttribute('aria-current', String(entry === picked));
-      row.textContent = entry.label;
-      row.dataset.scenario = entry.target || '';
-      row.addEventListener('click', function () {
-        openScenarios(false);
-        entry.pick();
-      });
-      scenarioMenu.appendChild(row);
-    });
   }
-
-  function openSources(open) {
-    sourceMenu.hidden = !open;
-    sourceButton.setAttribute('aria-expanded', String(open));
-  }
-
-  function sourceRow(label, sub, enabled, title, onPick) {
-    var row = document.createElement('button');
-    row.className = 'wb-menu-row';
-    row.type = 'button';
-    row.setAttribute('role', 'menuitem');
-    row.disabled = !enabled;
-    row.title = title;
-    row.appendChild(document.createTextNode(label));
-    var line = document.createElement('span');
-    line.className = 'wb-menu-sub';
-    line.textContent = sub;
-    row.appendChild(line);
-    if (enabled) {
-      row.addEventListener('click', function () {
-        openSources(false);
-        onPick();
-      });
-    }
-    sourceMenu.appendChild(row);
-  }
-  function drawLenses(choices, showing, pick) {
-    lensesBox.innerHTML = '';
-    lensesBox.hidden = choices.length < 2;
-    if (lensesBox.hidden) return;
-    choices.forEach(function (choice) {
-      var button = document.createElement('button');
-      button.className = 'wb-lens';
-      button.type = 'button';
-      button.dataset.lens = choice.key;
-      button.textContent = choice.label;
-      button.title = choice.title;
-      button.setAttribute('aria-pressed', String(showing === choice.key));
-      button.addEventListener('click', function () {
-        pick(choice.key);
-      });
-      lensesBox.appendChild(button);
-    });
-  }
-  return { openScenarios, drawScenarioMenu, openSources, sourceRow, drawLenses };
-};
+  const button = () => {
+    const node = document.createElement('button');
+    node.type = 'button';
+    return node;
+  };
+  return {
+    lenses({ choices, showing }) {
+      if (lensesBox.hidden !== choices.length < 2) lensesBox.hidden = choices.length < 2;
+      reconcile(
+        lensesBox,
+        (choices.length < 2 ? [] : choices).map((row) => ({ ...row, key: row.key })),
+        lenses,
+        () => {
+          const node = button();
+          node.className = 'wb-lens';
+          return node;
+        },
+        (node, row) => {
+          if (node.dataset.lens !== row.key) node.dataset.lens = row.key;
+          text(node, row.label);
+          if (node.title !== row.title) node.title = row.title;
+          attribute(node, 'aria-pressed', String(showing === row.key));
+        },
+      );
+    },
+    scenarios({ rows, kind }) {
+      if (scenario.control.hidden !== !rows) scenario.control.hidden = !rows;
+      const picked = rows?.find((row) => row.current) || rows?.[0];
+      text(scenario.name, picked?.label || '');
+      if (picked)
+        scenario.button.title =
+          (kind === 'story' ? 'Story: ' : 'Scenario: ') + picked.label + ' — pick another';
+      else scenario.button.removeAttribute('title');
+      attribute(scenario.menu, 'aria-label', kind === 'story' ? 'Story' : 'Scenario');
+      reconcile(
+        scenario.menu,
+        (rows || []).map((row) => ({ ...row, key: row.id })),
+        scenarios,
+        () => {
+          const node = button();
+          node.className = 'wb-menu-row';
+          node.tabIndex = -1;
+          node.setAttribute('role', 'menuitem');
+          return node;
+        },
+        (node, row) => {
+          if (node.dataset.scenario !== (row.target || ''))
+            node.dataset.scenario = row.target || '';
+          text(node, row.label);
+          attribute(node, 'aria-current', String(row === picked || row.id === picked?.id));
+        },
+      );
+    },
+    sources({ rows, available }) {
+      if (source.control.hidden !== !available) source.control.hidden = !available;
+      reconcile(
+        source.menu,
+        rows.map((row) => ({ ...row, key: row.id })),
+        sources,
+        () => {
+          const node = button();
+          node.className = 'wb-menu-row';
+          node.tabIndex = -1;
+          node.setAttribute('role', 'menuitem');
+          const label = document.createTextNode(''),
+            sub = document.createElement('span');
+          sub.className = 'wb-menu-sub';
+          node.append(label, sub);
+          return node;
+        },
+        (node, row) => {
+          if (node.dataset.source !== row.id) node.dataset.source = row.id;
+          if (node.firstChild.nodeValue !== row.label) node.firstChild.nodeValue = row.label;
+          text(node.lastChild, row.sub || '');
+          if (node.disabled !== !row.enabled) node.disabled = !row.enabled;
+          if (node.title !== row.title) node.title = row.title;
+        },
+      );
+    },
+  };
+}

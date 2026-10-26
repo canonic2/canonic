@@ -54,8 +54,6 @@ function mount(document, chrome) {
     signal,
     report: say,
   });
-  // Preview-controls owns this route-reset adapter until project/top-bar adoption.
-  chrome.wbPreviewControls = { reset: previewControls.deselect };
   const ready = json('/_workbench/spaces').then(async (listed) => {
     registry = listed.spaces;
     const resolved = await json('/_workbench/canvas/space', {
@@ -523,11 +521,11 @@ function mount(document, chrome) {
       publisher.dispose();
       controller.dispose();
       previewControls.clear();
-      delete chrome.wbPreviewControls;
     },
     { once: true },
   );
   return {
+    clearControls: previewControls.deselect,
     fail,
     begin() {
       fitPending = false;

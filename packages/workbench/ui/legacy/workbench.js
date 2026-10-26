@@ -37,7 +37,8 @@
    nothing here reads into it; what still works is what the address carries.
 */
 
-(function () {
+window.wbCreateShell = function (ports) {
+  var topBar = ports.topBar;
   var config = null;
   var collections = [];    /* the config's collections */
   var index = {};          /* src -> item */
@@ -63,41 +64,14 @@
   var artboardContent = document.getElementById('artboardContent');
   var artboardName = document.getElementById('artboardName');
   var blank = document.getElementById('blank');
-  var openLink = document.getElementById('open');
-  var reload = document.getElementById('reload');
-  var actionsToggle = document.getElementById('actionsToggle');
-  var lensesBox = document.getElementById('lenses');
-  var crumb = document.getElementById('crumb');
-  var crumbPage = document.getElementById('crumbPage');
-  var scenarioControl = document.getElementById('scenarioControl');
-  var scenarioButton = document.getElementById('scenarioButton');
-  var scenarioName = document.getElementById('scenarioName');
-  var scenarioMenu = document.getElementById('scenarioMenu');
   var spaceName = document.getElementById('spaceName');
-  var sourceControl = document.getElementById('sourceControl');
-  var sourceButton = document.getElementById('openSource');
-  var sourceMenu = document.getElementById('sourceMenu');
   var configureSpace = document.getElementById('configureSpace');
-  var exportSpace = document.getElementById('exportSpace');
   /* The size switcher and its two dialogs: Web Components that show sizes
      and say what was asked for. This controller owns the size and every
      change to workbench.yaml; see src/views/top-bar/components/size-switcher/. */
   var sizeSwitcher = document.getElementById('sizeSwitcher');
 
   var BLANK_TEXT = 'Pick a page or a component to see it here.';
-  var topBar = window.wbTopBarPresentation({ lensesBox: lensesBox, scenarioMenu: scenarioMenu,
-    scenarioButton: scenarioButton, scenarioControl: scenarioControl, scenarioName: scenarioName,
-    sourceMenu: sourceMenu, sourceButton: sourceButton });
-  var openScenarios = topBar.openScenarios;
-  var drawScenarioMenu = topBar.drawScenarioMenu;
-  var openSources = topBar.openSources;
-  var sourceRow = topBar.sourceRow;
-
-  var current = null;      /* src of the picked page */
-  var currentScenario = null; /* its scenario id, or null for the default one */
-  var currentExample = null; /* on a docs page, the example the address names */
-  var currentIterations = {}; /* each shown artboard's iteration: artboard id ("" for the implicit one) -> iteration id */
-  var lensPref = null;     /* the lens the top bar was left on, or null for the design */
   var view = null;         /* what the canvas is showing — see wbView below */
 
   /* What the canvas is showing, for the annotation layer: it names screenshots
@@ -118,9 +92,9 @@
     destination: function () {
     var pages = Object.keys(resolved.pages).map(function (id) { return { id: id, label: resolved.pages[id].label }; });
     var collections = (resolved.collections || []).concat(resolved.catalogCollections || []).map(function (c) { return c.name; });
-    var selected = current ? { page: current, scenario: currentScenario, lens: view && view.lens ? view.lens.key : null,
+    var selected = topBar.state.get().src ? { page: topBar.state.get().src, scenario: topBar.state.get().scenario, lens: view && view.lens ? view.lens.key : null,
       artboard: window.wbMultiCanvas ? window.wbMultiCanvas.selectedArtboard() : undefined,
-      iteration: (window.wbMultiCanvas ? window.wbMultiCanvas.selectedIteration() : currentIterations['']) || undefined,
+      iteration: (window.wbMultiCanvas ? window.wbMultiCanvas.selectedIteration() : topBar.state.get().iterations['']) || undefined,
       size: canvas.dataset.size, width: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().width : Math.round(frame.offsetWidth) || 1440,
       height: window.wbMultiCanvas ? window.wbMultiCanvas.selectedSize().height : Math.round(frame.offsetHeight) || 900 } : undefined;
     return { pages: pages, collections: collections, current: selected };
@@ -165,7 +139,7 @@
      authored design. */
   function writeHash(src, scenario, size, lens, example, iterations) {
     /* A docs lens has no size, and only a docs lens has examples. */
-    var docs = lensRules.isDocsLens(lensRules.chooseLens(index[src], config.implementations, lens || lensPref));
+    var docs = lensRules.isDocsLens(lensRules.chooseLens(index[src], config.implementations, lens || topBar.state.get().lensPref));
     location.hash = window.wbAddress.write({ src: src, scenario: scenario, iterations: iterations || null,
       size: docs ? null : size || null, lens: lens || null, example: docs ? example || null : null });
   }
@@ -181,10 +155,10 @@
     var lens = view ? lensRules.addressLens(view.item, config.implementations, view.lens) : null;
     var docs = !!view && lensRules.isDocsLens(view.lens);
     var size = docs ? null : sizeKey() || null;
-    var example = docs ? currentExample : null;
-    if (have.src === current && have.scenario === currentScenario && have.size === size && have.lens === lens &&
-        have.example === example && sameIterations(have.iterations, currentIterations)) return;
-    var want = window.wbAddress.write({ src: current, scenario: currentScenario, iterations: currentIterations,
+    var example = docs ? topBar.state.get().example : null;
+    if (have.src === topBar.state.get().src && have.scenario === topBar.state.get().scenario && have.size === size && have.lens === lens &&
+        have.example === example && sameIterations(have.iterations, topBar.state.get().iterations)) return;
+    var want = window.wbAddress.write({ src: topBar.state.get().src, scenario: topBar.state.get().scenario, iterations: topBar.state.get().iterations,
       size: size, lens: lens, example: example });
     history.replaceState(null, '', location.pathname + location.search + (want ? '#' + want : ''));
   }
@@ -293,34 +267,22 @@
     canvasMode: function () { return 'default'; },
   };
 
-  /* Which lenses a page has besides its design, in order. */
-  function lensesOf(item) {
-    return lensRules.pageLenses(item, config.implementations);
-  }
-
   /* The lens the top bar is on, if this page has it; else the page's default. */
   function effectiveLens(item) {
-    return lensRules.chooseLens(item, config.implementations, lensPref);
+    return lensRules.chooseLens(item, config.implementations, topBar.state.get().lensPref);
   }
 
-  function setLensPref(key) {
-    lensPref = key || null;
-    try {
-      localStorage.setItem('canonic-workbench-lens', lensPref || '');
-    } catch (e) {
-      /* file:// storage can be blocked; the lens still holds this session. */
-    }
-  }
+  function setLensPref(key) { topBar.setLensPref(key); }
 
   /* The address the frame loads: the design with its flags, or the page's
      path on the implementation. Stories are asked for first — see loadStory. */
   function viewUrl(item, lens, scenario) {
     /* The server serves a page's Markdown as its docs, in the lens named. */
     if (lensRules.isDocsLens(lens)) return withFlags(item.markdown, scenario) + '&lens=' + encodeURIComponent(lens.key);
-    if (!lens) return withFlags(item.src, scenario, currentIterations['']);
+    if (!lens) return withFlags(item.src, scenario, topBar.state.get().iterations['']);
     if (lens.kind === 'workbench') {
       var target = new URL(window.wbLenses.url(lens, item.implementations[lens.key], scenario), config.root);
-      target.searchParams.set('actions', actionsOn ? 'on' : 'off');
+      target.searchParams.set('actions', topBar.state.get().actionsOn ? 'on' : 'off');
       var artboard = new URLSearchParams(location.search).get('artboard');
       if (artboard) target.searchParams.set('artboard', artboard);
       return target.href;
@@ -332,23 +294,23 @@
   function showFrame(url) {
     if (window.wbMultiCanvas) {
       var sequence = showSeq;
-      var preview = resolved && resolved.pages[current] && resolved.pages[current].preview;
-      var declared = (!view.lens || view.lens.kind === 'workbench') && preview ? declaredArtboards(current, currentScenario) : undefined;
-      window.wbMultiCanvas.show({ src: current, label: titleParts(view.item, view.scenarioLabel, view.lens).join(' / '), pageLabel: view.item.label, scenario: currentScenario, lens: view.lens ? view.lens.key : null,
-        example: currentExample, docs: lensRules.isDocsLens(view.lens), size: sizeByKey(canvas.dataset.size) || spaceSizes[0], actions: actionsOn,
+      var preview = resolved && resolved.pages[topBar.state.get().src] && resolved.pages[topBar.state.get().src].preview;
+      var declared = (!view.lens || view.lens.kind === 'workbench') && preview ? declaredArtboards(topBar.state.get().src, topBar.state.get().scenario) : undefined;
+      window.wbMultiCanvas.show({ src: topBar.state.get().src, label: titleParts(view.item, view.scenarioLabel, view.lens).join(' / '), pageLabel: view.item.label, scenario: topBar.state.get().scenario, lens: view.lens ? view.lens.key : null,
+        example: topBar.state.get().example, docs: lensRules.isDocsLens(view.lens), size: sizeByKey(canvas.dataset.size) || spaceSizes[0], actions: topBar.state.get().actionsOn,
         artboards: declared,
         /* Each renderer keeps its iteration through every lens, so its
            annotations stay with it; only the design lens renders it. */
-        iterations: currentIterations,
+        iterations: topBar.state.get().iterations,
         select: function (scenario, size, actions, src, lens) {
           if (actions !== undefined) setActions(actions);
           var preset = sizesOf(view.item).find(function (entry) { return entry.kind === 'fixed' && entry.width === size.width && entry.height === size.height; });
           if (preset) canvas.dataset.size = preset.key;
-          if ((src && src !== current) || currentScenario !== scenario) writeHash(src || current, scenario, canvas.dataset.size, lens || (view.lens ? view.lens.key : null), currentExample);
+          if ((src && src !== topBar.state.get().src) || topBar.state.get().scenario !== scenario) writeHash(src || topBar.state.get().src, scenario, canvas.dataset.size, lens || (view.lens ? view.lens.key : null), topBar.state.get().example);
         },
       }).catch(function (error) { if (sequence === showSeq) window.wbMultiCanvas.fail(error); });
-      if (url) openLink.href = view && view.lens ? window.wbLenses.upstream(view.lens, url) : url;
-      else openLink.removeAttribute('href');
+      if (url) topBar.setOpenLink(view && view.lens ? window.wbLenses.upstream(view.lens, url) : url);
+      else topBar.setOpenLink('');
       return;
     }
     window.wbSimulator.hide();
@@ -361,7 +323,7 @@
     loadPreview(url);
     /* A lens loads through the workbench's proxy; on its own, the page
        opens at the implementation's own address. */
-    openLink.href = view && view.lens ? window.wbLenses.upstream(view.lens, url) : url;
+    topBar.setOpenLink(view && view.lens ? window.wbLenses.upstream(view.lens, url) : url);
   }
 
   var pendingStorySwitch = null;
@@ -386,7 +348,7 @@
         renderedStory.frame !== frame || renderedStory.seq !== showSeq || !view ||
         !view.story || view.story.id !== renderedStory.id) return;
     reportedStorySeq = showSeq;
-    tellHost(current, currentScenario, view.lens.key);
+    tellHost(topBar.state.get().src, topBar.state.get().scenario, view.lens.key);
   }
 
   /* Keep Storybook's loaded preview warm. The channel does not promise that
@@ -465,36 +427,7 @@
      implementation has one (itself); a page imported from a single
      implementation, with no design, has one too. Neither shows the control.
      A Markdown page has no design: its docs lenses come first. */
-  function drawLenses(item, lens) {
-    /* Docs first, then the page's own design, then its implementations. */
-    var lenses = lensesOf(item);
-    var docs = lenses.filter(lensRules.isDocsLens);
-    var others = lenses.filter(function (impl) { return !lensRules.isDocsLens(impl); });
-    var choices = lensRules.hasDesignLens(item) ? docs.concat([null], others) : lenses;
-    topBar.drawLenses(choices.map(function (impl) {
-      return { key: impl ? impl.key : lensRules.DESIGN_KEY,
-        label: impl ? impl.label : window.wbManifest.authoredLensLabel(item),
-        title: impl ? 'This page as ' + impl.label + ' has it' : 'This page as designed' };
-    }), lens ? lens.key : lensRules.DESIGN_KEY, function (key) {
-      setLensPref(key);
-      writeHash(current, currentScenario, sizeKey(), key, currentExample, currentIterations);
-    });
-  }
-
-  /* Through a lens the page is served by somebody else and actions.js isn't
-     in it, so the switch has nothing to switch: it shows on and stays put. */
-  function setActionsAvailability(lens) {
-    if (lens && lens.kind !== 'workbench' && lens.kind !== 'docs') {
-      actionsToggle.disabled = true;
-      actionsToggle.checked = true;
-      actionsToggle.hint = 'always on here: ' + lens.label +
-        ' serves this page, not the workbench, so nothing inside it is switched off';
-      return;
-    }
-    actionsToggle.disabled = false;
-    actionsToggle.checked = actionsOn;
-    actionsToggle.hint = '';
-  }
+  function drawLenses(item, lens) { topBar.showLenses(item, config.implementations, lens); }
 
   /* ----------------------------------------------------------- stories */
 
@@ -539,38 +472,12 @@
      title's stories under a Storybook lens. rows: [{ label, current, pick }],
      or null when there is nothing to choose between. */
 
-  function drawStories(list, picked, lens) {
-    drawScenarioMenu(list && list.map(function (story) {
-      return {
-        label: story.name,
-        target: story.scenario,
-        current: story.id === picked.id,
-        pick: function () { writeHash(current, story.scenario, sizeKey(), lens.key); },
-      };
-    }), 'story');
-  }
+  function drawStories(list, picked) { topBar.showStories(list, picked); }
 
   /* A design's scenarios, or a lens that answers to them. An implementation
      with none of its own shows the page itself and nothing to pick. Every
      example in a docs lens gets the page's scenario. */
-  function drawScenarios(item, lens) {
-    var scenarios = scenariosOf(item);
-    var mapped = !lens || item.implementationOnly || lensRules.isDocsLens(lens) || !!item.implementations[lens.key].scenarios;
-    if (!scenarios || !mapped || window.wbManifest.streamed(lens)) {
-      drawScenarioMenu(null);
-      return;
-    }
-    drawScenarioMenu(scenarios.map(function (scenario, i) {
-      return {
-        label: scenario.label,
-        target: window.wbPageList.scenarioPick(scenario, i),
-        current: currentScenario ? currentScenario === scenario.id : i === 0,
-        pick: function () {
-          writeHash(current, window.wbPageList.scenarioPick(scenario, i), sizeKey(), lens ? lens.key : null);
-        },
-      };
-    }), 'scenario');
-  }
+  function drawScenarios(item, lens) { topBar.showScenarios(item, lens, scenariosOf(item)); }
 
   /* The story's turn of show(): the title's stories are asked for, the one
      the address names — or the first — goes in the frame. `seq` is show()'s
@@ -587,7 +494,7 @@
       function (list) {
         if (seq !== showSeq) return;
         var picked = window.wbLenses.pick(list, scenario);
-        currentScenario = picked.scenario;
+        topBar.setScenario(picked.scenario);
         view.story = picked;
         view.scenarioLabel = picked.name;
         view.url = window.wbLenses.storyUrl(lens, picked.id);
@@ -596,15 +503,15 @@
         setTitle(item, picked.name, lens);
         syncHash();
         if (!reuseStoryFrame(previousView, lens, picked.id, seq)) showFrame(view.url);
-        openLink.href = window.wbLenses.upstream(lens, window.wbLenses.storyOpenUrl(lens, picked.id));
+        topBar.setOpenLink(window.wbLenses.upstream(lens, window.wbLenses.storyOpenUrl(lens, picked.id)));
       },
       function (error) {
         if (seq !== showSeq) return;
-        currentScenario = null;
+        topBar.setScenario(null);
         artboard.hidden = true;
         frameReady = false;
         parkPreview();
-        openLink.removeAttribute('href');
+        topBar.setOpenLink('');
         blank.textContent = String(error.message || error);
         blank.classList.remove('is-loading');
         blank.hidden = false;
@@ -624,48 +531,9 @@
      still shows. Nothing serving that answer, no control. */
 
 
-  function drawSources(item) {
-    var info = item && resolved && resolved.pages && resolved.pages[item.src];
-    sourceMenu.innerHTML = '';
-    openSources(false);
-    sourceControl.hidden = !info;
-    if (!info) return;
-    if (info.design) {
-      sourceRow(lensRules.hasDesignLens(item) ? window.wbManifest.authoredLensLabel(item) : 'Docs', item.src, true, info.design, function () {
-        openSource(item.src, null);
-      });
-    }
-    var lenses = lensesOf(item);
-    info.code.forEach(function (entry) {
-      var impl = lenses.filter(function (lens) { return lens.key === entry.implementation; })[0] || config.implementations[entry.implementation];
-      var label = entry.label || (impl ? impl.label : entry.implementation);
-      var title = !entry.path
-        ? 'Implementation “' + entry.implementation + '” has no root, so this can’t be found'
-        : entry.exists ? entry.path : 'Not on this machine: ' + entry.path;
-      sourceRow(label, entry.relative, !!entry.exists, title, function () {
-        openSource(item.src, entry.path);
-      });
-    });
-  }
+  function drawSources(item) { topBar.showSources(item, item && resolved && resolved.pages && resolved.pages[item.src], config.implementations); }
 
-  function openSource(src, file) {
-    fetch('/_workbench/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ src: src, path: file }),
-    })
-      .then(function (res) {
-        return res.json();
-      })
-      .then(function (result) {
-        if (!result.ok) throw new Error(result.error || 'the editor refused it');
-        say('Opened ' + result.opened.split('/').pop());
-      })
-      .catch(function (error) {
-        say('Couldn’t open it — ' + String(error.message || error));
-        console.error('[workbench] open failed', error);
-      });
-  }
+
 
   /* ------------------------------------------------------------ canvas */
 
@@ -759,8 +627,8 @@
     /* Another example on the docs already showing only scrolls them. */
     if (docsItem && view && view.src === src && view.scenario === nextScenario && frameReady &&
         (view.lens ? view.lens.key : null) === nextLens.key) {
-      currentExample = example || null;
-      scrollToExample(currentExample);
+      topBar.setExample(example || null);
+      scrollToExample(topBar.state.get().example);
       syncHash();
       /* Routing still acknowledges the selection when its preview is reused.
          The editor holds sidebar picks until a config refresh is acknowledged. */
@@ -768,8 +636,8 @@
       return;
     }
     if (window.wbMultiCanvas) window.wbMultiCanvas.begin();
-    currentExample = docsItem ? example || null : null;
-    exampleToReveal = currentExample;
+    topBar.setExample(docsItem ? example || null : null);
+    exampleToReveal = topBar.state.get().example;
     holdLayout();
     setCanvasMode(lensRules.canvasMode(nextLens));
     var seq = ++showSeq;
@@ -778,15 +646,15 @@
     cancelStorySwitch();
     cancelPendingFrame();
     renderedStory = null;
-    current = item ? src : null;
+    topBar.setPage(item ? src : null);
     var lens = nextLens;
     var story = !!lens && lens.kind === 'storybook';
     /* Under a Storybook lens the scenario slot carries the story; it's checked
        against the title's stories once they're in. */
-    currentScenario = !item ? null : story ? scenario || null : scenarioOf(item, scenario);
+    topBar.setScenario(!item ? null : story ? scenario || null : scenarioOf(item, scenario));
     /* A story is no scenario to check iterations against: keep them as they are
        for the way back to the design lens, which checks them again. */
-    currentIterations = !item ? {} : story ? Object.assign({}, iterations || {}) : knownIterations(src, currentScenario, iterations);
+    topBar.setIterations(!item ? {} : story ? Object.assign({}, iterations || {}) : knownIterations(src, topBar.state.get().scenario, iterations));
     updateSizeAvailability(item, lens);
 
     /* The list marks the row and follows it into its collection, wherever the
@@ -794,20 +662,18 @@
        Through a lens that doesn't answer to the page's scenarios, the row
        marked is the page itself. */
     var mapped = !item || item.implementationOnly || docsItem || !lens || (!story && !!item.implementations[lens.key].scenarios);
-    var reported = mapped ? currentScenario : null;
-    if (pageList) pageList.setCurrent(current, reported, item && item.collection);
-    tellHost(current, reported, lens ? lens.key : null, story);
+    var reported = mapped ? topBar.state.get().scenario : null;
+    if (pageList) pageList.setCurrent(topBar.state.get().src, reported, item && item.collection);
+    tellHost(topBar.state.get().src, reported, lens ? lens.key : null, story);
 
     view = null;
-    if (window.wbPreviewControls) window.wbPreviewControls.reset();
+    ports.clearPreview();
     drawLenses(item, lens);
-    crumb.hidden = !item;
-    crumbPage.textContent = item ? item.label : '';
+    topBar.showPage(item);
     /* A story's turn comes once the title's stories are in. */
     if (item && !story) drawScenarios(item, lens);
-    else drawScenarioMenu(null);
+    else topBar.clearScenarios();
     drawSources(item);
-    setActionsAvailability(lens);
 
     if (!item) {
       if (window.wbMultiCanvas) window.wbMultiCanvas.clear();
@@ -819,7 +685,7 @@
       blank.textContent = BLANK_TEXT;
       blank.classList.remove('is-loading');
       blank.hidden = false;
-      openLink.removeAttribute('href');
+      topBar.setOpenLink('');
       document.title = config.name;
       artboardName.textContent = '';
       return;
@@ -829,10 +695,10 @@
       src: src,
       item: item,
       lens: lens,
-      scenario: story ? null : currentScenario,
+      scenario: story ? null : topBar.state.get().scenario,
       scenarioLabel: null,
       /* The implicit artboard's iteration, on the design only. */
-      iteration: lens ? null : iterationEntry(src, currentScenario, null, currentIterations['']),
+      iteration: lens ? null : iterationEntry(src, topBar.state.get().scenario, null, topBar.state.get().iterations['']),
       story: null,
       url: null,
       code: codeFor(item, null),
@@ -846,7 +712,7 @@
       artboard.hidden = true;
       frameReady = false;
       parkPreview();
-      openLink.removeAttribute('href');
+      topBar.setOpenLink('');
       blank.textContent = lens.problem;
       blank.classList.remove('is-loading');
       blank.hidden = false;
@@ -867,14 +733,14 @@
       commitLayout();
       if (window.wbMultiCanvas) { setTitle(item, null, lens); syncHash(); showFrame(null); return; }
       var streamRef = item.implementations[lens.key];
-      currentScenario = null;
+      topBar.setScenario(null);
       view.url = null;
       frameReady = false;
       parkPreview();
       artboardContent.classList.remove('is-loading');
       artboard.hidden = false;
       blank.hidden = true;
-      openLink.removeAttribute('href');
+      topBar.setOpenLink('');
       window.wbSimulator.show({
         kind: lens.kind,
         implementation: lens.key,
@@ -887,9 +753,9 @@
       return;
     }
 
-    var url = viewUrl(item, lens, currentScenario);
+    var url = viewUrl(item, lens, topBar.state.get().scenario);
     view.url = url;
-    view.scenarioLabel = currentScenario ? scenarioLabel(item, currentScenario) : null;
+    view.scenarioLabel = topBar.state.get().scenario ? scenarioLabel(item, topBar.state.get().scenario) : null;
     setTitle(item, view.scenarioLabel, lens);
     syncHash();
 
@@ -908,7 +774,6 @@
      origin — so the flag travels in the URL and each page applies it through
      actions.js. It goes on the "open on its own" link too, so a page in its
      own tab behaves the way the top bar says it should. */
-  var actionsOn = false;
 
   /* The address the frame loads: the page resolved against the project root,
      carrying both flags it needs — whether the preview is live, and which
@@ -916,7 +781,7 @@
      reach across the origin, so it hands them over in the URL. */
   function withFlags(src, scenario, iteration) {
     var url = root + src + (src.indexOf('?') > -1 ? '&' : '?') +
-      'actions=' + (actionsOn ? 'on' : 'off');
+      'actions=' + (topBar.state.get().actionsOn ? 'on' : 'off');
     var artboard = new URLSearchParams(location.search).get('artboard');
     if (artboard) url += '&artboard=' + encodeURIComponent(artboard);
     if (iteration) url += '&iteration=' + encodeURIComponent(iteration);
@@ -1192,7 +1057,7 @@
     var message = { type: 'wb-here', src: src || null, scenario: scenario || null,
       lens: lens || null, pending: !!pending };
     /* The implicit artboard's iteration, when the design shows one. */
-    if (src && src === current && !lens && currentIterations['']) message.iteration = currentIterations[''];
+    if (src && src === topBar.state.get().src && !lens && topBar.state.get().iterations['']) message.iteration = topBar.state.get().iterations[''];
     host.postMessage(message, '*');
   }
 
@@ -1373,15 +1238,7 @@
     writeHash(src, scenarioOf(index[src], data.scenario), sizeKey());
   });
 
-  function setActions(on) {
-    actionsOn = !!on;
-    actionsToggle.checked = actionsOn;
-    try {
-      localStorage.setItem('canonic-workbench-actions', actionsOn ? 'on' : 'off');
-    } catch (e) {
-      /* file:// storage can be blocked; the toggle still works this session. */
-    }
-  }
+  function setActions(on) { topBar.setActions(on); }
 
   var RESIZABLE_DEFAULT_WIDTH = 1024;
   var RESIZABLE_DEFAULT_HEIGHT = 768;
@@ -1416,7 +1273,7 @@
   }
 
   function sizeByKey(key) {
-    var shown = current && index[current] ? sizesOf(index[current]) : spaceSizes;
+    var shown = topBar.state.get().src && index[topBar.state.get().src] ? sizesOf(index[topBar.state.get().src]) : spaceSizes;
     return shown.concat(spaceSizes).find(function (size) { return size.key === key; }) || null;
   }
 
@@ -1508,13 +1365,13 @@
      Keep the address shareable without sending the same page through the
      hash router, which would navigate its iframe and reset live state. */
   function chooseSize(key) {
-    var item = current ? index[current] : null;
+    var item = topBar.state.get().src ? index[topBar.state.get().src] : null;
     if (item && !sizesOf(item).some(function (size) { return size.key === key; })) return;
     if (view && lensRules.isDocsLens(view.lens)) return;
     pinnedSize = false;
     setSize(key);
     if (window.wbMultiCanvas) window.wbMultiCanvas.resize(sizeByKey(key)).catch(function (error) { say(String(error.message || error)); });
-    if (current) syncHash();
+    if (topBar.state.get().src) syncHash();
   }
 
   function rememberSidebar(w) {
@@ -1538,7 +1395,7 @@
   /* After a size change the canvas reads the config again. `key`, when
      given, is the size the address asks for next, so a new size shows. */
   function reloadSizes(key, message) {
-    if (key && current) {
+    if (key && topBar.state.get().src) {
       var have = window.wbAddress.parse(location.hash);
       have.size = key;
       history.replaceState(null, '', location.pathname + location.search + '#' + window.wbAddress.write(have));
@@ -1549,10 +1406,10 @@
     }, refuse);
   }
 
-  window.wbSizeBindings({
+  ports.connectSizes({
     choose: chooseSize,
     context: function () {
-      var item = current ? index[current] : null;
+      var item = topBar.state.get().src ? index[topBar.state.get().src] : null;
       var docs = lensRules.isMarkdownPage(item);
       var page = item && resolved && resolved.pages ? resolved.pages[item.src] : null;
       var listed = !!item && !docs && listedInYaml(item.src);
@@ -1564,7 +1421,7 @@
       };
     },
     sizes: function () { return (resolved && resolved.sizes) || spaceSizes; },
-    post: window.wbProjectConfiguration.postSizes,
+    post: ports.postSizes,
     added: function (result, detail, docs) { reloadSizes(docs ? null : result.key, 'Added ' + detail.name.trim() + ' to workbench.yaml.'); },
     updated: function () { reloadSizes(null, 'Saved the sizes to workbench.yaml.'); }
   });
@@ -1583,25 +1440,18 @@
     get height() { return resizableHeight; }, set height(value) { resizableHeight = value; }
   });
 
-  window.wbTopBarBindings({
-    actions: function (checked) {
-    setActions(checked);
-    if (current) show(current, currentScenario, undefined, currentIterations);
-    },
-    reload: function () {
-    if (!current) return;
+  function reloadCurrent() {
+    if (!topBar.state.get().src) return;
     if (view && window.wbManifest.streamed(view.lens)) {
       window.wbSimulator.reload();
       return;
     }
     if (!frame.getAttribute('src')) {
-      show(current, currentScenario, undefined, currentIterations);
+      show(topBar.state.get().src, topBar.state.get().scenario, undefined, topBar.state.get().iterations);
       return;
     }
     loadPreview(view && view.url ? view.url : frame.src, true);
-    },
-    openSources: openSources, openScenarios: openScenarios
-  });
+  }
 
   function route() {
     if (window.wbArtboardHeld) { syncHash(); return; }
@@ -1637,7 +1487,7 @@
     }
     /* The lens is checked against the config where it's used, so a name from
        another space's top bar just means each page's default lens here. */
-    lensPref = saved.lens || null;
+    topBar.restore(saved);
     if (saved.resizableWidth) resizableWidth = parseInt(saved.resizableWidth, 10) || RESIZABLE_DEFAULT_WIDTH;
     if (saved.resizableHeight) resizableHeight = parseInt(saved.resizableHeight, 10) || RESIZABLE_DEFAULT_HEIGHT;
     /* Checked against each page's sizes when it shows, so a key from another
@@ -1646,7 +1496,6 @@
     if (saved.sidebar) setSidebar(parseInt(saved.sidebar, 10));
     /* Only an explicit "on" turns them on — anything else, including nothing
        stored, lands on off. Must run before route(), which builds the src. */
-    setActions(saved.actions === 'on');
   }
 
   /* -------------------------------------------------------------- boot */
@@ -1696,7 +1545,7 @@
       loadSpaceSizes();
       /* Custom size… and Edit sizes… write through the server. */
       sizeSwitcher.allowEdit = !!resolved;
-      showSizes(current ? index[current] : null, view && view.lens);
+      showSizes(topBar.state.get().src ? index[topBar.state.get().src] : null, view && view.lens);
       collections = window.wbManifest.mergeCollections(config.collections, (resolved && resolved.catalogCollections) || []);
       index = window.wbPageList.index(collections);
       storyCache = {};
@@ -1827,4 +1676,9 @@
   }
 
   window.wbConfig.load(start, refuse);
-})();
+  return {
+    writeHash: writeHash, size: sizeKey,
+    actionsChanged: function () { if (topBar.state.get().src) show(topBar.state.get().src, topBar.state.get().scenario, undefined, topBar.state.get().iterations); },
+    reload: reloadCurrent
+  };
+};

@@ -155,7 +155,7 @@ ui/src/
   app/viewer/                Portable export viewer, copied into each portable export
   views/canvas/              Canvas bindings to the existing shell, the canvas element and its registration
   views/page-list/           Shared collection/page rows, folds, filtering, keyboard presentation, browser sidebar sizing and styles
-  views/top-bar/             Responsive menu, breadcrumb/lens/source styles, Size/Actions elements and shell control/dialog bindings
+  views/top-bar/             Responsive menu, retained breadcrumb/lens/source presentation, Size/Actions elements and supplied-target bindings
   views/toolbar/             Annotation/review control bindings, classic toolbar presentation and floating toolbar/view-control styles
   views/configure-pages/     Configure pages editor and modal styles
   views/export/              Export dialog, progress presentation and classic shell bindings
@@ -168,6 +168,7 @@ ui/src/
     project/                Collection traversal/indexing, handwritten configuration rules/HTTP and the sidebar host/catalog adapter
     canvas/                 Artboard state, geometry, controller and publication
     navigation/             Requested destination, supersession and transition state
+    top-bar/                Route choices, lens/Actions preferences, presentation selections and size form workflows
     preview-sessions/       Renderer transport, retention, catalog and legacy adapter
     preview-controls/       Lattice-owned transient inputs, action reports, selection and open state per renderer
     review/                 Capture, reference projection, review workflow, export polling and browser delivery
@@ -188,7 +189,7 @@ or HTTP requests and can mount independently of the document entry.
 Component styles stay beside their element; shared modal styles have their own
 presentation owner. Importing an element class does not register it.
 
-`app/workbench/workbench.js` registers the browser controls and composes the canvas;
+`app/workbench/workbench.js` registers the browser controls and composes the top bar and canvas;
 `app/sidebar/sidebar.js` is the direct webview module entry. `app/renderer/renderer.js`
 composes the content-only renderer. `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js`
 hand the size and docs rules to the classic scripts.
@@ -197,7 +198,7 @@ controls. `modules/project/pages.js` owns traversal, indexing and initial-page
 rules; `views/page-list/page-list.js` owns row rendering and interaction. They
 retain the classic `wbPageList` API and existing closure state for the shell and
 sidebar until the project/page-list adoption step.
-`views/canvas/bindings.js` connects capability ports to the existing shell. Its
+`app/workbench/canvas.js` connects capability ports to the existing shell. Its
 legacy chrome adapter owns camera controls and restores the previous zoom API
 when its connection ends. `views/toolbar/bindings.js` connects the existing
 annotation and reference controls to their commands with the same lifetime.
@@ -209,7 +210,13 @@ Review owns capture/handoff sequencing and partial failure. Its browser adapter
 owns downloads and HTTP delivery. Server-side handoff prompt formatting and its
 tests live in the server ([handoff.rs](../../server/src/handoff.rs)), not in browser source.
 
-The outer legacy shell still interprets its configuration, hash and controls.
+`app/workbench/top-bar.js` creates the top-bar owner and size workflows, wires storage,
+HTTP and project ports, and binds supplied targets for the document lifetime.
+`views/top-bar/` retains native menu rows and receives independent presentation selections.
+The `wbCreateShell` adapter in the outer legacy shell still interprets configuration
+and hash addresses, resolving destinations into project/canvas operations. It reads
+route choices and preferences from the top-bar owner rather than storing another copy.
+Applied dimensions remain canvas-owned; size dialogs hold only workflow state and drafts.
 The content controller separately derives renderer metadata from the project model,
 without menu DOM. `app/renderer/renderer.js` composes content, retained frame sessions,
 native surfaces and annotation/capture ports inside `content.html`.

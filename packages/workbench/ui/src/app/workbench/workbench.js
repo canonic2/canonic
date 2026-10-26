@@ -15,6 +15,7 @@ import { registerActionsComponents } from '../../views/top-bar/register-actions.
 import { registerCanvasComponents } from '../../views/canvas/register-canvas.js';
 import { registerExportComponents } from '../../views/export/register-export.js';
 import { initialize } from './canvas.js';
+import { mountTopBar } from './top-bar.js';
 import { registerPreviewControls } from '../../components/preview-controls/register.js';
 
 registerSpaceComponents();
@@ -23,4 +24,5 @@ registerActionsComponents();
 registerCanvasComponents();
 registerExportComponents();
 registerPreviewControls();
+if (window.wbCreateShell) mountTopBar(document, window);
 initialize({ document, window });

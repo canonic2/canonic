@@ -3,6 +3,7 @@ var test = require('node:test');
 var vm = require('node:vm');
 var fs = require('node:fs');
 var path = require('node:path');
+var installTopBar = require('../../scripts/top-bar-fixture.cjs').installTopBar;
 
 // Exercise the shell's actual loading handlers with controlled load/paint
 // ordering. No network or rendering timing determines which iframe wins.
@@ -34,6 +35,7 @@ function preview() {
   state.URL = URL;
   state.location = { href: 'http://127.0.0.1/_workbench/', origin: 'http://127.0.0.1' };
   var handlers = source.slice(source.indexOf('  function warmFrame('), source.indexOf("  frame.addEventListener('load', frameLoaded)"));
+  installTopBar(state);
   vm.runInNewContext(handlers, state);
   return { state: state, events: events, paint: function () { paints.splice(0).forEach(function (fn) { fn(); }); } };
 }
@@ -52,6 +54,7 @@ function sizeChoice(current, supported) {
   };
   var source = fs.readFileSync(path.join(__dirname, "./workbench.js"), 'utf8');
   var handler = source.slice(source.indexOf('  function chooseSize('), source.indexOf('  function rememberSidebar('));
+  installTopBar(state);
   vm.runInNewContext(handler, state);
   return { choose: state.chooseSize, calls: calls };
 }
@@ -84,6 +87,7 @@ function sizeAvailability(options) {
   state.appliedSize = options.current || '';
   var source = fs.readFileSync(path.join(__dirname, "./workbench.js"), 'utf8');
   var handler = source.slice(source.indexOf('  /* What the size switcher shows for a page'), source.indexOf('  /* A size switcher change'));
+  installTopBar(state);
   vm.runInNewContext(handler, state);
   state.updateSizeAvailability(Object.assign({ src: 'page.html' }, options.item), options.lens || null);
   return { switcher: switcher, selected: selected, requested: state.requestedSize };
@@ -140,6 +144,7 @@ function storyNavigation() {
     setTitle: function () {}, syncHash: function () {}, say: function () {},
   };
   var source = fs.readFileSync(path.join(__dirname, "./workbench.js"), 'utf8');
+  installTopBar(state);
   vm.runInNewContext(source.slice(source.indexOf('  var pendingStorySwitch = null;'), source.indexOf('  /* Where the code is,')), state);
   var handler = source.slice(source.indexOf('  function loadStory('), source.indexOf('  /* ------------------------------------------------------------ source */'));
   vm.runInNewContext(handler, state);
@@ -197,6 +202,7 @@ function layoutHold(options) {
     applySize: function (size) { applied.push(['size', size.key]); state.canvas.dataset.size = size.key; state.appliedSize = size.key; },
   };
   var source = fs.readFileSync(path.join(__dirname, './workbench.js'), 'utf8');
+  installTopBar(state);
   vm.runInNewContext(source.slice(source.indexOf('  function setCanvasMode('), source.indexOf('  /* The docs page in the frame')), state);
   var setMode = state.setCanvasMode;
   state.setCanvasMode = function (mode) { setMode(mode); if (state.shell.dataset.canvasMode === mode) applied.push(['mode', mode]); };
@@ -395,8 +401,8 @@ test('reports a fallback story only after its spare frame becomes visible', asyn
 
 function lensSwitcher(item) {
   var source = fs.readFileSync(path.join(__dirname, "./workbench.js"), 'utf8');
-  var start = source.indexOf('  function lensesOf(');
-  var end = source.indexOf('  /* Through a lens the page is served by somebody else');
+  var start = source.indexOf('  function drawLenses(');
+  var end = source.indexOf('  /* ----------------------------------------------------------- stories */');
   var box = { hidden: false, innerHTML: '', children: [], appendChild: function (el) { this.children.push(el); } };
   var context = {
     window: { wbManifest: require('../../contracts/manifest') },
@@ -415,8 +421,7 @@ function lensSwitcher(item) {
       },
     },
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/views/top-bar/presentation.js'), 'utf8'), context);
-  context.topBar = context.window.wbTopBarPresentation({ lensesBox: box });
+  installTopBar(context, { lenses: function (rows) { box.hidden = rows.length < 2; box.children = box.hidden ? [] : rows; } });
   vm.runInNewContext(source.slice(start, end) + '\ndrawLenses(item, null);', Object.assign(context, { item: item }));
   return { hidden: box.hidden, labels: box.children.map(function (b) { return b.textContent; }) };
 }
@@ -437,13 +442,14 @@ test('opening on no page still tells the host it is ready', function () {
     cancelStorySwitch: noop, effectiveLens: function () { return null; }, scenarioOf: noop,
     cancelPendingFrame: noop, parkPreview: noop, setCanvasMode: noop, holdLayout: noop, commitLayout: noop,
     updateSizeAvailability: noop, drawLenses: noop, drawScenarios: noop, drawScenarioMenu: noop,
-    drawSources: noop, setActionsAvailability: noop,
+    drawSources: noop,
     tellHost: function (src, scenario, lens) { told.push([src, scenario, lens]); },
     window: { wbSimulator: { hide: noop } },
     crumb: el(), crumbPage: el(), artboard: el(), frame: el(), frameBuffer: el(),
     blank: el(), openLink: el(), artboardName: el(), document: {}, config: { name: 'Acme' },
     BLANK_TEXT: '',
   };
+  installTopBar(context);
   vm.runInNewContext(source.slice(start, end) + '\nshow(null, null);', context);
   assert.deepEqual(told, [[null, null, null]]);
   assert.equal(context.blank.hidden, false);
@@ -537,8 +543,10 @@ function shellAddress(hash) {
     },
   });
   context.index[src] = item;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/views/top-bar/presentation.js'), 'utf8'), context);
-  context.topBar = context.window.wbTopBarPresentation({ lensesBox: context.lensesBox });
+  installTopBar(context, {
+    lenses: function (rows) { buttons.splice(0, buttons.length, ...rows); },
+    scenarios: function (rows) { menus.push(rows); }
+  });
   context.resolved.pages[src] = { preview: { id: 'feedback', scenarios: [
     { id: 'default', artboards: [
       { id: 'info', iterations: [{ id: 'calm', label: 'Calm' }] },
@@ -552,7 +560,7 @@ function shellAddress(hash) {
   }
   vm.runInContext(between('  function writeHash(', '  window.wbTarget = parseHash;'), context);
   vm.runInContext(between('  /* ------------------------------------------------ artboards, iterations */', '  /* ------------------------------------------------------------ lenses */'), context);
-  vm.runInContext(between('  function lensesOf(', '  /* Through a lens the page is served by somebody else'), context);
+  vm.runInContext(between('  function drawLenses(', '  /* ----------------------------------------------------------- stories */'), context);
   vm.runInContext(between('  function drawScenarios(', "  /* The story's turn of show()"), context);
   return {
     src: src,

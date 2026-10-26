@@ -3,6 +3,7 @@ var fs = require('node:fs');
 var path = require('node:path');
 var test = require('node:test');
 var vm = require('node:vm');
+var { installTopBar } = require('../scripts/top-bar-fixture.cjs');
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value));
@@ -573,6 +574,7 @@ test('refreshing a rendered docs page releases the next sidebar pick without rel
     },
   });
   var source = fs.readFileSync(path.join(__dirname, "../ui/legacy/workbench.js"), 'utf8');
+  installTopBar(child);
   vm.runInContext(source.slice(source.indexOf('  function show('), source.indexOf('  /* ----------------------------------------------------------- actions */')), child);
   receive({ source: frame.contentWindow, data: { type: 'wb-here', src: 'docs/card.md', scenario: null } });
   receive({ data: { type: 'canonic-refresh' } });

@@ -1,13 +1,8 @@
 var assert = require('node:assert/strict');
-var fs = require('node:fs');
-var path = require('node:path');
 var test = require('node:test');
-var vm = require('node:vm');
 
 function topBar() {
-  var context = {};
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, './top-bar.js'), 'utf8'), context);
-  return context.wbTopBar;
+  return require('./top-bar.js');
 }
 
 test('compacts when equal side tracks would make top bar regions collide', function () {
