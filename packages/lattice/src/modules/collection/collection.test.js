@@ -649,3 +649,30 @@ describe('key reuse', () => {
     expect(old).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('released ownership', () => {
+  test('once-listener cleanup avoids redundant searches during normal abort', () => {
+    const collection = tasks(), controller = new AbortController();
+    const detach = vi.spyOn(controller.signal, 'removeEventListener'), run = vi.fn();
+    for (const key of collection.keys()) collection.watchItem(key, label, run, { signal: controller.signal });
+    collection.watchKeys(() => {}, { signal: controller.signal });
+    collection.watch(open, () => {}, { signal: controller.signal });
+    controller.abort();
+    expect(detach).not.toHaveBeenCalled();
+    collection.update('a', { label: 'After abort' });
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  test.each([false, true])('once-listener cleanup preserves initial failure with aborted=%s', (abort) => {
+    const collection = tasks(), controller = new AbortController(), failure = new Error('initial');
+    const detach = vi.spyOn(controller.signal, 'removeEventListener');
+    const run = vi.fn(() => { if (abort) controller.abort(); throw failure; });
+    expect(() => collection.watchItem('a', label, run, { signal: controller.signal })).toThrow(failure);
+    expect(detach).toHaveBeenCalledTimes(abort ? 0 : 1);
+    collection.update('a', { label: 'After failure' });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(controller.signal.aborted).toBe(abort);
+    controller.abort();
+  });
+
+});

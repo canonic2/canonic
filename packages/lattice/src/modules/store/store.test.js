@@ -850,3 +850,24 @@ describe('batches', () => {
     expect(cases.map(({ store }) => store.get().count)).toEqual([9, 9, 9]);
   });
 });
+
+describe('once-listener cleanup', () => {
+  test('normal abort performs no redundant explicit listener removal', () => {
+    const store = createStore(initial()), controller = new AbortController();
+    const detach = vi.spyOn(controller.signal, 'removeEventListener'), run = vi.fn();
+    store.watch({ fields: ['count'], read: (state) => state.count }, run, { signal: controller.signal });
+    controller.abort(); store.set({ count: 1 });
+    expect(detach).not.toHaveBeenCalled(); expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([false, true])('initial abort/throw preserves failure and ownership with aborted=%s', (abort) => {
+    const store = createStore(initial()), controller = new AbortController(), failure = new Error('initial');
+    const detach = vi.spyOn(controller.signal, 'removeEventListener');
+    const run = vi.fn(() => { if (abort) controller.abort(); throw failure; });
+    expect(() => store.watch({ fields: ['count'], read: (state) => state.count }, run, { signal: controller.signal })).toThrow(failure);
+    expect(detach).toHaveBeenCalledTimes(abort ? 0 : 1);
+    store.set({ count: 1 }); expect(run).toHaveBeenCalledTimes(1);
+    expect(controller.signal.aborted).toBe(abort); controller.abort();
+  });
+});
+
