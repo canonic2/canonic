@@ -295,7 +295,7 @@ and passes its acceptance:
 | Adapter | Owner | Removed in |
 | --- | --- | --- |
 | Legacy shell route and sidebar to navigation's `picked`/`shown` | `navigation` | The `project`/`page-list` and `top-bar` steps, when the shell's route and sidebar code are ported |
-| Classic `wbPreviewControls.reset()` route boundary in canvas bindings | `preview-controls` | The project/top-bar adoption step; it delegates deselection to the capability and holds no state |
+| Classic `wbPreviewControls.reset()` route boundary in document composition | `preview-controls` | The project/top-bar adoption step; it delegates deselection to the capability and holds no state |
 | Legacy chrome (`modules/canvas/legacy-chrome.js`) | `canvas` | The `canvas` step |
 | Classic single-artboard resize rails in `views/canvas/legacy-bindings.js` | `canvas` | The `canvas` adoption step; dimensions and persistence remain in the shell until then |
 | `modules/canvas/legacy-sizes.js` and `modules/docs/legacy-rules.js` publish shared browser rules to classic consumers | `canvas` / `docs` | Their adoption steps; existing globals and ready events stay until then |

@@ -14,7 +14,7 @@ import { registerSizeComponents } from '../../views/top-bar/register-sizes.js';
 import { registerActionsComponents } from '../../views/top-bar/register-actions.js';
 import { registerCanvasComponents } from '../../views/canvas/register-canvas.js';
 import { registerExportComponents } from '../../views/export/register-export.js';
-import { initialize } from '../../views/canvas/bindings.js';
+import { initialize } from './canvas.js';
 import { registerPreviewControls } from '../../components/preview-controls/register.js';
 
 registerSpaceComponents();
@@ -23,4 +23,4 @@ registerActionsComponents();
 registerCanvasComponents();
 registerExportComponents();
 registerPreviewControls();
-initialize();
+initialize({ document, window });

@@ -181,6 +181,10 @@ ui/src/
 Canvas, navigation, preview-session, preview-controls and review `index.js` files expose their application contracts. Canvas also has
 a pure `presentation.js` entry point for component data and camera geometry;
 components cannot import capability operations, document entries or host services.
+The Workbench document's `app/workbench/canvas.js` creates those owners, wires
+host operations and owns their document lifetime. `views/canvas/bindings.js`
+receives targets, named actions and an abort signal; it creates no capabilities
+or HTTP requests and can mount independently of the document entry.
 Component styles stay beside their element; shared modal styles have their own
 presentation owner. Importing an element class does not register it.
 
