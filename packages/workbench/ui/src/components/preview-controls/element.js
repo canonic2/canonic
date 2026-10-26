@@ -1,6 +1,10 @@
 import { captureInputs, replayInputs } from '@canonic2/lattice/elements';
 import { styles } from './styles.js';
 
+const UNSET = Symbol('unrendered');
+const EMPTY = {};
+const NO_ACTIONS = [];
+
 const node = (tag, text) => {
   const element = document.createElement(tag);
   if (text) element.textContent = text;
@@ -18,6 +22,11 @@ export class WbPreviewControls extends HTMLElement {
   #empty = node('p', 'No actions yet.');
   #docs = node('details');
   #documentation = node('p');
+  #renderedControls = UNSET;
+  #renderedInputs = UNSET;
+  #renderedActions = UNSET;
+  #renderedDocs = UNSET;
+  #actionRows = new Map();
 
   constructor() {
     super();
@@ -37,10 +46,11 @@ export class WbPreviewControls extends HTMLElement {
       this.#actions,
       this.#docs,
     );
-    queueMicrotask(() => {
-      if (this.#pending) replayInputs(this, this.#pending);
-      this.#pending = null;
-    });
+    if (this.#pending)
+      queueMicrotask(() => {
+        replayInputs(this, this.#pending);
+        this.#pending = null;
+      });
   }
   connectedCallback() {
     this.#connection?.abort();
@@ -49,11 +59,8 @@ export class WbPreviewControls extends HTMLElement {
     this.#reset.addEventListener(
       'click',
       () => {
-        for (const row of this.#rows.values()) {
-          row.value = undefined;
-          row.input.setCustomValidity('');
-        }
-        this.#render();
+        this.#invalidateInputs();
+        this.#render(true);
         this.#emit('wb-preview-reset');
       },
       { signal },
@@ -93,28 +100,57 @@ export class WbPreviewControls extends HTMLElement {
     this.#connection?.abort();
   }
   get model() {
-    return this.#model;
+    return this.#pending?.has('model') ? this.#pending.get('model') : this.#model;
   }
   set model(value) {
+    const previous = this.model;
+    const pending = this.#pending?.has('model');
     this.#pending?.delete('model');
-    if (this.#model === value) return;
-    if (
-      this.#model?.instance !== value?.instance ||
-      this.#model?.id !== value?.id ||
-      this.#model?.scenario !== value?.scenario
-    )
-      for (const row of this.#rows.values()) {
-        row.value = undefined;
-        row.input.setCustomValidity('');
-      }
+    if (this.#model === value && !pending) return;
+    const contextChanged =
+      previous?.instance !== value?.instance ||
+      previous?.id !== value?.id ||
+      previous?.scenario !== value?.scenario;
+    if (contextChanged) this.#invalidateInputs();
     this.#model = value;
-    this.#render();
+    this.#render(contextChanged);
   }
   #emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
-  #render() {
-    const controls = this.#model?.controls || {};
+  #invalidateInputs() {
+    for (const row of this.#rows.values()) {
+      row.source = UNSET;
+      row.value = UNSET;
+      row.input.setCustomValidity('');
+    }
+  }
+  #render(forceInputs = false) {
+    const model = this.model;
+    const controls = model?.controls || EMPTY;
+    const inputs = model?.inputs || EMPTY;
+    const definitionsChanged = controls !== this.#renderedControls;
+    if (definitionsChanged) {
+      this.#renderDefinitions(controls);
+      this.#renderedControls = controls;
+    }
+    if (forceInputs || definitionsChanged || inputs !== this.#renderedInputs) {
+      this.#renderInputs(inputs);
+      this.#renderedInputs = inputs;
+    }
+    const actions = model?.actions || NO_ACTIONS;
+    if (actions !== this.#renderedActions) {
+      this.#renderActionLog(actions);
+      this.#renderedActions = actions;
+    }
+    const docs = model?.docs || '';
+    if (docs !== this.#renderedDocs) {
+      this.#docs.hidden = !docs;
+      this.#documentation.textContent = docs;
+      this.#renderedDocs = docs;
+    }
+  }
+  #renderDefinitions(controls) {
     for (const [name, row] of this.#rows)
       if (!Object.hasOwn(controls, name)) {
         row.label.remove();
@@ -144,19 +180,26 @@ export class WbPreviewControls extends HTMLElement {
           if (spec[key] !== undefined) input[key] = spec[key];
         label.append(node('span', spec.label || name), input);
         this.#fields.append(label);
-        row = { signature, label, input };
+        row = { signature, label, input, spec, source: UNSET, value: UNSET };
         this.#rows.set(name, row);
       }
       const at = this.#fields.children[position++];
       if (at !== row.label) this.#fields.insertBefore(row.label, at || null);
-      const value = this.#model.inputs[name];
+    }
+  }
+  #renderInputs(inputs) {
+    for (const [name, row] of this.#rows) {
+      const value = inputs[name];
+      if (Object.is(row.source, value)) continue;
+      row.source = value;
+      const { spec } = row;
       if (spec.type === 'boolean') {
         if (row.value !== !!value) row.input.checked = !!value;
         row.value = !!value;
       } else {
         const text =
           spec.type === 'json'
-            ? JSON.stringify(value, null, 2)
+            ? (JSON.stringify(value, null, 2) ?? '')
             : value === undefined
               ? ''
               : String(value);
@@ -167,14 +210,25 @@ export class WbPreviewControls extends HTMLElement {
         row.value = text;
       }
     }
-    const actions = this.#model?.actions || [];
-    this.#actions.replaceChildren(
-      ...actions.map((action) =>
-        node('li', action.name + (action.values.length ? ': ' + action.values.join(', ') : '')),
-      ),
-    );
-    this.#empty.hidden = !!actions.length;
-    this.#docs.hidden = !this.#model?.docs;
-    this.#documentation.textContent = this.#model?.docs || '';
+  }
+  #renderActionLog(actions) {
+    const retained = new Map();
+    const rows = [];
+    for (const action of actions) {
+      const text = action.name + (action.values.length ? ': ' + action.values.join(', ') : '');
+      const occurrences = retained.get(text) || [];
+      const item = this.#actionRows.get(text)?.[occurrences.length] || node('li', text);
+      occurrences.push(item);
+      retained.set(text, occurrences);
+      rows.push(item);
+    }
+    for (const [text, items] of this.#actionRows)
+      for (const item of items) if (!retained.get(text)?.includes(item)) item.remove();
+    for (const [position, item] of rows.entries()) {
+      const at = this.#actions.children[position];
+      if (at !== item) this.#actions.insertBefore(item, at || null);
+    }
+    this.#actionRows = retained;
+    if (this.#empty.hidden !== !!actions.length) this.#empty.hidden = !!actions.length;
   }
 }

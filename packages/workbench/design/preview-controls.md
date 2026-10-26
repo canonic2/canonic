@@ -26,6 +26,9 @@ Reported actions appear with their values, alongside optional documentation.
 - `model`, default `null`: `{ instance, id, scenario, controls, inputs, actions, docs }`.
   `instance` identifies the owning renderer, separately from the preview's `id`.
   Assignment is silent and does not mutate the supplied object.
+  Replace changed `controls`, `inputs` and `actions` sections instead of mutating
+  them; unchanged sections retain their references. A model assigned before
+  upgrade is readable immediately and replays unless a newer assignment replaces it.
 - `wb-preview-input`: detail `{ name, value }`, bubbles and composes.
 - `wb-preview-reset`: no detail, bubbles and composes.
 - Native `hidden` controls visibility. No other reflected attributes or slots.
