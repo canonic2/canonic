@@ -28,15 +28,3 @@ test('imports the collection entry point in Node without browser globals and use
   collection.update('a', { count: 1 });
   expect(seen).toEqual([0, 1]);
 });
-
-test('experimental collection is an explicit pure opt-in without changing the regular entry', async () => {
-  const experimental = await import('@canonic2/lattice/experimental/collection');
-  const regular = await import('@canonic2/lattice/collection');
-  expect(Reflect.has(globalThis, 'document')).toBe(false);
-  expect(Object.keys(experimental)).toEqual(['createCollection']);
-  const checkpoint = experimental.createCollection([['a', { count: 1 }]]);
-  checkpoint.updateMembership({ remove: ['a'], insert: [['b', { count: 2 }]] });
-  expect(checkpoint.keys()).toEqual(['b']);
-  expect(checkpoint.get('b')?.count).toBe(2);
-  expect('updateMembership' in regular.createCollection([])).toBe(false);
-});

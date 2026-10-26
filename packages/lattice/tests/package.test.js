@@ -97,7 +97,7 @@ describe('packed archive', () => {
     expect(archived).toContain('package/src/modules/store/store.js');
     expect(archived).toContain('package/src/modules/elements/elements.js');
     expect(archived).toContain('package/src/modules/collection/collection.js');
-    expect(archived).toContain('package/src/modules/collection/experimental.js');
+    expect(archived).not.toContain('package/src/modules/collection/experimental.js');
     expect(archived).toContain('package/src/report.js');
     expect(archived.filter((file) => file.endsWith('.test.js'))).toEqual([]);
     expect(archived.filter((file) => file.startsWith('package/types/'))).toEqual([]);
@@ -109,7 +109,6 @@ describe('packed archive', () => {
       join(consumer, 'check.js'),
       `import * as root from '@canonic2/lattice';
 import * as collection from '@canonic2/lattice/collection';
-import * as experimental from '@canonic2/lattice/experimental/collection';
 import * as elements from '@canonic2/lattice/elements';
 import * as testing from '@canonic2/lattice/testing';
 const store = root.createStore({ count: 0 });
@@ -120,13 +119,17 @@ const items = collection.createCollection([['a', { count: 0 }]]);
 const counts = [];
 items.watchItem('a', { fields: ['count'], read: (item) => item.count }, (value) => counts.push(value));
 items.update('a', { count: 1 });
-const checkpoint = experimental.createCollection([['a', { count: 0 }]]);
-checkpoint.updateMembership({ remove: ['a'], insert: [['b', { count: 2 }]] });
 let internal = 'imported';
 try {
   await import('@canonic2/lattice/src/modules/store/store.js');
 } catch (error) {
   internal = error.code;
+}
+let unsupported = 'imported';
+try {
+  await import('@canonic2/lattice/experimental/collection');
+} catch (error) {
+  unsupported = error.code;
 }
 const checked = testing.checkSelection(
   'count',
@@ -136,9 +139,7 @@ const checked = testing.checkSelection(
 console.log(JSON.stringify({
   root: Object.keys(root).sort(),
   collection: Object.keys(collection).sort(),
-  experimental: Object.keys(experimental).sort(),
-  checkpointKeys: checkpoint.keys(),
-  checkpointValue: checkpoint.get('b').count,
+  unsupported,
   shippingHasBulk: 'updateMembership' in items,
   counts,
   elements: Object.keys(elements).sort(),
@@ -154,9 +155,7 @@ console.log(JSON.stringify({
     expect(output).toEqual({
       root: ['createStore', 'shallow'],
       collection: ['createCollection'],
-      experimental: ['createCollection'],
-      checkpointKeys: ['b'],
-      checkpointValue: 2,
+      unsupported: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
       shippingHasBulk: false,
       counts: [0, 1],
       elements: ['captureInputs', 'defineOnce', 'replayInputs', 'skipUpgradeAttribute'],
@@ -181,12 +180,6 @@ describe('TypeScript consumer types', () => {
     // result, because TypeScript infers the value type from run's parameter.
     test(`valid collection uses type-check with ${environment} types`, () => {
       const { status, output } = typecheck('valid-collection.ts', environment);
-      expect(output).toBe('');
-      expect(status).toBe(0);
-    }, 60000);
-
-    test(`experimental bulk inference and invalid calls are checked with ${environment} types`, () => {
-      const { status, output } = typecheck('valid-experimental-collection.ts', environment);
       expect(output).toBe('');
       expect(status).toBe(0);
     }, 60000);
