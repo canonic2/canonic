@@ -11,6 +11,7 @@
 
 import { styles } from './styles.js';
 import { stylesFor } from '../../../../components/shared/stylesheet.js';
+import { bindModal, syncModal } from '../../../../components/shared/modal-behavior.js';
 const stylesheet = stylesFor(styles);
 import { draftOf, rowsProblem, rowValue } from './rows.js';
 
@@ -37,6 +38,7 @@ export class WbSizesEditor extends HTMLElement {
   #problem;
   #save;
   #cancel;
+  #rowNodes = new Map();
 
   constructor() {
     super();
@@ -97,9 +99,12 @@ export class WbSizesEditor extends HTMLElement {
     this.#root.addEventListener('change', this.#typed, options);
     this.#list.addEventListener('click', this.#tool, options);
     this.#dialog.addEventListener('submit', this.#submit, options);
-    this.#dialog.addEventListener('cancel', this.#dismiss, options);
-    this.#dialog.addEventListener('click', this.#backdrop, options);
-    this.#cancel.addEventListener('click', this.#dismiss, options);
+    bindModal({
+      dialog: this.#dialog,
+      cancel: this.#cancel,
+      requestClose: this.#dismiss,
+      signal: this.#connection.signal,
+    });
     this.#renderRows();
     this.#sync();
   }
@@ -107,7 +112,6 @@ export class WbSizesEditor extends HTMLElement {
   disconnectedCallback() {
     this.#connection?.abort();
     this.#connection = undefined;
-    if (this.#dialog.open) this.#dialog.close();
   }
 
   attributeChangedCallback() {
@@ -215,10 +219,58 @@ export class WbSizesEditor extends HTMLElement {
     return box;
   }
 
-  /* Rows are rebuilt when they move or go; typing only updates the draft. */
+  /* A new draft replaces rows; movement and removal keep surviving controls. */
   #renderRows(focus) {
     const last = this.#rows.length - 1;
+    const wanted = new Set(this.#rows.map((row) => row.key));
+    for (const [key, node] of this.#rowNodes)
+      if (!wanted.has(key)) {
+        node.item.remove();
+        this.#rowNodes.delete(key);
+      }
     const items = this.#rows.map((row, at) => {
+      const retained = this.#rowNodes.get(row.key);
+      if (retained?.row === row) {
+        const { up, down, remove } = retained;
+        for (const [button, disabled] of [
+          [up, at === 0 || this.pending],
+          [down, at === last || this.pending],
+          [remove, row.local || this.#rows.length === 1 || this.pending],
+        ])
+          if (button.disabled !== disabled) button.disabled = disabled;
+        const label = row.name || row.key;
+        for (const [button, text] of [
+          [up, `Move ${label} up`],
+          [down, `Move ${label} down`],
+          [remove, `Remove ${label}`],
+        ]) {
+          if (button.getAttribute('aria-label') !== text) button.setAttribute('aria-label', text);
+          if (button.title !== text) button.title = text;
+        }
+        const labels = [
+          [retained.fields.icon, `Icon of ${label}`],
+          [retained.fields.button, `Show ${label} as a button`],
+        ];
+        for (const axis of ['width', 'height']) {
+          const title = `${axis === 'width' ? 'Width' : 'Height'} of ${label}`;
+          labels.push(
+            [retained.fields[axis], title],
+            [retained.fields[axis + 'Fill'], title + ' fills the canvas'],
+          );
+        }
+        for (const [field, text] of labels)
+          if (field && field.getAttribute('aria-label') !== text)
+            field.setAttribute('aria-label', text);
+        if (retained.renderer !== this.#icons) {
+          retained.preview.replaceChildren(this.#glyph(row.icon.trim() || 'frame', '', 16));
+          up.replaceChildren(this.#glyph('arrow-up', '↑'));
+          down.replaceChildren(this.#glyph('arrow-down', '↓'));
+          remove.replaceChildren(this.#glyph('trash-2', '×'));
+          retained.renderer = this.#icons;
+        }
+        return retained.item;
+      }
+      retained?.item.remove();
       const item = document.createElement('li');
       item.className = 'size' + (row.local ? ' local' : '');
       item.dataset.key = row.key;
@@ -242,17 +294,16 @@ export class WbSizesEditor extends HTMLElement {
       const tools = document.createElement('div');
       tools.className = 'tools';
       const label = row.name || row.key;
-      tools.append(
-        this.#toolButton('up', 'arrow-up', '↑', `Move ${label} up`, at === 0),
-        this.#toolButton('down', 'arrow-down', '↓', `Move ${label} down`, at === last),
-        this.#toolButton(
-          'remove',
-          'trash-2',
-          '×',
-          `Remove ${label}`,
-          row.local || this.#rows.length === 1,
-        ),
+      const up = this.#toolButton('up', 'arrow-up', '↑', `Move ${label} up`, at === 0);
+      const down = this.#toolButton('down', 'arrow-down', '↓', `Move ${label} down`, at === last);
+      const remove = this.#toolButton(
+        'remove',
+        'trash-2',
+        '×',
+        `Remove ${label}`,
+        row.local || this.#rows.length === 1,
       );
+      tools.append(up, down, remove);
       item.append(
         preview,
         name,
@@ -268,9 +319,25 @@ export class WbSizesEditor extends HTMLElement {
         note.textContent = 'Set in workbench.local.yaml; change it there.';
         item.append(note);
       }
+      const fields = Object.fromEntries(
+        [...item.querySelectorAll('[data-field]')].map((field) => [field.dataset.field, field]),
+      );
+      this.#rowNodes.set(row.key, {
+        row,
+        item,
+        up,
+        down,
+        remove,
+        preview,
+        fields,
+        renderer: this.#icons,
+      });
       return item;
     });
-    this.#list.replaceChildren(...items);
+    for (const [at, item] of items.entries()) {
+      const before = this.#list.children[at];
+      if (before !== item) this.#list.insertBefore(item, before || null);
+    }
     if (focus) {
       const row = this.#list.querySelector(`[data-key="${CSS.escape(focus.key)}"]`);
       const target =
@@ -296,13 +363,12 @@ export class WbSizesEditor extends HTMLElement {
     else if (field === 'widthFill' || field === 'heightFill' || field === 'button')
       row[field] = target.checked;
     if (field === 'icon')
-      target
-        .closest('.size')
-        ?.querySelector('.preview')
-        ?.replaceChildren(this.#glyph(row.icon.trim() || 'frame', '', 16));
+      this.#rowNodes
+        .get(row.key)
+        .preview.replaceChildren(this.#glyph(row.icon.trim() || 'frame', '', 16));
     if (field === 'widthFill' || field === 'heightFill') {
       const axis = field === 'widthFill' ? 'width' : 'height';
-      const box = target.closest('.size')?.querySelector(`input[data-field="${axis}"]`);
+      const box = this.#rowNodes.get(row.key).fields[axis];
       if (box) box.disabled = target.checked;
     }
     this.#error = '';
@@ -340,10 +406,6 @@ export class WbSizesEditor extends HTMLElement {
       );
   };
 
-  #backdrop = (event) => {
-    if (event.target === this.#dialog) this.#dismiss(event);
-  };
-
   #submit = (event) => {
     event.preventDefault();
     if (this.pending || rowsProblem(this.#rows)) return;
@@ -365,10 +427,10 @@ export class WbSizesEditor extends HTMLElement {
     this.#list.toggleAttribute('inert', pending);
     this.#dialog.setAttribute('aria-busy', String(pending));
     this.#problem.textContent = this.#error || problem || '';
-    if (this.#open && !this.#dialog.open && this.isConnected) {
-      this.#dialog.showModal();
-      this.#list.querySelector('input:not(:disabled)')?.focus();
-    }
-    if (!this.#open && this.#dialog.open) this.#dialog.close();
+    syncModal(this.#dialog, {
+      open: this.#open,
+      connected: this.isConnected,
+      focus: () => this.#list.querySelector('input:not(:disabled)')?.focus(),
+    });
   }
 }

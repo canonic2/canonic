@@ -3,6 +3,8 @@
 
 import type { WbSizesEditor } from '../ui/src/views/top-bar/components/sizes-editor/element.js';
 import { icon, opener, sampleSizes } from './sizes-ui.ts';
+import { registerSizesEditor } from '../ui/src/views/top-bar/components/sizes-editor/register.js';
+registerSizesEditor();
 
 function editor(sizes = sampleSizes) {
   const element = document.createElement('wb-sizes-editor') as WbSizesEditor;

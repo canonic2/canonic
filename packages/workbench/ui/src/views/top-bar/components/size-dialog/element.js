@@ -11,6 +11,7 @@ import { EMPTY_DRAFT, readDraft } from './form.js';
 
 import { dialogStyles } from './styles.js';
 import { stylesFor } from '../../../../components/shared/stylesheet.js';
+import { bindModal, syncModal } from '../../../../components/shared/modal-behavior.js';
 const stylesheet = stylesFor(dialogStyles);
 
 const INPUTS = ['open', 'pending', 'error', 'notice', 'iconRenderer', 'allowPageOnly'];
@@ -157,16 +158,18 @@ export class WbSizeDialog extends HTMLElement {
     this.#root.addEventListener('input', this.#changed, options);
     this.#root.addEventListener('change', this.#changed, options);
     this.#dialog.addEventListener('submit', this.#submit, options);
-    this.#dialog.addEventListener('cancel', this.#dismiss, options);
-    this.#dialog.addEventListener('click', this.#backdrop, options);
-    this.#cancel.addEventListener('click', this.#dismiss, options);
+    bindModal({
+      dialog: this.#dialog,
+      cancel: this.#cancel,
+      requestClose: this.#dismiss,
+      signal: this.#connection.signal,
+    });
     this.#sync();
   }
 
   disconnectedCallback() {
     this.#connection?.abort();
     this.#connection = undefined;
-    if (this.#dialog.open) this.#dialog.close();
   }
 
   attributeChangedCallback() {
@@ -256,10 +259,6 @@ export class WbSizeDialog extends HTMLElement {
       );
   };
 
-  #backdrop = (event) => {
-    if (event.target === this.#dialog) this.#dismiss(event);
-  };
-
   #submit = (event) => {
     event.preventDefault();
     const read = readDraft(this.draft);
@@ -303,10 +302,10 @@ export class WbSizeDialog extends HTMLElement {
         ? this.#icons(icon, 16)
         : document.createTextNode(''),
     );
-    if (this.#open && !this.#dialog.open && this.isConnected) {
-      this.#dialog.showModal();
-      this.#fields.name.focus();
-    }
-    if (!this.#open && this.#dialog.open) this.#dialog.close();
+    syncModal(this.#dialog, {
+      open: this.#open,
+      connected: this.isConnected,
+      focus: () => this.#fields.name.focus(),
+    });
   }
 }

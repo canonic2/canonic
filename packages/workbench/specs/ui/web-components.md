@@ -61,6 +61,11 @@ open state and focus restoration for the space and size menus. Each component
 supplies its eligible and preferred items and owns its domain intents.
 `components/shared/stylesheet.js` lazily shares each component's parsed styles
 within an owner document; importing a component does not parse CSS.
+`components/shared/modal-behavior.js` owns connection-scoped cancel/backdrop
+listeners, native modal visibility and cleanup. Dialogs decide whether to request
+or perform a close, whether a pending operation blocks it, and which field starts
+focused. Native field presentation lives in `components/shared/form-styles.js`;
+components keep their own form rules and use native inputs.
 
 The HTML entry points compose components and load their registration. Feature
 controllers supply application state and handle user requests. A folder move is
@@ -156,8 +161,9 @@ The **Public API** section lists each property with its default, the attributes
 and which reflect, the events with their `detail` and whether they bubble and
 compose, the styling parts and custom properties, and the keyboard model.
 
-Shared helpers in `design/` register the elements and supply sample data and
-icons (`sizes-ui.ts`, `workbench-ui.ts`, `icons.ts`). Examples import only what
+Shared helpers in `design/` supply sample data, layouts and
+icons (`sizes-ui.ts`, `workbench-ui.ts`, `icons.ts`). Each size example page
+registers only its own element through that component's `register.js`. Examples import only what
 they draw: each docs page compiles its examples on first view, so a whole
 icon set or library in a helper slows every component page.
 

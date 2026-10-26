@@ -1,5 +1,7 @@
 /* Shared modal form presentation; each dialog owns its additional styles. */
+import { formStyles } from './form-styles.js';
 export const dialogStyles = `
+${formStyles}
 :host { font-family:var(--wb-ui-font,system-ui,sans-serif); font-size:var(--wb-ui-font-size,13px); color:var(--wb-fg); }
 :host([hidden]) { display:none !important; }
 [hidden] { display:none !important; }
@@ -10,15 +12,10 @@ dialog::backdrop { background:#0007; }
 form { display:flex; flex-direction:column; gap:14px; margin:0; padding:20px; }
 h2 { margin:0; font-size:15px; font-weight:600; }
 .hint { margin:-6px 0 0; color:var(--wb-fg-2); }
-label, .field { display:flex; flex-direction:column; gap:6px; color:var(--wb-fg-2); font-size:12px; }
 .row { display:flex; gap:12px; }
 .row > * { flex:1 1 0; min-width:0; }
 .length { display:flex; align-items:center; gap:8px; }
 .length input[type=number] { flex:1 1 auto; min-width:0; }
-input[type=text], input[type=number] { box-sizing:border-box; width:100%; min-height:30px; padding:4px 8px; font:inherit; font-size:13px;
-  color:var(--wb-fg); background:var(--wb-raised); border:1px solid var(--wb-line); border-radius:6px; }
-input:disabled { opacity:.55; }
-input:focus-visible, button:focus-visible { outline:2px solid var(--wb-focus); outline-offset:-1px; }
 .check { flex-direction:row; align-items:center; gap:8px; color:var(--wb-fg); font-size:13px; }
 .inline { flex-direction:row; align-items:center; gap:4px; color:var(--wb-fg-2); white-space:nowrap; font-size:12px; }
 .icon-field { display:flex; align-items:center; gap:8px; }

@@ -84,13 +84,18 @@ void test(
           'Content-Security-Policy',
           "default-src 'none'; script-src 'self' 'nonce-test'; style-src 'self'; connect-src 'self'",
         );
+        const only = {
+          '/only-size-switcher': ['size-switcher', 'registerSizeSwitcher'],
+          '/only-size-dialog': ['size-dialog', 'registerSizeDialog'],
+          '/only-sizes-editor': ['sizes-editor', 'registerSizesEditor'],
+        }[req.url];
         res.end(`<!doctype html><script type="importmap" nonce="test">{"imports":{"@canonic2/lattice":"/_workbench/node_modules/@canonic2/lattice/src/index.js","@canonic2/lattice/elements":"/_workbench/node_modules/@canonic2/lattice/src/modules/elements/elements.js"}}</script><link rel="stylesheet" href="/_workbench/ui/src/theme/defaults.css">
       <button id="before">Before</button><wb-size-switcher id="switcher"></wb-size-switcher><button id="after">After</button>
       <wb-size-dialog id="dialog"></wb-size-dialog><wb-sizes-editor id="editor"></wb-sizes-editor>
       <script nonce="test">window.violations=[]; document.addEventListener('securitypolicyviolation', e => window.violations.push(e.violatedDirective));
         const early=document.getElementById('switcher'); early.sizes=${SIZES}; early.current='sidebar'; early.supported=['fit','sidebar','tablet'];
         early.iconRenderer=(name)=>{const s=document.createElement('span');s.dataset.icon=name;s.textContent=name.charAt(0);return s;};</script>
-      <script type="module" src="/_workbench/ui/src/app/workbench/workbench.js"></script>`);
+      ${only ? `<script type="module" nonce="test">import {${only[1]}} from '/_workbench/ui/src/views/top-bar/components/${only[0]}/register.js';${only[1]}();</script>` : '<script type="module" src="/_workbench/ui/src/app/workbench/workbench.js"></script>'}`);
       })().catch((error) => {
         res.statusCode = 500;
         res.end(String(error));
@@ -206,10 +211,18 @@ void test(
     check(rows()[0].querySelector('.none').textContent === 'Fills the canvas', 'Fit has no dimensions');
     check(rows()[4].querySelectorAll('input:not(:disabled)').length === 0 && rows()[4].querySelector('[data-action=remove]').disabled, 'local rows are read-only');
     check(rows()[0].querySelector('[data-action=up]').disabled && rows()[4].querySelector('[data-action=down]').disabled, 'ends can’t move further');
+    const retainedRows=new Map(rows().map(row=>[row.dataset.key,row]));
+    const width=rows()[1].querySelector('[data-field=width]');width.value='1512';
+    const mutation=new MutationObserver(()=>{});mutation.observe(eroot.querySelector('.rows'),{childList:true,subtree:true,attributes:true});
     rows()[1].querySelector('[data-action=down]').click();
     check(rows().map(r => r.dataset.key).join() === 'fit,sidebar,laptop,tablet,phone' && eroot.activeElement.dataset.action === 'down' && eroot.activeElement.closest('li').dataset.key === 'laptop', 'moving keeps focus on the row');
+    check(rows().every(row=>retainedRows.get(row.dataset.key)===row)&&rows()[2].querySelector('[data-field=width]')===width,'moving retains all rows and native fields');
+    const moved=mutation.takeRecords();
+    check(moved.length===2&&moved.every(record=>record.type==='childList')&&moved.reduce((sum,record)=>sum+record.addedNodes.length+record.removedNodes.length,0)===2,'moving changes only the moved node position');
     rows()[3].querySelector('[data-action=remove]').click();
     check(rows().map(r => r.dataset.key).join() === 'fit,sidebar,laptop,phone', 'remove');
+    const removed=mutation.takeRecords();mutation.disconnect();
+    check(rows().every(row=>retainedRows.get(row.dataset.key)===row)&&removed.length===1&&removed[0].removedNodes.length===1,'removing touches only its row');
     const name = rows()[1].querySelector('[data-field=name]'); name.focus(); name.value = ''; name.dispatchEvent(new Event('input', {bubbles:true,composed:true}));
     check(save.disabled && eroot.querySelector('.problem').textContent === 'sidebar needs a name.', 'Save waits for valid rows');
     name.value = 'Panel'; name.dispatchEvent(new Event('input', {bubbles:true,composed:true}));
@@ -223,10 +236,40 @@ void test(
     check(rows().length === 1 && rows()[0].querySelector('[data-action=remove]').disabled, 'reopens from its sizes; the last size stays');
     eroot.querySelector('dialog').dispatchEvent(new Event('cancel', {cancelable:true})); check(events.at(-1)[0] === 'wb-sizes-close', 'Escape asks to close');
     editor.open = false;
+    let dismissed=0;dialog.addEventListener('wb-size-dialog-close',()=>dismissed++);
+    dialog.open=true;dialog.remove();check(!native.open,'disconnect releases the native modal');
+    native.dispatchEvent(new Event('cancel',{cancelable:true}));
+    check(dismissed===0,'disconnected modal handlers are released');
+    document.body.append(dialog);check(native.open,'a controlled open modal reconnects');
+    native.dispatchEvent(new Event('cancel',{cancelable:true}));
+    check(dismissed===1,'reconnected modal emits one close request');
+    dialog.open=false;
     check(window.violations.length === 0, 'CSP permits adopted styles');
     return results.length;
   })()`);
     assert.equal(typeof results, 'number');
     assert.ok(results > 50);
+    for (const name of ['size-switcher', 'size-dialog', 'sizes-editor']) {
+      const standalone = await browser.createTarget();
+      await standalone.navigate(`http://127.0.0.1:${address.port}/only-${name}`);
+      assert.deepEqual(
+        await standalone.evaluate(
+          `['size-switcher','size-dialog','sizes-editor'].filter(name=>customElements.get('wb-'+name))`,
+        ),
+        [name],
+        'individual registration defines only its own element',
+      );
+      const loaded = await standalone.evaluate(
+        `performance.getEntriesByType('resource').map(entry=>new URL(entry.name).pathname)`,
+      );
+      for (const other of ['size-switcher', 'size-dialog', 'sizes-editor'].filter(
+        (other) => other !== name,
+      ))
+        assert.equal(
+          loaded.some((file) => file.endsWith('/' + other + '/element.js')),
+          false,
+          'standalone registration does not load ' + other,
+        );
+    }
   },
 );

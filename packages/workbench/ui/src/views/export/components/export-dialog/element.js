@@ -1,5 +1,6 @@
 import { styles } from './styles.js';
 import { stylesFor } from '../../../../components/shared/stylesheet.js';
+import { bindModal, syncModal } from '../../../../components/shared/modal-behavior.js';
 const stylesheet = stylesFor(styles);
 
 export class WbExportDialog extends HTMLElement {
@@ -26,6 +27,10 @@ export class WbExportDialog extends HTMLElement {
   }
   #dialog;
   #connection;
+  #form;
+  #cancel;
+  #fields;
+  #sections;
   constructor() {
     super();
     const root = this.attachShadow({ mode: 'open' });
@@ -41,9 +46,17 @@ export class WbExportDialog extends HTMLElement {
       <p class="hint">Visual PDF pages preserve their full height. Documentation uses paginated paper.</p>
       <div class="actions"><button type="button" class="secondary">Cancel</button><button class="primary">Export</button></div></form></dialog>`;
     this.#dialog = root.querySelector('dialog');
+    this.#form = root.querySelector('form');
+    this.#cancel = root.querySelector('button[type=button]');
+    this.#fields = Object.fromEntries(
+      [...this.#form.elements].filter((field) => field.name).map((field) => [field.name, field]),
+    );
+    this.#sections = Object.fromEntries(
+      [...root.querySelectorAll('[data-field]')].map((section) => [section.dataset.field, section]),
+    );
   }
   #select(name) {
-    return this.shadowRoot.querySelector(`[name="${name}"]`);
+    return this.#fields[name];
   }
   connectedCallback() {
     for (const key of ['pages', 'collections', 'current']) {
@@ -69,10 +82,14 @@ export class WbExportDialog extends HTMLElement {
       },
       { signal },
     );
-    this.shadowRoot
-      .querySelector('button[type=button]')
-      .addEventListener('click', () => this.#dialog.close(), { signal });
-    this.shadowRoot.querySelector('form').addEventListener(
+    bindModal({
+      dialog: this.#dialog,
+      cancel: this.#cancel,
+      requestClose: () => this.#dialog.close(),
+      signal,
+      backdrop: false,
+    });
+    this.#form.addEventListener(
       'submit',
       (event) => {
         event.preventDefault();
@@ -108,7 +125,6 @@ export class WbExportDialog extends HTMLElement {
   }
   disconnectedCallback() {
     this.#connection?.abort();
-    this.#dialog.close();
   }
   show() {
     for (const [name, choices] of [
@@ -122,7 +138,7 @@ export class WbExportDialog extends HTMLElement {
     this.#select('format').value = 'zip';
     this.#select('variants').value = 'all';
     this.#update();
-    this.#dialog.showModal();
+    syncModal(this.#dialog, { open: true, connected: this.isConnected });
   }
   #update() {
     const scope = this.#select('scope').value,
@@ -136,7 +152,7 @@ export class WbExportDialog extends HTMLElement {
       paper: format === 'pdf',
       imageFormat: format === 'images',
     })) {
-      this.shadowRoot.querySelector(`[data-field="${field}"]`).hidden = !visible;
+      this.#sections[field].hidden = !visible;
     }
   }
 }

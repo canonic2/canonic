@@ -1,12 +1,9 @@
-import { WbSizeSwitcher } from './components/size-switcher/element.js';
-import { WbSizeDialog } from './components/size-dialog/element.js';
-import { WbSizesEditor } from './components/sizes-editor/element.js';
-import { register } from '../../components/register-elements.js';
+import { registerSizeSwitcher } from './components/size-switcher/register.js';
+import { registerSizeDialog } from './components/size-dialog/register.js';
+import { registerSizesEditor } from './components/sizes-editor/register.js';
 
 export function registerSizeComponents(registry = customElements) {
-  register(registry, [
-    ['wb-size-switcher', WbSizeSwitcher],
-    ['wb-size-dialog', WbSizeDialog],
-    ['wb-sizes-editor', WbSizesEditor],
-  ]);
+  registerSizeSwitcher(registry);
+  registerSizeDialog(registry);
+  registerSizesEditor(registry);
 }

@@ -2,6 +2,8 @@
    wb-size-switcher as the canvas's top bar draws it, from sample sizes. */
 
 import { sizeSwitcher, topBar } from './sizes-ui.ts';
+import { registerSizeSwitcher } from '../ui/src/views/top-bar/components/size-switcher/register.js';
+registerSizeSwitcher();
 
 export const buttons = (canvas: HTMLElement) => {
   topBar(canvas).append(sizeSwitcher({ current: 'laptop' }));

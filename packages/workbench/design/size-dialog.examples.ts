@@ -3,6 +3,8 @@
 
 import type { WbSizeDialog } from '../ui/src/views/top-bar/components/size-dialog/element.js';
 import { icon, opener } from './sizes-ui.ts';
+import { registerSizeDialog } from '../ui/src/views/top-bar/components/size-dialog/register.js';
+registerSizeDialog();
 
 function dialog(options: { pageOnly?: boolean; notice?: string; error?: string }) {
   const element = document.createElement('wb-size-dialog') as WbSizeDialog;
