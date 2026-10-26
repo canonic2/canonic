@@ -708,12 +708,14 @@ export function createCollection(entries, options = {}) {
     const removedKeys = [];
     /** @type {string[]} */
     const insertedKeys = [];
-    /** @type {Set<string>} */
-    const removing = new Set();
-    /** @type {Set<string>} */
-    const adding = new Set();
-    /** @type {Map<string | undefined, Incarnation[]>} */
-    const buckets = new Map();
+    /** @type {Set<string> | null} */
+    let removing = null;
+    /** @type {Set<string> | null} */
+    let adding = null;
+    /** @type {Map<string | undefined, Incarnation[]> | null} */
+    let buckets = null;
+    /** @type {string | undefined} */
+    let singleBefore;
     /** @type {readonly string[] | null} */
     let next = null;
     writing = true;
@@ -729,11 +731,16 @@ export function createCollection(entries, options = {}) {
       const removeLength = remove.length;
       const insertLength = insert.length;
       if (removeLength === 0 && insertLength === 0) return;
+      // No removal lookup is needed without removals; one insertion cannot
+      // duplicate another insertion. Keep bulk lookups off these cheap paths.
+      if (removeLength > 0) removing = new Set();
+      if (insertLength > 1) adding = new Set();
+      if (insertLength > 1) buckets = new Map();
       for (let at = 0; at < removeLength; at++) {
         const key = remove[at];
-        if (typeof key !== 'string' || removing.has(key) || !items.has(key))
+        if (typeof key !== 'string' || removing?.has(key) || !items.has(key))
           throw new TypeError('Removal keys must be existing unique strings.');
-        removing.add(key);
+        removing?.add(key);
         losses.push(/** @type {Incarnation} */ (items.get(key)));
         removedKeys.push(key);
       }
@@ -745,28 +752,35 @@ export function createCollection(entries, options = {}) {
         if (entryLength < 2 || entryLength > 3)
           throw new TypeError('Insertion entries must be [key, item, before?].');
         const key = entry[0], value = entry[1], before = entry[2];
-        if (typeof key !== 'string' || adding.has(key) || (items.has(key) && !removing.has(key)))
+        if (typeof key !== 'string' || adding?.has(key) || (items.has(key) && !removing?.has(key)))
           throw new TypeError('Insertion keys must be unique and cannot replace survivors.');
-        if (before !== undefined && (typeof before !== 'string' || !items.has(before) || removing.has(before)))
+        if (before !== undefined && (typeof before !== 'string' || !items.has(before) || removing?.has(before)))
           throw new TypeError('An insertion anchor must be a surviving key.');
-        adding.add(key);
+        adding?.add(key);
         const item = incarnate(key, toItemRecord(value));
         gains.push(item);
         insertedKeys.push(key);
-        let bucket = buckets.get(before);
-        if (bucket === undefined) { bucket = []; buckets.set(before, bucket); }
-        bucket.push(item);
+        if (insertLength === 1) singleBefore = before;
+        else {
+          let bucket = buckets?.get(before);
+          if (bucket === undefined) { bucket = []; buckets?.set(before, bucket); }
+          bucket.push(item);
+        }
       }
       const order = [];
       for (let at = 0; at < keys.length; at++) {
         const key = /** @type {string} */ (keys[at]);
-        if (removing.has(key)) continue;
-        const bucket = buckets.get(key);
+        if (removing?.has(key)) continue;
+        if (gains.length === 1 && singleBefore === key)
+          order.push(/** @type {Incarnation} */ (gains[0]).key);
+        const bucket = buckets?.get(key);
         if (bucket !== undefined)
           for (let index = 0; index < bucket.length; index++) order.push(/** @type {Incarnation} */ (bucket[index]).key);
         order.push(key);
       }
-      const tail = buckets.get(undefined);
+      const tail = buckets?.get(undefined);
+      if (gains.length === 1 && singleBefore === undefined)
+        order.push(/** @type {Incarnation} */ (gains[0]).key);
       if (tail !== undefined)
         for (let index = 0; index < tail.length; index++) order.push(/** @type {Incarnation} */ (tail[index]).key);
       next = Object.freeze(order);

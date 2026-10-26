@@ -90,6 +90,28 @@ describe('experimental membership checkpoint', () => {
     for (const run of [membership, item, wide]) expect(run).toHaveBeenCalledTimes(1);
   });
 
+  test('single insertion preserves getter atomicity, anchors and nested rollback', () => {
+    const c = tasks(), original = c.keys(), survivor = c.get('a');
+    let reads = 0;
+    const entry = /** @type {const} */ (['x', { label: 'X', done: false }, 'b']);
+    const insert = [entry];
+    Object.defineProperty(insert, 0, { get() { reads++; return entry; } });
+    c.batch(() => {
+      expect(() => c.batch(() => {
+        c.updateMembership({ insert });
+        expect(c.keys()).toEqual(['a', 'x', 'b', 'c']);
+        expect(c.get('a')).toBe(survivor);
+        throw new Error('rollback single insertion');
+      })).toThrow('rollback single insertion');
+      expect(c.keys()).toBe(original);
+      expect(c.has('x')).toBe(false);
+      c.updateMembership({ insert: [['x', { label: 'X', done: false }]] });
+    });
+    expect(reads).toBe(1);
+    expect(c.keys()).toEqual(['a', 'b', 'c', 'x']);
+    expect(c.get('a')).toBe(survivor);
+  });
+
   test('same-key equal-value replacement changes incarnation and keys identity, ending old watchers', () => {
     const c = tasks(), keys = c.keys(), old = c.get('b'), run = vi.fn(), membership = vi.fn();
     const owner = new AbortController(), detach = vi.spyOn(owner.signal, 'removeEventListener');
