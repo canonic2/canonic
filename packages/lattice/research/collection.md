@@ -23,6 +23,14 @@ supported: every threshold holds. Decided 2026-10-25: the keyed collection is
 accepted for implementation. Stage 5 measured the shipping implementation and
 confirmed every threshold, with a confirmation run.
 
+Stage 6 final: **Decided, 2026-10-26 UTC: reject for this version under the
+owner's bounded accept-or-discard rule.** The corrected harness stabilizes
+probe controls and small append allocations fit, but setup and full-replacement
+retention gates are not established, and churn/independent comparisons remain
+incomplete at their deadlines. The experimental runtime/export are discarded;
+the regular API and independent cleanup fixes remain. Historical results and
+measured revisions below are preserved, not replaced by this final decision.
+
 Stage 6 bulk membership: **Reported, 2026-10-26 UTC; current prototype rejected
 for adoption by the reduced run's setup-p95 gate.** The owner approved the
 20-case amendment and stopping on a clear gate failure. The run stopped after
@@ -1385,12 +1393,93 @@ store and repeat the fixed calibration once within the original three-minute
 deadline. This is a control-fixture correction, not a relaxed byte gate or an
 extension of calibration time. Preserve the original runner bytes separately.
 
+### Stage 6: final accept-or-discard stage (2026-10-26 UTC)
+
+The owner's final instruction authorizes correcting retention measurement,
+focused final acceptance and affected correctness/package-consumer tests, then
+integrating only an accepted result or removing the experimental runtime.
+Inconclusive evidence means reject for this version. No permanent experimental
+entry or duplicate implementation remains after this stage. This supersedes
+the earlier decision to leave the checkpoint available, not any numerical gate.
+
+Fix the scope before running: C02 small append allocations (five 1,000-action
+Chromium profiles with 512-byte collected-object sampling); C02/Q02/Q03 setup
+and teardown (100 independent lifetimes/block, five warmup and fifteen measured
+paired blocks); B02/B04/B06/B09 large append/removal/replacement/mixed actions
+in Node and Chromium (five warmup and fifteen measured blocks). Calibrate each
+large variant separately until 20 ms total action time, bounded by its existing
+cap, and freeze its counts for independent confirmation. Preparation, reset,
+oracles, counters and correctness remain outside action clocks. Cache immutable
+timing oracles before measurements to avoid repeated quadratic harness work;
+timing fixtures and membership work remain identical to their prior definitions.
+Confirmation repeats these setup and large cases in fresh Node processes and
+Chromium contexts, with identical counts and boundaries. Keep both sets separate.
+
+Retention correction: install one fixed CDP dispatcher and reuse its function
+declaration instead of compiling a new browser evaluation wrapper at each
+boundary. Warm exactly ten lifetimes of each measured shape, including both
+commit and rollback, plus the measurement dispatcher/control/GC path before
+empty baselines. Never warm until a favorable number appears. Drop API inputs,
+oracles, old references and callback captures before live/drop observations;
+do not cache them across retained samples. Release probe remote-object groups.
+Keep five GC readings per state. Pair a no-product probe control with each of
+five commit/rollback samples at C02, B06 and Q02. A 128 KiB held/released control
+must resolve its backing store and return within 16 KiB. Keep raw product and
+probe deltas separate; do not subtract a failing raw gate into a pass. Capture
+one matched before/after heap pair if residue remains beyond the budget, to
+distinguish runtime/probe footprint from reachable collection state.
+
+Retain B06 and Q02's original 100-cycle Chromium churn, five GC observations
+at every cycle and original-empty as well as first-cycle growth. Record every
+sample, spike and control drift. Node runs the pure semantic/retention tests;
+Chromium owns CDP allocation/retained-heap acceptance, as in the contract.
+All original correctness, allocation, setup/teardown, 2× membership speedup,
+meaningful-IQR difference, mixed-action non-regression, 16 KiB drop/churn and
+10%/16 KiB live-overhead gates remain. Any failed or unresolved required gate
+prevents acceptance; deferred earlier cells do not become passing evidence.
+
+This final stage has non-transferable ceilings of eight minutes for initial
+timing/smoke/calibration, twelve for memory including correction/control work,
+and eight for confirmation. These are below the previous 45/60/45-minute caps;
+the memory ceiling also fits the unspent portion of the original memory budget.
+Do not reset any deadline on a runner correction, expand the matrix or tune
+the candidate mid-run. Continue the fixed independent evidence groups despite
+a numerical failure; stop a group on correctness/ownership failure or its
+deadline. Partial/insufficient evidence causes rejection, not another amendment
+or calibration campaign. Correctness/package tests run outside measurements.
+
+The initial timing ceiling expired after the Node cases and Chromium setup
+cases, during Chromium large-append calibration. Preserve the full partial
+report and original coordinator bytes. The final independent timing group
+starts Chromium first, counterbalancing engine order within its unchanged
+eight-minute ceiling. Reuse every available per-engine count. If a count was
+not reached in the initial set, calibrate that named cell with the same rule
+and label it a first final set, not independent confirmation. This does not
+drop a selected case or turn missing paired evidence into acceptance; any
+unconfirmed required comparison still means rejection for this version.
+An available calibration count is not a completed initial timing set: the
+final assessment also labels Chromium append unconfirmed because its initial
+samples did not finish, even though its counts were saved. Raw reports stay
+unchanged; confirmation classification depends on complete paired samples.
+
 ### Host and tools
 
 The same machine and tools as the full-flow lab. Background load is recorded
 with each set.
 
 ## Conditions
+
+### Stage 6: final accept-or-discard stage (2026-10-26 UTC)
+
+Node 24.12.0 and Chromium 156.0.8078.4 on Darwin 24.6.0 x64, an Intel Xeon
+W-2140B at 3.20 GHz, sixteen logical CPUs and 64 GiB RAM. Initial one-minute
+host load was 5.21 and independent-group initial load 7.66; host load and
+runtime conditioning remain limits. Memory, initial timing, independent
+timing and product checks ran sequentially. The package's actual experimental
+export was measured read-only against the separately frozen B0. Candidate and
+regular-source hashes, report hashes, retained ranges and incomplete scopes
+are recorded with the final result above. No candidate tuning occurred during
+this stage. Profiling and forced GC were absent from action timing windows.
 
 ### Stage 6: independent memory phase (2026-10-26 UTC)
 
@@ -1629,6 +1718,170 @@ and reporter hashes were checked again after these runs and were unchanged.
 | Measured source | The shipping collection as implemented, served unchanged from the package source (`collection.js` SHA-256 `a597d35a…`, `report.js` `e4ad2ac9…`, `store.js` `9bf3b436…`), with the lab's variants, reconciler and runner, hashed in each report |
 
 ## Results
+
+### Stage 6: final accept-or-discard decision (2026-10-26 UTC)
+
+**Decision: reject bulk membership for this version.** The owner's final rule
+requires rejection when a required gate fails or remains inconclusive within
+this bounded stage. The experimental runtime, public experimental export,
+experimental-only tests and consumer fixture are discarded in public commit
+`b623ff76f7378a458731b845ae736dfabe0e718d`. The regular API and independent
+collection/store cleanup fixes remain. No permanent experimental branch or
+second runtime implementation is part of this version.
+
+#### Measurement correction and retained heap
+
+The final harness uses one fixed CDP dispatcher and function declaration,
+explicit remote-object-group release, ten exact warmup lifetimes covering
+commit and rollback, and the same dispatcher/GC/control paths before baselines.
+API inputs, oracles and reference captures are dropped before live/drop
+observations. Each product lifetime is paired with a no-product probe lifetime;
+all five GC readings remain raw evidence. This separates probe footprint from
+product observations without subtracting a failed product gate into a pass.
+
+All eight completed 128 KiB positive controls measure **131,096 bytes held and
+zero bytes after release**. Across all sixty no-product comparisons, post-drop
+deltas range **−1,932 to 84 bytes**; these fit the original 16 KiB budget.
+The combined dispatcher/warmup correction therefore removes the earlier large
+empty-probe/control residue in the measured cases. The separate contributions
+of dispatcher compilation, warmup and remote handles were not isolated.
+
+Sixty product lifetimes and sixty matched no-product lifetimes completed:
+five samples per variant, case (C02/B06/Q02) and transaction (commit/rollback).
+All six selected live-overhead cohorts fit their observed 10%/16 KiB envelopes.
+The separate post-drop gate does not pass:
+
+| Case/transaction | B0 post-drop observed range (bytes) | B1 range (bytes) | Outcome |
+| --- | --- | --- | --- |
+| C02 commit | 0–7,768 | 0–10,568 | Observed ranges fit |
+| C02 rollback | 0–60 | 0–60 | Observed ranges fit |
+| Q02 commit | 0–352 | 0–420 | Observed ranges fit |
+| Q02 rollback | 0–60 | 0–60 | Observed ranges fit |
+| B06 commit | −24,504–24,836 | −25,348–15,220 | Control numerical failure; candidate unresolved drift |
+| B06 rollback | −24,752–24,812 | −25,384–25,496 | Numerical failures; attribution unresolved |
+
+Positive and negative full-replacement shifts survive the stable controls.
+These are not established collection leaks; compiled/runtime footprint is
+still a possible contributor. The fixed matched before/after heap-attribution
+group was not reached before the deadline and supplies no evidence. Neither
+negative deltas nor stable controls erase these numerical failures.
+
+Churn keeps every observation: B06/B0 completed **100 cycles**, ranging
+−9,612 to **19,472 bytes** above its original warmed empty baseline, exceeding
+16 KiB at its maximum. It ended at −3,992 bytes, with −18,232 bytes from first
+cycle to final; this is not evidence of monotonic product growth or a passing
+instrument. B06/B1 completed **12/100 cycles** (−30,320 to 540 bytes) before
+the deadline. Q02 churn in both variants was not started. The older uncorrected
+100-cycle results remain preserved and do not substitute for corrected
+acceptance. Churn acceptance is incomplete.
+
+#### Small append allocations
+
+Five independent action profiles per variant each contain 1,000 warmed,
+restored C02 actions, with 512-byte sampling including collected objects.
+Mean B0/B1 is **1,177.477 / 1,241.031 bytes/action**, or **63.554 extra bytes**.
+The conservative observed gap envelope is **−6.300 to 124.004 bytes**, fitting
+the unchanged 256-byte allowance. B0 p50/p95=max is 1,161.452/1,229.140;
+B1 is 1,245.956/1,255.952. Actual-profile sample counts are 10,846/11,528.
+Matched empty-loop profile means are 21.592/26.210 bytes and are not subtracted.
+Twenty allocation profiles completed, including all ten matched controls.
+The prior 375.871-byte failure and intermediate correction remain intact.
+
+#### Setup and teardown
+
+Every completed cell has five warmup and fifteen measured paired blocks of
+100 independent lifetimes per variant. Values are microseconds. **p95 is p95
+of block-average setup times, not individual setup latency**; with fifteen
+measured blocks it equals the maximum. No outlier or losing replicate is
+removed, and engines/sets remain separate.
+
+| Set | Engine/case | Setup p50 B0 / B1 | Setup p95=max B0 / B1 | Setup outcome |
+| --- | --- | --- | --- | --- |
+| initial | Node Q02 | 90.589 / 102.520 | 179.491 / 256.083 | Numerical setup gate fails |
+| initial | Node Q03 | 88.908 / 92.804 | 123.916 / 205.647 | Numerical setup gate fails |
+| initial | Node C02 | 13.820 / 13.300 | 14.828 / 14.494 | Setup ranges fit |
+| initial | Chromium Q02 | 128.900 / 128.300 | 162.100 / 143.700 | Setup ranges fit |
+| initial | Chromium Q03 | 126.950 / 127.700 | 142.300 / 141.750 | Setup ranges fit |
+| initial | Chromium C02 | 14.450 / 14.400 | 21.050 / 22.600 | Setup ranges fit |
+| confirm | Chromium Q02 | 129.300 / 126.150 | 166.400 / 135.150 | Setup ranges fit |
+| confirm | Chromium Q03 | 124.050 / 122.450 | 143.300 / 131.750 | Setup ranges fit |
+| confirm | Chromium C02 | 15.200 / 14.650 | 21.500 / 20.850 | Setup ranges fit |
+| confirm | Node Q02 | 90.081 / 89.023 | 142.800 / 208.153 | Numerical setup gate fails |
+| confirm | Node Q03 | 88.505 / 88.709 | 209.797 / 106.584 | Setup ranges fit |
+| confirm | Node C02 | 13.467 / 14.006 | 14.315 / 14.347 | Setup ranges fit |
+
+Node Q02 setup p95 fails in both sets. Initial increase is 76.592 µs against
+17.949 allowed; the independent set increases 65.352 µs against 14.280 allowed.
+The initial failure exceeds both IQRs; the independent excess does not exceed
+the candidate's 51.649 µs IQR. This reproduces a numerical gate failure while
+leaving its intrinsic cause uncertain. Node Q03's initial failure does not
+repeat; Chromium setup fits in both sets. Passing cells do not waive Q02.
+
+Other numerical findings remain in the compact summary: initial Node B04
+teardown p95 121.770/154.961 µs against 12.177 allowed extra; initial Node B09
+setup p95 1,267,483.040/1,431,515.411 µs against 126,748.304 allowed extra;
+Chromium B04 teardown p50 75.000/80.000 µs against 3.750 allowed extra; and
+independent Node C02 teardown p95 12.862/16.338 µs against 2 allowed extra.
+Some are within the recorded IQR uncertainty. None is silently classified
+as passing, nor attributed to a specific mechanism without evidence.
+
+#### Large-operation benefit and independent repetition
+
+Completed rows below have fifteen measured blocks after five warmups. Times
+are **milliseconds per action**, normalized by each variant's own frozen
+count. B02/B04/B06 are full append/removal/replacement at N=C=10,000; B09 is
+mixed at N=10,000/C=1,000. Setup, reference capture, verification and abort are
+outside total-action timing. All observed membership action gains exceed both
+IQRs and the 2× target; completed mixed actions fit their non-regression gates.
+These benefits do not override setup, teardown, retention or missing evidence.
+
+| Set | Engine/case | Action p50 B0 / B1 (ms) | Action p95=max B0 / B1 (ms) | Median ratio |
+| --- | --- | --- | --- | --- |
+| initial | Node B02 | 3727.400 / 18.529 | 5435.998 / 34.268 | 201.16× |
+| initial | Node B04 | 4129.470 / 323.332 | 4414.142 / 787.731 | 12.77× |
+| initial | Node B06 | 4727.500 / 355.218 | 6475.055 / 570.030 | 13.31× |
+| initial | Node B09 | 967.197 / 76.034 | 1877.715 / 146.703 | 12.72× |
+| confirm | Chromium B02 | 1375.965 / 6.058 | 2120.570 / 11.990 | 227.15× |
+| confirm | Chromium B04 | 3300.520 / 352.140 | 3578.705 / 380.545 | 9.37× |
+| confirm | Chromium B06 | 3677.875 / 353.235 | 3771.225 / 431.290 | 10.41× |
+| confirm | Chromium B09 | 715.445 / 65.375 | 846.245 / 73.780 | 10.94× |
+| confirm | Node B02 | 3489.380 / 15.611 | 3691.177 / 19.929 | 223.53× |
+
+Node append is independently repeated through the same package entry, with
+the same frozen counts. Other large Node independent comparisons are incomplete:
+B04 was interrupted; B06/B09 were not reached. Chromium's first timing group
+ended during B02 calibration, so every completed large Chromium row in the
+second group is a **first complete final set**, not independent confirmation.
+Available calibration counts do not constitute a completed initial set. The
+raw coordinator reports retain their original classification; the final
+assessment corrects that distinction without changing samples. The missing
+paired evidence prevents acceptance.
+
+#### Budget, preservation and disposition
+
+Initial, memory and independent timing groups consumed **480.047, 720.067 and
+480.026 seconds**, including closure/bookkeeping at their unchanged eight-,
+twelve- and eight-minute deadlines. No phase deadline was reset or transferred.
+All partial rows and error reports remain. Owned workers and contexts closed,
+with no reported cleanup errors. Deadline interruption is incomplete evidence,
+not a product correctness failure or an accepted latency.
+
+The measured candidate remains reproducible at
+`dfc342e66eccb33a213fa778541ec5ca304c051f`, source SHA-256
+`406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116`.
+The frozen measured B0, original prototype, earlier package checkpoints,
+corrected candidate and every prior report remain preserved. The pre-removal
+manifest hash is `fb72313f5a16fa52cac9ca79f8e015b26aa96ef221a9392a3772d4492b07e868`.
+
+Final raw-report SHA-256:
+initial `ef9149932e83a957804bf25595a8a03a2516246ad37a701cd8f9b43d9d88d666`;
+memory `a9def86485c6b5c2e8807363c859e9d96ec5a872913e95a98ab792a73b367940`;
+independent group `4a5a9ac770fb5e91972e34d682ba13903692e1c5014792140b2dd582cdacc8d9`.
+
+The regular collection/store sources retain hashes
+`1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907` and
+`368915a3f34abd4cfc2ed4f709473f4529019dbf53e99537a09478a1024ddd5e`.
+No Workbench changes or new regular API are part of this stage.
 
 ### Stage 6: single-append correction and retention calibration (2026-10-26 UTC)
 
@@ -2739,6 +2992,18 @@ open-count derivations and summary writes, was identical to the prototype's.
 
 ## Correctness
 
+### Stage 6: final accept-or-discard stage
+
+Completed Node/Chromium semantic, counted-delivery and post-action probes
+observed no product correctness failure. They checked exact order/values,
+frozen/stable old keys, surviving record identities, replacements, rollback,
+abort, errors and subscription delivery. Deadline-interrupted work remains
+incomplete. The discarded implementation's behavior tests and source remain
+in its recorded Git revision. Current regression coverage retains regular
+collection/store cleanup and packed-package import boundaries: the package
+contains no experimental runtime and the unsupported subpath is refused.
+Consumer inference/invalid-call fixtures cover the remaining public entries.
+
 ### Stage 6: independent memory and regular cleanup
 
 Semantic/counting preflights used the actual experimental export and frozen B0
@@ -2936,6 +3201,23 @@ environments.
 
 ## Threats to validity
 
+### Stage 6: final acceptance limits
+
+Stable no-product and positive controls support the combined harness correction;
+they do not attribute the remaining full-replacement positive/negative shifts
+to live collection objects. The matched heap pair and most corrected churn
+groups were not reached. No leak-freedom or retained-byte acceptance claim
+follows. Sampled allocations are estimates. Setup p95 is a maximum of fifteen
+block averages on a shared host, not an individual-operation latency or proof
+of a specific constructor defect. Required failed and missing comparisons
+remain failed or missing; passing means, engines or earlier runs cannot waive
+them. Rejection follows the owner's fallback rule without another expansion.
+
+The frozen control precedes the independent once-abort cleanup correction;
+teardown comparisons therefore include that separate benefit. Total-action
+clocks exclude abort. No corrected regular-entry shipping integration was
+performed, because this candidate was rejected rather than adopted.
+
 ### Stage 6: independent memory evidence
 
 Five allocation profiles are sampled estimates, not exact totals. Observed
@@ -3075,6 +3357,18 @@ planned clean lifetime measurement without correction before use.
   happen.
 
 ## Decision and follow-ups
+
+### Stage 6: final decision applied
+
+**Reject for this version; evaluation closed.** The owner's final instruction
+requires rejection on failed or inconclusive bounded acceptance. Small append
+allocation and measured large-action gains do not establish setup, retained
+heap/churn or complete independent confirmation. The experimental runtime,
+export and API-specific fixture are discarded; there is one regular collection
+implementation. Retain the independent cleanup fixes and their regression
+coverage. Supported membership operations retain their documented per-operation
+order-copy cost and batch-read semantics. No experimental adoption or further
+measurement campaign is pending from this stage.
 
 ### Stage 6: attributable append correction, calibration still unresolved
 

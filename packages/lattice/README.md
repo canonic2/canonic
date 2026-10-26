@@ -17,6 +17,10 @@ Source files run unchanged in modern browsers. There is no production build,
 bundler, transpilation or CommonJS entry point. TypeScript checks JavaScript and
 JSDoc with `noEmit`; it does not produce the shipped code.
 
+Collection batches combine delivery into one commit. Each membership insert
+or removal still creates its own frozen keys array, so large membership
+batches pay for those individual order copies.
+
 ## Using Lattice from TypeScript
 
 Lattice ships JavaScript with JSDoc types and no declaration files. A

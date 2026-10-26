@@ -275,164 +275,20 @@ Incremental aggregates and windowing are not part of this contract.
 
 ## Proposal: bulk membership
 
-**Status: implemented as an experimental checkpoint; not accepted.**
-The owner requested a reviewable implementation with correctness tests on
-2026-10-26. `@canonic2/lattice/experimental/collection` explicitly opts into
-the checkpoint factory and its `updateMembership` method. The regular
-`@canonic2/lattice/collection` still loads `collection.js`, with no bulk method.
-Its independently authorized abort-cleanup correction does not depend on this
-checkpoint. Nothing imports the checkpoint implicitly.
+**Status: rejected for this version, 2026-10-26.** The bounded final acceptance
+stage did not establish the required setup and retained-heap/churn gates.
+The regular collection exposes the API above; bulk membership has no supported
+entry point or additional method. Independent collection/store listener-cleanup
+corrections remain part of their existing lifecycle behavior.
 
-| Surface | Implementation status | Acceptance status |
-| --- | --- | --- |
-| Regular collection and existing methods | Implemented at the regular collection entry | Accepted, within recorded measured scope |
-| Bulk membership checkpoint | Implemented at the explicit experimental entry | Experimental; redundant abort cleanup corrected and measured, setup admission and broader correctness/performance/memory acceptance remain pending |
-| Bulk membership on the regular collection | Not implemented | Not accepted; requires a separate adoption decision |
+Use `insert`, `remove`, `reorder` and `batch` with their existing identities,
+ordering, incarnation, rollback and subscription guarantees. A batch combines
+delivery, not order copies: each membership operation still creates its own
+frozen keys array, visible immediately to later reads in that batch.
 
-The checkpoint initially ports the measured prototype's runtime logic, with
-typed JSDoc and relocated reporter import. It intentionally keeps a separate
-core during evaluation so the accepted collection, import graph and per-instance
-cost remain unchanged. This is a bounded experimental duplication, not a
-second accepted collection architecture. Acceptance must settle a single
-supported implementation and its migration separately.
-
-Existing guarantees above remain agreed. The
-[collection research, stage 6](../../research/collection.md#stage-6-bulk-membership-2026-10-25-plan-awaiting-approval)
-owns the approved experiment and thresholds. This stage adds no aggregate or
-presentation mechanism.
-
-### One explicit operation
-
-Experimental signature: `collection.updateMembership({ remove?, insert? })`.
-Both properties are arrays, defaulting to empty. `remove` contains keys;
-`insert` contains tuples `[key, item, before?]`, using the same meaning of
-`before` as `insert`. The method returns `undefined`.
-
-```js
-// With keys ['a', 'b', 'c'], replace b and add x before c in one operation.
-collection.updateMembership({
-  remove: ['b'],
-  insert: [
-    ['b', { label: 'New B', done: false }, 'c'],
-    ['x', { label: 'New X', done: false }, 'c'],
-  ],
-});
-// keys(): ['a', 'b', 'x', 'c']; old b's subscriptions end at commit.
-```
-
-This call removes the named items, then inserts the supplied new incarnations.
-Each insertion anchor must be an existing key that survives this call. Newly
-inserted keys and removed keys cannot be anchors. Entries sharing an anchor
-keep their supplied order; entries without an anchor append in supplied order.
-Survivors retain their relative order. Arbitrary reorder remains `reorder`.
-The restriction permits one pass over the existing order, without an index
-search or array copy for every change.
-
-Removal keys must exist and be unique. Inserted keys must be strings and
-unique in the supplied insertions, and cannot conflict with a survivor.
-Removing and inserting the same key is permitted and always replaces its
-incarnation, even for equal record values in the same position. Item validity
-and shallow copying follow `insert`. Invalid input throws `TypeError` and
-applies none of this call's changes. Errors thrown by input getters propagate
-unchanged, with the same atomicity. Empty changes preserve the keys identity,
-allocate no record and deliver nothing.
-
-### Reads, transactions and delivery
-
-- The operation validates and copies supplied values before mutation. Each
-  supplied value is read once. Reads made by input getters see the state before
-  this call; collection writes from those getters are rejected. There are no
-  user callbacks between applying removals and installing the complete order.
-  External side effects of getters, including aborts, are not rolled back.
-- On return, `keys`, `get`, `has` and `size` all describe the complete result,
-  including inside a batch. Keys already returned remain frozen and unchanged;
-  survivors retain their record identities. A nonempty valid change replaces
-  the keys array, including an incarnation replacement with identical key
-  strings. Repeated reads without another write return the same array.
-- This is one atomic operation. It does not make successive existing `insert`
-  and `remove` calls lazy: reads between those calls continue to see every
-  pending write, with their existing keys identities.
-- Outside a batch it commits once before returning. Inside a batch it joins
-  the existing undo log and publishes only at the outermost commit. A failed
-  call caught inside a batch preserves earlier pending writes. Nested rollback
-  restores the exact keys array, records and incarnations at the savepoint.
-- Removals end subscriptions only on commit. Rollback restores the old
-  incarnation's still-active subscriptions; an independently aborted signal
-  stays ended. A replacement starts without subscriptions. Removal cleanup
-  detaches live owning signals and releases callback captures as today.
-- Existing membership/item/collection-wide delivery ordering, reentrancy,
-  errors and registration rules apply. Membership metadata lists removals in
-  supplied removal order and insertions in supplied insertion order, following
-  existing outer-batch filtering of transient incarnations. Metadata can
-  include the same key in both lists. Reads during queued delivery remain
-  latest-state reads, not historical snapshots.
-
-### Bounded implementation and acceptance
-
-Prepare removal lookup, new records and insertion buckets keyed by surviving
-anchor, then build and freeze one next order with an indexed pass over the
-current keys and buckets. Apply map changes with the existing incarnation and
-undo-log mechanism; save the previous keys once for this operation. No whole
-item-map clone, persistent order index, mutable exposed array or strategy
-switch is proposed. Keep the existing single-item paths.
-
-Target work is O(N + C + F), where N is the starting collection size, C the
-number of supplied changes and F the supplied item fields copied. Additional
-working storage is O(N + C + F); rollback bookkeeping is O(C), plus one saved
-keys reference. Delivery and removal cleanup add work proportional to affected
-subscriptions. Arbitrary scanning selections retain their separate costs.
-
-Before adoption, behavioral cases must cover empty input, all anchor positions,
-multiple anchor groups, duplicate/missing/conflicting keys, getter failures and
-write guards, stable snapshots, same-key replacement, invalid calls caught in
-an outer batch, nested commit and rollback, transient incarnations, abort during
-rollback, reentrant delivery, and collection of released bookkeeping and
-subscriptions. `experimental.test.js` authors checkpoint cases for validation,
-stable anchor ordering, getters/write guards, ordinary batch reads, immutable
-identities, replacement, nested/outer rollback, transient incarnations,
-selective ordered/reentrant delivery, errors, abort and released references.
-`tests/import.test.js` and `tests/package.test.js` cover explicit opt-in,
-unchanged regular behavior, packed imports and inferred experimental types.
-Authored tests do not establish execution or acceptance; measurement must
-exercise the actual experimental package export rather than the old lab copy.
-The agreed evaluation plan and amendments are in stage 6 of the research
-record. The bounded initial result was inconclusive. The approved reduced run
-then stopped at a setup-p95 gate failure; the current prototype is not accepted
-for adoption, and the tail's cause remains unresolved. Timing coverage,
-allocation and retention evidence remain incomplete.
-The subsequent bounded diagnostic found inconsistent setup tails and large
-action benefits for append, removal and replacement, alongside slower
-candidate teardown after append. These diagnostics do not override the
-failed gate or establish API adoption.
-The checkpoint investigation subsequently reproduced that abort regression,
-attributed the dominant cost to redundant removal of once-listeners during
-abort dispatch, and corrected it only in the experimental module. Three
-same-workload reproductions fit the abort gates after correction. Checkpoint
-admission then failed the mixed-case setup-p95 gate; allocation/retention and
-confirmation did not start under the agreed stop rule. The experimental
-implementation remains unaccepted, with the normal collection unchanged.
-The owner subsequently authorized allocation/retention independently of that
-setup gate, while keeping adoption blocked. Their results remain separate
-from timing admission. The regular collection also avoids redundant native
-listener removal inside its once-abort callback; other release paths still
-detach live listeners. That independent fix introduces no experimental API.
-The independent memory phase is reported: selected large allocation targets
-fit, a small bulk-call allocation gate fails, and retained-heap acceptance
-remains unestablished. Targeted weak-reference release does not waive byte
-budgets or setup admission. Confirmation and API acceptance remain pending.
-Source reasoning alone does not establish the target. Following an accepted result,
-update the architecture, public collection reference and guide, a runnable
-tasks capability action and its behavior tests together, and repeat the
-decisive comparison through the shipping export before closing this stage.
-
-The bounded single-append diagnosis subsequently corrected unnecessary lookup
-allocation in the experimental implementation. Empty input acquires no plan
-lookups, no-removal calls acquire no removal set, and one insertion needs no
-duplicate set or anchor buckets: its validated anchor is stored directly.
-Multiple insertions retain ordered buckets and duplicate validation. The
-target remains O(N + C + F), with the same atomicity and read behavior.
-The corrected C02 diagnostic allocation range fits the unchanged allowance;
-this does not establish full-matrix acceptance. Separate retention calibration
-still has shared first-use residue and baseline drift larger than its byte
-budget. Setup attribution, retention acceptance and confirmation remain open.
+The [collection research, final decision](../../research/collection.md#stage-6-final-accept-or-discard-decision-2026-10-26-utc)
+preserves the evaluated API, measured revisions, corrected measurement method,
+large-operation benefits, failed and incomplete gates, and decision. Those
+results are scoped evidence, not a supported API promise. No experimental
+runtime branch is part of this version.
 
