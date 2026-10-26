@@ -87,6 +87,37 @@ is unchanged. Earlier partial runs are retained below.
 
 ## Method
 
+### Stage 6: calibration fixture correction checkpoint (2026-10-26 UTC)
+
+The owner requests fixing the fixture separately before further measurement.
+Replace the engine-dependent 32,768-slot ordinary array with a `Uint8Array`
+whose view and backing buffer both have exactly 131,072 bytes, filled with
+the same scalar value. Check both byte lengths before subscribing. The real
+subscription remains the sole strong owner after setup returns; weak metadata
+tracks both the view and backing buffer, and calibration requires both to
+release after abort. The graph includes backing-store/native storage as
+application-owned payload rather than classifying it as persistent runtime
+footprint. If that storage cannot be attributed, calibration must remain
+unresolved; no threshold or graph subtraction is changed.
+
+The original failed calibration, its hashes and two heaps remain preserved.
+The old probe/runner are reconstructed byte-for-byte against their recorded
+hashes and retained locally alongside the corrected harness checkpoint.
+Only the research description and source identities enter Git; lab-specific
+runners and artifacts remain ignored. This is a fixture correction, not a
+rerun or retroactive pass. The prior once-only stop remains respected; a new
+comparison needs its own bounded scope. No checks or measurements are started.
+
+Corrected probe SHA-256:
+`31a297a3ca073c4fd640caf0c9bc812e0832d599fb83d63e815a25a75a434935`;
+corrected coordinator:
+`3df11f379e60a3a419820fdf032ea6edf7946a570eae0c6d457f071fc1ec633e`.
+Measured predecessors are respectively
+`a0136ea57bfe60ed18dcf684f363aba9c07a3d138b365547b54ccc1a8111f523`
+and `059fc07cb83b7e5ad34080de6ef44b1d986941ec18938013ae160ab2f0b53128`.
+The coordinator deliberately still refuses an unmatched collection revision;
+a future approved comparison must freeze and name its corrected source first.
+
 ### Variants
 
 Both variants mount the example's `<acme-filter-field>` as rows, one per item,
