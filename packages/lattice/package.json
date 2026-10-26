@@ -14,6 +14,7 @@
   "exports": {
     ".": "./src/index.js",
     "./collection": "./src/modules/collection/collection.js",
+    "./experimental/collection": "./src/modules/collection/experimental.js",
     "./elements": "./src/modules/elements/elements.js",
     "./testing": "./src/testing/index.js"
   },
