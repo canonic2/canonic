@@ -87,6 +87,36 @@ is unchanged. Earlier partial runs are retained below.
 
 ## Method
 
+### Stage 6: direct single-insertion correction checkpoint (2026-10-26 UTC)
+
+The owner requests a separate implementation checkpoint before further
+measurement. Static inspection attributes avoidable work to direct append:
+the general order loop checks removal/single-anchor/buckets for every original
+key, and allocates empty losses/removal-metadata arrays. A validated request
+with exactly one insertion and no removals now copies the order once, then
+appends or splices exactly as ordinary insertion does. Removal operands reuse
+the shared immutable empty list. Validation, guarded getters, copied record,
+new incarnation, plan ownership, undo log and delivery are unchanged. Ordinary
+operations and independent cleanup fixes remain intact. No constructor-owned
+scratch, additional closure, bridge or experimental implementation is added.
+
+New behavioral cases cover detached append, anchors at first/middle/last keys,
+empty collection, copied records, survivor and old-key identities, one delivery,
+immediate batch reads and exact rollback. Existing candidate coverage remains.
+These cases are authored, not newly executed; earlier passes belong to the
+earlier source. Attributable extra work is removed by inspection; its size and
+effect on allocations or timings are unmeasured. Bulk membership stays
+unaccepted, with setup, small-operation, allocation and application-retention
+requirements still unresolved. No further lab or enlarged budget is implied.
+
+Corrected working collection SHA-256:
+`9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91`.
+The measured predecessor `a34241150895ac77b61cc90094851c8657fd2b0790a7c21ca7ee72c988634c3f`
+remains frozen. The correction changes executable planning logic, so its earlier
+performance samples cannot certify this revision. The scoped Git checkpoint
+isolates membership additions from unrelated API work still in the workspace;
+the working-source hash identifies the complete candidate used for review.
+
 ### Stage 6: calibration fixture correction checkpoint (2026-10-26 UTC)
 
 The owner requests fixing the fixture separately before further measurement.

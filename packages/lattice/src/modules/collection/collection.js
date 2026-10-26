@@ -99,6 +99,14 @@ import { fallback, isThenable } from '../../report.js';
  *   nothing. Unchanged values are silent. Otherwise the item gets a new frozen
  *   record and, outside a batch, the commit is delivered before `update`
  *   returns.
+ * @property {(changes: MembershipChanges<T>) => void} updateMembership
+ *   Unaccepted candidate: atomically removes and inserts
+ *   memberships with one new frozen order. Anchors must survive the call;
+ *   insertions at each anchor keep their supplied order. Inputs are validated
+ *   and copied before mutation, with writes rejected during getters. Empty
+ *   changes are silent. Reads after this call inside a batch see its complete
+ *   result immediately; ordinary operations keep their existing batch reads.
+ *   Nested rollback restores exact prior identities and item subscriptions.
  * @property {(key: string, item: T, before?: string) => void} insert Adds an
  *   item, as a new frozen record, before the key `before`, or at the end
  *   without it. A key already in the collection, or a `before` not in it,
@@ -138,6 +146,28 @@ import { fallback, isThenable } from '../../report.js';
  *   in any item, when the value changes under `equals`. Collection-wide
  *   subscriptions run last in a commit's delivery and are evaluated at most
  *   once per commit. Throws a `TypeError` inside a batch.
+ */
+
+/**
+ * One atomic membership request. Keys removed and reinserted get new
+ * incarnations; their old item subscriptions do not transfer.
+ * @template T The item record.
+ * @typedef {object} MembershipChanges
+ * @property {readonly string[]} [remove] Existing, unique keys to remove.
+ * @property {readonly (readonly [string, T, (string | undefined)?])[]} [insert]
+ *   New incarnations in stable supplied order. The optional anchor must be a
+ *   current key not removed by this call; omission or undefined appends.
+ */
+
+/**
+ * A fully validated, call-owned membership plan. Nothing publishes until this
+ * plan exists; only journal/commit operands may outlive its application.
+ * @typedef {object} MembershipPlan
+ * @property {readonly Incarnation[]} losses Original incarnations to remove.
+ * @property {Incarnation[]} gains Fresh copied incarnations to insert.
+ * @property {readonly string[]} removedKeys Removal metadata in supplied order.
+ * @property {string[]} insertedKeys Insertion metadata in supplied order.
+ * @property {readonly string[]} next The frozen next order.
  */
 
 /**
@@ -182,7 +212,7 @@ const released = () => undefined;
  */
 const releasedEquals = () => true;
 
-/** The shared empty key list. @type {readonly string[]} */
+/** The shared immutable empty key/plan operands. @type {readonly never[]} */
 const NONE = Object.freeze([]);
 
 /** The change of a commit that inserts and removes nothing. @type {KeysChange} */
@@ -259,6 +289,109 @@ function toItemRecord(item) {
  */
 function incarnate(key, record) {
   return { key, record, subscriptions: [], ended: false, base: null, batch: 0 };
+}
+
+/**
+ * Validates and copies membership inputs and builds one order. Scratch belongs
+ * only to this call; the caller guards getters against writes to this map.
+ * @param {Map<string, Incarnation>} items Current incarnations, read only here.
+ * @param {readonly string[]} keys Current immutable order.
+ * @param {MembershipChanges<ItemRecord>} changes Supplied atomic changes.
+ * @returns {MembershipPlan | null} A call-owned plan, or null for empty input.
+ * @throws {TypeError} For invalid removals, insertions, anchors or records.
+ */
+function planMembership(items, keys, changes) {
+  if (typeof changes !== 'object' || changes === null)
+    throw new TypeError('updateMembership() needs a change object.');
+  const suppliedRemove = changes.remove;
+  const suppliedInsert = changes.insert;
+  const remove = suppliedRemove === undefined ? NONE : suppliedRemove;
+  const insert = suppliedInsert === undefined ? NONE : suppliedInsert;
+  if (!Array.isArray(remove) || !Array.isArray(insert))
+    throw new TypeError('Membership changes must be arrays.');
+  const removeLength = remove.length;
+  const insertLength = insert.length;
+  if (removeLength === 0 && insertLength === 0) return null;
+  /** @type {Incarnation[] | null} */
+  const losses = removeLength > 0 ? [] : null;
+  /** @type {Incarnation[]} */
+  const gains = [];
+  /** @type {string[] | null} */
+  const removedKeys = removeLength > 0 ? [] : null;
+  /** @type {string[]} */
+  const insertedKeys = [];
+  /** @type {Set<string> | null} */
+  let removing = null;
+  /** @type {Set<string> | null} */
+  let adding = null;
+  /** @type {Map<string | undefined, Incarnation[]> | null} */
+  let buckets = null;
+  /** @type {string | undefined} */
+  let singleBefore;
+  /** @type {readonly string[] | null} */
+  let next = null;
+  // Keep bulk lookup structures off empty and single-insertion paths.
+  if (removeLength > 0) removing = new Set();
+  if (insertLength > 1) adding = new Set();
+  if (insertLength > 1) buckets = new Map();
+  for (let at = 0; at < removeLength; at++) {
+    const key = remove[at];
+    if (typeof key !== 'string' || removing?.has(key) || !items.has(key))
+      throw new TypeError('Removal keys must be existing unique strings.');
+    removing?.add(key);
+    losses?.push(/** @type {Incarnation} */ (items.get(key)));
+    removedKeys?.push(key);
+  }
+  for (let at = 0; at < insertLength; at++) {
+    const entry = insert[at];
+    if (!Array.isArray(entry))
+      throw new TypeError('Insertion entries must be [key, item, before?].');
+    const entryLength = entry.length;
+    if (entryLength < 2 || entryLength > 3)
+      throw new TypeError('Insertion entries must be [key, item, before?].');
+    const key = entry[0], value = entry[1], before = entry[2];
+    if (typeof key !== 'string' || adding?.has(key) || (items.has(key) && !removing?.has(key)))
+      throw new TypeError('Insertion keys must be unique and cannot replace survivors.');
+    if (before !== undefined && (typeof before !== 'string' || !items.has(before) || removing?.has(before)))
+      throw new TypeError('An insertion anchor must be a surviving key.');
+    adding?.add(key);
+    const item = incarnate(key, toItemRecord(value));
+    gains.push(item);
+    insertedKeys.push(key);
+    if (insertLength === 1) singleBefore = before;
+    else {
+      let bucket = buckets?.get(before);
+      if (bucket === undefined) { bucket = []; buckets?.set(before, bucket); }
+      bucket.push(item);
+    }
+  }
+  // A validated single insertion needs the same order copy as ordinary insert,
+  // without per-key removal/anchor/bucket checks or empty removal buffers.
+  if (removeLength === 0 && insertLength === 1) {
+    const order = [...keys];
+    const key = /** @type {Incarnation} */ (gains[0]).key;
+    if (singleBefore === undefined) order.push(key);
+    else order.splice(order.indexOf(singleBefore), 0, key);
+    return { losses: NONE, gains, removedKeys: NONE, insertedKeys, next: Object.freeze(order) };
+  }
+  const order = [];
+  for (let at = 0; at < keys.length; at++) {
+    const key = /** @type {string} */ (keys[at]);
+    if (removing?.has(key)) continue;
+    if (gains.length === 1 && singleBefore === key)
+      order.push(/** @type {Incarnation} */ (gains[0]).key);
+    const bucket = buckets?.get(key);
+    if (bucket !== undefined)
+      for (let index = 0; index < bucket.length; index++) order.push(/** @type {Incarnation} */ (bucket[index]).key);
+    order.push(key);
+  }
+  const tail = buckets?.get(undefined);
+  if (gains.length === 1 && singleBefore === undefined)
+    order.push(/** @type {Incarnation} */ (gains[0]).key);
+  if (tail !== undefined)
+    for (let index = 0; index < tail.length; index++) order.push(/** @type {Incarnation} */ (tail[index]).key);
+  next = Object.freeze(order);
+  return { losses: losses ?? NONE, gains, removedKeys: removedKeys ?? NONE, insertedKeys, next };
 }
 
 /**
@@ -625,6 +758,43 @@ export function createCollection(entries, options = {}) {
     commit(false, NO_CHANGE, item, previous, item.record);
   }
 
+  /**
+   * Applies one operation-local plan through the existing undo/delivery path.
+   * @param {MembershipChanges<ItemRecord>} changes Atomic membership changes.
+   * @returns {void}
+   */
+  function updateMembership(changes) {
+    guard();
+    /** @type {MembershipPlan | null} */
+    let plan;
+    writing = true;
+    try { plan = planMembership(items, keys, changes); }
+    finally { writing = false; }
+    if (plan === null) return;
+    const { losses, gains, removedKeys, insertedKeys, next } = plan;
+    const previous = keys;
+    keys = /** @type {readonly string[]} */ (next);
+    if (depth > 0) log.push(KEYS, previous, undefined);
+    for (let at = 0; at < losses.length; at++) {
+      const item = /** @type {Incarnation} */ (losses[at]);
+      items.delete(item.key);
+      if (depth > 0) {
+        log.push(ENTRY, item.key, item, REMOVED, undefined, undefined);
+        removed.push(item);
+      } else end(item);
+    }
+    for (let at = 0; at < gains.length; at++) {
+      const item = /** @type {Incarnation} */ (gains[at]);
+      items.set(item.key, item);
+      if (depth > 0) {
+        log.push(ENTRY, item.key, undefined, INSERTED, undefined, undefined);
+        inserted.push(item);
+      }
+    }
+    if (depth === 0)
+      commit(true, { inserted: insertedKeys, removed: removedKeys }, null, null, null);
+  }
+
   /** @type {Collection<ItemRecord>['insert']} */
   function insert(key, value, before) {
     guard();
@@ -908,6 +1078,7 @@ export function createCollection(entries, options = {}) {
       return items.size;
     },
     update,
+    updateMembership,
     insert,
     remove,
     reorder,
