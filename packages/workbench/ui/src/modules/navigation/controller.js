@@ -20,11 +20,12 @@ export function shownIterations(selection, boards) {
 }
 export function createNavigation(ports) {
   const store = createStore({ ...initial(), expanding: false, disposed: false });
+  /** @type {import('@canonic2/lattice').StoreReader<ReturnType<typeof store.get>>} */
   const state = { get: store.get, watch: store.watch };
   const namespace = 'canvas:' + crypto.randomUUID() + ':';
   let serial = 0;
   const mint = () => namespace + ++serial;
-  const send = (event) => store.set((current) => transition(current, event));
+  const send = (event) => store.update((current) => transition(current, event));
   const current = () => store.get();
   let trace, clicked;
   let loadingTimer;
@@ -49,7 +50,7 @@ export function createNavigation(ports) {
     clicked = null;
     group = '';
     sizedSelection = undefined;
-    store.set({ ...initial(), expanding: false });
+    store.update({ ...initial(), expanding: false });
   }
   // Whether the selection's size rules apply to the view a renderer reports:
   // a page's single artboard showing the selected destination. Docs read at
@@ -122,7 +123,7 @@ export function createNavigation(ports) {
       }
       const displayed = current().displayed;
       if (displayed?.id === id && displayed.model !== model)
-        store.set({ displayed: { ...displayed, model } });
+        store.update({ displayed: { ...displayed, model } });
     },
     // A retained renderer reports the destination independently of the route.
     // Consume its requested preset only when that destination's size rules apply.
@@ -141,7 +142,7 @@ export function createNavigation(ports) {
     },
     resize(size) {
       const selection = current().requested;
-      if (selection && !current().disposed) store.set({ requested: { ...selection, size } });
+      if (selection && !current().disposed) store.update({ requested: { ...selection, size } });
     },
     presentation() {
       const { visible, pending, loading } = feedback.read(current());
@@ -151,7 +152,7 @@ export function createNavigation(ports) {
       if (current().disposed || current().capturing || ports.busy()) return;
       clicked = beginTrace();
       trace = null;
-      store.set({
+      store.update({
         ...transition(current(), { type: 'picked', id: mint(), destination: null }),
         expanding: false,
       });
@@ -217,7 +218,7 @@ export function createNavigation(ports) {
       ]);
       if (group !== key) {
         group = key;
-        store.set({ expanding: true });
+        store.update({ expanding: true });
         try {
           await ports.activate(next);
         } catch (error) {
@@ -231,7 +232,7 @@ export function createNavigation(ports) {
           throw error;
         } finally {
           if (!current().disposed && request === current().id) {
-            store.set({ expanding: false });
+            store.update({ expanding: false });
             ports.present();
           }
         }
@@ -257,7 +258,7 @@ export function createNavigation(ports) {
     },
     dispose() {
       clear();
-      store.set({ disposed: true });
+      store.update({ disposed: true });
     },
   };
 }

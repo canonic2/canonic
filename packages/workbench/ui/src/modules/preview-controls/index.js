@@ -3,6 +3,8 @@ import { createStore } from '@canonic2/lattice';
 /** Transient inputs and reported actions, isolated by owning renderer. */
 export function createPreviewControls({ send }) {
   const store = createStore({ instances: {}, selected: null, opened: false });
+  /** @type {import('@canonic2/lattice').StoreReader<ReturnType<typeof store.get>>} */
+  const state = { get: store.get, watch: store.watch };
   const entry = (state) => state.instances[state.selected] || null;
   function update(id, value) {
     store.update((state) => ({ instances: { ...state.instances, [id]: value } }));
@@ -12,7 +14,7 @@ export function createPreviewControls({ send }) {
     return [state.selected, entry(state)];
   }
   return {
-    state: { get: store.get, watch: store.watch },
+    state,
     select: {
       model: { fields: ['instances', 'selected'], read: entry },
       available: { fields: ['instances', 'selected'], read: (state) => !!entry(state) },
