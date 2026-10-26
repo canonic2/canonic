@@ -1478,7 +1478,7 @@ runtime conditioning remain limits. Memory, initial timing, independent
 timing and product checks ran sequentially. The package's actual experimental
 export was measured read-only against the separately frozen B0. Candidate and
 regular-source hashes, report hashes, retained ranges and incomplete scopes
-are recorded with the final result above. No candidate tuning occurred during
+are recorded with the final result. No candidate tuning occurred during
 this stage. Profiling and forced GC were absent from action timing windows.
 
 ### Stage 6: independent memory phase (2026-10-26 UTC)
