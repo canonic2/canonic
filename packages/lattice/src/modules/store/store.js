@@ -370,7 +370,9 @@ export function createStore(initial, options = {}) {
     try {
       run(value, undefined);
     } catch (error) {
-      signal?.removeEventListener('abort', onAbort);
+      // An initial callback may abort and then throw. In that case dispatch
+      // already removed the once-listener and deactivated this record.
+      if (record.active) signal?.removeEventListener('abort', onAbort);
       deactivate(record);
       throw error;
     }

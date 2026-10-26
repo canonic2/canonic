@@ -151,6 +151,8 @@ import { fallback, isThenable } from '../../report.js';
  * @property {number} version The commit count when it was created.
  * @property {boolean} active Whether it still receives commits.
  * @property {Subscription[]} owner The array that holds it.
+ * @property {AbortSignal | undefined} signal The subscription's owning signal.
+ * @property {(() => void) | undefined} onAbort Listener removed when this subscription ends.
  */
 
 /**
@@ -378,6 +380,11 @@ export function createCollection(entries, options = {}) {
     subscription.equals = releasedEquals;
     subscription.run = released;
     subscription.last = undefined;
+    if (subscription.onAbort !== undefined) {
+      subscription.signal?.removeEventListener('abort', subscription.onAbort);
+    }
+    subscription.signal = undefined;
+    subscription.onAbort = undefined;
   }
 
   /**
@@ -794,18 +801,26 @@ export function createCollection(entries, options = {}) {
     }
     if (signal?.aborted) return;
     /** @type {Subscription} */
-    const subscription = { fields, read, equals, run, last: value, version, active: true, owner };
+    const subscription = { fields, read, equals, run, last: value, version, active: true, owner, signal, onAbort: undefined };
     owner.push(subscription);
-    /**
-     * Ends the subscription when its signal aborts.
-     * @returns {void}
-     */
-    const onAbort = () => deactivate(subscription);
-    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal !== undefined) {
+      /**
+       * Ends the subscription with its owner.
+       * @returns {void}
+       */
+      const onAbort = () => {
+        // Dispatch already removed this once-listener. Other release paths
+        // must still detach listeners whose owning signal remains live.
+        subscription.signal = undefined;
+        subscription.onAbort = undefined;
+        deactivate(subscription);
+      };
+      subscription.onAbort = onAbort;
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
     try {
       first(value);
     } catch (error) {
-      signal?.removeEventListener('abort', onAbort);
       deactivate(subscription);
       throw error;
     }
