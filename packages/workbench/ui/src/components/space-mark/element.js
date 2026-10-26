@@ -1,18 +1,19 @@
 import { isLight, markColor } from './space.js';
 import { styles } from './styles.js';
+import { stylesFor } from '../shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 
 /** Decorative mark; the surrounding control supplies its accessible name. */
 export class WbSpaceMark extends HTMLElement {
   #space = {};
   #icons;
   #mark;
+  #content;
 
   constructor() {
     super();
     const root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    root.adoptedStyleSheets = [sheet];
+    root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#mark = document.createElement('span');
     this.#mark.className = 'mark';
     this.#mark.setAttribute('aria-hidden', 'true');
@@ -51,6 +52,13 @@ export class WbSpaceMark extends HTMLElement {
     this.#mark.style.background = color;
     this.#mark.style.color = color && isLight(color) ? '#1d1d1d' : 'white';
     this.#mark.classList.toggle('colored', !!color);
+    const content = space.image
+      ? ['image', space.image]
+      : space.icon && this.#icons
+        ? ['icon', space.icon, this.#icons]
+        : ['text', space.initial || space.name?.slice(0, 1) || '?'];
+    if (this.#content?.every((value, at) => value === content[at])) return;
+    this.#content = content;
     if (space.image) {
       const image = document.createElement('img');
       image.src = space.image;

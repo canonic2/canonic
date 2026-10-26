@@ -1,10 +1,13 @@
 import { styles } from './styles.js';
+import { createMenuBehavior } from '../shared/menu-behavior.js';
+import { stylesFor } from '../shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 
 export class WbSpaceSwitcher extends HTMLElement {
   static observedAttributes = ['allow-add', 'allow-remove', 'disabled'];
   #spaces = [];
   #current = '';
-  #open = false;
+  #menuBehavior;
   #icons;
   #connection;
   #root;
@@ -16,13 +19,12 @@ export class WbSpaceSwitcher extends HTMLElement {
   #rows = new Map();
   #add;
   #rule;
+  #glyphs = new WeakMap();
 
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    this.#root.adoptedStyleSheets = [sheet];
+    this.#root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#trigger = document.createElement('button');
     this.#trigger.type = 'button';
     this.#trigger.className = 'trigger';
@@ -57,6 +59,16 @@ export class WbSpaceSwitcher extends HTMLElement {
     this.#add.tabIndex = -1;
     this.#menu.append(heading, this.#rule, this.#add);
     this.#root.append(this.#trigger, this.#menu);
+    this.#menuBehavior = createMenuBehavior({
+      host: this,
+      root: this.#root,
+      trigger: this.#trigger,
+      menu: this.#menu,
+      disabled: () => this.disabled,
+      items: () => this.#items(),
+      preferred: () => this.#menu.querySelector('[aria-checked=true]:not(:disabled)'),
+      toggled: (open) => this.#emit('wb-space-toggle', { open }),
+    });
     this.#render();
   }
 
@@ -80,9 +92,7 @@ export class WbSpaceSwitcher extends HTMLElement {
     this.#connection = new AbortController();
     const options = { signal: this.#connection.signal };
     this.#root.addEventListener('click', this.#click, options);
-    this.#root.addEventListener('keydown', this.#key, options);
-    this.ownerDocument.addEventListener('pointerdown', this.#outside, options);
-    this.ownerDocument.defaultView?.addEventListener('blur', this.#blur, options);
+    this.#menuBehavior.connect(this.#connection.signal);
     this.#render();
   }
 
@@ -146,16 +156,10 @@ export class WbSpaceSwitcher extends HTMLElement {
   }
 
   #setOpen(value, user = false, focus = false) {
-    const next = value && !this.disabled;
-    const changed = this.#open !== next;
-    this.#open = next;
-    this.#menu.hidden = !next;
-    this.#trigger.setAttribute('aria-expanded', String(next));
-    if (focus) {
-      if (next) (this.#menu.querySelector('[aria-checked=true]') || this.#items()[0])?.focus();
-      else this.#trigger.focus();
-    }
-    if (changed && user) this.#emit('wb-space-toggle', { open: next });
+    this.#menuBehavior.setOpen(value, user, focus);
+  }
+  get #open() {
+    return this.#menuBehavior.open;
   }
 
   #items() {
@@ -179,54 +183,18 @@ export class WbSpaceSwitcher extends HTMLElement {
     else if (action === 'add') this.#emit('wb-space-add', {});
   };
 
-  #key = (event) => {
-    const e = event;
-    if (this.disabled) return;
-    if (e.key === 'Escape' && this.#open) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.#setOpen(false, true, true);
-      return;
+  #glyph(target, name, fallback, caption = '') {
+    const previous = this.#glyphs.get(target);
+    if (previous?.renderer === this.#icons && previous?.name === name) return;
+    let node;
+    if (this.#icons) node = this.#icons(name, 14);
+    else {
+      node = document.createElement('span');
+      node.textContent = fallback;
+      node.setAttribute('aria-hidden', 'true');
     }
-    // Move the sequential focus starting point out of the soon-hidden menu;
-    // the browser then performs its normal Tab/Shift+Tab traversal.
-    if (e.key === 'Tab' && this.#open) {
-      this.#setOpen(false, true, true);
-      return;
-    }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-    const items = this.#items();
-    if (this.#root.activeElement === this.#trigger) {
-      if (!['ArrowDown', 'ArrowUp'].includes(e.key)) return;
-      e.preventDefault();
-      this.#setOpen(true, true, true);
-      return;
-    }
-    if (!this.#open || !items.length) return;
-    e.preventDefault();
-    const at = items.indexOf(this.#root.activeElement);
-    const next =
-      e.key === 'Home'
-        ? 0
-        : e.key === 'End'
-          ? items.length - 1
-          : (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-    items[next]?.focus();
-  };
-
-  #outside = (event) => {
-    if (!event.composedPath().includes(this)) this.#setOpen(false, true);
-  };
-  #blur = () => {
-    this.#setOpen(false, true);
-  };
-
-  #glyph(name, fallback) {
-    if (this.#icons) return this.#icons(name, 14);
-    const node = document.createElement('span');
-    node.textContent = fallback;
-    node.setAttribute('aria-hidden', 'true');
-    return node;
+    target.replaceChildren(node, ...(caption ? [document.createTextNode(caption)] : []));
+    this.#glyphs.set(target, { renderer: this.#icons, name });
   }
 
   #render() {
@@ -238,7 +206,7 @@ export class WbSpaceSwitcher extends HTMLElement {
     this.#mark.iconRenderer = this.#icons;
     this.#mark.space = shown || {};
     this.#name.textContent = shown?.name || 'Workbench';
-    this.#caret.replaceChildren(this.#glyph('chevrons-up-down', '↕'));
+    this.#glyph(this.#caret, 'chevrons-up-down', '↕');
     this.#trigger.title = shown
       ? `${shown.name}${shown.root ? ' — ' + shown.root : ''}\nSwitch space`
       : 'Switch space';
@@ -278,7 +246,7 @@ export class WbSpaceSwitcher extends HTMLElement {
       mark.iconRenderer = this.#icons;
       mark.space = space;
       pick.querySelector('.label').textContent = space.name || '';
-      pick.querySelector('.check').replaceChildren(this.#glyph('check', '✓'));
+      this.#glyph(pick.querySelector('.check'), 'check', '✓');
       let remove = row.querySelector('.remove');
       if (space.removable && this.allowRemove) {
         if (!remove) {
@@ -294,7 +262,7 @@ export class WbSpaceSwitcher extends HTMLElement {
         remove.disabled = this.disabled;
         remove.setAttribute('aria-label', `Remove ${space.name} from Workbench`);
         remove.title = 'Remove from Workbench';
-        remove.replaceChildren(this.#glyph('x', '×'));
+        this.#glyph(remove, 'x', '×');
       } else remove?.remove();
       if (row !== cursor) this.#menu.insertBefore(row, cursor);
       cursor = row.nextElementSibling || this.#rule;
@@ -307,7 +275,7 @@ export class WbSpaceSwitcher extends HTMLElement {
     }
     this.#rule.hidden = this.#add.hidden = !this.allowAdd;
     this.#add.disabled = this.disabled;
-    this.#add.replaceChildren(this.#glyph('plus', '+'), document.createTextNode('Add a space…'));
+    this.#glyph(this.#add, 'plus', '+', 'Add a space…');
     this.#setOpen(this.#open);
     if (scroll !== null) this.#menu.scrollTop = scroll;
     if (active && this.#open) {

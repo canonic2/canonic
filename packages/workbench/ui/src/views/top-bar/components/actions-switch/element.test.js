@@ -65,6 +65,7 @@ void test(
     check(button.title === 'Actions — set before upgrade' && el.shadowRoot.querySelector('[data-icon=mouse-pointer-click]'), 'hint and icon from early inputs');
     check(button.getAttribute('role') === 'switch' && button.getAttribute('aria-label') === 'Actions', 'a named switch');
     check(events.length === 0, 'inputs emit nothing');
+    const glyph = el.shadowRoot.querySelector('.icon').firstChild;
 
     button.click();
     check(events.length === 1 && events[0][0].checked === false && events[0][1], 'asks for the other state, composed');
@@ -76,16 +77,18 @@ void test(
     el.disabled = true; button.click();
     check(button.disabled && events.length === 1, 'locked asks nothing');
     el.disabled = false;
+    check(el.shadowRoot.querySelector('.icon').firstChild === glyph, 'state and hint changes retain the icon');
 
     el.remove(); document.body.append(el); button.click();
     check(events.length === 2 && events[1][0].checked === true, 'reconnect leaves one listener');
 
     const copy = document.createElement('wb-actions-switch'); document.body.append(copy);
+    check(copy.shadowRoot.adoptedStyleSheets[0] === el.shadowRoot.adoptedStyleSheets[0], 'instances share their parsed stylesheet');
     copy.checked = true; check(!el.checked && !copy.shadowRoot.querySelector('.icon').childNodes.length, 'independent instances; no icon without a renderer');
     check(getComputedStyle(copy.shadowRoot.querySelector('.track')).backgroundColor === 'rgb(0, 161, 255)', 'on uses the accent default');
     check(window.violations.length === 0, 'CSP permits adopted styles');
     return results.length;
   })()`);
-    assert.equal(results, 14);
+    assert.equal(results, 16);
   },
 );

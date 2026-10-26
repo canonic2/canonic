@@ -194,6 +194,10 @@ fn viewer_files(product: &Path, add: &mut impl FnMut(String, Vec<u8>)) -> Result
         ("ui/src/app/viewer/viewer.css", "viewer.css"),
         ("ui/src/app/viewer/viewer.js", "ui/src/app/viewer/viewer.js"),
         (
+            "ui/src/components/shared/stylesheet.js",
+            "ui/src/components/shared/stylesheet.js",
+        ),
+        (
             "ui/src/modules/preview-controls/index.js",
             "ui/src/modules/preview-controls/index.js",
         ),

@@ -107,6 +107,10 @@ void test(
       new Promise((_, reject) => setTimeout(() => reject(new Error('Registration failed: ' + JSON.stringify(window.violations))), 3000))]);
     const results = [];
     const check = (value, label) => { if (!value) throw new Error(label); results.push(label); };
+    for (const tag of ['wb-space-mark','wb-space-switcher','wb-size-switcher','wb-size-dialog','wb-sizes-editor','wb-actions-switch','wb-canvas','wb-preview-controls','wb-export-dialog']) {
+      const one=document.createElement(tag),two=document.createElement(tag);
+      check(one.shadowRoot.adoptedStyleSheets[0]===two.shadowRoot.adoptedStyleSheets[0], tag+' shares its parsed stylesheet');
+    }
     const key = (node, value) => node.dispatchEvent(new KeyboardEvent('keydown', {key:value,bubbles:true,composed:true,cancelable:true}));
     const events = [];
     for (const name of ['wb-size-pick','wb-size-custom','wb-size-edit','wb-size-toggle','wb-size-add','wb-size-dialog-close','wb-sizes-save','wb-sizes-close'])

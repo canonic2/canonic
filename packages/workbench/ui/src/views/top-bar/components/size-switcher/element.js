@@ -9,6 +9,9 @@
 import { describe, dimensionsText } from '../../../../../../contracts/src/sizes/browser/choice.js';
 
 import { styles } from './styles.js';
+import { createMenuBehavior } from '../../../../components/shared/menu-behavior.js';
+import { stylesFor } from '../../../../components/shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 
 /** A size as the switcher shows it: the space's, or a page's own. */
 
@@ -19,7 +22,7 @@ export class WbSizeSwitcher extends HTMLElement {
   #sizes = [];
   #supported = null;
   #current = '';
-  #open = false;
+  #menuBehavior;
   #icons;
   #connection;
   #root;
@@ -31,9 +34,7 @@ export class WbSizeSwitcher extends HTMLElement {
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    this.#root.adoptedStyleSheets = [sheet];
+    this.#root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#group = document.createElement('div');
     this.#group.className = 'group';
     this.#group.setAttribute('role', 'group');
@@ -54,6 +55,16 @@ export class WbSizeSwitcher extends HTMLElement {
     this.#menu.setAttribute('aria-label', 'Sizes');
     this.#menu.setAttribute('part', 'menu');
     this.#root.append(this.#group, this.#menu);
+    this.#menuBehavior = createMenuBehavior({
+      host: this,
+      root: this.#root,
+      trigger: this.#more,
+      menu: this.#menu,
+      disabled: () => this.disabled,
+      items: () => this.#items(),
+      preferred: () => this.#menu.querySelector('[aria-checked=true]:not(:disabled)'),
+      toggled: (open) => this.#emit('wb-size-toggle', { open }),
+    });
     this.#render();
   }
 
@@ -69,9 +80,7 @@ export class WbSizeSwitcher extends HTMLElement {
     this.#connection = new AbortController();
     const options = { signal: this.#connection.signal };
     this.#root.addEventListener('click', this.#click, options);
-    this.#root.addEventListener('keydown', this.#key, options);
-    this.ownerDocument.addEventListener('pointerdown', this.#outside, options);
-    this.ownerDocument.defaultView?.addEventListener('blur', this.#blur, options);
+    this.#menuBehavior.connect(this.#connection.signal);
     this.#render();
   }
 
@@ -144,19 +153,10 @@ export class WbSizeSwitcher extends HTMLElement {
   }
 
   #setOpen(value, user = false, focus = false) {
-    const next = value && !this.disabled;
-    const changed = this.#open !== next;
-    this.#open = next;
-    this.#menu.hidden = !next;
-    this.#more.setAttribute('aria-expanded', String(next));
-    if (focus) {
-      if (next)
-        (
-          this.#menu.querySelector('[aria-checked=true]:not(:disabled)') || this.#items()[0]
-        )?.focus();
-      else this.#more.focus();
-    }
-    if (changed && user) this.#emit('wb-size-toggle', { open: next });
+    this.#menuBehavior.setOpen(value, user, focus);
+  }
+  get #open() {
+    return this.#menuBehavior.open;
   }
 
   #items() {
@@ -183,46 +183,6 @@ export class WbSizeSwitcher extends HTMLElement {
     if (action === 'pick') this.#pick(target.dataset.key || '');
     else if (action === 'custom') this.#emit('wb-size-custom', {});
     else if (action === 'edit') this.#emit('wb-size-edit', {});
-  };
-
-  #key = (event) => {
-    const e = event;
-    if (this.disabled) return;
-    if (e.key === 'Escape' && this.#open) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.#setOpen(false, true, true);
-      return;
-    }
-    if (e.key === 'Tab' && this.#open) {
-      this.#setOpen(false, true, true);
-      return;
-    }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-    if (this.#root.activeElement === this.#more) {
-      if (!['ArrowDown', 'ArrowUp'].includes(e.key)) return;
-      e.preventDefault();
-      this.#setOpen(true, true, true);
-      return;
-    }
-    const items = this.#items();
-    if (!this.#open || !items.length || !this.#menu.contains(this.#root.activeElement)) return;
-    e.preventDefault();
-    const at = items.indexOf(this.#root.activeElement);
-    const next =
-      e.key === 'Home'
-        ? 0
-        : e.key === 'End'
-          ? items.length - 1
-          : (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-    items[next]?.focus();
-  };
-
-  #outside = (event) => {
-    if (this.#open && !event.composedPath().includes(this)) this.#setOpen(false, true);
-  };
-  #blur = () => {
-    if (this.#open) this.#setOpen(false, true);
   };
 
   #glyph(name, fallback, size = 16) {

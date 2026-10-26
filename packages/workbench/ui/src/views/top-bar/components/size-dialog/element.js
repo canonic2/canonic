@@ -10,6 +10,8 @@
 import { EMPTY_DRAFT, readDraft } from './form.js';
 
 import { dialogStyles } from './styles.js';
+import { stylesFor } from '../../../../components/shared/stylesheet.js';
+const stylesheet = stylesFor(dialogStyles);
 
 const INPUTS = ['open', 'pending', 'error', 'notice', 'iconRenderer', 'allowPageOnly'];
 
@@ -50,9 +52,7 @@ export class WbSizeDialog extends HTMLElement {
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(dialogStyles);
-    this.#root.adoptedStyleSheets = [sheet];
+    this.#root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#dialog = document.createElement('dialog');
     this.#dialog.setAttribute('aria-labelledby', 'title');
     this.#dialog.setAttribute('part', 'dialog');

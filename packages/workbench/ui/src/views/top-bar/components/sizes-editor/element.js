@@ -10,6 +10,8 @@
    specs/canvas/sizes.md. */
 
 import { styles } from './styles.js';
+import { stylesFor } from '../../../../components/shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 import { draftOf, rowsProblem, rowValue } from './rows.js';
 
 const INPUTS = ['sizes', 'open', 'pending', 'error', 'iconRenderer'];
@@ -39,9 +41,7 @@ export class WbSizesEditor extends HTMLElement {
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    this.#root.adoptedStyleSheets = [sheet];
+    this.#root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#dialog = document.createElement('dialog');
     this.#dialog.setAttribute('aria-labelledby', 'title');
     this.#dialog.setAttribute('part', 'dialog');

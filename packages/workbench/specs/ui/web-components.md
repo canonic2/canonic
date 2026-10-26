@@ -56,6 +56,12 @@ that boundary; they do not own capability I/O or application state.
 - Keep browser classes and registration out of extension/server imports. Pure
   helpers can be tested in Node without creating a fake browser runtime.
 
+`components/shared/menu-behavior.js` supplies opt-in keyboard movement, dismissal,
+open state and focus restoration for the space and size menus. Each component
+supplies its eligible and preferred items and owns its domain intents.
+`components/shared/stylesheet.js` lazily shares each component's parsed styles
+within an owner document; importing a component does not parse CSS.
+
 The HTML entry points compose components and load their registration. Feature
 controllers supply application state and handle user requests. A folder move is
 not sufficient: each migrated component must stop depending on document-wide IDs,

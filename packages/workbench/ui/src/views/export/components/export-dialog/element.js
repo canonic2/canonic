@@ -1,4 +1,6 @@
 import { styles } from './styles.js';
+import { stylesFor } from '../../../../components/shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 
 export class WbExportDialog extends HTMLElement {
   #pages = [];
@@ -27,9 +29,7 @@ export class WbExportDialog extends HTMLElement {
   constructor() {
     super();
     const root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    root.adoptedStyleSheets = [sheet];
+    root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     root.innerHTML = `<dialog aria-labelledby="title"><form><h2 id="title">Export</h2>
       <label>Format<select name="format"><option value="zip">Source package (ZIP)</option><option value="pdf">PDF</option><option value="images">Images (ZIP)</option><option value="browser">Portable browser (ZIP)</option></select></label>
       <label>Scope<select name="scope"><option value="page">Current page</option><option value="pages">Selected pages</option><option value="collection">Collection</option><option value="space">Whole space</option></select></label>

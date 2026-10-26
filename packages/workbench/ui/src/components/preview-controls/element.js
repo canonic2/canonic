@@ -1,5 +1,7 @@
 import { captureInputs, replayInputs } from '@canonic2/lattice/elements';
 import { styles } from './styles.js';
+import { stylesFor } from '../shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 
 const UNSET = Symbol('unrendered');
 const EMPTY = {};
@@ -32,9 +34,7 @@ export class WbPreviewControls extends HTMLElement {
     super();
     this.#pending = captureInputs(this, ['model']);
     const root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    root.adoptedStyleSheets = [sheet];
+    root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#reset.type = 'button';
     this.#docs.append(node('summary', 'Documentation'), this.#documentation);
     root.append(

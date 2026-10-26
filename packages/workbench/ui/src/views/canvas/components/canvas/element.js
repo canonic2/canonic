@@ -1,4 +1,6 @@
 import { styles } from './styles.js';
+import { stylesFor } from '../../../../components/shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 import {
   artboardLabel,
   centeredX,
@@ -29,9 +31,7 @@ export class WbCanvas extends HTMLElement {
   #resize;
   constructor() {
     super();
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    this.#root.adoptedStyleSheets = [sheet];
+    this.#root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#world.className = 'world';
     this.#empty.textContent = 'Pick a page or a component to see it here.';
     this.#panLayer.className = 'pan';

@@ -1103,7 +1103,7 @@ test('the portable build includes the interactive viewer and shared controls whi
   assert.deepEqual(catalog.previews[0].scenarios.map(scenario => scenario.id), ['default', 'disabled']);
   assert.equal(catalog.previews[0].files, undefined);
   assert.ok(fs.existsSync(path.join(output, catalog.previews[0].directory.replace(/^browser\//, ''), 'index.html')));
-  for (const file of ['ui/src/app/viewer/viewer.js', 'ui/src/modules/preview-controls/index.js',
+  for (const file of ['ui/src/app/viewer/viewer.js', 'ui/src/components/shared/stylesheet.js', 'ui/src/modules/preview-controls/index.js',
     'ui/src/views/top-bar/preview-bindings.js', 'ui/src/components/preview-controls/element.js',
     'ui/src/components/preview-controls/styles.js', 'ui/src/components/preview-controls/register.js',
     'node_modules/@canonic2/lattice/src/index.js', 'node_modules/@canonic2/lattice/src/report.js',

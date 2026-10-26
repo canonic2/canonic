@@ -6,6 +6,8 @@
    The element only shows the state and asks for a change. */
 
 import { styles } from './styles.js';
+import { stylesFor } from '../../../../components/shared/stylesheet.js';
+const stylesheet = stylesFor(styles);
 
 const INPUTS = ['checked', 'disabled', 'hint', 'iconRenderer'];
 const HINT = 'let links navigate and forms submit';
@@ -20,9 +22,7 @@ export class WbActionsSwitch extends HTMLElement {
   constructor() {
     super();
     const root = this.attachShadow({ mode: 'open' });
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(styles);
-    root.adoptedStyleSheets = [sheet];
+    root.adoptedStyleSheets = [stylesheet(this.ownerDocument)];
     this.#button = document.createElement('button');
     this.#button.type = 'button';
     this.#button.setAttribute('role', 'switch');
@@ -89,8 +89,9 @@ export class WbActionsSwitch extends HTMLElement {
     return this.#icons;
   }
   set iconRenderer(value) {
+    if (this.#icons === value) return;
     this.#icons = value;
-    this.#render();
+    this.#icon.replaceChildren(...(value ? [value('mouse-pointer-click', 16)] : []));
   }
 
   #click = () => {
@@ -108,7 +109,5 @@ export class WbActionsSwitch extends HTMLElement {
     this.#button.disabled = this.disabled;
     this.#button.setAttribute('aria-checked', String(this.checked));
     this.#button.title = 'Actions — ' + this.hint;
-    if (this.#icons) this.#icon.replaceChildren(this.#icons('mouse-pointer-click', 16));
-    else this.#icon.replaceChildren();
   }
 }

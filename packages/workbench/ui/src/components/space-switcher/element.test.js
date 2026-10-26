@@ -143,6 +143,16 @@ void test(
       trigger.click(); key(root.activeElement,'Tab'); check(!el.open, 'Tab closes menu');
       trigger.click(); document.getElementById('after').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,composed:true})); check(!el.open, 'outside press closes');
       const copy = document.createElement('wb-space-switcher'); copy.spaces=el.spaces; copy.currentId='b'; document.body.append(copy);
+      check(copy.shadowRoot.adoptedStyleSheets[0]===el.shadowRoot.adoptedStyleSheets[0], 'instances share their parsed stylesheet');
+      let glyphCalls=0;
+      copy.iconRenderer=name=>{glyphCalls++;const icon=document.createElement('span');icon.dataset.icon=name;return icon};
+      copy.spaces=copy.spaces.map(space=>({...space,icon:'folder'}));
+      copy.allowRemove=true;
+      const glyph=copy.shadowRoot.querySelector('.check').firstChild, calls=glyphCalls;
+      copy.currentId='a';copy.allowAdd=true;copy.allowRemove=true;copy.disabled=true;copy.disabled=false;
+      check(glyphCalls===calls&&copy.shadowRoot.querySelector('.check').firstChild===glyph, 'selection and availability retain every row icon');
+      copy.allowAdd=false;
+      copy.currentId='b';
       el.open=true; check(!copy.open && copy.currentId==='b', 'independent instances');
       copy.open=true;
       check(getComputedStyle(copy.shadowRoot.querySelector('.add')).display==='none', 'unavailable add action is hidden');
@@ -176,7 +186,7 @@ void test(
       copy.remove(); el.remove();
       return results.length;
     })()`),
-        31,
+        33,
         host,
       );
       // Test actual Tab traversal, not just a synthetic keydown.
